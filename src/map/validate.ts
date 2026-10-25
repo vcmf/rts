@@ -123,7 +123,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
             bad(null, `sources[${i}]`, '"file" and "hash" belong to dem sources only')
           }
           if (s.kind === 'dem') {
-            // real heights (docs/plans/active/m5-relief.md): the file beside the map, pinned, with its credit
+            // real heights (docs/plans/done/m5-relief.md): the file beside the map, pinned, with its credit
             const missing = DEM_SOURCE_KEYS.filter(k => typeof s[k] !== 'string' || !s[k])
             if (missing.length) {
               bad(null, `sources[${i}]`, `a dem source needs ${missing.map(k => `"${k}"`).join(', ')}`)
@@ -770,7 +770,7 @@ export function validateExpanded(map: MapFile, cat: Catalogue): Issue[] {
 const isDemKind = (kind: string): boolean => kind === 'relief.dem' || kind.startsWith('relief.dem.')
 
 /**
- * The checks that need the map's files (docs/plans/active/m5-relief.md), for a map that `validate` accepts: each dem
+ * The checks that need the map's files (docs/plans/done/m5-relief.md), for a map that `validate` accepts: each dem
  * source's file is there and matches its hash, and each relief.dem piece lies inside its file with heights in the
  * catalogue's range above the datum. Also returns the decoded files, by source id, for `apply`.
  */

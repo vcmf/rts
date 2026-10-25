@@ -2,7 +2,7 @@
   "format": 1,
   "id": "dem-test",
   "name": "Real relief, a test",
-  "note": "The real relief's test map (docs/plans/active/m5-relief.md): small enough to compile for the sim. The Pratzen's western slope from the Austerlitz heightfield, set over the whole extent by a shift, a second piece from the Santon hill set in with a soft edge, a level edit on top and a brook that reads the real ground.",
+  "note": "The real relief's test map (docs/plans/done/m5-relief.md): small enough to compile for the sim. The Pratzen's western slope from the Austerlitz heightfield, set over the whole extent by a shift, a second piece from the Santon hill set in with a soft edge, a level edit on top and a brook that reads the real ground.",
   "seed": 5,
   "season": "summer",
   "datum": 180,

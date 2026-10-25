@@ -1,4 +1,4 @@
-// Real relief (docs/plans/active/m5-relief.md, M5): the .rdem file, its hash, its heights between nodes, relief.dem
+// Real relief (docs/plans/done/m5-relief.md, M5): the .rdem file, its hash, its heights between nodes, relief.dem
 // pieces in apply, the validator's and the file checks' errors, and the test map compiled for the sim.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'

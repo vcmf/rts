@@ -1,4 +1,4 @@
-// The real-relief importer (docs/plans/active/m5-relief.md): a crop of ČÚZK's terrain model, the Czech Republic's
+// The real-relief importer (docs/plans/done/m5-relief.md): a crop of ČÚZK's terrain model, the Czech Republic's
 // bare-ground heights (© ČÚZK, open data under CC BY 4.0), written as an .rdem heightfield beside a map, with the dem
 // source entry the map pastes in (its file, hash, credit and licence).
 //   node tools/dem-import.ts <lat> <lon> <width km> <height km> <out.rdem> [--model 4g|5g]

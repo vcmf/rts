@@ -7,6 +7,7 @@ import type { Feature, Pt } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName } from './protocol.ts'
 import { demFileNames } from '../../map/dem.ts'
+import { LitView, TILT } from '../../render/lit/view.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -17,7 +18,7 @@ const KINDS = import.meta.glob('/maps/kinds.json', { query: '?raw', import: 'def
   string,
   () => Promise<string>
 >
-// the heightfields beside them (docs/plans/active/m5-relief.md), as URLs: fetched only when a map's source names one
+// the heightfields beside them (docs/plans/done/m5-relief.md), as URLs: fetched only when a map's source names one
 const RDEMS = import.meta.glob('/maps/*.rdem', { query: '?url', import: 'default' }) as Record<
   string,
   () => Promise<string>
@@ -73,6 +74,18 @@ const errors = $('errors')
 const readout = $('readout')
 const showOutlines = $<HTMLInputElement>('outlines')
 const showIds = $<HTMLInputElement>('ids')
+const mode = $<HTMLSelectElement>('mode')
+// the lit map view under the overlays (docs/plans/active/m6-lit-view.md); ?tilt= degrees off straight down
+// the lit view needs WebGL2 (decision 0046): without it the page still compiles, lists errors and reads cells
+let lit: LitView | null = null
+let litError = ''
+try {
+  lit = new LitView($<HTMLCanvasElement>('lit'))
+} catch (e) {
+  litError = (e as Error).message
+}
+const tiltParam = Number(new URLSearchParams(location.search).get('tilt'))
+const tilt = Number.isFinite(tiltParam) && new URLSearchParams(location.search).has('tilt') ? tiltParam : TILT
 
 const names = Object.keys(MAPS).sort()
 for (const n of names) picker.append(new Option(n.replace('/maps/', '').replace('.map.json', ''), n))
@@ -83,12 +96,23 @@ picker.value =
 // the view: world point at the canvas centre, and pixels per metre; kept across reloads of the same map
 let view = { cx: 0, cz: 0, ppm: 0 }
 let current: Compiled | null = null
-let image: HTMLCanvasElement | null = null
 let issues: Issue[] = []
 let layers: Partial<Record<LayerName, Uint16Array>> = {}
 let height = new Float64Array(0)
 let depth = new Uint16Array(0)
 const log: { reason: string; savedAt?: number; drawnAt: number; ms: number }[] = []
+let frameMs = 0 // the last frame's CPU time in the lit view
+let readyWait: Promise<void> | null = null
+// one draw a displayed frame, however many pointer and wheel events arrive in it
+let queued = false
+function redraw(): void {
+  if (queued) return
+  queued = true
+  requestAnimationFrame(() => {
+    queued = false
+    draw()
+  })
+}
 
 let seq = 0
 let pending: { reason: string; t0: number; savedAt?: number } | null = null
@@ -133,15 +157,39 @@ function onReply(e: MessageEvent<CompileReply>): void {
   }
   if (r.ok) {
     const fresh = !current || current.map.id !== r.map.id
-    current = r
     issues = []
     layers = Object.fromEntries(Object.entries(r.layers).map(([k, b]) => [k, new Uint16Array(b)]))
     height = new Float64Array(r.height)
     depth = new Uint16Array(r.depth)
-    image = document.createElement('canvas')
-    image.width = r.w
-    image.height = r.h
-    image.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(r.rgba), r.w, r.h), 0, 0)
+    lit?.setMap({
+      x0: r.x0,
+      z0: r.z0,
+      cell: r.cell,
+      nx: r.nx,
+      nz: r.nz,
+      datum: r.map.datum ?? 0,
+      season: r.map.season,
+      light: r.light,
+      height,
+      relief: new Uint8Array(r.relief),
+      masks: new Uint8Array(r.masks),
+      flat: { w: r.w, h: r.h, rgba: new Uint8Array(r.rgba) },
+    })
+    // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
+    current = { ...r, relief: new ArrayBuffer(0), masks: new ArrayBuffer(0), rgba: new ArrayBuffer(0) }
+    // the first frame after a new map may come before its shader compiles: draw again once it is ready (one wait at
+    // a time; a shader that never compiles is reported)
+    if (lit && !readyWait) {
+      readyWait = lit
+        .ready()
+        .then(draw, (e: Error) => {
+          litError = e.message
+          panel()
+        })
+        .finally(() => {
+          readyWait = null
+        })
+    }
     if (fresh || !view.ppm) fit()
   } else issues = r.issues
   const now = performance.now()
@@ -181,14 +229,63 @@ function fit(): void {
   const h = current.nz * current.cell
   view = { cx: 0, cz: 0, ppm: Math.min(r.width / w, r.height / h) * 0.95 }
 }
-const toScreen = (x: number, z: number): [number, number] => {
+// the camera follows the view; every point drawn or picked goes through it
+const place = () => lit?.setCamera({ ...view, tilt })
+// without the lit view (no WebGL2), straight down and flat, as the page drew before it
+const flatScreen = (x: number, z: number): [number, number] => {
   const r = canvas.getBoundingClientRect()
   return [r.width / 2 + (x - view.cx) * view.ppm, r.height / 2 - (z - view.cz) * view.ppm]
 }
-const toWorld = (sx: number, sy: number): Pt => {
+const flatWorld = (sx: number, sy: number): Pt => {
   const r = canvas.getBoundingClientRect()
   return [view.cx + (sx - r.width / 2) / view.ppm, view.cz - (sy - r.height / 2) / view.ppm]
 }
+const toScreen = (x: number, z: number): [number, number] | null => (lit ? lit.project(x, z) : flatScreen(x, z))
+/**
+ * Adds a polyline (or a ring) of ground points to the 2D path, clipped where it passes behind the tilted camera: the
+ * part of a segment too near the camera's plane is left out, never drawn mirrored (LitView.depth).
+ */
+function groundPath(pts: Pt[], close: boolean): void {
+  ctx.beginPath()
+  if (!lit) {
+    pts.forEach((p, k) => {
+      const [x, y] = flatScreen(p[0], p[1])
+      if (k) ctx.lineTo(x, y)
+      else ctx.moveTo(x, y)
+    })
+    if (close) ctx.closePath()
+    return
+  }
+  const L = lit
+  const room = (p: Pt) => L.depth(p[0], p[1]) // above 0: far enough in front to draw
+  const along = (q: Pt, p: Pt, t: number): Pt => [q[0] + (p[0] - q[0]) * t, q[1] + (p[1] - q[1]) * t]
+  let pen = false
+  const to = (p: Pt) => {
+    const s = L.project(p[0], p[1])
+    if (!s) return
+    if (pen) ctx.lineTo(s[0], s[1])
+    else ctx.moveTo(s[0], s[1])
+    pen = true
+  }
+  const seq = close ? [...pts, pts[0]] : pts
+  for (let k = 0; k < seq.length; k++) {
+    const p = seq[k]
+    const rp = room(p)
+    if (k > 0) {
+      const q = seq[k - 1]
+      const rq = room(q)
+      if (rq > 0 !== rp > 0) {
+        // where the segment meets the near limit (the depth is linear along it), a hair on the drawable side
+        const t = rq / (rq - rp)
+        to(along(q, p, rp > 0 ? t + 1e-6 : t - 1e-6))
+        if (rp <= 0) pen = false
+      }
+    }
+    if (rp > 0) to(p)
+  }
+}
+const toWorld = (sx: number, sy: number): Pt =>
+  lit ? (lit.unproject(sx, sy) ?? [view.cx, view.cz]) : flatWorld(sx, sy)
 
 const CATEGORY_INK: Record<string, string> = {
   relief: '#7a5a2a',
@@ -207,41 +304,32 @@ function outline(f: Feature): void {
   ctx.fillStyle = ink
   ctx.lineWidth = 1
   const path = (pts: Pt[], close: boolean) => {
-    ctx.beginPath()
-    pts.forEach((p, k) => {
-      const [x, y] = toScreen(p[0], p[1])
-      if (k) ctx.lineTo(x, y)
-      else ctx.moveTo(x, y)
-    })
-    if (close) ctx.closePath()
+    groundPath(pts, close)
     ctx.stroke()
   }
   if (f.line) path(f.line, false)
   if (f.area) f.area.forEach(r => path(r, true))
-  if (f.circle) {
-    const [x, y] = toScreen(f.circle[0][0], f.circle[0][1])
-    ctx.beginPath()
-    ctx.arc(x, y, f.circle[1] * view.ppm, 0, 2 * Math.PI)
-    ctx.stroke()
-  }
-  if (f.ellipse) {
-    const [[cx, cz], a, b, ang] = f.ellipse
-    const [x, y] = toScreen(cx, cz)
-    ctx.beginPath()
-    ctx.ellipse(x, y, a * view.ppm, b * view.ppm, -ang, 0, 2 * Math.PI)
-    ctx.stroke()
-  }
+  // a circle or an ellipse as a ring of points on the ground, so it leans with the view
+  const ring = (c: Pt, a: number, b: number, ang: number) =>
+    Array.from({ length: 48 }, (_, k): Pt => {
+      const t = (k / 48) * 2 * Math.PI
+      const u = a * Math.cos(t)
+      const v = b * Math.sin(t)
+      return [c[0] + u * Math.cos(ang) - v * Math.sin(ang), c[1] + u * Math.sin(ang) + v * Math.cos(ang)]
+    })
+  if (f.circle) path(ring(f.circle[0], f.circle[1], f.circle[1], 0), true)
+  if (f.ellipse) path(ring(...f.ellipse), true)
   const at = anchor(f)
-  if (f.point || f.near) {
-    const [x, y] = toScreen(...(f.point ?? f.near!))
+  const mark = (f.point || f.near) && toScreen(...(f.point ?? f.near!))
+  if (mark) {
     ctx.beginPath()
-    ctx.arc(x, y, 3, 0, 2 * Math.PI)
+    ctx.arc(mark[0], mark[1], 3, 0, 2 * Math.PI)
     ctx.fill()
   }
-  if (showIds.checked && at) {
-    const [x, y] = toScreen(at[0], at[1])
+  const label = showIds.checked && at && toScreen(at[0], at[1])
+  if (label) {
     ctx.font = '11px ui-monospace, Menlo, monospace'
-    ctx.fillText(f.id, x + 4, y - 4)
+    ctx.fillText(f.id, label[0] + 4, label[1] - 4)
   }
 }
 // where a feature's id is written: its point, the middle of its line, its area's first corner
@@ -263,31 +351,44 @@ function draw(): void {
     canvas.height = Math.round(r.height * dpr)
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.fillStyle = getComputedStyle(document.body).backgroundColor
-  ctx.fillRect(0, 0, r.width, r.height)
-  if (!current || !image) return
-  const [x0, y0] = toScreen(current.x0, current.z0 + current.nz * current.cell)
-  ctx.imageSmoothingEnabled = view.ppm < 1
-  ctx.drawImage(image, x0, y0, current.nx * current.cell * view.ppm, current.nz * current.cell * view.ppm)
-  // the play area
-  const p = current.map.play
-  const [px, py] = toScreen(-p.w / 2, p.h / 2)
-  ctx.setLineDash([6, 4])
-  ctx.strokeStyle = 'rgba(0,0,0,.45)'
-  ctx.strokeRect(px, py, p.w * view.ppm, p.h * view.ppm)
-  ctx.setLineDash([])
-  if (showOutlines.checked) for (const f of current.map.features) outline(f)
-  if (issues.length) {
+  ctx.clearRect(0, 0, r.width, r.height)
+  const tint = () => {
+    if (!issues.length) return
     ctx.fillStyle = 'rgba(160, 20, 20, .08)'
     ctx.fillRect(0, 0, r.width, r.height)
   }
+  if (!current) {
+    // no map to show (another was picked): not the last map's picture under the new one's errors
+    lit?.clear()
+    tint()
+    return
+  }
+  place()
+  frameMs = lit?.render() ?? 0
+  // the play area
+  const p = current.map.play
+  const corners: Pt[] = [
+    [-p.w / 2, -p.h / 2],
+    [p.w / 2, -p.h / 2],
+    [p.w / 2, p.h / 2],
+    [-p.w / 2, p.h / 2],
+  ]
+  ctx.setLineDash([6, 4])
+  ctx.strokeStyle = 'rgba(0,0,0,.45)'
+  groundPath(corners, true)
+  ctx.stroke()
+  ctx.setLineDash([])
+  if (showOutlines.checked) for (const f of current.map.features) outline(f)
+  tint()
 }
 
 function panel(): void {
   const c = current
-  status.textContent = c
-    ? `${c.map.name}: ${c.map.features.length} features, ${c.nx}×${c.nz} cells of ${c.cell} m · validate ${c.ms.validate.toFixed(0)} ms, apply ${c.ms.apply.toFixed(0)} ms, draw ${c.ms.draw.toFixed(0)} ms`
-    : 'compiling…'
+  status.textContent =
+    (litError ? `${litError}: only the panel works. ` : '') +
+    (c
+      ? `${c.map.name}: ${c.map.features.length} features, ${c.nx}×${c.nz} cells of ${c.cell} m · validate ${c.ms.validate.toFixed(0)} ms, apply ${c.ms.apply.toFixed(0)} ms, draw ${c.ms.draw.toFixed(0)} ms, bake ${c.ms.bake.toFixed(0)} ms`
+      : 'compiling…')
   errors.replaceChildren(
     ...issues.map(i => {
       const li = document.createElement('li')
@@ -323,9 +424,10 @@ function hover(sx: number, sy: number): void {
 }
 
 // pan with the mouse, zoom with the wheel about the cursor
-let drag: { x: number; y: number; cx: number; cz: number } | null = null
+// a drag keeps the ground point it started on under the pointer
+let drag: { at: Pt } | null = null
 canvas.addEventListener('pointerdown', e => {
-  drag = { x: e.clientX, y: e.clientY, cx: view.cx, cz: view.cz }
+  drag = { at: toWorld(e.offsetX, e.offsetY) }
   canvas.setPointerCapture(e.pointerId)
 })
 canvas.addEventListener('pointerup', () => {
@@ -333,9 +435,11 @@ canvas.addEventListener('pointerup', () => {
 })
 canvas.addEventListener('pointermove', e => {
   if (drag) {
-    view.cx = drag.cx - (e.clientX - drag.x) / view.ppm
-    view.cz = drag.cz + (e.clientY - drag.y) / view.ppm
-    draw()
+    const now = toWorld(e.offsetX, e.offsetY)
+    view.cx += drag.at[0] - now[0]
+    view.cz += drag.at[1] - now[1]
+    place()
+    redraw()
   }
   hover(e.offsetX, e.offsetY)
 })
@@ -345,10 +449,12 @@ canvas.addEventListener(
     e.preventDefault()
     const before = toWorld(e.offsetX, e.offsetY)
     view.ppm = Math.max(0.05, Math.min(40, view.ppm * Math.exp(-e.deltaY * 0.0015)))
+    place()
     const after = toWorld(e.offsetX, e.offsetY)
     view.cx += before[0] - after[0]
     view.cz += before[1] - after[1]
-    draw()
+    place()
+    redraw()
     hover(e.offsetX, e.offsetY)
   },
   { passive: false },
@@ -356,10 +462,21 @@ canvas.addEventListener(
 addEventListener('resize', draw)
 picker.addEventListener('change', () => {
   current = null
-  history.replaceState(null, '', `?map=${picker.selectedOptions[0].text}`)
+  const q = new URLSearchParams(location.search) // the other settings (?tilt=) stay
+  q.set('map', picker.selectedOptions[0].text)
+  history.replaceState(null, '', `?${q}`)
   void compile('pick')
 })
 showOutlines.addEventListener('change', draw)
+lit?.setFlat(mode.value === 'flat') // a value the browser restored on reload
+lit?.onLost(() => {
+  litError = 'the WebGL context was lost: reload the page'
+  panel()
+})
+mode.addEventListener('change', () => {
+  lit?.setFlat(mode.value === 'flat')
+  draw()
+})
 showIds.addEventListener('change', draw)
 
 // a saved map file, catalogue or heightfield (vite.config.ts sends `map-changed` with the file and the time it was
@@ -396,6 +513,14 @@ window.MAP = {
   get height() {
     return height
   },
+  // the lit view: the last compile's bake time and the last frame's CPU time, ms; draw a frame
+  get bakeMs() {
+    return current?.ms.bake ?? null
+  },
+  get frameMs() {
+    return frameMs
+  },
+  draw,
   compile: () => compile('manual'),
   fit: () => {
     fit()

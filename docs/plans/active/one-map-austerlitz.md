@@ -83,7 +83,7 @@ These are owner decisions and merges, not code:
 
 ### 1. Relief from real heights, in the language
 
-Built by M5: `docs/plans/active/m5-relief.md`, decision 0063.
+Built by M5: `docs/plans/done/m5-relief.md`, decision 0063.
 
 - A relief kind `relief.dem`: a heightfield file, its transform onto the map's extent, and its datum. Also a `sources`
   entry of kind `dem` with its licence and credit (the format proposal's `relief` row, `dem`).

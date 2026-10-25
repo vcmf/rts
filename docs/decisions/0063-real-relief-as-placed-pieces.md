@@ -12,7 +12,7 @@ true local scale: the land keeps its real shapes and slopes, while the distances
 shortened. Austerlitz (`docs/plans/active/one-map-austerlitz.md`) is drawn on the real ground. Until now every height in
 a map was invented (`relief.base` and the landforms), and the prototype's real heights were a page-specific,
 git-ignored script squeezed 2.5×. The owner decided on 2026-10-24 that the derived heightfield is committed with
-ČÚZK's credit. Plan: `docs/plans/active/m5-relief.md`.
+ČÚZK's credit. Plan: `docs/plans/done/m5-relief.md`.
 
 ## Decision
 
