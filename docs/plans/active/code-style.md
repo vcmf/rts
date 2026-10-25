@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-23
+last_reviewed: 2026-10-24
 ---
 
 # Plan: code style, a formatter and readability lint rules
@@ -62,9 +62,11 @@ Per PR, every check run with its full output and exit code (`AGENTS.md`):
   measurement: 0 of 8,417 differed). The formatting commit touches no file outside its area.
 - **PR 1**: the golden replay hashes unchanged (`test/golden/*.json`, read by the Vitest suite, not regenerated);
   `npm run check:data` reports the same hashes as main; `test/lint.test.ts` passes (its fixture not formatted).
-- **PR 2**: on the built page (vite build and preview), `node tools/golden.mjs main:<page> <page>` pixel-identical
-  for the look page and the sim page; `node tools/guard.mjs`, `node tools/water-check.mjs`,
-  `node tools/water-look-check.mjs`, `node tools/detail-check.mjs` pass against main; `npm run check:app`.
+- **PR 2**: on the built page (vite build and preview), `node tools/golden.mjs <main> <branch>` pixel-identical
+  for the look page, also with `?armies=20`. The sim page has no `__proto` for golden to drive: its built bundle
+  byte-identical to main's and `npm run check:app` (every session's replay reproduces the page's hashes) cover it.
+  `node tools/guard.mjs --base`, the `--selftest` of `tools/detail-check.mjs`, `tools/water-check.mjs` and
+  `tools/water-look-check.mjs` give main's results (a check that fails on main, fails the same).
 - **PR 3**: each tool's `--selftest` passes (`tools/golden.mjs`, `tools/detail-check.mjs`, `tools/water-check.mjs`,
   `tools/water-look-check.mjs`), `node tools/check-negatives.mjs` passes, `npm run check:data`, Vitest.
 - After PR 3: no line over 120 columns in the formatted areas except long strings, templates, URLs and regular
@@ -79,6 +81,18 @@ Prettier, then `eslint --fix` with the four rules, then Prettier again, on `src/
 among them. The one failure was a cost test (`test/soldiers.test.ts`, 40 battalions of 400: 12.82 ms against a 12 ms
 budget, with the whole suite running in parallel on a loaded machine; CI skips the cost tests); run alone it passed
 twice on the formatted copy and twice on main, alternating.
+
+### Measured for PR 2 (2026-10-24, #160, on main 1fa1312)
+
+`npm run format` on `src/look/`, `src/render/`, `src/app/`: 42 files, +10,993 −2,873; then 100 hanging comments
+moved and 156 comments over 120 columns shortened. Lines over 120: `src/look/` 1,159 → 46, `src/render/` 102 → 0,
+`src/app/` 50 → 6 (all strings, templates or URLs). Rule hits 2,844 → 0. `npm test` exit 0 (309 of 309),
+`check:data` the same hashes, `check-docs` and `build` exit 0. The built `dist/` against main's: 68 of 70 files
+byte-identical (every sim-page file among them); the look chunk the same size, differing only in the build stamp.
+The AST of all 42 files matches main's, 3,185 literal parts and every file's comment words unchanged. Golden
+match (0/16 regions on all 8 cameras, with and without `?armies=20`); `guard --base`, detail and water `--selftest`
+exit 0; `water-look-check --selftest` exit 1 on `banks` (#118) and `winter` (#120), its output identical to main's;
+`check:app` exit 0.
 
 ## Open questions
 

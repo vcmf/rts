@@ -8,7 +8,9 @@ const banned = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'sinh', 'c
 
 // decision 0052: the areas Prettier formats so far, and the style rules below cover. .prettierignore lists the rest;
 // test/format-scope.test.ts checks the two agree. Later PRs add areas here and take them out of .prettierignore.
-export const formatted = ['src/sim/', 'src/rulesets/', 'src/scenarios/', 'maps/']
+export const formatted = [
+  'src/sim/', 'src/rulesets/', 'src/scenarios/', 'maps/', 'src/look/', 'src/render/', 'src/app/',
+]
 
 // max-len skips a line that holds a string, and with it a comment at its end: this checks every comment on its own
 const commentWidth = {

@@ -29,140 +29,331 @@ import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
 
 export interface Terrain {
-  terrainMat: ShaderMaterial; terrainRoadsMat: ShaderMaterial; terrainBakedMat: ShaderMaterial; terrainSplitMat: MultiMaterial; tileMats: ShaderMaterial[]; farTerrainMat: ShaderMaterial; hillMat: ShaderMaterial; bankN: RawTexture
-  riverMask: DynamicTexture; riverMaskCanvas: HTMLCanvasElement
-  tileGround: GroundMesh; farGround: GroundMesh; apron: Mesh
+  terrainMat: ShaderMaterial
+  terrainRoadsMat: ShaderMaterial
+  terrainBakedMat: ShaderMaterial
+  terrainSplitMat: MultiMaterial
+  tileMats: ShaderMaterial[]
+  farTerrainMat: ShaderMaterial
+  hillMat: ShaderMaterial
+  bankN: RawTexture
+  riverMask: DynamicTexture
+  riverMaskCanvas: HTMLCanvasElement
+  tileGround: GroundMesh
+  farGround: GroundMesh
+  apron: Mesh
 }
 
-const TILE_W = D.spec.tile, TILE_SUB = D.spec.tileSub, FAR_W = D.spec.far, FAR_SUB = D.spec.farSub, FAR_CELL = D.farCell, BAND = D.band, MASK_N = D.spec.sizes.riverMask
+const TILE_W = D.spec.tile
+const TILE_SUB = D.spec.tileSub
+const FAR_W = D.spec.far
+const FAR_SUB = D.spec.farSub
+const FAR_CELL = D.farCell
+const BAND = D.band
+const MASK_N = D.spec.sizes.riverMask
 
 // heights come from the look data: the tile from the heightfield (decision 0012), the far ring from its own nodes
 export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: SpanGrid, water: RawTexture): Terrain {
   // DETAIL: the detail layer (src/look/shaders/painter.glsl), on the terrain and the water. BANKN: the tile shades the
   // river's banks with the fine bank normals (docs/plans/done/w2-river-banks.md). WATERDATA: the water data (W3), for
   // the shore band the tile paints near the water as the water does (docs/plans/done/w4-water-surface.md)
-  // two: with the live roads (ROADS, WebGL2) and without, where the macro bake holds them far out (src/look/main.ts swaps
-  // them by zoom: docs/plans/done/roads.md). On WebGL1 one, without
-  const make = (name: string, roads: boolean, paving = false) => mats.make(name, TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER', ...(roads ? ['#define ROADS'] : []), ...(paving ? ['#define PAVING', ...paveDefines()] : [])] })
-  // three tile materials: the live roads and the buildings' paving (terrainMat: on the yards' ground; the whole tile under
-  // ?split=0, the debug views), the live roads alone (terrainRoadsMat: on the ground near a road), and neither (the
-  // baked: far out, and the rest of the ground near). splitGround gives each its triangles. On WebGL1 one, without
-  const terrainMat = make('terrain', !mats.webgl1, !mats.webgl1), terrainRoadsMat = mats.webgl1 ? terrainMat : make('terrainRoads', true)
+  // two: with the live roads (ROADS, WebGL2) and without, where the macro bake holds them far out (src/look/main.ts
+  // swaps them by zoom: docs/plans/done/roads.md). On WebGL1 one, without
+  const make = (name: string, roads: boolean, paving = false) =>
+    mats.make(name, TER_VS, TER_FS, {
+      attributes: ['position', 'normal', 'aRiver'],
+      uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'],
+      samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'],
+      defines: [
+        '#define DETAIL',
+        '#define BANKN',
+        '#define WATERDATA',
+        '#define GROUND_BOUNCE',
+        '#define MEADOW_UNDER',
+        ...(roads ? ['#define ROADS'] : []),
+        ...(paving ? ['#define PAVING', ...paveDefines()] : []),
+      ],
+    })
+  // three tile materials: the live roads and the buildings' paving (terrainMat: on the yards' ground; the whole tile
+  // under ?split=0, the debug views), the live roads alone (terrainRoadsMat: on the ground near a road), and neither
+  // (the baked: far out, and the rest of the ground near). splitGround gives each its triangles. On WebGL1 one, without
+  const terrainMat = make('terrain', !mats.webgl1, !mats.webgl1)
+  const terrainRoadsMat = mats.webgl1 ? terrainMat : make('terrainRoads', true)
   const terrainBakedMat = mats.webgl1 ? terrainMat : make('terrainBaked', false)
   const tileMats = [...new Set([terrainMat, terrainRoadsMat, terrainBakedMat])]
   // the tile ground's three materials by triangle (splitGround: the paving only near a yard, the live roads only near a
   // road), made here so the ground keeps its place in the opaque draws (Babylon sorts them by the mesh's material's
   // creation: after the trees the ground cost more, docs/plans/done/trees-perf-trunks.md)
-  const terrainSplitMat = new MultiMaterial('terrainSplit', scene); terrainSplitMat.subMaterials = [terrainMat, terrainRoadsMat, terrainBakedMat]
+  const terrainSplitMat = new MultiMaterial('terrainSplit', scene)
+  terrainSplitMat.subMaterials = [terrainMat, terrainRoadsMat, terrainBakedMat]
   // the bank normals: x, z of the normal, the weight; the uncovered texels a level normal of no weight (the vertex
   // normals hold there)
   const bankN = spanTexture(scene, bank, [128, 128, 0, 0], 'bankN')
-  for (const m of tileMats) { m.setTexture('uWater', water); m.setTexture('uBankN', bankN) }
+  for (const m of tileMats) {
+    m.setTexture('uWater', water)
+    m.setTexture('uBankN', bankN)
+  }
   // the bank colours turn symmetric over the bank normals' edge fade, to meet the far ring's painted river (stroked
   // at the river's width) at the tile's edge
-  const edgeK = (x: number, z: number) => 1 - sstep(TILE_W / 2 - D.spec.bank.edge, TILE_W / 2, Math.max(Math.abs(x), Math.abs(z)))
+  const edgeK = (x: number, z: number) =>
+    1 - sstep(TILE_W / 2 - D.spec.bank.edge, TILE_W / 2, Math.max(Math.abs(x), Math.abs(z)))
   // the lab's test hill: the terrain's material without the ground's bank normals (they would shade its faces)
-  const hillMat = mats.make('hill', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uGB'], defines: ['#define DETAIL', '#define GROUND_BOUNCE'] })
+  const hillMat = mats.make('hill', TER_VS, TER_FS, {
+    attributes: ['position', 'normal', 'aRiver'],
+    samplers: ['uGB'],
+    defines: ['#define DETAIL', '#define GROUND_BOUNCE'],
+  })
   // far ring: the river painted from a mask (the samples stroked at their widths), since 15 m vertices can't hold it
-  const riverMaskCanvas = document.createElement('canvas'); riverMaskCanvas.width = riverMaskCanvas.height = MASK_N
-  // one path per run of equal (half-pixel) width: a canvas filter or a stroke per sample loses the GL context in SwiftShader
+  const riverMaskCanvas = document.createElement('canvas')
+  riverMaskCanvas.width = riverMaskCanvas.height = MASK_N
+  // one path per run of equal (half-pixel) width: a canvas filter or a stroke per sample
+  // loses the GL context in SwiftShader
   {
-    const g = riverMaskCanvas.getContext('2d')!, C = RIVER, k = MASK_N / FAR_W, X = (i: number) => (C.px[i] + FAR_W / 2) * k, Z = (i: number) => (C.pz[i] + FAR_W / 2) * k, w = (i: number) => Math.round(C.W[i] * k * 2) / 2
-    g.fillStyle = '#000'; g.fillRect(0, 0, MASK_N, MASK_N); g.strokeStyle = '#fff'; g.lineCap = g.lineJoin = 'round'
-    for (let i = 0; i < C.n - 1;) { const lw = w(i); g.lineWidth = lw; g.beginPath(); g.moveTo(X(i), Z(i)); let j = i + 1; for (; j < C.n - 1 && w(j) === lw; j++) g.lineTo(X(j), Z(j)); g.lineTo(X(j), Z(j)); g.stroke(); i = j }
+    const g = riverMaskCanvas.getContext('2d')!
+    const C = RIVER
+    const k = MASK_N / FAR_W
+    const X = (i: number) => (C.px[i] + FAR_W / 2) * k
+    const Z = (i: number) => (C.pz[i] + FAR_W / 2) * k
+    const w = (i: number) => Math.round(C.W[i] * k * 2) / 2
+    g.fillStyle = '#000'
+    g.fillRect(0, 0, MASK_N, MASK_N)
+    g.strokeStyle = '#fff'
+    g.lineCap = g.lineJoin = 'round'
+    for (let i = 0; i < C.n - 1;) {
+      const lw = w(i)
+      g.lineWidth = lw
+      g.beginPath()
+      g.moveTo(X(i), Z(i))
+      let j = i + 1
+      for (; j < C.n - 1 && w(j) === lw; j++) g.lineTo(X(j), Z(j))
+      g.lineTo(X(j), Z(j))
+      g.stroke()
+      i = j
+    }
   }
-  const riverMask = new DynamicTexture('riverMask', riverMaskCanvas, scene, true, Texture.BILINEAR_SAMPLINGMODE); riverMask.wrapU = riverMask.wrapV = Texture.CLAMP_ADDRESSMODE; riverMask.update(false)
-  const farTerrainMat = mats.make('farTerrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uRiverMask'], defines: ['#define FARRING', '#define DETAIL'] }); farTerrainMat.setTexture('uRiverMask', riverMask)
+  const riverMask = new DynamicTexture('riverMask', riverMaskCanvas, scene, true, Texture.BILINEAR_SAMPLINGMODE)
+  riverMask.wrapU = riverMask.wrapV = Texture.CLAMP_ADDRESSMODE
+  riverMask.update(false)
+  const farTerrainMat = mats.make('farTerrain', TER_VS, TER_FS, {
+    attributes: ['position', 'normal', 'aRiver'],
+    samplers: ['uRiverMask'],
+    defines: ['#define FARRING', '#define DETAIL'],
+  })
+  farTerrainMat.setTexture('uRiverMask', riverMask)
 
   function ground(size: number, sub: number): GroundMesh {
     const g = CreateGround('t', { width: size, height: size, subdivisions: sub, updatable: true }, scene)
-    const p = g.getVerticesData(VertexBuffer.PositionKind)!, coarse = size > TILE_W
+    const p = g.getVerticesData(VertexBuffer.PositionKind)!
+    const coarse = size > TILE_W
     const rv = new Float32Array(p.length / 3)
     // far ring: valley trough only, no channel and no water; the river is a painted line there (FARRING). rv=8 (no bank
     // colours): on a 14 m grid they would bead along the line. Vertex (row, col) is node (col, sub − row) of its grid.
     const m = D.hfMargin
-    for (let row = 0, k = 0; row <= sub; row++) for (let col = 0; col <= sub; col++, k++) {
-      if (coarse) { p[k * 3 + 1] = far.h[(sub - row) * far.n + col]; rv[k] = 8 }
-      else { p[k * 3 + 1] = HF.h[(sub - row + m) * HF.n + col + m]; rv[k] = bandOf(riverQuery(p[k * 3], p[k * 3 + 2]), edgeK(p[k * 3], p[k * 3 + 2])) }
+    for (let row = 0, k = 0; row <= sub; row++) {
+      for (let col = 0; col <= sub; col++, k++) {
+        if (coarse) {
+          p[k * 3 + 1] = far.h[(sub - row) * far.n + col]
+          rv[k] = 8
+        } else {
+          p[k * 3 + 1] = HF.h[(sub - row + m) * HF.n + col + m]
+          rv[k] = bandOf(riverQuery(p[k * 3], p[k * 3 + 2]), edgeK(p[k * 3], p[k * 3 + 2]))
+        }
+      }
     }
-    g.updateVerticesData(VertexBuffer.PositionKind, p); g.updateCoordinateHeights()
+    g.updateVerticesData(VertexBuffer.PositionKind, p)
+    g.updateCoordinateHeights()
     if (coarse) {
-      const ix = g.getIndices()!, keep: number[] = []
+      const ix = g.getIndices()!
+      const keep: number[] = []
       for (let t = 0; t < ix.length; t += 3) {
-        const cx = (p[ix[t] * 3] + p[ix[t + 1] * 3] + p[ix[t + 2] * 3]) / 3, cz = (p[ix[t] * 3 + 2] + p[ix[t + 1] * 3 + 2] + p[ix[t + 2] * 3 + 2]) / 3
+        const cx = (p[ix[t] * 3] + p[ix[t + 1] * 3] + p[ix[t + 2] * 3]) / 3
+        const cz = (p[ix[t] * 3 + 2] + p[ix[t + 1] * 3 + 2] + p[ix[t + 2] * 3 + 2]) / 3
         if (Math.max(Math.abs(cx), Math.abs(cz)) > BAND) keep.push(ix[t], ix[t + 1], ix[t + 2])
       }
       g.setIndices(keep)
     }
-    const n: number[] = []; VertexData.ComputeNormals(p, g.getIndices(), n); g.updateVerticesData(VertexBuffer.NormalKind, n)
+    const n: number[] = []
+    VertexData.ComputeNormals(p, g.getIndices(), n)
+    g.updateVerticesData(VertexBuffer.NormalKind, n)
     g.setVerticesData('aRiver', rv, false, 1)
-    g.material = coarse ? farTerrainMat : terrainMat; return g
+    g.material = coarse ? farTerrainMat : terrainMat
+    return g
   }
-  const tileGround = ground(TILE_W, TILE_SUB), farGround = ground(FAR_W, FAR_SUB)
+  const tileGround = ground(TILE_W, TILE_SUB)
+  const farGround = ground(FAR_W, FAR_SUB)
 
   // vertex index of grid point (x,z) in a CreateGround mesh (rows run from +z to -z)
-  const gridV = (size: number, sub: number, x: number, z: number) => { const c = size / sub, col = Math.round((x + size / 2) / c), row = sub - Math.round((z + size / 2) / c); return row * (sub + 1) + col }
-  const tp = tileGround.getVerticesData(VertexBuffer.PositionKind)!, tn = tileGround.getVerticesData(VertexBuffer.NormalKind)!, tr = tileGround.getVerticesData('aRiver')!
-  const fp = farGround.getVerticesData(VertexBuffer.PositionKind)!, fn = farGround.getVerticesData(VertexBuffer.NormalKind)!
-  const pos: number[] = [], nor: number[] = [], rv: number[] = [], idx: number[] = [], E2 = TILE_W / 2, R = Math.round(TILE_SUB * FAR_CELL / TILE_W)   // 8 tile cells per far cell
+  const gridV = (size: number, sub: number, x: number, z: number) => {
+    const c = size / sub
+    const col = Math.round((x + size / 2) / c)
+    const row = sub - Math.round((z + size / 2) / c)
+    return row * (sub + 1) + col
+  }
+  const tp = tileGround.getVerticesData(VertexBuffer.PositionKind)!
+  const tn = tileGround.getVerticesData(VertexBuffer.NormalKind)!
+  const tr = tileGround.getVerticesData('aRiver')!
+  const fp = farGround.getVerticesData(VertexBuffer.PositionKind)!
+  const fn = farGround.getVerticesData(VertexBuffer.NormalKind)!
+  const pos: number[] = []
+  const nor: number[] = []
+  const rv: number[] = []
+  const idx: number[] = []
+  const E2 = TILE_W / 2
+  // 8 tile cells per far cell
+  const R = Math.round((TILE_SUB * FAR_CELL) / TILE_W)
   // each apron vertex is a copy of a tile or far vertex (position, normal, bank value), so the seams are exact
   const add = (src: ArrayLike<number>, sn: ArrayLike<number>, k: number, r: number, x: number, z: number) => {
-    if (Math.abs(src[k * 3] - x) > 1e-3 || Math.abs(src[k * 3 + 2] - z) > 1e-3) throw Error(`apron: no grid vertex at ${x},${z}`)
-    pos.push(src[k * 3], src[k * 3 + 1], src[k * 3 + 2]); nor.push(sn[k * 3], sn[k * 3 + 1], sn[k * 3 + 2]); rv.push(r); return pos.length / 3 - 1
+    if (Math.abs(src[k * 3] - x) > 1e-3 || Math.abs(src[k * 3 + 2] - z) > 1e-3) {
+      throw Error(`apron: no grid vertex at ${x},${z}`)
+    }
+    pos.push(src[k * 3], src[k * 3 + 1], src[k * 3 + 2])
+    nor.push(sn[k * 3], sn[k * 3 + 1], sn[k * 3 + 2])
+    rv.push(r)
+    return pos.length / 3 - 1
   }
-  const T = (x: number, z: number) => { const k = gridV(TILE_W, TILE_SUB, x, z); return add(tp, tn, k, tr[k], x, z) }, Fv = (x: number, z: number) => add(fp, fn, gridV(FAR_W, FAR_SUB, x, z), 8, x, z)
+  const T = (x: number, z: number) => {
+    const k = gridV(TILE_W, TILE_SUB, x, z)
+    return add(tp, tn, k, tr[k], x, z)
+  }
+  const Fv = (x: number, z: number) => add(fp, fn, gridV(FAR_W, FAR_SUB, x, z), 8, x, z)
   // same winding as the ground meshes (their face normals point up)
-  const ti = tileGround.getIndices()!, up = (a: number, b: number, c: number, P: ArrayLike<number>) => { const ax = P[b * 3] - P[a * 3], az = P[b * 3 + 2] - P[a * 3 + 2], bx = P[c * 3] - P[a * 3], bz = P[c * 3 + 2] - P[a * 3 + 2]; return az * bx - ax * bz }
-  const sgn = Math.sign(up(ti[0], ti[1], ti[2], tp)), tri = (a: number, b: number, c: number) => { if (Math.sign(up(a, b, c, pos)) === sgn) idx.push(a, b, c); else idx.push(a, c, b) }
-  for (const [ux, uz, ox, oz] of [[1, 0, 0, -1], [0, 1, 1, 0], [-1, 0, 0, 1], [0, -1, -1, 0]]) {   // edge direction, outward normal
-    for (let s = 0; s < Math.round(FAR_SUB * TILE_W / FAR_W); s++) {                                // one far cell along the edge
-      const at = (t: number, o: number): [number, number] => [(-ux * E2 + ox * E2) + ux * t + ox * o, (-uz * E2 + oz * E2) + uz * t + oz * o], cell = TILE_W / TILE_SUB
-      const I: number[] = []; for (let k = 0; k <= R; k++) I.push(T(...at((s * R + k) * cell, 0)))
-      const O0 = Fv(...at(s * FAR_CELL, FAR_CELL)), O1 = Fv(...at((s + 1) * FAR_CELL, FAR_CELL))
+  const ti = tileGround.getIndices()!
+  const up = (a: number, b: number, c: number, P: ArrayLike<number>) => {
+    const ax = P[b * 3] - P[a * 3]
+    const az = P[b * 3 + 2] - P[a * 3 + 2]
+    const bx = P[c * 3] - P[a * 3]
+    const bz = P[c * 3 + 2] - P[a * 3 + 2]
+    return az * bx - ax * bz
+  }
+  const sgn = Math.sign(up(ti[0], ti[1], ti[2], tp))
+  const tri = (a: number, b: number, c: number) => {
+    if (Math.sign(up(a, b, c, pos)) === sgn) idx.push(a, b, c)
+    else idx.push(a, c, b)
+  }
+  for (const [ux, uz, ox, oz] of [
+    [1, 0, 0, -1],
+    [0, 1, 1, 0],
+    [-1, 0, 0, 1],
+    [0, -1, -1, 0],
+  ]) {
+    // edge direction, outward normal
+    for (let s = 0; s < Math.round((FAR_SUB * TILE_W) / FAR_W); s++) {
+      // one far cell along the edge
+      const at = (t: number, o: number): [number, number] => [
+        -ux * E2 + ox * E2 + ux * t + ox * o,
+        -uz * E2 + oz * E2 + uz * t + oz * o,
+      ]
+      const cell = TILE_W / TILE_SUB
+      const I: number[] = []
+      for (let k = 0; k <= R; k++) I.push(T(...at((s * R + k) * cell, 0)))
+      const O0 = Fv(...at(s * FAR_CELL, FAR_CELL))
+      const O1 = Fv(...at((s + 1) * FAR_CELL, FAR_CELL))
       for (let k = 0; k < R; k++) tri(I[k], I[k + 1], k < R / 2 ? O0 : O1)
       tri(I[R / 2], O1, O0)
     }
     // corner square beyond the end of this edge: tile corner + three far vertices
-    const c = [ux * E2 + ox * E2, uz * E2 + oz * E2], a = T(c[0], c[1]), b = Fv(c[0] + ox * FAR_CELL, c[1] + oz * FAR_CELL), d = Fv(c[0] + ox * FAR_CELL + ux * FAR_CELL, c[1] + oz * FAR_CELL + uz * FAR_CELL), e = Fv(c[0] + ux * FAR_CELL, c[1] + uz * FAR_CELL)
-    tri(a, b, d); tri(a, d, e)
+    const c = [ux * E2 + ox * E2, uz * E2 + oz * E2]
+    const a = T(c[0], c[1])
+    const b = Fv(c[0] + ox * FAR_CELL, c[1] + oz * FAR_CELL)
+    const d = Fv(c[0] + ox * FAR_CELL + ux * FAR_CELL, c[1] + oz * FAR_CELL + uz * FAR_CELL)
+    const e = Fv(c[0] + ux * FAR_CELL, c[1] + uz * FAR_CELL)
+    tri(a, b, d)
+    tri(a, d, e)
   }
-  const apron = new Mesh('apron', scene), vd = new VertexData(); vd.positions = pos; vd.normals = nor; vd.indices = idx; vd.applyToMesh(apron)
-  apron.setVerticesData('aRiver', new Float32Array(rv), false, 1); apron.material = farTerrainMat
-  return { terrainMat, terrainRoadsMat, terrainBakedMat, terrainSplitMat, tileMats, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
+  const apron = new Mesh('apron', scene)
+  const vd = new VertexData()
+  vd.positions = pos
+  vd.normals = nor
+  vd.indices = idx
+  vd.applyToMesh(apron)
+  apron.setVerticesData('aRiver', new Float32Array(rv), false, 1)
+  apron.material = farTerrainMat
+  return {
+    terrainMat,
+    terrainRoadsMat,
+    terrainBakedMat,
+    terrainSplitMat,
+    tileMats,
+    farTerrainMat,
+    hillMat,
+    bankN,
+    riverMask,
+    riverMaskCanvas,
+    tileGround,
+    farGround,
+    apron,
+  }
 }
 
 // The tile's triangles by what can paint them (docs/plans/done/headroom.md: a shader's size costs every pixel it draws,
 // so each feature's code only where it can show): by its grid cell's cover texels and 1 m round them (read nearest:
-// a texel of slack), a cell with a yard's texel (YARD_ALL and up in B, src/look/world/cover.ts: under it the paving can paint)
-// takes the live roads with the paving (submesh 0, terrainMat); else a cell within the road gate of a line by the
-// cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate) the live roads alone (1, terrainRoadsMat); the
-// rest the material without either (2: there roadPaint returns its colour unchanged). The same pixels as the live
+// a texel of slack), a cell with a yard's texel (YARD_ALL and up in B, src/look/world/cover.ts: under it the paving can
+// paint) takes the live roads with the paving (submesh 0, terrainMat); else a cell within the road gate of a line by
+// the cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate) the live roads alone (1, terrainRoadsMat);
+// the rest the material without either (2: there roadPaint returns its colour unchanged). The same pixels as the live
 // material everywhere but for a step of rounding between the programs. Each triangle takes its cell's answer (by its
-// centroid: it lies inside it). Returns the tile ground's material for it, and the share of the tile's triangles each of
-// the three takes (paved, roads, neither)
-export function splitGround(t: Terrain, cover: CoverGrid): { material: MultiMaterial; share: [number, number, number] } {
-  const g = t.tileGround, P = g.getVerticesData(VertexBuffer.PositionKind)!, ix = g.getIndices()!, C = cover, M = 1
-  const n = TILE_SUB, w = TILE_W / n, h = TILE_W / 2, lim = Math.ceil(D.roadGate / WEAR_STEP) + 1
-  const at = (v: number) => Math.min(C.n - 1, Math.max(0, Math.floor(v))), cellOf = (v: number) => Math.min(n - 1, Math.max(0, Math.floor((v + h) / w)))
+// centroid: it lies inside it). Returns the tile ground's material for it, and the share of the tile's triangles each
+// of the three takes (paved, roads, neither)
+export function splitGround(
+  t: Terrain,
+  cover: CoverGrid,
+): { material: MultiMaterial; share: [number, number, number] } {
+  const g = t.tileGround
+  const P = g.getVerticesData(VertexBuffer.PositionKind)!
+  const ix = g.getIndices()!
+  const C = cover
+  const M = 1
+  const n = TILE_SUB
+  const w = TILE_W / n
+  const h = TILE_W / 2
+  const lim = Math.ceil(D.roadGate / WEAR_STEP) + 1
+  const at = (v: number) => Math.min(C.n - 1, Math.max(0, Math.floor(v)))
+  const cellOf = (v: number) => Math.min(n - 1, Math.max(0, Math.floor((v + h) / w)))
   const kind = new Uint8Array(n * n).fill(2)
-  for (let cz = 0; cz < n; cz++) for (let cx = 0; cx < n; cx++) {
-    const x0 = cx * w - h, z0 = cz * w - h
-    // (a village texel's field id is 0: its B is the yard's mark or 0; the first yard texel settles the cell)
-    scan: for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z0 + w + M - C.z0) / C.cell); j++) for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x0 + w + M - C.x0) / C.cell); i++) {
-      const o = (j * C.n + i) * 4
-      if (C.tex[o] === COVER.village && C.tex[o + 2] >= YARD_ALL) { kind[cz * n + cx] = 0; break scan }
-      if (C.tex[o + 3] <= lim) kind[cz * n + cx] = 1
+  for (let cz = 0; cz < n; cz++) {
+    for (let cx = 0; cx < n; cx++) {
+      const x0 = cx * w - h
+      const z0 = cz * w - h
+      // (a village texel's field id is 0: its B is the yard's mark or 0; the first yard texel settles the cell)
+      scan: for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z0 + w + M - C.z0) / C.cell); j++) {
+        for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x0 + w + M - C.x0) / C.cell); i++) {
+          const o = (j * C.n + i) * 4
+          if (C.tex[o] === COVER.village && C.tex[o + 2] >= YARD_ALL) {
+            kind[cz * n + cx] = 0
+            break scan
+          }
+          if (C.tex[o + 3] <= lim) kind[cz * n + cx] = 1
+        }
+      }
     }
   }
   // each triangle by its centroid's cell, once; then by kind, the paved first
-  const tk = new Uint8Array(ix.length / 3), count = [0, 0, 0]
+  const tk = new Uint8Array(ix.length / 3)
+  const count = [0, 0, 0]
   for (let k = 0; k < tk.length; k++) {
-    let x = 0, z = 0; for (let q = 0; q < 3; q++) { x += P[ix[k * 3 + q] * 3]; z += P[ix[k * 3 + q] * 3 + 2] }
-    tk[k] = kind[cellOf(z / 3) * n + cellOf(x / 3)]; count[tk[k]] += 3
+    let x = 0
+    let z = 0
+    for (let q = 0; q < 3; q++) {
+      x += P[ix[k * 3 + q] * 3]
+      z += P[ix[k * 3 + q] * 3 + 2]
+    }
+    tk[k] = kind[cellOf(z / 3) * n + cellOf(x / 3)]
+    count[tk[k]] += 3
   }
-  const out = new Uint32Array(ix.length), at3 = [0, count[0], count[0] + count[1]]
-  for (let k = 0; k < tk.length; k++) { const o = at3[tk[k]]; out[o] = ix[k * 3]; out[o + 1] = ix[k * 3 + 1]; out[o + 2] = ix[k * 3 + 2]; at3[tk[k]] += 3 }
-  g.setIndices(out); g.subMeshes = []
-  const nv = P.length / 3; new SubMesh(0, 0, nv, 0, count[0], g); new SubMesh(1, 0, nv, count[0], count[1], g); new SubMesh(2, 0, nv, count[0] + count[1], count[2], g)
+  const out = new Uint32Array(ix.length)
+  const at3 = [0, count[0], count[0] + count[1]]
+  for (let k = 0; k < tk.length; k++) {
+    const o = at3[tk[k]]
+    out[o] = ix[k * 3]
+    out[o + 1] = ix[k * 3 + 1]
+    out[o + 2] = ix[k * 3 + 2]
+    at3[tk[k]] += 3
+  }
+  g.setIndices(out)
+  g.subMeshes = []
+  const nv = P.length / 3
+  new SubMesh(0, 0, nv, 0, count[0], g)
+  new SubMesh(1, 0, nv, count[0], count[1], g)
+  new SubMesh(2, 0, nv, count[0] + count[1], count[2], g)
   return { material: t.terrainSplitMat, share: [count[0] / ix.length, count[1] / ix.length, count[2] / ix.length] }
 }
