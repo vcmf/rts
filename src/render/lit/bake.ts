@@ -158,11 +158,12 @@ export interface InkedLine {
  * The ink's distance fields on the cells, as RGBA bytes, the south row first: per channel the signed distance from a
  * cell's centre to the nearest edge (negative inside), over ±INK_RANGE m, 128 at the edge.
  * - R the ways' edges, from their centrelines (crisp hairlines at every zoom), their free ends cut square, as apply
- *   paints them; outside on every cell neither a way's nor beside one, and on water that took a way's cells;
+ *   paints them; outside on every cell neither a way's nor beside one;
  * - G the water, B the barriers, A the woods, from their cells: what the sim reads, whatever rule put them there
- *   (priority, `clear`, a hedge's gates). The water's and the woods' fields are smoothed so their edges run through
- *   the cells' steps (within about a metre of the shapes), not along them; the barriers' stay square, on the grid by
- *   design (proposal §3.6).
+ *   (priority, `clear`, a hedge's gates). The contract (decision 0065): every cell reads as its own kind at its
+ *   centre, and an edge lies within half a cell of the cells' sides. The water's and the woods' fields are smoothed so
+ *   their edges run through the cells' steps, not along them; the barriers' stay square, on the grid by design
+ *   (proposal §3.6).
  */
 export function bakeInk(
   L: Pick<Layers, 'x0' | 'z0' | 'cell' | 'nx' | 'nz' | 'veg' | 'water' | 'barrier' | 'way' | 'table'>,
@@ -180,8 +181,6 @@ export function bakeInk(
   const CHUNK = 16 // m: a long segment is scanned in pieces, so a diagonal one scans a strip, not its whole box
   for (const w of ways) {
     const pts = w.line
-    // a closed line (a loop) has no free end: no square cut at its seam
-    const closed = pts.length > 2 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]
     const pieces: { a: Pt; b: Pt; ends: [boolean, boolean] }[] = []
     for (let k = 1; k < pts.length; k++) {
       const [p, q] = [pts[k - 1], pts[k]]
@@ -189,7 +188,8 @@ export function bakeInk(
       for (let t = 0; t < n; t++) {
         const a: Pt = [p[0] + ((q[0] - p[0]) * t) / n, p[1] + ((q[1] - p[1]) * t) / n]
         const b: Pt = [p[0] + ((q[0] - p[0]) * (t + 1)) / n, p[1] + ((q[1] - p[1]) * (t + 1)) / n]
-        pieces.push({ a, b, ends: [!closed && k === 1 && t === 0, !closed && k === pts.length - 1 && t === n - 1] })
+        // the line's first and last points are its free ends, a loop's too (apply cuts its seam square as well)
+        pieces.push({ a, b, ends: [k === 1 && t === 0, k === pts.length - 1 && t === n - 1] })
       }
     }
     for (const { a, b, ends } of pieces) {
@@ -206,19 +206,18 @@ export function bakeInk(
       }
     }
   }
-  // a way's ink only on its cells and beside them, and never on water that took its cells (a crossing with no bridge):
-  // the shape's line never shows where the sim has no way
+  // a way's ink only on its cells and beside them: outside elsewhere (the shape's line never shows where the sim has no
+  // way). Where a way crosses water with no bridge the sim has both, and so does the map
+  const nearWay = new Uint8Array(nx * nz)
   for (let j = 0; j < nz; j++) {
     for (let i = 0; i < nx; i++) {
-      const c = j * nx + i
-      if (L.way[c]) continue
-      let near = false
-      for (let b = Math.max(0, j - 1); b <= Math.min(nz - 1, j + 1) && !near; b++) {
-        for (let a = Math.max(0, i - 1); a <= Math.min(nx - 1, i + 1); a++) if (L.way[b * nx + a]) near = true
+      if (!L.way[j * nx + i]) continue
+      for (let b = Math.max(0, j - 1); b <= Math.min(nz - 1, j + 1); b++) {
+        for (let a = Math.max(0, i - 1); a <= Math.min(nx - 1, i + 1); a++) nearWay[b * nx + a] = 1
       }
-      if (!near || L.water[c]) sd[c] = INK_RANGE
     }
   }
+  for (let c = 0; c < sd.length; c++) if (!nearWay[c]) sd[c] = INK_RANGE
   store(sd, 0)
   // the water, the barriers and the woods, from their cells
   const wood = L.table.map(r => r.attrs.growth === 'stand')
@@ -329,11 +328,12 @@ export function cellField(
 }
 
 /**
- * Joins cells that touch only at a corner. Where two cells of one kind meet diagonally and the two beside them are of
- * the other, the corner they share is ambiguous; `join` says which kind it belongs to: each cell of the other kind with
- * neighbours of the joining kind on two adjacent sides (an L) is pulled to within a tenth of a cell of the edge, so the
- * corner reads on the joining side. Water and barriers join their insides (a stream or a hedge one cell wide stepping
- * diagonally stays one line); the woods join their outsides (a path cut diagonally through a wood stays one clearing).
+ * Joins cells that touch only at a corner: in a two-by-two block where two cells of one kind meet diagonally and the
+ * other two are of the other kind (a saddle), the shared corner is ambiguous; `join` says which kind it belongs to.
+ * Each of the other kind's two cells there is pulled to within a tenth of a cell of the edge, so the corner reads on
+ * the joining side. Water and barriers join their insides (a stream or a hedge one cell wide stepping diagonally stays
+ * one line); the woods join their outsides (a path cut diagonally through a wood stays one clearing). A stair-step
+ * edge holds no saddle (three cells of each of its blocks are of one kind) and is left alone. Writes `f` in place.
  */
 function joinCorners(
   f: Float32Array,
@@ -344,22 +344,21 @@ function joinCorners(
   join: 'inside' | 'outside',
 ): Float32Array {
   const hold = cell * 0.1
-  const out = Float32Array.from(f)
-  for (let j = 0; j < nz; j++) {
-    for (let i = 0; i < nx; i++) {
-      const c = j * nx + i
-      const m = mask[c]
-      if ((join === 'inside') === (m === 1)) continue // only the other kind's cells give way
-      const other = (a: number, b: number) => a >= 0 && a < nx && b >= 0 && b < nz && mask[b * nx + a] !== m
-      const w = other(i - 1, j)
-      const e = other(i + 1, j)
-      const s = other(i, j - 1)
-      const n = other(i, j + 1)
-      if (!((w || e) && (s || n))) continue
-      out[c] = m ? Math.max(f[c], -hold) : Math.min(f[c], hold)
+  const pull = join === 'inside' ? 0 : 1 // the kind of the cells that give way
+  for (let j = 0; j + 1 < nz; j++) {
+    for (let i = 0; i + 1 < nx; i++) {
+      const a = j * nx + i // the block's four cells: a b on this row, c d on the next
+      const b = a + 1
+      const c = a + nx
+      const d = c + 1
+      // a saddle: a and d alike, b and c alike, the two pairs different
+      if (mask[a] !== mask[d] || mask[b] !== mask[c] || mask[a] === mask[b]) continue
+      for (const q of mask[a] === pull ? [a, d] : [b, c]) {
+        f[q] = pull === 1 ? Math.max(f[q], -hold) : Math.min(f[q], hold)
+      }
     }
   }
-  return out
+  return f
 }
 
 /** The ways of a compiled map's features, as ink: each centreline at the half-width apply paints it (`lineReach`). */

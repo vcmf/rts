@@ -118,13 +118,14 @@ void main() {
     float mpp = 0.5 * (fwidth(vW.x) + fwidth(vW.z));   /* about the metres a pixel spans */
     float far = 1.0 - 0.55 * smoothstep(1.0, 3.0, mpp);
     /* a road's ground a little lighter, its two edges in ink */
-    mapC = mix(mapC, min(mapC * 1.06 + 0.02, vec3(1.0)), step(I.r, 0.0) * 0.6 * inside);
+    float onRoad = clamp(0.5 - I.r / max(fwidth(I.r), 1e-5), 0.0, 1.0);   /* anti-aliased, as the water and the woods */
+    mapC = mix(mapC, min(mapC * 1.06 + 0.02, vec3(1.0)), onRoad * 0.6 * inside);
     mapC = mix(mapC, uLine, hair(I.r) * 0.85 * far * inside);
     /* the water's banks, and a lining 4.5 m and 7.5 m inside a pond's or a river's shore (a stream up to 9 m wide has
        none: its centreline lies nearer its banks than the first lining) */
     mapC = mix(mapC, uLine, hair(I.g) * 0.7 * far * inside);
     /* not where the field folds over (the water's middle line, where the distance stops growing) */
-    float rising = smoothstep(0.3, 0.6, fwidth(I.g) / max(2.0 * mpp, 1e-6));
+    float rising = smoothstep(0.3, 0.6, length(vec2(dFdx(I.g), dFdy(I.g))) / max(mpp, 1e-6));   /* any direction */
     mapC = mix(mapC, uLine, (hair(I.g + 4.5) * 0.28 + hair(I.g + 7.5) * 0.16) * step(I.g, -2.0) * rising * inside);
     /* hedges and walls: solid, dark */
     mapC = mix(mapC, uBarrier, max((1.0 - smoothstep(-0.4, 0.0, I.b)) * 0.75, hair(I.b) * 0.6) * inside);

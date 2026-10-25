@@ -126,18 +126,16 @@ describe('M6b: the ink distance fields', () => {
     expect(read(out, 0, 7, 1)).toBeCloseTo(1, 1) // 1 m past its end, beside its cells: outside by 1 m (square)
     expect(read(out, 0, 0, 15)).toBeCloseTo(INK_RANGE, 1) // out of reach
   })
-  it("a way's ink shows only on and beside its cells, never on water that took them", () => {
+  it("a way's ink shows only on and beside its cells", () => {
     const line: Pt[] = [
       [-20, 1],
       [20, 1],
     ]
-    const water = cells()
-    for (let j = 0; j < nz; j++) for (let i = 9; i <= 11; i++) water[at(i, j)] = 1 // a stream across the road
     const way = wayCells(0, 19, 9, 11)
-    for (let j = 9; j <= 11; j++) for (let i = 9; i <= 11; i++) way[at(i, j)] = 0 // the stream took the road's cells
-    const out = bakeInk(layers({ way, water }), [{ line, half: 3 }])
+    for (let j = 9; j <= 11; j++) for (let i = 8; i <= 12; i++) way[at(i, j)] = 0 // a stretch with no way cells
+    const out = bakeInk(layers({ way }), [{ line, half: 3 }])
     expect(read(out, 0, -10, 1)).toBeLessThan(0) // the road
-    expect(read(out, 0, 1, 1)).toBeCloseTo(INK_RANGE, 1) // the stream: no road there
+    expect(read(out, 0, 1, 1)).toBeCloseTo(INK_RANGE, 1) // two cells from any of its cells: no road drawn
   })
   it('waysOf gives each way the half-width apply paints it at (lineReach: at least just over half a cell)', () => {
     const line: Pt[] = [
@@ -212,6 +210,33 @@ describe('M6b: the ink distance fields', () => {
     const f = cellField(m, nx, nz, cell, true, 'outside')
     const corner = (f[at(9, 9)] + f[at(10, 10)] + f[at(10, 9)] + f[at(9, 10)]) / 4
     expect(corner).toBeGreaterThan(0)
+  })
+  it('the contract (decision 0065): every cell reads as its own kind at its centre, whatever the shape', () => {
+    const shapes: Record<string, (i: number, j: number) => boolean> = {
+      'a stair-step shore': (i, j) => i + j < 20,
+      'a saddle checkerboard': (i, j) => (i + j) % 2 === 0,
+      'a line one cell wide': i => i === 9,
+      'a diagonal one cell wide': (i, j) => i === j,
+      'a blob': (i, j) => (i - 9.5) ** 2 + (j - 9.5) ** 2 < 30,
+      'a ring of clearings': (i, j) => (i - 9.5) ** 2 + (j - 9.5) ** 2 > 12 || (i + j) % 3 === 0,
+    }
+    for (const [what, inside] of Object.entries(shapes)) {
+      const m = new Uint8Array(nx * nz)
+      for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) m[at(i, j)] = inside(i, j) ? 1 : 0
+      for (const smooth of [true, false]) {
+        for (const join of ['inside', 'outside'] as const) {
+          const f = cellField(m, nx, nz, cell, smooth, join)
+          const wrong = [...m.keys()].filter(c => (m[c] ? f[c] >= 0 : f[c] <= 0))
+          expect(wrong, `${what}, smooth ${smooth}, join ${join}`).toEqual([])
+        }
+      }
+    }
+  })
+  it('a stair-step shore is no saddle: its dry cells keep their distance', () => {
+    const m = new Uint8Array(nx * nz)
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) m[at(i, j)] = i + j < 20 ? 1 : 0
+    const f = cellField(m, nx, nz, cell, false)
+    expect(f[at(10, 10)]).toBeCloseTo(1, 5) // a dry step cell: its raw distance, half a cell from the water's side
   })
   it('a clearing one cell wide in a wood stays open after the smoothing', () => {
     const m = new Uint8Array(nx * nz).fill(1)

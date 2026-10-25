@@ -122,10 +122,11 @@ settings (the owner, 2026-10-25).
   barriers come from their cells, the ways' edges from their shapes. Decision 0065 was amended in this PR, before it
   merged, to say so. The first design (every fill from the shapes) is in the review rounds below.
 - `bakeInk` (`src/render/lit/bake.ts`), in the worker: R the ways' edges from their centrelines at the width apply
-  paints them (`waysOf`, `lineReach`), cut square at free ends; G the water, B the barriers, A the woods, each the
-  signed distance field of its cells (`cellField`: a two-pass chamfer, the 0 on the cells' sides; smoothed by a
-  binomial blur for the water and the woods, square for the barriers). The mask's G marks the ways' cells and those
-  next to them: the road ink draws only there. The fields are mipmapped.
+  paints them (`waysOf`, `lineReach`), cut square at free ends, outside away from the ways' cells; G the water, B the
+  barriers, A the woods, each the signed distance field of its cells (`cellField`: a two-pass chamfer, the 0 on the
+  cells' sides; smoothed by a binomial blur for the water and the woods, each cell held on its own side; saddle
+  corners joined; square for the barriers). The contract (the owner, 2026-10-25): every cell reads as its own kind at
+  its centre, and an edge lies within half a cell of the cells' sides. No texture is mipmapped.
 - The shader fills the water and the woods from their fields, draws hairlines where a field is 0 (banks, road
   edges), a pond's or a river's lining at 4.5 m and 7.5 m (not on the water's middle line, where the field folds), the
   barriers solid; a road's ground a little lighter; the edges fade from a metre a pixel to three. Contours fade below
@@ -194,3 +195,14 @@ settings (the owner, 2026-10-25).
   is scanned in 16 m pieces; a closed way has no square cut at its seam; no names over the fallback view.
   **Open:** far out, features a cell or two wide are sampled, not averaged, and may shimmer while the view moves; a
   min-filtered mip chain would keep them steady.
+- **Redesign, round 3**: severe, the redesign's third. The corner join pulled every stair-step cell, not only true
+  diagonal corners, moving 45° shores and hedge steps about half a metre onto the other kind's cells; and the road
+  gate's water test never applied (apply keeps a way's cells under the water it crosses). The rounds kept holding a
+  smoothed edge to the cells' exact sides, which no smooth edge can meet: the rule was the problem. Stopped and asked
+  the owner, who set the contract: every cell reads as its own kind at its centre, an edge within half a cell of the
+  cells' sides (decision 0065, amended in this PR). Under it: the corner join holds only saddles (a stair-step is left
+  alone), with a test of the contract over stair-steps, saddles, one-cell lines, diagonals, a blob and clearings; the
+  road gate is the ways' cells alone (an unbridged crossing shows both, as the sim has both); a loop's seam is cut
+  square as apply cuts it; the join writes in place and the gate dilates the way cells once; the road surface is
+  anti-aliased like the fills; the lining's fold test reads the field's gradient in any direction; the docs no longer
+  say the fields are mipmapped. The review count restarts with the contract.
