@@ -7,7 +7,7 @@ import type { Feature, Pt } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName } from './protocol.ts'
 import { demFileNames } from '../../map/dem.ts'
-import { LitView, TILT } from '../../render/lit/view.ts'
+import { LitView, NEAR_W, TILT } from '../../render/lit/view.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -76,7 +76,14 @@ const showOutlines = $<HTMLInputElement>('outlines')
 const showIds = $<HTMLInputElement>('ids')
 const mode = $<HTMLSelectElement>('mode')
 // the lit map view under the overlays (docs/plans/active/m6-lit-view.md); ?tilt= degrees off straight down
-const lit = new LitView($<HTMLCanvasElement>('lit'))
+// the lit view needs WebGL2 (decision 0046): without it the page still compiles, lists errors and reads cells
+let lit: LitView | null = null
+let litError = ''
+try {
+  lit = new LitView($<HTMLCanvasElement>('lit'))
+} catch (e) {
+  litError = (e as Error).message
+}
 const tiltParam = Number(new URLSearchParams(location.search).get('tilt'))
 const tilt = Number.isFinite(tiltParam) && new URLSearchParams(location.search).has('tilt') ? tiltParam : TILT
 
@@ -139,12 +146,11 @@ function onReply(e: MessageEvent<CompileReply>): void {
   }
   if (r.ok) {
     const fresh = !current || current.map.id !== r.map.id
-    current = r
     issues = []
     layers = Object.fromEntries(Object.entries(r.layers).map(([k, b]) => [k, new Uint16Array(b)]))
     height = new Float64Array(r.height)
     depth = new Uint16Array(r.depth)
-    lit.setMap({
+    lit?.setMap({
       x0: r.x0,
       z0: r.z0,
       cell: r.cell,
@@ -152,12 +158,16 @@ function onReply(e: MessageEvent<CompileReply>): void {
       nz: r.nz,
       datum: r.map.datum ?? 0,
       season: r.map.season,
-      light: 'nw',
+      light: r.light,
       height,
       relief: new Uint8Array(r.relief),
       masks: new Uint8Array(r.masks),
       flat: { w: r.w, h: r.h, rgba: new Uint8Array(r.rgba) },
     })
+    // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
+    current = { ...r, relief: new ArrayBuffer(0), masks: new ArrayBuffer(0), rgba: new ArrayBuffer(0) }
+    // the first frame after a new map may come before its shader compiles: draw again once it is ready
+    void lit?.ready().then(draw)
     if (fresh || !view.ppm) fit()
   } else issues = r.issues
   const now = performance.now()
@@ -198,9 +208,44 @@ function fit(): void {
   view = { cx: 0, cz: 0, ppm: Math.min(r.width / w, r.height / h) * 0.95 }
 }
 // the camera follows the view; every point drawn or picked goes through it
-const place = () => lit.setCamera({ ...view, tilt })
-const toScreen = (x: number, z: number): [number, number] => lit.project(x, z)
-const toWorld = (sx: number, sy: number): Pt => lit.unproject(sx, sy) ?? [view.cx, view.cz]
+const place = () => lit?.setCamera({ ...view, tilt })
+const toScreen = (x: number, z: number): [number, number] | null => lit?.project(x, z) ?? null
+/**
+ * Adds a polyline (or a ring) of ground points to the 2D path, clipped where it passes behind the tilted camera: the
+ * part of a segment too near the camera's plane is left out, never drawn mirrored (LitView.depth).
+ */
+function groundPath(pts: Pt[], close: boolean): void {
+  ctx.beginPath()
+  if (!lit) return
+  const L = lit
+  const room = (p: Pt) => L.depth(p[0], p[1]) - NEAR_W // above 0: far enough in front to draw
+  const along = (q: Pt, p: Pt, t: number): Pt => [q[0] + (p[0] - q[0]) * t, q[1] + (p[1] - q[1]) * t]
+  let pen = false
+  const to = (p: Pt) => {
+    const s = L.project(p[0], p[1])
+    if (!s) return
+    if (pen) ctx.lineTo(s[0], s[1])
+    else ctx.moveTo(s[0], s[1])
+    pen = true
+  }
+  const seq = close ? [...pts, pts[0]] : pts
+  for (let k = 0; k < seq.length; k++) {
+    const p = seq[k]
+    const rp = room(p)
+    if (k > 0) {
+      const q = seq[k - 1]
+      const rq = room(q)
+      if (rq > 0 !== rp > 0) {
+        // where the segment meets the near limit (the depth is linear along it), a hair on the drawable side
+        const t = rq / (rq - rp)
+        to(along(q, p, rp > 0 ? t + 1e-6 : t - 1e-6))
+        if (rp <= 0) pen = false
+      }
+    }
+    if (rp > 0) to(p)
+  }
+}
+const toWorld = (sx: number, sy: number): Pt => lit?.unproject(sx, sy) ?? [view.cx, view.cz]
 
 const CATEGORY_INK: Record<string, string> = {
   relief: '#7a5a2a',
@@ -219,13 +264,7 @@ function outline(f: Feature): void {
   ctx.fillStyle = ink
   ctx.lineWidth = 1
   const path = (pts: Pt[], close: boolean) => {
-    ctx.beginPath()
-    pts.forEach((p, k) => {
-      const [x, y] = toScreen(p[0], p[1])
-      if (k) ctx.lineTo(x, y)
-      else ctx.moveTo(x, y)
-    })
-    if (close) ctx.closePath()
+    groundPath(pts, close)
     ctx.stroke()
   }
   if (f.line) path(f.line, false)
@@ -241,16 +280,16 @@ function outline(f: Feature): void {
   if (f.circle) path(ring(f.circle[0], f.circle[1], f.circle[1], 0), true)
   if (f.ellipse) path(ring(...f.ellipse), true)
   const at = anchor(f)
-  if (f.point || f.near) {
-    const [x, y] = toScreen(...(f.point ?? f.near!))
+  const mark = (f.point || f.near) && toScreen(...(f.point ?? f.near!))
+  if (mark) {
     ctx.beginPath()
-    ctx.arc(x, y, 3, 0, 2 * Math.PI)
+    ctx.arc(mark[0], mark[1], 3, 0, 2 * Math.PI)
     ctx.fill()
   }
-  if (showIds.checked && at) {
-    const [x, y] = toScreen(at[0], at[1])
+  const label = showIds.checked && at && toScreen(at[0], at[1])
+  if (label) {
     ctx.font = '11px ui-monospace, Menlo, monospace'
-    ctx.fillText(f.id, x + 4, y - 4)
+    ctx.fillText(f.id, label[0] + 4, label[1] - 4)
   }
 }
 // where a feature's id is written: its point, the middle of its line, its area's first corner
@@ -275,7 +314,7 @@ function draw(): void {
   ctx.clearRect(0, 0, r.width, r.height)
   if (!current) return
   place()
-  frameMs = lit.render()
+  frameMs = lit?.render() ?? 0
   // the play area
   const p = current.map.play
   const corners: Pt[] = [
@@ -286,13 +325,7 @@ function draw(): void {
   ]
   ctx.setLineDash([6, 4])
   ctx.strokeStyle = 'rgba(0,0,0,.45)'
-  ctx.beginPath()
-  corners.forEach((c, k) => {
-    const [x, y] = toScreen(c[0], c[1])
-    if (k) ctx.lineTo(x, y)
-    else ctx.moveTo(x, y)
-  })
-  ctx.closePath()
+  groundPath(corners, true)
   ctx.stroke()
   ctx.setLineDash([])
   if (showOutlines.checked) for (const f of current.map.features) outline(f)
@@ -304,9 +337,11 @@ function draw(): void {
 
 function panel(): void {
   const c = current
-  status.textContent = c
-    ? `${c.map.name}: ${c.map.features.length} features, ${c.nx}×${c.nz} cells of ${c.cell} m · validate ${c.ms.validate.toFixed(0)} ms, apply ${c.ms.apply.toFixed(0)} ms, draw ${c.ms.draw.toFixed(0)} ms, bake ${c.ms.bake.toFixed(0)} ms`
-    : 'compiling…'
+  status.textContent =
+    (litError ? `${litError}: only the panel works. ` : '') +
+    (c
+      ? `${c.map.name}: ${c.map.features.length} features, ${c.nx}×${c.nz} cells of ${c.cell} m · validate ${c.ms.validate.toFixed(0)} ms, apply ${c.ms.apply.toFixed(0)} ms, draw ${c.ms.draw.toFixed(0)} ms, bake ${c.ms.bake.toFixed(0)} ms`
+      : 'compiling…')
   errors.replaceChildren(
     ...issues.map(i => {
       const li = document.createElement('li')
@@ -382,8 +417,9 @@ picker.addEventListener('change', () => {
   void compile('pick')
 })
 showOutlines.addEventListener('change', draw)
+lit?.setFlat(mode.value === 'flat') // a value the browser restored on reload
 mode.addEventListener('change', () => {
-  lit.setFlat(mode.value === 'flat')
+  lit?.setFlat(mode.value === 'flat')
   draw()
 })
 showIds.addEventListener('change', draw)

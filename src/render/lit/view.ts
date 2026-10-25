@@ -22,6 +22,8 @@ import LIT_VS from './shaders/lit.vert?raw'
 import LIT_FS from './shaders/lit.frag?raw'
 
 const FOV = 0.52 // rad, vertical (the prototype's)
+// the clip w under which a ground point is too near the camera's plane to project (m in front of the camera)
+export const NEAR_W = 1
 export const TILT = 20 // degrees off straight down (decision 0055)
 // the relief's tone on the paper: never darker than SHADE_FLOOR (with its warm hue, 0.62 of the paper), never lighter
 // than SHADE_TOP (the prototype's)
@@ -72,9 +74,14 @@ export class LitView {
   private flat = 0
   private readonly canvas: HTMLCanvasElement
 
+  /** Throws when the browser has no WebGL2 (the shader reads its heights with texelFetch; decision 0046). */
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
     this.engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: false }, false)
+    if (this.engine.webGLVersion < 2) {
+      this.engine.dispose()
+      throw new Error('the lit map view needs WebGL2 (decision 0046)')
+    }
     this.engine.setHardwareScalingLevel(1 / Math.min(2, devicePixelRatio || 1))
     this.scene = new Scene(this.engine)
     this.scene.skipPointerMovePicking = true
@@ -127,6 +134,7 @@ export class LitView {
   /** Draws another map (or the same one recompiled): its textures and plane replace the last ones. */
   setMap(m: LitMap): void {
     for (const t of this.textures) t.dispose()
+    this.textures = []
     this.plane?.dispose()
     const W = m.nx * m.cell
     const H = m.nz * m.cell
@@ -170,8 +178,8 @@ export class LitView {
     this.material.setColor3('uPaper', seasonColour(PAPER, s))
     this.material.setColor3('uWaterW', seasonColour(WATER, s))
     this.material.setFloat('uFlat', this.flat)
-    // the plane reaches well past the map, so the paper fills the screen at any tilt
-    const pad = Math.max(W, H) * 2
+    // the plane reaches far past the map (100 km), so the paper fills the screen at every zoom and tilt the page allows
+    const pad = 100000
     const plane = new Mesh('plane', this.scene)
     const vd = new VertexData()
     const [a, b, c, d] = [m.x0 - pad, m.z0 - pad, m.x0 + W + pad, m.z0 + H + pad]
@@ -180,6 +188,11 @@ export class LitView {
     vd.applyToMesh(plane)
     plane.material = this.material
     this.plane = plane
+  }
+
+  /** Resolves once the plane's shader and textures are ready to draw (the first frame after setMap may not be). */
+  ready(): Promise<void> {
+    return this.scene.whenReadyAsync()
   }
 
   /** Shows the flat draft's colours instead of the lit map (a debug setting). */
@@ -202,8 +215,15 @@ export class LitView {
     this.viewProj = this.camera.getViewMatrix(true).multiply(this.camera.getProjectionMatrix(true))
   }
 
-  /** A ground point to CSS pixels on the canvas. */
-  project(x: number, z: number): [number, number] {
+  /** How far a ground point lies in front of the camera (its clip w): at or below NEAR_W it cannot be drawn. */
+  depth(x: number, z: number): number {
+    const m = this.viewProj.m
+    return x * m[3] + z * m[11] + m[15]
+  }
+
+  /** A ground point to CSS pixels on the canvas, or null when it lies behind the camera (see `depth`). */
+  project(x: number, z: number): [number, number] | null {
+    if (this.depth(x, z) <= NEAR_W) return null
     const r = this.canvas.getBoundingClientRect()
     const p = Vector3.Project(
       new Vector3(x, 0, z),

@@ -84,3 +84,20 @@ settings (the owner, 2026-10-25).
 1. The water wash needs the distance to the bank for its sunk-bank shading; the prototype takes it from a blurred
    depth. M6a uses the depth's gradient as the prototype does; a true distance field may read better.
 2. The bakes at 6 km: 9 M nodes. Measured in M6a; if the worker takes over a second, a 4 m bake for maps over 3 km.
+
+## Review rounds (M6a)
+
+- **Round 1** (`/code-review high`): severe. Three severe findings:
+  - ground points behind the tilted camera projected mirrored or huge, so outlines and the play area could draw
+    stray lines across the screen when zoomed in;
+  - the first frame after a map loaded could be blank (the shader still compiling), with nothing to redraw it;
+  - without WebGL2 the whole page failed to load, error list included.
+
+  Fixed: `LitView.depth` gives a ground point's clip w and `project` returns null at or under a near limit; the
+  page's outlines and play area are clipped where they meet it, and marks and ids behind it are skipped; the page
+  redraws when the view is ready (`ready`); the view refuses a WebGL1 engine with a clear error, and the page then
+  keeps its panel, errors and readout. With them: the textures' list is emptied after disposal; the view setting is
+  applied as the browser restores it; the plane reaches 100 km past the map, so no paper edge shows at the widest
+  zoom; the slope at the grid's edges is taken over its true span (no seam), with a test; the light travels with the
+  bake to the shader; the noise helpers are the look's (`src/look/noise.ts`); the page drops the bakes' buffers once
+  they are on the GPU.

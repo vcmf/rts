@@ -1,21 +1,8 @@
 // The lit map view's paper (docs/plans/active/m6-lit-view.md): a tileable texture drawn once on a canvas, as the
 // prototype draws it (prototypes/staff-map.html paperCanvas): mottling, fibres and speckles, grey around the middle
 // (the shader colours it).
+import { hash, mulberry } from '../../look/noise.ts'
 
-const hash = (x: number, y: number) => {
-  const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
-  return h - Math.floor(h)
-}
-function mulberry(seed: number): () => number {
-  let a = seed
-  return () => {
-    a |= 0
-    a = (a + 0x6d2b79f5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
 /** Smooth value noise at (x, y), periodic over P cells, from the hash shifted by s. */
 function periodic(x: number, y: number, P: number, s = 0): number {
   const xi = Math.floor(x)

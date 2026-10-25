@@ -3,6 +3,7 @@ import type { MapFile } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Resolved } from '../../map/resolve.ts'
 import type { LAYER_NAMES } from '../../map/apply.ts'
+import type { LightDir } from '../../render/lit/bake.ts'
 
 export interface CompileRequest {
   seq: number
@@ -32,6 +33,7 @@ export interface Compiled {
   // the lit view's bakes (src/render/lit/bake.ts): the relief on the nodes, the masks on the cells, RGBA
   relief: ArrayBuffer
   masks: ArrayBuffer
+  light: LightDir // the light the relief was baked for: the shader's water banks take the same
   ms: { validate: number; apply: number; draw: number; bake: number }
 }
 export interface Failed {

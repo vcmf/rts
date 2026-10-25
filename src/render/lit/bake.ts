@@ -3,6 +3,7 @@
 // the prototype's relief bake (prototypes/staff-map.html bakeRelief, docs/plans/active/relief-shading.md), with the
 // light's direction a parameter instead of the north-west diagonal.
 import type { Layers } from '../../map/apply.ts'
+import { sstep } from '../../look/noise.ts'
 
 // the light: toward it, one of the grid's eight directions (x east, z north), and its height
 export const LIGHTS = {
@@ -58,11 +59,6 @@ function boxMean(h: Float32Array, nx: number, nz: number, r: number): Float32Arr
   return out
 }
 
-const sstep = (a: number, b: number, x: number) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
-  return t * t * (3 - 2 * t)
-}
-
 /**
  * The shaded relief on the height nodes, as RGBA bytes, the south row first: R the slope's light (Lambert over
  * RELIEF.lambert, its middle on flat ground), G the cast shadow (255 lit), B the exposure (128 even, lower in hollows,
@@ -107,8 +103,13 @@ export function bakeRelief(heights: Float64Array, nx: number, nz: number, cell: 
   for (let j = 0; j < nz; j++) {
     for (let i = 0; i < nx; i++) {
       const k = j * nx + i
-      const gx = (h[j * nx + Math.min(nx - 1, i + 1)] - h[j * nx + Math.max(0, i - 1)]) / (2 * cell)
-      const gz = (h[Math.min(nz - 1, j + 1) * nx + i] - h[Math.max(0, j - 1) * nx + i]) / (2 * cell)
+      // central differences, one-sided at the grid's edges (over their true span)
+      const i0 = Math.max(0, i - 1)
+      const i1 = Math.min(nx - 1, i + 1)
+      const j0 = Math.max(0, j - 1)
+      const j1 = Math.min(nz - 1, j + 1)
+      const gx = (h[j * nx + i1] - h[j * nx + i0]) / ((i1 - i0) * cell)
+      const gz = (h[j1 * nx + i] - h[j0 * nx + i]) / ((j1 - j0) * cell)
       const nl = Math.sqrt(gx * gx + 1 + gz * gz)
       const lambert = Math.max(0, (-gx * L[0] + L[1] - gz * L[2]) / nl) / L[1] // 1 on flat ground
       const exposed = 0.5 - ((near[k] - h0[k]) * 0.1 + (wide[k] - h0[k]) * 0.03)

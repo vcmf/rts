@@ -6,7 +6,10 @@ import { checkFiles, validate } from '../../map/validate.ts'
 import { expand } from '../../map/expand.ts'
 import { apply, LAYER_NAMES } from '../../map/apply.ts'
 import { draft } from '../../map/draft.ts'
-import { bakeMasks, bakeRelief } from '../../render/lit/bake.ts'
+import { bakeMasks, bakeRelief, type LightDir } from '../../render/lit/bake.ts'
+
+// the map view's one light, from the north-west for now (docs/plans/active/one-map-austerlitz.md, open question 6)
+const LIGHT: LightDir = 'nw'
 import type { CompileReply, CompileRequest, LayerName } from './protocol.ts'
 
 self.onmessage = (e: MessageEvent<CompileRequest>) => {
@@ -86,7 +89,7 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
   const t2 = performance.now()
   const img = draft(L)
   const t3 = performance.now()
-  const relief = bakeRelief(L.height, L.nx + 1, L.nz + 1, L.cell, 'nw')
+  const relief = bakeRelief(L.height, L.nx + 1, L.nz + 1, L.cell, LIGHT)
   const masks = bakeMasks(L)
   const t4 = performance.now()
   const layers = Object.fromEntries(LAYER_NAMES.map(n => [n, L[n].buffer as ArrayBuffer])) as Record<
@@ -110,6 +113,7 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
     layers,
     table: L.table,
     relief: relief.buffer as ArrayBuffer,
+    light: LIGHT,
     masks: masks.buffer as ArrayBuffer,
     ms: { validate: t1 - t0, apply: t2 - t1, draw: t3 - t2, bake: t4 - t3 },
   }

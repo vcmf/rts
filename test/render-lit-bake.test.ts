@@ -32,6 +32,19 @@ describe('M6a: the relief bake', () => {
       expect(toward).toBe(255)
     })
   }
+  it("a uniform slope's light is the same at the grid's edges as inside it (no seam)", () => {
+    const h = new Float64Array(N * N)
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) h[j * N + i] = i * 0.5 + j * 0.25
+    const out = bakeRelief(h, N, N, 2, 'nw')
+    for (const [i, j] of [
+      [0, 40],
+      [N - 1, 40],
+      [40, 0],
+      [40, N - 1],
+    ]) {
+      expect(at(out, i, j)[0]).toBe(at(out, 40, 40)[0])
+    }
+  })
   it("the block's top stands exposed and its foot in a hollow", () => {
     const out = bakeRelief(block, N, N, 2, 'nw')
     expect(at(out, 40, 40)[2]).toBeGreaterThan(160)
