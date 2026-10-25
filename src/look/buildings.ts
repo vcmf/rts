@@ -18,6 +18,8 @@ import BUILDING_VS from './shaders/building.vert?raw'
 import BUILDING_FS from './shaders/building.frag?raw'
 import WINDMILL_DETAIL from '../../data/buildings/windmill-detail.png?url'
 import HOUSE_DETAIL from '../../data/buildings/house-detail.png?url'
+import FARMHOUSE_DETAIL from '../../data/buildings/farmhouse-detail.png?url'
+import MANOR_DETAIL from '../../data/buildings/manor-detail.png?url'
 
 interface BuildingModel {
   pos: number[]
@@ -38,7 +40,9 @@ declare global {
 // each model's palette, by role (wall, roof, timber, opening, accent: building.frag), and its detail texture. Muted
 // against the armies (readable first: the guard): the windmill's warm ochre stone and red cap, the cottages' pale
 // limestone and blue-grey slate, timber a dark brown, the openings near black, the chimney pots terracotta, the
-// windmill's sail blades a pale canvas (its accent: tools/building-to-js.py, sails)
+// farmhouse's red tiles and grey-green shutters (its accent), the manor's honey stone and brown-grey stone slates
+// (the windmill's accent, a pale canvas, was its rebuilt solid blades': its lattice sails are timber now, no face
+// of it is an accent)
 const PALETTE: Record<
   Building['model'],
   { wall: string; roof: string; timber: string; opening: string; accent: string; detail: string }
@@ -58,6 +62,22 @@ const PALETTE: Record<
     opening: '#1c1c1e',
     accent: '#a5643f',
     detail: HOUSE_DETAIL,
+  },
+  farmhouse: {
+    wall: '#c9bb9c',
+    roof: '#8f5340',
+    timber: '#5e4632',
+    opening: '#1c1c1e',
+    accent: '#7f8a78',
+    detail: FARMHOUSE_DETAIL,
+  },
+  manor: {
+    wall: '#c8b591',
+    roof: '#5f5a53',
+    timber: '#64472f',
+    opening: '#1c1c1e',
+    accent: '#a5643f',
+    detail: MANOR_DETAIL,
   },
 }
 const DETAIL_AMT = 0.35 // how much of the texture's value shows (the paint's grain is on top)

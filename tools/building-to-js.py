@@ -5,14 +5,17 @@
 # timber, opening, accent) by the median colour of the texels under it, nearest in Lab to the model's reference colours
 # (MODELS, below); the page paints each role from the palette. The detail keeps the texture's value only, each texel
 # over its neighbourhood's mean (so it varies about 1: the fine courses and slates), stored as 128 = 1, with a neutral
-# block (value 1) the generated faces take. Each model is cut to about MODELS[...]['tris'] triangles (the flat regions
-# dissolved within a role and a UV island, then collapsed; the export fails if the cut smears the detail: SMEAR_MAX),
-# the windmill's lattice sails made again first as four solid blades on stocks (sails; MODELS['windmill']['sails']),
-# and centred on its base (the footprint: BASE_BAND).
+# block (value 1) the generated faces take; its G and B the openings and accents painted inside larger faces (inlays). A
+# model with MODELS[...]['tris'] is cut to about that many triangles (the flat regions dissolved within a role and a
+# UV island, then collapsed; the export fails if the cut smears the detail: SMEAR_MAX), with 'sails' its lattice sails
+# made again first as four solid blades on stocks (sails); one with 'tris' None (Tripo's own low-poly exports) is kept
+# as made. Each is centred on its base (the footprint: BASE_BAND).
 #
 # Usage (from rts/; the zips are the owner's, in the git-ignored assets/buildings):
-#   blender -b --python tools/building-to-js.py -- windmill assets/buildings/windmill.zip
-#   blender -b --python tools/building-to-js.py -- house assets/buildings/house.zip
+#   blender -b --python tools/building-to-js.py -- windmill assets/buildings/windmill-low-poly.zip
+#   blender -b --python tools/building-to-js.py -- house assets/buildings/house-low-poly.zip
+#   blender -b --python tools/building-to-js.py -- farmhouse assets/buildings/building-low-poly.zip
+#   blender -b --python tools/building-to-js.py -- manor assets/buildings/building-2-low-poly.zip
 #   (a .fbx path works too; --analyse prints the texture's colour clusters instead; --render <png> saves three views
 #   of the model as cut, painted by role, flat, for checking the classification, and with --full the model before the
 #   cut; with --tex the views textured with its own texture, for checking the UVs)
@@ -23,26 +26,38 @@ ROLES = ['wall', 'roof', 'timber', 'opening', 'accent']   # the role ids are the
 # per model: its height or length in metres (the axis the model is fitted on), and reference colours (sRGB 0-255) per
 # role, picked from the texture's clusters (--analyse); a role may list several
 MODELS = {
-    'windmill': {'fit': ('height', 15.0), 'tris': 2300, 'refs': {
-        'wall': [(191, 125, 65), (161, 105, 59), (212, 148, 87), (226, 170, 105)],
-        'roof': [(122, 49, 29), (150, 62, 36), (100, 40, 26)],
-        'timber': [(99, 64, 37), (114, 77, 47), (83, 51, 29), (66, 38, 21)],
-        'opening': [(36, 24, 16), (24, 18, 14)],
-    }, 'up': {'roof': (0.15, 1.01), 'wall': (-0.2, 0.75), 'opening': (-0.5, 0.5)},
-       # the lattice sails (sails(), the model's units): a loose part in the plane y `plane`, thinner across it than
-       # `thin`, and either longer than `long` or off the tower's front column (|x| over `column`, or its centre's height
-       # out of `window_z`: the tower's windows lie in that plane too); the new stock's width and depth, the blade's start
-       # along the arm (a share), its offset to the side, width and depth
-       'sails': {'plane': (-0.2, -0.155), 'thin': 0.03, 'long': 0.08, 'column': 0.12, 'window_z': (0.45, 0.72),
-                 'stock': (0.012, 0.010), 'blade': (0.22, 0.026, 0.048, 0.004)}},
-    'house': {'fit': ('length', 11.0), 'tris': 2300, 'refs': {
-        'wall': [(174, 154, 125), (188, 167, 138), (158, 139, 113), (201, 180, 151), (217, 197, 169)],
-        'roof': [(90, 85, 78), (68, 65, 60), (114, 103, 88)],
+    # the owner's low-poly regenerations (2026-10-25: Tripo's own low-poly export, about 1,450-1,800 triangles; tris
+    # None, kept as made): the windmill (10-reference-windmill) with its lattice sails (no sails rebuilt), the stone
+    # cottage (01-stone-cottage), the farmhouse (02-village-farmhouse) and the small manor (03-small-country-manor).
+    # (The first windmill's config, cut to 2,300 with its sails rebuilt, was 'tris': 2300 and 'sails': {'plane':
+    # (-0.2, -0.155), 'thin': 0.03, 'long': 0.08, 'column': 0.12, 'window_z': (0.45, 0.72), 'stock': (0.012, 0.010),
+    # 'blade': (0.22, 0.026, 0.048, 0.004)}: git history)
+    'windmill': {'fit': ('height', 15.0), 'tris': None, 'refs': {
+        'wall': [(191, 125, 65), (161, 105, 59), (212, 148, 87), (226, 170, 105), (184, 122, 67), (210, 144, 79), (234, 182, 127), (150, 103, 65)],
+        'roof': [(122, 49, 29), (150, 62, 36), (100, 40, 26), (131, 56, 33)],
+        'timber': [(99, 64, 37), (114, 77, 47), (83, 51, 29), (66, 38, 21), (90, 56, 34), (67, 39, 22), (107, 70, 43)],
+        'opening': [(36, 24, 16), (24, 18, 14), (4, 1, 0)],
+    }, 'up': {'roof': (0.15, 1.01), 'wall': (-0.2, 0.75), 'opening': (-0.5, 0.5)}},
+    'house': {'fit': ('length', 11.0), 'tris': None, 'refs': {
+        'wall': [(174, 154, 125), (188, 167, 138), (158, 139, 113), (201, 180, 151), (217, 197, 169), (183, 163, 136), (165, 147, 121), (226, 207, 180), (145, 130, 108)],
+        'roof': [(90, 85, 78), (68, 65, 60), (114, 103, 88), (97, 93, 86), (80, 78, 73)],
         'timber': [(166, 104, 66), (140, 86, 54), (112, 84, 58)],
-        'opening': [(39, 38, 35), (24, 24, 24)],
+        'opening': [(39, 38, 35), (24, 24, 24), (40, 38, 34)],
         'accent': [(166, 104, 66), (190, 128, 84), (140, 86, 54)],
     }, 'up': {'roof': (0.3, 1.01), 'wall': (-0.2, 0.55), 'opening': (-0.5, 0.5)},
        'zr': {'accent': (0.86, 1.01), 'timber': (-0.01, 0.86)}},
+    'farmhouse': {'fit': ('length', 13.0), 'tris': None, 'refs': {
+        'wall': [(191, 169, 138), (170, 149, 121), (148, 130, 106), (212, 190, 160), (128, 108, 87)],
+        'roof': [(89, 63, 47), (114, 79, 58), (60, 43, 32)],
+        'timber': [(100, 89, 73)],
+        'opening': [(8, 3, 0), (30, 26, 22)],
+        'accent': [(105, 110, 95), (90, 96, 82), (120, 125, 108)],   # the grey-green shutters
+    }, 'up': {'roof': (0.3, 1.01), 'wall': (-0.2, 0.55), 'opening': (-0.5, 0.5), 'accent': (-0.3, 0.3)}},
+    'manor': {'fit': ('length', 15.0), 'tris': None, 'refs': {
+        'wall': [(186, 163, 130), (170, 147, 116), (151, 130, 101), (204, 180, 147), (224, 201, 170), (131, 112, 87)],
+        'roof': [(87, 74, 58), (67, 57, 44), (110, 93, 72)],
+        'opening': [(38, 29, 19)],
+    }, 'up': {'roof': (0.3, 1.01), 'wall': (-0.2, 0.55), 'opening': (-0.5, 0.5)}},
 }
 # 'up': per role the range of a face's normal's upward component it may take (a roof faces up, a wall stands): the
 # colours alone do not split a shaded wall from a slate or a lit beam from a wall stone; 'zr': the range of a face's
@@ -139,10 +154,15 @@ def main():
     # the windmill's lattice taken out and measured first (its arms), the cut, then the solid blades built on the cut
     # mesh (a cut after them flattened their thin boxes: their faces checked once built, so built last)
     plan = sails_find(obj, cfg['sails']) if cfg.get('sails') else None
-    decimate(obj, cfg['tris'] - (SAIL_TRIS if plan else 0))
+    # (a model Tripo made low-poly itself, tris None, is kept as made: no cut)
+    if cfg.get('tris') is not None: decimate(obj, cfg['tris'] - (SAIL_TRIS if plan else 0))
     if plan: sails_build(obj, cfg['sails'], *plan); triangulate(obj)
     me = obj.data; uvl = me.uv_layers.active.data   # (the mesh's layers made again by the cut: read them anew)
     role = np.array([f.material_index for f in me.polygons])
+    # the openings and accents painted inside a larger face (a low-poly model's windows and shutters are its texture's,
+    # not faces of their own): each face's texels classed, the face's role their most common other role, the rest
+    # kept as inlays in the detail texture's G (opening) and B (accent) (building.frag)
+    role, inlay = inlays(me, role, px, cfg)
     after = {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()}
     print(name, 'tris', sum(before.values()), '->', len(me.polygons), 'by role', before, '->', after)
     sm = smear(obj); print(name, f'smear (the surface share whose texel density strays 4x from the median): {smear0:.3f} -> {sm:.3f}')
@@ -196,7 +216,8 @@ def main():
     det8 = np.clip(det * 128, 0, 255).astype(np.uint8)
     out_dir = os.path.join(REPO, 'data', 'buildings'); os.makedirs(out_dir, exist_ok=True)
     im = bpy.data.images.new(name + '-detail', sw_, sh_, alpha=False); g = det8.astype(np.float32) / 255
-    im.pixels[:] = np.dstack([g, g, g, np.ones_like(g)]).ravel(); im.filepath_raw = os.path.join(out_dir, name + '-detail.png'); im.file_format = 'PNG'; im.save()
+    if inlay.shape[:2] != g.shape: raise SystemExit(f'{name}: the inlays {inlay.shape[:2]} and the detail {g.shape} differ in size')
+    im.pixels[:] = np.dstack([g, inlay[..., 0], inlay[..., 1], np.ones_like(g)]).ravel(); im.filepath_raw = os.path.join(out_dir, name + '-detail.png'); im.file_format = 'PNG'; im.save()
     # the data file: one key a model, the others kept (the models are exported one by one)
     out = os.path.join(REPO, 'prototypes', 'buildings.data.js'); allm = {}
     if os.path.exists(out):
@@ -206,6 +227,67 @@ def main():
         f.write('// generated by tools/building-to-js.py from the owner\'s Tripo models (assets/buildings, git-ignored)\n')
         f.write('window.BUILDINGS=' + json.dumps(allm, separators=(',', ':')) + ';\n')
     print('wrote', out, os.path.getsize(out), 'bytes;', im.filepath_raw)
+
+def inlays(me, role, px, cfg, min_share=0.25):
+    # each face's texels (their centres inside its UV triangle, at the detail's 512² scale) classed by colour as the
+    # faces are (classify: the face's normal and height bound the roles); a face of at least 4 texels takes their most
+    # common role other than opening and accent (if those other roles are at least min_share of its texels; else the
+    # most common of all). In a wall or timber face, the texels of the opening or accent role become inlays: a mask
+    # each (G opening, B accent; 0..1, rows from the bottom as the detail's), each texel kept only with 4 of its 3 x 3
+    # neighbours the same (no speck of shadow read as a window) and in a part about a rectangle (boxy). Returns the
+    # faces' roles and the (h, w, 2) masks
+    h, w = px.shape[:2]; st = max(1, w // 512); hh, ww = h // st * st, w // st * st
+    small = px[:hh, :ww].reshape(hh // st, st, ww // st, st, 3).mean((1, 3)); sh_, sw_ = small.shape[:2]
+    uvl = me.uv_layers[0].data; fid, tx, ty = [], [], []
+    for f in me.polygons:
+        uv = np.array([uvl[li].uv[:] for li in f.loop_indices]) * (sw_, sh_)
+        lo = np.floor(uv.min(0)).astype(int); hi = np.ceil(uv.max(0)).astype(int)
+        X, Y = np.meshgrid(np.arange(lo[0], hi[0] + 1) + 0.5, np.arange(lo[1], hi[1] + 1) + 0.5)
+        a, b, c = uv; d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(d) < 1e-12: continue
+        l1 = ((b[1] - c[1]) * (X - c[0]) + (c[0] - b[0]) * (Y - c[1])) / d
+        l2 = ((c[1] - a[1]) * (X - c[0]) + (a[0] - c[0]) * (Y - c[1])) / d
+        ins = (l1 >= 0) & (l2 >= 0) & (1 - l1 - l2 >= 0)
+        xs = np.floor(X[ins]).astype(int) % sw_; ys = np.floor(Y[ins]).astype(int) % sh_
+        fid += [f.index] * len(xs); tx += xs.tolist(); ty += ys.tolist()
+    fid, tx, ty = np.array(fid, int), np.array(tx, int), np.array(ty, int)
+    nz = np.array([f.normal.z for f in me.polygons]); fz = np.array([f.center.z for f in me.polygons])
+    hz = (fz - fz.min()) / max(fz.max() - fz.min(), 1e-6)
+    tr = classify(small[ty, tx], cfg['refs'], cfg.get('up'), nz[fid], cfg.get('zr'), hz[fid])
+    inl = [ROLES.index('opening'), ROLES.index('accent')]
+    role = role.copy(); changed = 0
+    for f in np.unique(fid):
+        r = tr[fid == f]
+        if len(r) < 4: continue
+        base = r[~np.isin(r, inl)]
+        nr = np.bincount(base if len(base) >= min_share * len(r) else r, minlength=len(ROLES)).argmax()
+        changed += nr != role[f]; role[f] = nr
+    mask = np.zeros((sh_, sw_, 2), np.float32)
+    for k, ir in enumerate(inl):
+        # (into walls and timber only: a roof's shaded slates read as openings)
+        host = np.isin(role[fid], [ROLES.index('wall'), ROLES.index('timber')])
+        m = np.zeros((sh_, sw_), bool); sel = (tr == ir) & host; m[ty[sel], tx[sel]] = True
+        p_ = np.pad(m, 1).astype(int); n_ = sum(p_[1 + dy:sh_ + 1 + dy, 1 + dx:sw_ + 1 + dx] for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+        mask[..., k] = boxy(m & (n_ >= 5))   # (itself and 4 neighbours)
+    print('inlays: faces whose role changed', int(changed), 'of', len(role), '; texels opening', int(mask[..., 0].sum()), 'accent', int(mask[..., 1].sum()))
+    return role, mask
+
+def boxy(m, fill=0.55):
+    # the mask's 8-connected parts kept where they fill at least `fill` of their bounding box (a window, a pane, a
+    # shutter is a rectangle; a blotch of shade on a face Tripo textured with its roof's slates is not), as 0..1
+    out = np.zeros(m.shape, np.float32); seen = np.zeros(m.shape, bool); h, w = m.shape
+    for y0, x0 in zip(*np.nonzero(m)):
+        if seen[y0, x0]: continue
+        st = [(y0, x0)]; seen[y0, x0] = True; part = []
+        while st:
+            y, x = st.pop(); part.append((y, x))
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    yy, xx = y + dy, x + dx
+                    if 0 <= yy < h and 0 <= xx < w and m[yy, xx] and not seen[yy, xx]: seen[yy, xx] = True; st.append((yy, xx))
+        p = np.array(part); box = (np.ptp(p[:, 0]) + 1) * (np.ptp(p[:, 1]) + 1)
+        if len(p) >= fill * box: out[p[:, 0], p[:, 1]] = 1
+    return out
 
 def set_roles(obj, role):   # each face's role as its material index (a material a role)
     me = obj.data; me.materials.clear()

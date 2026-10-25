@@ -9,7 +9,7 @@
 // (west, the road), −π/2 +x (east), π +z (north)
 import { segD } from './geom.ts'
 export interface Building {
-  model: 'windmill' | 'house'
+  model: 'windmill' | 'house' | 'farmhouse' | 'manor'
   x: number
   z: number
   yaw: number
@@ -27,10 +27,12 @@ export const toLocal = (yaw: number, x: number, z: number): [number, number] => 
   return [x * c - z * s, x * s + z * c]
 }
 // each model's ground footprint before its scale: a circle's radius (the windmill's tower and gallery) or a box's half
-// sizes along its own x and z (the house's walls, its eaves), m
+// sizes along its own x and z (the house's walls, its eaves; the farmhouse's with its lean-to), m
 export const FOOT: Record<Building['model'], { r?: number; hx?: number; hz?: number }> = {
   windmill: { r: 4.4 },
   house: { hx: 5.6, hz: 4.4 },
+  farmhouse: { hx: 6.6, hz: 5.1 },
+  manor: { hx: 7.6, hz: 4.4 },
 }
 const Q = Math.PI / 2 // a quarter turn: 0 the door south (−z), Q west (to the road), −Q east, 2Q north
 export const BUILDINGS: readonly Building[] = [
@@ -39,13 +41,14 @@ export const BUILDINGS: readonly Building[] = [
   { model: 'windmill', x: 78, z: 66, yaw: 0.6, scale: 1 },
   // the village (cover.ts, VILLAGE): an irregular cluster east of the road, the houses turned each a quarter turn of
   // its own (two doors to the road, one gable to it, two side-on, one back to it) and a little more, their paved yards
-  // at least PAVE_GAP apart (cover.ts checks it); six fit the village ground with their yards
-  { model: 'house', x: 208, z: -30, yaw: Q + 0.14, scale: 1.0 },
+  // at least PAVE_GAP apart (cover.ts checks it); six fit the village ground with their yards. Four stone cottages, a
+  // farmhouse on the road and a small manor at the far end (docs/plans/active/tripo-lowpoly-buildings.md)
+  { model: 'farmhouse', x: 208, z: -30, yaw: Q + 0.14, scale: 1.0 },
   { model: 'house', x: 232, z: -38, yaw: -0.12, scale: 0.95 },
   { model: 'house', x: 214, z: -6, yaw: 2 * Q + 0.1, scale: 1.04 },
   { model: 'house', x: 240, z: -12, yaw: -Q - 0.18, scale: 0.92 },
   { model: 'house', x: 212, z: 20, yaw: Q - 0.2, scale: 1.0 },
-  { model: 'house', x: 240, z: 18, yaw: 2 * Q + 0.16, scale: 1.06 },
+  { model: 'manor', x: 240, z: 18, yaw: 2 * Q + 0.16, scale: 1.0 },
 ]
 export const PAVE_GAP = 4 // the least ground between two buildings' paved yards, m
 
@@ -55,6 +58,8 @@ export const PAVE_GAP = 4 // the least ground between two buildings' paved yards
 export const PAVE: Record<Building['model'], { side: number; front: number }> = {
   windmill: { side: 3, front: 3 },
   house: { side: 2.5, front: 6 },
+  farmhouse: { side: 2.5, front: 6 },
+  manor: { side: 2.5, front: 6 },
 }
 export const PAVE_WOBBLE = 1.15
 // the paving's ragged edge (shore.glsl, pavePaint): a wobble of two noises of PAVE_WOB amplitudes (each noise 0..1

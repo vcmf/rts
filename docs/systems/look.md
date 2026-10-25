@@ -355,18 +355,23 @@ crowns as cards.
 
 The owner's Tripo models (`assets/buildings`, git-ignored; art bible §10) go through `tools/building-to-js.py`
 (Blender headless; its header has the commands) to `prototypes/buildings.data.js`: metres, normals sharp past 30°, UV0
-and a role per face (0 wall, 1 roof, 2 timber, 3 opening, 4 accent). The import cuts each model to about 2,300 triangles (the
-flat regions dissolved within a role and a UV island, then collapsed); the windmill's lattice sails made again as four
-solid canvas blades on timber stocks (the accent role). The role is the median colour of the texels
-under the face, nearest in Lab to the model's reference colours, with priors on the face's orientation (a roof faces
-up, a wall and an opening stand) and height (the house's terracotta chimney pots). Pack colours are never used: the
+and a role per face (0 wall, 1 roof, 2 timber, 3 opening, 4 accent). The models are Tripo's own low-poly exports
+(`docs/plans/active/tripo-lowpoly-buildings.md`: 1,454-1,794 triangles, kept as made, the windmill's lattice sails
+with them); a model the import should cut (`'tris'` in its `MODELS` entry) is dissolved and collapsed to that count,
+and with `'sails'` its lattice sails made again as solid blades (the first models, `docs/plans/done/buildings.md`). The
+role is the most common class of the face's texels other than opening and accent (each texel's colour nearest in Lab
+to the model's reference colours, with priors on the face's orientation, a roof faces up, a wall and an opening
+stand, and height, the house's terracotta chimney pots); a face too small to hold four texels takes the median colour
+under it. A low-poly model's windows and shutters are painted in its texture across larger faces, so a wall's or
+timber's texels of the opening or accent class are kept as inlays (the detail texture's G and B, only where they
+form near-rectangular parts: no blotch of shade read as a window), which `building.frag` paints over the face's role. Pack colours are never used: the
 page paints each role from its palette (`src/look/buildings.ts`, `PALETTE`, muted against the armies), and the texture
-keeps only its value over its local mean (a box of texels round each: `data/buildings/<model>-detail.png`, 128 = 1;
+keeps only its value over its local mean (a box of texels round each: `data/buildings/<model>-detail.png`'s R, 128 = 1;
 the faces the export makes, the windmill's sails, a UV below 0 and no detail), a third of it showing
 (`DETAIL_AMT`) under the paint's grain (`shaders/building.frag`: the painter's ramp, the cast shadow, the sky's
 occlusion, the ground's bounce, the snow on what faces up, the air). One instanced mesh a model. Placed in
 `src/look/world/buildings.ts` (authored: the windmill in the large wheat field; six houses in an irregular cluster in
-the village, each turned a quarter turn of its own and a little more: doors to the road, a gable to it, side-on, a back
+the village, four stone cottages, a farmhouse and a small manor, each turned a quarter turn of its own and a little more: doors to the road, a gable to it, side-on, a back
 to it), each on its footprint's lowest ground, sunk 0.2 m. The turn is Babylon's instance yaw, verified against its
 Matrix (`test/buildings.test.ts`) and on the page: a local point (x, z) goes to (x cos + z sin, −x sin + z cos)
 (`toWorld`, `toLocal`: the one rule the footprints, the yards, the ground's samples and `pavePaint`'s frame use); the

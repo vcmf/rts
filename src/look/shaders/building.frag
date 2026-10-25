@@ -3,7 +3,7 @@ precision highp float;varying vec3 vW,vN;varying vec2 vUV;varying float vRole,vH
 // the buildings (docs/plans/done/buildings.md): each region a palette colour by its role (tools/building-to-js.py:
 // 0 wall, 1 roof, 2 timber, 3 opening, 4 accent), per model (src/look/buildings.ts), never the model's own colours
 // (AGENTS.md); the model's texture only as its value over its local mean (a box of texels round it: the tool's
-// DETAIL_BOX; uDetail, 128 = 1), uDetailAmt of it,
+// DETAIL_BOX; uDetail's R, 128 = 1), uDetailAmt of it,
 // so the stone courses and the slates show under the paint's grain. Painted as the stones and the trunks are: the
 // ramp, the cast shadow, the sky's occlusion from the light map, the ground's bounce, the snow on what faces up, the air
 uniform vec3 uWall,uRoof,uTimber,uOpening,uAccent;uniform float uDetailAmt;uniform sampler2D uDetail;
@@ -43,9 +43,12 @@ void main(){
   #endif
   // (a face the export made, the windmill's sails, has no texel of its own: its UV below 0, its detail 1. The read
   // made anyway, at a clamped UV, so its derivatives hold in every quad)
-  float d=texture2D(uDetail,max(vUV,0.0)).r*255.0/128.0;
-  if(vUV.x<0.0)d=1.0;
-  vec3 alb=roleCol(vRole)*mix(1.0,d,uDetailAmt);
+  // (G and B: the openings and accents painted inside a larger face, a low-poly model's windows and shutters, as
+  // inlays over the face's role: tools/building-to-js.py, inlays)
+  vec3 dt=texture2D(uDetail,max(vUV,0.0)).rgb;
+  float d=dt.r*255.0/128.0;
+  if(vUV.x<0.0){d=1.0;dt.gb=vec2(0.0);}
+  vec3 alb=mix(mix(roleCol(vRole),uOpening,dt.g),uAccent,dt.b)*mix(1.0,d,uDetailAmt);
   // (the grain breaks the band edges at a third of the ground's: on a flat wall it broke them into pixel specks)
   vec3 c=paint(alb,N,vW,mix(1.0,lm.g,uAO*0.6),0.4,0.3,sh);
   gl_FragColor=lensOut(airOf(c,vW,lm,vH),vW);}
