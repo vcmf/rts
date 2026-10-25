@@ -108,6 +108,25 @@ export function shadowModes(q: URLSearchParams): { simpleFar: boolean; simpleClo
   return { simpleFar: q.get('ushadowfar') !== 'map', simpleClose: q.get('ushadowclose') !== 'map' }
 }
 
+/** Whether the soldiers' simple shadows draw anywhere: armies on the page (?armies), their shadows on (not
+ *  ?unitshadow=0), and the simple ones beyond close zoom (not ?ushadowfar=map: shadowModes). The page refuses
+ *  ?armies=0 and any count outside 1 to 40 (src/look/main.ts), so a present ?armies means armies */
+export function simpleShadowsDraw(q: URLSearchParams): boolean {
+  return q.get('armies') !== null && q.get('unitshadow') !== '0' && shadowModes(q).simpleFar
+}
+
+/** Where the page puts a stencil buffer (#134), from its switches. The soldiers' simple shadows are its only use (each
+ *  sample darkened once where shadows overlap): ?stencil=scene, the default, gives one to the scene's target alone
+ *  (MSAA.stencil, src/look/post.ts) and only while they draw (simpleShadowsDraw), so without them the scene's depth
+ *  stays DEPTH32_FLOAT, not DEPTH24_STENCIL8; ?stencil=all, the engine's own (the canvas and every target: the A/B);
+ *  ?stencil=0, none */
+export function stencilFor(q: URLSearchParams): 'none' | 'scene' | 'engine' {
+  const v = q.get('stencil') ?? 'scene'
+  if (!['scene', 'all', '0'].includes(v)) throw new Error(`?stencil must be scene, all or 0, not ${v}`)
+  if (v === 'all') return 'engine'
+  return v === 'scene' && simpleShadowsDraw(q) ? 'scene' : 'none'
+}
+
 const NUMBER = /^\d+(\.\d+)?$/
 /** ?<k>=<n>[,<n>…]: count numbers (any of counts), each within [lo, hi] (the pairs' second of each pair within
  *  [lo2, hi2] when given), or null when absent; an empty or malformed field is an error, not 0 */

@@ -853,3 +853,33 @@ export function shadowShape(
     dir: [A[0], A[1]],
   }
 }
+
+/** The far figure's growth across (the far LOD drawn wider as it shrinks on screen, src/look/units.ts): up to maxXZ,
+ *  but never wider than 95 % of a file (fileSpacing, m), the figure's shoulders measured as the far LOD's vertices
+ *  (positions, m) between 1.2 and 1.5 m up. A figure with no width there (no vertex in the band, or one) is not
+ *  widened: 1, never −0 (found in #130's review: an empty band's width, −Infinity, gave a scale of −0) */
+export function farWidthScale(positions: Float32Array, fileSpacing: number, maxXZ: number): number {
+  let x0 = Infinity
+  let x1 = -Infinity
+  for (let v = 0; v < positions.length / 3; v++) {
+    const y = positions[v * 3 + 1]
+    if (y > 1.2 && y < 1.5) {
+      x0 = Math.min(x0, positions[v * 3])
+      x1 = Math.max(x1, positions[v * 3])
+    }
+  }
+  return x1 > x0 ? Math.min(maxXZ, (0.95 * fileSpacing) / (x1 - x0)) : 1
+}
+
+/** Whether a battalion is drawn at the near LOD, by its figure's height on screen (px) against the switch (lodPx):
+ *  on from 10 % over it, off from 10 % under it, as it was (wasNear) between, so a battalion at the switch does not
+ *  flicker. (A battalion split at the nearest LOD is near whatever this says: src/look/units.ts) */
+export function drawsNear(px: number, wasNear: boolean, lodPx: number): boolean {
+  return wasNear ? px >= lodPx * 0.9 : px >= lodPx * 1.1
+}
+
+/** Whether a battalion not drawn near is drawn at the tiny LOD: below its switch (tinyPx, the figure's height on
+ *  screen) with the near LOD's 10 % either way (wasTiny: as it was between) */
+export function drawsTiny(px: number, wasTiny: boolean, tinyPx: number): boolean {
+  return wasTiny ? px < tinyPx * 1.1 : px < tinyPx * 0.9
+}
