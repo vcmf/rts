@@ -164,3 +164,39 @@ export function boxPxRange(
   out[1] = k / Math.max(1, near)
   return out
 }
+
+/** A list of men as the figures' instance buffers hold them: matrices (16 a man), clip settings (3), moves to the next
+ *  step (3) and each man's index in his battalion (1: aMan, the cross-fade's hash) */
+export interface ManLists {
+  m: Float32Array
+  s: Float32Array
+  n: Float32Array
+  i: Float32Array
+}
+
+/** A split battalion's men shared into two lists (src/look/units.ts share): those selected (sel 1) into near, the
+ *  rest into rest, in the battalion's order, each with his index; returns how many went to each */
+export function splitLists(
+  sel: Uint8Array,
+  all: Omit<ManLists, 'i'>,
+  near: ManLists,
+  rest: ManLists,
+): [number, number] {
+  let a = 0
+  let b = 0
+  for (let i = 0; i < sel.length; i++) {
+    const to = sel[i] ? near : rest
+    const k = sel[i] ? a++ : b++
+    to.m.set(all.m.subarray(i * 16, i * 16 + 16), k * 16)
+    to.s.set(all.s.subarray(i * 3, i * 3 + 3), k * 3)
+    to.n.set(all.n.subarray(i * 3, i * 3 + 3), k * 3)
+    to.i[k] = i
+  }
+  return [a, b]
+}
+
+/** The buffers the near LOD draws a battalion from (setSplit): its rest list while split, else its own; each buffer
+ *  with its own index list, so a man's hash goes with his matrix */
+export function nextLodBuffers(split: boolean, own: ManLists, rest: ManLists): ManLists {
+  return split ? rest : own
+}

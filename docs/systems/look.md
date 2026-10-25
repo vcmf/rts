@@ -607,7 +607,8 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   LOD by the figure's height in pixels (48; the tiny LOD's 12), **cross-faded per man** (below; `?lodfade=0`: the hard
   switch, a battalion wholly at one LOD by its centre's height, ±10 %: `drawsNear`, `drawsTiny` in
   `src/look/units-data.ts`). **The nearest LOD** (a figure with three, decision 0051;
-  `?nearestpx=<px>`, 0: none): a battalion whose bounds' nearest point is within 90 % of `nearestPx` (100 px) and in the view
+  `?nearestpx=<px>`, 0: none; keep it at least `lodPx` × 1.25, the near band's top, so the nearest LOD only takes men
+  the near LOD would draw whole): a battalion whose bounds' nearest point is within 90 % of `nearestPx` (100 px) and in the view
   is split, each man whose sphere is in the view and who stands taller than it (±10 %) drawn at the nearest LOD, the rest
   at the near one (`setSplit`, `share`: the next LOD's buffers swapped to the rest's list; the lists written again
   when a man changes LOD or the men move); skinned like the near LOD. A battalion's nearest-LOD mesh and lists are made at its first split (about 1 MB of geometry a battalion otherwise), then disabled while unsplit. Only within about
@@ -702,7 +703,8 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   a coat under luminance 0.18 (Rec. 709 on linear sRGB, a mid grey: `FAR_COAT_BELOW`) takes 'coat'. `?farpal=0|1`
   forces the rule off or on for every uniform.
 - **The tiny LOD** (`docs/plans/active/armies-32k.md`, step 3, experimental; `?tinylod=0`: none, `?tinypx=<px>`: its
-  switch): a battalion whose figure falls under 12 px tall (±10 %) draws the far LOD's parts as boxes instead (`tinyMesh`,
+  switch): a man whose figure falls under 12 px tall draws the far LOD's parts as boxes instead, each man at his own
+  height in the 9.6 to 15 px band (the LOD cross-fade, below; `?lodfade=0`: a battalion under 12 px, ±10 %; `tinyMesh`,
   `src/look/units-data.ts`: the shadow proxy's parts, `boneParts`, 8 shared corners each, 112 vertices, wound with
   their fronts out as the figure's, #164), a corner's
   colour a mix of the roles (`TINY`: three vec4 weights) calibrated at load so the boxes show each role in the far
@@ -719,7 +721,11 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   pixel's threshold picks exactly one LOD (`lodCover`, `drawsPixel`, `dropsMan`; `units.vert` and `units.frag` mirror
   them under `LODFADE`, `LOD_SLOT`; the cover snapped to the dither's 16 levels, `snapCover`, so interpolating it
   cannot flip a pixel: a flat varying cost 1.5 to 4 ms of GPU on ANGLE's Metal), so a man is never hidden and nothing
-  is blended or sorted. A LOD's men outside it are dropped in the vertex shader (off screen). A battalion draws a second LOD only
+  is blended or sorted. The exact split also needs a man's share bit-identical in the three LODs' programs: the same
+  inputs (his root from the same instance matrix and move, the shared uniforms) and the same arithmetic; the snap
+  leaves 1/32 between a share and a threshold for any difference, and absorbs the CPU's float64 against the shader's
+  float32 at a band's edges (`lodsDrawn` may draw a LOD whose men all drop). A LOD's men outside it are dropped in the
+  vertex shader before their pose is fetched (off screen). A battalion draws a second LOD only
   while one of its men can be in a band (`battalionLods`, `lodsDrawn`, by its bounds' nearest and farthest points,
   `boxPxRange`); one drawing a single LOD skips the per-man work (`uLodFade` 0, set as each mesh binds the shared
   material). **A split battalion fades too**: its near LOD draws its men not at the nearest from their own list, each

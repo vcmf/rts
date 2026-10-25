@@ -17,7 +17,10 @@ import {
   lodCover,
   lodsDrawn,
   manHash,
+  nextLodBuffers,
   snapCover,
+  splitLists,
+  type ManLists,
   type BattalionAt,
 } from '../src/look/lod-fade.ts'
 
@@ -202,6 +205,15 @@ describe('battalionLods', () => {
     expect(l).toEqual({ near: true, far: true, tiny: false })
     expect(lodCount(l)).toBe(2)
   })
+  it('forces the near LOD while split even when every man is under the band (a small nearestPx)', () => {
+    // nearestPx under near[0]: the split's men may all be smaller than the band; the near LOD stays drawn for its list,
+    // its men dropped by their own shares (0), the far LOD drawing them
+    expect(battalionLods(at({ pLo: 20, pHi: 35, split: true }), true, LOD_PX, TINY_PX, near, tiny)).toEqual({
+      near: true,
+      far: true,
+      tiny: false,
+    })
+  })
   it('draws the near LOD while split even with every man above the band (the nearest LOD takes some)', () => {
     expect(battalionLods(at({ pLo: 80, pHi: 150, split: true }), true, LOD_PX, TINY_PX, near, tiny)).toEqual({
       near: true,
@@ -224,6 +236,51 @@ describe('battalionLods', () => {
   })
 })
 
+describe("a split battalion's lists (aMan)", () => {
+  const MEN = 23
+  const all = {
+    m: Float32Array.from({ length: MEN * 16 }, (_, k) => 1000 * Math.floor(k / 16) + (k % 16)),
+    s: Float32Array.from({ length: MEN * 3 }, (_, k) => 100 * Math.floor(k / 3) + (k % 3)),
+    n: Float32Array.from({ length: MEN * 3 }, (_, k) => -100 * Math.floor(k / 3) - (k % 3)),
+  }
+  const lists = (): ManLists => ({
+    m: new Float32Array(MEN * 16),
+    s: new Float32Array(MEN * 3),
+    n: new Float32Array(MEN * 3),
+    i: new Float32Array(MEN),
+  })
+  /** each entry of a list is the man its index names: his matrix, clip and move */
+  const holdsItsMen = (l: ManLists, count: number) => {
+    for (let k = 0; k < count; k++) {
+      const i = l.i[k]
+      expect([...l.m.subarray(k * 16, k * 16 + 16)]).toEqual([...all.m.subarray(i * 16, i * 16 + 16)])
+      expect([...l.s.subarray(k * 3, k * 3 + 3)]).toEqual([...all.s.subarray(i * 3, i * 3 + 3)])
+      expect([...l.n.subarray(k * 3, k * 3 + 3)]).toEqual([...all.n.subarray(i * 3, i * 3 + 3)])
+    }
+  }
+  it("writes each man into one list with his own index, the lists in the battalion's order", () => {
+    const sel = Uint8Array.from({ length: MEN }, (_, i) => (manHash(i) < 0.4 ? 1 : 0))
+    const near = lists()
+    const rest = lists()
+    const [a, b] = splitLists(sel, all, near, rest)
+    expect(a + b).toBe(MEN)
+    expect(a).toBe(sel.reduce((x, y) => x + y, 0))
+    holdsItsMen(near, a)
+    holdsItsMen(rest, b)
+    const seen = [...near.i.subarray(0, a), ...rest.i.subarray(0, b)].sort((x, y) => x - y)
+    expect(seen).toEqual(Array.from({ length: MEN }, (_, i) => i))
+    expect([...rest.i.subarray(0, b)].every((v, k, r) => k === 0 || v > r[k - 1])).toBe(true)
+  })
+  it("draws the near LOD from the rest's buffers with the rest's indices while split, else its own", () => {
+    const own = { ...all, i: Float32Array.from({ length: MEN }, (_, i) => i) }
+    const rest = lists()
+    expect(nextLodBuffers(true, own, rest)).toBe(rest)
+    expect(nextLodBuffers(false, own, rest)).toBe(own)
+    // the own buffers' indices are the identity: each matrix is its man's
+    holdsItsMen(own, MEN)
+  })
+})
+
 describe('the shaders mirror it', () => {
   it("hash a man's index as manHash does, with the fade's width", () => {
     const vert = shader('units.vert')
@@ -238,7 +295,7 @@ describe('the shaders mirror it', () => {
     const units = readFileSync(new URL('../src/look/units.ts', import.meta.url), 'utf8')
     expect(units).toContain('`#define LOD_FADE_W ${FADE_WIDTH.toFixed(4)}`')
   })
-  it("draw a pixel by drawsPixel's predicates and drop a man by dropsMan's, the cover flat", () => {
+  it("draw a pixel by drawsPixel's predicates and drop a man by dropsMan's, the cover snapped", () => {
     const frag = shader('units.frag').replace(/\s+/g, '')
     expect(frag).toContain(
       '#ifLOD_SLOT==0if(q>=vFade.x)discard;#elifLOD_SLOT==1if(q<vFade.x||q>=vFade.y)discard;#elseif(q<vFade.y)discard;',

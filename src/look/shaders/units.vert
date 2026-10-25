@@ -79,6 +79,18 @@ void main(){
   #if defined(SMOOTH)&&defined(INSTANCES)
   finalWorld[3].xyz+=aNext*uStepFrac;
   #endif
+  #if defined(LODFADE)&&!defined(DEPTH)
+  vFade=vec2(LOD_SLOT==0?1.0:0.0,LOD_SLOT==2?0.0:1.0);
+  #ifdef INSTANCES
+  // (before the pose's fetches: a man this LOD does not draw costs one test; the branch is the same for his vertices)
+  if(uLodFade>0.5){
+    float mh=manHash(aMan),mpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz));
+    float fn=fadeShare(mpx,uLodBand.xy,mh),ff=max(fn,fadeShare(mpx,uLodBand.zw,mh));
+    bool none=LOD_SLOT==0?fn<=0.0:LOD_SLOT==1?fn>=1.0||ff<=0.0:ff>=1.0;
+    if(none){gl_Position=vec4(0.0,0.0,2.0,1.0);return;}
+    vFade=floor(vec2(fn,ff)*16.0+0.5)/16.0;}
+  #endif
+  #endif
   vec3 r=vec3(0.0,1.0,0.0);
   #ifdef INSTANCES
   r=aVAT;
@@ -96,17 +108,6 @@ void main(){
   #endif
   vec4 w=finalWorld*vec4(lp,1.0);
   vec4 p=viewProjection*w;
-  #if defined(LODFADE)&&!defined(DEPTH)
-  vFade=vec2(LOD_SLOT==0?1.0:0.0,LOD_SLOT==2?0.0:1.0);
-  #ifdef INSTANCES
-  if(uLodFade>0.5){
-    float mh=manHash(aMan),mpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz));
-    float fn=fadeShare(mpx,uLodBand.xy,mh),ff=max(fn,fadeShare(mpx,uLodBand.zw,mh));
-    bool none=LOD_SLOT==0?fn<=0.0:LOD_SLOT==1?fn>=1.0||ff<=0.0:ff>=1.0;
-    vFade=floor(vec2(fn,ff)*16.0+0.5)/16.0;
-    if(none)p=vec4(0.0,0.0,2.0,1.0);}
-  #endif
-  #endif
   #ifdef DEPTH
   vD=p.z/p.w*0.5+0.5;
   #else

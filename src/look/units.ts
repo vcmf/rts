@@ -54,6 +54,8 @@ import {
   battalionLods,
   boxPxRange,
   lodCount,
+  nextLodBuffers,
+  splitLists,
   type BattalionAt,
   type Lods,
 } from './lod-fade.ts'
@@ -990,10 +992,12 @@ export class Units {
       if (h.fading) this.fadingMeshes.add(m) // (made while its battalion fades: faded with the rest)
     }
     const l = h.lod[this.nextLod]
-    l.thinInstanceSetBuffer('matrix', on ? h.restM : h.matrices, 16, false)
-    l.thinInstanceSetBuffer('aVAT', on ? h.restS : h.settings, 3, false)
-    l.thinInstanceSetBuffer('aNext', on ? h.restN : h.next, 3, false)
-    l.thinInstanceSetBuffer('aMan', on ? h.restI : h.man, 1, !on)
+    const own = { m: h.matrices, s: h.settings, n: h.next, i: h.man }
+    const buf = nextLodBuffers(on, own, { m: h.restM, s: h.restS, n: h.restN, i: h.restI })
+    l.thinInstanceSetBuffer('matrix', buf.m, 16, false)
+    l.thinInstanceSetBuffer('aVAT', buf.s, 3, false)
+    l.thinInstanceSetBuffer('aNext', buf.n, 3, false)
+    l.thinInstanceSetBuffer('aMan', buf.i, 1, !on)
     h.lod[0].setEnabled(on && this.shown)
     if (on) {
       h.sel.fill(0)
@@ -1035,26 +1039,12 @@ export class Units {
     }
     if (!changed && !h.resplit) return false
     h.resplit = false
-    let a = 0
-    let b = 0
-    for (let i = 0; i < sel.length; i++) {
-      const mi = m.subarray(i * 16, i * 16 + 16)
-      const si = s.subarray(i * 3, i * 3 + 3)
-      const ni = n.subarray(i * 3, i * 3 + 3)
-      if (sel[i]) {
-        h.nearM.set(mi, a * 16)
-        h.nearS.set(si, a * 3)
-        h.nearN.set(ni, a * 3)
-        h.nearI[a] = i
-        a++
-      } else {
-        h.restM.set(mi, b * 16)
-        h.restS.set(si, b * 3)
-        h.restN.set(ni, b * 3)
-        h.restI[b] = i
-        b++
-      }
-    }
+    const [a, b] = splitLists(
+      sel,
+      { m, s, n },
+      { m: h.nearM, s: h.nearS, n: h.nearN, i: h.nearI },
+      { m: h.restM, s: h.restS, n: h.restN, i: h.restI },
+    )
     h.lod[0].thinInstanceCount = a
     h.lod[this.nextLod].thinInstanceCount = b
     h.stale[0] =
@@ -1820,7 +1810,8 @@ export class Units {
     if (on === h.fading) return
     h.fading = on
     for (const k of [0, this.nextLod, this.farLod, this.tinyLod]) {
-      if (k < 0) continue
+      // (none for the tiny LOD off; nor the nearest's place before its first split: the shared source mesh holds it)
+      if (k < 0 || (k === 0 && this.hasNearest && h.sel.length === 0)) continue
       if (on) this.fadingMeshes.add(h.lod[k])
       else this.fadingMeshes.delete(h.lod[k])
     }

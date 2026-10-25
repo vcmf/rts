@@ -153,6 +153,26 @@ without), the snap changes no pixel (tested).
 −0.2 to +0.3 ms a frame, within the runs' spread; the per-man work skipped for single-LOD battalions took most of the
 first build's cost.
 
+**Review round 2.** A LOD's men it does not draw are dropped before their pose is fetched (one test a vertex). The
+split's lists are written by a pure helper (`splitLists`, `nextLodBuffers`), tested to keep each man's matrix with
+his index. The nearest LOD's shared source mesh never joins the faded meshes. Notes: the exact split relies on a
+man's share being bit-identical in the three programs, and the snap absorbs the CPU's float64 against the shader's
+float32 at a band's edge; `nearestPx` should stay at least `lodPx` × 1.25.
+
+- **The close view's golden difference attributed**: a temporary build with the fade on and the far ramps back at 0.9
+  (`FAR_FROM`) matches main in every view with `?armies=20` (close 0.000 %); so the close view's 6 % is the far
+  ramps' new start (one line at 0.8 to 0.9 × the switch), not the fade.
+- **The cost** (the same bench, alternated, two rounds; frame p50 / GPU frame p50, ms):
+
+| zoom (m) | main | branch |
+|---|---|---|
+| 40 | 8.74 / 12.72 | 8.75 / 12.74 |
+| 63 (near band) | 9.45 / 13.36 | 9.40 / 13.40 |
+| 125 | 9.72 / 12.82 | 9.92 / 12.97 |
+| 250 (tiny band) | 6.34 / 9.24 | 6.07 / 8.96 |
+
+Within ±0.2 to 0.3 ms of main at every zoom, either way: the runs' spread.
+
 ## Open questions
 
 - **Matching the LODs' colours** (the owner's call): the far LOD's facings and coverage (a re-bake with the epaulettes
