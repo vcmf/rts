@@ -17,7 +17,8 @@ import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Season } from '../../map/schema.ts'
 import { INK_RANGE, lightXZ, RELIEF, type LightDir } from './bake.ts'
 import { paperCanvas } from './paper.ts'
-import { ringArea2 } from '../../map/geometry.ts'
+import type { Pt } from '../../map/schema.ts'
+import { bridged, triangulate, type Standing } from './houses.ts'
 import LIT_VS from './shaders/lit.vert?raw'
 import LIT_FS from './shaders/lit.frag?raw'
 
@@ -282,10 +283,10 @@ export class LitView {
   }
 
   /**
-   * Stands the map's houses on the paper (M6b): each footprint (a ring, m, convex or not) raised to its wall height,
+   * Stands the map's houses on the paper (M6b, `standing`): each footprint (its rings, m) raised to its wall height,
    * its roof flat, its faces lit by the map's light, and a soft shadow away from the light, as the prototype's bake.
    */
-  setHouses(houses: { ring: [number, number][]; height: number; church: boolean; roof: boolean }[]): void {
+  setHouses(houses: Standing[]): void {
     for (const h of this.houses) h.dispose()
     this.houses = []
     if (!houses.length) return
@@ -297,42 +298,51 @@ export class LitView {
     const shadeIdx: number[] = []
     for (const h of houses) {
       const base = h.church ? CHURCH : HOUSE
-      const ring = ccw(h.ring)
-      const n = ring.length
-      // the roof: a fan over the ring at the wall's height
+      // the footprint less its courtyards as one ring, triangulated once: the roof and the shadow's copy share it
+      const outline = bridged(h.rings)
+      const tris = triangulate(outline)
+      // the roof, flat at the wall's height; a roofless house (a ruin, burnt) is its walls alone
       const top = pos.length / 3
-      for (const [x, z] of ring) {
+      for (const [x, z] of outline) {
         pos.push(x, h.height, z)
         col.push(base[0], base[1], base[2], 1)
       }
-      // a roofless house (a ruin, burnt) is its walls alone
-      if (h.roof) for (const [a, b, c] of triangulate(ring)) idx.push(top + a, top + c, top + b)
-      // the walls: a quad an edge, lit by how much it faces the light
-      for (let k = 0; k < n; k++) {
-        const [ax, az] = ring[k]
-        const [bx, bz] = ring[(k + 1) % n]
-        const ex = bx - ax
-        const ez = bz - az
-        const el = Math.sqrt(ex * ex + ez * ez) || 1
-        // the outward normal of a counter-clockwise ring, (ez, -ex), against the light
-        const facing = (ez / el) * lx - (ex / el) * lz
-        const f = facing > 0 ? 0.62 + 0.23 * facing : 0.62
-        const v = pos.length / 3
-        pos.push(ax, 0, az, bx, 0, bz, bx, h.height, bz, ax, h.height, az)
-        for (let q = 0; q < 4; q++) col.push(base[0] * f, base[1] * f, base[2] * f, 1)
-        idx.push(v, v + 2, v + 1, v, v + 3, v + 2)
-      }
+      if (h.roof) for (const [a, b, c] of tris) idx.push(top + a, top + c, top + b)
+      // the walls of every ring (a courtyard's face inward: its ring is counter-clockwise too, so its normal is
+      // flipped for the light), a quad an edge, lit by how much it faces the light
+      h.rings.forEach((ring, r) => {
+        const n = ring.length
+        for (let k = 0; k < n; k++) {
+          const [ax, az] = ring[k]
+          const [bx, bz] = ring[(k + 1) % n]
+          const ex = bx - ax
+          const ez = bz - az
+          const el = Math.sqrt(ex * ex + ez * ez) || 1
+          // the outward normal of a counter-clockwise ring, (ez, -ex), against the light (inward for a courtyard)
+          const facing = ((ez / el) * lx - (ex / el) * lz) * (r === 0 ? 1 : -1)
+          const f = facing > 0 ? 0.62 + 0.23 * facing : 0.62
+          const v = pos.length / 3
+          pos.push(ax, 0, az, bx, 0, bz, bx, h.height, bz, ax, h.height, az)
+          for (let q = 0; q < 4; q++) col.push(base[0] * f, base[1] * f, base[2] * f, 1)
+          idx.push(v, v + 2, v + 1, v, v + 3, v + 2)
+        }
+      })
       // the shadow: the footprint swept away from the light, as long as the wall is high (HOUSE_SHADOW for a 4 m
-      // wall), as the footprint's copy there and a quad an edge between them (their union; the stencil keeps any
+      // wall): its copy there and a quad an edge of every ring between them (their union; the stencil keeps any
       // overlap from darkening twice)
       const reach = (HOUSE_SHADOW * h.height) / 4
-      const away: [number, number][] = ring.map(([x, z]) => [x - lx * reach, z - lz * reach])
+      const shift = ([x, z]: Pt): Pt => [x - lx * reach, z - lz * reach]
       const s0 = shade.length / 3
-      for (const [x, z] of [...ring, ...away]) shade.push(x, SHADOW_Y, z)
-      for (const [a, b, c] of triangulate(away)) shadeIdx.push(s0 + n + a, s0 + n + c, s0 + n + b)
-      for (let k = 0; k < n; k++) {
-        const k2 = (k + 1) % n
-        shadeIdx.push(s0 + k, s0 + k2, s0 + n + k2, s0 + k, s0 + n + k2, s0 + n + k)
+      for (const [x, z] of outline.map(shift)) shade.push(x, SHADOW_Y, z)
+      for (const [a, b, c] of tris) shadeIdx.push(s0 + a, s0 + c, s0 + b)
+      for (const ring of h.rings) {
+        const q0 = shade.length / 3
+        const n = ring.length
+        for (const [x, z] of [...ring, ...ring.map(shift)]) shade.push(x, SHADOW_Y, z)
+        for (let k = 0; k < n; k++) {
+          const k2 = (k + 1) % n
+          shadeIdx.push(q0 + k, q0 + k2, q0 + n + k2, q0 + k, q0 + n + k2, q0 + n + k)
+        }
       }
     }
     const shadow = new Mesh('house-shadows', this.scene)
@@ -437,40 +447,3 @@ attribute vec3 position; uniform mat4 world, viewProjection;
 void main() { gl_Position = viewProjection * world * vec4(position, 1.0); }`
 const SHADOW_FS = `precision highp float; uniform float uAlpha;
 void main() { gl_FragColor = vec4(0.204, 0.149, 0.071, uAlpha); }`
-
-/** A ring turned counter-clockwise (seen from above, x east, z north). */
-const ccw = (ring: [number, number][]): [number, number][] => (ringArea2(ring) < 0 ? [...ring].reverse() : ring)
-
-/** The triangles of a simple counter-clockwise ring, by ear clipping (a footprint has a few corners). */
-function triangulate(ring: [number, number][]): [number, number, number][] {
-  const left = ring.map((_, k) => k)
-  const out: [number, number, number][] = []
-  const area2 = (a: number, b: number, c: number) =>
-    (ring[b][0] - ring[a][0]) * (ring[c][1] - ring[a][1]) - (ring[b][1] - ring[a][1]) * (ring[c][0] - ring[a][0])
-  // strictly inside: a corner on an ear's edge (a traced footprint's midpoint) does not block it
-  const inside = (p: number, a: number, b: number, c: number) =>
-    area2(a, b, p) > 0 && area2(b, c, p) > 0 && area2(c, a, p) > 0
-  let guard = ring.length * ring.length
-  while (left.length > 3 && guard-- > 0) {
-    let cut = false
-    for (let k = 0; k < left.length; k++) {
-      const a = left[(k + left.length - 1) % left.length]
-      const b = left[k]
-      const c = left[(k + 1) % left.length]
-      if (area2(a, b, c) === 0) {
-        left.splice(k, 1) // a corner on a straight edge: drop it, it bounds nothing
-        cut = true
-        break
-      }
-      if (area2(a, b, c) < 0) continue // a reflex corner is no ear
-      if (left.some(p => p !== a && p !== b && p !== c && inside(p, a, b, c))) continue
-      out.push([a, b, c])
-      left.splice(k, 1)
-      cut = true
-      break
-    }
-    if (!cut) break // a ring that is not simple: what is left is fanned
-  }
-  for (let k = 1; k + 1 < left.length; k++) out.push([left[0], left[k], left[k + 1]])
-  return out
-}

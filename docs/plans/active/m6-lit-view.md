@@ -216,3 +216,11 @@ settings (the owner, 2026-10-25).
   say how far a saddle's cells yield; the decisions index names 0065 as decided; the unused `mips` parameter is gone.
   Left: the worker's peak memory for the cells' fields at 6 km (five grids a channel) and a shared exact distance
   transform (`src/look/world/water-data.ts`'s `edt`, generalised) instead of a third one.
+- **Contract, round 2**: moderate and light only, so the review stops. The fields and the road hold were checked by
+  hand against the contract and meet it. Fixed: the buildings' logic moved out of the page into a pure, tested module
+  (`src/render/lit/houses.ts`: `standing`, `bridged`, `triangulate`, `ccw`): a building stands where at least half
+  the cells under it are its own (one cell lost on a shared wall or a curve's sliver no longer hides a house); a
+  courtyard is bridged into the outline, so the roof leaves it open and its walls stand, and a burnt house alone is
+  roofless; a footprint is triangulated once for its roof and its shadow. Left: the road's field re-derives apply's
+  line rule (the per-cell hold keeps the contract wherever the two differ; building it from apply's `nearLine` would
+  make them one), the worker's memory for the cells' fields, and a shared exact distance transform.

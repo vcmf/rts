@@ -8,8 +8,8 @@ import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName } from './protocol.ts'
 import { demFileNames } from '../../map/dem.ts'
 import { LitView, TILT } from '../../render/lit/view.ts'
-import { ringsOf } from '../../map/reach.ts'
-import { inRing, lineLength, pointAt } from '../../map/geometry.ts'
+import { standing } from '../../render/lit/houses.ts'
+import { lineLength, pointAt } from '../../map/geometry.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -178,7 +178,7 @@ function onReply(e: MessageEvent<CompileReply>): void {
       ink: new Uint8Array(r.ink),
       flat: { w: r.w, h: r.h, rgba: new Uint8Array(r.rgba) },
     })
-    lit?.setHouses(housesOf(r))
+    lit?.setHouses(standing(r.map.features, r.table, new Uint16Array(r.layers.built), r))
     labels = namesOf(r)
     // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
     current = {
@@ -342,43 +342,6 @@ function outline(f: Feature): void {
     ctx.font = '11px ui-monospace, Menlo, monospace'
     ctx.fillText(f.id, label[0] + 4, label[1] - 4)
   }
-}
-/**
- * The compiled map's buildings as the lit view stands them: each footprint, its wall height, whether a church and
- * whether roofed. A building stands only where every cell whose centre lies in its footprint is its own (decision
- * 0065: a house whose cells another built feature took, or that leaves the grid, is not drawn).
- */
-function housesOf(c: Compiled): { ring: Pt[]; height: number; church: boolean; roof: boolean }[] {
-  const built = new Uint16Array(c.layers.built)
-  const index = new Map(c.table.map((r, k) => [r.id, k]))
-  return c.map.features.flatMap(f => {
-    const k = index.get(f.id)
-    const r = k === undefined ? undefined : c.table[k]
-    if (k === undefined || !r || !/^built\.(house|barn|church)(\.|$)/.test(r.kind)) return []
-    const rings = ringsOf(f) // the rings apply paints (a circle's or an ellipse's polygon too)
-    if (!rings) return []
-    const ring = rings[0]
-    const xs = ring.map(p => p[0])
-    const zs = ring.map(p => p[1])
-    const i0 = Math.floor((Math.min(...xs) - c.x0) / c.cell)
-    const i1 = Math.floor((Math.max(...xs) - c.x0) / c.cell)
-    const j0 = Math.floor((Math.min(...zs) - c.z0) / c.cell)
-    const j1 = Math.floor((Math.max(...zs) - c.z0) / c.cell)
-    let own = 0
-    for (let j = j0; j <= j1; j++) {
-      for (let i = i0; i <= i1; i++) {
-        const p: Pt = [c.x0 + (i + 0.5) * c.cell, c.z0 + (j + 0.5) * c.cell]
-        if (!inRing(ring, p) || rings.slice(1).some(h => inRing(h, p))) continue
-        if (i < 0 || j < 0 || i >= c.nx || j >= c.nz || built[j * c.nx + i] !== k + 1) return []
-        own++
-      }
-    }
-    if (!own) return []
-    const wall = typeof r.attrs.wall === 'number' ? r.attrs.wall : 4
-    // no roof over a burnt house (its state lowers its walls and takes its roof) or over a courtyard
-    const roof = r.attrs.roof !== 'none' && rings.length === 1
-    return [{ ring, height: wall, church: r.kind.startsWith('built.church'), roof }]
-  })
 }
 
 // the map's names, read once a compile (namesOf), drawn every frame

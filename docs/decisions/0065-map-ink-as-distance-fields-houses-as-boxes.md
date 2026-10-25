@@ -37,8 +37,9 @@ We will draw the ink and the houses as follows:
 - **The ways' edges from their shapes**, at the half-width apply paints them (`lineReach`), cut square at their free
   ends: crisp double hairlines at every zoom, drawn only on and beside the ways' cells. Where a way crosses water with
   no bridge, the sim has both (apply keeps the way's cells under the water), and the map draws both.
-- **The houses as boxes on the paper**, each standing only where all its cells are its own (a house whose cells
-  another built feature took is not drawn), raised to their wall height, their faces lit by the map's light in the
+- **The houses as boxes on the paper**, each standing only where at least half the cells under it are its own (a
+  house whose cells another built feature took is not drawn; a cell lost on a shared wall does not topple it), a
+  courtyard cut out of its roof, raised to their wall height, their faces lit by the map's light in the
   prototype's colours (the roof's, 0.62 of it away from the light, up to 0.85 toward it), and the footprint swept away
   from the light as its shadow, each pixel darkened once (a stencil); the view's tilt (decision 0055) shows their sides.
 - **The names** (`zone.label`) as text on the overlay, through the view's camera.
