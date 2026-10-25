@@ -54,7 +54,7 @@ import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
-import { SHADOW_LOOK, applyLookParams, shadowModes } from './shadow-look.ts'
+import { SHADOW_LOOK, applyLookParams, shadowModes, simpleShadowsDraw, stencilFor } from './shadow-look.ts'
 
 declare global {
   interface Window {
@@ -87,20 +87,11 @@ setHeightfield(look.hf, look.far, D.spec.tile / 2)
   checkGround(D.spec, lo, hi, farLo)
 }
 const canvas = document.getElementById('c') as HTMLCanvasElement
-// ?stencil=scene (the default): a stencil on the scene's target alone, for the soldiers' simple shadows
-// (src/look/units.ts, MSAA.stencil in src/look/post.ts); all: the engine's own (the canvas and its targets too: the
-// A/B); 0: none
-const stencilParam = new URLSearchParams(location.search).get('stencil') ?? 'scene'
-if (!['scene', 'all', '0'].includes(stencilParam)) {
-  throw new Error(`?stencil must be scene, all or 0, not ${stencilParam}`)
-}
-// (only with the simple shadows, which are the stencil's only use: without them the scene's depth stays DEPTH32_FLOAT)
-{
-  const q = new URLSearchParams(location.search)
-  MSAA.stencil =
-    stencilParam === 'scene' && q.get('armies') !== null && q.get('unitshadow') !== '0' && q.get('ushadowfar') !== 'map'
-}
-const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: stencilParam === 'all' }, false)
+// the stencil: on the scene's target alone while the soldiers' simple shadows draw (?stencil=scene, the default), the
+// engine's own (?stencil=all) or none (?stencil=0): stencilFor (src/look/shadow-look.ts)
+const stencilAt = stencilFor(new URLSearchParams(location.search))
+MSAA.stencil = stencilAt === 'scene'
+const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: stencilAt === 'engine' }, false)
 engine.setHardwareScalingLevel(1)
 // the scene's own lines (the finishing chain's: under the upscale, its first target's; called only from the frames,
 // after the chain is made below)
@@ -687,7 +678,7 @@ if (armiesParam !== null) {
   if (decalLift !== null) units.decalLift = +decalLift
   // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
   // after the bounce map (the season, the shadows' switch, the grain) and when the occlusion's switch changes
-  if (units.simpleFar && unitShadowParam !== '0') {
+  if (simpleShadowsDraw(params)) {
     const shade = (units.shade = bakes.unitShade())
     let ao = S.ao
     scene.onBeforeRenderObservable.add(() => {

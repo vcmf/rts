@@ -14,6 +14,8 @@ import {
   lookBetween,
   parseNumbers,
   shadowModes,
+  simpleShadowsDraw,
+  stencilFor,
 } from '../src/look/shadow-look.ts'
 import { decodeUnits, shadowShape } from '../src/look/units-data.ts'
 
@@ -148,6 +150,44 @@ describe("the page's switches", () => {
     }
     expect(parseNumbers(q('k=0.5'), 'k', [1, 2], [0, 1])).toEqual([0.5])
     expect(parseNumbers(q(''), 'k', [1], [0, 1])).toBeNull()
+  })
+})
+
+describe('where the stencil goes (stencilFor, #134)', () => {
+  // (#134: the engine's own stencil gave every target one, the scene's depth DEPTH24_STENCIL8, not DEPTH32_FLOAT)
+  const cases: [string, 'none' | 'scene' | 'engine'][] = [
+    ['', 'none'],
+    ['stencil=scene', 'none'],
+    ['armies=20', 'scene'],
+    ['armies=20&unitshadow=1', 'scene'],
+    ['armies=20&ushadowclose=map', 'scene'],
+    ['armies=20&ushadowfar=simple', 'scene'],
+    ['armies=20&unitshadow=0', 'none'],
+    ['armies=20&ushadowfar=map', 'none'],
+    ['armies=20&stencil=0', 'none'],
+    ['stencil=all', 'engine'],
+    ['armies=20&stencil=all', 'engine'],
+    ['armies=20&unitshadow=0&stencil=all', 'engine'],
+  ]
+  for (const [params, at] of cases) {
+    it(`?${params}: ${at}`, () => {
+      expect(stencilFor(q(params))).toBe(at)
+    })
+  }
+  // (?armies=0 never gets here: the page refuses a count outside 1 to 40, src/look/main.ts)
+  it('refuses another value', () => {
+    for (const v of ['1', 'engine', '']) expect(() => stencilFor(q(`stencil=${v}`)), v).toThrow(/\?stencil must be/)
+  })
+})
+
+describe('whether the simple shadows draw (simpleShadowsDraw)', () => {
+  it('only with armies, their shadows on and the simple ones beyond close zoom', () => {
+    expect(simpleShadowsDraw(q(''))).toBe(false)
+    expect(simpleShadowsDraw(q('armies=20'))).toBe(true)
+    expect(simpleShadowsDraw(q('armies=20&ushadowclose=map'))).toBe(true)
+    expect(simpleShadowsDraw(q('armies=20&unitshadow=0'))).toBe(false)
+    expect(simpleShadowsDraw(q('armies=20&ushadowfar=map'))).toBe(false)
+    expect(() => simpleShadowsDraw(q('armies=20&ushadowfar=x'))).toThrow(/ushadowfar/)
   })
 })
 
