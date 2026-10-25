@@ -378,8 +378,8 @@ export const napoleonic: Ruleset = {
     refuge: { alert: 200, closing: 1, react: 2, hold: 30 }, // the square against cavalry
   },
   // the end of a battle (S1e-2): a side with 35% of its men out of the fight is broken (S1e-3: at half,
-  // a side whose first line had routed fought on; its rallied battalions stood at the map's edge for the rest); at a time limit, shares in the
-  // fight within 5 points are a draw
+  // a side whose first line had routed fought on; its rallied battalions stood at the map's edge for the rest);
+  // at a time limit, shares in the fight within 5 points are a draw
   end: { broken: 0.65, margin: 0.05 },
 }
 // the ceiling (decision 0018): the same ruleset with companies of 45 files, 810 places (tests, cost benches)
