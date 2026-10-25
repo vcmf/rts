@@ -9,6 +9,7 @@ import type { Compiled, CompileReply, CompileRequest, LayerName } from './protoc
 import { demFileNames } from '../../map/dem.ts'
 import { LitView, TILT } from '../../render/lit/view.ts'
 import { ringsOf } from '../../map/reach.ts'
+import { lineLength, pointAt } from '../../map/geometry.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -363,7 +364,9 @@ function namesOf(c: Compiled): { at: Pt; text: string }[] {
   return c.map.features.flatMap(f => {
     const r = byId.get(f.id)
     if (!r || !r.kind.startsWith('zone.label') || typeof r.attrs.text !== 'string' || !r.attrs.text) return []
-    const at = anchor(f)
+    // a line's name at the middle of its length, a point's at the point
+    const mid = f.line && pointAt(f.line, lineLength(f.line) / 2)
+    const at: Pt | null = mid ? [mid[0], mid[1]] : anchor(f)
     return at ? [{ at, text: r.attrs.text }] : []
   })
 }

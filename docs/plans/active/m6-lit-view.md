@@ -116,25 +116,29 @@ settings (the owner, 2026-10-25).
   - `project` and `unproject` read the camera's matrix and its inverse, kept with the canvas's size in `setCamera`:
     no layout read or matrix inversion per point.
 
-## M6b: ink from the features' shapes (decision 0065)
+## M6b: ink and houses (decision 0065)
 
-- `bakeInk` (`src/render/lit/bake.ts`), in the worker: per cell, the signed distance to the nearest edge of the ways,
-  the water and the barriers (R, G, B, ±8 m in a byte), from the expanded features' shapes and their resolved widths
-  (`inkOf`; a barrier's thickness in cells). The shader draws hairlines where a field is 0, a pond's lining 4 m and
-  9 m inside its shore, the barriers solid, a road's ground a little lighter; the edges fade from a metre a pixel to
-  three, so the far map does not darken with them. The mask's A is now the yards (a village's, a farm's, `ground.yard`).
-- The water and the woods are filled from their fields too (the woods' in the ink's A), so their edges are the shapes',
-  not the 2 m cells' staircase; the cell mask keeps the depth (for the banks' shading) and the yards.
-- The houses (`LitView.setHouses`): `built.house`, `.barn` and `.church` footprints as boxes at their wall height,
-  their faces lit by the map's light in the prototype's colours, their shadows one hull each away from the light; the
-  shadows drawn over the paper, the boxes over both (rendering groups).
-- The names: `zone.label` texts in italic on the overlay, with a paper halo, in the lit view.
-- **Results:** the generated map's village stands raised and lit along its road, the brook reads as a light channel
-  with fine banks at the overview and as two banks up close, the road as a double hairline, the labels in place;
-  every map in `maps/` draws with no console error. The bakes for the generated map: 81–121 ms in the worker.
-- **Open:** up close, a stream's carved channel still steps in the relief's shading and contours: `apply` carves it
-  cell by cell into the heights. A carving that follows the bank's true distance would smooth it (the heights, not
-  the view).
+- **Redesigned after round 3** (the owner, 2026-10-25: "Cells, edges smoothed"): the water, the woods and the
+  barriers come from their cells, the ways' edges from their shapes. Decision 0065 was amended in this PR, before it
+  merged, to say so. The first design (every fill from the shapes) is in the review rounds below.
+- `bakeInk` (`src/render/lit/bake.ts`), in the worker: R the ways' edges from their centrelines at the width apply
+  paints them (`waysOf`, `lineReach`), cut square at free ends; G the water, B the barriers, A the woods, each the
+  signed distance field of its cells (`cellField`: a two-pass chamfer, the 0 on the cells' sides; smoothed by a
+  binomial blur for the water and the woods, square for the barriers). The mask's G marks the ways' cells and those
+  next to them: the road ink draws only there. The fields are mipmapped.
+- The shader fills the water and the woods from their fields, draws hairlines where a field is 0 (banks, road
+  edges), a pond's or a river's lining at 4.5 m and 7.5 m (not on the water's middle line, where the field folds), the
+  barriers solid; a road's ground a little lighter; the edges fade from a metre a pixel to three. Contours fade below
+  half a percent of slope (gated on the ground's slope, not the pixel's).
+- The houses (`LitView.setHouses`): `built.house`, `.barn` and `.church` footprints (`ringsOf`) as boxes at their
+  wall height, roofs by ear clipping, faces lit by the map's light in the prototype's colours; each footprint swept
+  away from the light as its shadow, every pixel darkened once (a stencil); hidden in the flat colours.
+- The names: `zone.label` texts at the middle of a line or at a point, in italic on the overlay, with a paper halo.
+- **Results:** the generated map's wood stops at the brook's bank, its village stands raised and lit along an
+  unbroken road; the valley's hedges keep their gates; every map in `maps/` draws with no console error. The bakes:
+  0.2 s for the generated map, 1.45 s for Austerlitz (6 km), in the worker.
+- **Open:** up close, a stream's carved channel still steps in the relief's shading and contours (`apply` carves it
+  cell by cell into the heights). The cells' fields at 6 km take about a second; a faster transform if saves need it.
 
 ### Review rounds (M6b)
 
@@ -165,3 +169,10 @@ settings (the owner, 2026-10-25).
   features' `anchor`; the mask's G is unused (the woods come from the ink). Found while checking: the square-end rule
   first took `max(d − half, over)` everywhere, which emptied every line's inside (roads and streams drawn solid); a
   test now checks a line's inside and its square ends.
+- **Round 3**: severe, the third: the woods' field (the union of their shapes) ignored the vegetation layer's
+  priority, so a field painted over a wood drew as forest. Three rounds had each found a rule of the engine the
+  shapes did not follow (gaps, `clear`, priority): the design was wrong, not the code. Stopped and redesigned with the
+  owner (above). The round's other findings went into the redesign: shadows darkened once by a stencil (the depth
+  trick could double-blend), names at a line's true middle, the fields mipmapped against far-zoom dashes, the far fade
+  on the metres a pixel spans, the lining kept off the water's middle line, no dead mask channel, one rule for a
+  way's width (`lineReach`). The review count restarts with the redesign.

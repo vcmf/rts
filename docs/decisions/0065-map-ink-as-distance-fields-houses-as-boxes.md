@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-25
 ---
 
-# 0065 The lit map's ink is a distance field from the features' shapes; its houses are lit boxes
+# 0065 The lit map draws from the cells, its edges smoothed by distance fields; its houses are lit boxes
 
 ## Context
 
@@ -17,30 +17,39 @@ houses were pre-lit 2D drawings (tops, side faces and shadows) baked into such a
 ## Decision
 
 We will draw the ink and the houses as follows:
-- **The ink as signed distance fields on the cells**, baked in the compile worker from the features' shapes: per cell,
-  the signed metres to the nearest edge of the ways (their two edges), of the water (a stream's banks, a pond's shore
-  and its holes), and of the barriers, over ±8 m in a byte. The shader draws a hairline of constant screen width where
-  a field crosses 0 (`fwidth`), the lining of a pond at fixed distances inside its shore, and the barriers solid. A
-  distance field reads between its texels as straight as the edge itself, so a field at the cell's size stays crisp
-  at every zoom.
+- **What the sim reads is what the map shows.** The water, the woods and the barriers are drawn from their compiled
+  cells, whatever rule put them there (priority, `clear`, a hedge's gates), never from the raw shapes: a renderer
+  that copies the engine's rules one by one disagrees with the cells wherever a rule is missed (three review rounds
+  found three such rules, `docs/plans/active/m6-lit-view.md`).
+- **Edges smoothed by distance fields on the cells**, baked in the compile worker: per cell, the signed metres to the
+  nearest cell of the other kind, smoothed for the water and the woods so their edges run through the cells' steps
+  (within about a metre of the shapes), square for the barriers (on the grid by design, proposal §3.6). The shader
+  fills them and draws their edges as hairlines of constant screen width where a field crosses 0 (`fwidth`); the
+  fields are mipmapped, so a far view does not break them into dashes.
+- **The ways' edges from their shapes**, at the half-width apply paints them (`lineReach`), cut square at their free
+  ends: crisp double hairlines at every zoom, drawn only on and beside the ways' cells.
 - **The houses as boxes on the paper**, raised to their wall height, their faces lit by the map's light in the
-  prototype's colours (the roof's, 0.62 of it away from the light, up to 0.85 toward it), and a soft shadow on the
-  ground away from the light; the view's tilt (decision 0055) shows their sides.
+  prototype's colours (the roof's, 0.62 of it away from the light, up to 0.85 toward it), and the footprint swept away
+  from the light as its shadow, each pixel darkened once (a stencil); the view's tilt (decision 0055) shows their sides.
 - **The names** (`zone.label`) as text on the overlay, through the view's camera.
 
 ## Consequences
 
-- Good: lines crisp at every zoom from a field the size of the other bakes (4 bytes a cell); houses that need no
+- Good: the map cannot show a wood, a stream or a hedge the sim does not have, or hide one it has.
+- Good: lines crisp at every zoom from fields the size of the other bakes (4 bytes a cell); houses that need no
   texture and lean with the view.
-- Good: one source for every renderer: the features' shapes, as the sim and the draft read them.
-- Bad: where two edges of one field meet at a sharp corner or a junction, the bilinear field rounds them a little
-  within a cell.
-- Bad: a road or a stream narrower than a few pixels shows its two edges as one line; the ink fades from a metre a
+- Bad: an edge from the cells is within about a metre of the shape, not on it: a curve shows a little wobble up close.
+- Bad: the cells' fields cost time in the worker: about 1.5 s for a 6 km map (three chamfer distance transforms and
+  two blurs over 9 million cells), measured on the dev Mac; to be cut if the editor needs faster saves.
+- Bad: a road or a stream narrower than a few pixels shows its two edges as one line; the edges fade from a metre a
   pixel to three, so the far map is not dark with them.
 
 ## Alternatives considered
 
 - **The prototype's ink texture at a texel a metre:** 144 MB a channel group at 6 km, and blurred up close.
+- **The fills from the shapes**, which M6b first did: exact curves, but the map then disagreed with the cells wherever
+  the engine applies a rule the renderer did not copy (priority, `clear`, gaps). Shapes gated by the cells was the
+  other option offered: exact where nothing overrides, at the cost of two sources to keep checked.
 - **Line meshes with a screen-space width:** crisp too, but one more geometry path to keep in step with the cells;
   the distance field reuses the bakes' grid and the plane's shader.
 - **The houses baked pre-lit into a texture, as the prototype:** the same size problem, and flat when the view tilts.

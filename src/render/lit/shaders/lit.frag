@@ -8,8 +8,9 @@ precision highp float;
 varying vec3 vW;
 uniform sampler2D uHeight;   // the node heights, m above the datum: one float a node, read by texelFetch
 uniform sampler2D uRelief;   // R the slope's light, G the cast shadow (1 lit), B the exposure (0.5 even), on the nodes
-uniform sampler2D uMask;     // R the water's depth (0..1), B the water, A the yards, on the cells (G unused)
-uniform sampler2D uInk;      // the ink's distance fields on the cells: R ways, G water, B barriers, A woods (signed m)
+uniform sampler2D uMask;     // R the water's depth (0..1), G the ways, B the water, A the yards, on the cells
+uniform sampler2D uInk;      // the ink's distance fields on the cells: R ways (their shapes), G water, B barriers, A woods
+                             // (their cells), signed m
 uniform sampler2D uPaperT, uFlatT;
 uniform vec2 uX0Z0, uSize, uNodes, uCells, uLightXZ, uLambert;
 uniform float uCell, uDatum, uFlat, uShadeFloor, uShadeTop, uInkRange;
@@ -38,8 +39,8 @@ void main() {
   float edge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
   vec2 cuv = clamp(uv, 0.0, 1.0);
   vec4 M = texture2D(uMask, cuv) * inside;
-  /* the ink's distance fields (bakeInk), signed metres to the nearest edge; water and woods are filled from them, so
-     their edges are the shapes', not the cells' */
+  /* the ink's distance fields (bakeInk), signed metres to the nearest edge; the water and the woods are filled from
+     their cells' fields, smoothed, so their edges run through the cells' steps and never leave the cells the sim reads */
   vec4 I = (texture2D(uInk, cuv) * 255.0 - 128.0) / 127.0 * uInkRange;
   float waterA = clamp(0.5 - I.g / max(fwidth(I.g), 1e-5), 0.0, 1.0) * inside;
   float woodA = clamp(0.5 - I.a / max(fwidth(I.a), 1e-5), 0.0, 1.0) * inside;
@@ -98,7 +99,9 @@ void main() {
     float hx = h / 25.0, fwx = max(fwidth(hx), 1e-4), dx = abs(fract(hx - 0.5) - 0.5) / fwx;
     /* flat ground lying exactly at a contour's height is no line: the line needs the ground to slope on screen */
     float grade = fwidth(h) / max(fwidth(vW.x) + fwidth(vW.z), 1e-6);   /* the ground's slope, m a m, at any zoom */
-    float sloped = smoothstep(0.0002, 0.001, grade);
+    /* contours fade below half a percent, where they lie a kilometre apart: there, near a flat floor, the line would
+       widen into a band where the ground only begins to rise */
+    float sloped = smoothstep(0.001, 0.005, grade);
     float minorC = (1.0 - smoothstep(0.5, 1.3, dc)) * (1.0 - smoothstep(0.22, 0.5, fwc)) * sloped;
     float indexC = (1.0 - smoothstep(0.9, 1.9, dx)) * (1.0 - smoothstep(0.3, 0.7, fwx)) * sloped;
     mapC = mix(mapC, vec3(0.42, 0.30, 0.16), max(minorC * 0.25, indexC * 0.45) * inside * (1.0 - waterA));
@@ -107,18 +110,24 @@ void main() {
   /* a village's or a farm's yard: the paper lighter, trodden */
   mapC = mix(mapC, mix(mapC, vec3(0.97, 0.96, 0.94), 0.55), M.a * 0.25);
 
-  /* the ink, from the features' shapes (bakeInk): signed metres to the nearest edge, a hairline where it is 0 */
+  /* the ink (bakeInk): signed metres to the nearest edge, a hairline where it is 0; the ways' from their shapes, the
+     water's and the barriers' from their cells */
   {
     /* zoomed out, a road's or a stream's two edges fall within a few pixels and would read as one heavy line: they
        fade from a metre a pixel to three */
-    float far = 1.0 - 0.55 * smoothstep(1.0, 3.0, fwidth(vW.x) + fwidth(vW.z));
+    float mpp = 0.5 * (fwidth(vW.x) + fwidth(vW.z));   /* about the metres a pixel spans */
+    float far = 1.0 - 0.55 * smoothstep(1.0, 3.0, mpp);
+    /* a way's edges only on its cells: the shapes' line never shows where a rule took the cells away */
+    float onWay = smoothstep(0.0, 0.25, M.g);
     /* a road's ground a little lighter, its two edges in ink */
-    mapC = mix(mapC, min(mapC * 1.06 + 0.02, vec3(1.0)), step(I.r, 0.0) * 0.6 * inside);
-    mapC = mix(mapC, uLine, hair(I.r) * 0.85 * far * inside);
+    mapC = mix(mapC, min(mapC * 1.06 + 0.02, vec3(1.0)), step(I.r, 0.0) * 0.6 * onWay * inside);
+    mapC = mix(mapC, uLine, hair(I.r) * 0.85 * far * onWay * inside);
     /* the water's banks, and a lining 4.5 m and 7.5 m inside a pond's or a river's shore (a stream up to 9 m wide has
        none: its centreline lies nearer its banks than the first lining) */
     mapC = mix(mapC, uLine, hair(I.g) * 0.7 * far * inside);
-    mapC = mix(mapC, uLine, (hair(I.g + 4.5) * 0.28 + hair(I.g + 7.5) * 0.16) * step(I.g, -2.0) * inside);
+    /* not where the field folds over (the water's middle line, where the distance stops growing) */
+    float rising = smoothstep(0.3, 0.6, fwidth(I.g) / max(2.0 * mpp, 1e-6));
+    mapC = mix(mapC, uLine, (hair(I.g + 4.5) * 0.28 + hair(I.g + 7.5) * 0.16) * step(I.g, -2.0) * rising * inside);
     /* hedges and walls: solid, dark */
     mapC = mix(mapC, uBarrier, max((1.0 - smoothstep(-0.4, 0.0, I.b)) * 0.75, hair(I.b) * 0.6) * inside);
   }

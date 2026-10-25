@@ -40,7 +40,7 @@ const HOUSE = [0.36, 0.29, 0.23]
 const CHURCH = [0.27, 0.22, 0.19]
 const HOUSE_SHADOW = 4.3
 const SHADOW_ALPHA = 0.32
-const SHADOW_Y = 0.05 // m above the paper: one plane, so overlapping shadows meet at one depth
+const SHADOW_Y = 0.05 // m above the paper
 const SEASON_AT: Record<Season, number> = { spring: 0, summer: 0, autumn: 1.5, winter: 3 }
 
 /** What the view draws: a compiled map's grids and bakes. */
@@ -99,7 +99,7 @@ export class LitView {
     this.engine = new Engine(
       canvas,
       true,
-      { preserveDrawingBuffer: true, stencil: false, doNotHandleContextLost: true },
+      { preserveDrawingBuffer: true, stencil: true, doNotHandleContextLost: true },
       false,
     )
     if (this.engine.webGLVersion < 2) {
@@ -157,8 +157,13 @@ export class LitView {
       { attributes: ['position'], uniforms: ['world', 'viewProjection', 'uAlpha'], needAlphaBlending: true },
     )
     this.shadowMaterial.setFloat('uAlpha', SHADOW_ALPHA)
-    this.shadowMaterial.forceDepthWrite = true // a blended material writes no depth by default
-    this.shadowMaterial.depthFunction = Constants.LESS
+    // each pixel of the shadows blends once, however many shadows overlap there: the first marks the stencil, the
+    // others fail it
+    this.shadowMaterial.disableDepthWrite = true
+    this.shadowMaterial.stencil.enabled = true
+    this.shadowMaterial.stencil.func = Constants.NOTEQUAL
+    this.shadowMaterial.stencil.funcRef = 1
+    this.shadowMaterial.stencil.opStencilDepthPass = Constants.REPLACE
     this.shadowMaterial.backFaceCulling = false
     const paper = paperCanvas()
     const t = this.rgba(paper, Texture.TRILINEAR_SAMPLINGMODE, true)
@@ -190,8 +195,9 @@ export class LitView {
       format: number,
       sampling: number,
       type = Constants.TEXTURETYPE_UNSIGNED_BYTE,
+      mips = false,
     ) => {
-      const t = new RawTexture(data, w, h, format, this.scene, false, false, sampling, type)
+      const t = new RawTexture(data, w, h, format, this.scene, mips, false, sampling, type)
       t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
       this.textures.push(t)
       return t
@@ -208,8 +214,12 @@ export class LitView {
     const linear = Texture.BILINEAR_SAMPLINGMODE
     this.material.setTexture('uHeight', height)
     this.material.setTexture('uRelief', tex(m.relief, m.nx + 1, m.nz + 1, rgba, linear))
-    this.material.setTexture('uMask', tex(m.masks, m.nx, m.nz, rgba, linear))
-    this.material.setTexture('uInk', tex(m.ink, m.nx, m.nz, rgba, linear))
+    // the cells' mask and the ink's fields mipmapped: zoomed out, a pixel spans several cells, and a road or a bank
+    // read from one of them would break into dashes that crawl as the view moves
+    const tri = Texture.TRILINEAR_SAMPLINGMODE
+    const byte = Constants.TEXTURETYPE_UNSIGNED_BYTE
+    this.material.setTexture('uMask', tex(m.masks, m.nx, m.nz, rgba, tri, byte, true))
+    this.material.setTexture('uInk', tex(m.ink, m.nx, m.nz, rgba, tri, byte, true))
     this.material.setFloat('uInkRange', INK_RANGE)
     this.material.setTexture('uFlatT', tex(m.flat.rgba, m.flat.w, m.flat.h, rgba, Texture.NEAREST_SAMPLINGMODE))
     this.material.setVector2('uX0Z0', new Vector2(m.x0, m.z0))
@@ -313,7 +323,7 @@ export class LitView {
         idx.push(v, v + 2, v + 1, v, v + 3, v + 2)
       }
       // the shadow: the footprint swept away from the light, as the footprint's copy there and a quad an edge between
-      // them (their union; the shadows' depth test keeps any overlap from darkening twice)
+      // them (their union; the stencil keeps any overlap from darkening twice)
       const away: [number, number][] = ring.map(([x, z]) => [x - lx * HOUSE_SHADOW, z - lz * HOUSE_SHADOW])
       const s0 = shade.length / 3
       for (const [x, z] of [...ring, ...away]) shade.push(x, SHADOW_Y, z)
@@ -329,9 +339,7 @@ export class LitView {
     sd.indices = shadeIdx
     sd.applyToMesh(shadow)
     shadow.material = this.shadowMaterial
-    // over the paper (a group of its own, its depth cleared); each shadow pixel blends once: the first fragment there
-    // writes the depth and the next ones at the same depth fail the test
-    shadow.renderingGroupId = 1
+    shadow.renderingGroupId = 1 // over the paper, with no depth against it
     const boxes = new Mesh('houses', this.scene)
     const bd = new VertexData()
     bd.positions = pos

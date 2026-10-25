@@ -218,11 +218,13 @@ maps/kinds.json ──► checkCatalogue ─┐
     woods darkening it, the shaded relief (slope light, cast shadow and exposure baked on the 2 m nodes, the light one
     of the grid's 8 directions, north-west for now), the water as a wash sunk below its banks, contours every 5 m and
     25 m from the node heights (a float texture read by `texelFetch`), the yards (a village's, a farm's), the ink, the
-    paper's grain; the ink (decision 0065, M6b): the ways' edges, the water's banks and a pond's lining, the hedges and
-    walls, from signed distance fields baked on the cells from the features' shapes (`bakeInk`), hairlines of
-    constant screen width that fade as the map zooms out; the houses, barns and churches stand as boxes raised to
-    their wall height, lit by the map's light, with a soft shadow away from it; the names (`zone.label`) are written
-    on the overlay;
+    paper's grain; the ink (decision 0065, M6b): the water, the woods and the barriers from their cells (what the sim
+    reads), their edges from signed distance fields on the cells (`cellField`, smoothed for the water and the woods,
+    square for the barriers), the ways' edges as crisp hairlines from their shapes at the width apply paints them,
+    drawn only on and beside their cells; a pond's lining; hairlines of constant screen width that fade as the map
+    zooms out, the fields mipmapped; the houses, barns and churches stand as boxes raised to their wall height, lit by
+    the map's light, each with its footprint swept away from the light as its shadow; the names (`zone.label`) are
+    written on the overlay;
   - a "view" setting shows the flat draft's colours on the same plane instead (a debug overlay); the outlines, ids
     and the play area are drawn on a 2D canvas over it, through the same camera (circles and ellipses as rings of
     ground points, so they lean with the view); pan keeps the ground point under the pointer, zoom keeps the one
@@ -289,7 +291,8 @@ and the file checks' refusals; the test map's real heights and its sim compile.
 
 `test/render-lit-bake.test.ts` (M6a): the relief bake on flat ground, the cast shadow away from the light for each of
 its 8 directions, the exposure of a block's top and foot, no seam at the grid's edge; the cells' mask with its yards;
-(M6b) the ink's distance field for a way, an area with a hole, and the widths each feature gives it.
+(M6b) a way's field and its square ends, the widths `waysOf` takes from `lineReach`, a cell field's 0 on the cells'
+sides, a smoothed diagonal edge without stairs, a wood's clearing taken by priority, a hedge's gate.
 
 `test/map-language.test.ts`:
 - the catalogue checks clean, and a broken one is reported;
