@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-23
+last_reviewed: 2026-10-25
 ---
 
 # Plan: the test gaps, audited, filled area by area
@@ -96,27 +96,31 @@ The tests this PR adds (`test/`, 103 tests in about 7 s on the dev Mac in parall
   words, `atan2`, `wrapAngle`, `sin`, `exp` and `quantise` at their boundaries, FNV-1a's reference values, the data
   loader's refusals and a file read from an offset view.
 
-### The look and render area (`src/look`, `src/render`, `src/app`): after PR 2
+### The look and render area (`src/look`, `src/render`, `src/app`): step 2
+
+The numbers are the audit's (main `1fa1312`); where step 2 changed a row, it gives main's before step 2 (`96bba1f`,
+measured the same way) → after.
 
 | Module | Lines | Branches | Risk | Covered by |
 |---|---|---|---|---|
 | `src/look/world/armies.ts` | 98.3 | 90.7 | high | `test/armies.test.ts` (layout, `farPalette`, `farRule`, the demo map's hashes) |
-| `src/look/spec.ts` | 100 | 94.8 | high | `test/look-spec.test.ts` (`derive`, `ZoomHold`, `clearRadius`, `checkGround`); untested: `footprintOf`, `nearReachOf`, `bakeMB` edges |
-| `src/look/units-data.ts` | 100 | 83.0 | high | `test/armies.test.ts`; untested: `boneParts`, `seenArea`; the far width cap (regression g) lives in `units.ts`, not here |
-| `src/look/units.ts` | 0 | 0 | high | inline logic worth pulling out: the LOD hysteresis in `Units.frame()`, the far width cap, `casterOf`. No page check counts the men drawn (`Units.drawn()` is unused) |
-| `src/look/mood.ts` | 62.8 | 20 | high | `test/look-moods.test.ts` (`MOODS`, `seasonLight`); untested: `setMood`, `lockMood`, `setBounce`, `gradeColour`, `lumaW` (imports only `Color3`, loads in Node) |
+| `src/look/spec.ts` | 96.0 → 100 | 94.8 → 99.3 | high | `test/look-spec.test.ts` (`derive`, `ZoomHold`, `clearRadius`, `checkGround`; step 2: `derive`'s eight untested refusals, `footprintOf`, `nearReachOf`, `bakeMB`, the camera's hold a frame `holdView` (regression b)) |
+| `src/look/units-data.ts` | 96.6 → 97.1 | 84.7 → 86.3 | high | `test/armies.test.ts`; step 2, `test/look-units.test.ts`: `boneParts` (minimum vertices and length, the heaviest bone, a bone at the ground with no part up its chain), `seenArea`, and what step 2 moved here from `units.ts`: the far width cap `farWidthScale` (regression g) and the LOD switches `drawsNear`, `drawsTiny` |
+| `src/look/units.ts` | 0 | 0 | high | the LOD hysteresis and the far width cap pulled out (step 2, above); `casterOf` left (it reads the page's switches and the battalion's state: a one-line rule). No page check counts the men drawn (`Units.drawn()` is unused) |
+| `src/look/mood.ts` | 70.8 → 100 | 20 → 100 | high | `test/look-moods.test.ts` (`MOODS`, `seasonLight`; step 2: `setMood`, `setBounce`, `setGroundBounce`, `lockMood` and its seeding of the season's light, each on a fresh module, `gradeColour`, `lumaW`) |
 | `src/look/river.ts` | 95.5 | 84.1 | high | the water data tests |
 | `src/look/world/{author,buildings,cover,data,water-data,geom}.ts`, `heightfield.ts`, `noise.ts` | 96–100 | 50–94 | high | `test/cover.test.ts`, `buildings.test.ts`, `water-data.test.ts`, `look-roads.test.ts` |
-| `src/look/meadow-spec.ts`, `span-texture.ts`, `trace.ts` | 0 | | medium | pure, no Babylon: `grassDefinesForClumps` untested |
+| `src/look/meadow-spec.ts` | 0 → 100 | 100 | medium | step 2: `test/meadow-spec.test.ts` (`grassDefinesForClumps`) |
+| `src/look/span-texture.ts`, `trace.ts` | 0 | | medium | pure, no Babylon, untested |
 | `src/look/building-light.ts` | 11.2 | 6.1 | medium | `atlasLayout`, `tileOf` pure; the rest is a bake in the page |
 | `src/look/flow.ts`, `canopy.ts`, `bakes.ts`, `macro.ts` | 0 | 0 | medium | pure helpers among Babylon code (`flowAt`, `leafLoss`, `softDefines`, `isBakedArm`); `tools/macro-check.mjs` covers the macro bake |
-| `src/look/post.ts` | 0 | 0 | medium | `typingIn`, `CLEAR_BELOW`; the stencil rule (regression e) is inline in `main.ts` |
+| `src/look/post.ts` | 0 | 0 | medium | `typingIn`; the camera's hold a frame moved to `spec.ts` (`holdView`, `clearBelow`), the stencil rule (regression e) from `main.ts` to `shadow-look.ts` (`stencilFor`, `test/shadow-look.test.ts`), step 2 |
 | `src/look/materials.ts` | 0 | 0 | medium | the sampler count (`checkSamplers`, `failSamplers`) runs in every page load; no check loads every flag set (regression c) |
 | `src/look/main.ts`, `terrain.ts`, `water.ts`, `meadow.ts`, `nature.ts`, `leaves.ts`, `grain.ts`, `lab.ts`, `bench.ts`, `gputimer.ts`, `buildings.ts` | 0 | 0 | low | `tools/look-check.js`, `tools/guard.mjs`, `tools/coat-check.mjs`, `tools/detail-check.mjs`, `tools/water-look-check.mjs`, `tools/macro-check.mjs`, `tools/bench-look.mjs`, `tools/golden.mjs` (all local, none in CI) |
 | `src/render/soldiers.ts`, `scene.ts`, `style.ts` | 81–100 | 78–100 | high | `test/soldiers.test.ts` |
-| `src/render/map.ts` | 0 | 0 | medium | `toS`, `toW` pure; the staff map drawn by `tools/app-check.mjs` |
+| `src/render/map.ts` | 0 → 0.4 | 0 | medium | `toS`, `toW`: `test/staff-map.test.ts` (step 2); the staff map drawn by `tools/app-check.mjs` |
 | `src/app/main.ts` | 0 | 0 | low | `tools/app-check.mjs` (local; CI's header says it is not run there yet) |
-| **look, render, app** | **look 25.2, render 51.8, app 0** | **20.6, 48.2, 0** | | |
+| **look, render, app** | **look 25.2 (25.3 → 26.3), render 51.8 (44.9 → 45.1), app 0** | **20.6 (22.0 → 23.6), 48.2 (48.2), 0** | | |
 
 ### The tools (`tools/`): after PR 3
 
@@ -134,12 +138,12 @@ The tests this PR adds (`test/`, 103 tests in about 7 s on the dev Mac in parall
 | # | What | Guarded now? | The test that would catch it | PR |
 |---|---|---|---|---|
 | a | After a review fix, battalion host meshes cloned from disabled sources drew no soldiers on a plain `?armies` load (the fix: `Units.hostMesh()` enables a host only when shown; #145, #151) | **No.** `tools/guard.mjs --figures` calls `__units.show(true)` first, which hides the bug; `Units.drawn()` is unused | a page check: load `?armies=20`, never call `show()`, render at the default view and at about 125 m, and require `__units.drawn()` to count men, the far or tiny LOD at the wide view | look checks (after PR 3, with the tools) |
-| b | The player's zoom was lost after panning over a hill (`ZoomHold`, `clearRadius`, #145) | **Yes**: `test/look-spec.test.ts`, "keeps the player's zoom apart from the held one" and the two `clearRadius` tests. Not the wiring in `post.ts` | a unit test of the wiring once it is a pure function | look tests (after PR 2) |
+| b | The player's zoom was lost after panning over a hill (`ZoomHold`, `clearRadius`, #145) | **Yes**: `test/look-spec.test.ts`, "keeps the player's zoom apart from the held one", the two `clearRadius` tests, and (step 2) the wiring, `holdView`: "holds the zoom out over a hill and brings the player's zoom back past it" | | step 2 |
 | c | The water shader went over ANGLE-Metal's 16 fragment texture units and hung the bench (SwiftShader allows more) | **Partly**: `Materials.checkSamplers()` counts every compiled program against 16 in the page itself, so a headless run fails too (`tools/shot.mjs` treats the exception as fatal), but only for the flag sets a check loads | a sampler-count guard: load the flag matrix (default, `?armies=20`, `?armies&ushadowfar=map`, `?armies&unitshadow=0`, `?grass=brush`), read `__look.mats.samplers`, require terrain, water and meadow ≤ 16 and print the headroom | look checks |
 | d | Overlapping simple shadows darkened twice (#134) | **No** | a page check: two overlapping battalions with `?unitshadow=1` and with the shadows off; in the overlap the darkening matches a single shadow's within 2 %; sabotaged with `?stencil=0` it must fail | look checks |
-| e | The engine-wide stencil turned the scene depth from DEPTH32F to DEPTH24_STENCIL8 (#134) | **No** (checked by hand) | a unit test: pull the rule at `src/look/main.ts` into a pure `stencilFor(params)` and table-test it (no armies: none; `?armies`: the scene's; `?stencil=all`: the engine's); and a page check that the scene target's depth is DEPTH32F without armies | look tests, look checks |
+| e | The engine-wide stencil turned the scene depth from DEPTH32F to DEPTH24_STENCIL8 (#134) | **The rule, yes** (step 2): `stencilFor` (`src/look/shadow-look.ts`), table-tested in `test/shadow-look.test.ts`. Not yet the depth format itself | a page check that the scene target's depth is DEPTH32F without armies | look checks |
 | f | The bake's colour classifier painted skin as red facings and shaded navy as black (`tools/bake-figure.py`, #145) | **No** | a Vitest test on the baked figure: decode `data/figures/fr-line-infantry.unitdata`, count triangle roles by heaviest bone, require the hands mostly skin and the chest's black share small; and Python table tests once `hsv` and `texel_role` move to a module without `bpy` | tools (after PR 3) |
-| g | A far-scale width cap could become −0 when no vertex sat in the shoulder band (`Units` constructor, #130) | **No** | a unit test: pull the cap into `farWidthScale(positions, fileSpacing, maxXZ)` in `units-data.ts` and require 1 for an empty band and never −0 | look tests |
+| g | A far-scale width cap could become −0 when no vertex sat in the shoulder band (`Units` constructor, #130) | **Yes** (step 2): `farWidthScale` (`src/look/units-data.ts`), `test/look-units.test.ts`: 1 for an empty band or one vertex, never −0 | | step 2 |
 | h | The trample mask's clamp-to-edge streaks (`terrain.vert`, `meadow.vert`, #130) | **No** | a page check: `?armies&trample=1` against `?trample=0`, pixels outside the trample box equal | look checks |
 
 ## Findings
@@ -186,13 +190,33 @@ for them.
 ## The test PRs, in order
 
 1. **The sim area** (this PR, `test/gaps-sim`): the sim is formatted (#148).
-2. **The look and render area**, after the look's formatting PR (PR 2, `style/format-look`) merges: unit tests for the
+2. **The look and render area** (done: `test/look-units`), after the look's formatting PR (PR 2, `style/format-look`): unit tests for the
    pure parts listed above (`mood.ts`'s setters and grading, `spec.ts`'s footprints, `meadow-spec.ts`,
    `units-data.ts`'s `boneParts` and `seenArea`, `render/map.ts`'s transforms), and the extractions that make
    regressions b, e and g unit-testable (the LOD hysteresis, `stencilFor`, `farWidthScale`). The extractions change
    `src/look`: they wait for PR 2 so as not to fight its formatting.
 3. **The tools**, after PR 3 formats them: the figure bake's roles test (regression f), the page checks for
    regressions a, c, d and h, and the self-tests' place in CI (which can run in CI with SwiftShader, which cannot).
+
+## Step 2: the look's tests
+
+Branch `test/look-units`. The extractions move code unchanged (no visual change: the goldens of the default view and
+of `?armies=20` match main's on production builds):
+
+- `stencilFor(params)` (`src/look/shadow-look.ts`, from `src/look/main.ts`): `none`, `scene` or `engine`. Checked
+  against main after #175: the scene's stencil only with `?armies`, not `?unitshadow=0` and not `?ushadowfar=map`
+  (`?ushadowclose=map` keeps it: the simple shadows still draw past close zoom).
+- `holdView(spec, zoom, camera, ground)` and `clearBelow(spec)` (`src/look/spec.ts`, from `buildCamera` in
+  `src/look/post.ts`, whose `CLEAR_BELOW` it replaces): the focus clamped to the play area, the zoom held a frame.
+- `farWidthScale(positions, fileSpacing, maxXZ)`, `drawsNear(px, wasNear, lodPx)`, `drawsTiny(px, wasTiny, tinyPx)`
+  (`src/look/units-data.ts`, from the `Units` constructor and `frameBody`).
+
+Each regression test fails without its fix (the bug put back by hand, the test run, the fix restored):
+
+- b: `holdView` stepping the camera's own radius through the hold, no wanted zoom apart (before #145): "holds the
+  zoom out over a hill and brings the player's zoom back past it" fails (28.7 m shown, 15 m expected).
+- e: `stencilFor` giving the engine's stencil by default (before #134): 8 of the 12 table rows fail.
+- g: `farWidthScale` without its guard: "is 1 for a figure with no width there" fails (an empty band gives −0).
 
 ## Acceptance (this PR)
 
