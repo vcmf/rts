@@ -102,8 +102,9 @@ describe('lodCover and lodAt', () => {
           expect(Math.min(Math.abs(q - s.near), Math.abs(q - s.far))).toBeGreaterThanOrEqual(1 / 32 - 1e-12)
         }
         // and a man dropped by a LOD has no pixel of it after the snap either
-        for (const slot of [0, 1, 2] as const)
-          {if (dropsMan(slot, c)) expect(QS.some(q => drawsPixel(slot, q, s))).toBe(false)}
+        for (const slot of [0, 1, 2] as const) {
+          if (dropsMan(slot, c)) expect(QS.some(q => drawsPixel(slot, q, s))).toBe(false)
+        }
       }
     }
   })
