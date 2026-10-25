@@ -25,6 +25,7 @@ import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
 import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
 import { cellK, impAt, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
+import { claimedAt, claimsNear } from './claims.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
@@ -57,6 +58,12 @@ const ARRIVE = 0.4 // m
 const sqrt = Math.sqrt
 const hyp = (x: number, z: number) => sqrt(x * x + z * z)
 const now = (w: World) => w.meta[M_TICK] * DT
+// impassable ground for formation i: the terrain's, and with the claim grid's prototype on, other formations' cells
+// (src/sim/claims.ts)
+const blockedAt = (w: World, i: number, imp: Uint8Array, x: number, z: number): number =>
+  impAt(w.terrain, imp, x, z) || (w.claims && claimedAt(w, i, x, z) ? 1 : 0)
+// the quick rejects below read the terrain's distance field alone: with claims, they wait while others stand near
+const claimsMatter = (w: World, i: number): boolean => w.claims && claimsNear(w, i)
 
 /* ---------------- shapes, places ---------------- */
 // (a formation's shapes are its type's: f.shape and f.tShape index typeOf(w, i).shapes)
@@ -213,10 +220,10 @@ function wetSlots(w: World, i: number, c: number, ctx: Places, out: Bits): Bits 
       if (p) {
         const lx = U.slotLX[s] * p.kx
         const lz = U.slotLZ[s] * p.kz
-        if (impAt(w.terrain, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) setBit(out, s - base)
+        if (blockedAt(w, i, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) setBit(out, s - base)
       } else {
         placeAtSlot(ctx, s, pt)
-        if (impAt(w.terrain, imp, pt[0], pt[1])) setBit(out, s - base)
+        if (blockedAt(w, i, imp, pt[0], pt[1])) setBit(out, s - base)
       }
     }
   }
@@ -816,7 +823,9 @@ function clearOfImpassable(w: World, i: number): boolean {
   for (let j = 0; j < U.NB; j++) lmax = Math.max(lmax, f.lags[i * w.cr.maxNB + j])
   const kind = kindOf(w, i)
   // a company's places lie within a frontage of its origin, times its spacing
-  return w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2
+  return (
+    !claimsMatter(w, i) && w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2
+  )
 }
 // the bins with a man's place on impassable ground, for the pose as it is now, into out (a set of NB bits)
 export function wetBins(w: World, i: number, out: Bits): Bits {
@@ -843,7 +852,7 @@ export function wetBins(w: World, i: number, out: Bits): Bits {
         const s = Fl.s[k]
         const lx = U.slotLX[s] * p.kx
         const lz = U.slotLZ[s] * p.kz
-        if (impAt(w.terrain, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) {
+        if (blockedAt(w, i, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) {
           setBit(out, c * B)
           break
         }
@@ -860,7 +869,7 @@ export function wetBins(w: World, i: number, out: Bits): Bits {
       const j = c * B + L.of[s]
       if (hasBit(out, j)) continue
       placeAtSlot(ctx, s, pt)
-      if (impAt(T, imp, pt[0], pt[1])) setBit(out, j)
+      if (blockedAt(w, i, imp, pt[0], pt[1])) setBit(out, j)
     }
   }
   return out
@@ -882,6 +891,7 @@ function companyClear(ctx: Places, c: number, impd: Float64Array): boolean {
   const T = w.terrain
   const U = ctx.U
   const B = U.geo.bins
+  if (claimsMatter(w, ctx.i)) return false
   if (!ctx.snake) {
     const x0 = ctx.fx[c * B]
     const z0 = ctx.fz[c * B]
@@ -958,7 +968,7 @@ function sampleBins(w: World, i: number, pace: number, V0: number): void {
     const T = w.terrain
     const cell = cellK(T, px, pz)
     const gg = groundGAt(T, cell, kind, dx, dz)
-    if (gg <= 0 || impAt(T, imp, px + dx * look, pz + dz * look)) blkTmp[j]++
+    if (gg <= 0 || blockedAt(w, i, imp, px + dx * look, pz + dz * look)) blkTmp[j]++
     else {
       gTmp[j] += 1 / gg
       nTmp[j]++
@@ -1237,7 +1247,12 @@ function changeWet(w: World, i: number): boolean {
   const spread = Math.max(layoutOf(w, i).spread, targetLayout(w, i).spread)
   let lmax = 0
   for (let j = 0; j < U.NB; j++) lmax = Math.max(lmax, f.lags[i * w.cr.maxNB + j])
-  if (w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2) return false
+  if (
+    !claimsMatter(w, i) &&
+    w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2
+  ) {
+    return false
+  }
   const span = f.tDelay[i * CS + C - 1] + f.tDur[i]
   for (let k = 0; k <= CHANGE_SAMPLES; k++) {
     const t = f.tStart[i] + (span * k) / CHANGE_SAMPLES
@@ -1248,7 +1263,7 @@ function changeWet(w: World, i: number): boolean {
       for (let s = c * g.ranks * g.files, e = s + g.ranks * g.files; s < e; s++) {
         const lx = U.slotLX[s] * p.kx
         const lz = U.slotLZ[s] * p.kz
-        if (impAt(w.terrain, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) return true
+        if (blockedAt(w, i, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) return true
       }
     }
   }

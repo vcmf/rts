@@ -40,7 +40,7 @@ import {
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
 import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS, PAGE_SEED } from '../scenarios/page.ts'
-import { BENCH_CASES } from '../scenarios/bench.ts'
+import { BENCH_CASES, CLAIM_CASES } from '../scenarios/bench.ts'
 import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
   const buildMs = performance.now() - t0
 
   // a bench case names itself under the panel's title
-  const bench = BENCH_CASES.find(c => c.scenario === scenario)
+  const bench = [...BENCH_CASES, ...CLAIM_CASES].find(c => c.scenario === scenario)
   if (bench) document.getElementById('sub')!.textContent = bench.title
   const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
   const lookAt = bench ? `look at ${bench.keys.map(clock).join(' · ')} (G)` : ''

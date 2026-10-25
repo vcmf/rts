@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest'
 import { root, longIt } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
-import { BENCH_CASES, type BenchCase } from '../src/scenarios/bench.ts'
+import { BENCH_CASES, CLAIM_CASES, type BenchCase } from '../src/scenarios/bench.ts'
 import {
   loadSimData,
   compileRuleset,
@@ -27,7 +27,7 @@ import {
 
 const data = loadSimData(new Uint8Array(fs.readFileSync(path.join(root, 'data/bench.simdata'))), MAP_VERSIONS.bench)
 const cr = compileRuleset(napoleonic)
-const caseOf = (id: string): BenchCase => BENCH_CASES.find(c => c.id === id)!
+const caseOf = (id: string): BenchCase => [...BENCH_CASES, ...CLAIM_CASES].find(c => c.id === id)!
 
 // plays a case for `seconds` (its own length by default), calling `each` every `every` ticks
 function play(
@@ -155,4 +155,29 @@ describe('the queue', () => {
     const w = play(caseOf('q05-plain-order-in-a-chain'), { seconds: 30 })
     expect(moves(w, 0).map(([x, z]) => [Math.round(x), Math.round(z)])).toEqual([[-150, 100]])
   })
+})
+
+// the claim grid's prototype (docs/plans/active/c1-claims.md): the same cases with formations claiming cells
+describe('with claims: invariant 1', () => {
+  // a router rallies where it stopped, inside the friend: rallies on free ground are not in the prototype
+  const STILL = new Set(['x11-rally-in-a-friend-claims'])
+  for (const c of CLAIM_CASES) {
+    if (c.id === 'x14-forty-crossing-claims') continue
+    const test = STILL.has(c.id) ? it.fails : it
+    test(`${c.id}`, () => expect(firstOverlap(c)).toBe(-1))
+  }
+  longIt(
+    'x14-forty-crossing-claims',
+    () => expect(firstOverlap(caseOf('x14-forty-crossing-claims'), 300)).toBe(-1),
+    180_000,
+  )
+})
+describe('with claims: invariant 4, the keyed order', () => {
+  for (const c of CLAIM_CASES) {
+    if (c.id === 'x14-forty-crossing-claims') continue
+    it(`${c.id}`, () => {
+      const s = Math.min(c.seconds, 120)
+      expect(stateOf(play(c, { seconds: s, reverse: true }))).toEqual(stateOf(play(c, { seconds: s })))
+    })
+  }
 })

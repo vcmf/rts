@@ -28,7 +28,7 @@ import {
 import { toS, type View } from './map.ts'
 
 /** The overlay's layers, each toggled on the panel. */
-export const LAYERS = ['blocks', 'strips', 'contacts', 'statuses', 'orders'] as const
+export const LAYERS = ['cells', 'blocks', 'strips', 'contacts', 'statuses', 'orders'] as const
 export type Layer = (typeof LAYERS)[number]
 
 // how near two companies of different formations are drawn as touching (metres)
@@ -43,6 +43,11 @@ const INK = {
   label: '#211f1c',
   order: 'rgba(40,90,60,.9)',
 }
+// the claim grid's cells by side: [margin, core]
+const CELL_INK: [string, string][] = [
+  ['rgba(52,95,140,.10)', 'rgba(52,95,140,.28)'],
+  ['rgba(150,60,40,.10)', 'rgba(150,60,40,.28)'],
+]
 const ORDER_NAME: Record<number, string> = {
   [O_FORM]: 'form',
   [O_WHEEL]: 'wheel',
@@ -71,12 +76,33 @@ export class Overlay {
     }
     const P = this.P
     const near = (this.near ??= on.has('contacts') ? contacts(w, P, NEAR) : null) ?? []
+    if (on.has('cells')) this.cells(g, v, w)
     if (on.has('strips')) this.strips(g, v, w, P)
     if (on.has('contacts')) this.overlaps(g, v, w, P, near)
     if (on.has('blocks')) this.blocks(g, v, w, P)
     if (on.has('contacts')) this.touching(g, v, w, near)
     if (on.has('orders')) this.orders(g, v, w)
     if (on.has('statuses')) this.statuses(g, v, w)
+  }
+
+  // the claim grid's cells (docs/plans/active/c1-claims.md), as the last formation step left them: each claimed cell in
+  // its owner's side's colour, its core darker than its margin, a cell in two formations' cores in red
+  private cells(g: CanvasRenderingContext2D, v: View, w: World): void {
+    const C = w.scratch.claims
+    if (!w.claims || !C) return
+    const T = w.terrain
+    const s = T.cell * v.k
+    for (let k = 0; k < C.a.length; k++) {
+      if (!C.a[k]) continue
+      const [sx, sy] = toS(v, T.x0 + (k % T.n) * T.cell, T.z0 + Math.floor(k / T.n) * T.cell)
+      if (sx < -s || sy < -s || sx > v.W + s || sy > v.H + s) continue
+      const o = (C.a[k] >> 1) - 1
+      const core = (C.a[k] | C.b[k]) & 1
+      // two formations' cores in one cell: they overlap
+      const shared = C.b[k] >> 1 !== C.a[k] >> 1 && (C.a[k] & C.b[k] & 1) === 1
+      g.fillStyle = shared ? 'rgba(200,30,20,.35)' : (CELL_INK[w.f.side[o]]?.[core] ?? 'rgba(0,0,0,.1)')
+      g.fillRect(sx - s / 2, sy - s / 2, s, s)
+    }
   }
 
   // each company's block: the hull of its places, solid in the fight and dashed out of it

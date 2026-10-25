@@ -330,9 +330,18 @@ export const BENCH_CASES: BenchCase[] = [
   ),
 ]
 
+/** A case with the claim grid's prototype on (docs/plans/active/c1-claims.md): `bench-…-claims` on the page. */
+export const withClaims = (c: BenchCase): BenchCase => ({
+  ...c,
+  id: `${c.id}-claims`,
+  title: `${c.title} (with claims)`,
+  scenario: { ...c.scenario, name: `${c.scenario.name}-claims`, claims: true },
+})
+export const CLAIM_CASES: BenchCase[] = BENCH_CASES.map(withClaims)
+
 export const BENCH_SCENARIOS: Record<string, Scenario> = Object.fromEntries(
-  BENCH_CASES.map(c => [c.scenario.name, c.scenario]),
+  [...BENCH_CASES, ...CLAIM_CASES].map(c => [c.scenario.name, c.scenario]),
 )
 export const BENCH_VIEWS: Record<string, [number, number, number]> = Object.fromEntries(
-  BENCH_CASES.map(c => [c.scenario.name, c.view]),
+  [...BENCH_CASES, ...CLAIM_CASES].map(c => [c.scenario.name, c.view]),
 )
