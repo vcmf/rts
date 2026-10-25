@@ -71,6 +71,28 @@ already does that, and the bending of the proposal comes from the same lag model
 - The cost: the grid's rebuild and the extra tests per tick at 40 battalions (X-14), against the tick's budget.
 - With the switch off, every existing test, golden and replay is unchanged.
 
+## Weak points, and the order of work
+
+The first runs, and seven review rounds of the earlier design, leave these. The research
+(`docs/research/claim-grid-weak-points.md`) gives each an answer; each step is measured on its bench cases.
+
+| Step | Weak point | What | Cases |
+|---|---|---|---|
+| 1 | W5, cost: 4.6 ms a tick at 40 battalions (1.55 ms without claims, budget 2 ms) | stamp each core cell's margin once; claim each bin as a rectangle instead of every man; a 16 m mask of who is near, so the gate's quick rejects come back; cells held by three or more formations block only those that do not own them | X-14 |
+| 2 | W1, jams: three battalions on one point all stop; a block by a formation takes the terrain stall, which drops orders | "blocked by a formation" its own status that keeps the orders; a formation blocked by a settled friend at its goal counts as arrived, the radius growing while it stays blocked; the order of a tick by how long each has been blocked, then a keyed draw held for 2 s, kept until it makes progress | X-05, X-06, X-07, X-14 |
+| 3 | W2, acts that cannot be cut short: a change of shape checked only at its start (X-09); a rally inside a friend (X-11) | a change's swept ground reserved when it starts, refused (or the next shape that fits) if that ground is taken; a break mid-change snaps inside that ground; a router forms only where its formed footprint fits, else runs on or takes the nearest free place by a ring search | X-09, X-11, X-12 |
+| 4 | W3, the clash: melee pairs only stand | the loser's bins in contact step back as a claim; the winner follows by at most that; a friend behind is pushed a little, or the loser loses cohesion; an enemy or impassable ground behind routs it | X-01, X-03 |
+
+W4 (today's code paths: the stall path, orders that read the head, reactions that clear the queue) and W9 (the
+queue) are the orders work (C4); W6 (the cell's size) is measured on the bench as the steps land; W8 (two
+geometries) is C2's.
+
 ## Results
 
-Not yet run.
+**First run** (2026-10-25), every bench case with claims on:
+- no two formed bodies overlap in 17 of 19 cases; X-11 (a rally inside a friend) and X-09 (a column into a square
+  still forming) do (W2, step 3);
+- the keyed order: the reversed visiting order gives the same state in every case;
+- charges reach melee (X-01, X-03); the column halts at the friendly line (X-05);
+- three battalions on one point all stop (X-06) and today's stall drops their orders (W1, step 2);
+- cost: 4.6 ms a tick at 40 battalions against 1.55 ms without claims (W5, step 1).
