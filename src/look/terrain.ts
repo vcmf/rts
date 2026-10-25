@@ -4,6 +4,7 @@
 // triangle inside the band one far cell beyond the tile; the apron fills that band, joining the tile's edge
 // vertices to the far ring's vertices one for one.
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
+import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
 import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
@@ -11,6 +12,7 @@ import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js
 import type { GroundMesh } from '@babylonjs/core/Meshes/groundMesh.js'
 import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
+import { SubMesh } from '@babylonjs/core/Meshes/subMesh.js'
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
@@ -20,12 +22,14 @@ import { sstep } from './noise.ts'
 import { D } from './spec.ts'
 import type { Grid } from './heightfield.ts'
 import type { SpanGrid } from './world/data.ts'
+import { COVER, WEAR_STEP, type CoverGrid } from './world/cover.ts'
+import { YARD_ALL, paveDefines } from './world/buildings.ts'
 import { spanTexture } from './span-texture.ts'
 import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
 
 export interface Terrain {
-  terrainMat: ShaderMaterial; farTerrainMat: ShaderMaterial; hillMat: ShaderMaterial; bankN: RawTexture
+  terrainMat: ShaderMaterial; terrainRoadsMat: ShaderMaterial; terrainBakedMat: ShaderMaterial; terrainSplitMat: MultiMaterial; tileMats: ShaderMaterial[]; farTerrainMat: ShaderMaterial; hillMat: ShaderMaterial; bankN: RawTexture
   riverMask: DynamicTexture; riverMaskCanvas: HTMLCanvasElement
   tileGround: GroundMesh; farGround: GroundMesh; apron: Mesh
 }
@@ -37,16 +41,28 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   // DETAIL: the detail layer (src/look/shaders/painter.glsl), on the terrain and the water. BANKN: the tile shades the
   // river's banks with the fine bank normals (docs/plans/done/w2-river-banks.md). WATERDATA: the water data (W3), for
   // the shore band the tile paints near the water as the water does (docs/plans/done/w4-water-surface.md)
-  const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones'], samplers: ['uBankN', 'uWater'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA'] })
-  terrainMat.setTexture('uWater', water)
+  // two: with the live roads (ROADS, WebGL2) and without, where the macro bake holds them far out (src/look/main.ts swaps
+  // them by zoom: docs/plans/done/roads.md). On WebGL1 one, without
+  const make = (name: string, roads: boolean, paving = false) => mats.make(name, TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER', ...(roads ? ['#define ROADS'] : []), ...(paving ? ['#define PAVING', ...paveDefines()] : [])] })
+  // three tile materials: the live roads and the buildings' paving (terrainMat: on the yards' ground; the whole tile under
+  // ?split=0, the debug views), the live roads alone (terrainRoadsMat: on the ground near a road), and neither (the
+  // baked: far out, and the rest of the ground near). splitGround gives each its triangles. On WebGL1 one, without
+  const terrainMat = make('terrain', !mats.webgl1, !mats.webgl1), terrainRoadsMat = mats.webgl1 ? terrainMat : make('terrainRoads', true)
+  const terrainBakedMat = mats.webgl1 ? terrainMat : make('terrainBaked', false)
+  const tileMats = [...new Set([terrainMat, terrainRoadsMat, terrainBakedMat])]
+  // the tile ground's three materials by triangle (splitGround: the paving only near a yard, the live roads only near a
+  // road), made here so the ground keeps its place in the opaque draws (Babylon sorts them by the mesh's material's
+  // creation: after the trees the ground cost more, docs/plans/done/trees-perf-trunks.md)
+  const terrainSplitMat = new MultiMaterial('terrainSplit', scene); terrainSplitMat.subMaterials = [terrainMat, terrainRoadsMat, terrainBakedMat]
   // the bank normals: x, z of the normal, the weight; the uncovered texels a level normal of no weight (the vertex
   // normals hold there)
-  const bankN = spanTexture(scene, bank, [128, 128, 0, 0], 'bankN'); terrainMat.setTexture('uBankN', bankN)
+  const bankN = spanTexture(scene, bank, [128, 128, 0, 0], 'bankN')
+  for (const m of tileMats) { m.setTexture('uWater', water); m.setTexture('uBankN', bankN) }
   // the bank colours turn symmetric over the bank normals' edge fade, to meet the far ring's painted river (stroked
   // at the river's width) at the tile's edge
   const edgeK = (x: number, z: number) => 1 - sstep(TILE_W / 2 - D.spec.bank.edge, TILE_W / 2, Math.max(Math.abs(x), Math.abs(z)))
   // the lab's test hill: the terrain's material without the ground's bank normals (they would shade its faces)
-  const hillMat = mats.make('hill', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], defines: ['#define DETAIL'] })
+  const hillMat = mats.make('hill', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uGB'], defines: ['#define DETAIL', '#define GROUND_BOUNCE'] })
   // far ring: the river painted from a mask (the samples stroked at their widths), since 15 m vertices can't hold it
   const riverMaskCanvas = document.createElement('canvas'); riverMaskCanvas.width = riverMaskCanvas.height = MASK_N
   // one path per run of equal (half-pixel) width: a canvas filter or a stroke per sample loses the GL context in SwiftShader
@@ -112,6 +128,41 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   }
   const apron = new Mesh('apron', scene), vd = new VertexData(); vd.positions = pos; vd.normals = nor; vd.indices = idx; vd.applyToMesh(apron)
   apron.setVerticesData('aRiver', new Float32Array(rv), false, 1); apron.material = farTerrainMat
-  return { terrainMat, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
+  return { terrainMat, terrainRoadsMat, terrainBakedMat, terrainSplitMat, tileMats, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
 }
 
+// The tile's triangles by what can paint them (docs/plans/done/headroom.md: a shader's size costs every pixel it draws,
+// so each feature's code only where it can show): by its grid cell's cover texels and 1 m round them (read nearest:
+// a texel of slack), a cell with a yard's texel (YARD_ALL and up in B, src/look/world/cover.ts: under it the paving can paint)
+// takes the live roads with the paving (submesh 0, terrainMat); else a cell within the road gate of a line by the
+// cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate) the live roads alone (1, terrainRoadsMat); the
+// rest the material without either (2: there roadPaint returns its colour unchanged). The same pixels as the live
+// material everywhere but for a step of rounding between the programs. Each triangle takes its cell's answer (by its
+// centroid: it lies inside it). Returns the tile ground's material for it, and the share of the tile's triangles each of
+// the three takes (paved, roads, neither)
+export function splitGround(t: Terrain, cover: CoverGrid): { material: MultiMaterial; share: [number, number, number] } {
+  const g = t.tileGround, P = g.getVerticesData(VertexBuffer.PositionKind)!, ix = g.getIndices()!, C = cover, M = 1
+  const n = TILE_SUB, w = TILE_W / n, h = TILE_W / 2, lim = Math.ceil(D.roadGate / WEAR_STEP) + 1
+  const at = (v: number) => Math.min(C.n - 1, Math.max(0, Math.floor(v))), cellOf = (v: number) => Math.min(n - 1, Math.max(0, Math.floor((v + h) / w)))
+  const kind = new Uint8Array(n * n).fill(2)
+  for (let cz = 0; cz < n; cz++) for (let cx = 0; cx < n; cx++) {
+    const x0 = cx * w - h, z0 = cz * w - h
+    // (a village texel's field id is 0: its B is the yard's mark or 0; the first yard texel settles the cell)
+    scan: for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z0 + w + M - C.z0) / C.cell); j++) for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x0 + w + M - C.x0) / C.cell); i++) {
+      const o = (j * C.n + i) * 4
+      if (C.tex[o] === COVER.village && C.tex[o + 2] >= YARD_ALL) { kind[cz * n + cx] = 0; break scan }
+      if (C.tex[o + 3] <= lim) kind[cz * n + cx] = 1
+    }
+  }
+  // each triangle by its centroid's cell, once; then by kind, the paved first
+  const tk = new Uint8Array(ix.length / 3), count = [0, 0, 0]
+  for (let k = 0; k < tk.length; k++) {
+    let x = 0, z = 0; for (let q = 0; q < 3; q++) { x += P[ix[k * 3 + q] * 3]; z += P[ix[k * 3 + q] * 3 + 2] }
+    tk[k] = kind[cellOf(z / 3) * n + cellOf(x / 3)]; count[tk[k]] += 3
+  }
+  const out = new Uint32Array(ix.length), at3 = [0, count[0], count[0] + count[1]]
+  for (let k = 0; k < tk.length; k++) { const o = at3[tk[k]]; out[o] = ix[k * 3]; out[o + 1] = ix[k * 3 + 1]; out[o + 2] = ix[k * 3 + 2]; at3[tk[k]] += 3 }
+  g.setIndices(out); g.subMeshes = []
+  const nv = P.length / 3; new SubMesh(0, 0, nv, 0, count[0], g); new SubMesh(1, 0, nv, count[0], count[1], g); new SubMesh(2, 0, nv, count[0] + count[1], count[2], g)
+  return { material: t.terrainSplitMat, share: [count[0] / ix.length, count[1] / ix.length, count[2] / ix.length] }
+}

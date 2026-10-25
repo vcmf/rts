@@ -11,6 +11,7 @@
 // spills onto the land, nothing covers it).
 (() => {
   const C = RIVER, cam = __proto.camera, gl = engine._gl, out = {}, fail = []
+  const res0 = __proto.S.res; __proto.S.res = 1; scene.render()   // the render scale pinned to 1 (Auto would resize the frame at the wide views), put back at the end
   const W = engine.getRenderWidth(true), Hh = engine.getRenderHeight(true)   // true: the screen, not the last bound render target
   const water = scene.getMeshByName('water'), blank = new B.DynamicTexture('blankMask', 4, scene, false)
   blank.getContext().fillRect(0, 0, 4, 4); blank.update(false)                // black: no river line
@@ -25,13 +26,13 @@
     { name: 'wide', alpha: -Math.PI / 2, beta: 0.7, radius: 260, t: [-100, 8, 150] },
     { name: 'far', alpha: -Math.PI / 2 - 0.35, beta: 0.98, radius: 260, t: [-110, 8, 230] },   // looks out past the tile edge (+z) at the default yaw; at the camera limits
   ]
-  const half = SMW / 2, saved = { alpha: cam.alpha, beta: cam.beta, radius: cam.radius, target: cam.target.clone() }
+  const half = SMW / 2, zoom = __proto.zoom, saved = { alpha: cam.alpha, beta: cam.beta, radius: zoom ? zoom.wanted : cam.radius, target: cam.target.clone() }   // (zoom: the wanted radius, decision 0051)
   // views must be ones the player can reach: the camera clamps beta/radius on render, which would silently move the view
   const yawOk = a => (cam.lowerAlphaLimit == null || a >= cam.lowerAlphaLimit) && (cam.upperAlphaLimit == null || a <= cam.upperAlphaLimit)
   for (const v of views) if (!yawOk(v.alpha) || v.beta > cam.upperBetaLimit || v.radius > cam.upperRadiusLimit || v.radius < cam.lowerRadiusLimit || Math.abs(v.t[0]) > PLAY || Math.abs(v.t[2]) > PLAY) fail.push(`${v.name}: outside the camera limits`)
   try {
     for (const v of views) {
-      cam.alpha = v.alpha; cam.beta = v.beta; cam.radius = v.radius; cam.target.set(...v.t)
+      cam.alpha = v.alpha; cam.beta = v.beta; cam.radius = v.radius; zoom?.set(v.radius); cam.target.set(...v.t)
       const on = frame(false), off = frame(true)
       const vp = cam.viewport.toGlobal(W, Hh), M = scene.getTransformMatrix(), I = B.Matrix.Identity()
       // summed RGB change at the projected point; null when off screen
@@ -58,7 +59,7 @@
     }
   } finally {
     water.isVisible = true; farTerrainMat.setTexture('uRiverMask', riverMask); blank.dispose()
-    cam.alpha = saved.alpha; cam.beta = saved.beta; cam.radius = saved.radius; cam.target.copyFrom(saved.target)
+    cam.alpha = saved.alpha; cam.beta = saved.beta; cam.radius = saved.radius; zoom?.set(saved.radius); cam.target.copyFrom(saved.target)
   }
   // camera: from the centre every pan direction moves the focus; from every play-area corner, panning any way keeps the
   // focus in the play area and on the ground plane (no clamp forces y: mapPanning has to do it)
@@ -93,5 +94,6 @@
   if (!views.some(v => out[v.name]?.bankN >= 20)) fail.push('no view tested the banks')
   if (!views.some(v => out[v.name]?.farN >= 20)) fail.push('no view tested the far-ring line')
   if (fail.length) console.error('render-check FAILED: ' + fail.join(', '))
+  __proto.S.res = res0
   return JSON.stringify(out)
 })()

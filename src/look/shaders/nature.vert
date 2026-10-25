@@ -3,15 +3,22 @@ precision highp float;attribute vec3 position;attribute vec3 normal;attribute fl
 uniform mat4 viewProjection;uniform vec3 uCamPos;
 #ifdef INSTANCES
 attribute float aTint;
+#ifdef FAR_CROWN
+attribute float aFade;
 #endif
-varying vec3 vW,vN;varying float vRole,vTint,vOcc,vH;
+#endif
+varying vec3 vW,vN;varying float vRole,vTint,vOcc,vH;varying vec2 vRoot;
+#ifdef FAR_CROWN
+// a far tree's crown mesh (src/look/nature.ts, farCuller): its clump's ellipsoid, as the cards', and its fade from them
+attribute vec3 aEllC;attribute vec2 aEllR;varying vec3 vEllC,vEllR;varying float vFade;
+#endif
 void main(){
   #include<instancesVertex>
   vec3 pp=position;
   #ifdef GRASSY
   pp*=1.0-smoothstep(120.0,165.0,length(finalWorld[3].xyz-uCamPos));
   #endif
-  vec4 w=finalWorld*vec4(pp,1.0);vH=w.y-finalWorld[3].y;
+  vec4 w=finalWorld*vec4(pp,1.0);vH=w.y-finalWorld[3].y;vRoot=finalWorld[3].xz;
   vec3 n=normal;
   #ifdef GRASSY
   n=normalize(mix(n,vec3(0.0,1.0,0.0),0.7));                 // grass shades like the ground it grows from
@@ -26,4 +33,11 @@ void main(){
   #ifdef INSTANCES
   t=aTint;
   #endif
-  vTint=t;gl_Position=viewProjection*w;}
+  vTint=t;
+  #ifdef FAR_CROWN
+  float sc=length(finalWorld[0].xyz);vEllC=(finalWorld*vec4(aEllC,1.0)).xyz;vEllR=vec3(aEllR.x,aEllR.y,aEllR.x)*sc;vFade=1.0;
+  #ifdef INSTANCES
+  vFade=aFade;
+  #endif
+  #endif
+  gl_Position=viewProjection*w;}

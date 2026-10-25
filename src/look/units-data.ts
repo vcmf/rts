@@ -1,0 +1,357 @@
+// The unit data files (data/figures/<figure>.unitdata, written by tools/bake-figure.py; docs/plans/active/armies-demo.md):
+// their decoder and their checks. No Babylon: the tests read it in Node. A figure's clips are named by ROLE (halt,
+// march, run, fire: decision 0015, the page never names a clip), each a range of the baked animation's 12 fps steps
+export interface UnitRange { start: number; end: number; loop: boolean; clips: string[]; seconds: number; speed: number }   // speed: m/s the root moves at for the feet to stay planted
+export interface UnitLod { name: string; vertices: number; triangles: number }
+export interface UnitData {
+  fps: number; mPerUnit: number; bones: string[]
+  lods: UnitLod[]   // nearest first, each lighter than the one before (the page draws the last far, the one before it near, a first of three nearest)
+  ranges: Record<string, UnitRange>
+  palette: string[]   // the colour roles, in order: a vertex's role is an index into it (an army's colours paint it)
+  vat: { width: number; height: number; data: Uint16Array }
+  mesh: Record<string, { positions: Float32Array; normals: Float32Array; roles: Uint8Array; boneIndices: Uint8Array; boneWeights: Float32Array; indices: Uint16Array }>
+}
+
+/** a mesh skinned to the figure's bones (a LOD's, or the shadow proxy's) */
+export interface SkinnedMesh { positions: Float32Array; normals: Float32Array; boneIndices: Uint8Array; boneWeights: Float32Array; indices: Uint16Array }
+
+const TYPES = { float32: Float32Array, uint8: Uint8Array, uint16: Uint16Array } as const
+
+// the file written by tools/bake-figure.py: b'UNIT', u32 version, u32 header length, the JSON header, the buffers
+export function decodeUnits(buf: ArrayBuffer): UnitData {
+  const dv = new DataView(buf)
+  if (String.fromCharCode(...new Uint8Array(buf, 0, 4)) !== 'UNIT') throw new Error('unit data: not a UNIT file')
+  const version = dv.getUint32(4, true), hl = dv.getUint32(8, true)
+  if (version !== 2) throw new Error(`unit data: version ${version}, this page reads 2 (rebake: tools/bake-figure.py)`)
+  const h = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 12, hl))) as {
+    fps: number; mPerUnit: number; bones: string[]; lods: UnitLod[]; ranges: Record<string, UnitRange>; palette: string[]
+    vat: { width: number; height: number; halfFloat: boolean }; buffers: { name: string; offset: number; bytes: number; type: keyof typeof TYPES }[]
+  }
+  const base = 12 + hl, arrays = new Map<string, Float32Array | Uint8Array | Uint16Array>()
+  for (const b of h.buffers) {
+    const T = TYPES[b.type]; if (!T) throw new Error(`unit data: buffer ${b.name} has type ${b.type}`)
+    if (base + b.offset + b.bytes > buf.byteLength) throw new Error(`unit data: buffer ${b.name} runs past the end of the file`)
+    arrays.set(b.name, new T(buf.slice(base + b.offset, base + b.offset + b.bytes)))
+  }
+  const get = <K extends Float32Array | Uint8Array | Uint16Array>(name: string, T: { new(...a: never[]): K }): K => {
+    const a = arrays.get(name); if (!(a instanceof T)) throw new Error(`unit data: missing or mistyped buffer ${name}`); return a
+  }
+  const mesh: UnitData['mesh'] = {}
+  for (const l of h.lods) mesh[l.name] = {
+    positions: get(`${l.name}.positions`, Float32Array), normals: get(`${l.name}.normals`, Float32Array), roles: get(`${l.name}.roles`, Uint8Array),
+    boneIndices: get(`${l.name}.boneIndices`, Uint8Array), boneWeights: get(`${l.name}.boneWeights`, Float32Array), indices: get(`${l.name}.indices`, Uint16Array),
+  }
+  const data: UnitData = { fps: h.fps, mPerUnit: h.mPerUnit, bones: h.bones, lods: h.lods, ranges: h.ranges, palette: h.palette, mesh, vat: { width: h.vat.width, height: h.vat.height, data: get('vat', Uint16Array) } }
+  checkUnits(data)
+  return data
+}
+
+// every size the file states agrees with its buffers; every bone index, colour role and range lies inside its table
+export function checkUnits(d: UnitData): void {
+  const bad: string[] = [], nb = d.bones.length
+  if (d.vat.width !== (nb + 1) * 4) bad.push(`vat width ${d.vat.width} is not (bones + 1) × 4 = ${(nb + 1) * 4}`)
+  if (d.vat.data.length !== d.vat.width * d.vat.height * 4) bad.push(`vat holds ${d.vat.data.length} values, not width × height × 4`)
+  d.lods.forEach((l, i) => { if (i > 0 && !(l.triangles < d.lods[i - 1].triangles)) bad.push(`${l.name}: not lighter than ${d.lods[i - 1].name} (the LODs nearest first)`) })
+  for (const l of d.lods) {
+    const m = d.mesh[l.name], n = l.vertices
+    if (m.positions.length !== n * 3 || m.normals.length !== n * 3 || m.roles.length !== n || m.boneIndices.length !== n * 4 || m.boneWeights.length !== n * 4) bad.push(`${l.name}: a vertex buffer is not ${n} vertices long`)
+    if (m.indices.length !== l.triangles * 3) bad.push(`${l.name}: ${m.indices.length} indices for ${l.triangles} triangles`)
+    for (const i of m.indices) if (i >= n) { bad.push(`${l.name}: index ${i} past ${n} vertices`); break }
+    for (const b of m.boneIndices) if (b >= nb) { bad.push(`${l.name}: bone index ${b} past ${nb} bones`); break }
+    for (const r of m.roles) if (r >= d.palette.length) { bad.push(`${l.name}: colour role ${r} past the palette's ${d.palette.length}`); break }
+    for (let v = 0; v < n; v++) { const s = m.boneWeights[v * 4] + m.boneWeights[v * 4 + 1] + m.boneWeights[v * 4 + 2] + m.boneWeights[v * 4 + 3]; if (Math.abs(s - 1) > 1e-3) { bad.push(`${l.name}: vertex ${v}'s weights sum to ${s}`); break } }
+  }
+  for (const [k, r] of Object.entries(d.ranges)) if (!(r.start >= 0 && r.end > r.start && r.end < d.vat.height)) bad.push(`range ${k} [${r.start}, ${r.end}] outside the ${d.vat.height} baked steps`)
+  if (bad.length) throw new Error('unit data:\n  ' + bad.join('\n  '))
+}
+
+// a half float (IEEE 754 binary16, as the bake writes the animation) as a number
+export function fromHalf(h: number): number {
+  const s = h & 0x8000 ? -1 : 1, e = (h >> 10) & 0x1f, m = h & 0x3ff
+  return e === 0 ? s * m * 2 ** -24 : e === 31 ? (m ? NaN : s * Infinity) : s * (1 + m / 1024) * 2 ** (e - 15)
+}
+
+/** a LOD's every vertex posed at every baked step (batch B, ?uvat): skinned here once, at load, from the baked bone
+ *  matrices exactly as units.vert skins them, so the far LOD and the shadow pass read a vertex's place and normal (two
+ *  texels) instead of four bone matrices (sixteen). RGBA float32, width 2 × vertices (place, then normal), one row a
+ *  step; the place and the normal in the figure's own frame, as the skinned ones */
+export function posedVertices(d: UnitData, lod: string): { width: number; height: number; data: Float32Array } { return posedMesh(d, d.mesh[lod]) }
+/** a skinned mesh's vertices posed at every baked step (posedVertices' layout) */
+export function posedMesh(d: UnitData, m: SkinnedMesh): { width: number; height: number; data: Float32Array } {
+  const nv = m.positions.length / 3, rows = d.vat.height, W = d.vat.width, src = d.vat.data
+  const out = new Float32Array(nv * 2 * rows * 4), sk = new Float64Array(16)
+  for (let f = 0; f < rows; f++) for (let v = 0; v < nv; v++) {
+    sk.fill(0)
+    for (let i = 0; i < 4; i++) {
+      const w = m.boneWeights[v * 4 + i]; if (w === 0) continue
+      const o = (f * W + m.boneIndices[v * 4 + i] * 4) * 4   // the bone's four texels: its matrix, column by column
+      for (let c = 0; c < 16; c++) sk[c] += fromHalf(src[o + c]) * w
+    }
+    const x = m.positions[v * 3], y = m.positions[v * 3 + 1], z = m.positions[v * 3 + 2]
+    const nx = m.normals[v * 3], ny = m.normals[v * 3 + 1], nz = m.normals[v * 3 + 2], o = (f * nv * 2 + v * 2) * 4
+    for (let r = 0; r < 3; r++) {
+      out[o + r] = sk[r] * x + sk[4 + r] * y + sk[8 + r] * z + sk[12 + r]
+      out[o + 4 + r] = sk[r] * nx + sk[4 + r] * ny + sk[8 + r] * nz
+    }
+    out[o + 3] = 1
+  }
+  return { width: nv * 2, height: rows, data: out }
+}
+
+/** a figure's parts (the shadow proxy's and the tiny LOD's): each bone that carries at least minVerts of a LOD's
+ *  vertices (by their heaviest weight) over minLen m long, along the part's long axis (its vertices' principal axis,
+ *  end to end, t0 to t1 from its centre c) and as wide as most of it (the 85th percentile of their distance from the
+ *  axis, along u and along w). No era names: the parts are wherever the figure's own weights put them */
+export interface Part { bone: number; vs: number[]; c: number[]; ax: number[]; u: number[]; w: number[]; t0: number; t1: number; hu: number; hw: number }
+export function boneParts(d: UnitData, lod: string, minVerts = 8, minLen = 0.14): Part[] {
+  const m = d.mesh[lod], nv = m.positions.length / 3, groups = new Map<number, number[]>()
+  for (let v = 0; v < nv; v++) {
+    let bi = 0; for (let i = 1; i < 4; i++) if (m.boneWeights[v * 4 + i] > m.boneWeights[v * 4 + bi]) bi = i
+    const b = m.boneIndices[v * 4 + bi], g = groups.get(b); if (g) g.push(v); else groups.set(b, [v])
+  }
+  const P = (v: number, k: number) => m.positions[v * 3 + k], out: Part[] = []
+  for (const [b, vs] of [...groups].sort((x, y) => x[0] - y[0])) {
+    if (vs.length < minVerts) continue
+    const c = [0, 1, 2].map(k => vs.reduce((a, v) => a + P(v, k), 0) / vs.length)
+    const cov = [0, 1, 2].map(i => [0, 1, 2].map(j => vs.reduce((a, v) => a + (P(v, i) - c[i]) * (P(v, j) - c[j]), 0) / vs.length))
+    let ax = [0.3, 1, 0.2]   // the principal axis, by power iteration
+    for (let it = 0; it < 32; it++) { const n = [0, 1, 2].map(i => cov[i][0] * ax[0] + cov[i][1] * ax[1] + cov[i][2] * ax[2]), l = Math.hypot(...n) || 1; ax = n.map(x => x / l) }
+    const cross = (p: number[], q: number[]) => [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]]
+    const ref = Math.abs(ax[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], u0 = cross(ax, ref), lu = Math.hypot(...u0), u = u0.map(x => x / lu), w = cross(ax, u)
+    const proj = (v: number, a: number[]) => (P(v, 0) - c[0]) * a[0] + (P(v, 1) - c[1]) * a[1] + (P(v, 2) - c[2]) * a[2]
+    const t = vs.map(v => proj(v, ax)), t0 = Math.min(...t), t1 = Math.max(...t)
+    if (t1 - t0 < minLen) continue   // (a hand, a foot: under a texel of the map's at the default zoom)
+    const half = (a: number[]) => { const q = vs.map(v => Math.abs(proj(v, a))).sort((x, y) => x - y); return Math.max(0.02, q[Math.floor(0.85 * (q.length - 1))]) }
+    out.push({ bone: b, vs, c, ax, u, w, t0, t1, hu: half(u), hw: half(w) })
+  }
+  return out
+}
+
+/** the figure's shadow caster (the shadow fix, docs/plans/active/armies-demo.md): built at load from a LOD's parts
+ *  (boneParts), a pair of crossed quads a part, each quad's four corners skinned wholly to the part's bone. Two crossed
+ *  quads cast a part's shadow from any side of the sun; four triangles a part, drawn both sides */
+export function shadowProxy(d: UnitData, lod: string, minVerts = 8, minLen = 0.14): SkinnedMesh {
+  const pos: number[] = [], nor: number[] = [], bones: number[] = [], idx: number[] = []
+  for (const { bone: b, c, ax, u, w, t0, t1, hu, hw } of boneParts(d, lod, minVerts, minLen)) {
+    for (const [side, n, h] of [[u, w, hu], [w, u, hw]] as const) {
+      const base = pos.length / 3
+      for (const [tt, ss] of [[t0, -h], [t0, h], [t1, h], [t1, -h]]) { for (let k = 0; k < 3; k++) { pos.push(c[k] + ax[k] * tt + side[k] * ss); nor.push(n[k]) } bones.push(b) }
+      idx.push(base, base + 1, base + 2, base, base + 2, base + 3)
+    }
+  }
+  return skinned(pos, nor, bones, idx)
+}
+function skinned(pos: number[], nor: number[], bones: number[], idx: number[]): SkinnedMesh {
+  const n = pos.length / 3, bi = new Uint8Array(n * 4), bw = new Float32Array(n * 4)
+  for (let v = 0; v < n; v++) { bi[v * 4] = bones[v]; bw[v * 4] = 1 }
+  return { positions: Float32Array.from(pos), normals: Float32Array.from(nor), boneIndices: bi, boneWeights: bw, indices: Uint16Array.from(idx) }
+}
+
+// a mesh as seen by `views` orthographic cameras `elev` above the horizon round the figure (its rest pose, a res²
+// depth buffer each): calls hit(triangle, its barycentric weights) for each pixel's nearest triangle
+function rasterSeen(pos: Float32Array, idx: Uint16Array, hit: (t: number, w0: number, w1: number, w2: number) => void, elev = 0.87, views = 8, res = 96): void {
+  const nv = pos.length / 3, nt = idx.length / 3, depth = new Float64Array(res * res), id = new Int32Array(res * res), bw = new Float64Array(res * res * 2), px = new Float64Array(nv * 3)
+  for (let k = 0; k < views; k++) {
+    const az = (k + 0.5) / views * 2 * Math.PI, ce = Math.cos(elev), se = Math.sin(elev)
+    const f = [-ce * Math.sin(az), -se, -ce * Math.cos(az)], r = [Math.cos(az), 0, -Math.sin(az)]   // the view, its right
+    const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]]          // and its up
+    for (let v = 0; v < nv; v++) {
+      const x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2]
+      // (a fixed scale, 3 m across the buffer centred on the figure's root: every mesh of a figure on the same pixels)
+      px[v * 3] = (x * r[0] + y * r[1] + z * r[2] + 1.5) / 3 * res; px[v * 3 + 1] = (x * u[0] + y * u[1] + z * u[2] + 1.5) / 3 * res; px[v * 3 + 2] = x * f[0] + y * f[1] + z * f[2]
+    }
+    depth.fill(Infinity); id.fill(-1)
+    for (let t = 0; t < nt; t++) {
+      const a = idx[t * 3] * 3, b = idx[t * 3 + 1] * 3, c = idx[t * 3 + 2] * 3
+      const area = (px[b] - px[a]) * (px[c + 1] - px[a + 1]) - (px[c] - px[a]) * (px[b + 1] - px[a + 1])
+      if (Math.abs(area) < 1e-12) continue
+      const bx0 = Math.max(0, Math.floor(Math.min(px[a], px[b], px[c]))), bx1 = Math.min(res - 1, Math.ceil(Math.max(px[a], px[b], px[c])))
+      const by0 = Math.max(0, Math.floor(Math.min(px[a + 1], px[b + 1], px[c + 1]))), by1 = Math.min(res - 1, Math.ceil(Math.max(px[a + 1], px[b + 1], px[c + 1])))
+      for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
+        const qx = x + 0.5, qy = y + 0.5
+        const w0 = ((px[b] - qx) * (px[c + 1] - qy) - (px[c] - qx) * (px[b + 1] - qy)) / area
+        const w1 = ((px[c] - qx) * (px[a + 1] - qy) - (px[a] - qx) * (px[c + 1] - qy)) / area
+        if (w0 < 0 || w1 < 0 || w0 + w1 > 1) continue
+        const zz = w0 * px[a + 2] + w1 * px[b + 2] + (1 - w0 - w1) * px[c + 2], i = y * res + x
+        if (zz < depth[i]) { depth[i] = zz; id[i] = t; bw[i * 2] = w0; bw[i * 2 + 1] = w1 }
+      }
+    }
+    for (let i = 0; i < res * res; i++) if (id[i] >= 0) hit(id[i], bw[i * 2], bw[i * 2 + 1], 1 - bw[i * 2] - bw[i * 2 + 1])
+  }
+}
+/** each triangle of a LOD's mesh as seen: the pixels it covers from round the figure (rasterSeen), so what the figure
+ *  hides (the insides of its arms, its undersides, what the pack covers) counts for nothing */
+export function seenArea(d: UnitData, lod: string, elev = 0.87): Float64Array {
+  const m = d.mesh[lod], out = new Float64Array(m.indices.length / 3)
+  rasterSeen(m.positions, m.indices, t => { out[t]++ }, elev)
+  return out
+}
+
+/** the tiny LOD's colour weights a vertex: one a colour role, up to this many roles (three vec4 attributes) */
+export const TINY_ROLES = 12
+/** the tiny LOD (docs/plans/active/armies-32k.md, step 3): a LOD's parts (boneParts) as boxes, eight corners each
+ *  shared by its faces (their normals from the box's centre), each corner skinned wholly to the part's bone,
+ *  outward-wound. A corner's colour is a mix of the roles (`weights`, TINY_ROLES a vertex, summing to 1): their shares
+ *  of its eighth of the part as a camera `elev` above the horizon sees it from round the figure (seenArea: what the
+ *  figure hides counts for nothing), with `own` of the whole part's shares, so a box reads as the mean colour of what
+ *  it stands for (a single role spread over a box's face reads louder than on the figure); then `figure` of the whole
+ *  figure's seen colour mixed in, and calibrated (`calibrate` rounds) so the boxes' seen pixels hold each role in the
+ *  far LOD's share. `roles` is the corner's largest (the masks' coat role). About a fifth of the far LOD's vertices:
+ *  the wide view pays a vertex's posing for every vertex of every figure */
+export function tinyMesh(d: UnitData, lod: string, minVerts = 8, minLen = 0.14, elev = 0.87, own = 0.25, figure = 0.35, calibrate = 4): SkinnedMesh & { roles: Uint8Array; weights: Float32Array } {
+  const NR = d.palette.length
+  if (NR > TINY_ROLES) throw new Error(`unit data: ${NR} colour roles, the tiny LOD mixes at most ${TINY_ROLES}`)
+  const m = d.mesh[lod], pos: number[] = [], nor: number[] = [], bones: number[] = [], idx: number[] = [], roles: number[] = [], weights: number[] = []
+  const parts = boneParts(d, lod, minVerts, minLen), partOf = new Map<number, number>()
+  parts.forEach((p, i) => { for (const v of p.vs) partOf.set(v, i) })
+  // each part's area by role and eighth (index 8: the whole part), seen from above: a triangle's role is its first
+  // vertex's (the bake splits by role), its eighth its centroid's side of the part's axis, u and w
+  const area = parts.map(() => new Float64Array(9 * NR)), P = (v: number, k: number) => m.positions[v * 3 + k], seen = seenArea(d, lod, elev)
+  for (let t = 0; t < m.indices.length; t += 3) {
+    const [a, b, c] = [m.indices[t], m.indices[t + 1], m.indices[t + 2]], pi = partOf.get(a); if (pi === undefined) continue
+    const q = parts[pi], g = [0, 1, 2].map(k => (P(a, k) + P(b, k) + P(c, k)) / 3 - q.c[k]), dot = (x: number[]) => g[0] * x[0] + g[1] * x[1] + g[2] * x[2]
+    const oct = (dot(q.ax) > (q.t0 + q.t1) / 2 ? 1 : 0) + (dot(q.u) > 0 ? 2 : 0) + (dot(q.w) > 0 ? 4 : 0)
+    const wgt = seen[t / 3]   // (its pixels as seen from round the figure: seenArea)
+    area[pi][oct * NR + m.roles[a]] += wgt; area[pi][8 * NR + m.roles[a]] += wgt
+  }
+  const shares = (a: Float64Array, o: number) => { let all = 0; for (let i = 0; i < NR; i++) all += a[o * NR + i]; return Array.from({ length: NR }, (_, i) => all > 0 ? a[o * NR + i] / all : 0) }
+  // the faces by corner (corner k: bit 0 the axis's end, bit 1 u's side, bit 2 w's side)
+  const FACES = [[0, 2, 6, 4], [1, 5, 7, 3], [0, 4, 5, 1], [2, 3, 7, 6], [0, 1, 3, 2], [4, 6, 7, 5]]
+  parts.forEach(({ bone: b, c, ax, u, w, t0, t1, hu, hw }, pi) => {
+    const base = pos.length / 3, mid = (t0 + t1) / 2, cs: number[][] = [], whole = shares(area[pi], 8)
+    for (let k = 0; k < 8; k++) {
+      const tt = k & 1 ? t1 : t0, su = k & 2 ? hu : -hu, sw = k & 4 ? hw : -hw
+      const p = [0, 1, 2].map(i => c[i] + ax[i] * tt + u[i] * su + w[i] * sw), o = [0, 1, 2].map(i => ax[i] * (tt - mid) + u[i] * su + w[i] * sw), l = Math.hypot(...o) || 1
+      const oc = shares(area[pi], k), has = oc.some(x => x > 0), mix = whole.map((x, i) => has ? (1 - own) * oc[i] + own * x : x)
+      cs.push(p); pos.push(...p); nor.push(...o.map(x => x / l)); bones.push(b)
+      roles.push(mix.indexOf(Math.max(...mix))); for (let i = 0; i < TINY_ROLES; i++) weights.push(mix[i] ?? 0)
+    }
+    const centre = [0, 1, 2].map(i => c[i] + ax[i] * mid)
+    for (const f of FACES) {
+      // wound outward: the face's normal (by the right hand) away from the box's centre, else turned
+      const [a, bb, cc] = f.map(k => cs[k]), e1 = [0, 1, 2].map(i => bb[i] - a[i]), e2 = [0, 1, 2].map(i => cc[i] - a[i])
+      const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]
+      const out = n[0] * (a[0] - centre[0]) + n[1] * (a[1] - centre[1]) + n[2] * (a[2] - centre[2]) > 0
+      const q = out ? f : [f[0], f[3], f[2], f[1]]
+      idx.push(base + q[0], base + q[1], base + q[2], base + q[0], base + q[2], base + q[3])
+    }
+  })
+  // calibrated: each role's weights scaled by its share of the far LOD's pixels over its share of the boxes' (the boxes'
+  // silhouettes are not the parts': a musket's box shows more wood than the musket), each corner's renormalised
+  const W = Float32Array.from(weights), P32 = Float32Array.from(pos), I16 = Uint16Array.from(idx), want = new Float64Array(NR)
+  seen.forEach((px, t) => { want[m.roles[m.indices[t * 3]]] += px })   // (the far LOD's seen pixels by role)
+  // (a share of the figure's whole seen colour in every corner first: a box of one role, the musket's, could not move)
+  const sw0 = want.reduce((x, y) => x + y, 0)
+  for (let v = 0; v < W.length / TINY_ROLES; v++) for (let i = 0; i < NR; i++) W[v * TINY_ROLES + i] = (1 - figure) * W[v * TINY_ROLES + i] + figure * want[i] / sw0
+  for (let it = 0; it < calibrate; it++) {
+    const got = new Float64Array(NR)
+    rasterSeen(P32, I16, (t, w0, w1, w2) => {
+      const a = I16[t * 3] * TINY_ROLES, b = I16[t * 3 + 1] * TINY_ROLES, c = I16[t * 3 + 2] * TINY_ROLES
+      for (let i = 0; i < NR; i++) got[i] += w0 * W[a + i] + w1 * W[b + i] + w2 * W[c + i]
+    }, elev)
+    const sw = want.reduce((x, y) => x + y, 0), sg = got.reduce((x, y) => x + y, 0)
+    const k = Array.from(want, (x, i) => got[i] > 0 ? (x / sw) / (got[i] / sg) : 1)
+    for (let v = 0; v < W.length / TINY_ROLES; v++) {
+      let s2 = 0; for (let i = 0; i < NR; i++) { W[v * TINY_ROLES + i] *= k[i]; s2 += W[v * TINY_ROLES + i] }
+      for (let i = 0; i < NR; i++) W[v * TINY_ROLES + i] /= s2 || 1
+    }
+  }
+  for (let v = 0; v < roles.length; v++) { let bi = 0; for (let i = 1; i < NR; i++) if (W[v * TINY_ROLES + i] > W[v * TINY_ROLES + bi]) bi = i; roles[v] = bi }
+  return { ...skinned(pos, nor, bones, idx), roles: Uint8Array.from(roles), weights: W }
+}
+
+/** the simple shadow's shape (decision 0049): an atlas, a cell a facing (columns) and a role (rows), R8 */
+export interface ShadowShape {
+  width: number; height: number; data: Uint8Array
+  facings: number; roles: string[]
+  cellW: number; cellH: number; margin: number   // a cell's texels across and along the shadow, its empty border (texels)
+  texel: number                                  // m a texel
+  across: [number, number]; along: [number, number]   // m: what a cell holds, from the man's root (the shadow's frame)
+  dir: [number, number]                          // the shadow's direction on the ground (x, z): away from the sun
+}
+
+/** The simple shadow's shape (decision 0049, docs/plans/active/simple-soldier-shadows.md), baked at load from the figure:
+ *  a LOD posed at each step of a role's clip (up to maxSteps of them, evenly), turned to each of `facings` facings (the
+ *  figure's own turn, as units.ts writes it), its triangles projected along the sun (sun: toward it, y > 0) onto the
+ *  ground at its root and rasterised in the shadow's frame (along it, away from the sun; across it), averaged over the
+ *  steps (a marching man's legs are one soft wedge) and blurred (blur: its sigma, m). Every soldier of a figure casts
+ *  it: no era names, the roles are the bake's (decision 0015). posed: the LOD's posedVertices, if already made */
+export function shadowShape(d: UnitData, lod: string, sun: readonly [number, number, number], roles: readonly string[], { facings = 16, texel = 0.05, blur = 0.06, maxSteps = 12, posed = null as ReturnType<typeof posedVertices> | null } = {}): ShadowShape {
+  if (!(sun[1] > 0.05)) throw new Error(`shadowShape: the sun must be above the horizon (y ${sun[1]})`)
+  const m = d.mesh[lod]; if (!m) throw new Error(`shadowShape: no LOD ${lod}`)
+  const pv = posed ?? posedVertices(d, lod), nv = m.positions.length / 3, idx = m.indices
+  const l = Math.hypot(sun[0], sun[2]) || 1, A = [-sun[0] / l, -sun[2] / l], C = [-A[1], A[0]]
+  const kx = sun[0] / sun[1], kz = sun[2] / sun[1]
+  const stepsOf = (r: string) => {
+    const rg = d.ranges[r]; if (!rg) throw new Error(`shadowShape: the figure has no clips for the role ${r}`)
+    const n = rg.end - rg.start, k = Math.min(n, maxSteps)
+    return Array.from({ length: k }, (_, i) => rg.start + Math.floor(i * n / k))
+  }
+  const steps = roles.map(stepsOf)
+  // the projections: [role][facing][step] → (across, along) a vertex, and the bounds over all of them
+  const proj = (f: number, a: number, out: Float64Array) => {
+    const ca = Math.cos(a), sa = Math.sin(a)
+    for (let v = 0; v < nv; v++) {
+      const o = (f * nv * 2 + v * 2) * 4, x = pv.data[o], y = pv.data[o + 1], z = pv.data[o + 2]
+      const wx = ca * x + sa * z - kx * y, wz = -sa * x + ca * z - kz * y
+      out[v * 2] = wx * C[0] + wz * C[1]; out[v * 2 + 1] = wx * A[0] + wz * A[1]
+    }
+  }
+  const buf = new Float64Array(nv * 2)
+  let c0 = Infinity, c1 = -Infinity, a0 = Infinity, a1 = -Infinity
+  for (const ss of steps) for (const f of ss) for (let k = 0; k < facings; k++) {
+    proj(f, 2 * Math.PI * k / facings, buf)
+    for (let v = 0; v < nv; v++) { c0 = Math.min(c0, buf[v * 2]); c1 = Math.max(c1, buf[v * 2]); a0 = Math.min(a0, buf[v * 2 + 1]); a1 = Math.max(a1, buf[v * 2 + 1]) }
+  }
+  // the blur's reach to spare either way, and an empty border so the bilinear reads never cross into a neighbour
+  // (its mips are read too, the mask's texels coarser than its own: a cell's border and size whole texels of the fourth
+  // mip, so no mip up to it bleeds into a neighbour)
+  const pad = 3 * blur, margin = 8
+  c0 -= pad; c1 += pad; a0 -= pad; a1 += pad
+  const iw = Math.ceil((c1 - c0) / texel / 8) * 8, ih = Math.ceil((a1 - a0) / texel / 8) * 8, cellW = iw + 2 * margin, cellH = ih + 2 * margin
+  const W = cellW * facings, H = cellH * roles.length, out = new Uint8Array(W * H)
+  const sw = iw, sh = ih, cov = new Uint8Array(sw * sh), sp = new Float64Array(nv * 2), acc = new Float32Array(iw * ih), tmp = new Float32Array(iw * ih)
+  // the blur's kernel (separable)
+  const sg = blur / texel, R = Math.max(1, Math.ceil(3 * sg)), ker = Array.from({ length: 2 * R + 1 }, (_, i) => Math.exp(-((i - R) ** 2) / (2 * sg * sg)))
+  const ks = ker.reduce((a, b) => a + b, 0); for (let i = 0; i < ker.length; i++) ker[i] /= ks
+  roles.forEach((_, r) => {
+    for (let k = 0; k < facings; k++) {
+      acc.fill(0)
+      for (const f of steps[r]) {
+        proj(f, 2 * Math.PI * k / facings, buf); cov.fill(0)
+        // each triangle's projection, the texels whose centres it covers
+        for (let v = 0; v < nv; v++) { sp[v * 2] = (buf[v * 2] - c0) / texel; sp[v * 2 + 1] = (buf[v * 2 + 1] - a0) / texel }
+        for (let t = 0; t < idx.length; t += 3) {
+          const i0 = idx[t] * 2, i1 = idx[t + 1] * 2, i2 = idx[t + 2] * 2
+          const ax = sp[i0], ay = sp[i0 + 1], bx = sp[i1], by = sp[i1 + 1], cx = sp[i2], cy = sp[i2 + 1]
+          // (a convex triangle: each texel row's centre line meets its edges in one span)
+          const y0 = Math.max(0, Math.ceil(Math.min(ay, by, cy) - 0.5)), y1 = Math.min(sh - 1, Math.floor(Math.max(ay, by, cy) - 0.5))
+          for (let y = y0; y <= y1; y++) {
+            const py = y + 0.5
+            let lo = Infinity, hi = -Infinity
+            for (let e = 0; e < 3; e++) {
+              const px0 = e === 0 ? ax : e === 1 ? bx : cx, py0 = e === 0 ? ay : e === 1 ? by : cy
+              const px1 = e === 0 ? bx : e === 1 ? cx : ax, py1 = e === 0 ? by : e === 1 ? cy : ay
+              if ((py0 <= py && py1 >= py) || (py1 <= py && py0 >= py)) {
+                const x = py1 === py0 ? Math.min(px0, px1) : px0 + (px1 - px0) * (py - py0) / (py1 - py0)
+                const x2 = py1 === py0 ? Math.max(px0, px1) : x
+                lo = Math.min(lo, x); hi = Math.max(hi, x2)
+              }
+            }
+            const x0 = Math.max(0, Math.ceil(lo - 0.5)), x1 = Math.min(sw - 1, Math.floor(hi - 0.5))
+            for (let x = x0; x <= x1; x++) cov[y * sw + x] = 1
+          }
+        }
+        for (let i = 0; i < cov.length; i++) acc[i] += cov[i]
+      }
+      for (let i = 0; i < acc.length; i++) acc[i] /= steps[r].length
+      // blurred across, then along
+      for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) { let s = 0; for (let j = -R; j <= R; j++) { const xx = x + j; if (xx >= 0 && xx < iw) s += acc[y * iw + xx] * ker[j + R] } tmp[y * iw + x] = s }
+      for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) {
+        let s = 0; for (let j = -R; j <= R; j++) { const yy = y + j; if (yy >= 0 && yy < ih) s += tmp[yy * iw + x] * ker[j + R] }
+        out[(r * cellH + margin + y) * W + k * cellW + margin + x] = Math.round(255 * Math.min(1, s))
+      }
+    }
+  })
+  return { width: W, height: H, data: out, facings, roles: [...roles], cellW, cellH, margin, texel, across: [c0, c0 + iw * texel], along: [a0, a0 + ih * texel], dir: [A[0], A[1]] }
+}

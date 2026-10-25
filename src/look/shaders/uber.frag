@@ -1,21 +1,68 @@
-precision highp float;varying vec2 vUV;uniform sampler2D textureSampler,uGrain;uniform vec2 uRes;uniform float uGrade,uGrainOn,uBloom;
+precision highp float;varying vec2 vUV;uniform sampler2D textureSampler,uGrain;uniform vec2 uRes;uniform float uGrainOn,uGrainHere,uBloom,uGrade,uRenderScale;
+// the mood's vignette (src/look/mood.ts; its grade is in the painted materials: gradeOf, painter.glsl)
+uniform vec3 uVignette,uSplitHi;uniform float uGradeSat,uTopAmt;
+// ?nanmark: a repaired pixel shows magenta, so the material that writes it can be found (docs/plans/done/nan-guard.md)
+#ifdef NANMARK
+#define MARK(c) vec3(1.0,0.0,1.0)
+#else
+#define MARK(c) (c)
+#endif
 vec3 shoulder(vec3 c){float m=max(c.r,max(c.g,c.b));if(m<=0.8)return c;float mm=0.8+0.2*(1.0-exp(-(m-0.8)/0.2));return c*(mm/m);}
-float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
-void main(){vec3 c=texture2D(textureSampler,vUV).rgb;
-  if(uBloom>0.0){vec3 b=vec3(0.0);                                  // fused cheap bloom: highlights gathered on two rings
+#include<paper>
+#ifdef DOF
+// the depth of field's composite (decision 0024; dof.frag): textureSampler is the half-resolution blur and uSharp the
+// scene; the sharp scene where this pixel's blur is under a pixel (the blur not read), the blur where it passes two.
+// uHalfUV maps the screen to the blur (its size is the scene's halved, rounded down). The bloom gathers from the blur
+uniform sampler2D uSharp;uniform vec2 uHalfUV,uHalfTexel,uDofPaint;
+#include<dofcoc>
+// (a sharp pixel that is not a finite number, or on the 8-bit target the alpha code 0 that stores one, takes the blur,
+// which dofdown cleaned: docs/plans/done/nan-guard.md)
+vec3 base(){vec4 s=texture2D(uSharp,vUV);if(!okPx(s))return MARK(texture2D(textureSampler,vUV*uHalfUV).rgb);
+  // the far blur by this pixel's own circle, the near layer by the coverage it spread here (the blur's alpha: dof.frag)
+  vec2 hu=vUV*uHalfUV;vec4 b=texture2D(textureSampler,hu);float cf=coc(s.a,vUV),fw=smoothstep(0.5,2.0,cf),w=max(fw,b.a);
+  if(w<=0.0)return s.rgb;
+  // the postfilter: four bilinear taps half a texel off on the diagonals, a 3 x 3 tent over the half-resolution blur
+  // (its spiral noise and flicker smoothed, without temporal anti-aliasing)
+  vec2 o=0.5*uHalfTexel;b=0.25*(texture2D(textureSampler,hu+o)+texture2D(textureSampler,hu-o)+texture2D(textureSampler,hu+vec2(o.x,-o.y))+texture2D(textureSampler,hu+vec2(-o.x,o.y)));
+  // the painted look: the far blur toward the haze by its size (lighter and greyer, as distance in a painting), the
+  // near layer darker and cooler by its coverage (a foreground framing the scene)
+  float l=dot(b.rgb,vec3(0.2126,0.7152,0.0722));
+  b.rgb=mix(b.rgb,mix(vec3(l),b.rgb,0.55)*0.9+0.1,uDofPaint.x*fw*clamp(cf/max(uMaxPx,1.0),0.0,1.0));
+  vec3 tint=mix(vec3(1.0),vec3(0.80,0.85,0.94),uDofPaint.y*b.a);
+  // where this pixel has no far blur: the near colour taken back out of the blur (b = the scene's half-resolution
+  // colour c0, one bilinear read of the sharp scene at the 2 x 2 block's centre, under the near layer by its coverage),
+  // laid over the sharp scene by its coverage, so a sharp pixel round a blurred crown keeps its own detail
+  vec3 nearOnly=s.rgb;
+  if(fw<1.0&&b.a>0.02){vec3 c0=texture2D(uSharp,(floor(vUV*uRes*0.5)*2.0+1.0)/uRes).rgb;
+    nearOnly=mix(s.rgb,clamp((b.rgb-c0*(1.0-b.a))/b.a,0.0,1.0)*tint,w);}
+  return mix(nearOnly,mix(s.rgb,b.rgb*tint,w),fw);}
+#define BLOOM_UV(uv) ((uv)*uHalfUV)
+#else
+// (a pixel that is not a finite number takes its neighbours' mean: docs/plans/done/nan-guard.md; the half floats of
+// ?rt16 and ?nanmark hold one, the default 8-bit target stores it black with the alpha code 0, painter.glsl lensOut)
+bool ok3(vec3 s){return all(lessThan(abs(s),vec3(65504.0)));}
+vec3 base(){vec4 s4=texture2D(textureSampler,vUV);vec3 s=s4.rgb;if(ok3(s)&&s4.a>=0.5/255.0)return s;
+  vec3 m=vec3(0.0);float n=0.0;
+  for(int i=0;i<8;i++){float a=float(i)*0.7854;vec4 t=texture2D(textureSampler,vUV+vec2(cos(a),sin(a))*2.0/uRes);if(ok3(t.rgb)&&t.a>=0.5/255.0){m+=t.rgb;n+=1.0;}}
+  return MARK(n>0.0?m/n:vec3(0.0));}
+#define BLOOM_UV(uv) (uv)
+#endif
+void main(){vec3 c=base();
+  // fused cheap bloom: highlights gathered on two rings. The scene comes graded (gradeOf, painter.glsl), so the
+  // grade's highlight tint (uSplitHi) is taken off each tap before the per-channel threshold and put back on the
+  // bloom, with the grade's saturation and its haze toward the top, which covered the bloom when the grade was here:
+  // it gathers as from the ungraded scene. A per-channel threshold on the graded scene amplifies the tint (winter's
+  // snow turned amber); a threshold on value changed the ground's bloom more (docs/plans/done/lc1b-coats.md). A
+  // unit blooms a little cool and weak: graded at units.grade only, then put back at its value and clamped at 1
+  // (airOf), it is divided by more of the tint than it has
+  if(uBloom>0.0){vec3 b=vec3(0.0);vec3 hi=mix(vec3(1.0),uSplitHi,uGrade);
     for(int i=0;i<12;i++){float a=float(i)*0.5236+(i<6?0.0:0.26);float r=(i<6?6.0:16.0)*uRes.y/1080.0;
-      vec3 s=texture2D(textureSampler,vUV+vec2(cos(a),sin(a))*r/uRes).rgb;b+=max(s-vec3(0.70),0.0)*(i<6?1.0:0.6);}
-    c+=b*0.11*uBloom;}
-  if(uGrade>0.0){float l=dot(c,vec3(0.2126,0.7152,0.0722));
-    float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
-    vec3 g=mix(c,vec3(l)*vec3(1.03,1.0,0.88)+(c-vec3(l))*0.5,green*0.85);
-    g=mix(vec3(dot(g,vec3(0.2126,0.7152,0.0722))),g,0.9);      // muted, warmer greens
-    g*=mix(vec3(0.92,0.99,1.06),vec3(1.08,1.0,0.85),smoothstep(0.08,0.75,l));  // split tone: teal shadows, amber highlights
-    g+=vec3(0.03,0.02,0.0)*(1.0-l);                                           // warm lift in the darks
-    g=mix(g,vec3(0.72,0.76,0.82)*(0.85+l*0.35),smoothstep(0.60,1.0,vUV.y)*0.20); // cooler, hazier toward the top (depth by painting)
-    c=mix(c,g,uGrade);}
+      vec3 s=texture2D(textureSampler,BLOOM_UV(vUV+vec2(cos(a),sin(a))*r/uRes)).rgb;b+=max(s-0.70*hi,0.0)*(i<6?1.0:0.6);}   // = max(s/hi-0.70,0)*hi
+    b/=hi;b=mix(vec3(dot(b,vec3(0.2126,0.7152,0.0722))),b,mix(1.0,uGradeSat,uGrade));
+    c+=b*hi*0.11*uBloom*(1.0-smoothstep(0.60,1.0,vUV.y)*uTopAmt*uGrade);}
   c=shoulder(c);
-  vec2 q=(vUV-0.5)*vec2(uRes.x/uRes.y,1.0);c=mix(c,c*vec3(0.80,0.87,0.98),smoothstep(0.45,1.05,length(q))*0.55);
-  c*=1.0+(texture2D(uGrain,gl_FragCoord.xy/512.0).r-0.5)*0.06*uGrainOn;     // static paper
-  c+=(h(gl_FragCoord.xy)+h(gl_FragCoord.yx+17.3)-1.0)/255.0;                 // dither against banding in mist & vignette
+  vec2 q=(vUV-0.5)*vec2(uRes.x/uRes.y,1.0);c=mix(c,c*uVignette,smoothstep(0.45,1.05,length(q))*0.55);
+  // (upscaled, the paper is laid after the upscale, at the screen's pixels: uGrainHere 0, the easu pass, src/look/post.ts)
+  c=paperOf(c,gl_FragCoord.xy/uRenderScale,uGrainOn*uGrainHere);     // static paper, fixed on the screen whatever the render scale
+  c+=ditherOf(gl_FragCoord.xy);                 // dither against banding in mist & vignette
   gl_FragColor=vec4(c,1.0);}

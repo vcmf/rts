@@ -1,6 +1,5 @@
 // The camera and the finishing passes (prototypes/painted-cinematic.html, docs/research/cheap-painterly-postfx.md):
-// [depth of field H, V, presentation and video only per decision 0003] → one fused pass (grade, bloom, vignette,
-// paper, dither). Materials write view distance into alpha, so depth of field needs no second scene render.
+// [the depth of field, a player option per decision 0024: the scene at half resolution, its blur] → one fused pass (its composite, bloom, vignette, paper, dither; the grade is the materials': gradeOf, src/look/shaders/painter.glsl). Materials write view distance into alpha, so depth of field needs no second scene render.
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
@@ -13,27 +12,71 @@ import { PostProcess } from '@babylonjs/core/PostProcesses/postProcess.js'
 // the passes' vertex shader, loaded up front: PostProcess imports it lazily, but in the built page that load never
 // completed and the grade pass stayed not-ready (observed in L0c; the CDN build has it registered from the start)
 import '@babylonjs/core/Shaders/postprocess.vertex.js'
+// FSR 1's edge-adaptive upscale (EASU, AMD), as Babylon ships it: its source, our grain after it (easu, below)
+import '@babylonjs/core/Shaders/fsr1Upscale.fragment.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
-import { D } from './spec.ts'
+import { D, TUNED_R, ZoomHold, clearRadius } from './spec.ts'
+import DOFCOC from './shaders/dofcoc.glsl?raw'
 import DOF_FS from './shaders/dof.frag?raw'
+import DOFDOWN_FS from './shaders/dofdown.frag?raw'
 import UBER_FS from './shaders/uber.frag?raw'
+import { MOOD, SEASON } from './mood.ts'
 
 // the view the page opens on (the bench measures it as its default zoom)
 export const START = { beta: 0.80, radius: 125, x: -10, z: 2 }
+// the gameplay depth of field (decision 0024), a band at the top of the screen: past a sharp band beyond the focus
+// (1 - focus/z below it is sharp, z the depth along the view axis; nothing nearer than the focus blurs), the gain past
+// it, the largest blur in pixels at 1080 lines, and the share of it left at the widest zoom (window.__look.dof tunes
+// them live); FOCUS_S the focus's easing time (s)
+export const DOF = { band: 0.2, k: 4, px: 7, wide: 0.4 }
+// the near blur (docs/plans/done/dof-v2.md): its sharp band nearer than the focus (in 1 - focus/z), its gain, its
+// largest blur in pixels at 1080 lines (eased by the zoom as the far one) and the share of the frame from the bottom it
+// reaches (the formations in the middle never take it)
+export const DOF_NEAR = { band: 0.04, k: 4, px: 8, screen: 0.3 }
+// the blur's painted look (docs/plans/done/dof-v2.md): the far blur's colour toward the haze (lighter, greyer) by its
+// size, the near layer darker and cooler by its coverage (uber.frag)
+export const DOF_PAINT = { far: 0.5, near: 0.7 }
+// the scene's MSAA samples (4; ?msaa=1 for the frame-rate A/Bs, src/look/main.ts)
+// byte: the scene's MSAA target 8 bits a channel, not half floats (docs/plans/done/wide-perf.md: the same frame, 0.4 to
+// 0.8 ms less at the widest zoom); not under the depth of field, whose distance in alpha needs the half floats; ?rt16
+// for the A/B
+// stencil: a stencil on the scene's target alone (the soldiers' simple shadows darken each sample once: src/look/units.ts),
+// not on the canvas and every other target as the engine's own option gives (?stencil=all: that, the A/B; 0: none)
+export const MSAA = { samples: 4, byte: true, stencil: true }
+// ?nanmark: a pixel that is not a number shows magenta instead of its neighbours' mean (docs/plans/done/nan-guard.md)
+export const DEBUG = { nanmark: false }
+const FOCUS_S = 0.25
+// m: from here out the eye clears the SPEC's highest ground (ground.hi, at the steepest pitch's cos) by its clearance:
+// no ground to read (checked in test/look-spec.test.ts)
+export const CLEAR_BELOW = (D.spec.ground.hi + D.spec.camera.clearance - D.spec.camera.focusY) / Math.cos(D.spec.camera.betaMax)
+const TAPS = [16, 24, 32, 48, 64]
 
-// the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit
-export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateCamera {
+// each camera's zoom hold (buildCamera's): the page's zoom inputs and the tools set the wanted radius through it
+const HOLDS = new WeakMap<ArcRotateCamera, ZoomHold>()
+export const zoomOf = (camera: ArcRotateCamera): ZoomHold => { const z = HOLDS.get(camera); if (!z) throw new Error('zoomOf: not a camera buildCamera made'); return z }
+
+// the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit. ground: the
+// drawn ground's height (the zoom is held out where the eye would come within the SPEC's clearance of it)
+export function buildCamera(scene: Scene, canvas: HTMLCanvasElement, ground: (x: number, z: number) => number): ArcRotateCamera {
   const c = D.spec.camera, PLAY = D.spec.play
   const camera = new ArcRotateCamera('cam', c.yaw0, START.beta, START.radius, new Vector3(START.x, c.focusY, START.z), scene)
   scene.activeCamera = camera; camera.attachControl(canvas, true)
   // locked down (decision 0010): yaw ± the spec's range around the default, pitch and zoom inside the checked limits
   camera.lowerAlphaLimit = c.yaw0 - c.yawRange; camera.upperAlphaLimit = c.yaw0 + c.yawRange
   camera.lowerRadiusLimit = c.rMin
+  const zoom = new ZoomHold(); HOLDS.set(camera, zoom)
+  rtsControls(scene, camera, canvas, zoom)
   // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
-  camera.mapPanning = true; scene.onBeforeRenderObservable.add(() => { const t = camera.target; t.x = Math.max(-PLAY, Math.min(PLAY, t.x)); t.z = Math.max(-PLAY, Math.min(PLAY, t.z)) })
+  // the closest zoom held out over high ground (clearRadius, ZoomHold, src/look/spec.ts: decision 0051), the player's
+  // wanted zoom kept apart so it comes back in on lower ground; from CLEAR_BELOW out the eye always clears the tile's
+  // highest ground, so the ground is not read there. The depth of field's zoom ease is reckoned from TUNED_R out
+  camera.mapPanning = true; scene.onBeforeRenderObservable.add(() => {
+    const t = camera.target; t.x = Math.max(-PLAY, Math.min(PLAY, t.x)); t.z = Math.max(-PLAY, Math.min(PLAY, t.z))
+    const r = zoom.step(camera.radius, w => w < CLEAR_BELOW ? clearRadius(c, w, camera.alpha, camera.beta, t.x, t.y, t.z, ground) : w)
+    if (r !== camera.radius) camera.radius = r
+  })
   camera.upperRadiusLimit = c.rMax; camera.lowerBetaLimit = c.betaMin; camera.upperBetaLimit = c.betaMax
-  camera.wheelDeltaPercentage = 0.01
   camera.panningSensibility = 30; camera.minZ = 0.5; camera.maxZ = 5000; camera.fov = c.fov; camera.inertia = 0.88
   // the SPEC checked frames up to aspectMax: a wider screen keeps that frame's horizontal field of view and sees
   // less vertically, never more of the world than was checked
@@ -46,26 +89,257 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateC
   return camera
 }
 
-Effect.ShadersStore.dofFragmentShader = DOF_FS
-Effect.ShadersStore.uberFragmentShader = UBER_FS
+// where a key types (a text field) or picks (a list), not where it moves the camera; sliders and buttons keep the keys
+// for the camera
+export const typingIn = (t: EventTarget | null): boolean => t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || (t instanceof HTMLInputElement && !['range', 'checkbox', 'button', 'radio'].includes(t.type))
+
+// RTS controls: the arrows or WASD pan in the ground plane and Q and E turn, at a speed that grows with the zoom; a
+// trackpad's two-finger swipe pans (the ground follows the fingers) and its pinch zooms; a mouse wheel zooms. They
+// replace Babylon's keyboard (which turned the camera) and wheel (which only zoomed); dragging still turns and pans
+const PAN_PER_S = 0.9, TURN_PER_S = 1.2, SWIPE = 0.0016, PINCH = 0.01, WHEEL = 0.0012
+function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasElement, zoom: ZoomHold): void {
+  camera.inputs.removeByType('ArcRotateCameraKeyboardMoveInput'); camera.inputs.removeByType('ArcRotateCameraMouseWheelInput')
+  // the ground's forward (away from the camera) and right, from the camera's yaw
+  const pan = (right: number, fwd: number) => {
+    const fx = -Math.cos(camera.alpha), fz = -Math.sin(camera.alpha)
+    camera.target.x += fz * right + fx * fwd; camera.target.z += -fx * right + fz * fwd
+  }
+  const held = new Set<string>()
+  const typing = (e: KeyboardEvent) => typingIn(e.target)
+  addEventListener('keydown', e => { if (!typing(e) && !e.metaKey && !e.ctrlKey) { held.add(e.code); if (e.code.startsWith('Arrow')) e.preventDefault() } })
+  // (macOS sends no keyup for a key let go while Cmd is down: Cmd's own release clears them all)
+  addEventListener('keyup', e => { held.delete(e.code); if (e.key === 'Meta') held.clear() })
+  addEventListener('blur', () => held.clear())
+  const on = (...codes: string[]) => codes.some(c => held.has(c)) ? 1 : 0
+  scene.onBeforeRenderObservable.add(() => {
+    if (!held.size) return
+    const dt = Math.min(0.1, scene.getEngine().getDeltaTime() / 1000), step = camera.radius * PAN_PER_S * dt
+    pan((on('ArrowRight', 'KeyD') - on('ArrowLeft', 'KeyA')) * step, (on('ArrowUp', 'KeyW') - on('ArrowDown', 'KeyS')) * step)
+    camera.alpha += (on('KeyE') - on('KeyQ')) * TURN_PER_S * dt
+  })
+  // a trackpad: Chrome reports its wheelDeltaY as 3 × deltaY; a mouse wheel: wheelDeltaY in steps of 120 (whatever the
+  // page's zoom does to deltaY), or lines elsewhere. A trackpad's swipe moves the ground with the fingers (natural
+  // scrolling: fingers up, deltaY > 0). Not measured on a real mouse yet: synthetic events carry no wheelDeltaY
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault()
+    const wy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY
+    const pad = wy !== undefined && Math.abs(Math.abs(wy) - 3 * Math.abs(e.deltaY)) < 1.5
+    const mouse = e.deltaMode === 1 || (!pad && e.deltaX === 0 && (wy ? wy % 120 === 0 : Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY)))
+    if (e.ctrlKey || mouse) {
+      const lo = camera.lowerRadiusLimit ?? 1, hi = camera.upperRadiusLimit ?? 1e4
+      // a pinch's steps are small (a few pixels); a wheel's notch, with or without Ctrl, a hundred (or a few lines)
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY
+      // (the wanted radius scaled, not the one shown: held out over a hill, a zoom in must not raise it, decision 0051)
+      const w = Number.isNaN(zoom.wanted) ? camera.radius : zoom.wanted
+      zoom.set(Math.min(hi, Math.max(lo, w * Math.exp(dy * (e.ctrlKey && Math.abs(dy) < 50 ? PINCH : WHEEL)))))
+    } else { const k = camera.radius * SWIPE; pan(e.deltaX * k, -e.deltaY * k) }
+  }, { passive: false })
+}
+
+// the lens (#include<dofcoc>) inlined as the materials inline theirs (a replacer function keeps `$` in the GLSL)
+// the paper grain (the grain texture over 512 screen pixels, ±3 %) and the dither (±1/255), one definition for the
+// finishing pass and the last pass (the grain is laid in one of them: uGrainHere)
+const PAPER = `float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+vec3 paperOf(vec3 c,vec2 px,float on){return c*(1.0+(texture2D(uGrain,px/512.0).r-0.5)*0.06*on);}
+vec3 ditherOf(vec2 px){return vec3((h(px)+h(px.yx+17.3)-1.0)/255.0);}
+`
+const withLens = (src: string) => src.replace('#include<dofcoc>', () => DOFCOC).replace('#include<paper>', () => PAPER)
+Effect.ShadersStore.dofdownFragmentShader = withLens(DOFDOWN_FS)
+Effect.ShadersStore.dofFragmentShader = withLens(DOF_FS)
+Effect.ShadersStore.uberFragmentShader = withLens(UBER_FS)
+// the last pass under the render scale (decision 0045, docs/plans/done/render-scale.md): the chain draws at the scale
+// and this pass draws the screen, by uMode: 0 a copy (the scale 1: texel for texel, the same pixels), 1 bilinear (the
+// stretch the browser made before: the wide zooms' scales), 2 FSR 1's edge-adaptive upscale, EASU (from 0.9
+// up, under 1). Upscaled (1 and 2) the paper grain is laid here, at the screen's pixels (the finishing pass leaves it:
+// uGrainHere 0), and a dither after the filter (the finishing pass's own comes before its 8-bit target and is averaged
+// away). EASU is Babylon's port (fsr1Upscale), its four 2 x 2 gathers read once each, as colour (the port reads each
+// texel once per channel: 48 reads a pixel for 16, the same values in the same order); a port of another shape leaves
+// the pass without it (EASU_OK false: bilinear in its place), the page still up
+const EASU_HEAD = `uniform sampler2D uGrain;uniform float uGrainOn,uMode;
+${PAPER}`
+const EASU_MAIN = (easu: boolean) => `void main(){
+  if(uMode<0.5){gl_FragColor=vec4(texelFetch(textureSampler,ivec2(gl_FragCoord.xy),0).rgb,1.0);return;}
+  vec3 c=texture2D(textureSampler,vUV).rgb;
+  ${easu ? 'if(uMode>1.5)c=FsrEasuF(ivec2(gl_FragCoord.xy),con0,con1,con2,con3);' : ''}
+  c=paperOf(c,gl_FragCoord.xy,uGrainOn)+ditherOf(gl_FragCoord.xy);
+  gl_FragColor=vec4(c,1.0);}`
+let EASU_OK = false, EASU_WHY = ''
+// FSR 1's FsrEasuCon (ffx_fsr1.h), as Babylon's ThinFSR1UpscalePostProcess.updateConstants: the input's viewport vw x vh
+// in its texture iw x ih, drawn to ow x oh
+const FSR1_CONSTANTS = (e: Effect, vw: number, vh: number, iw: number, ih: number, ow: number, oh: number): void => {
+  e.setFloat4('con0', vw / ow, vh / oh, 0.5 * vw / ow - 0.5, 0.5 * vh / oh - 0.5)
+  e.setFloat4('con1', 1 / iw, 1 / ih, 1 / iw, -1 / ih); e.setFloat4('con2', -1 / iw, 2 / ih, 1 / iw, 2 / ih); e.setFloat4('con3', 0, 4 / ih, 0, 0)
+}
+{
+  const gather = 'void easuGather(vec2 p,out vec4 r,out vec4 g,out vec4 b){ivec2 s=textureSize(textureSampler,0),mx=s-ivec2(1),q=ivec2(floor(p*vec2(s)-0.5));' +
+    'vec3 a=texelFetch(textureSampler,clamp(q+ivec2(0,1),ivec2(0),mx),0).rgb,c=texelFetch(textureSampler,clamp(q+ivec2(1,1),ivec2(0),mx),0).rgb,' +
+    'd=texelFetch(textureSampler,clamp(q+ivec2(1,0),ivec2(0),mx),0).rgb,e=texelFetch(textureSampler,clamp(q,ivec2(0),mx),0).rgb;' +
+    'r=vec4(a.r,c.r,d.r,e.r);g=vec4(a.g,c.g,d.g,e.g);b=vec4(a.b,c.b,d.b,e.b);}\n'
+  let src = Effect.ShadersStore.fsr1UpscalePixelShader ?? '', n = 0
+  src = src.replace(/vec4 (\w+)R=FsrEasuRF\((p\d)\);\s*vec4 \1G=FsrEasuGF\(\2\);\s*vec4 \1B=FsrEasuBF\(\2\);/g, (_m, v: string, q: string) => { n++; return `vec4 ${v}R,${v}G,${v}B;easuGather(${q},${v}R,${v}G,${v}B);` })
+  const fn = src.indexOf('vec3 FsrEasuF('), at = src.lastIndexOf('void main()')
+  EASU_OK = n === 4 && fn >= 0 && at > fn
+  if (EASU_OK) Effect.ShadersStore.easuFragmentShader = src.slice(0, fn) + gather + src.slice(fn, at) + EASU_HEAD + EASU_MAIN(true)
+  else {
+    EASU_WHY = `FSR 1's upscale shader not as expected (${n} gathers of 4)`
+    Effect.ShadersStore.easuFragmentShader = 'uniform sampler2D textureSampler;varying vec2 vUV;\n' + EASU_HEAD + EASU_MAIN(false)
+  }
+}
+
+// (a pass's size object Babylon did not keep: build, Post.fail)
+class KeptSize extends Error {}
 
 export class Post {
   private posts: PostProcess[] = []
+  // the scene's render scale (1: the canvas's pixels; set by the page: main.ts, Auto or the panel). With the upscale
+  // (WebGL2, not ?upscale=bilinear: main.ts) the canvas stays at the page's pixels and the chain draws at the scale,
+  // its passes resized in place (each pass's size is an object of this class's, which Babylon reads at each frame: no
+  // pass is made again, no shader compiled); without it the page's hardware scale, as before
+  private k = 1
+  private readonly upscaleWanted: boolean
+  private failed = false
+  // the chain draws at the scale (its last pass drawing the screen); false once the last pass failed to compile, or
+  // Babylon would not keep a pass's size object: the page then takes the hardware scale (main.ts)
+  get upscale(): boolean { return this.upscaleWanted && !this.failed }
+  private sizes: { size: { width: number; height: number }; f: number }[] = []
+  get scale(): number { return this.k }
+  set scale(k: number) { this.k = k }   // (the sizes at the next resize: main.ts, after the hardware scale)
+  // the passes' sizes from the canvas's and the scale (each frame: the canvas may change too)
+  resize(): void {
+    const w = this.engine.getRenderWidth(true), h = this.engine.getRenderHeight(true)
+    for (const { size, f } of this.sizes) { size.width = Math.max(1, (w * this.k * f) | 0); size.height = Math.max(1, (h * this.k * f) | 0) }
+  }
+  // the last pass's mode (EASU_HEAD): a copy at 1, EASU from 0.9 up, else bilinear
+  private mode(): number { return this.k === 1 ? 0 : this.k >= 0.9 && this.k < 1 && EASU_OK ? 2 : 1 }
   private readonly camera: ArcRotateCamera; private readonly engine: AbstractEngine; private readonly S: LookState; private readonly grain: () => BaseTexture
-  constructor(camera: ArcRotateCamera, engine: AbstractEngine, S: LookState, grain: () => BaseTexture) { this.camera = camera; this.engine = engine; this.S = S; this.grain = grain }
+  private readonly ground: (x: number, z: number) => number
+  // ground: the terrain's height, for the depth of field's focus
+  // upscale: the chain draws at the scale and its last pass draws the screen (above)
+  constructor(camera: ArcRotateCamera, engine: AbstractEngine, S: LookState, grain: () => BaseTexture, ground: (x: number, z: number) => number, upscale: boolean) { this.camera = camera; this.engine = engine; this.S = S; this.grain = grain; this.ground = ground; this.upscaleWanted = upscale }
   get passes(): PostProcess[] { return this.posts }
   // no finishing passes: the scene draws straight to the canvas (the detail check's debug view)
-  clear(): void { this.posts.forEach(p => p.dispose(this.camera)); this.posts = [] }
+  clear(): void { this.posts.forEach(p => p.dispose(this.camera)); this.posts = []; this.sizes = [] }
+  // the lines of the target the scene draws into: the first pass's (with the upscale its size, as set: in the frame of a
+  // change too), or the canvas's
+  sceneLines(): number { return this.sizes[0]?.size.height ?? this.engine.getRenderHeight(true) }
+  // the depth along the view axis of the ground the screen's centre shows: the centre ray marched against the
+  // terrain (the target sits at a fixed height, inside a hill or above a valley, so neither it nor the ground under
+  // it is what the centre shows), eased over FOCUS_S so a pan over a hillside does not jump the sharp band; a jump
+  // of over a third (a new view) is taken at once
+  private focus = 0
+  // the marched depth, not eased (the near bake's zoom gate: src/look/main.ts)
+  focusRaw = 0
+  // each frame before the scene renders (src/look/main.ts): the materials encode their lens term against it. need:
+  // whether anything reads it (the depth of field, the near bake); else not marched, and the next march is taken at
+  // once (a depth of field turned on starts from the true focus)
+  updateFocus(dt: number, need = true): number {
+    if (!need) { this.focus = this.focusRaw = 0; return 1 }
+    const c = this.camera, p = c.position, t = c.target
+    let fx = t.x - p.x, fy = t.y - p.y, fz = t.z - p.z; const l = Math.hypot(fx, fy, fz) || 1; fx /= l; fy /= l; fz /= l
+    const above = (d: number) => p.y + fy * d - this.ground(p.x + fx * d, p.z + fz * d)
+    const N = 96, far = 3 * c.radius; let d0 = 0, d1 = far
+    for (let i = 1; i <= N; i++) { const d = far * i / N; if (above(d) <= 0) { d1 = d; break } d0 = d }
+    if (d1 < far) for (let i = 0; i < 12; i++) { const m = (d0 + d1) / 2; if (above(m) > 0) d0 = m; else d1 = m }
+    const want = Math.max(1, d1 < far ? d1 : l); this.focusRaw = want
+    this.focus = !this.focus || Math.abs(want - this.focus) > this.focus / 3 ? want : this.focus + (want - this.focus) * (1 - Math.exp(-Math.max(0, dt) / FOCUS_S))
+    return this.focus
+  }
+  // the upscale given up (above): the scale 1, the chain made again without its last pass (after this frame)
+  private fail(why: string, now = false): void {
+    if (this.failed) return
+    console.error(`post: ${why}: the render scale takes the hardware scale`)
+    this.failed = true; this.k = 1
+    if (now) this.build(); else setTimeout(() => { if (this.posts.length) this.build() })
+  }
+  // the chain made, in place of the one before (on load, the depth of field switched, a tool's finishing(true))
   build(): void {
-    const { camera, engine, S } = this
-    this.posts.forEach(p => p.dispose(camera)); this.posts = []
-    const HF = Constants.TEXTURETYPE_HALF_FLOAT
-    const pp = (name: string, uni: string[], smp: string[], type: number) => { const p = new PostProcess(name, name, uni, smp, 1.0, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, null, type); if (!this.posts.length) p.samples = 4; this.posts.push(p); return p }
-    if (S.dof) for (const dir of [[1, 0], [0, 1]]) {
-      const p = pp('dof', ['uTexel', 'uDir', 'uFocus', 'uRange', 'uMaxPx'], [], HF)
-      p.onApply = e => { const f = camera.radius / 1000; e.setFloat2('uTexel', 1 / p.width, 1 / p.height); e.setFloat2('uDir', dir[0], dir[1]); e.setFloat('uFocus', f); e.setFloat('uRange', f * 0.32 + 0.012); e.setFloat('uMaxPx', 9 * S.dofAmt * p.height / 1080) }
+    try { this.make() } catch (e) {
+      if (!(e instanceof KeptSize)) throw e
+      this.posts.forEach(p => p.dispose(this.camera)); this.posts = []; this.sizes = []
+      this.fail('Babylon does not keep a pass\'s size object', true)
     }
-    const u = pp('uber', ['uRes', 'uGrade', 'uGrainOn', 'uBloom'], ['uGrain'], HF)
-    u.onApply = e => { e.setFloat2('uRes', u.width, u.height); e.setFloat('uGrade', S.grade); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain()) }
+  }
+  private make(): void {
+    const { camera, engine, S } = this
+    this.posts.forEach(p => p.dispose(camera)); this.posts = []; this.sizes = []
+    if (this.upscale && !EASU_OK) console.error(`post: ${EASU_WHY}: the render scale stretches bilinear`)
+    // the scene's target, the first pass's input: 8 bits with the depth of field too (the lens term in alpha, 8 bits:
+    // painter.glsl depthA; docs/plans/done/dof-v2.md)
+    const HF = Constants.TEXTURETYPE_HALF_FLOAT, sceneType = MSAA.byte ? Constants.TEXTURETYPE_UNSIGNED_BYTE : HF
+    // ratio: the size of the texture this pass reads, as a share of the scene's, so the pass before it draws at that
+    // size (with the upscale an object of sizes, resized in place: resize)
+    const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => {
+      const size = this.upscale ? { width: 1, height: 1 } : null
+      if (size) this.sizes.push({ size, f: ratio })
+      // (the options' form: Babylon keeps its size object, the positional form copies it)
+      const p = new PostProcess(name, name, { uniforms: uni, samplers: smp, size: size ?? ratio, camera, samplingMode: Texture.BILINEAR_SAMPLINGMODE, engine, reusable: false, defines, textureType: type })
+      if (size && (p as unknown as { _options: unknown })._options !== size) throw new KeptSize()
+      if (!this.posts.length) {
+        p.samples = MSAA.samples
+        // (Babylon gives the first pass's target a stencil only when the engine has one: so the engine's is lent while it
+        // makes it, MSAA.stencil)
+        if (MSAA.stencil && !engine.isStencilEnable) {
+          const resize = p.resize.bind(p), e = engine as unknown as { _isStencilEnable: boolean }
+          p.resize = (...a: Parameters<typeof resize>) => { e._isStencilEnable = true; try { resize(...a) } finally { e._isStencilEnable = false } }
+        }
+      }
+      this.posts.push(p); return p
+    }
+    // the miniature field (decisions 0024, 0040): focused on the ground at the screen's centre (updateFocus); a sharp
+    // band beyond it (DOF.band) and one nearer (DOF_NEAR.band, in the bottom DOF_NEAR.screen of the frame only); the
+    // largest blurs DOF.px and DOF_NEAR.px at 1080 lines, strongest at the closest zoom and DOF.wide of it at the widest.
+    // The scene at half resolution (each four pixels' colour averaged, one lens term: dofdown.frag), its blur at half
+    // resolution, and the finishing pass puts the sharp scene (the first pass's input) back where the blur is under a
+    // pixel and no near layer covers it
+    const lens = ['uBand', 'uK', 'uMaxPx', 'uNBand', 'uNK', 'uNMaxPx', 'uNScreen'], c = D.spec.camera
+    // the chain: the scene at half resolution (dofdown), the blur at half resolution (dof: far and near), the finishing
+    // pass (uber). A pass draws into the next one's input, at the next one's ratio. (No tile passes: the near blur lies
+    // in the bottom band of the frame only, so the band says where it can reach; two small tile passes cost about
+    // 0.7 ms on the Mac, measured: docs/plans/done/dof-v2.md)
+    const d = S.dof ? pp('dofdown', ['uTexel', 'uOut', ...lens], [], sceneType) : null
+    const p = d ? pp('dof', ['uTexel', 'uHalf', 'uN', 'uNN', ...lens], [], sceneType, 0.5) : null
+    let px = 0, npx = 0
+    const lensUniforms = (e: Effect) => { e.setFloat('uBand', DOF.band); e.setFloat('uK', DOF.k); e.setFloat('uMaxPx', px); e.setFloat('uNBand', DOF_NEAR.band); e.setFloat('uNK', DOF_NEAR.k); e.setFloat('uNMaxPx', npx); e.setFloat('uNScreen', DOF_NEAR.screen) }
+    if (d && p) {   // (p is made only with d: the test narrows both)
+      // the blurs by the zoom (strongest at the closest zoom, DOF.wide of it at the widest) and the frame's lines, each
+      // frame before the first pass
+      d.onApply = e => {
+        const z = Math.min(1, Math.max(0, (camera.radius - TUNED_R) / (c.rMax - TUNED_R))), ease = S.dofAmt * d.height / 1080 * (1 + (DOF.wide - 1) * z)
+        px = DOF.px * ease; npx = DOF_NEAR.px * ease
+        e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uOut', p.width, p.height); lensUniforms(e)
+      }
+      // the taps: 16 up to a 7 px blur (the default's largest at 1080 lines), then as many per unit of area as the
+      // blur grows, in steps to 64 (past a 14 px blur, sparser; a step moves every tap, so there are few)
+      p.onApply = e => {
+        e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uHalf', 1 / p.width, 1 / p.height)
+        e.setFloat('uN', TAPS.find(n => n >= 0.32 * px * px) ?? 64)
+        // the near taps: as many per unit of area of its largest blur, 8 to 24 (a near layer is soft: fewer taps do)
+        e.setFloat('uNN', Math.min(24, Math.max(8, Math.ceil(0.25 * npx * npx)))); lensUniforms(e)
+      }
+    }
+    const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uGrainHere', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV', 'uHalfTexel', 'uDofPaint'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, [p ? '#define DOF' : '', DEBUG.nanmark ? '#define NANMARK' : ''].filter(Boolean).join('\n') || null)
+    // uRes: the full resolution (with the depth of field, this pass reads the half-resolution blur)
+    u.onApply = e => {
+      const r = d ?? u; e.setFloat2('uRes', r.width, r.height); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain())
+      e.setFloat('uRenderScale', S.res ? 1 : 1 / engine.getHardwareScalingLevel())   // Auto: the paper in screen pixels (the fixed scales as before)
+      e.setFloat('uGrainHere', this.upscale && this.mode() > 0 ? 0 : 1)   // (upscaled, the last pass lays the paper)
+      // the mood's vignette, and the grade's parts the bloom takes off and puts back (its grade is in the painted
+      // materials: src/look/materials.ts)
+      e.setColor3('uVignette', MOOD.grade.vignette); e.setColor3('uSplitHi', MOOD.grade.splitHi); e.setFloat('uGradeSat', SEASON.sat); e.setFloat('uTopAmt', MOOD.grade.topAmt); e.setFloat('uGrade', S.grade)   // (uGradeSat: the season's, as the materials')
+      if (d && p) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / p.width, d.height / 2 / p.height); e.setFloat2('uHalfTexel', 1 / p.width, 1 / p.height); e.setFloat2('uDofPaint', DOF_PAINT.far, DOF_PAINT.near); e.setTextureFromPostProcess('uSharp', d) }
+    }
+    // the last pass (EASU_HEAD): the finishing pass draws into its input at the scene's size, it draws the screen
+    if (this.upscale) {
+      const x = pp('easu', ['con0', 'con1', 'con2', 'con3', 'uGrainOn', 'uMode'], ['uGrain'], Constants.TEXTURETYPE_UNSIGNED_BYTE)
+      x.onApply = e => {
+        // (FsrEasuCon, Babylon's: the input's viewport is the whole of its texture)
+        const iw = x.width, ih = x.height; FSR1_CONSTANTS(e, iw, ih, iw, ih, engine.getRenderWidth(true), engine.getRenderHeight(true))
+        e.setFloat('uMode', this.mode()); e.setFloat('uGrainOn', S.grain); e.setTexture('uGrain', this.grain())
+      }
+      // (a last pass that does not compile would leave the screen undrawn: the chain made again without it)
+      const onErr = (eff: Effect) => eff.onErrorObservable.add(() => this.fail('the last pass did not compile'))
+      const eff = x.getEffect(); if (eff) onErr(eff); x.onEffectCreatedObservable.add(onErr)
+    }
+    this.resize()
   }
 }

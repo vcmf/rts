@@ -1,5 +1,5 @@
 // The painted water's checks (docs/plans/done/w4-water-surface.md, W4): the shore band, the seam, pools against
-// riffles, and shimmer; the banks and the stones' foam (docs/plans/active/w5-banks.md, W5a); the ice and the autumn
+// riffles, and shimmer; the banks and the stones' foam (docs/plans/done/w5-banks.md, W5a); the ice and the autumn
 // leaves (W5b). Each renders the look page headless (SwiftShader, the clock frozen) through its hooks
 // (window.__look in src/look/main.ts).
 //
@@ -32,12 +32,26 @@
 //   (the data's textures have no mips), in summer, and in autumn (the leaves) and winter (the ice's edges, W5b), everything drawn, the image shifted a quarter pixel a frame; within 6 px of the water's pixels, a pixel shimmers when its luma
 //   differs by over 8/255 from the previous frame resampled a quarter pixel along. Under SHIMMER_MAX per pair at the
 //   closest zoom; at the widest, where the river's outline (the painted shoreline, the banks hiding the water) is a
-//   large share of the mask, under SHIMMER_WIDE (main measured 6.3% there, the same mask and view: W4's plan). In
+//   large share of the mask, under SHIMMER_WIDE (main measured 6.3% there at W4, the same mask and view: W4's plan; re-baselined since, below). In
 //   winter, bright snow and ice make every painted edge and the grain's clusters pop more (main measures 3.3% at the
 //   closest zoom and 10.9% at the widest, the same views and mask, with W4's even ice; and on the water's own pixels,
 //   the surface eroded 2 px, 3.1% and 11.3%: W5b's plan), so there the limits are main's, rounded down: the mask
 //   under SHIMMER_WINTER and SHIMMER_WINTER_WIDE, the water's own pixels (the ice, its edges and rime, the open
-//   riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water must shimmer less than main's.
+//   riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water had to shimmer less than main's (since decision 0042: the dark water's own measurements, below).
+//   The widest limits re-baselined for the temperate mood (decision 0034, the owner's call,
+//   docs/plans/done/temperate-fixes.md), so no longer main's rounded down: its frame is about 7 % more contrasty (half the rise), the
+//   rest spread over the grain, the painted edges and the bloom. Main measured 3.68 to 3.84 % in summer, 4.11 % in
+//   autumn (after the ground's straw turn) and 11.03 to 11.4 % in winter; the limits sit a run's spread above them:
+//   4.0, 4.4 and 11.8 %.
+//   Re-baselined for the dark water (decision 0042, the owner's call, docs/plans/done/dark-water.md): dark water
+//   against pale banks and light foam makes every painted edge more contrasty, so more of its pixels pass 8/255 under
+//   the same quarter-pixel move. It measured, worst of a run: 1.17 % closest (1.19 % in autumn), 5.57 % widest
+//   (5.99 % in autumn), winter 3.20 % and 12.52 %, the water's own 2.97 % and 14.51 %; the limits sit a run's spread
+//   above them: 1.3, 6.0, 6.5, 3.5, 13.5, 3.2 and 15.5 %.
+//   Re-baselined again for the epic mood, the default (decision 0044, the owner's call): its thinner mist and air make
+//   the river's edges more contrasty. Measured, worst of a run: 1.15 % closest (1.22 % in autumn), 6.83 % widest (6.82 %
+//   in autumn), winter 3.83 % and 13.90 %, the water's own 3.51 % and 15.73 %; the limits a run's spread above them:
+//   1.3, 7.2, 7.2, 4.0, 14.5, 3.7 and 16.5 %.
 //   Sabotage: aliased hard edges (WATER_SAB_STEP).
 // Frames are 1280×720. Exit 1 on a failure.
 import fs from 'node:fs'
@@ -56,7 +70,7 @@ const W = 1280, H = 720, CAM = SPEC.camera, BAND = SPEC.water.band, SDF = SPEC.w
 const [, A0, BETA0, R0] = CAMS.find(c => c[0] === 'start')
 const SEAM_P95 = 2, SEAM_MAX = 6, SEAM_MIN_PX = 500
 const POOL = 0.2, RIFFLE = 0.5, LUMA_GAP = 0.03, BRIGHT = 0.2, FOAM_RATIO = 2, FOAM_MIN = 0.02
-const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035, SHIMMER_WINTER = 0.032, SHIMMER_WINTER_WIDE = 0.108, SHIMMER_ICE = 0.03, SHIMMER_ICE_WIDE = 0.11
+const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.013, SHIMMER_WIDE = 0.072, SHIMMER_AUTUMN_WIDE = 0.072, SHIMMER_WINTER = 0.040, SHIMMER_WINTER_WIDE = 0.145, SHIMMER_ICE = 0.037, SHIMMER_ICE_WIDE = 0.165
 
 let C = null
 const river = () => {
@@ -192,7 +206,7 @@ function pools(url, dir, sab) {
 function shimmerViews() {
   const c = river(), bi = sharpest(), t = `${[c.px[bi], CAM.focusY, c.pz[bi]]}`
   return (v => process.env.SHIMMER_ONLY ? v.filter(x => process.env.SHIMMER_ONLY.split(',').includes(x[0])) : v)([['closest', A0, CAM.betaMin, CAM.rMin, t, 0, SHIMMER_MAX], ['widest', A0, CAM.betaMax, CAM.rMax, t, 0, SHIMMER_WIDE],
-    ['closest-autumn', A0, CAM.betaMin, CAM.rMin, t, 1.5, SHIMMER_MAX], ['widest-autumn', A0, CAM.betaMax, CAM.rMax, t, 1.5, SHIMMER_WIDE],
+    ['closest-autumn', A0, CAM.betaMin, CAM.rMin, t, 1.5, SHIMMER_MAX], ['widest-autumn', A0, CAM.betaMax, CAM.rMax, t, 1.5, SHIMMER_AUTUMN_WIDE],
     ['closest-winter', A0, CAM.betaMin, CAM.rMin, t, 3, SHIMMER_WINTER, SHIMMER_ICE], ['widest-winter', A0, CAM.betaMax, CAM.rMax, t, 3, SHIMMER_WINTER_WIDE, SHIMMER_ICE_WIDE]])
 }
 function shimmer(url, dir, sab) {
@@ -207,7 +221,7 @@ function shimmer(url, dir, sab) {
   shoot(url, dir, steps, W, H)
   const lum = img => { const v = new Float32Array(W * H); for (let i = 0; i < v.length; i++) v[i] = lumaAt(img, i) * 255; return v }
   let ok = true
-  const lines = [`shimmer: the water and its shore, luma off by over ${ERR}/255 from the previous frame resampled ${STEP} px along (per pair under ${(SHIMMER_MAX * 100).toFixed(1)}% at the closest zoom, ${(SHIMMER_WIDE * 100).toFixed(1)}% at the widest; in winter ${(SHIMMER_WINTER * 100).toFixed(1)}% and ${(SHIMMER_WINTER_WIDE * 100).toFixed(1)}%, main's)`]
+  const lines = [`shimmer: the water and its shore, luma off by over ${ERR}/255 from the previous frame resampled ${STEP} px along (per pair under ${(SHIMMER_MAX * 100).toFixed(1)}% at the closest zoom, ${(SHIMMER_WIDE * 100).toFixed(1)}% at the widest (${(SHIMMER_AUTUMN_WIDE * 100).toFixed(1)}% in autumn); in winter ${(SHIMMER_WINTER * 100).toFixed(1)}% and ${(SHIMMER_WINTER_WIDE * 100).toFixed(1)}%)`]
   for (const [n, , , , , , lim, coreLim] of shimmerViews()) {
     // the water's pixels, dilated 6 px (the shore band on the terrain's side, the shore foam)
     const surf = load(dir, `${n}.surface`), rows = new Uint8Array(W * H), mask = new Uint8Array(W * H), R = 6
@@ -375,7 +389,11 @@ const SABOTAGE = { band: [['nodive']], seam: [['WATER_SAB_OWN'], ['WATER_SAB_TER
 function main() {
   const args = process.argv.slice(2), self = args.includes('--selftest'), oi = args.indexOf('--only')
   const only = oi >= 0 ? args.splice(oi, 2)[1].split(',') : Object.keys(CHECKS)
-  const [url, out = path.join(ROOT, 'scratch/water-look-check')] = args.filter(a => a !== '--selftest')
+  const [url0, out = path.join(ROOT, 'scratch/water-look-check')] = args.filter(a => a !== '--selftest')
+  // the river and its banks measured under the pack's trees unless the URL names a set: the generated woods (the look
+  // page's default, docs/plans/done/gen-trees-default.md) overhang the river and shade the bank's meadow samples, which
+  // these checks were tuned without
+  const url = url0 && !/[?&]trees=/.test(url0) ? url0 + (url0.includes('?') ? '&' : '?') + 'trees=pack' : url0
   if (!url || only.some(k => !CHECKS[k])) { console.error('usage: node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer,banks,foam,winter,leaves] [--selftest]'); process.exit(2) }
   let ok = true
   for (const k of only) {

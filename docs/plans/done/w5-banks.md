@@ -1,6 +1,6 @@
 ---
-status: active
-last_reviewed: 2026-10-11
+status: done
+last_reviewed: 2026-10-12
 ---
 
 # Plan: W5, the banks, stones and reeds (W5a) and the river's seasons (W5b)

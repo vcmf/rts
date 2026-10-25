@@ -3,7 +3,7 @@
 // look data is what the authoring step builds now.
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { SPEC, checkGround, derive, shadowMapSize, type Spec } from '../src/look/spec.ts'
+import { SPEC, TUNED_R, ZoomHold, checkGround, clearRadius, derive, shadowMapSize, type Spec } from '../src/look/spec.ts'
 import { heightAt, setHeightfield, type Heightfield } from '../src/look/heightfield.ts'
 import { checkLookData, decodeLook, encodeLook } from '../src/look/world/data.ts'
 import { LOOK_FILE, buildLookData } from '../tools/build-look-data.ts'
@@ -29,7 +29,8 @@ describe('world spec', () => {
     ['occlusion cell as wide as the narrowest channel', s => { s.texel.ao = 10; s.sizes.aoCell = 4 }, /narrowest channel/],
     ['a far cell spanning an odd number of tile cells', s => { s.tileSub = 392 }, /odd number of tile cells/],
     ['the frame below the focus past the margin', s => { s.camera.rMax = 320 }, /beside the play edge/],
-    ['the closest camera below the highest ground', s => { s.ground.hi = 40 }, /horizon|inside/],
+    ['a camera held inside the highest ground even at the widest zoom', s => { s.ground.hi = 160 }, /horizon|inside/],
+    ['no clearance over the ground', s => { s.camera.clearance = 0 }, /clearance/],
     ['the occlusion ring past the heightfield margin', s => { s.aoRing = 60 }, /occlusion ring/],
     ['a bake over the min-spec texture size', s => { s.sizes.reflMask = 16384 }, /min-spec/],
     ['sun depth range out of order', s => { s.depth.near = 2000 }, /depth range/],
@@ -38,6 +39,13 @@ describe('world spec', () => {
     ['no shore band', s => { s.water.band = 0 }, /water: the shore band/],
     ['bank colours past the bank normals', s => { s.bank.paint = 13 }, /bank: the banks' colours/],
     ['too many stones for the foam loop', s => { s.water.stones = 100 }, /water: the stones/],
+    ['road grid listing less than the junction weight reads', s => { s.road.reach = 5 }, /road: the paint/],
+    ['road search narrower than the paint', s => { s.road.near = 2.4 }, /road: near/],
+    ['road paint short of the warp and the edge', s => { s.road.paint = 3.0 }, /road: paint short/],
+    ['macro texels not dividing the tile', s => { s.macro.texel = 0.3 }, /macro: the tile/],
+    ['a macro bake over the min-spec texture size', s => { s.macro.far = 0.25 }, /bake: macro far ring/],
+    ['a macro bake draw out of range', s => { s.macro.bakeTile = 16 }, /macro: a bake draw/],
+    ['a Kuwahara radius past its loop', s => { s.macro.kuwahara = 3 }, /macro: the Kuwahara radius/],
   ]
   for (const [name, f, msg] of cases) it(`throws: ${name}`, () => { expect(() => derive(with_(f))).toThrow(msg) })
   it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {
@@ -46,6 +54,41 @@ describe('world spec', () => {
     expect(730.1 / sm.h / sin).toBeLessThanOrEqual(SPEC.texel.shadow)   // light-space y, stretched on the ground by 1/sin(elevation)
     expect(() => shadowMapSize(d, 4000, 700, sin)).toThrow(/shadow map .*min-spec/)
     expect(() => shadowMapSize(derive(with_(s => { s.minSpec.bakeMB = 100 })), 1203.3, 730.1, sin)).toThrow(/MB of bakes/)
+  })
+  it('holds the closest zoom out over high ground, never from 45 m out (decision 0051)', () => {
+    const c = SPEC.camera, flat = () => 0, hill = () => 18
+    expect(clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, flat)).toBe(c.rMin)   // flat ground: the eye 16.4 m up
+    const r = clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, hill)
+    expect(r * Math.cos(c.betaMax) + c.focusY - 18).toBeGreaterThanOrEqual(c.clearance)
+    expect(r * Math.cos(c.betaMax) + c.focusY - 18 - c.clearance).toBeLessThan(1e-3 * Math.cos(c.betaMax) + 1e-9)
+    expect(clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, () => 400)).toBe(c.rMax)
+    // (src/look/post.ts holds it only below this radius: today's zooms, 45 m out, never read the ground)
+    expect((SPEC.ground.hi + c.clearance - c.focusY) / Math.cos(c.betaMax)).toBeLessThan(TUNED_R)
+  })
+  it('finds the held radius on a steep slope rising under the eye (0.5 m a metre), the least radius that clears', () => {
+    const c = SPEC.camera, a = -2, b = c.betaMax, ca = Math.cos(a), sa = Math.sin(a)
+    // the ground rises 0.5 m a metre away from the focus toward the eye, from 6 m at the focus
+    const slope = (x: number, z: number) => 6 + 0.5 * (x * ca + z * sa)
+    const clear = (q: number) => q * Math.cos(b) + c.focusY - slope(q * ca * Math.sin(b), q * sa * Math.sin(b)) - c.clearance
+    const r = clearRadius(c, c.rMin, a, b, 0, c.focusY, 0, slope)
+    expect(clear(r)).toBeGreaterThanOrEqual(0); expect(clear(r - 2e-3)).toBeLessThan(0)   // the least radius that clears, to 1 mm
+    expect(r).toBeGreaterThan(c.rMin); expect(r).toBeLessThan(c.rMax)
+  })
+  it('keeps the player\'s zoom apart from the held one: it comes back in on lower ground (ZoomHold)', () => {
+    const z = new ZoomHold()
+    let ground = 0, cam = 15
+    const hold = (w: number) => Math.max(w, 10 + ground)   // a stand-in hold: held out over ground, as clearRadius
+    cam = z.step(cam, hold); expect(cam).toBe(15)
+    ground = 13; cam = z.step(cam, hold); expect(cam).toBe(23)   // over a hill: held out
+    cam = z.step(cam, hold); expect(cam).toBe(23); expect(z.wanted).toBe(15)   // (the shown radius is not taken as wanted)
+    ground = 0; cam = z.step(cam, hold); expect(cam).toBe(15)   // past it: back in to the wanted zoom
+    cam = z.step(40, hold); expect(cam).toBe(40); expect(z.wanted).toBe(40)   // the player zooms out: the new wanted one
+    ground = 35; cam = z.step(cam, hold); expect(cam).toBe(45)
+    cam = z.step(30, hold); expect(z.wanted).toBe(30); expect(cam).toBe(45)   // zooming in while held: wanted moves, still held
+    // the page's inputs and the tools set it explicitly: a set equal to the radius shown still lands
+    ground = 13; z.set(15); cam = z.step(cam, hold); expect(cam).toBe(23)
+    z.set(23); cam = z.step(cam, hold); expect(z.wanted).toBe(23); expect(cam).toBe(23)
+    ground = 0; cam = z.step(cam, hold); expect(cam).toBe(23)   // (23 was asked for: no coming back in to 15)
   })
   it('refuses ground outside its range', () => {
     expect(() => checkGround(SPEC, 0.4, 20.3, 2.2)).not.toThrow()
@@ -80,6 +123,7 @@ describe('look data', () => {
     expect(() => checkLookData(derive(with_(s => { s.aoMargin = 60; s.aoRing = 60 })), d)).toThrow(/heightfield .* nodes/)
     expect(() => checkLookData(derive(with_(s => { s.far = 2600 + 2 * 2600 / 182; s.farSub = 184 })), d)).toThrow(/far ring/)
     expect(() => checkLookData(derive(with_(s => { s.water.texel = 1 })), d)).toThrow(/water data/)
+    expect(() => checkLookData(derive(with_(s => { s.macro.cover = 4 })), d)).toThrow(/cover/)
   })
   it('the committed file is what the authoring step builds (else run node tools/build-look-data.ts)', () => {
     expect(Buffer.compare(fs.readFileSync(LOOK_FILE), Buffer.from(buildLookData()))).toBe(0)

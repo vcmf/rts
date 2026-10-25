@@ -1,0 +1,753 @@
+{
+ "version": 1,
+ "figures": {
+  "fr-line-infantry": {
+   "kind": "foot",
+   "pipeline": "infantry",
+   "sources": [
+    "french-army/line-infantry-trial"
+   ],
+   "fps": 24,
+   "m_per_unit": 1.8219,
+   "files": [
+    "soldier-lod0.glb",
+    "soldier-lod1.glb",
+    "soldier-lod2.glb"
+   ],
+   "clips": {
+    "AboutFace": {
+     "frames": 41,
+     "loop": false,
+     "events": {},
+     "root_turn": 180,
+     "starts": "Walking@1",
+     "ends": "Walking@1"
+    },
+    "Aim": {
+     "frames": 25,
+     "loop": true,
+     "events": {},
+     "starts": "Present@end",
+     "ends": "Aim@1"
+    },
+    "BayonetGuard": {
+     "frames": 33,
+     "loop": true,
+     "events": {},
+     "starts": "GuardReady@end",
+     "ends": "BayonetGuard@1"
+    },
+    "BayonetThrust": {
+     "frames": 30,
+     "loop": false,
+     "events": {
+      "hit": [
+       13
+      ]
+     },
+     "starts": "BayonetGuard@1",
+     "ends": "BayonetGuard@1"
+    },
+    "ButtStroke": {
+     "frames": 36,
+     "loop": false,
+     "events": {
+      "hit": [
+       15
+      ]
+     },
+     "starts": "BayonetGuard@1",
+     "ends": "BayonetGuard@1"
+    },
+    "ChargeRun": {
+     "frames": 17,
+     "loop": true,
+     "events": {},
+     "root_speed": 3.2,
+     "starts": "ChargeRun@1",
+     "ends": "ChargeRun@1"
+    },
+    "ChargeWalk": {
+     "frames": 25,
+     "loop": true,
+     "events": {},
+     "root_speed": 1.2025,
+     "starts": "LevelBayonets@end",
+     "ends": "ChargeWalk@1"
+    },
+    "Cheer": {
+     "frames": 51,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "Walking@1"
+    },
+    "Crawl": {
+     "frames": 33,
+     "loop": true,
+     "events": {},
+     "root_speed": 0.2186,
+     "starts": "Crawl@1",
+     "ends": "Crawl@1"
+    },
+    "FallBackward": {
+     "frames": 30,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "still"
+    },
+    "FallCrumple": {
+     "frames": 34,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "still"
+    },
+    "FallForward": {
+     "frames": 30,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "still"
+    },
+    "FallFromAim": {
+     "frames": 30,
+     "loop": false,
+     "events": {},
+     "starts": "Aim@1",
+     "ends": "still"
+    },
+    "Fire": {
+     "frames": 28,
+     "loop": false,
+     "events": {
+      "fire": [
+       3
+      ]
+     },
+     "starts": "Present@end|Aim@1",
+     "ends": "Reload@1"
+    },
+    "Flinch": {
+     "frames": 24,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "Walking@1"
+    },
+    "GuardReady": {
+     "frames": 22,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "BayonetGuard@1"
+    },
+    "Halt": {
+     "frames": 17,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "Stand@1"
+    },
+    "Kneel": {
+     "frames": 24,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "KneelPresent@1|KneelGuardReady@1|KneelFall@1"
+    },
+    "KneelAim": {
+     "frames": 25,
+     "loop": true,
+     "events": {},
+     "starts": "KneelPresent@end",
+     "ends": "KneelAim@1"
+    },
+    "KneelFall": {
+     "frames": 30,
+     "loop": false,
+     "events": {
+      "down": [
+       22
+      ]
+     },
+     "starts": "Kneel@end",
+     "ends": "still"
+    },
+    "KneelFire": {
+     "frames": 28,
+     "loop": false,
+     "events": {
+      "fire": [
+       3
+      ]
+     },
+     "starts": "KneelPresent@end|KneelAim@1",
+     "ends": "KneelReload@1"
+    },
+    "KneelGuard": {
+     "frames": 33,
+     "loop": true,
+     "events": {},
+     "starts": "KneelGuardReady@end",
+     "ends": "KneelGuard@1"
+    },
+    "KneelGuardReady": {
+     "frames": 16,
+     "loop": false,
+     "events": {},
+     "starts": "Kneel@end",
+     "ends": "KneelGuard@1"
+    },
+    "KneelPresent": {
+     "frames": 11,
+     "loop": false,
+     "events": {},
+     "starts": "Kneel@end|KneelReload@end",
+     "ends": "KneelAim@1"
+    },
+    "KneelReload": {
+     "frames": 272,
+     "loop": false,
+     "events": {
+      "rammed": [
+       181
+      ],
+      "rod_drawn": [
+       144
+      ],
+      "rod_returned": [
+       252
+      ]
+     },
+     "starts": "KneelFire@end",
+     "ends": "KneelPresent@1"
+    },
+    "LevelBayonets": {
+     "frames": 19,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "ChargeWalk@1"
+    },
+    "LimpWalk": {
+     "frames": 41,
+     "loop": true,
+     "events": {},
+     "root_speed": 0.3279,
+     "starts": "LimpWalk@1",
+     "ends": "LimpWalk@1"
+    },
+    "MakeReady": {
+     "frames": 21,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "Present@1"
+    },
+    "OrderArms": {
+     "frames": 30,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "OrderArmsIdle@1"
+    },
+    "OrderArmsIdle": {
+     "frames": 49,
+     "loop": true,
+     "events": {},
+     "starts": "OrderArms@end",
+     "ends": "OrderArmsIdle@1"
+    },
+    "Present": {
+     "frames": 11,
+     "loop": false,
+     "events": {},
+     "starts": "MakeReady@end|Reload@end",
+     "ends": "Aim@1"
+    },
+    "Reload": {
+     "frames": 272,
+     "loop": false,
+     "events": {
+      "rammed": [
+       181
+      ],
+      "rod_drawn": [
+       144
+      ],
+      "rod_returned": [
+       252
+      ]
+     },
+     "starts": "Fire@end",
+     "ends": "Present@1"
+    },
+    "RoutRun": {
+     "frames": 33,
+     "loop": true,
+     "events": {},
+     "root_speed": 3.2,
+     "starts": "RoutTurn@end",
+     "ends": "RoutRun@1"
+    },
+    "RoutTurn": {
+     "frames": 20,
+     "loop": false,
+     "events": {},
+     "root_turn": 180,
+     "starts": "Walking@1",
+     "ends": "RoutRun@1"
+    },
+    "Running": {
+     "frames": 17,
+     "loop": true,
+     "events": {},
+     "root_speed": 3.2,
+     "starts": "Running@1",
+     "ends": "Running@1"
+    },
+    "Shaken": {
+     "frames": 49,
+     "loop": true,
+     "events": {},
+     "starts": "Waver@end",
+     "ends": "Shaken@1"
+    },
+    "SideStepLeft": {
+     "frames": 25,
+     "loop": true,
+     "events": {},
+     "root_speed": 0.2915,
+     "root_direction": "left",
+     "starts": "Stand@1",
+     "ends": "SideStepLeft@1"
+    },
+    "SideStepRight": {
+     "frames": 25,
+     "loop": true,
+     "events": {},
+     "root_speed": 0.2915,
+     "root_direction": "right",
+     "starts": "Stand@1",
+     "ends": "SideStepRight@1"
+    },
+    "SitWounded": {
+     "frames": 30,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "WoundedSitting@1"
+    },
+    "Stand": {
+     "frames": 97,
+     "loop": true,
+     "events": {},
+     "starts": "Halt@end",
+     "ends": "Stand@1"
+    },
+    "Surrender": {
+     "frames": 30,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "SurrenderIdle@1"
+    },
+    "SurrenderIdle": {
+     "frames": 41,
+     "loop": true,
+     "events": {},
+     "starts": "Surrender@end",
+     "ends": "SurrenderIdle@1"
+    },
+    "TrailArms": {
+     "frames": 19,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "TrailWalk@1"
+    },
+    "TrailRun": {
+     "frames": 17,
+     "loop": true,
+     "events": {},
+     "root_speed": 3.2,
+     "starts": "TrailRun@1",
+     "ends": "TrailRun@1"
+    },
+    "TrailWalk": {
+     "frames": 33,
+     "loop": true,
+     "events": {},
+     "root_speed": 0.9018,
+     "starts": "TrailArms@end",
+     "ends": "TrailWalk@1"
+    },
+    "TurnLeft": {
+     "frames": 25,
+     "loop": false,
+     "events": {},
+     "root_turn": 90,
+     "starts": "Walking@1",
+     "ends": "Walking@1"
+    },
+    "TurnRight": {
+     "frames": 25,
+     "loop": false,
+     "events": {},
+     "root_turn": -90,
+     "starts": "Walking@1",
+     "ends": "Walking@1"
+    },
+    "WalkBackward": {
+     "frames": 49,
+     "loop": true,
+     "events": {},
+     "root_speed": 0.6012,
+     "root_direction": "back",
+     "starts": "Walking@1",
+     "ends": "WalkBackward@1"
+    },
+    "Walking": {
+     "frames": 33,
+     "loop": true,
+     "events": {},
+     "root_speed": 0.9018,
+     "starts": "Walking@1",
+     "ends": "Walking@1"
+    },
+    "Waver": {
+     "frames": 18,
+     "loop": false,
+     "events": {},
+     "starts": "Walking@1",
+     "ends": "Shaken@1"
+    },
+    "WoundedSitting": {
+     "frames": 49,
+     "loop": true,
+     "events": {},
+     "starts": "SitWounded@end",
+     "ends": "WoundedSitting@1"
+    }
+   }
+  },
+  "fr-foot-artillery": {
+   "kind": "crewed",
+   "pipeline": "units",
+   "sources": [
+    "french-army/gunner",
+    "french-army/light-cannon"
+   ],
+   "fps": 24,
+   "m_per_unit": 1.0,
+   "files": [
+    "battery.glb"
+   ],
+   "clips": {
+    "Fire": {
+     "frames": 166,
+     "loop": false,
+     "events": {
+      "shot": [
+       15
+      ]
+     },
+     "next": [
+      "Load",
+      "Idle"
+     ]
+    },
+    "Idle": {
+     "frames": 72,
+     "loop": true,
+     "events": {},
+     "next": [
+      "Load"
+     ]
+    },
+    "Load": {
+     "frames": 240,
+     "loop": false,
+     "events": {
+      "cartridge_in": [
+       128
+      ],
+      "cartridge_out": [
+       81
+      ]
+     },
+     "next": [
+      "Ready",
+      "Fire"
+     ]
+    },
+    "Ready": {
+     "frames": 48,
+     "loop": true,
+     "events": {},
+     "next": [
+      "Fire"
+     ]
+    }
+   }
+  },
+  "fr-cuirassier": {
+   "kind": "mounted",
+   "pipeline": "units",
+   "sources": [
+    "french-army/horse",
+    "french-army/dragoon",
+    "french-army/pistol"
+   ],
+   "fps": 24,
+   "m_per_unit": 1.0,
+   "files": [
+    "cavalry.glb"
+   ],
+   "clips": {
+    "AimPistol": {
+     "frames": 37,
+     "loop": true,
+     "events": {},
+     "next": [
+      "FirePistol",
+      "LowerPistol"
+     ]
+    },
+    "DrawPistol": {
+     "frames": 28,
+     "loop": false,
+     "events": {
+      "drawn": [
+       18
+      ]
+     },
+     "next": [
+      "ReadyPistol",
+      "PresentPistol",
+      "HolsterPistol"
+     ]
+    },
+    "DrawSabre": {
+     "frames": 31,
+     "loop": false,
+     "events": {
+      "drawn": [
+       21
+      ]
+     },
+     "next": [
+      "IdleSabre",
+      "SabreCutRight",
+      "SabreCutLeft",
+      "SabreThrust",
+      "SabreParry",
+      "SabreFight"
+     ]
+    },
+    "FirePistol": {
+     "frames": 25,
+     "loop": false,
+     "events": {
+      "shot": [
+       3
+      ]
+     },
+     "next": [
+      "ReadyPistol",
+      "PresentPistol",
+      "HolsterPistol"
+     ]
+    },
+    "Gallop": {
+     "frames": 14,
+     "loop": true,
+     "events": {},
+     "root_speed": 6.5
+    },
+    "GallopCut": {
+     "frames": 27,
+     "loop": false,
+     "events": {
+      "hit": [
+       15
+      ]
+     },
+     "root_speed": 6.5,
+     "next": [
+      "GallopSabre"
+     ]
+    },
+    "GallopSabre": {
+     "frames": 14,
+     "loop": true,
+     "events": {},
+     "root_speed": 6.5,
+     "next": [
+      "GallopCut"
+     ]
+    },
+    "HolsterPistol": {
+     "frames": 28,
+     "loop": false,
+     "events": {
+      "holstered": [
+       17
+      ]
+     },
+     "next": [
+      "Idle"
+     ]
+    },
+    "Idle": {
+     "frames": 96,
+     "loop": true,
+     "events": {},
+     "next": [
+      "DrawSabre",
+      "DrawPistol"
+     ]
+    },
+    "IdleSabre": {
+     "frames": 49,
+     "loop": true,
+     "events": {},
+     "next": [
+      "SabreCutRight",
+      "SabreCutLeft",
+      "SabreThrust",
+      "SabreParry",
+      "SabreFight",
+      "SheatheSabre"
+     ]
+    },
+    "LowerPistol": {
+     "frames": 13,
+     "loop": false,
+     "events": {},
+     "next": [
+      "ReadyPistol",
+      "PresentPistol",
+      "HolsterPistol"
+     ]
+    },
+    "PresentPistol": {
+     "frames": 13,
+     "loop": false,
+     "events": {},
+     "next": [
+      "AimPistol",
+      "FirePistol",
+      "LowerPistol"
+     ]
+    },
+    "ReadyPistol": {
+     "frames": 49,
+     "loop": true,
+     "events": {},
+     "next": [
+      "PresentPistol",
+      "HolsterPistol"
+     ]
+    },
+    "SabreCutLeft": {
+     "frames": 29,
+     "loop": false,
+     "events": {
+      "hit": [
+       15
+      ]
+     },
+     "next": [
+      "IdleSabre",
+      "SabreCutRight"
+     ]
+    },
+    "SabreCutRight": {
+     "frames": 29,
+     "loop": false,
+     "events": {
+      "hit": [
+       15
+      ]
+     },
+     "next": [
+      "IdleSabre",
+      "SabreCutLeft",
+      "SabreThrust"
+     ]
+    },
+    "SabreFight": {
+     "frames": 117,
+     "loop": true,
+     "events": {
+      "hit": [
+       15,
+       64,
+       95
+      ],
+      "parry": [
+       41
+      ]
+     },
+     "next": [
+      "IdleSabre",
+      "SheatheSabre"
+     ]
+    },
+    "SabreParry": {
+     "frames": 21,
+     "loop": false,
+     "events": {
+      "parry": [
+       9
+      ]
+     },
+     "next": [
+      "IdleSabre",
+      "SabreCutRight"
+     ]
+    },
+    "SabreThrust": {
+     "frames": 25,
+     "loop": false,
+     "events": {
+      "hit": [
+       12
+      ]
+     },
+     "next": [
+      "IdleSabre",
+      "SabreParry"
+     ]
+    },
+    "SheatheSabre": {
+     "frames": 31,
+     "loop": false,
+     "events": {
+      "sheathed": [
+       21
+      ]
+     },
+     "next": [
+      "Idle"
+     ]
+    },
+    "Trot": {
+     "frames": 17,
+     "loop": true,
+     "events": {},
+     "root_speed": 3.3
+    },
+    "Walk": {
+     "frames": 21,
+     "loop": true,
+     "events": {},
+     "root_speed": 1.7
+    }
+   }
+  }
+ }
+}
