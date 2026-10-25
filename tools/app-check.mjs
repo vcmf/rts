@@ -236,14 +236,12 @@ async function run(scenario, steps) {
     return false
   }
   const { replay, hashes } = JSON.parse(JSON.parse(line.slice(5)).slice(7))
-  const bad = play(replay, dataOf(PAGE_SCENARIOS[scenario].map ?? DEFAULT_MAP), cr, PAGE_SCENARIOS[scenario], hashes)
-  console.log(
-    bad
-      ? `replay MISMATCH ${JSON.stringify(bad)}`
-      : `replay: ${replay.log.length} commands, ${hashes.length} hashes reproduced in Node`,
-  )
-  if (bad) return false
-  // the playtest's report (tools/battle-report.ts) of the session, with its mark, reaches the result
+  const scen = PAGE_SCENARIOS[scenario]
+  const data = dataOf(scen.map ?? DEFAULT_MAP)
+  // the battle's session goes through the playtest's report (tools/battle-report.ts), which checks the hashes as it
+  // plays, in one pass; the other scenarios only replay
+  let lines = null
+  let bad = null
   if (scenario === 's1e-battle') {
     const sline = text.split('\n').find(l => l.startsWith('EVAL "SESSION '))
     if (!sline) {
@@ -251,11 +249,20 @@ async function run(scenario, steps) {
       return false
     }
     const marks = JSON.parse(JSON.parse(sline.slice(5)).slice(8))
-    const lines = reportSession(dataOf(PAGE_SCENARIOS[scenario].map ?? DEFAULT_MAP), cr, PAGE_SCENARIOS[scenario], {
-      replay,
-      hashes,
-      marks,
-    })
+    try {
+      lines = reportSession(data, cr, scen, { replay, hashes, marks })
+    } catch (e) {
+      bad = e instanceof Error ? e.message : String(e)
+    }
+  } else bad = play(replay, data, cr, scen, hashes)
+  console.log(
+    bad
+      ? `replay MISMATCH ${typeof bad === 'string' ? bad : JSON.stringify(bad)}`
+      : `replay: ${replay.log.length} commands, ${hashes.length} hashes reproduced in Node`,
+  )
+  if (bad) return false
+  // the report of the session, with its mark, reaches the result
+  if (lines) {
     const ok = lines.some(l => /MARK the enemy first line is down$/.test(l)) && lines.some(l => /THE END: /.test(l))
     console.log(`REPORT ${lines.length} lines, the mark ${ok ? 'and the end found' : 'or the end MISSING'}`)
     if (!ok) return false

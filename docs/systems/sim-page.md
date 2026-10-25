@@ -51,7 +51,10 @@ line are drawn at the interpolated anchor, as the men are. `Save
 session` downloads `{ replay, hashes, marks }` as `<scenario>-<date>.json`; `play` in `src/sim/replay.ts` checks it,
 and `tools/battle-report.ts` plays it back and prints what happened, with where everyone stood at each mark
 (S1e-3, `docs/plans/active/s1e3-playtest.md`). The report refuses a file whose marks are out of tick order, past
-its end or without a text note (one edited by hand would otherwise lose marks silently).
+its end or without a text note (one edited by hand would otherwise lose marks silently). It tells a formation that
+left the field (with its men, from what the tick returned) from one destroyed, each named by its own side. With no
+session it plays the scenario with no orders for `[minutes]` (a positive number; the scenario's limit by default),
+and stops a minute after the battle's end.
 
 **Who stands where** (`SoldierLayer.sync`). The sim keeps men per company (decisions 0007, 0018); the layer
 places them. A battalion is matched again only when its signature changes: men per company, shape,

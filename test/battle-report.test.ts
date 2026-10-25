@@ -1,11 +1,22 @@
 // The battle report (tools/battle-report.ts, docs/plans/active/s1e3-playtest.md): a saved session played back with
 // its marks, and a session that does not reproduce refused.
 import { describe, it, expect } from 'vitest'
-import { battleData } from './fx.ts'
+import { battleData, data, longIt } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { s1eBattle } from '../src/scenarios/s1e-battle.ts'
-import { compileRuleset, record, formationHandle, advanceTick, TICK_HZ, type Scenario } from '../src/sim/index.ts'
-import { reportSession, type Session } from '../tools/battle-report.ts'
+import { levelled } from '../src/scenarios/s1c-firefight.ts'
+import {
+  compileRuleset,
+  record,
+  formationHandle,
+  formationSlot,
+  makeWorld,
+  issue,
+  advanceTick,
+  TICK_HZ,
+  type Scenario,
+} from '../src/sim/index.ts'
+import { reportSession, reporter, type Session } from '../tools/battle-report.ts'
 
 const cr = compileRuleset(napoleonic)
 const T = 150 * TICK_HZ
@@ -65,6 +76,39 @@ describe('the battle report', () => {
     expect(run([{ tick: 30, note: 7 }])).toThrow(/mark 1: its note is not text/)
     expect(run([{ tick: 30 }])).toThrow(/mark 1: its note is not text/)
     expect(run({ tick: 30, note: 'a' })).toThrow(/marks are not a list/)
+  })
+  it('names who left the field, with its men, and who was destroyed, each by its own side', () => {
+    // on the open 360 m field, as in morale.test.ts with the sides swapped: side 1's #1 breaks, is shattered and
+    // runs west off the field; its #2 loses every man
+    const w = makeWorld(levelled(data), cr, 1)
+    issue(w, { type: 'side', side: 0, x: 1, z: 0 })
+    issue(w, { type: 'side', side: 1, x: -1, z: 0 })
+    const spawn = (side: number, x: number, z: number, heading: number) =>
+      issue(w, { type: 'debug-spawn', side, x, z, heading, shape: 'line', men: 100, fire: 'hold' })
+    spawn(0, 170, -35, -Math.PI / 2)
+    spawn(1, -60, -35, Math.PI / 2)
+    spawn(1, -60, 40, Math.PI / 2)
+    advanceTick(w)
+    const runner = formationHandle(w, 1)
+    const r = reporter(w)
+    w.f.morale[1] = 0.3 // breaks at the next tick
+    r.tick(advanceTick(w))
+    issue(w, { type: 'debug-kill', id: runner, men: 51 })
+    issue(w, { type: 'debug-kill', id: formationHandle(w, 2), men: 100 })
+    for (let n = 0; n < 20 * 240 && formationSlot(w, runner) >= 0; n++) r.tick(advanceTick(w))
+    const lines = r.end()
+    expect(lines.some(l => /^\d\d:\d\d {2}side 1 #1 \S+ left the field \(49 men\)$/.test(l))).toBe(true)
+    expect(lines.some(l => /^\d\d:\d\d {2}side 1 #2 \S+ destroyed$/.test(l))).toBe(true)
+    expect(lines.some(l => /side 0 #[12]/.test(l))).toBe(false)
+  })
+  // the battle to its end: about 20 minutes of play
+  longIt('with no orders, stops a minute after the end', () => {
+    const lines = reportSession(battleData, cr, s1eBattle, null, 40 * 60 * TICK_HZ)
+    const end = lines.findIndex(l => / {2}THE END: /.test(l))
+    expect(end).toBeGreaterThan(0)
+    const [m, s] = lines[end].slice(0, 5).split(':').map(Number)
+    const stop = `${String(m + 1).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    expect(lines[0]).toBe(`s1e-battle, no orders, ${stop}, stopped a minute after the end`)
   })
   it('with no session, runs the scenario with no orders', () => {
     const lines = reportSession(battleData, cr, s1eBattle, null, 60 * TICK_HZ)

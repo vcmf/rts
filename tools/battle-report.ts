@@ -18,6 +18,7 @@ import {
   typeOf,
   sheltering,
   formationSlot,
+  handleIndex,
   M_TICK,
   M_END,
   M_WINNER,
@@ -32,6 +33,7 @@ import {
   type SimData,
   type Compiled,
   type Scenario,
+  type TickResult,
 } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { PAGE_SCENARIOS, PAGE_SEED } from '../src/scenarios/page.ts'
@@ -69,29 +71,40 @@ const look = (w: World, i: number) => ({
   melee: w.f.foe[i] ? other(w, w.f.foe[i]) : '',
 })
 
-// a report built tick by tick: `tick` after each of the world's ticks, `end` for the lines
-export function reporter(w: World, marks: Mark[] = []): { tick: () => void; end: () => string[] } {
+/**
+ * A report built tick by tick on a world: `tick` after each of its ticks, with what that tick returned, and `end`
+ * for the lines. It only reads the world. A formation reaped in a tick has every column zeroed, so its side and name
+ * come from the reporter's own record of it, and its men from the tick's departures: one in `departed` left the
+ * field with them, one not was destroyed (no men left).
+ */
+export function reporter(w: World, marks: Mark[] = []): { tick: (res: TickResult) => void; end: () => string[] } {
   const out: string[] = []
   const N = w.f.alive.length
   const at = (s: string) => out.push(`${clock(w.meta[M_TICK])}  ${s}`)
-  const was = Array.from({ length: N }, (_, i) => (w.f.alive[i] ? look(w, i) : null))
+  const seen = (i: number) => ({ ...look(w, i), name: nameOf(w, i) })
+  const was: (ReturnType<typeof seen> | null)[] = Array.from({ length: N }, (_, i) => (w.f.alive[i] ? seen(i) : null))
+  const left = new Map<number, number>()
   let m = 0
-  const tick = () => {
+  const tick = (res: TickResult) => {
     const t = w.meta[M_TICK]
+    left.clear()
+    for (const d of res.departed) left.set(handleIndex(d.id), d.men)
     for (let i = 0; i < N; i++) {
       const a = was[i]
       if (!a && !w.f.alive[i]) continue
-      const b = w.f.alive[i] ? look(w, i) : null
-      const n = nameOf(w, i)
-      if (a && !b) {
-        at(`side ${w.f.side[i]} #${i} left the field`)
+      // reaped this tick: its columns are zeroed
+      if (a && !w.f.alive[i]) {
+        const men = left.get(i)
+        at(men !== undefined ? `${a.name} left the field (${men} men)` : `${a.name} destroyed`)
         was[i] = null
         continue
       }
-      if (!a || !b) {
+      const b = seen(i)
+      if (!a) {
         was[i] = b
         continue
       }
+      const n = b.name
       if (a.morale !== b.morale) at(`${n}: ${b.morale} (${menOf(w, i)} men)`)
       if (a.shape !== b.shape) at(`${n}: ${b.shape}`)
       if (a.square !== b.square) at(`${n}: ${b.square ? 'shelters in square' : 'stands down from square'}`)
@@ -152,9 +165,14 @@ export function checkMarks(session: Session): Mark[] {
   return marks as Mark[]
 }
 
+// with no orders, the battle is played on this long after its end (a minute), then stops: the end and the table
+// close the report rather than the quiet after it
+const AFTER_END = 60 * TICK_HZ
+
 /**
  * Reports a session the page saved (a mismatch with its hashes or a bad mark throws, `checkMarks`), or with none
- * the scenario with no orders for `ticks` at the page's seed. Both start the reporter before the first tick.
+ * the scenario with no orders for `ticks` at the page's seed, stopped `AFTER_END` after the battle's end. Both
+ * start the reporter before the first tick.
  */
 export function reportSession(
   data: SimData,
@@ -172,7 +190,7 @@ export function reportSession(
       start: w => {
         on.r = reporter(w, marks)
       },
-      tick: () => on.r?.tick(),
+      tick: (_, res) => on.r?.tick(res),
     })
     if (bad) throw new Error(`the session does not reproduce: ${JSON.stringify(bad)}`)
     return [
@@ -184,11 +202,10 @@ export function reportSession(
   attachScenario(w, scenario)
   scenario.setup(w)
   const r = reporter(w)
-  while (w.meta[M_TICK] < ticks) {
-    advanceTick(w)
-    r.tick()
-  }
-  return [`${scenario.name}, no orders, ${clock(ticks)}`, ...r.end()]
+  const over = () => w.meta[M_END] > 0 && w.meta[M_TICK] >= w.meta[M_END] + AFTER_END
+  while (w.meta[M_TICK] < ticks && !over()) r.tick(advanceTick(w))
+  const stopped = w.meta[M_TICK] < ticks ? ', stopped a minute after the end' : ''
+  return [`${scenario.name}, no orders, ${clock(w.meta[M_TICK])}${stopped}`, ...r.end()]
 }
 
 // run as a script (a symlinked or percent-encoded path too), not imported
@@ -207,7 +224,11 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
       new Uint8Array(fs.readFileSync(new URL(`../data/${map}.simdata`, import.meta.url))),
       MAP_VERSIONS[map],
     )
-    const ticks = Math.round(Number(process.argv[3] ?? scenario.minutes ?? 20) * 60 * TICK_HZ)
+    const given = process.argv[3]
+    if (session && given !== undefined) throw new Error('a session plays as long as it was played: no minutes')
+    const minutes = Number(given ?? scenario.minutes ?? 20)
+    if (!Number.isFinite(minutes) || minutes <= 0) throw new Error(`minutes must be a positive number, not ${given}`)
+    const ticks = Math.round(minutes * 60 * TICK_HZ)
     for (const line of reportSession(data, compileRuleset(napoleonic), scenario, session, ticks)) console.log(line)
   } catch (e) {
     console.error(e instanceof Error ? e.message : String(e))

@@ -4,7 +4,7 @@
 import { attachScenario, type ScenarioRules } from './plan.ts'
 import { type World, makeWorld, M_TICK } from './world.ts'
 import { issue, type Stamped } from './commands.ts'
-import { advanceTick } from './tick.ts'
+import { advanceTick, type TickResult } from './tick.ts'
 import { sectionHashes } from './serialize.ts'
 import { type SimData, DataVersionMismatch, hex } from './data.ts'
 import type { Compiled } from './ruleset.ts'
@@ -83,8 +83,8 @@ export interface Mismatch {
 export interface PlayObserver {
   /** the world as the scenario set it up, before the first tick */
   start?: (w: World) => void
-  /** the world after each tick, before that tick's hash is checked */
-  tick?: (w: World) => void
+  /** the world after each tick, with what the tick returned (its departures), before its hash is checked */
+  tick?: (w: World, res: TickResult) => void
 }
 
 /**
@@ -134,7 +134,7 @@ export function play(
       k++
     }
     const res = advanceTick(w)
-    observe?.tick?.(w)
+    observe?.tick?.(w, res)
     if (res.hash === null) continue
     const want = expected[e++]
     if (!want || want.tick !== res.tick) {
