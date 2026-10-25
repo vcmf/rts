@@ -24,6 +24,7 @@ import {
   O_DRESS,
   O_CHARGE,
   sheltering,
+  SLOTS,
 } from '../sim/index.ts'
 import { toS, type View } from './map.ts'
 
@@ -92,15 +93,20 @@ export class Overlay {
     if (!w.claims || !C) return
     const T = w.terrain
     const s = T.cell * v.k
-    for (let k = 0; k < C.a.length; k++) {
-      if (!C.a[k]) continue
+    for (let k = 0; k < C.more.length; k++) {
+      const first = C.own[k * SLOTS]
+      if (!first) continue
       const [sx, sy] = toS(v, T.x0 + (k % T.n) * T.cell, T.z0 + Math.floor(k / T.n) * T.cell)
       if (sx < -s || sy < -s || sx > v.W + s || sy > v.H + s) continue
-      const o = (C.a[k] >> 1) - 1
-      const core = (C.a[k] | C.b[k]) & 1
-      // two formations' cores in one cell: they overlap
-      const shared = C.b[k] >> 1 !== C.a[k] >> 1 && (C.a[k] & C.b[k] & 1) === 1
-      g.fillStyle = shared ? 'rgba(200,30,20,.35)' : (CELL_INK[w.f.side[o]]?.[core] ?? 'rgba(0,0,0,.1)')
+      // its first owner's colour; a core of any owner darker; two formations' cores in one cell: they overlap
+      let core = 0
+      let cores = 0
+      for (let q = k * SLOTS; q < k * SLOTS + SLOTS && C.own[q]; q++) {
+        core |= C.own[q] & 1
+        cores += C.own[q] & 1
+      }
+      const o = (first >> 1) - 1
+      g.fillStyle = cores > 1 ? 'rgba(200,30,20,.35)' : (CELL_INK[w.f.side[o]]?.[core] ?? 'rgba(0,0,0,.1)')
       g.fillRect(sx - s / 2, sy - s / 2, s, s)
     }
   }

@@ -182,3 +182,11 @@ describe('with claims: invariant 4, the keyed order', () => {
     })
   }
 })
+describe('with claims: invariant 4, the keyed order', () => {
+  // every step reversed: the claims step formations in a keyed order, whatever the slots, so the two regiments of
+  // X-01 (#187 without claims) give the same state too
+  for (const c of CLAIM_CASES) {
+    if (c.id === 'x14-forty-crossing-claims') continue
+    it(`${c.id}`, () => expect(stateOf(play(c, { reverse: true }))).toEqual(stateOf(play(c))))
+  }
+})
