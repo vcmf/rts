@@ -453,6 +453,33 @@ export class ZoomHold {
   }
 }
 
+/** The radius, m, from which the eye clears the spec's highest ground (ground.hi, at the steepest pitch) by its
+ *  clearance: no ground to read from there out */
+export const clearBelow = (s: Spec): number =>
+  (s.ground.hi + s.camera.clearance - s.camera.focusY) / Math.cos(s.camera.betaMax)
+
+/** The orbit camera the hold steers (Babylon's ArcRotateCamera in src/look/post.ts; a stand-in in the tests) */
+export interface OrbitView {
+  alpha: number
+  beta: number
+  radius: number
+  target: { x: number; y: number; z: number }
+}
+
+/** The camera's hold, once a frame before it renders (src/look/post.ts): the focus kept within ±play, and the radius
+ *  the zoom hold gives, held out over high ground below clearBelow (clearRadius), the player's wanted zoom kept
+ *  apart so it comes back in on lower ground (#145). ground: the drawn ground's height at x, z, m */
+export function holdView(s: Spec, zoom: ZoomHold, cam: OrbitView, ground: (x: number, z: number) => number): void {
+  const t = cam.target
+  t.x = Math.max(-s.play, Math.min(s.play, t.x))
+  t.z = Math.max(-s.play, Math.min(s.play, t.z))
+  const below = clearBelow(s)
+  const r = zoom.step(cam.radius, w =>
+    w < below ? clearRadius(s.camera, w, cam.alpha, cam.beta, t.x, t.y, t.z, ground) : w,
+  )
+  if (r !== cam.radius) cam.radius = r
+}
+
 // the drawn ground must stay inside the spec's range, which the camera's reach assumes: the tile within lo..hi,
 // the far ring above lo
 export function checkGround(s: Spec, tileLo: number, tileHi: number, farLo: number): void {

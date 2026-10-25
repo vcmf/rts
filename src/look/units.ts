@@ -48,6 +48,9 @@ import {
 import { TR, TRACE, tr, trNow } from './trace.ts'
 import {
   TINY_ROLES,
+  drawsNear,
+  drawsTiny,
+  farWidthScale,
   posedMesh,
   posedVertices,
   shadowProxy,
@@ -413,23 +416,10 @@ export class Units {
     vat.name = 'figureVAT'
     const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT', 'aVid', 'aNext']
     const n = data.palette.length
-    // the far figure's growth (setFarScale): across up to FAR_SCALE_XZ, but never wider than 95 % of a file (the far
-    // LOD's shoulders, measured between 1.2 and 1.5 m up), and FAR_SCALE_Y tall
+    // the far figure's growth (setFarScale): across up to FAR_SCALE_XZ, but never wider than 95 % of a file
+    // (farWidthScale), and FAR_SCALE_Y tall
     const fm = data.mesh[data.lods[this.farLod].name]
-    let x0 = Infinity
-    let x1 = -Infinity
-    for (let v = 0; v < fm.positions.length / 3; v++) {
-      const y = fm.positions[v * 3 + 1]
-      if (y > 1.2 && y < 1.5) {
-        x0 = Math.min(x0, fm.positions[v * 3])
-        x1 = Math.max(x1, fm.positions[v * 3])
-      }
-    }
-    // (no vertex in that band, a figure of another shape: not widened)
-    const farScale = new Vector2(
-      x1 > x0 ? Math.min(FAR_SCALE_XZ, (0.95 * drill.fileSpacing) / (x1 - x0)) : 1,
-      FAR_SCALE_Y,
-    )
+    const farScale = new Vector2(farWidthScale(fm.positions, drill.fileSpacing, FAR_SCALE_XZ), FAR_SCALE_Y)
     this.farScaleV = farScale
     // 1: the battalions' bounds' side pad, from the baked poses: the far LOD's farthest reach from a man's root across
     // every step (his musket at the present), as wide as the far figures grow, a little to spare
@@ -1138,7 +1128,7 @@ export class Units {
         split = (FIGURE * pxPerM) / Math.max(1, Math.hypot(dx, dy, dz)) >= this.nearestPx * (h.split ? 0.8 : 0.9)
         if (split) split = !boxOutside(this.camPlanes, lo.x, lo.y, lo.z, hi.x, hi.y, hi.z)
       }
-      const near = split || (h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1)
+      const near = split || drawsNear(px, h.near, this.lodPx)
       if (near !== h.near && this.casterNear) moved = true
       if (split !== h.split) {
         this.setSplit(h, split)
@@ -1146,7 +1136,7 @@ export class Units {
       }
       if (split && this.share(h, camPos, pxPerM) && this.casterNear) moved = true
       // the tiny LOD below tinyPx (±10 %, as the near one), never where the near LOD is drawn
-      const tiny = !near && this.tinyLod >= 0 && (h.tiny ? px < this.tinyPx * 1.1 : px < this.tinyPx * 0.9)
+      const tiny = !near && this.tinyLod >= 0 && drawsTiny(px, h.tiny, this.tinyPx)
       h.near = near
       h.tiny = tiny
       h.lod[this.nextLod].isVisible = near && (!split || h.lod[this.nextLod].thinInstanceCount > 0)

@@ -18,7 +18,7 @@ import '@babylonjs/core/Shaders/postprocess.vertex.js'
 import '@babylonjs/core/Shaders/fsr1Upscale.fragment.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
-import { D, TUNED_R, ZoomHold, clearRadius } from './spec.ts'
+import { D, TUNED_R, ZoomHold, holdView } from './spec.ts'
 import DOFCOC from './shaders/dofcoc.glsl?raw'
 import DOF_FS from './shaders/dof.frag?raw'
 import DOFDOWN_FS from './shaders/dofdown.frag?raw'
@@ -50,10 +50,6 @@ export const MSAA = { samples: 4, byte: true, stencil: true }
 // ?nanmark: a pixel that is not a number shows magenta instead of its neighbours' mean (docs/plans/done/nan-guard.md)
 export const DEBUG = { nanmark: false }
 const FOCUS_S = 0.25
-// m: from here out the eye clears the SPEC's highest ground (ground.hi, at the steepest pitch's cos) by its clearance:
-// no ground to read (checked in test/look-spec.test.ts)
-export const CLEAR_BELOW =
-  (D.spec.ground.hi + D.spec.camera.clearance - D.spec.camera.focusY) / Math.cos(D.spec.camera.betaMax)
 const TAPS = [16, 24, 32, 48, 64]
 
 // each camera's zoom hold (buildCamera's): the page's zoom inputs and the tools set the wanted radius through it
@@ -72,7 +68,6 @@ export function buildCamera(
   ground: (x: number, z: number) => number,
 ): ArcRotateCamera {
   const c = D.spec.camera
-  const PLAY = D.spec.play
   const camera = new ArcRotateCamera(
     'cam',
     c.yaw0,
@@ -92,19 +87,11 @@ export function buildCamera(
   rtsControls(scene, camera, canvas, zoom)
   // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target);
   // the focus stays in the play area
-  // the closest zoom held out over high ground (clearRadius, ZoomHold, src/look/spec.ts: decision 0051), the player's
-  // wanted zoom kept apart so it comes back in on lower ground; from CLEAR_BELOW out the eye always clears the tile's
-  // highest ground, so the ground is not read there. The depth of field's zoom ease is reckoned from TUNED_R out
+  // the closest zoom held out over high ground (holdView, clearRadius, ZoomHold, src/look/spec.ts: decision 0051), the
+  // player's wanted zoom kept apart so it comes back in on lower ground; from clearBelow out the eye always clears the
+  // tile's highest ground, so the ground is not read there. The depth of field's zoom ease is reckoned from TUNED_R out
   camera.mapPanning = true
-  scene.onBeforeRenderObservable.add(() => {
-    const t = camera.target
-    t.x = Math.max(-PLAY, Math.min(PLAY, t.x))
-    t.z = Math.max(-PLAY, Math.min(PLAY, t.z))
-    const r = zoom.step(camera.radius, w =>
-      w < CLEAR_BELOW ? clearRadius(c, w, camera.alpha, camera.beta, t.x, t.y, t.z, ground) : w,
-    )
-    if (r !== camera.radius) camera.radius = r
-  })
+  scene.onBeforeRenderObservable.add(() => holdView(D.spec, zoom, camera, ground))
   camera.upperRadiusLimit = c.rMax
   camera.lowerBetaLimit = c.betaMin
   camera.upperBetaLimit = c.betaMax
