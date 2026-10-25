@@ -39,7 +39,5 @@ The order of S1f-1 to S1f-4 can change after each phase; each plan says why if i
 
 ## Open questions
 
-- **Battle threads:** `docs/plans/active/battle-threads.md` says the logic track paused for it (2026-10-22), and its
-  PR 1 has not started. If it starts during this epic, the two share `src/sim` and one of them waits.
 - **Pathfinding before or after the playtest:** S1f-3 is the largest phase. If the S1e battle plays well without
   flank marches, the playtest could come before it.
