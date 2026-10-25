@@ -176,3 +176,18 @@ If 3 grows (the service's grid and limits), it becomes its own PR after 1–2.
   - `file` and `hash` belong to dem sources only, and only dem sources' files are read;
   - the piece's box is `boxOf`'s, and the Node reader of a map's files is `maps/map-files.ts`, not the CLI.
   Tests for each severe one, the clamp and the non-dem source.
+- **Round 2**: moderate and light only, so the review stops. Fixed:
+  - the worker stores the files a request carries before anything else can fail (a broken kinds catalogue dropped
+    them, while the page counted them as sent), drops those the map no longer names, and replies with the ones it
+    was counted as holding but lacks (after a restart), which the page sends again;
+  - the page reads a saved heightfield 300 ms after its last change event, not while it is still being written;
+  - the range check covers exactly the nodes the reader reads, a box edge on a node line included;
+  - a whole-extent piece's `edge` no longer widens its file check;
+  - one rule for a dem source's file name (`DEM_FILE`, `demFileNames`), shared by the validator, the Node reader
+    and the page;
+  - `checkFiles` returns at once for a map without a dem source; SHA-256 hashes the input in place, padding only its
+    tail;
+  - the TIFF reader is TypeScript (`tools/dem-tiff.ts`), with no hand-written declarations;
+  - doc comments on the new functions.
+  Left: where the reader's clamp is active (past a sharp break), its window moves at each node line, so the surface
+  can step there by the overshoot it removes; it is centimetres on real ground and keeps heights within their check.

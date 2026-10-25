@@ -116,13 +116,18 @@ export function demSampler(d: Dem): (x: number, z: number) => number {
 /** One height of the file (see demSampler); for a few reads, not a grid's. */
 export const demHeight = (d: Dem, x: number, z: number): number => demSampler(d)(x, z)
 
-/** The lowest and highest node heights (m above sea level) inside a box of the file's frame, edges included. */
+/**
+ * The lowest and highest heights (m above sea level) the sampler can return inside a box of the file's frame: those of
+ * every node it reads there, the 4 × 4 around each point, which bound what it returns (it clamps to them).
+ */
 export function demRange(d: Dem, box: [number, number, number, number]): [number, number] {
-  const h = demHalf(d)
-  const i0 = Math.max(0, Math.floor((box[0] + h.x) / d.cell))
-  const i1 = Math.min(d.nx - 1, Math.ceil((box[2] + h.x) / d.cell))
-  const j0 = Math.max(0, Math.floor((box[1] + h.z) / d.cell))
-  const j1 = Math.min(d.nz - 1, Math.ceil((box[3] + h.z) / d.cell))
+  const hx = ((d.nx - 1) * d.cell) / 2
+  const hz = ((d.nz - 1) * d.cell) / 2
+  const lowCell = (v: number, n: number) => Math.min(n - 2, Math.max(0, Math.floor(v)))
+  const i0 = Math.max(0, lowCell((box[0] + hx) / d.cell, d.nx) - 1)
+  const i1 = Math.min(d.nx - 1, lowCell((box[2] + hx) / d.cell, d.nx) + 2)
+  const j0 = Math.max(0, lowCell((box[1] + hz) / d.cell, d.nz) - 1)
+  const j1 = Math.min(d.nz - 1, lowCell((box[3] + hz) / d.cell, d.nz) + 2)
   let lo = Infinity
   let hi = -Infinity
   for (let j = j0; j <= j1; j++) {
@@ -151,19 +156,21 @@ const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n))
 /** The SHA-256 of some bytes, as "sha256:" and 64 hex digits. */
 export function sha256(bytes: Uint8Array): string {
   const len = bytes.length
-  const blocks = Math.floor((len + 9 + 63) / 64)
-  const m = new Uint8Array(blocks * 64)
-  m.set(bytes)
-  m[len] = 0x80
-  const bits = new DataView(m.buffer)
-  bits.setUint32(m.length - 8, Math.floor(len / 0x20000000), false)
-  bits.setUint32(m.length - 4, (len * 8) >>> 0, false)
+  const full = Math.floor(len / 64)
+  // the last block or two: the rest of the input, the 0x80 marker and the length in bits
+  const tail = new Uint8Array(len % 64 < 56 ? 64 : 128)
+  tail.set(bytes.subarray(full * 64))
+  tail[len % 64] = 0x80
+  const tv = new DataView(tail.buffer)
+  tv.setUint32(tail.length - 8, Math.floor(len / 0x20000000), false)
+  tv.setUint32(tail.length - 4, (len * 8) >>> 0, false)
   const H = new Uint32Array([
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
   ])
   const W = new Uint32Array(64)
-  for (let b = 0; b < blocks; b++) {
-    for (let t = 0; t < 16; t++) W[t] = bits.getUint32(b * 64 + t * 4, false)
+  const body = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const block = (v: DataView, at: number) => {
+    for (let t = 0; t < 16; t++) W[t] = v.getUint32(at + t * 4, false)
     for (let t = 16; t < 64; t++) {
       const s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >>> 3)
       const s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >>> 10)
@@ -185,7 +192,22 @@ export function sha256(bytes: Uint8Array): string {
     const add = [a, bb, c, d, e, f, g, h]
     for (let k = 0; k < 8; k++) H[k] = (H[k] + add[k]) >>> 0
   }
+  for (let b = 0; b < full; b++) block(body, b * 64)
+  for (let at = 0; at < tail.length; at += 64) block(tv, at)
   return 'sha256:' + Array.from(H, x => x.toString(16).padStart(8, '0')).join('')
+}
+
+// a dem source's file: an .rdem beside the map (lowercase, no folders)
+export const DEM_FILE = /^[a-z0-9][a-z0-9._-]*\.rdem$/
+
+/** The files a map's dem sources name that the validator accepts, for the readers that load them. */
+export function demFileNames(map: unknown): string[] {
+  const sources = (map as { sources?: unknown } | null)?.sources
+  if (!Array.isArray(sources)) return []
+  return sources.flatMap(s => {
+    const f = (s as { kind?: unknown; file?: unknown } | null)?.file
+    return (s as { kind?: unknown })?.kind === 'dem' && typeof f === 'string' && DEM_FILE.test(f) ? [f] : []
+  })
 }
 
 // the attributes a dem source carries, beside id, kind, ref and note
@@ -197,14 +219,10 @@ export const demShift = (attrs: Record<string, unknown>): { x: number; z: number
   return { x: s?.x ?? 0, z: s?.z ?? 0 }
 }
 
-/**
- * The checks that need the map's files: each `dem` source's file is there, decodes and matches its hash; each
- * `relief.dem` piece (its box on the map, with its edge, moved by its shift) lies inside its file, and its heights,
- * less the map's datum, stay within `min`..`max` m. Returns the decoded files by source id.
- */
 // the files already hashed and decoded, by their bytes: the page's worker keeps a file's bytes across compiles, so a
 // save of the map's text does not hash and decode 10 MB again
 const seen = new WeakMap<Uint8Array, { hash: string; dem?: Dem; error?: string }>()
+/** A file's hash, and its heightfield or why it does not decode; each bytes object is read once. */
 function readFile(bytes: Uint8Array): { hash: string; dem?: Dem; error?: string } {
   let r = seen.get(bytes)
   if (!r) {
@@ -219,6 +237,11 @@ function readFile(bytes: Uint8Array): { hash: string; dem?: Dem; error?: string 
   return r
 }
 
+/**
+ * The checks that need the map's files: each `dem` source's file is there, decodes and matches its hash; each
+ * `relief.dem` piece (its box on the map, with its edge, moved by its shift) lies inside its file, and its heights,
+ * less the map's datum, stay within `min`..`max` m. Returns the decoded files by source id.
+ */
 export function checkDemFiles(
   map: MapFile,
   files: MapFiles,
@@ -262,7 +285,7 @@ export function checkDemFiles(
       })
       continue
     }
-    const [lo, hi] = demRange(d, [box[0] - d.cell, box[1] - d.cell, box[2] + d.cell, box[3] + d.cell])
+    const [lo, hi] = demRange(d, box)
     if (lo - datum < range.min || hi - datum > range.max) {
       issues.push({
         id: f.id,

@@ -10,7 +10,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { encodeRdem, sha256 } from '../src/map/dem.ts'
-import { fillHoles, readTiff } from './dem-tiff.mjs'
+import { fillHoles, readTiff } from './dem-tiff.ts'
 
 const MODELS = {
   '4g': { service: 'dmr4g', name: 'DMR 4G', cell: 5 },

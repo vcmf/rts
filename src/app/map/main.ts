@@ -6,6 +6,7 @@
 import type { Feature, Pt } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName } from './protocol.ts'
+import { demFileNames } from '../../map/dem.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -25,14 +26,13 @@ const RDEMS = import.meta.glob('/maps/*.rdem', { query: '?url', import: 'default
 // keeps the bytes of the version it was last sent, so only a new version is fetched and sent. A file that is missing
 // or fails to load is left out, and the validator reports it against its source.
 const fileVersion = new Map<string, number>()
+const RDEM_SETTLE = 300 // ms after a heightfield's last save before it is read
+let rdemTimer: ReturnType<typeof setTimeout> | undefined
 let sentVersion = new Map<string, number>()
 async function readFiles(mapText: string): Promise<CompileRequest['files']> {
-  let names: string[] = []
+  let names: string[]
   try {
-    const sources = (JSON.parse(mapText) as { sources?: { kind?: unknown; file?: unknown }[] }).sources
-    names = (Array.isArray(sources) ? sources : []).flatMap(s =>
-      s?.kind === 'dem' && typeof s.file === 'string' && !/[/\\]/.test(s.file) ? [s.file] : [],
-    )
+    names = demFileNames(JSON.parse(mapText))
   } catch {
     return {}
   }
@@ -125,6 +125,12 @@ function makeWorker(): Worker {
 function onReply(e: MessageEvent<CompileReply>): void {
   const r = e.data
   if (r.seq !== seq || !pending) return // an older compile, overtaken
+  if (!r.ok && r.missing?.length) {
+    // the worker lacks files it was counted as holding: send them again
+    for (const name of r.missing) sentVersion.delete(name)
+    void compile(pending.reason, pending.savedAt)
+    return
+  }
   if (r.ok) {
     const fresh = !current || current.map.id !== r.map.id
     current = r
@@ -361,10 +367,13 @@ showIds.addEventListener('change', draw)
 if (import.meta.hot) {
   import.meta.hot.on('map-changed', (d: { file: string; at: number }) => {
     if (d.file.endsWith('.rdem')) {
+      // a heightfield is large and written in one go: wait until the saves stop before reading it, so a file still
+      // being written is not kept as the new version
       const name = d.file.replace('/maps/', '')
       fileVersion.set(name, (fileVersion.get(name) ?? 0) + 1)
-    }
-    if (d.file === picker.value || d.file === '/maps/kinds.json' || d.file.endsWith('.rdem')) void compile('save', d.at)
+      clearTimeout(rdemTimer)
+      rdemTimer = setTimeout(() => void compile('save', d.at), RDEM_SETTLE)
+    } else if (d.file === picker.value || d.file === '/maps/kinds.json') void compile('save', d.at)
   })
 }
 

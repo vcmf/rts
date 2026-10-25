@@ -9,7 +9,7 @@ import type { Issue } from './catalogue.ts'
 import { CLEAR_KEYS, FOLLOW_KEYS, KEEPS_OFF } from './follow.ts'
 import { listOf, num } from './util.ts'
 import type { Dem, MapFiles } from './dem.ts'
-import { DEM_SOURCE_KEYS, checkDemFiles, demShift } from './dem.ts'
+import { DEM_FILE, DEM_SOURCE_KEYS, checkDemFiles, demShift } from './dem.ts'
 import { resolve } from './resolve.ts'
 import {
   allowedIn,
@@ -129,7 +129,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
               bad(null, `sources[${i}]`, `a dem source needs ${missing.map(k => `"${k}"`).join(', ')}`)
             } else if (!/^sha256:[0-9a-f]{64}$/.test(s.hash as string)) {
               bad(null, `sources[${i}].hash`, 'must be "sha256:" and 64 hex digits (node tools/map.ts hash <file>)')
-            } else if (!/^[a-z0-9][a-z0-9._-]*\.rdem$/.test(s.file as string)) {
+            } else if (!DEM_FILE.test(s.file as string)) {
               bad(null, `sources[${i}].file`, 'must be an .rdem file beside the map (lowercase, no folders)')
             }
             demSources.add(s.id)
@@ -777,13 +777,15 @@ const isDemKind = (kind: string): boolean => kind === 'relief.dem' || kind.start
 export function checkFiles(map: MapFile, cat: Catalogue, files: MapFiles): { issues: Issue[]; dems: Map<string, Dem> } {
   const spec = cat.attributes.height
   const range = { min: spec.min ?? -Infinity, max: spec.max ?? Infinity }
+  if (!(map.sources ?? []).some(s => s.kind === 'dem')) return { issues: [], dems: new Map() }
   // each piece as apply reads it: its kind, edge and shift resolved (a preset may set them)
   const pieces = map.features.flatMap((f, i) => {
     const r = resolve(f, map, cat)
     if (!isDemKind(r.kind)) return []
-    const edge = num(r.attrs.edge, 0)
+    // an area piece reaches its edge beyond the area; a whole-extent piece only the extent
+    const e = f.area ? num(r.attrs.edge, 0) : 0
     const b = f.area ? boxOf(f, r.attrs) : [-map.extent.w / 2, -map.extent.h / 2, map.extent.w / 2, map.extent.h / 2]
-    const box: [number, number, number, number] = [b[0] - edge, b[1] - edge, b[2] + edge, b[3] + edge]
+    const box: [number, number, number, number] = [b[0] - e, b[1] - e, b[2] + e, b[3] + e]
     return [{ f, i, box, shift: demShift(r.attrs) }]
   })
   return checkDemFiles(map, files, pieces, range)

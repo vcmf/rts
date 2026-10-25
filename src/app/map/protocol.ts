@@ -35,5 +35,8 @@ export interface Failed {
   seq: number
   ok: false
   issues: Issue[]
+  // heightfields the worker was told it holds but does not (it restarted, or never stored them): the page sends
+  // them again and recompiles
+  missing?: string[]
 }
 export type CompileReply = Compiled | Failed

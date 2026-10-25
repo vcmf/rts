@@ -5,7 +5,10 @@
  * `want`: the { width, height } asked for. Returns { width, height, data } with the rows north first, as the TIFF
  * stores them.
  */
-export function readTiff(buf, want) {
+export function readTiff(
+  buf: Buffer,
+  want: { width: number; height: number },
+): { width: number; height: number; data: Float32Array } {
   // the service answers errors as JSON, even with status 200
   const magic = buf.toString('latin1', 0, 2)
   const isTiff = (magic === 'II' && buf.readUInt16LE(2) === 42) || (magic === 'MM' && buf.readUInt16BE(2) === 42)
@@ -13,13 +16,13 @@ export function readTiff(buf, want) {
     throw new Error(`not a TIFF: ${buf.toString('utf8', 0, 300)}`)
   }
   const le = magic === 'II'
-  const u16 = o => (le ? buf.readUInt16LE(o) : buf.readUInt16BE(o))
-  const u32 = o => (le ? buf.readUInt32LE(o) : buf.readUInt32BE(o))
-  const f32 = o => (le ? buf.readFloatLE(o) : buf.readFloatBE(o))
+  const u16 = (o: number) => (le ? buf.readUInt16LE(o) : buf.readUInt16BE(o))
+  const u32 = (o: number) => (le ? buf.readUInt32LE(o) : buf.readUInt32BE(o))
+  const f32 = (o: number) => (le ? buf.readFloatLE(o) : buf.readFloatBE(o))
 
   // the tags: only the SHORT and LONG ones read below (ASCII, RATIONAL, DOUBLE skipped)
   const ifd = u32(4)
-  const tags = {}
+  const tags: Record<number, number[]> = {}
   for (let i = 0; i < u16(ifd); i++) {
     const e = ifd + 2 + i * 12
     const tag = u16(e)
@@ -50,7 +53,7 @@ export function readTiff(buf, want) {
     const tw = tags[322][0]
     const th = tags[323][0]
     const across = Math.ceil(width / tw)
-    tags[324].forEach((offset, t) => {
+    tags[324].forEach((offset: number, t: number) => {
       const x0 = (t % across) * tw
       const y0 = Math.floor(t / across) * th
       for (let y = 0; y < th; y++) {
@@ -64,7 +67,7 @@ export function readTiff(buf, want) {
   } else {
     // strips
     const rowsPerStrip = tags[278] ? tags[278][0] : height
-    tags[273].forEach((offset, s) => {
+    tags[273].forEach((offset: number, s: number) => {
       for (let y = 0; y < rowsPerStrip && s * rowsPerStrip + y < height; y++) {
         for (let x = 0; x < width; x++) {
           data[(s * rowsPerStrip + y) * width + x] = f32(offset + (y * width + x) * 4)
@@ -79,8 +82,8 @@ export function readTiff(buf, want) {
  * Marks the pixels without data (outside the country the service returns none) and fills them from their valid
  * neighbours, pass by pass (a lowest-height fill would cut craters). Returns the count and the valid heights' range.
  */
-export function fillHoles(f, width, height) {
-  const valid = v => Number.isFinite(v) && v > -100 && v < 3000
+export function fillHoles(f: Float32Array, width: number, height: number): { bad: number; lo: number; hi: number } {
+  const valid = (v: number) => Number.isFinite(v) && v > -100 && v < 3000
   let bad = 0
   let lo = Infinity
   let hi = -Infinity

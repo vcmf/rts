@@ -16,6 +16,12 @@ self.onmessage = (e: MessageEvent<CompileRequest>) => {
       ok: false,
       issues: [{ id: null, path, message }],
     } satisfies CompileReply)
+  // the files first, whatever else fails: the page counts them as held once sent
+  const { files: mine, missing } = held(files ?? {})
+  if (missing.length) {
+    ;(self as unknown as Worker).postMessage({ seq, ok: false, issues: [], missing } satisfies CompileReply)
+    return
+  }
   let map: unknown
   let cat: Catalogue
   try {
@@ -31,7 +37,7 @@ self.onmessage = (e: MessageEvent<CompileRequest>) => {
     return
   }
   try {
-    compile(seq, map, cat, held(files ?? {}))
+    compile(seq, map, cat, mine)
   } catch (err) {
     fail('', `the compiler failed: ${(err as Error).message} (a bug, or a catalogue the validator does not check)`)
   }
@@ -40,14 +46,21 @@ self.onmessage = (e: MessageEvent<CompileRequest>) => {
 // the heightfields this worker holds, by name: the version it was last sent and its bytes, kept across compiles so a
 // file is hashed and decoded once (checkFiles remembers the bytes it has read)
 const kept = new Map<string, { version: number; bytes: Uint8Array }>()
-function held(files: CompileRequest['files']): MapFiles {
+/**
+ * Stores the files a request carries, drops those its map no longer names, and returns the map's files with the
+ * names it was told it holds but does not.
+ */
+function held(files: CompileRequest['files']): { files: MapFiles; missing: string[] } {
+  for (const name of [...kept.keys()]) if (!(name in files)) kept.delete(name)
   const out: MapFiles = new Map()
+  const missing: string[] = []
   for (const [name, f] of Object.entries(files)) {
     if (f.bytes) kept.set(name, { version: f.version, bytes: new Uint8Array(f.bytes) })
     const k = kept.get(name)
     if (k && k.version === f.version) out.set(name, k.bytes)
+    else missing.push(name)
   }
-  return out
+  return { files: out, missing }
 }
 
 function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): void {

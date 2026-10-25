@@ -11,7 +11,7 @@
 // Open: prototypes/staff-map.html?style=lit&dem= followed by this file's path relative to the page (also from file://)
 import fs from 'node:fs'
 import path from 'node:path'
-import { fillHoles, readTiff } from './dem-tiff.mjs'
+import { fillHoles, readTiff } from './dem-tiff.ts'
 
 // the prototype's terrain (prototypes/staff-map.html)
 const TX = 2700

@@ -56,7 +56,9 @@ describe('M5: the .rdem file', () => {
     expect(() => decodeRdem(bad)).toThrow(/magic/)
   })
   it('hashes as SHA-256 does', () => {
-    for (const b of [new Uint8Array(0), new TextEncoder().encode('abc'), FILE, new Uint8Array(1000).fill(7)]) {
+    // the padding's edges: a tail that fits one block, one that needs two, and whole blocks
+    const sizes = [0, 3, 55, 56, 63, 64, 65, 119, 120, 128, 1000]
+    for (const b of [...sizes.map(n => new Uint8Array(n).map((_, k) => k * 7)), FILE]) {
       expect(sha256(b)).toBe('sha256:' + crypto.createHash('sha256').update(b).digest('hex'))
     }
   })
@@ -87,6 +89,18 @@ describe('M5: heights between the nodes (bicubic)', () => {
       const h = demHeight(step, x, 0)
       expect(h).toBeGreaterThanOrEqual(lo)
       expect(h).toBeLessThanOrEqual(hi)
+    }
+  })
+  it('the range of a box bounds every height read in it, a box edge on a node line included', () => {
+    const d = decodeRdem(rdem(40, 40, 5, (i, j) => ((i * 37 + j * 91) % 13) * 300))
+    const box: [number, number, number, number] = [-40, -40, 25, 25] // 25 m: on a node line of the 5 m grid
+    const [lo, hi] = demRange(d, box)
+    for (let x = -40; x <= 25; x += 1) {
+      for (let z = -40; z <= 25; z += 1) {
+        const h = demHeight(d, x, z)
+        expect(h).toBeGreaterThanOrEqual(lo)
+        expect(h).toBeLessThanOrEqual(hi)
+      }
     }
   })
   it('a 2 m profile across node lines has a smooth slope: its second differences are constant', () => {
@@ -157,6 +171,13 @@ describe('M5: relief.dem in apply', () => {
         .issues.map(i => i.message)
         .join(),
     ).toMatch(/past its file/)
+  })
+  it("a whole-extent piece's edge does not widen the file check (it reads only the extent)", () => {
+    const map = base()
+    map.features[0].shift = { x: 100, z: 100 } // the extent in the file's north-east corner, to its very edge
+    map.features[0].edge = 80
+    map.datum = 450 // the corner's heights, 361–841 m
+    expect(checkFiles(map, cat, files()).issues).toEqual([])
   })
   it('sets the real ground over the base noise whatever their ids', () => {
     const d = decodeRdem(FILE)
