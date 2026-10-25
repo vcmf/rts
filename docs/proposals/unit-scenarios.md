@@ -26,7 +26,7 @@ Times are battle time; the page plays at 2× by default.
 | A-03 | A line is fired on from its rear | Worse than A-02 for morale; it must Face about (3 s) before replying | Sectors, morale | no |
 | A-04 | An enemy stands ahead of one end of a long line, 60° off its centre | It counts as in front: the sector is read from the nearest end of the front, not the centre | Sectors | no (centre angle) |
 | A-05 | An enemy stands exactly on the 45° border between front and flank | No cliff: moving it 1 m changes the effect by a little, not a step | Sectors (the blend) | no |
-| A-06 | A square is attacked from any side | Always the front: a square has no flank or rear | Sectors, shapes | yes for charges, no for fire |
+| A-06 | A square is attacked from any side | Always the front: a square has no flank or rear | Sectors, shapes | partly (bracing turns charges away, but a charge reads the side struck from the square's centre, so a breached square takes a flank or rear shock) |
 | A-07 | A column of attack is fired on from its flank | Its flank companies take it; worse than frontal but less than a line's enfilade (the column is deep, not long) | Sectors, fire | no |
 | A-08 | Skirmishers are approached from their flank | Little flank penalty: open order has no rigid flank; their weakness is cavalry, from anywhere | Sectors, shapes | no (no skirmish order) |
 | A-09 | A battery is approached from its flank | Its guns cannot bear; turning them (change front) takes time; the approach is the battery's worst case | Sectors, artillery | partly (arc only) |
@@ -37,7 +37,7 @@ Times are battle time; the page plays at 2× by default.
 | Id | Situation | Should | Model | Today |
 |---|---|---|---|---|
 | B-01 | Line to square, no enemy near | Takes the full change time (100 s at level 2), with no fire during it | Changes | yes |
-| B-02 | The same with a veteran (level 4) and with recruits (level 0) | The veteran is markedly faster (about 0.7×); recruits slower (about 1.4×) | Changes, experience | no |
+| B-02 | The same with an elite battalion (level 4) and with recruits (level 0) | The elite battalion is markedly faster (about 0.7×); recruits slower (about 1.4×) | Changes, experience | no |
 | B-03 | Line to square while under musketry at 100 m | Allowed, but slower and with disorder; the battalion loses the firefight while it forms | Changes, engagement | partly (no extra time or disorder) |
 | B-04 | A change ordered while in melee | Refused: a formation in contact cannot change shape | Engagement | yes |
 | B-05 | A change caught half done by cavalry | Struck as if in the flank, at the change's partial bracing | Changes, charges | yes |
@@ -51,13 +51,13 @@ Times are battle time; the page plays at 2× by default.
 
 | Id | Situation | Should | Model | Today |
 |---|---|---|---|---|
-| C-01 | Two average lines at 100 m | The weaker breaks in 6–10 minutes (the calibration anchor, `docs/proposals/sim-design.md` §8) | Fire | yes |
+| C-01 | Two lines at 100 m, of quality 0.8 and 0.65 | The weaker breaks in 6–10 minutes (the calibration anchor, `docs/proposals/sim-design.md` §8; `tools/calibrate-fire.ts` pits quality 0.8 against 0.65) | Fire | yes |
 | C-02 | A veteran line against a recruit line at 100 m | The veteran wins clearly, with about half the losses | Fire, experience | partly (quality is morale only) |
 | C-03 | The same two lines at 50 m | Much bloodier; the recruits break in a few minutes, or refuse to stand at that range | Fire, nerve | partly |
 | C-04 | A recruit line ordered to hold fire while an enemy advances | It cannot hold: it opens fire on its own at long range (about 150 m), wasting its first volley | Nerve, fire discipline | no |
 | C-05 | A veteran line holding fire until 60 m | Its first volley is the best of the fight (carefully loaded, at short range) | Fire discipline, first volley | no |
-| C-06 | A line fires on a square | A square is a dense target: it suffers, and fires back with one face only | Fire, shapes | partly (no density by shape) |
-| C-07 | A line fires on skirmishers | Few hits: a small, spread target | Fire, shapes | yes (depth 0.5) |
+| C-06 | A line fires on a square | A square is a dense target: it suffers, and fires back with one face only | Fire, shapes | yes (the square is of kind `column`: depth 1.6) |
+| C-07 | A line fires on skirmishers | Few hits: a small, spread target | Fire, shapes | no (no skirmish order; `fire.depth` has a skirmish kind that no shape uses) |
 | C-08 | A second line behind the first | It cannot fire through the first | Fire | yes |
 | C-09 | A wavering line keeps firing | It fires worse (state factor) and falls back if the losses continue | Fire, morale | yes |
 | C-10 | Fire into a wood | The men in the wood are seen to 40 m and take fewer hits (cover) | Fire, ground | partly (sight, no cover) |
@@ -76,7 +76,7 @@ Times are battle time; the page plays at 2× by default.
 | D-06 | Cavalry charges a battery from its flank | The guns cannot bear; the battery is overrun cheaply. A battery's flanks need infantry | Sectors, artillery | partly |
 | D-07 | A battery's gunners flee into a nearby square and come back after the cavalry leaves | The guns stay where they stood and fire again when manned (Waterloo) | Guns taken | no |
 | D-08 | Guns overrun and held by the enemy | Silent until retaken; the enemy cannot turn them (no crew), but can drag them off later (S3) | Guns taken | no |
-| D-09 | Counter-battery fire | Possible but slow: guns are small targets; firing on infantry pays more | Artillery | yes (by depth) |
+| D-09 | Counter-battery fire | Possible but slow: guns are small targets; firing on infantry pays more | Artillery | yes (the ball's line through the detachments' small blocks) |
 | D-10 | Horse artillery limbers, moves and unlimbers | Much faster than foot artillery; follows cavalry | Categories, changes | no |
 
 ## E. Cavalry, charges and melee
@@ -105,7 +105,7 @@ Times are battle time; the page plays at 2× by default.
 |---|---|---|---|---|
 | F-01 | An attack column advances on a steady line without firing | It takes fire; at about 50 m both take a morale test; most often one side breaks before the bayonets cross (the column if the line's fire holds, the line if it wavers) | Infantry assault, closing | no |
 | F-02 | The same column advances on a wavering line | The line breaks; the column takes the ground | Infantry assault | no |
-| F-03 | A recruit battalion is ordered to advance to 50 m under fire | It halts on its own at its nerve distance (about 120 m) and opens fire; it will not close further unless its morale is high | Nerve | no |
+| F-03 | A recruit battalion is ordered to advance to 50 m under fire | Its advance stalls on its own, at about 120 m, and it opens fire; it will not close further while it is losing men | Nerve | no |
 | F-04 | A veteran battalion is ordered the same | It closes to 50 m and fires a first volley, or presses on with the bayonet | Nerve, first volley | no |
 | F-05 | A battalion closes with an enemy on its flank | It is punished: the enemy's fire and charges strike its flank; its own front cannot bear | Closing, sectors | partly |
 | F-06 | A battalion advances on an enemy, then turns its back to retire at 80 m | Its rear is exposed while it goes; the enemy may charge it; a Retire under fire costs disorder | Closing, sectors | partly |
@@ -115,7 +115,7 @@ Times are battle time; the page plays at 2× by default.
 
 | Id | Situation | Should | Model | Today |
 |---|---|---|---|---|
-| G-01 | A battalion loses 20% in a firefight | It breaks (the average line) | Morale | yes |
+| G-01 | A battalion loses men in a firefight | A battalion of quality 0.65 breaks at about 20% losses, an average one (0.75) at about 28% | Morale | yes |
 | G-02 | A friend breaks next to a wavering battalion | It may break too (contagion) | Morale | yes |
 | G-03 | Both flanks covered by friends | Holds longer than alone | Morale | yes |
 | G-04 | An enemy appears on its flank (no fire yet) | Morale pressure: a threatened flank is felt before the first shot | Morale, sectors | no |
