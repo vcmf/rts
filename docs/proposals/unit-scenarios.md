@@ -145,7 +145,7 @@ Times are battle time; the page plays at 2× by default.
 | I-04 | Infantry crosses a ford | Wades, slowly, disordered | Movement | yes |
 | I-05 | Guns at a ford too deep for them | Halt; infantry beside them crosses | Movement | yes |
 | I-06 | A battalion is ordered to a point behind another friendly battalion | It goes around, or passes through it at a cohesion cost to both if ordered through; it never stands inside it | Collision, pathfinding | no (passes through) |
-| I-07 | Two enemy formations meet without a charge | They do not overlap: they halt in contact, and a melee or a firefight follows | Collision | no (pass through) |
+| I-07 | Two enemy formations meet without a charge | They do not overlap: they halt at contact distance and fire at point-blank range; a melee follows only if one charges or assaults | Collision | no (pass through) |
 | I-08 | A regiment gallops through its own infantry | Not allowed as free: it goes around, or both are disordered | Collision | no |
 | I-09 | Skirmishers pass through a friendly line | Freely (they open and close ranks) | Collision, categories | no |
 | I-10 | A line climbs a steep hill | Slower; the slope decides; too steep is impassable by kind | Movement | yes |
