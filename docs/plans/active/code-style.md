@@ -82,8 +82,8 @@ twice on the formatted copy and twice on main, alternating.
 
 ## Open questions
 
-- `.git-blame-ignore-revs` and squash-merging: a follow-up commit with the squashed hash, or a merge commit for the
-  formatting PRs (above).
+- `.git-blame-ignore-revs` and squash-merging: decided (2026-10-23, the owner): squash as usual, and a one-line
+  follow-up after each formatting PR lists its squashed commit (PR 1: 8abc1cf).
 - Format on save in editors: left to each editor; the check in `npm test` and CI is what holds.
 
 ## Review rounds
