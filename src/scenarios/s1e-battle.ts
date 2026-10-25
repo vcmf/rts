@@ -9,8 +9,8 @@
 import type { World, Scenario, PlanStep } from '../sim/index.ts'
 import { issue, PI } from '../sim/index.ts'
 
-// one formation: its type, shape, men, place and heading, and its part in the battle; side 1's battalions also
-// carry the x they fight at. Units are numbered in spawn order, SOUTH then NORTH; the plan finds them by part
+// one formation: its type, shape, men, place and heading, and its part in the battle. Units are numbered in spawn
+// order, SOUTH then NORTH; the plan finds them by part
 interface Row {
   unit: string
   shape: string
@@ -20,7 +20,11 @@ interface Row {
   a: number
   part: 'first' | 'second' | 'regiment' | 'battery'
   quality?: number
-  fight?: number
+}
+// side 1's battalions are rows of their own type, which carries the x they fight at
+interface Battalion extends Row {
+  part: 'first' | 'second'
+  fight: number
 }
 const inf = (shape: string, x: number, z: number, a: number, part: 'first' | 'second'): Row => ({
   unit: 'infantry',
@@ -50,7 +54,7 @@ const SOUTH: Row[] = [
 // ridge west of its first line, turned 25° inwards, so that it fires past its own line while that comes down (once
 // the line has closed, it masks the battery's fire at your western battalions)
 const VETERAN = 0.85 // the ruleset's quality is 0.75
-const vet = (shape: string, x: number, z: number, part: 'first' | 'second', fight: number): Row => ({
+const vet = (shape: string, x: number, z: number, part: 'first' | 'second', fight: number): Battalion => ({
   unit: 'infantry',
   shape,
   men: 400,
@@ -61,24 +65,24 @@ const vet = (shape: string, x: number, z: number, part: 'first' | 'second', figh
   fight,
   quality: VETERAN,
 })
-const NORTH: Row[] = [
+// first in NORTH, so their unit numbers count from S1
+const BATTALIONS: Battalion[] = [
   vet('line', 220, 230, 'first', 100),
   vet('line', 40, 230, 'first', -20),
   vet('line', -80, 230, 'first', -140),
   vet('line', -200, 230, 'first', -260),
   vet('column', -20, 330, 'second', -20),
   vet('column', -140, 330, 'second', -140),
+]
+const NORTH: Row[] = [
+  ...BATTALIONS,
   { unit: 'cavalry', shape: 'line', men: 256, x: 260, z: 320, a: PI, part: 'regiment' },
   { unit: 'battery', shape: 'unlimbered', men: 96, x: -330, z: 280, a: PI - 0.44, part: 'battery' },
 ]
-const units = (rows: Row[], first: number, part: Row['part']) =>
+const units = <R extends Row>(rows: R[], first: number, part: Row['part']) =>
   rows.map((r, k) => ({ ...r, id: first + k })).filter(r => r.part === part)
-// side 1's battalions of a line, each with the x it fights at (a row without one is a mistake in this file)
-const lines = (part: 'first' | 'second') =>
-  units(NORTH, S1, part).map(u => {
-    if (u.fight === undefined) throw new Error(`s1e-battle: unit ${u.id} has no fight x`)
-    return { ...u, fight: u.fight }
-  })
+// side 1's battalions of a line, each with the x it fights at
+const lines = (part: 'first' | 'second') => units(BATTALIONS, S1, part)
 const S1 = SOUTH.length
 const FIRST = lines('first')
 const SECOND = lines('second')
@@ -93,7 +97,8 @@ const YOUR_BATTERY = units(SOUTH, 0, 'battery')[0].id
 // at a set time (once its rest is over): a charge ends by clearing its orders, so a move queued after it is lost,
 // and a charge still running then is cut short. The ride back is given again twice, 2 and 4 minutes later: in
 // melee at the first, the move waits for the melee's end, and a melee that ends in a pursuit or a recoil clears it
-// (melee.ts). Riding back already, the same move again changes nothing (no orders: the same battle on eight seeds)
+// (melee.ts). Riding back already, the same move again changes nothing (no orders: the same battle on eight seeds).
+// A stopgap: a melee after the last still leaves it forward; the fix belongs in the sim (#179)
 const T = { dress: 200, close: 500, charge: 300, back: 630, wave: 900 } // seconds
 const march = (at: number, unit: number, points: [number, number][]): PlanStep => ({
   at,
