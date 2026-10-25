@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "id": "austerlitz",
+  "name": "Austerlitz",
+  "note": "Austerlitz, 1805 (docs/plans/active/one-map-austerlitz.md): a 6 km map (decision 0061). Step 1, the real relief alone: the field's heights from ČÚZK's terrain model, one piece over the whole extent, centred on the crop's centre. The designed map (pieces moved closer, the 1805 features) is step 4.",
+  "seed": 1805,
+  "season": "winter",
+  "datum": 180,
+  "extent": {"w":6000,"h":6000},
+  "play": {"w":6000,"h":6000},
+  "sources": [
+    {"id":"cuzk","kind":"dem","ref":"ČÚZK DMR 4G, 49.118 N 16.737 E, a transverse Mercator centred there","file":"austerlitz.rdem","hash":"sha256:9e2dec99f07e5c56a5ccf525a7f0b915a1c3ad1202c54e0600de938ee76bb7f5","credit":"© ČÚZK, 2026 (DMR 4G)","licence":"CC BY 4.0"}
+  ],
+  "features": [
+    {"id":"field","kind":"relief.dem","source":"cuzk","note":"the real ground: today's terrain, so modern embankments and quarries are still in it until step 4 levels them"}
+  ]
+}

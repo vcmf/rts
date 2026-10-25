@@ -8,6 +8,7 @@ export interface CompileRequest {
   seq: number
   mapText: string
   kindsText: string
+  files: Record<string, ArrayBuffer> // the files the map's sources name (heightfields), by name
 }
 export type LayerName = (typeof LAYER_NAMES)[number]
 export interface Compiled {

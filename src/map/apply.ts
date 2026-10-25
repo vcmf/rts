@@ -1,6 +1,7 @@
 // Apply (docs/proposals/map-engine.md §4, docs/plans/done/m1-language.md M1b): the expanded map's features
 // laid into the five layers on the 2 m grid over the map's extent, in the engine's fixed order:
-//   1. relief: the base ground (seeded noise) and the landforms (hill, ridge, valley, plateau, scarp), summed;
+//   1. relief: the base ground (seeded noise) and the landforms (hill, ridge, valley, plateau, scarp), summed, and
+//      real relief (dem), which sets the height in its area;
 //   2. relief edits, now that every shape exists: raise, lower, level, cut, ditch, and a way's cut or raise;
 //   3. water: the cells under streams, rivers and ponds (levels and carving: M2);
 //   4. areas: ground and vegetation;
@@ -18,6 +19,8 @@ import { seedOf } from './seed.ts'
 import type { Clear } from './util.ts'
 import { listOf, num, smooth } from './util.ts'
 import { addFbmGrid } from './noise.ts'
+import type { Dem } from './dem.ts'
+import { demHeight, demShift } from './dem.ts'
 
 export const CELL = 2 // m (decision 0021)
 // widths where the catalogue gives none: a way's (every way kind sets one), and the bands of the line-shaped kinds
@@ -318,7 +321,11 @@ function ramp(v: AttrValue | undefined, input: { edge?: number; along?: number }
   return stops[stops.length - 1][1]
 }
 
-export function apply(map: MapFile, cat: Catalogue): Layers {
+/**
+ * The expanded map laid into its layers. `dems`: the decoded heightfields of its dem sources, by source id, as
+ * `checkFiles` returns them (a map without real relief needs none).
+ */
+export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new Map()): Layers {
   const c = CELL
   const nx = map.extent.w / c
   const nz = map.extent.h / c
@@ -424,6 +431,27 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
         const rise = s <= w2 ? smooth((s + w2) / (2 * w2)) : smooth(1 - (s - w2) / back)
         // past the ends the step fades over the back slope's length, not as a wall
         H[k] += h * rise * smooth(1 - q.over / back)
+      })
+    } else if (kind === 'dem') {
+      // real relief (docs/plans/active/m5-relief.md): the file's heights, less the datum, set in the piece's area
+      // (the whole extent with no shape) and blended into the ground under it over its edge
+      const d = dems.get(f.source as string)
+      if (!d) throw new Error(`${f.id}: its dem source "${String(f.source)}" was not loaded (checkFiles first)`)
+      const sh = demShift(f)
+      const datum = map.datum ?? 0
+      const set = (k: number, x: number, z: number, w: number) => {
+        H[k] += (demHeight(d, x + sh.x, z + sh.z) - datum - H[k]) * w
+      }
+      if (!f.area) {
+        nodes([x0, z0, -x0, -z0], 0, (k, x, z) => set(k, x, z, 1))
+        continue
+      }
+      const field = areaField(f)!
+      const edge = num(a.edge, 0)
+      nodes(field.box, edge, (k, x, z) => {
+        const e = field.edge(x, z)
+        const w = e >= 0 ? 1 : edge > 0 ? smooth(1 + e / edge) : 0
+        if (w > 0) set(k, x, z, w)
       })
     } else if (kind === 'plateau') {
       const field = areaField(f)!

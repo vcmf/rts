@@ -1,0 +1,189 @@
+// Real relief (docs/plans/active/m5-relief.md, M5): the .rdem file, its hash, its heights between nodes, relief.dem
+// pieces in apply, the validator's and the file checks' errors, and the test map compiled for the sim.
+import { describe, it, expect } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
+import crypto from 'node:crypto'
+import type { Catalogue, MapFile } from '../src/map/schema.ts'
+import type { Dem, MapFiles } from '../src/map/dem.ts'
+import { decodeRdem, demHeight, encodeRdem, sha256 } from '../src/map/dem.ts'
+import { checkFiles, validate } from '../src/map/validate.ts'
+import { apply, heightOf } from '../src/map/apply.ts'
+import { engineMap, layersOf } from '../maps/engine.ts'
+import { root } from './fx.ts'
+
+const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps/kinds.json'), 'utf8')) as Catalogue
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
+
+// a synthetic heightfield: nx × nz nodes at `cell` m, heights from f(i, j) in cm above 200 m
+function rdem(nx: number, nz: number, cell: number, f: (i: number, j: number) => number): Uint8Array {
+  const cm = new Uint16Array(nx * nz)
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) cm[j * nx + i] = f(i, j)
+  return encodeRdem({ nx, nz, cellMm: cell * 1000, baseCm: 20000, cm })
+}
+const quad = (i: number, j: number) => 100 + 3 * i * i + 2 * j * j + 5 * i * j // cm: a quadratic surface
+const FILE = rdem(81, 81, 5, quad) // 400 × 400 m, centred
+const files = (b = FILE): MapFiles => new Map([['t.rdem', b]])
+const base = (): MapFile =>
+  ({
+    format: 1,
+    id: 't',
+    name: 'T',
+    seed: 1,
+    season: 'summer',
+    datum: 200,
+    extent: { w: 200, h: 200 },
+    play: { w: 200, h: 200 },
+    sources: [{ id: 'd', kind: 'dem', file: 't.rdem', hash: sha256(FILE), credit: '© someone', licence: 'CC BY 4.0' }],
+    features: [{ id: 'all', kind: 'relief.dem', source: 'd' }],
+  }) as unknown as MapFile
+const compile = (map: MapFile, f = files()) => {
+  expect(validate(map, cat)).toEqual([])
+  const c = checkFiles(map, cat, f)
+  expect(c.issues).toEqual([])
+  return apply(map, cat, c.dems)
+}
+const fileHeight = (d: Dem, x: number, z: number) => demHeight(d, x, z)
+
+describe('M5: the .rdem file', () => {
+  it('round-trips its header and heights, and refuses what is not one', () => {
+    const d = decodeRdem(FILE)
+    expect([d.nx, d.nz, d.cell, d.base]).toEqual([81, 81, 5, 200])
+    expect(d.cm[2 * 81 + 3]).toBe(quad(3, 2))
+    expect(() => decodeRdem(FILE.slice(0, 30))).toThrow(/needs/)
+    const bad = FILE.slice()
+    bad[0] = 88
+    expect(() => decodeRdem(bad)).toThrow(/magic/)
+  })
+  it('hashes as SHA-256 does', () => {
+    for (const b of [new Uint8Array(0), new TextEncoder().encode('abc'), FILE, new Uint8Array(1000).fill(7)]) {
+      expect(sha256(b)).toBe('sha256:' + crypto.createHash('sha256').update(b).digest('hex'))
+    }
+  })
+})
+
+describe('M5: heights between the nodes (bicubic)', () => {
+  const d = decodeRdem(FILE)
+  const exact = (x: number, z: number) => {
+    const i = (x + 200) / 5
+    const j = (z + 200) / 5
+    return 200 + quad(i, j) / 100
+  }
+  it('reads the nodes exactly, and a quadratic surface exactly between them (no 5 m lattice)', () => {
+    for (const [x, z] of [
+      [0, 0],
+      [-150, 95],
+      [3, -7],
+      [101.3, 33.9],
+      [-12.5, 140.25],
+    ]) {
+      expect(fileHeight(d, x, z)).toBeCloseTo(exact(x, z), 9)
+    }
+  })
+  it('a 2 m profile across node lines has a smooth slope: its second differences are constant', () => {
+    const h = Array.from({ length: 60 }, (_, k) => fileHeight(d, -60 + 2 * k, 17))
+    const d2 = h.slice(2).map((v, k) => v - 2 * h[k + 1] + h[k])
+    for (const v of d2) expect(v).toBeCloseTo(d2[0], 9)
+  })
+})
+
+describe('M5: relief.dem in apply', () => {
+  it('a whole-extent piece sets every node to the file less the datum, moved by its shift', () => {
+    const d = decodeRdem(FILE)
+    const map = base()
+    map.features[0].shift = { x: 30, z: -40 }
+    const L = compile(map)
+    for (const [x, z] of [
+      [0, 0],
+      [-98, 52],
+      [76, -24],
+    ]) {
+      // on the map's 2 m nodes (between them the layers read linearly)
+      expect(heightOf(L, x, z)).toBeCloseTo(fileHeight(d, x + 30, z - 40) - 200, 6)
+    }
+  })
+  it('an area piece sets its inside, blends over its edge, and leaves the ground beyond it', () => {
+    const d = decodeRdem(FILE)
+    const map = base()
+    map.features = [
+      { id: 'hill', kind: 'relief.hill', point: [0, 0], height: 3, width: 400 },
+      {
+        id: 'piece',
+        kind: 'relief.dem',
+        source: 'd',
+        area: [
+          [
+            [-40, -40],
+            [40, -40],
+            [40, 40],
+            [-40, 40],
+          ],
+        ],
+        edge: 30,
+      },
+    ] as MapFile['features']
+    const L = compile(map)
+    const under = compile({ ...clone(map), features: [map.features[0]] })
+    const at = (x: number) => heightOf(L, x, 0)
+    expect(at(0)).toBeCloseTo(fileHeight(d, 0, 0) - 200, 6)
+    expect(at(80)).toBeCloseTo(heightOf(under, 80, 0), 9)
+    const mid = at(56)
+    const lo = Math.min(heightOf(under, 56, 0), fileHeight(d, 56, 0) - 200)
+    const hi = Math.max(heightOf(under, 56, 0), fileHeight(d, 56, 0) - 200)
+    expect(mid).toBeGreaterThan(lo)
+    expect(mid).toBeLessThan(hi)
+  })
+  it('gives the same bytes twice', () => {
+    const a = compile(base())
+    const b = compile(base())
+    expect(Buffer.from(a.height.buffer).equals(Buffer.from(b.height.buffer))).toBe(true)
+  })
+})
+
+describe('M5: what the validator and the file checks refuse', () => {
+  const issue = (map: unknown, f = files()) => {
+    const v = validate(map, cat)
+    return v.length ? v : checkFiles(map as MapFile, cat, f).issues
+  }
+  const cases: [string, (m: MapFile) => void, RegExp, MapFiles?][] = [
+    ['a dem source without its credit', m => delete (m.sources![0] as { credit?: string }).credit, /"credit"/],
+    ['a hash that is no hash', m => ((m.sources![0] as { hash?: string }).hash = 'abc'), /sha256/],
+    ['a file in a folder', m => ((m.sources![0] as { file?: string }).file = '../x.rdem'), /beside the map/],
+    ['a source key it does not know', m => ((m.sources![0] as Record<string, string>).url = 'x'), /must be/],
+    ['a piece that names no dem source', m => (m.features[0].source = 'invented'), /dem sources/],
+    ['a map with real relief and no datum', m => delete (m as { datum?: number }).datum, /datum/],
+    ['a missing file', () => {}, /not found/, new Map()],
+    ['a file that changed', () => {}, /has hash/, files(rdem(81, 81, 5, () => 7))],
+    ['a piece past its file', m => (m.features[0].shift = { x: 150, z: 0 }), /past its file/],
+    ['heights out of range above the datum', m => (m.datum = 700), /leave -100/],
+  ]
+  for (const [what, edit, msg, f] of cases) {
+    it(what, () => {
+      const map = base()
+      edit(map)
+      expect(
+        issue(map, f)
+          .map(i => i.message)
+          .join('; '),
+      ).toMatch(msg)
+    })
+  }
+})
+
+describe('M5: the test map, for the sim', () => {
+  const { map, layers: L } = layersOf('maps/dem-test.map.json')
+  const d = decodeRdem(new Uint8Array(fs.readFileSync(path.join(root, 'maps/austerlitz.rdem'))))
+  it('reads the real heights where only the shifted piece lies', () => {
+    for (const [x, z] of [
+      [600, 600],
+      [-200, 0],
+      [800, -900],
+    ]) {
+      expect(heightOf(L, x, z)).toBeCloseTo(demHeight(d, x + 400, z + 300) - (map.datum ?? 0), 6)
+    }
+  })
+  it('compiles for the sim', () => {
+    const def = engineMap('dem-test', 'maps/dem-test.map.json')
+    expect(def.half).toBe(600)
+  })
+})

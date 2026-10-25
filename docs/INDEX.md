@@ -65,6 +65,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/woods-canopy.md`](plans/active/woods-canopy.md) (woods in warm grey, in the staff map prototype),
   [`plans/active/perf-150.md`](plans/active/perf-150.md) (150 fps in the staff map prototype: the ink canvas made cheap),
   [`plans/active/real-terrain-proto.md`](plans/active/real-terrain-proto.md) (real terrain in the staff map prototype: ČÚZK's DMR 4G at Austerlitz, an experiment),
+  [`plans/active/m5-relief.md`](plans/active/m5-relief.md) (Track M M5: real relief in the language, `relief.dem` and the `.rdem` file),
   [`plans/active/one-map-austerlitz.md`](plans/active/one-map-austerlitz.md) (one map in the language, drawn with the map editor: Austerlitz 1805, its draft-map mode and the real map),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),

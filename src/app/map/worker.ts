@@ -1,14 +1,15 @@
 // The draft page's compile worker (docs/plans/done/m1-language.md M1b): validate, expand, apply, draw, off the
 // page's thread, with the same code the map CLI runs in Node (src/map/).
 import type { Catalogue, MapFile } from '../../map/schema.ts'
-import { validate } from '../../map/validate.ts'
+import type { MapFiles } from '../../map/dem.ts'
+import { checkFiles, validate } from '../../map/validate.ts'
 import { expand } from '../../map/expand.ts'
 import { apply, LAYER_NAMES } from '../../map/apply.ts'
 import { draft } from '../../map/draft.ts'
 import type { CompileReply, CompileRequest, LayerName } from './protocol.ts'
 
 self.onmessage = (e: MessageEvent<CompileRequest>) => {
-  const { seq, mapText, kindsText } = e.data
+  const { seq, mapText, kindsText, files } = e.data
   const fail = (path: string, message: string) =>
     (self as unknown as Worker).postMessage({
       seq,
@@ -30,17 +31,22 @@ self.onmessage = (e: MessageEvent<CompileRequest>) => {
     return
   }
   try {
-    compile(seq, map, cat)
+    compile(seq, map, cat, new Map(Object.entries(files ?? {}).map(([k, b]) => [k, new Uint8Array(b)])))
   } catch (err) {
     fail('', `the compiler failed: ${(err as Error).message} (a bug, or a catalogue the validator does not check)`)
   }
 }
 
-function compile(seq: number, map: unknown, cat: Catalogue): void {
+function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): void {
   const t0 = performance.now()
   const issues = validate(map, cat)
   if (issues.length) {
     ;(self as unknown as Worker).postMessage({ seq, ok: false, issues } satisfies CompileReply)
+    return
+  }
+  const checked = checkFiles(map as MapFile, cat, files)
+  if (checked.issues.length) {
+    ;(self as unknown as Worker).postMessage({ seq, ok: false, issues: checked.issues } satisfies CompileReply)
     return
   }
   const ex = expand(map as MapFile, cat)
@@ -49,7 +55,7 @@ function compile(seq: number, map: unknown, cat: Catalogue): void {
     return
   }
   const t1 = performance.now()
-  const L = apply(ex.map, cat)
+  const L = apply(ex.map, cat, checked.dems)
   const t2 = performance.now()
   const img = draft(L)
   const t3 = performance.now()
