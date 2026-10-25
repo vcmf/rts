@@ -354,7 +354,8 @@ One compiled map, one view of it, one world (revised 2026-10-24, decision 0058):
 - **The debug overlays** are the first draft view's tools, kept: layers in flat category colours, feature outlines with
   their ids, passability per kind of unit, water depth, slope, sight from a clicked point, hovering a cell to see its
   five layers and the feature that wrote each, and the validator's errors in place. They are overlays on the map
-  view, not a view of their own.
+  view, not a view of their own, switched on in the settings: an option for now, a developer setting later, not
+  shown to players (the owner, 2026-10-25).
 - **The painted world** is the 3D world from the look compiler's output, with the game's camera rules (decision 0002:
   no sky). The map view and the painted world are one world on one camera, joined by the staff map's staged zoom
   (`docs/proposals/staff-map/design.md` §9): the player sees no toggle and no crossfade. While building and testing, a

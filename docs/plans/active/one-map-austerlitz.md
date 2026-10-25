@@ -79,7 +79,7 @@ These are owner decisions and merges, not code:
   as the source instead of Terrarium. Step 4 traces the 1805 features, using OSM's ways and water as a guide where the
   period map agrees. Those two plans are updated to point here when this one is accepted.
 - **The editor's base.** One renderer is the rule (decision 0057). So the editor is built on the lit view (step 2), and
-  the map engine's flat draft page becomes a debug overlay of the lit view (open question 4).
+  the map engine's flat draft page becomes debug overlays of the lit view, switched on in the settings (open question 4, decided).
 
 ### 1. Relief from real heights, in the language
 
@@ -166,7 +166,8 @@ over them with relief edits) is settled at the start of this step.
 - **The zoom handover** on one page and one camera: the draft-map mode at far zoom, the painted world close, in the
   staff map's stages (`docs/proposals/staff-map/design.md` §9), blended, never switched. The light follows open
   question 6.
-- **The demo world:** the hand-written world on `main` is retired, or kept as a second map file.
+- **The demo world:** the hand-written world on `main` is kept as a point of reference, as a second map file (open
+  question 5, decided).
 
 **Acceptance:**
 - zooming from the whole 6 km map down to 15 m shows one place throughout, with the 3D world streamed in tiles;
@@ -207,8 +208,12 @@ track, Track S). Each gets its own plan in its track; this plan only records tha
    play at true local scale; Austerlitz a 6 km map after the real field.
 2. **The real heights.** Decided 2026-10-24: the derived heightfield is committed, with ČÚZK's credit (CC BY 4.0).
 3. **The period map** to trace, and whether its licence allows tracing.
-4. **The draft page:** the plan makes the map engine's flat draft page a debug overlay of the lit view, not a view of its
-   own (one renderer, decision 0057). Confirm, since step 3 builds on it.
-5. **The demo world on `main`:** retire it when Austerlitz lands, or keep it as a second map file?
-6. **The light across the zoom:** north-west on the map, east-south-east in the world. Pick one, or turn between them
-   with the zoom.
+4. **The draft page.** Decided 2026-10-25: the flat draft page becomes debug overlays of the lit view, switched on in
+   the settings. For now an option anyone can set; later a developer setting only, not shown to players.
+5. **The demo world on `main`.** Decided 2026-10-25: kept as a point of reference, beside Austerlitz (step 5 writes it
+   as a second map file, so it is not a second hand-written world).
+6. **The light across the zoom:** north-west on the map, east-south-east in the world. Recommended (2026-10-25), for
+   the owner to confirm: the world's sun stays fixed (its light is baked once per map), and only the map view's relief
+   shading turns. Far out it is lit from the screen's top left, the cartographers' convention: lit from the bottom,
+   relief reads inverted, valleys as ridges. Across the staged zoom it turns to the world's sun, so the two agree at
+   the handover. Turning a hillshade is cheap; the world's baked light cannot turn.
