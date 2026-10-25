@@ -1,7 +1,7 @@
 // The bench's timeline (src/app/timeline.ts, docs/plans/active/c0-bench.md): going back to a tick and playing on gives
 // the world the first pass gave, orders logged after the tick included; the same tick is the same world however it
 // was reached; an order given there branches the timeline, and the session still replays; the saves stay evenly
-// spaced; a tick played again that gives another world is caught, and leaves the timeline as it was.
+// spaced; a pass that parts from the first (a hash, or an order's number) warns, and the timeline follows it.
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
@@ -136,12 +136,25 @@ describe('timeline', () => {
     const w = back(tl, 700)
     expect(w.meta[M_TICK]).toBe(700)
     expect(tl.warning).toMatch(/tick 600 played again/)
+    expect(tl.warnings).toBe(1)
     expect(tl.hashes.find(h => h.tick === 600)!.hash).toBe(right)
     expect(tl.hashes.every(h => h.tick <= 700)).toBe(true)
     const replay = { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name }
     expect(play({ ...replay, seed: 1, ticks: 700, log: tl.log }, data, cr, scenario, tl.hashes)).toBeNull()
   })
-  it('a tick back starts from a recent world, and on from the world as it stands loads nothing', () => {
+  it("an order the world numbers otherwise than the log warns, takes the world's number, and the timeline follows", () => {
+    const tl = mkTimeline()
+    run(tl, begin(tl, fresh()), 900, [500])
+    tl.log[0] = { ...tl.log[0], seq: tl.log[0].seq + 7 }
+    const w = back(tl, 700)
+    expect(w.meta[M_TICK]).toBe(700)
+    expect(tl.warnings).toBe(1)
+    expect(tl.warning).toMatch(/numbered a logged order/)
+    expect(tl.hashes.every(h => h.tick <= 700) && tl.reached === 700).toBe(true)
+    const replay = { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name }
+    expect(play({ ...replay, seed: 1, ticks: 700, log: tl.log }, data, cr, scenario, tl.hashes)).toBeNull()
+  })
+  it('a tick back starts from a recent world, and going on starts from a copy of the world as it stands', () => {
     const tl = mkTimeline()
     let loads: number[] = []
     const counted = (bytes: Uint8Array) => {
@@ -153,10 +166,12 @@ describe('timeline', () => {
     const v = goTo(tl, 1189, fresh, counted, w)
     expect(v.meta[M_TICK]).toBe(1189)
     expect(loads).toEqual([1180])
+    // on from the world as it stands: a copy of it (loaded at its own tick), not a save
     loads = []
     const u = goTo(tl, 1250, fresh, counted, v)
-    expect(u).toBe(v)
-    expect(loads).toEqual([])
+    expect(u).not.toBe(v)
+    expect(loads).toEqual([1189])
+    expect(u.meta[M_TICK]).toBe(1250)
     // and to the tick it stands at: the same world, nothing done
     expect(goTo(tl, 1250, fresh, counted, u)).toBe(u)
   })

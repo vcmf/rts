@@ -22,6 +22,7 @@ import {
   issue,
   advanceTick,
   reissue,
+  serialize,
   M_TICK,
   HASH_EVERY,
 } from '../sim/index.ts'
@@ -56,9 +57,11 @@ export interface Timeline {
   dropped: Dropped[] // the orders the sim dropped, by tick, up to `reached`
   marks: Mark[]
   reached: number // the furthest tick played
-  warning: string // the last tick played again that gave another world ('' if none)
+  warning: string // the last divergence found ('' if none)
+  warnings: number // how many divergences were found: a new one is one more
 }
 
+/** An empty timeline. */
 export const mkTimeline = (): Timeline => ({
   log: [],
   next: 0,
@@ -70,15 +73,27 @@ export const mkTimeline = (): Timeline => ({
   marks: [],
   reached: 0,
   warning: '',
+  warnings: 0,
 })
 
-// keeps what the timeline holds up to tick t and forgets the rest
+/**
+ * Keeps what the timeline holds up to tick `t`, forgets the rest, and halves the save interval while the saves left
+ * would still fit at half of it.
+ */
 function cut(tl: Timeline, t: number): void {
   tl.snaps = tl.snaps.filter(s => s.tick <= t)
   tl.recent = tl.recent.filter(s => s.tick <= t)
   tl.hashes = tl.hashes.filter(h => h.tick <= t)
   tl.dropped = tl.dropped.filter(d => d.tick <= t)
   tl.reached = t
+  while (tl.every > SNAP_EVERY && Math.floor(t / (tl.every / 2)) <= MAX_SNAPS) tl.every /= 2
+}
+
+/** A pass that parts from the first at tick `t`: says so, and the timeline follows it from `t` on. */
+function diverge(tl: Timeline, t: number, why: string): void {
+  tl.warning = `timeline: ${why}; the timeline follows this pass from tick ${t}`
+  tl.warnings++
+  cut(tl, t - 1)
 }
 
 /** A new order from the player at the world's tick: drops what the timeline held past it (a branch), then logs it. */
@@ -87,8 +102,6 @@ export function order(tl: Timeline, w: World, cmd: Parameters<typeof issue>[1]):
   tl.log.length = tl.next
   cut(tl, t)
   tl.marks = tl.marks.filter(m => m.tick <= t)
-  // the interval halves again while the saves left, at half of it, would still fit
-  while (tl.every > SNAP_EVERY && Math.floor(t / (tl.every / 2)) <= MAX_SNAPS) tl.every /= 2
   const s = issue(w, cmd, tl.log)
   tl.next = tl.log.length
   return s
@@ -99,24 +112,27 @@ export function mark(tl: Timeline, w: World, note: string): void {
   tl.marks.push({ tick: w.meta[M_TICK], note })
 }
 
-// hands the world the logged orders stamped for its next tick, as a replay does (`reissue`, src/sim/replay.ts). An
-// order the world numbers otherwise than the log did takes the world's number in the log, and the timeline says so
+/**
+ * Hands the world the logged orders stamped for its next tick, as a replay does (`reissue`, src/sim/replay.ts). An
+ * order the world numbers otherwise than the log did is a pass that has parted from the first: it takes the world's
+ * number in the log, and the timeline follows this pass from the order's tick.
+ */
 function feed(tl: Timeline, w: World): void {
-  while (true) {
+  for (;;) {
     const k = reissue(w, tl.log, tl.next)
     if (typeof k === 'number') {
       tl.next = k
       return
     }
-    tl.warning = `timeline: at tick ${k.tick} the world numbered a logged order ${k.got}, the log ${k.expected}`
-    const s = w.pending[w.pending.length - 1]
-    tl.log[tl.next] = s
-    tl.next++
+    diverge(tl, k.tick, `at tick ${k.tick} the world numbered a logged order ${k.got}, the log ${k.expected}`)
+    tl.log[tl.next++] = w.pending[w.pending.length - 1]
   }
 }
 
-// keeps the world as it stood at tick t (its bytes, as the tick hashed it, before the next tick's orders were handed:
-// `next` is how much of the log they hold) among the saves and the recent ones
+/**
+ * Keeps the world as it stood at tick `t` (its bytes, as the tick hashed it, before the next tick's orders were
+ * handed: `next` is how much of the log they hold) among the saves and the recent ones.
+ */
 function keep(tl: Timeline, t: number, bytes: Uint8Array, next: number): void {
   const save = { tick: t, next, bytes }
   if (t % tl.every === 0 && !tl.snaps.some(s => s.tick === t)) {
@@ -139,17 +155,12 @@ function keep(tl: Timeline, t: number, bytes: Uint8Array, next: number): void {
 export function step(tl: Timeline, w: World): ReturnType<typeof advanceTick> {
   const r = advanceTick(w)
   if (r.hash !== null) {
-    const H = tl.hashes
-    let k = H.length - 1
-    while (k >= 0 && H[k].tick > r.tick) k--
-    if (k >= 0 && H[k].tick === r.tick && H[k].hash !== r.hash) {
-      // the first pass and this one part here: this one is the truth from here on
-      tl.warning = `timeline: tick ${r.tick} played again gave another world; the timeline follows it from here`
-      cut(tl, r.tick - 1)
-      k = tl.hashes.length - 1
-    }
-    if (!(k >= 0 && tl.hashes[k].tick === r.tick))
-      {tl.hashes.splice(k + 1, 0, { tick: r.tick, hash: r.hash, sections: [] })}
+    // hash points stand every HASH_EVERY ticks from the first, so a point's index follows from its tick
+    const k = r.tick / HASH_EVERY - 1
+    if (k > tl.hashes.length) throw new Error(`timeline: no hash point before tick ${r.tick}`)
+    const had = tl.hashes[k]
+    if (had && had.hash !== r.hash) diverge(tl, r.tick, `tick ${r.tick} played again gave another world`)
+    if (!tl.hashes[k]) tl.hashes.push({ tick: r.tick, hash: r.hash, sections: [] })
   }
   if (r.tick > tl.reached) tl.dropped.push(...r.dropped)
   tl.reached = Math.max(tl.reached, r.tick)
@@ -168,9 +179,9 @@ export function begin(tl: Timeline, w: World): World {
 
 /**
  * The world at tick `T`, played on as the first pass was: `now` itself when it stands at `T`; else from the latest of
- * `now`, a recent world and a save that stands at or before `T` (`load` makes a world of a save, the scenario
- * attached), or a fresh one. It works on a copy of the timeline and changes `tl` only once the world is reached, so a
- * failure leaves the page where it was.
+ * `now` (a copy of it), a recent world and a save that stands at or before `T` (`load` makes a world of bytes, the
+ * scenario attached), or a fresh one. It works on copies of the timeline and of `now`, and changes `tl` only once the
+ * world is reached, so a failure leaves the page where it was.
  */
 export function goTo(
   tl: Timeline,
@@ -182,6 +193,8 @@ export function goTo(
   if (now && now.meta[M_TICK] === T) return now
   const c: Timeline = {
     ...tl,
+    log: [...tl.log],
+    marks: [...tl.marks],
     snaps: [...tl.snaps],
     recent: [...tl.recent],
     hashes: [...tl.hashes],
@@ -189,7 +202,7 @@ export function goTo(
   }
   const saved = [...c.snaps, ...c.recent].filter(s => s.tick <= T).sort((a, b) => b.tick - a.tick)[0]
   let w: World
-  if (now && now.meta[M_TICK] < T && (!saved || now.meta[M_TICK] >= saved.tick)) w = now
+  if (now && now.meta[M_TICK] < T && (!saved || now.meta[M_TICK] >= saved.tick)) w = load(serialize(now))
   else if (saved) {
     w = load(saved.bytes)
     // the save holds the log as far as it had been handed when the tick hashed the world: the orders for the next

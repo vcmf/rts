@@ -50,6 +50,8 @@ import { mkTimeline, order, step, mark as markAt, goTo as timelineGoTo } from '.
 // the soldier layer steps once a frame, up to MEN_DT of game time (tested at that step); a longer frame
 // takes more steps, at most MEN_STEPS (then the men fall behind the sim and catch up)
 const SPEEDS = [0, 0.25, 0.5, 1, 2, 4, 8]
+// the most going to a time plays on at a press: five minutes
+const JUMP = 300 * TICK_HZ
 const MEN_DT = 0.2
 const MEN_STEPS = 4
 
@@ -142,17 +144,21 @@ async function main(): Promise<void> {
   // hash points without section hashes: those would cost a second serialization each time
   // a tick; a warning from the timeline (a tick played again gave another world) pauses the page and says so
   const tick = (): boolean => {
-    const was = tl.warning
+    const was = tl.warnings
     const r = step(tl, w)
     layer.sync(0, r.departed)
     for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
-    if (tl.warning === was) return true
+    return !warned(was)
+  }
+  // a divergence the timeline found since it counted `was`: pauses the page and says so
+  function warned(was: number): boolean {
+    if (tl.warnings === was) return false
     paused = true
     acc = 0
     note = tl.warning
     noteT = performance.now()
     console.warn(tl.warning)
-    return false
+    return true
   }
 
   // the frame: ticks owed at the game speed, then the men (in game time), then the drawing
@@ -253,8 +259,15 @@ async function main(): Promise<void> {
   const goTo = (target: number) => {
     // back to the start, or on as far as the scenario's time limit (ten minutes past the furthest tick without one)
     const end = scenario.minutes ? Math.round(scenario.minutes * 60 * TICK_HZ) : tl.reached + 600 * TICK_HZ
-    const T = Math.max(0, Math.min(Math.round(target), end))
+    let T = Math.max(0, Math.min(Math.round(target), end))
+    // on by at most five minutes at a press, so the page answers again soon (press G again to go on)
+    if (T > w.meta[M_TICK] + JUMP) {
+      T = w.meta[M_TICK] + JUMP
+      note = `went on five minutes, to ${clock(T / TICK_HZ)}: G again to go on`
+      noteT = performance.now()
+    }
     if (T === w.meta[M_TICK]) return
+    const was = tl.warnings
     let got: World
     try {
       got = timelineGoTo(tl, T, fresh, load, w)
@@ -266,6 +279,7 @@ async function main(): Promise<void> {
       return
     }
     w = got
+    warned(was)
     layer = new SoldierLayer(w, scene)
     layer.sync(0, [])
     map.w = w
@@ -664,8 +678,8 @@ async function main(): Promise<void> {
         const sp = speed
         speed = 1
         // stops where the timeline warns, as the page does
-        const was = tl.warning
-        for (let n = Math.round(sec * 30); n > 0 && tl.warning === was; n--) advance(1 / 30)
+        const was = tl.warnings
+        for (let n = Math.round(sec * 30); n > 0 && tl.warnings === was; n--) advance(1 / 30)
         speed = sp
         draw()
       },
