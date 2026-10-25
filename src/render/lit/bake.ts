@@ -3,6 +3,10 @@
 // the prototype's relief bake (prototypes/staff-map.html bakeRelief, docs/plans/active/relief-shading.md), with the
 // light's direction a parameter instead of the north-west diagonal.
 import type { Layers } from '../../map/apply.ts'
+import type { Feature, Pt } from '../../map/schema.ts'
+import type { Resolved } from '../../map/resolve.ts'
+import { inRing } from '../../map/geometry.ts'
+import { ringsOf } from '../../map/reach.ts'
 import { sstep } from '../../look/noise.ts'
 
 // the light: toward it, one of the grid's eight directions (x east, z north), and its height
@@ -124,17 +128,145 @@ export function bakeRelief(heights: Float64Array, nx: number, nz: number, cell: 
 
 /**
  * The cells' mask, as RGBA bytes, the south row first: R the water's depth (0..1 over 0..WATER_FULL m), G the woods
- * (vegetation that grows as a stand), B the water; A unused.
+ * (vegetation that grows as a stand), B the water, A the yards (a village's, a farm's, ground.yard).
  */
-export function bakeMasks(L: Pick<Layers, 'nx' | 'nz' | 'veg' | 'water' | 'depth' | 'table'>): Uint8Array {
+export function bakeMasks(
+  L: Pick<Layers, 'nx' | 'nz' | 'veg' | 'water' | 'depth' | 'table' | 'built' | 'ground'>,
+): Uint8Array {
   const n = L.nx * L.nz
   const out = new Uint8Array(n * 4)
   const wood = L.table.map(r => r.attrs.growth === 'stand')
+  // a village's or a farm's trodden yard, and a yard of its own
+  const yard = L.table.map(r => /^(built\.(village|farm)|ground\.yard)(\.|$)/.test(r.kind))
   for (let c = 0; c < n; c++) {
     out[c * 4] = Math.round(Math.min(1, L.depth[c] / 1000 / WATER_FULL) * 255)
     out[c * 4 + 1] = L.veg[c] && wood[L.veg[c] - 1] ? 255 : 0
     out[c * 4 + 2] = L.water[c] ? 255 : 0
-    out[c * 4 + 3] = 255
+    out[c * 4 + 3] = (L.built[c] && yard[L.built[c] - 1]) || (L.ground[c] && yard[L.ground[c] - 1]) ? 255 : 0
+  }
+  return out
+}
+
+// the ink's distance field (M6b): signed metres to the nearest edge, stored over ±INK_RANGE in a byte
+export const INK_RANGE = 8 // m
+
+/** A line feature drawn as ink: its centreline and half-width; or an area: its rings. */
+interface Inked {
+  line?: Pt[]
+  rings?: Pt[][]
+  half: number // m: a line's half-width (0 for an area)
+}
+
+/**
+ * The ink's distance fields on the cells, as RGBA bytes, the south row first: per channel the signed distance from a
+ * cell's centre to the nearest edge of a kind of feature (negative inside), over ±INK_RANGE m, 128 at the edge:
+ * R the ways (their two edges), G the water (a stream's banks, a pond's shore), B the barriers, A the woods. The shader
+ * fills the water and the woods from these, not from the cells, so their edges are the shapes'. A distance field
+ * reads between its texels as straight as the edge itself, so the hairlines stay crisp at every zoom.
+ */
+export function bakeInk(
+  grid: { x0: number; z0: number; cell: number; nx: number; nz: number },
+  layers: { way: Inked[]; water: Inked[]; barrier: Inked[]; wood: Inked[] },
+): Uint8Array {
+  const { x0, z0, cell, nx, nz } = grid
+  const out = new Uint8Array(nx * nz * 4)
+  const field = (items: Inked[], ch: number) => {
+    const sd = new Float32Array(nx * nz).fill(INK_RANGE)
+    // the cells within reach of a box, with each one's centre
+    const each = (box: number[], fn: (c: number, x: number, z: number) => void) => {
+      const i0 = Math.max(0, Math.floor((box[0] - x0) / cell))
+      const i1 = Math.min(nx - 1, Math.floor((box[2] - x0) / cell))
+      const j0 = Math.max(0, Math.floor((box[1] - z0) / cell))
+      const j1 = Math.min(nz - 1, Math.floor((box[3] - z0) / cell))
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) fn(j * nx + i, x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell)
+      }
+    }
+    for (const it of items) {
+      const reach = it.half + INK_RANGE
+      if (it.line) {
+        for (let k = 1; k < it.line.length; k++) {
+          const a = it.line[k - 1]
+          const b = it.line[k]
+          const box = [
+            Math.min(a[0], b[0]) - reach,
+            Math.min(a[1], b[1]) - reach,
+            Math.max(a[0], b[0]) + reach,
+            Math.max(a[1], b[1]) + reach,
+          ]
+          each(box, (c, x, z) => {
+            const v = segDistance(a, b, x, z) - it.half
+            if (v < sd[c]) sd[c] = v
+          })
+        }
+      }
+      if (it.rings) {
+        const pts = it.rings[0]
+        const box = [
+          Math.min(...pts.map(p => p[0])) - INK_RANGE,
+          Math.min(...pts.map(p => p[1])) - INK_RANGE,
+          Math.max(...pts.map(p => p[0])) + INK_RANGE,
+          Math.max(...pts.map(p => p[1])) + INK_RANGE,
+        ]
+        each(box, (c, x, z) => {
+          let d = Infinity
+          for (const ring of it.rings!) {
+            for (let k = 0; k < ring.length; k++) {
+              d = Math.min(d, segDistance(ring[k], ring[(k + 1) % ring.length], x, z))
+            }
+          }
+          const inside = inRing(it.rings![0], [x, z]) && !it.rings!.slice(1).some(h => inRing(h, [x, z]))
+          const v = inside ? -d : d
+          if (v < sd[c]) sd[c] = v
+        })
+      }
+    }
+    for (let c = 0; c < sd.length; c++) {
+      out[c * 4 + ch] = Math.round(128 + (Math.max(-INK_RANGE, Math.min(INK_RANGE, sd[c])) / INK_RANGE) * 127)
+    }
+  }
+  field(layers.way, 0)
+  field(layers.water, 1)
+  field(layers.barrier, 2)
+  field(layers.wood, 3)
+  return out
+}
+
+/** The distance from (x, z) to the segment a–b, m. */
+function segDistance(a: Pt, b: Pt, x: number, z: number): number {
+  const dx = b[0] - a[0]
+  const dz = b[1] - a[1]
+  const l2 = dx * dx + dz * dz
+  const t = l2 > 0 ? Math.min(1, Math.max(0, ((x - a[0]) * dx + (z - a[1]) * dz) / l2)) : 0
+  const ex = a[0] + dx * t - x
+  const ez = a[1] + dz * t - z
+  return Math.sqrt(ex * ex + ez * ez)
+}
+
+/**
+ * The ink of a compiled map's features: its ways, water and barriers, each with its shape and half-width from its
+ * resolved attributes (a barrier's thickness in cells).
+ */
+export function inkOf(features: Feature[], table: Resolved[], cell: number): Parameters<typeof bakeInk>[1] {
+  const byId = new Map(table.map(r => [r.id, r]))
+  const out: Parameters<typeof bakeInk>[1] = { way: [], water: [], barrier: [], wood: [] }
+  for (const f of features) {
+    const r = byId.get(f.id)
+    if (!r) continue
+    const cat = r.kind.split('.')[0]
+    const width = typeof r.attrs.width === 'number' ? r.attrs.width : 0
+    if (cat === 'way' && f.line) out.way.push({ line: f.line, half: width / 2 })
+    else if (cat === 'water' && f.line) out.water.push({ line: f.line, half: width / 2 })
+    else if (cat === 'water') {
+      const rings = ringsOf(f)
+      if (rings) out.water.push({ rings, half: 0 })
+    } else if (r.attrs.growth === 'stand') {
+      const rings = ringsOf(f)
+      if (rings) out.wood.push({ rings, half: 0 })
+    } else if (cat === 'barrier' && f.line) {
+      const cells = typeof r.attrs.thickness === 'number' ? r.attrs.thickness : 2
+      out.barrier.push({ line: f.line, half: (cells * cell) / 2 })
+    }
   }
   return out
 }

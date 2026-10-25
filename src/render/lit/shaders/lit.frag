@@ -2,16 +2,24 @@
 precision highp float;
 // The lit map view (docs/plans/active/m6-lit-view.md, decision 0058), ported from the prototype's lit and shaded paths
 // (prototypes/staff-map.html TER_FS): the paper and its worn border, the woods darkening it, the shaded relief in the
-// paper's hues, the water as a wash sunk below its banks, contours every 5 m and 25 m, the paper's grain; or the flat
+// paper's hues, the water as a wash sunk below its banks, contours every 5 m and 25 m, the yards, the ink of the ways,
+// banks and barriers from their shapes (M6b), the paper's grain; or the flat
 // draft's colours (a debug setting). Every texture but the paper's runs south row first: v grows with z (north).
 varying vec3 vW;
 uniform sampler2D uHeight;   // the node heights, m above the datum: one float a node, read by texelFetch
 uniform sampler2D uRelief;   // R the slope's light, G the cast shadow (1 lit), B the exposure (0.5 even), on the nodes
 uniform sampler2D uMask;     // R the water's depth (0..1), G the woods, B the water, on the cells
+uniform sampler2D uInk;      // the ink's distance fields on the cells: R ways, G water, B barriers, A woods (signed m)
 uniform sampler2D uPaperT, uFlatT;
 uniform vec2 uX0Z0, uSize, uNodes, uCells, uLightXZ, uLambert;
-uniform float uCell, uDatum, uFlat, uShadeFloor, uShadeTop;
-uniform vec3 uPaper, uWaterW;
+uniform float uCell, uDatum, uFlat, uShadeFloor, uShadeTop, uInkRange;
+uniform vec3 uPaper, uWaterW, uLine, uBarrier;
+
+// a hairline where a distance field crosses 0: about a pixel wide at any zoom
+float hair(float sd) {
+  float px = sd / max(fwidth(sd), 1e-5);
+  return 1.0 - smoothstep(0.5, 1.3, abs(px));
+}
 
 // the height at a point, bilinear between the four nodes round it (m above sea level)
 float heightAt(vec2 xz) {
@@ -30,6 +38,11 @@ void main() {
   float edge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
   vec2 cuv = clamp(uv, 0.0, 1.0);
   vec4 M = texture2D(uMask, cuv) * inside;
+  /* the ink's distance fields (bakeInk), signed metres to the nearest edge; water and woods are filled from them, so
+     their edges are the shapes', not the cells' */
+  vec4 I = (texture2D(uInk, cuv) * 255.0 - 128.0) / 127.0 * uInkRange;
+  float waterA = clamp(0.5 - I.g / max(fwidth(I.g), 1e-5), 0.0, 1.0) * inside;
+  float woodA = clamp(0.5 - I.a / max(fwidth(I.a), 1e-5), 0.0, 1.0) * inside;
 
   /* the paper */
   float g1 = texture2D(uPaperT, vW.xz / 95.0).r, g2 = texture2D(uPaperT, vW.xz / 900.0 + 0.37).r;
@@ -40,7 +53,7 @@ void main() {
                smoothstep(0.0, 0.006, edge) * (1.0 - smoothstep(0.006, 0.02, edge)) * inside);   /* a thin worn border */
   vec3 mapC = paper;
   /* woods: a dark warm grey, the paper itself darkened */
-  mapC = mix(mapC, paper * vec3(0.6, 0.57, 0.52), smoothstep(0.08, 0.2, M.g) * 0.85 * inside);
+  mapC = mix(mapC, paper * vec3(0.6, 0.57, 0.52), woodA * 0.85);
   vec3 flatPaper = mapC;   /* the paper before the relief: water lies flat */
 
   /* the shaded relief, in the paper's hues: warm grey-brown in the shade, a touch of ochre on the lit slopes */
@@ -58,7 +71,7 @@ void main() {
   /* water as a wash on the paper, sunk below the land: the bank toward the light shades the water under it, the far
      bank catches the light */
   {
-    float D = M.r, water = M.b;
+    float D = M.r, water = waterA;
     if (D > 0.004) {
       vec2 du = vec2(4.0 / uCells.x, 0.0), dv = vec2(0.0, 4.0 / uCells.y);   /* 4 cells: the 8-bit depth does not band */
       vec2 gW = vec2(texture2D(uMask, cuv + du).r - texture2D(uMask, cuv - du).r,
@@ -84,7 +97,25 @@ void main() {
     float hx = h / 25.0, fwx = max(fwidth(hx), 1e-4), dx = abs(fract(hx - 0.5) - 0.5) / fwx;
     float minorC = (1.0 - smoothstep(0.5, 1.3, dc)) * (1.0 - smoothstep(0.22, 0.5, fwc));
     float indexC = (1.0 - smoothstep(0.9, 1.9, dx)) * (1.0 - smoothstep(0.3, 0.7, fwx));
-    mapC = mix(mapC, vec3(0.42, 0.30, 0.16), max(minorC * 0.25, indexC * 0.45) * inside * (1.0 - M.b));
+    mapC = mix(mapC, vec3(0.42, 0.30, 0.16), max(minorC * 0.25, indexC * 0.45) * inside * (1.0 - waterA));
+  }
+
+  /* a village's or a farm's yard: the paper lighter, trodden */
+  mapC = mix(mapC, mix(mapC, vec3(0.97, 0.96, 0.94), 0.55), M.a * 0.25);
+
+  /* the ink, from the features' shapes (bakeInk): signed metres to the nearest edge, a hairline where it is 0 */
+  {
+    /* zoomed out, a road's or a stream's two edges fall within a few pixels and would read as one heavy line: they
+       fade from a metre a pixel to three */
+    float far = 1.0 - 0.55 * smoothstep(1.0, 3.0, fwidth(vW.x) + fwidth(vW.z));
+    /* a road's ground a little lighter, its two edges in ink */
+    mapC = mix(mapC, min(mapC * 1.06 + 0.02, vec3(1.0)), step(I.r, 0.0) * 0.6 * inside);
+    mapC = mix(mapC, uLine, hair(I.r) * 0.85 * far * inside);
+    /* the water's banks, and a pond's lining inside its shore */
+    mapC = mix(mapC, uLine, hair(I.g) * 0.7 * far * inside);
+    mapC = mix(mapC, uLine, (hair(I.g + 4.0) * 0.28 + hair(I.g + 9.0) * 0.16) * step(I.g, -2.0) * inside);
+    /* hedges and walls: solid, dark */
+    mapC = mix(mapC, uBarrier, max(smoothstep(0.0, -0.4, I.b) * 0.75, hair(I.b) * 0.6) * inside);
   }
 
   vec3 col = mapC * (0.93 + (g1 - 0.5) * 0.16 + (fine - 0.5) * 0.12);   /* the paper's grain */

@@ -33,6 +33,7 @@ export interface Compiled {
   // the lit view's bakes (src/render/lit/bake.ts): the relief on the nodes, the masks on the cells, RGBA
   relief: ArrayBuffer
   masks: ArrayBuffer
+  ink: ArrayBuffer // the ink's distance field on the cells (bakeInk), RGBA
   light: LightDir // the light the relief was baked for: the shader's water banks take the same
   ms: { validate: number; apply: number; draw: number; bake: number }
 }

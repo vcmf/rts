@@ -115,3 +115,23 @@ settings (the owner, 2026-10-25).
   - picking a map keeps the other settings in the URL (`?tilt=`);
   - `project` and `unproject` read the camera's matrix and its inverse, kept with the canvas's size in `setCamera`:
     no layout read or matrix inversion per point.
+
+## M6b: ink from the features' shapes (decision 0065)
+
+- `bakeInk` (`src/render/lit/bake.ts`), in the worker: per cell, the signed distance to the nearest edge of the ways,
+  the water and the barriers (R, G, B, ±8 m in a byte), from the expanded features' shapes and their resolved widths
+  (`inkOf`; a barrier's thickness in cells). The shader draws hairlines where a field is 0, a pond's lining 4 m and
+  9 m inside its shore, the barriers solid, a road's ground a little lighter; the edges fade from a metre a pixel to
+  three, so the far map does not darken with them. The mask's A is now the yards (a village's, a farm's, `ground.yard`).
+- The water and the woods are filled from their fields too (the woods' in the ink's A), so their edges are the shapes',
+  not the 2 m cells' staircase; the cell mask keeps the depth (for the banks' shading) and the yards.
+- The houses (`LitView.setHouses`): `built.house`, `.barn` and `.church` footprints as boxes at their wall height,
+  their faces lit by the map's light in the prototype's colours, their shadows one hull each away from the light; the
+  shadows drawn over the paper, the boxes over both (rendering groups).
+- The names: `zone.label` texts in italic on the overlay, with a paper halo, in the lit view.
+- **Results:** the generated map's village stands raised and lit along its road, the brook reads as a light channel
+  with fine banks at the overview and as two banks up close, the road as a double hairline, the labels in place;
+  every map in `maps/` draws with no console error. The bakes for the generated map: 81–121 ms in the worker.
+- **Open:** up close, a stream's carved channel still steps in the relief's shading and contours: `apply` carves it
+  cell by cell into the heights. A carving that follows the bank's true distance would smooth it (the heights, not
+  the view).

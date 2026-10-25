@@ -173,10 +173,18 @@ function onReply(e: MessageEvent<CompileReply>): void {
       height,
       relief: new Uint8Array(r.relief),
       masks: new Uint8Array(r.masks),
+      ink: new Uint8Array(r.ink),
       flat: { w: r.w, h: r.h, rgba: new Uint8Array(r.rgba) },
     })
+    lit?.setHouses(housesOf(r))
     // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
-    current = { ...r, relief: new ArrayBuffer(0), masks: new ArrayBuffer(0), rgba: new ArrayBuffer(0) }
+    current = {
+      ...r,
+      relief: new ArrayBuffer(0),
+      masks: new ArrayBuffer(0),
+      ink: new ArrayBuffer(0),
+      rgba: new ArrayBuffer(0),
+    }
     // the first frame after a new map may come before its shader compiles: draw again once it is ready (one wait at
     // a time; a shader that never compiles is reported)
     if (lit && !readyWait) {
@@ -332,6 +340,46 @@ function outline(f: Feature): void {
     ctx.fillText(f.id, label[0] + 4, label[1] - 4)
   }
 }
+/** The compiled map's buildings as the lit view stands them: each footprint, its wall height, and whether a church. */
+function housesOf(c: Compiled): { ring: Pt[]; height: number; church: boolean }[] {
+  const byId = new Map(c.table.map(r => [r.id, r]))
+  return c.map.features.flatMap(f => {
+    const r = byId.get(f.id)
+    if (!r || !/^built\.(house|barn|church)(\.|$)/.test(r.kind)) return []
+    const ring = f.area?.[0] ?? (f.circle ? circleRing(f.circle[0], f.circle[1]) : null)
+    if (!ring) return []
+    const wall = typeof r.attrs.wall === 'number' ? r.attrs.wall : 4
+    return [{ ring, height: wall, church: r.kind.startsWith('built.church') }]
+  })
+}
+const circleRing = (c: Pt, rad: number): Pt[] =>
+  Array.from({ length: 12 }, (_, k): Pt => [
+    c[0] + rad * Math.cos((k / 12) * 2 * Math.PI),
+    c[1] + rad * Math.sin((k / 12) * 2 * Math.PI),
+  ])
+
+/** The map's names (zone.label features): italic, with a paper halo, at their point or the middle of their line. */
+function drawNames(): void {
+  if (!current) return
+  const byId = new Map(current.table.map(r => [r.id, r]))
+  ctx.font = 'italic 15px Georgia, "Times New Roman", serif'
+  ctx.textAlign = 'center'
+  ctx.lineJoin = 'round'
+  for (const f of current.map.features) {
+    const r = byId.get(f.id)
+    if (!r || !r.kind.startsWith('zone.label') || typeof r.attrs.text !== 'string' || !r.attrs.text) continue
+    const at = f.point ?? (f.line ? f.line[Math.floor((f.line.length - 1) / 2)] : null)
+    const s = at && toScreen(at[0], at[1])
+    if (!s) continue
+    ctx.lineWidth = 3
+    ctx.strokeStyle = 'rgba(236, 222, 186, 0.85)'
+    ctx.strokeText(r.attrs.text, s[0], s[1])
+    ctx.fillStyle = '#3a3128'
+    ctx.fillText(r.attrs.text, s[0], s[1])
+  }
+  ctx.textAlign = 'start'
+}
+
 // where a feature's id is written: its point, the middle of its line, its area's first corner
 function anchor(f: Feature): Pt | null {
   if (f.point) return f.point
@@ -378,6 +426,7 @@ function draw(): void {
   groundPath(corners, true)
   ctx.stroke()
   ctx.setLineDash([])
+  if (mode.value !== 'flat') drawNames()
   if (showOutlines.checked) for (const f of current.map.features) outline(f)
   tint()
 }
