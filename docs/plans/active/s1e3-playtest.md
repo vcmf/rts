@@ -122,7 +122,7 @@ throwaway probes: shots fired per formation, positions over time, results over e
 | The lines arrived one at a time | different paths and the marsh | three legs: the north bank, a halt at about 130 m to dress, the final advance together |
 | The batteries never fired | each faced straight ahead (arc ±20°) from a flank where no enemy came | yours stands on your first line's eastern flank, turned 25° inwards: its arc sweeps the ground in front of the line, which no friend masks. Side 1's stands west of its first line, turned 25° inwards: it fires past its line while that comes down, and is masked by it once it closes |
 | One charge put a whole side in square for 4 minutes | the regiment charged into the middle of the line, then rested and stood within 200 m of every battalion | it charges your battery on the flank, then rides back: only the battalion beside the battery squares, for about 3 minutes (the rule is unchanged; a rule change was tried and withdrawn, see the review) |
-| The regiment loitered in your lines for 30 minutes | the plan ended with the charge | it charges your battery, then rides back over the stream (a timed step, 630 s: it moves once its rest is over; a charge ends by clearing its orders, so a move appended to it is lost) |
+| The regiment loitered in your lines for 30 minutes | the plan ended with the charge | it charges your battery, then rides back over the stream (a timed step, 630 s: it moves once its rest is over; a charge ends by clearing its orders, so a move appended to it is lost; given again at 750 s and 870 s, since a melee that ends in a pursuit or a recoil clears a move queued behind it) |
 | A standing defender won easily | a halted line fires from 250 m and a marching one cannot; the defender's battery swept the approach | side 1's infantry are veterans (quality 0.85) and overlap your line; its regiment goes for your guns |
 | Nothing was decided in 40 minutes; the limit gave a draw | at `end.broken` 0.5 a side whose first line had routed fought on, and its rallied battalions (at the map's edge) counted as in the fight | `end.broken` 0.65: a side with 35% of its men out of the fight is broken, and the battle is decided at 17–20 minutes. The quiet after it remains: the rallied battalions come back into the count, and nothing more happens (the result stands; the open question is in `docs/systems/sides.md`) |
 | Side 1's second line never fought | the plan halted it 100 m behind | in column behind the centre, it halts on the north bank clear of the stream, and at 15 minutes comes up to about 25 m behind the centre's two, beyond the hedge they crossed, to fill the line as it breaks |
@@ -216,3 +216,20 @@ commit with `-X ours`, then `npm run format` and long comments rewrapped by hand
 - a session file edited by hand with a mark out of tick order, past the end or with a note that is not text lost
   marks silently: the report refuses it with the mark's number (`checkMarks`, tested);
 - this plan's table treated S1e-3b as a PR of its own, and "Worth watching" asked about half the men out.
+
+**Round 1 of PR #51** (`/code-review high`, one severe finding; a second round follows). Fixed:
+- **Severe:** a formation that left the field was always reported as side 0's: the report read its side after the
+  reap had zeroed its row. `play`'s observer gets each tick's result; the report keeps each formation's name and
+  side itself, names one that left the field with its men (from the tick's departures), and one that vanished
+  without leaving as destroyed;
+- the report with no orders played on to the scenario's limit after the end, burying the end and the table: it
+  stops a minute after the end. The command line refuses minutes that are not a positive number, and minutes
+  given with a session file;
+- `check:app` played the battle's session twice (a replay, then the report, which checks the hashes again): once;
+- the mark's prompt swallowed the release of anything held (space to pan, a drag): after it, they let go, as on a
+  blur (which now also ends a drag);
+- the regiment's ride back was lost if it was in melee at 630 s and the melee ended in a pursuit or a recoil (both
+  clear its orders): the order is given again at 750 s and 870 s. With no orders the battle is the same on all
+  eight seeds, every formation in the same place for 40 minutes; the plan's hash changes, so the `s1e-battle`
+  golden was regenerated.
+
