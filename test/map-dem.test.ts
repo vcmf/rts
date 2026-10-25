@@ -6,7 +6,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import type { Catalogue, MapFile } from '../src/map/schema.ts'
 import type { Dem, MapFiles } from '../src/map/dem.ts'
-import { decodeRdem, demHeight, encodeRdem, sha256 } from '../src/map/dem.ts'
+import { decodeRdem, demHeight, demRange, encodeRdem, sha256 } from '../src/map/dem.ts'
 import { checkFiles, validate } from '../src/map/validate.ts'
 import { apply, heightOf } from '../src/map/apply.ts'
 import { engineMap, layersOf } from '../maps/engine.ts'
@@ -80,6 +80,15 @@ describe('M5: heights between the nodes (bicubic)', () => {
       expect(fileHeight(d, x, z)).toBeCloseTo(exact(x, z), 9)
     }
   })
+  it('never overshoots the nodes it reads, even past a sharp break (a quarry lip)', () => {
+    const step = decodeRdem(rdem(20, 20, 5, i => (i < 10 ? 0 : 5000)))
+    const [lo, hi] = demRange(step, [-50, -50, 50, 50])
+    for (let x = -20; x <= 20; x += 0.5) {
+      const h = demHeight(step, x, 0)
+      expect(h).toBeGreaterThanOrEqual(lo)
+      expect(h).toBeLessThanOrEqual(hi)
+    }
+  })
   it('a 2 m profile across node lines has a smooth slope: its second differences are constant', () => {
     const h = Array.from({ length: 60 }, (_, k) => fileHeight(d, -60 + 2 * k, 17))
     const d2 = h.slice(2).map((v, k) => v - 2 * h[k + 1] + h[k])
@@ -133,6 +142,30 @@ describe('M5: relief.dem in apply', () => {
     expect(mid).toBeGreaterThan(lo)
     expect(mid).toBeLessThan(hi)
   })
+  it('reads its shift and edge from a preset, as from the feature', () => {
+    const own = base()
+    own.features[0].shift = { x: 30, z: -40 }
+    const preset = base()
+    preset.presets = { moved: { kind: 'relief.dem', shift: { x: 30, z: -40 } } }
+    preset.features = [{ id: 'all', preset: 'moved', source: 'd' }]
+    expect(Buffer.from(compile(preset).height.buffer).equals(Buffer.from(compile(own).height.buffer))).toBe(true)
+    const far = base()
+    far.presets = { moved: { kind: 'relief.dem', shift: { x: 150, z: 0 } } }
+    far.features = [{ id: 'all', preset: 'moved', source: 'd' }]
+    expect(
+      checkFiles(far, cat, files())
+        .issues.map(i => i.message)
+        .join(),
+    ).toMatch(/past its file/)
+  })
+  it('sets the real ground over the base noise whatever their ids', () => {
+    const d = decodeRdem(FILE)
+    for (const noise of ['a-noise', 'z-noise']) {
+      const map = base()
+      map.features.push({ id: noise, kind: 'relief.base', height: 4, width: 50 })
+      expect(heightOf(compile(map), 20, 20)).toBeCloseTo(fileHeight(d, 20, 20) - 200, 6)
+    }
+  })
   it('gives the same bytes twice', () => {
     const a = compile(base())
     const b = compile(base())
@@ -150,6 +183,11 @@ describe('M5: what the validator and the file checks refuse', () => {
     ['a hash that is no hash', m => ((m.sources![0] as { hash?: string }).hash = 'abc'), /sha256/],
     ['a file in a folder', m => ((m.sources![0] as { file?: string }).file = '../x.rdem'), /beside the map/],
     ['a source key it does not know', m => ((m.sources![0] as Record<string, string>).url = 'x'), /must be/],
+    [
+      'a file on a source that is not a dem',
+      m => m.sources!.push({ id: 'old', kind: 'survey', file: '../x.bin' } as never),
+      /dem sources only/,
+    ],
     ['a piece that names no dem source', m => (m.features[0].source = 'invented'), /dem sources/],
     ['a map with real relief and no datum', m => delete (m as { datum?: number }).datum, /datum/],
     ['a missing file', () => {}, /not found/, new Map()],

@@ -7,9 +7,10 @@ import type { GenSpec } from './generators.ts'
 import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import type { Issue } from './catalogue.ts'
 import { CLEAR_KEYS, FOLLOW_KEYS, KEEPS_OFF } from './follow.ts'
-import { listOf } from './util.ts'
+import { listOf, num } from './util.ts'
 import type { Dem, MapFiles } from './dem.ts'
-import { DEM_SOURCE_KEYS, checkDemFiles } from './dem.ts'
+import { DEM_SOURCE_KEYS, checkDemFiles, demShift } from './dem.ts'
+import { resolve } from './resolve.ts'
 import {
   allowedIn,
   categoryOf,
@@ -20,7 +21,7 @@ import {
   kindMeta,
   kindStates,
 } from './catalogue.ts'
-import { kindMatches } from './reach.ts'
+import { boxOf, kindMatches } from './reach.ts'
 import {
   barrierProblem,
   inRing,
@@ -118,6 +119,9 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
         } else if (sources.has(s.id)) bad(null, `sources[${i}].id`, `"${s.id}" is used twice`)
         else {
           sources.add(s.id)
+          if (s.kind !== 'dem' && (s.file !== undefined || s.hash !== undefined)) {
+            bad(null, `sources[${i}]`, '"file" and "hash" belong to dem sources only')
+          }
           if (s.kind === 'dem') {
             // real heights (docs/plans/active/m5-relief.md): the file beside the map, pinned, with its credit
             const missing = DEM_SOURCE_KEYS.filter(k => typeof s[k] !== 'string' || !s[k])
@@ -773,20 +777,14 @@ const isDemKind = (kind: string): boolean => kind === 'relief.dem' || kind.start
 export function checkFiles(map: MapFile, cat: Catalogue, files: MapFiles): { issues: Issue[]; dems: Map<string, Dem> } {
   const spec = cat.attributes.height
   const range = { min: spec.min ?? -Infinity, max: spec.max ?? Infinity }
+  // each piece as apply reads it: its kind, edge and shift resolved (a preset may set them)
   const pieces = map.features.flatMap((f, i) => {
-    const kind = f.kind ?? (f.preset ? (map.presets?.[f.preset]?.kind as string | undefined) : undefined)
-    if (typeof kind !== 'string' || !isDemKind(kind)) return []
-    const edge = typeof f.edge === 'number' ? f.edge : 0
-    const ring = f.area?.[0]
-    const box: [number, number, number, number] = ring
-      ? [
-          Math.min(...ring.map(p => p[0])) - edge,
-          Math.min(...ring.map(p => p[1])) - edge,
-          Math.max(...ring.map(p => p[0])) + edge,
-          Math.max(...ring.map(p => p[1])) + edge,
-        ]
-      : [-map.extent.w / 2, -map.extent.h / 2, map.extent.w / 2, map.extent.h / 2]
-    return [{ f, i, box }]
+    const r = resolve(f, map, cat)
+    if (!isDemKind(r.kind)) return []
+    const edge = num(r.attrs.edge, 0)
+    const b = f.area ? boxOf(f, r.attrs) : [-map.extent.w / 2, -map.extent.h / 2, map.extent.w / 2, map.extent.h / 2]
+    const box: [number, number, number, number] = [b[0] - edge, b[1] - edge, b[2] + edge, b[3] + edge]
+    return [{ f, i, box, shift: demShift(r.attrs) }]
   })
   return checkDemFiles(map, files, pieces, range)
 }

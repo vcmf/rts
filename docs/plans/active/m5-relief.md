@@ -155,3 +155,24 @@ If 3 grows (the service's grid and limits), it becomes its own PR after 1–2.
 4. **Joining pieces:** a piece keeps its absolute heights, so one from higher ground stands as a mesa until an edit
    lowers it. A `lift` on the piece, or blending its difference to the ground under it, would join pieces without
    edits; decide when step 4 arranges Austerlitz.
+
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe. Three severe findings:
+  - a `shift` or `edge` set in a preset was ignored: `apply` and the file checks read them off the raw feature;
+  - the importer could write a pixel left unfilled (the middle of a wide hole) as 0 cm, a pit at the base;
+  - `relief.dem` and `relief.base` shared priority 0, so their ids decided whether the noise landed on the real
+    ground.
+
+  Fixed: the pieces are resolved (presets included) in `apply` and `checkFiles`; the importer refuses any pixel left
+  without data; `relief.dem` has priority 1, after the base. With them:
+  - the bicubic reading is clamped to the 4 × 4 nodes it reads, so it never overshoots them past a sharp break, and
+    the range check covers the box padded by a node: what passes the check is what `apply` writes;
+  - the reader allocates nothing per call: `apply` on Austerlitz from 3.5 s to 0.8 s;
+  - the page sends a heightfield to its worker only when the worker lacks that version, and the worker keeps the
+    bytes, which `checkFiles` remembers as hashed and decoded: a recompile of Austerlitz 0.7 s, against 2.2 s for
+    the first;
+  - a fetch that fails leaves only that file out, reported against its source;
+  - `file` and `hash` belong to dem sources only, and only dem sources' files are read;
+  - the piece's box is `boxOf`'s, and the Node reader of a map's files is `maps/map-files.ts`, not the CLI.
+  Tests for each severe one, the clamp and the non-dem source.

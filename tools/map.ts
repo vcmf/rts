@@ -13,7 +13,8 @@ import type { Catalogue, MapFile, Season } from '../src/map/schema.ts'
 import { SEASONS } from '../src/map/schema.ts'
 import type { Issue } from '../src/map/validate.ts'
 import { checkFiles, validate } from '../src/map/validate.ts'
-import type { Dem, MapFiles } from '../src/map/dem.ts'
+import type { Dem } from '../src/map/dem.ts'
+import { readMapFiles } from '../maps/map-files.ts'
 import { sha256 } from '../src/map/dem.ts'
 import { expand } from '../src/map/expand.ts'
 import { resolve } from '../src/map/resolve.ts'
@@ -31,18 +32,6 @@ export function expandedPath(file: string): string {
 }
 const show = (file: string, issues: Issue[]) => {
   for (const i of issues) console.log(`${file}: ${i.id ? `[${i.id}] ` : ''}${i.path || '(map)'}: ${i.message}`)
-}
-
-/** The files a map's sources name (its heightfields), read from beside the map file; a missing one is left out. */
-export function readMapFiles(file: string, map: MapFile): MapFiles {
-  const files: MapFiles = new Map()
-  for (const s of map.sources ?? []) {
-    const name = (s as { file?: unknown }).file
-    if (typeof name !== 'string') continue
-    const at = path.join(path.dirname(file), name)
-    if (fs.existsSync(at)) files.set(name, new Uint8Array(fs.readFileSync(at)))
-  }
-  return files
 }
 
 // the map, valid with its files, and its decoded heightfields

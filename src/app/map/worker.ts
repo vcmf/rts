@@ -31,10 +31,23 @@ self.onmessage = (e: MessageEvent<CompileRequest>) => {
     return
   }
   try {
-    compile(seq, map, cat, new Map(Object.entries(files ?? {}).map(([k, b]) => [k, new Uint8Array(b)])))
+    compile(seq, map, cat, held(files ?? {}))
   } catch (err) {
     fail('', `the compiler failed: ${(err as Error).message} (a bug, or a catalogue the validator does not check)`)
   }
+}
+
+// the heightfields this worker holds, by name: the version it was last sent and its bytes, kept across compiles so a
+// file is hashed and decoded once (checkFiles remembers the bytes it has read)
+const kept = new Map<string, { version: number; bytes: Uint8Array }>()
+function held(files: CompileRequest['files']): MapFiles {
+  const out: MapFiles = new Map()
+  for (const [name, f] of Object.entries(files)) {
+    if (f.bytes) kept.set(name, { version: f.version, bytes: new Uint8Array(f.bytes) })
+    const k = kept.get(name)
+    if (k && k.version === f.version) out.set(name, k.bytes)
+  }
+  return out
 }
 
 function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): void {

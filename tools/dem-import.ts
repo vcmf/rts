@@ -80,7 +80,10 @@ export async function importDem(
     north.set(await fetchRows(m.service, sr, m.cell, x0, zTop - r * m.cell, nx, rows), r * nx)
   }
   const { bad, lo, hi } = fillHoles(north, nx, nz)
-  if (bad > 0.05 * nx * nz) throw new Error(`${bad} of ${nx * nz} pixels have no data: is the crop inside Czechia?`)
+  // fillHoles refuses a crop with too many holes, and may leave the middle of a wide one unfilled: never written as
+  // a height (it would encode as the base, a pit)
+  const left = north.reduce((n, v) => n + (Number.isFinite(v) ? 0 : 1), 0)
+  if (left) throw new Error(`${left} of ${nx * nz} pixels have no data after filling: is the crop inside Czechia?`)
   const baseCm = Math.floor(lo * 100)
   if (Math.ceil(hi * 100) - baseCm > 0xffff) throw new Error(`heights ${lo}–${hi} m span more than an .rdem's 655 m`)
   const cm = new Uint16Array(nx * nz) // south row first

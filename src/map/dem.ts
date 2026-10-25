@@ -71,22 +71,50 @@ function cubic(t: number, p0: number, p1: number, p2: number, p3: number): numbe
 }
 
 /**
- * The height (m above sea level) at a point of the file's own frame, by bicubic (Catmull-Rom) interpolation
- * between its nodes; the nodes beyond its edges repeat the edge, so a point on the border reads the border.
+ * A reader of the file's heights (m above sea level) at points of its own frame, by bicubic (Catmull-Rom)
+ * interpolation between its nodes, clamped to the 4 × 4 nodes it reads, so it never overshoots them (a cubic can, by
+ * up to a quarter of their range, past a sharp break); nodes beyond the file's edges repeat the edge. It allocates
+ * nothing per call: it runs once per 2 m node of a map.
  */
-export function demHeight(d: Dem, x: number, z: number): number {
-  const h = demHalf(d)
-  const u = (x + h.x) / d.cell
-  const w = (z + h.z) / d.cell
-  const i = Math.min(d.nx - 2, Math.max(0, Math.floor(u)))
-  const j = Math.min(d.nz - 2, Math.max(0, Math.floor(w)))
-  const tu = Math.min(1, Math.max(0, u - i))
-  const tw = Math.min(1, Math.max(0, w - j))
-  const at = (a: number, b: number) =>
-    d.cm[Math.min(d.nz - 1, Math.max(0, b)) * d.nx + Math.min(d.nx - 1, Math.max(0, a))]
-  const row = (b: number) => cubic(tu, at(i - 1, b), at(i, b), at(i + 1, b), at(i + 2, b))
-  return d.base + cubic(tw, row(j - 1), row(j), row(j + 1), row(j + 2)) / 100
+export function demSampler(d: Dem): (x: number, z: number) => number {
+  const { nx, nz, cm, cell, base } = d
+  const hx = ((nx - 1) * cell) / 2
+  const hz = ((nz - 1) * cell) / 2
+  return (x, z) => {
+    const u = (x + hx) / cell
+    const w = (z + hz) / cell
+    const i = Math.min(nx - 2, Math.max(0, Math.floor(u)))
+    const j = Math.min(nz - 2, Math.max(0, Math.floor(w)))
+    const tu = Math.min(1, Math.max(0, u - i))
+    const tw = Math.min(1, Math.max(0, w - j))
+    const i0 = Math.max(0, i - 1)
+    const i3 = Math.min(nx - 1, i + 2)
+    let lo = Infinity
+    let hi = -Infinity
+    let acc = 0
+    let r0 = 0
+    let r1 = 0
+    let r2 = 0
+    for (let b = -1; b <= 2; b++) {
+      const row = Math.min(nz - 1, Math.max(0, j + b)) * nx
+      const p0 = cm[row + i0]
+      const p1 = cm[row + i]
+      const p2 = cm[row + i + 1]
+      const p3 = cm[row + i3]
+      lo = Math.min(lo, p0, p1, p2, p3)
+      hi = Math.max(hi, p0, p1, p2, p3)
+      const v = cubic(tu, p0, p1, p2, p3)
+      if (b === -1) r0 = v
+      else if (b === 0) r1 = v
+      else if (b === 1) r2 = v
+      else acc = cubic(tw, r0, r1, r2, v)
+    }
+    return base + Math.min(hi, Math.max(lo, acc)) / 100
+  }
 }
+
+/** One height of the file (see demSampler); for a few reads, not a grid's. */
+export const demHeight = (d: Dem, x: number, z: number): number => demSampler(d)(x, z)
 
 /** The lowest and highest node heights (m above sea level) inside a box of the file's frame, edges included. */
 export function demRange(d: Dem, box: [number, number, number, number]): [number, number] {
@@ -163,9 +191,9 @@ export function sha256(bytes: Uint8Array): string {
 // the attributes a dem source carries, beside id, kind, ref and note
 export const DEM_SOURCE_KEYS = ['file', 'hash', 'credit', 'licence'] as const
 
-/** The `relief.dem` features' pieces: where on the map, and the shift from map to file coordinates. */
-export const demShift = (f: Feature): { x: number; z: number } => {
-  const s = f.shift as { x?: number; z?: number } | undefined
+/** A `relief.dem` piece's shift from map to file coordinates, from its resolved attributes. */
+export const demShift = (attrs: Record<string, unknown>): { x: number; z: number } => {
+  const s = attrs.shift as { x?: number; z?: number } | undefined
   return { x: s?.x ?? 0, z: s?.z ?? 0 }
 }
 
@@ -174,10 +202,27 @@ export const demShift = (f: Feature): { x: number; z: number } => {
  * `relief.dem` piece (its box on the map, with its edge, moved by its shift) lies inside its file, and its heights,
  * less the map's datum, stay within `min`..`max` m. Returns the decoded files by source id.
  */
+// the files already hashed and decoded, by their bytes: the page's worker keeps a file's bytes across compiles, so a
+// save of the map's text does not hash and decode 10 MB again
+const seen = new WeakMap<Uint8Array, { hash: string; dem?: Dem; error?: string }>()
+function readFile(bytes: Uint8Array): { hash: string; dem?: Dem; error?: string } {
+  let r = seen.get(bytes)
+  if (!r) {
+    const hash = sha256(bytes)
+    try {
+      r = { hash, dem: decodeRdem(bytes) }
+    } catch (e) {
+      r = { hash, error: (e as Error).message }
+    }
+    seen.set(bytes, r)
+  }
+  return r
+}
+
 export function checkDemFiles(
   map: MapFile,
   files: MapFiles,
-  pieces: { f: Feature; i: number; box: [number, number, number, number] }[],
+  pieces: { f: Feature; i: number; box: [number, number, number, number]; shift: { x: number; z: number } }[],
   range: { min: number; max: number },
 ): { issues: Issue[]; dems: Map<string, Dem> } {
   const issues: Issue[] = []
@@ -191,22 +236,22 @@ export function checkDemFiles(
       issues.push({ id: null, path, message: `the file "${src.file}" was not found beside the map` })
       return
     }
-    const got = sha256(bytes)
-    if (got !== src.hash) {
-      issues.push({ id: null, path: `sources[${i}].hash`, message: `"${src.file}" has hash ${got}, not ${src.hash}` })
+    const got = readFile(bytes)
+    if (got.hash !== src.hash) {
+      issues.push({
+        id: null,
+        path: `sources[${i}].hash`,
+        message: `"${src.file}" has hash ${got.hash}, not ${src.hash}`,
+      })
       return
     }
-    try {
-      dems.set(s.id, decodeRdem(bytes))
-    } catch (e) {
-      issues.push({ id: null, path, message: `"${src.file}": ${(e as Error).message}` })
-    }
+    if (got.dem) dems.set(s.id, got.dem)
+    else issues.push({ id: null, path, message: `"${src.file}": ${got.error}` })
   })
   const datum = map.datum ?? 0
-  for (const { f, i, box: b } of pieces) {
+  for (const { f, i, box: b, shift: sh } of pieces) {
     const d = typeof f.source === 'string' ? dems.get(f.source) : undefined
     if (!d) continue
-    const sh = demShift(f)
     const box: [number, number, number, number] = [b[0] + sh.x, b[1] + sh.z, b[2] + sh.x, b[3] + sh.z]
     const h = demHalf(d)
     if (box[0] < -h.x || box[1] < -h.z || box[2] > h.x || box[3] > h.z) {
@@ -217,7 +262,7 @@ export function checkDemFiles(
       })
       continue
     }
-    const [lo, hi] = demRange(d, box)
+    const [lo, hi] = demRange(d, [box[0] - d.cell, box[1] - d.cell, box[2] + d.cell, box[3] + d.cell])
     if (lo - datum < range.min || hi - datum > range.max) {
       issues.push({
         id: f.id,

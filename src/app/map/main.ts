@@ -21,24 +21,38 @@ const RDEMS = import.meta.glob('/maps/*.rdem', { query: '?url', import: 'default
   string,
   () => Promise<string>
 >
-// the files a map's sources name, read beside it; one that is missing or unreadable is left out, so the
-// validator reports it against its source
-async function readFiles(mapText: string): Promise<Record<string, ArrayBuffer>> {
+// The heightfields a map's dem sources name, read beside it. A file's version goes up when it is saved; the worker
+// keeps the bytes of the version it was last sent, so only a new version is fetched and sent. A file that is missing
+// or fails to load is left out, and the validator reports it against its source.
+const fileVersion = new Map<string, number>()
+let sentVersion = new Map<string, number>()
+async function readFiles(mapText: string): Promise<CompileRequest['files']> {
   let names: string[] = []
   try {
-    const sources = (JSON.parse(mapText) as { sources?: { file?: unknown }[] }).sources
-    names = (Array.isArray(sources) ? sources : []).flatMap(s => (typeof s?.file === 'string' ? [s.file] : []))
+    const sources = (JSON.parse(mapText) as { sources?: { kind?: unknown; file?: unknown }[] }).sources
+    names = (Array.isArray(sources) ? sources : []).flatMap(s =>
+      s?.kind === 'dem' && typeof s.file === 'string' && !/[/\\]/.test(s.file) ? [s.file] : [],
+    )
   } catch {
     return {}
   }
-  const out: Record<string, ArrayBuffer> = {}
+  const out: CompileRequest['files'] = {}
   await Promise.all(
     names.map(async name => {
-      const key = `/maps/${name}`
-      const url = import.meta.env.DEV ? key : await RDEMS[key]?.()
-      if (!url) return
-      const res = await fetch(url, { cache: import.meta.env.DEV ? 'no-store' : 'default' })
-      if (res.ok) out[name] = await res.arrayBuffer()
+      const version = fileVersion.get(name) ?? 0
+      if (sentVersion.get(name) === version) {
+        out[name] = { version }
+        return
+      }
+      try {
+        const key = `/maps/${name}`
+        const url = import.meta.env.DEV ? key : await RDEMS[key]?.()
+        if (!url) return
+        const res = await fetch(url, { cache: import.meta.env.DEV ? 'no-store' : 'default' })
+        if (res.ok) out[name] = { version, bytes: await res.arrayBuffer() }
+      } catch {
+        // left out: reported as not found
+      }
     }),
   )
   return out
@@ -102,6 +116,7 @@ function makeWorker(): Worker {
   w.onerror = e => {
     e.preventDefault()
     w.terminate()
+    sentVersion = new Map() // the new worker holds no file
     worker = makeWorker()
     failed(`the compile worker failed: ${e.message || 'it did not load'}`)
   }
@@ -137,7 +152,7 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
   pending = { reason, t0, savedAt }
   let mapText: string
   let kindsText: string
-  let files: Record<string, ArrayBuffer>
+  let files: CompileRequest['files']
   try {
     ;[mapText, kindsText] = await Promise.all([read(picker.value, MAPS), read('/maps/kinds.json', KINDS)])
     files = await readFiles(mapText)
@@ -146,7 +161,11 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
     return
   }
   if (mine !== seq) return
-  worker.postMessage({ seq: mine, mapText, kindsText, files } satisfies CompileRequest, Object.values(files))
+  for (const [name, f] of Object.entries(files)) if (f.bytes) sentVersion.set(name, f.version)
+  worker.postMessage(
+    { seq: mine, mapText, kindsText, files } satisfies CompileRequest,
+    Object.values(files).flatMap(f => (f.bytes ? [f.bytes] : [])),
+  )
 }
 
 function fit(): void {
@@ -341,6 +360,10 @@ showIds.addEventListener('change', draw)
 // seen); any heightfield recompiles, since the map's text alone says which it reads
 if (import.meta.hot) {
   import.meta.hot.on('map-changed', (d: { file: string; at: number }) => {
+    if (d.file.endsWith('.rdem')) {
+      const name = d.file.replace('/maps/', '')
+      fileVersion.set(name, (fileVersion.get(name) ?? 0) + 1)
+    }
     if (d.file === picker.value || d.file === '/maps/kinds.json' || d.file.endsWith('.rdem')) void compile('save', d.at)
   })
 }

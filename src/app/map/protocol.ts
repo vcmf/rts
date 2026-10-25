@@ -8,7 +8,9 @@ export interface CompileRequest {
   seq: number
   mapText: string
   kindsText: string
-  files: Record<string, ArrayBuffer> // the files the map's sources name (heightfields), by name
+  // the heightfields the map's dem sources name, by name: each with the page's version of it, and its bytes only
+  // when the worker does not hold that version yet (a 10 MB file is sent once, not on every save of the map)
+  files: Record<string, { version: number; bytes?: ArrayBuffer }>
 }
 export type LayerName = (typeof LAYER_NAMES)[number]
 export interface Compiled {
