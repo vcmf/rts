@@ -25,7 +25,7 @@ import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
 import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
 import { cellK, impAt, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
-import { claimedAt, claimsNear } from './claims.ts'
+import { claimedAt, claimsNear, claimHit } from './claims.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
@@ -39,10 +39,15 @@ export const STATUS = [
   'cannot face about: the shape has no half-turn symmetry',
   'cannot face about: changing shape',
   'cannot face about: the shape is not centred on its trail',
+  'blocked by a formation',
+  'arrived: as near as the formations there allow',
 ]
 export const ST_HALTED = 1
 const ST_CANNOT_FORM = 2
 const ST_ARRIVED_NEAR = 3
+// the claim grid's prototype (docs/plans/active/c1-claims.md): held by another formation's cells, not the ground
+const ST_BLOCKED = 9
+const ST_ARRIVED_CROWD = 10
 const ST_CANNOT_WHEEL = 4
 const ST_FACE_WET = 5
 const ST_FACE_ASYM = 6
@@ -54,6 +59,12 @@ const CHANGE_SAMPLES = 128
 const STALL = 0.04 // m/s: an anchor slower than this, with a held bin, is stopped by impassable ground
 const HALT_AFTER = 1 // s held and stalled before the order is given up
 const ARRIVE = 0.4 // m
+// a move held by another formation counts as arrived within this of its target, growing while it stays held
+const CROWD_NEAR = 10 // m
+const CROWD_GROW = 5 // m/s
+const CROWD_MAX = 60 // m
+const BLOCK_WAIT = 0.5 // s held by a formation before it tries only now and then
+const BLOCK_RETRY = 10 // ticks between its tries
 
 const sqrt = Math.sqrt
 const hyp = (x: number, z: number) => sqrt(x * x + z * z)
@@ -1638,6 +1649,19 @@ function formationStep(w: World, i: number): void {
       setOnMap(w, n, f.x[i] + sin(f.heading[i]) * o.a[n], f.z[i] + cos(f.heading[i]) * o.a[n])
       o.resolved[n] = 1
     }
+    // held by another formation for a while: it stands, and tries again only every BLOCK_RETRY ticks (each formation
+    // on its own tick of them), so a crowd of waiting formations costs little
+    if (
+      type === O_MOVE &&
+      f.status[i] === ST_BLOCKED &&
+      f.blockedFor[i] > BLOCK_WAIT &&
+      (w.meta[M_TICK] + i) % BLOCK_RETRY !== 0
+    ) {
+      f.vx[i] = 0
+      f.vz[i] = 0
+      f.blockedFor[i] += DT
+      return
+    }
     const dx = o.x[n] - f.x[i]
     const dz = o.z[n] - f.z[i]
     const dist = hyp(dx, dz)
@@ -1719,7 +1743,16 @@ function formationStep(w: World, i: number): void {
     const anyHeld = anyBit(held)
     if ((anyHeld || turnHeld) && (moved < STALL * DT || turnHeld) && (want0 > 0 || turnHeld)) {
       f.blockedFor[i] += DT
-      if (f.blockedFor[i] > HALT_AFTER) haltAtEdge(w, i, held)
+      if (w.claims && claimHit(w, i)) {
+        // held by another formation's cells, not by the ground: it keeps its orders, and a move near enough its
+        // target counts as arrived (the nearer the longer it is held)
+        const near = Math.min(CROWD_MAX, CROWD_NEAR + CROWD_GROW * f.blockedFor[i])
+        if (type === O_MOVE && hyp(o.x[n] - f.x[i], o.z[n] - f.z[i]) <= near) {
+          shiftOrder(w, i)
+          f.blockedFor[i] = 0
+          f.status[i] = ST_ARRIVED_CROWD
+        } else f.status[i] = ST_BLOCKED
+      } else if (f.blockedFor[i] > HALT_AFTER) haltAtEdge(w, i, held)
     } else {
       f.blockedFor[i] = 0
       if (moved > 0.001) f.status[i] = 0
@@ -1778,7 +1811,9 @@ function formationStep(w: World, i: number): void {
     f.vz[i] = (f.z[i] - z0) / DT
     o.done[n] += wq * uw
     pushTrail(w, i)
-    if (uw === 0) haltAtEdge(w, i, null)
+    // a wheel held by another formation's cells waits with its order; one held by the ground gives it up
+    if (uw === 0 && w.claims && claimHit(w, i)) f.status[i] = ST_BLOCKED
+    else if (uw === 0) haltAtEdge(w, i, null)
     else if (o.done[n] >= Math.abs(o.a[n]) - 1e-6) {
       shiftOrder(w, i)
       f.vx[i] = 0

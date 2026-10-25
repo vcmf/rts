@@ -37,6 +37,8 @@ export interface Claims {
   // per formation, its pose at its last claim (x, z, heading, then each company's men and each bin's lag): a
   // formation that has not moved since keeps its claim as it is
   pose: Float64Array
+  // per formation, the build in which a claim last blocked it (claimHit)
+  hit: Int32Array
 }
 
 /** The entries kept per cell before it is marked as claimed by more. */
@@ -65,6 +67,7 @@ function claimsOf(w: World): Claims {
     near: new Uint8Array(MAX_FORMATIONS),
     nearAt: new Int32Array(MAX_FORMATIONS).fill(-1),
     pose: new Float64Array(MAX_FORMATIONS * (3 + w.cr.maxC + w.cr.maxNB)).fill(NaN),
+    hit: new Int32Array(MAX_FORMATIONS).fill(-1),
   })
 }
 
@@ -210,9 +213,14 @@ export function claimedAt(w: World, i: number, x: number, z: number): boolean {
   for (let s = k * SLOTS; s < k * SLOTS + SLOTS; s++) {
     const e = C.own[s]
     if (e === 0) break
-    if ((e >> 1) - 1 !== i && blocks(w, i, (e >> 1) - 1, (e & 1) === 1)) return true
+    if ((e >> 1) - 1 !== i && blocks(w, i, (e >> 1) - 1, (e & 1) === 1)) {
+      C.hit[i] = C.built
+      return true
+    }
   }
-  return C.more[k] === 1
+  if (C.more[k] !== 1) return false
+  C.hit[i] = C.built
+  return true
 }
 
 // how far a formation's places may reach past its claimed box within a tick (its margin, a cell, its motion)
@@ -241,14 +249,29 @@ export function claimsNear(w: World, i: number): boolean {
   return false
 }
 
-/** The live formations in the order of a tick with claims: by a keyed draw on the tick, ties by slot. */
+/** Whether another formation's claim blocked formation i in this tick's step: the stall is theirs, not the ground's */
+export const claimHit = (w: World, i: number): boolean => {
+  const C = w.scratch.claims
+  return !!C && C.hit[i] === C.built
+}
+
+// the keyed draw that orders the formations is drawn again only every this many ticks (2 s), so a formation keeps
+// its place in the order long enough to get through
+const ORDER_HOLD = 40
+
+/**
+ * The live formations in the order of a tick with claims: those held longest by others first (`blockedFor`, which
+ * falls to 0 once a formation moves freely), then by a keyed draw held for ORDER_HOLD ticks, ties by slot.
+ */
 export function claimOrder(w: World): number[] {
+  const f = w.f
   const order: number[] = []
   const key: number[] = []
+  const window = Math.floor(w.meta[M_TICK] / ORDER_HOLD)
   for (let i = 0; i < MAX_FORMATIONS; i++) {
-    if (!w.f.alive[i]) continue
+    if (!f.alive[i]) continue
     order.push(i)
-    key[i] = nextU32(keyedStream(ks, w.meta[M_SEED], w.meta[M_TICK], handleOf(w, i), 0, K_ORDER))
+    key[i] = nextU32(keyedStream(ks, w.meta[M_SEED], window, handleOf(w, i), 0, K_ORDER))
   }
-  return order.sort((p, q) => key[p] - key[q] || p - q)
+  return order.sort((p, q) => f.blockedFor[q] - f.blockedFor[p] || key[p] - key[q] || p - q)
 }
