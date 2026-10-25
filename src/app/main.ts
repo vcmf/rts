@@ -235,7 +235,8 @@ async function main(): Promise<void> {
     noteT = performance.now()
   }
   // M marks a moment of the playtest (docs/plans/active/s1e3-playtest.md): the prompt holds the page (and the
-  // battle) while you say what happened; Cancel marks nothing. The report prints where everyone stood then
+  // battle) while you say what happened; Cancel marks nothing, and says so on screen (a browser that suppresses
+  // dialogs returns at once as if cancelled, so M is never silent). The report prints where everyone stood then
   const marks: { tick: number; note: string }[] = []
   const mark = (text?: string) => {
     let said = text ?? null
@@ -244,7 +245,11 @@ async function main(): Promise<void> {
       // the prompt swallowed the keyup and pointerup of anything held (space, a drag): let go of them
       releaseHeld()
     }
-    if (said === null) return
+    if (said === null) {
+      note = 'mark cancelled: nothing marked'
+      noteT = performance.now()
+      return
+    }
     marks.push({ tick: w.meta[M_TICK], note: said.trim() })
     note = `moment ${marks.length} marked`
     noteT = performance.now()
@@ -423,7 +428,8 @@ async function main(): Promise<void> {
       charging = false
     } else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
-    else if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) mark() // not Cmd+M (minimise)
+    // not Cmd+M (minimise), nor a held key's repeats
+    else if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat) mark()
   })
 
   function drawScale(): void {
