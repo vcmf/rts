@@ -213,7 +213,8 @@ Canister uses exposure as musketry does.
 **Health is strength, and toughness divides the losses.** A unit has no hit points apart from its men. A higher
 level is tougher: the men lost to a given amount of fire or melee are divided by its level's toughness, so veterans
 lose fewer men to the same fire (they use the ground, close the ranks, keep their heads). Together with the bigger
-morale bar, a veteran battalion both bleeds slower and stands longer.
+morale bar, a veteran battalion both bleeds slower and stands longer. The owner confirmed this definition (2026-10-25);
+the toughness factors by level (§ Experience) are first guesses, tuned in U2.
 
 ### Engagement
 
