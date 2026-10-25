@@ -96,12 +96,11 @@ describe('rng: the draws', () => {
     expect([...s]).toEqual(before)
     for (let k = 0; k < 2000; k++) expect(sampleCount(s, 1.2)).toBeGreaterThanOrEqual(0)
   })
-  // #158: sampleCount(NaN) draws 12 uniforms and returns NaN. Expected to fail until it is fixed
-  it.fails('sampleCount: nothing for a NaN λ, without a draw (#158)', () => {
+  it('sampleCount: a NaN or infinite λ passes through as NaN, without a draw (#158)', () => {
     const s = new Uint32Array(4)
     seedRng(s, 5)
     const before = [...s]
-    expect(sampleCount(s, NaN)).toBe(0)
+    expect([sampleCount(s, NaN), sampleCount(s, Infinity), sampleCount(s, -Infinity)]).toEqual([NaN, NaN, NaN])
     expect([...s]).toEqual(before)
   })
   it('edge seeds (0, −1, 2^31 − 1, 2^32 − 1, 2^32) give a nonzero state and a moving stream', () => {
@@ -166,9 +165,12 @@ describe('bit sets', () => {
 })
 
 describe('num at its boundaries', () => {
-  // (#157: atan2(−0, x > 0) gives −0, against num.ts's "zero results are +0"; not asserted either way here)
-  it('atan2: +0 at the origin, +π on the negative x axis whatever the sign of zero', () => {
+  it('atan2: +0 at the origin and on the positive x axis, +π on the negative one, whatever the sign of zero', () => {
     expect(Object.is(atan2(0, 1), 0)).toBe(true)
+    expect(Object.is(atan2(-0, 1), 0)).toBe(true) // #157
+    expect(Object.is(atan2(-0, 0), 0)).toBe(true)
+    expect(atan2(0, NaN)).toBeNaN()
+    expect(Object.is(atan2(-5e-324, 2), 0)).toBe(true) // the ratio underflows to −0
     expect(Object.is(atan2(0, 0), 0)).toBe(true)
     expect(Object.is(atan2(-0, -0), 0)).toBe(true)
     expect(atan2(0, -1)).toBe(PI)
@@ -202,10 +204,11 @@ describe('num at its boundaries', () => {
     expect(exp(-700)).toBeGreaterThan(0)
     expect(() => exp(700.0001)).toThrow(RangeError)
   })
-  it('quantise rounds half a centimetre up, toward +∞, the same on both sides of zero', () => {
+  it('quantise rounds half a centimetre up, toward +∞, the same on both sides of zero; zero is +0', () => {
     expect(quantise(0.005)).toBe(0.01)
-    // equal to zero (Math.round gives −0 here: whether the sim should store −0 is #157's question, not pinned)
-    expect(quantise(-0.005) === 0).toBe(true)
+    // +0, not the −0 Math.round gives (#157)
+    expect(Object.is(quantise(-0.005), 0)).toBe(true)
+    expect(Object.is(quantise(-0), 0)).toBe(true)
     expect(quantise(1.004)).toBe(1)
     expect(quantise(-2.0049)).toBe(-2)
   })
