@@ -1,11 +1,11 @@
 ---
 status: current
 last_reviewed: 2026-10-25
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker]
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes]
 ---
 
-# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a)
+# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a–b)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
@@ -217,7 +217,15 @@ maps/kinds.json ──► checkCatalogue ─┐
     0055, `?tilt=`), its shader ported from the prototype's lit and shaded paths: the paper and its worn border, the
     woods darkening it, the shaded relief (slope light, cast shadow and exposure baked on the 2 m nodes, the light one
     of the grid's 8 directions, north-west for now), the water as a wash sunk below its banks, contours every 5 m and
-    25 m from the node heights (a float texture read by `texelFetch`), the paper's grain;
+    25 m from the node heights (a float texture read by `texelFetch`), the yards (a village's, a farm's), the ink, the
+    paper's grain; the ink (decision 0065, M6b): the water, the woods and the barriers from their cells (what the sim
+    reads), every cell reading as its own kind at its centre and every edge within half a cell of the cells' sides
+    (`cellField`: smoothed for the water and the woods, square for the barriers, saddle corners joined); the ways'
+    edges as crisp hairlines from their shapes at the width apply paints them, drawn only on and beside their cells;
+    a pond's lining; hairlines of constant screen width that fade as the map zooms out; no texture mipmapped (thin
+    features would vanish); the houses, barns and churches stand as boxes raised to their wall height (a burnt one
+    roofless, a courtyard open) where at least half their cells are their own (`standing`, `src/render/lit/houses.ts`), lit by the map's light, each with its footprint swept away from the light as its shadow; the names
+    (`zone.label`) are written on the overlay;
   - a "view" setting shows the flat draft's colours on the same plane instead (a debug overlay); the outlines, ids
     and the play area are drawn on a 2D canvas over it, through the same camera (circles and ellipses as rings of
     ground points, so they lean with the view); pan keeps the ground point under the pointer, zoom keeps the one
@@ -283,7 +291,13 @@ a whole-extent piece and its shift, an area piece's inside, blend and outside; t
 and the file checks' refusals; the test map's real heights and its sim compile.
 
 `test/render-lit-bake.test.ts` (M6a): the relief bake on flat ground, the cast shadow away from the light for each of
-its 8 directions, the exposure of a block's top and foot; the cells' mask.
+its 8 directions, the exposure of a block's top and foot, no seam at the grid's edge; the cells' mask with its yards;
+(M6b) a way's field, its square ends and its cells' gate, the widths `waysOf` takes from `lineReach`, the contract
+(every cell's kind at its centre on stair-steps, saddles, one-cell lines and diagonals), a cell field's 0 on the
+cells' sides, a smoothed diagonal without stairs, narrow streams and clearings kept, diagonal cells joined, a wood's
+clearing taken by priority, a hedge's gate. `test/render-lit-houses.test.ts`: which buildings stand (their own
+cells, a cell lost on a shared wall, a burnt roof, a courtyard) and footprints into triangles (convex, an L, a corner
+on a straight edge, a courtyard).
 
 `test/map-language.test.ts`:
 - the catalogue checks clean, and a broken one is reported;

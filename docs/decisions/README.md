@@ -89,3 +89,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0062](0062-simple-shadows-at-every-zoom.md) | The simple shadow at every zoom, softer, lighter and shorter up close | accepted |
 | [0063](0063-real-relief-as-placed-pieces.md) | Real relief is placed pieces of a pinned heightfield, read by bicubic | accepted |
 | [0064](0064-lit-view-flat-plane-baked-in-the-worker.md) | The lit map view is one flat plane in Babylon, its bakes made in the compile worker | accepted |
+| [0065](0065-map-ink-as-distance-fields-houses-as-boxes.md) | The lit map draws from the cells, its edges smoothed by distance fields; its houses are lit boxes | accepted |

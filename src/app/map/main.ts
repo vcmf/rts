@@ -8,6 +8,8 @@ import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName } from './protocol.ts'
 import { demFileNames } from '../../map/dem.ts'
 import { LitView, TILT } from '../../render/lit/view.ts'
+import { standing } from '../../render/lit/houses.ts'
+import { lineLength, pointAt } from '../../map/geometry.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -173,10 +175,19 @@ function onReply(e: MessageEvent<CompileReply>): void {
       height,
       relief: new Uint8Array(r.relief),
       masks: new Uint8Array(r.masks),
+      ink: new Uint8Array(r.ink),
       flat: { w: r.w, h: r.h, rgba: new Uint8Array(r.rgba) },
     })
+    lit?.setHouses(standing(r.map.features, r.table, new Uint16Array(r.layers.built), r))
+    labels = namesOf(r)
     // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
-    current = { ...r, relief: new ArrayBuffer(0), masks: new ArrayBuffer(0), rgba: new ArrayBuffer(0) }
+    current = {
+      ...r,
+      relief: new ArrayBuffer(0),
+      masks: new ArrayBuffer(0),
+      ink: new ArrayBuffer(0),
+      rgba: new ArrayBuffer(0),
+    }
     // the first frame after a new map may come before its shader compiles: draw again once it is ready (one wait at
     // a time; a shader that never compiles is reported)
     if (lit && !readyWait) {
@@ -332,6 +343,40 @@ function outline(f: Feature): void {
     ctx.fillText(f.id, label[0] + 4, label[1] - 4)
   }
 }
+
+// the map's names, read once a compile (namesOf), drawn every frame
+let labels: { at: Pt; text: string }[] = []
+/** The map's names: each `zone.label`'s text at its anchor (its point, the middle of its line). */
+function namesOf(c: Compiled): { at: Pt; text: string }[] {
+  const byId = new Map(c.table.map(r => [r.id, r]))
+  return c.map.features.flatMap(f => {
+    const r = byId.get(f.id)
+    if (!r || !r.kind.startsWith('zone.label') || typeof r.attrs.text !== 'string' || !r.attrs.text) return []
+    // a line's name at the middle of its length, a point's at the point
+    const mid = f.line && pointAt(f.line, lineLength(f.line) / 2)
+    const at: Pt | null = mid ? [mid[0], mid[1]] : anchor(f)
+    return at ? [{ at, text: r.attrs.text }] : []
+  })
+}
+/** Writes the map's names on the overlay: italic, with a paper halo. */
+function drawNames(): void {
+  if (!current) return
+  ctx.save() // its stroke and font stay its own
+  ctx.font = 'italic 15px Georgia, "Times New Roman", serif'
+  ctx.textAlign = 'center'
+  ctx.lineJoin = 'round'
+  for (const { at, text } of labels) {
+    const p = toScreen(at[0], at[1])
+    if (!p) continue
+    ctx.lineWidth = 3
+    ctx.strokeStyle = 'rgba(236, 222, 186, 0.85)'
+    ctx.strokeText(text, p[0], p[1])
+    ctx.fillStyle = '#3a3128'
+    ctx.fillText(text, p[0], p[1])
+  }
+  ctx.restore()
+}
+
 // where a feature's id is written: its point, the middle of its line, its area's first corner
 function anchor(f: Feature): Pt | null {
   if (f.point) return f.point
@@ -378,6 +423,7 @@ function draw(): void {
   groundPath(corners, true)
   ctx.stroke()
   ctx.setLineDash([])
+  if (lit && mode.value !== 'flat') drawNames()
   if (showOutlines.checked) for (const f of current.map.features) outline(f)
   tint()
 }
@@ -521,6 +567,11 @@ window.MAP = {
     return frameMs
   },
   draw,
+  // centre the view on a ground point at a zoom (px a metre), for checks
+  look(x: number, z: number, ppm: number) {
+    view = { cx: x, cz: z, ppm }
+    draw()
+  },
   compile: () => compile('manual'),
   fit: () => {
     fit()

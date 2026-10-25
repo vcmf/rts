@@ -15,8 +15,10 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Season } from '../../map/schema.ts'
-import { lightXZ, RELIEF, type LightDir } from './bake.ts'
+import { INK_RANGE, lightXZ, RELIEF, type LightDir } from './bake.ts'
 import { paperCanvas } from './paper.ts'
+import type { Pt } from '../../map/schema.ts'
+import { bridged, triangulate, type Standing } from './houses.ts'
 import LIT_VS from './shaders/lit.vert?raw'
 import LIT_FS from './shaders/lit.frag?raw'
 
@@ -32,6 +34,15 @@ const SHADE_TOP = 1.15
 // the paper and the water's wash by season, the prototype's lit palette: summer, early autumn, late autumn, winter
 const PAPER = ['#e3d1a2', '#e1cb98', '#d9c18f', '#e4d9bf']
 const WATER = ['#9fbcc2', '#9fbcc2', '#a3b8bb', '#d3e0e8']
+const LINE = ['#2b2824', '#2b2824', '#2b2824', '#363c45']
+const BARRIER = '#3a4528' // hedges and walls, a dark olive
+// the houses (the prototype's bakeHouses): dark warm roofs, a church darker, the faces away from the light at 0.62 of
+// the roof, the faces toward it at 0.85; a soft shadow HOUSE_SHADOW m away from the light
+const HOUSE = [0.36, 0.29, 0.23]
+const CHURCH = [0.27, 0.22, 0.19]
+const HOUSE_SHADOW = 4.3 // m, for a 4 m wall (the prototype's)
+const SHADOW_ALPHA = 0.32
+const SHADOW_Y = 0.05 // m above the paper
 const SEASON_AT: Record<Season, number> = { spring: 0, summer: 0, autumn: 1.5, winter: 3 }
 
 /** What the view draws: a compiled map's grids and bakes. */
@@ -47,6 +58,7 @@ export interface LitMap {
   height: Float64Array // (nx + 1) × (nz + 1) node heights, m above the datum, the south row first
   relief: Uint8Array // RGBA on the nodes (bakeRelief)
   masks: Uint8Array // RGBA on the cells (bakeMasks)
+  ink: Uint8Array // RGBA on the cells (bakeInk)
   flat: { w: number; h: number; rgba: Uint8Array } // the draft raster, the north row first
 }
 
@@ -68,7 +80,11 @@ export class LitView {
   private readonly scene: Scene
   private readonly camera: FreeCamera
   private readonly material: ShaderMaterial
+  private readonly houseMaterial: ShaderMaterial
+  private readonly shadowMaterial: ShaderMaterial
   private plane: Mesh | null = null
+  private houses: Mesh[] = []
+  private light: [number, number] = [-Math.SQRT1_2, Math.SQRT1_2]
   private textures: Texture[] = []
   private viewProj = Matrix.Identity()
   private inverse = Matrix.Identity()
@@ -85,7 +101,7 @@ export class LitView {
     this.engine = new Engine(
       canvas,
       true,
-      { preserveDrawingBuffer: true, stencil: false, doNotHandleContextLost: true },
+      { preserveDrawingBuffer: true, stencil: true, doNotHandleContextLost: true },
       false,
     )
     if (this.engine.webGLVersion < 2) {
@@ -121,11 +137,36 @@ export class LitView {
           'uShadeTop',
           'uPaper',
           'uWaterW',
+          'uLine',
+          'uBarrier',
+          'uInkRange',
         ],
-        samplers: ['uHeight', 'uRelief', 'uMask', 'uPaperT', 'uFlatT'],
+        samplers: ['uHeight', 'uRelief', 'uMask', 'uInk', 'uPaperT', 'uFlatT'],
       },
     )
     this.material.backFaceCulling = false
+    this.houseMaterial = new ShaderMaterial(
+      'houses',
+      this.scene,
+      { vertexSource: FLAT_VS, fragmentSource: FLAT_FS },
+      { attributes: ['position', 'color'], uniforms: ['world', 'viewProjection'] },
+    )
+    this.houseMaterial.backFaceCulling = false
+    this.shadowMaterial = new ShaderMaterial(
+      'house-shadows',
+      this.scene,
+      { vertexSource: SHADOW_VS, fragmentSource: SHADOW_FS },
+      { attributes: ['position'], uniforms: ['world', 'viewProjection', 'uAlpha'], needAlphaBlending: true },
+    )
+    this.shadowMaterial.setFloat('uAlpha', SHADOW_ALPHA)
+    // each pixel of the shadows blends once, however many shadows overlap there: the first marks the stencil, the
+    // others fail it
+    this.shadowMaterial.disableDepthWrite = true
+    this.shadowMaterial.stencil.enabled = true
+    this.shadowMaterial.stencil.func = Constants.NOTEQUAL
+    this.shadowMaterial.stencil.funcRef = 1
+    this.shadowMaterial.stencil.opStencilDepthPass = Constants.REPLACE
+    this.shadowMaterial.backFaceCulling = false
     const paper = paperCanvas()
     const t = this.rgba(paper, Texture.TRILINEAR_SAMPLINGMODE, true)
     t.wrapU = t.wrapV = Texture.WRAP_ADDRESSMODE
@@ -174,7 +215,12 @@ export class LitView {
     const linear = Texture.BILINEAR_SAMPLINGMODE
     this.material.setTexture('uHeight', height)
     this.material.setTexture('uRelief', tex(m.relief, m.nx + 1, m.nz + 1, rgba, linear))
+    // neither the mask nor the ink's fields mipmapped: averaged, a brook or a hedge two cells wide would vanish from
+    // the far view, and the water's depth would part from its fill (docs/plans/active/m6-lit-view.md, open: a
+    // min-filtered mip chain for the far view)
     this.material.setTexture('uMask', tex(m.masks, m.nx, m.nz, rgba, linear))
+    this.material.setTexture('uInk', tex(m.ink, m.nx, m.nz, rgba, linear))
+    this.material.setFloat('uInkRange', INK_RANGE)
     this.material.setTexture('uFlatT', tex(m.flat.rgba, m.flat.w, m.flat.h, rgba, Texture.NEAREST_SAMPLINGMODE))
     this.material.setVector2('uX0Z0', new Vector2(m.x0, m.z0))
     this.material.setVector2('uSize', new Vector2(W, H))
@@ -187,6 +233,9 @@ export class LitView {
     const s = SEASON_AT[m.season]
     this.material.setColor3('uPaper', seasonColour(PAPER, s))
     this.material.setColor3('uWaterW', seasonColour(WATER, s))
+    this.material.setColor3('uLine', seasonColour(LINE, s))
+    this.material.setColor3('uBarrier', Color3.FromHexString(BARRIER))
+    this.light = [lx, lz]
     this.material.setFloat('uFlat', this.flat)
     // the plane reaches far past the map (100 km), so the paper fills the screen at every zoom and tilt the page allows
     const pad = 100000
@@ -224,6 +273,7 @@ export class LitView {
     this.textures = []
     this.plane?.dispose()
     this.plane = null
+    this.setHouses([])
     this.scene.render()
   }
 
@@ -232,10 +282,93 @@ export class LitView {
     this.engine.onContextLostObservable.add(fn)
   }
 
+  /**
+   * Stands the map's houses on the paper (M6b, `standing`): each footprint (its rings, m) raised to its wall height,
+   * its roof flat, its faces lit by the map's light, and a soft shadow away from the light, as the prototype's bake.
+   */
+  setHouses(houses: Standing[]): void {
+    for (const h of this.houses) h.dispose()
+    this.houses = []
+    if (!houses.length) return
+    const [lx, lz] = this.light
+    const pos: number[] = []
+    const col: number[] = []
+    const idx: number[] = []
+    const shade: number[] = []
+    const shadeIdx: number[] = []
+    for (const h of houses) {
+      const base = h.church ? CHURCH : HOUSE
+      // the footprint less its courtyards as one ring, triangulated once: the roof and the shadow's copy share it
+      const outline = bridged(h.rings)
+      const tris = triangulate(outline)
+      // the roof, flat at the wall's height; a roofless house (a ruin, burnt) is its walls alone
+      const top = pos.length / 3
+      for (const [x, z] of outline) {
+        pos.push(x, h.height, z)
+        col.push(base[0], base[1], base[2], 1)
+      }
+      if (h.roof) for (const [a, b, c] of tris) idx.push(top + a, top + c, top + b)
+      // the walls of every ring (a courtyard's face inward: its ring is counter-clockwise too, so its normal is
+      // flipped for the light), a quad an edge, lit by how much it faces the light
+      h.rings.forEach((ring, r) => {
+        const n = ring.length
+        for (let k = 0; k < n; k++) {
+          const [ax, az] = ring[k]
+          const [bx, bz] = ring[(k + 1) % n]
+          const ex = bx - ax
+          const ez = bz - az
+          const el = Math.sqrt(ex * ex + ez * ez) || 1
+          // the outward normal of a counter-clockwise ring, (ez, -ex), against the light (inward for a courtyard)
+          const facing = ((ez / el) * lx - (ex / el) * lz) * (r === 0 ? 1 : -1)
+          const f = facing > 0 ? 0.62 + 0.23 * facing : 0.62
+          const v = pos.length / 3
+          pos.push(ax, 0, az, bx, 0, bz, bx, h.height, bz, ax, h.height, az)
+          for (let q = 0; q < 4; q++) col.push(base[0] * f, base[1] * f, base[2] * f, 1)
+          idx.push(v, v + 2, v + 1, v, v + 3, v + 2)
+        }
+      })
+      // the shadow: the footprint swept away from the light, as long as the wall is high (HOUSE_SHADOW for a 4 m
+      // wall): its copy there and a quad an edge of every ring between them (their union; the stencil keeps any
+      // overlap from darkening twice)
+      const reach = (HOUSE_SHADOW * h.height) / 4
+      const shift = ([x, z]: Pt): Pt => [x - lx * reach, z - lz * reach]
+      const s0 = shade.length / 3
+      for (const [x, z] of outline.map(shift)) shade.push(x, SHADOW_Y, z)
+      for (const [a, b, c] of tris) shadeIdx.push(s0 + a, s0 + c, s0 + b)
+      for (const ring of h.rings) {
+        const q0 = shade.length / 3
+        const n = ring.length
+        for (const [x, z] of [...ring, ...ring.map(shift)]) shade.push(x, SHADOW_Y, z)
+        for (let k = 0; k < n; k++) {
+          const k2 = (k + 1) % n
+          shadeIdx.push(q0 + k, q0 + k2, q0 + n + k2, q0 + k, q0 + n + k2, q0 + n + k)
+        }
+      }
+    }
+    const shadow = new Mesh('house-shadows', this.scene)
+    const sd = new VertexData()
+    sd.positions = shade
+    sd.indices = shadeIdx
+    sd.applyToMesh(shadow)
+    shadow.material = this.shadowMaterial
+    shadow.renderingGroupId = 1 // over the paper, with no depth against it
+    const boxes = new Mesh('houses', this.scene)
+    const bd = new VertexData()
+    bd.positions = pos
+    bd.colors = col
+    bd.indices = idx
+    bd.applyToMesh(boxes)
+    boxes.material = this.houseMaterial
+    boxes.renderingGroupId = 2
+    this.houses = [shadow, boxes]
+    for (const h of this.houses) h.setEnabled(!this.flat)
+  }
+
   /** Shows the flat draft's colours instead of the lit map (a debug setting). */
   setFlat(on: boolean): void {
     this.flat = on ? 1 : 0
     this.material.setFloat('uFlat', this.flat)
+    for (const h of this.houses) h.setEnabled(!on) // the flat colours show what lies under them
   }
 
   /** Places the camera: it looks north, leaning `tilt` degrees off straight down, `ppm` px a metre at the centre. */
@@ -303,3 +436,14 @@ export class LitView {
     this.engine.dispose()
   }
 }
+
+// the houses' shaders: a colour a vertex; the shadow one colour at an alpha
+const FLAT_VS = `precision highp float;
+attribute vec3 position; attribute vec4 color; uniform mat4 world, viewProjection; varying vec3 vC;
+void main() { vC = color.rgb; gl_Position = viewProjection * world * vec4(position, 1.0); }`
+const FLAT_FS = `precision highp float; varying vec3 vC; void main() { gl_FragColor = vec4(vC, 1.0); }`
+const SHADOW_VS = `precision highp float;
+attribute vec3 position; uniform mat4 world, viewProjection;
+void main() { gl_Position = viewProjection * world * vec4(position, 1.0); }`
+const SHADOW_FS = `precision highp float; uniform float uAlpha;
+void main() { gl_FragColor = vec4(0.204, 0.149, 0.071, uAlpha); }`
