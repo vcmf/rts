@@ -18,7 +18,7 @@ import '@babylonjs/core/Shaders/postprocess.vertex.js'
 import '@babylonjs/core/Shaders/fsr1Upscale.fragment.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
-import { D, TUNED_R, ZoomHold, holdView } from './spec.ts'
+import { D, TUNED_R, ZoomHold, clearBelow, holdView } from './spec.ts'
 import DOFCOC from './shaders/dofcoc.glsl?raw'
 import DOF_FS from './shaders/dof.frag?raw'
 import DOFDOWN_FS from './shaders/dofdown.frag?raw'
@@ -91,7 +91,8 @@ export function buildCamera(
   // player's wanted zoom kept apart so it comes back in on lower ground; from clearBelow out the eye always clears the
   // tile's highest ground, so the ground is not read there. The depth of field's zoom ease is reckoned from TUNED_R out
   camera.mapPanning = true
-  scene.onBeforeRenderObservable.add(() => holdView(D.spec, zoom, camera, ground))
+  const below = clearBelow(D.spec)
+  scene.onBeforeRenderObservable.add(() => holdView(D.spec, zoom, camera, ground, below))
   camera.upperRadiusLimit = c.rMax
   camera.lowerBetaLimit = c.betaMin
   camera.upperBetaLimit = c.betaMax

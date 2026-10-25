@@ -139,12 +139,12 @@ measured the same way) → after.
 |---|---|---|---|---|
 | a | After a review fix, battalion host meshes cloned from disabled sources drew no soldiers on a plain `?armies` load (the fix: `Units.hostMesh()` enables a host only when shown; #145, #151) | **No.** `tools/guard.mjs --figures` calls `__units.show(true)` first, which hides the bug; `Units.drawn()` is unused | a page check: load `?armies=20`, never call `show()`, render at the default view and at about 125 m, and require `__units.drawn()` to count men, the far or tiny LOD at the wide view | look checks (after PR 3, with the tools) |
 | b | The player's zoom was lost after panning over a hill (`ZoomHold`, `clearRadius`, #145) | **Yes**: `test/look-spec.test.ts`, "keeps the player's zoom apart from the held one", the two `clearRadius` tests, and (step 2) the wiring, `holdView`: "holds the zoom out over a hill and brings the player's zoom back past it" | | step 2 |
-| c | The water shader went over ANGLE-Metal's 16 fragment texture units and hung the bench (SwiftShader allows more) | **Partly**: `Materials.checkSamplers()` counts every compiled program against 16 in the page itself, so a headless run fails too (`tools/shot.mjs` treats the exception as fatal), but only for the flag sets a check loads | a sampler-count guard: load the flag matrix (default, `?armies=20`, `?armies&ushadowfar=map`, `?armies&unitshadow=0`, `?grass=brush`), read `__look.mats.samplers`, require terrain, water and meadow ≤ 16 and print the headroom | look checks |
+| c | The water shader went over ANGLE-Metal's 16 fragment texture units and hung the bench (SwiftShader allows more) | **Partly**: `Materials.checkSamplers()` counts every compiled program against 16 in the page itself, so a headless run fails too (`tools/shot.mjs` treats the exception as fatal), but only for the flag sets a check loads | a sampler-count guard: load the flag matrix (default, `?armies=20`, `?armies=20&ushadowfar=map`, `?armies=20&ushadowclose=map` (the map up close since #175), `?armies=20&unitshadow=0`, `?grass=brush`; the page refuses a bare `?armies`), read `__look.mats.samplers`, require terrain, water and meadow ≤ 16 and print the headroom | look checks |
 | d | Overlapping simple shadows darkened twice (#134) | **No** | a page check: two overlapping battalions with `?unitshadow=1` and with the shadows off; in the overlap the darkening matches a single shadow's within 2 %; sabotaged with `?stencil=0` it must fail | look checks |
 | e | The engine-wide stencil turned the scene depth from DEPTH32F to DEPTH24_STENCIL8 (#134) | **The rule, yes** (step 2): `stencilFor` (`src/look/shadow-look.ts`), table-tested in `test/shadow-look.test.ts`. Not yet the depth format itself | a page check that the scene target's depth is DEPTH32F without armies | look checks |
 | f | The bake's colour classifier painted skin as red facings and shaded navy as black (`tools/bake-figure.py`, #145) | **No** | a Vitest test on the baked figure: decode `data/figures/fr-line-infantry.unitdata`, count triangle roles by heaviest bone, require the hands mostly skin and the chest's black share small; and Python table tests once `hsv` and `texel_role` move to a module without `bpy` | tools (after PR 3) |
 | g | A far-scale width cap could become −0 when no vertex sat in the shoulder band (`Units` constructor, #130) | **Yes** (step 2): `farWidthScale` (`src/look/units-data.ts`), `test/look-units.test.ts`: 1 for an empty band or one vertex, never −0 | | step 2 |
-| h | The trample mask's clamp-to-edge streaks (`terrain.vert`, `meadow.vert`, #130) | **No** | a page check: `?armies&trample=1` against `?trample=0`, pixels outside the trample box equal | look checks |
+| h | The trample mask's clamp-to-edge streaks (`terrain.vert`, `meadow.vert`, #130) | **No** | a page check: `?armies=20&trample=1` against `?armies=20&trample=0`, pixels outside the trample box equal | look checks |
 
 ## Findings
 
@@ -203,7 +203,9 @@ for them.
 Branch `test/look-units`. The extractions move code unchanged (no visual change: the goldens of the default view and
 of `?armies=20` match main's on production builds):
 
-- `stencilFor(params)` (`src/look/shadow-look.ts`, from `src/look/main.ts`): `none`, `scene` or `engine`. Checked
+- `stencilFor(params)` (`src/look/shadow-look.ts`, from `src/look/main.ts`): `none`, `scene` or `engine`, on
+  `simpleShadowsDraw(params)`, the one rule for whether the simple shadows draw (the shade bake in `main.ts` reads it
+  too; review round 1). Checked
   against main after #175: the scene's stencil only with `?armies`, not `?unitshadow=0` and not `?ushadowfar=map`
   (`?ushadowclose=map` keeps it: the simple shadows still draw past close zoom).
 - `holdView(spec, zoom, camera, ground)` and `clearBelow(spec)` (`src/look/spec.ts`, from `buildCamera` in
@@ -217,6 +219,8 @@ Each regression test fails without its fix (the bug put back by hand, the test r
   zoom out over a hill and brings the player's zoom back past it" fails (28.7 m shown, 15 m expected).
 - e: `stencilFor` giving the engine's stencil by default (before #134): 8 of the 12 table rows fail.
 - g: `farWidthScale` without its guard: "is 1 for a figure with no width there" fails (an empty band gives −0).
+  The band's top edge (1.5 m, which float32 holds) is tested too: `y <= 1.5` fails "leaves out the vertices on the
+  edges"; its bottom (1.2 m) cannot be, float32 positions never equal it, so `y >= 1.2` behaves as `y > 1.2`.
 
 ## Acceptance (this PR)
 
@@ -227,3 +231,5 @@ Each regression test fails without its fix (the bug put back by hand, the test r
 ## Open questions
 
 - Should CI's coverage include `maps/`? Its code runs at build time; `check:data` already compares its output.
+- Should `holdView`, `clearBelow`, `clearRadius` and `ZoomHold` move from `src/look/spec.ts` to a camera module of
+  their own? They are the camera's runtime, not the world spec (review round 1 of step 2; left as is).

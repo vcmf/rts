@@ -467,13 +467,19 @@ export interface OrbitView {
 }
 
 /** The camera's hold, once a frame before it renders (src/look/post.ts): the focus kept within ±play, and the radius
- *  the zoom hold gives, held out over high ground below clearBelow (clearRadius), the player's wanted zoom kept
- *  apart so it comes back in on lower ground (#145). ground: the drawn ground's height at x, z, m */
-export function holdView(s: Spec, zoom: ZoomHold, cam: OrbitView, ground: (x: number, z: number) => number): void {
+ *  the zoom hold gives, held out over high ground below `below` (clearBelow(s), m, reckoned once by the caller:
+ *  clearRadius), the player's wanted zoom kept apart so it comes back in on lower ground (#145). ground: the drawn
+ *  ground's height at x, z, m */
+export function holdView(
+  s: Spec,
+  zoom: ZoomHold,
+  cam: OrbitView,
+  ground: (x: number, z: number) => number,
+  below: number,
+): void {
   const t = cam.target
   t.x = Math.max(-s.play, Math.min(s.play, t.x))
   t.z = Math.max(-s.play, Math.min(s.play, t.z))
-  const below = clearBelow(s)
   const r = zoom.step(cam.radius, w =>
     w < below ? clearRadius(s.camera, w, cam.alpha, cam.beta, t.x, t.y, t.z, ground) : w,
   )

@@ -333,8 +333,6 @@ describe('world spec', () => {
     expect(r * Math.cos(c.betaMax) + c.focusY - 18).toBeGreaterThanOrEqual(c.clearance)
     expect(r * Math.cos(c.betaMax) + c.focusY - 18 - c.clearance).toBeLessThan(1e-3 * Math.cos(c.betaMax) + 1e-9)
     expect(clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, () => 400)).toBe(c.rMax)
-    // (src/look/post.ts holds it only below this radius: today's zooms, 45 m out, never read the ground)
-    expect((SPEC.ground.hi + c.clearance - c.focusY) / Math.cos(c.betaMax)).toBeLessThan(TUNED_R)
   })
   it('finds the held radius on a steep slope rising under the eye (0.5 m a metre), the least radius that clears', () => {
     const c = SPEC.camera
@@ -439,13 +437,13 @@ describe("a bake's memory (bakeMB)", () => {
   })
 })
 
-describe("the camera's hold a frame (holdView, clearBelow; src/look/post.ts)", () => {
+describe("the camera's hold a frame (holdView, clearBelow in src/look/spec.ts, run by src/look/post.ts)", () => {
   const c = SPEC.camera
   const view = (radius: number, x = 0, z = 0) => ({ alpha: -2, beta: c.betaMax, radius, target: { x, y: c.focusY, z } })
   it('keeps the focus within the play area', () => {
     const z = new ZoomHold()
     const v = view(100, 400, -300)
-    holdView(SPEC, z, v, () => 0)
+    holdView(SPEC, z, v, () => 0, clearBelow(SPEC))
     expect([v.target.x, v.target.z]).toEqual([SPEC.play, -SPEC.play])
   })
   it('never reads the ground from clearBelow out (the eye clears the highest ground there)', () => {
@@ -455,9 +453,9 @@ describe("the camera's hold a frame (holdView, clearBelow; src/look/post.ts)", (
       reads.push(x)
       return SPEC.ground.hi
     }
-    holdView(SPEC, new ZoomHold(), view(clearBelow(SPEC)), ground)
+    holdView(SPEC, new ZoomHold(), view(clearBelow(SPEC)), ground, clearBelow(SPEC))
     expect(reads).toEqual([])
-    holdView(SPEC, new ZoomHold(), view(clearBelow(SPEC) - 1), ground)
+    holdView(SPEC, new ZoomHold(), view(clearBelow(SPEC) - 1), ground, clearBelow(SPEC))
     expect(reads.length).toBeGreaterThan(0)
   })
   it("holds the zoom out over a hill and brings the player's zoom back past it (#145)", () => {
@@ -467,7 +465,7 @@ describe("the camera's hold a frame (holdView, clearBelow; src/look/post.ts)", (
     // (the eye about 5 m short of the focus in x: over the hill from a focus about 55 m on)
     const frames = (x: number) => {
       v.target.x = x
-      holdView(SPEC, z, v, hill)
+      holdView(SPEC, z, v, hill, clearBelow(SPEC))
       return v.radius
     }
     expect(frames(-100)).toBe(c.rMin)

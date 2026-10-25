@@ -16,11 +16,25 @@ describe("the far figure's growth across (farWidthScale)", () => {
     const w = farWidthScale(at([-0.25, 1.3], [0.25, 1.45], [3, 0.9], [-2, 1.8]), 0.6, 1.35)
     expect(w).toBeCloseTo((0.95 * 0.6) / 0.5, 12)
   })
+  // the band's edges as the far LOD's float32 positions hold them: 1.5 exactly (out of the band), and 1.2, which
+  // float32 cannot hold: the nearest above it (in) and the one below (out)
+  const above12 = Math.fround(1.2)
+  const below12 = (() => {
+    const f = new Float32Array([above12])
+    new Uint32Array(f.buffer)[0]--
+    return f[0]
+  })()
   it('is 1 for a figure with no width there: no vertex in the band, or one (never −0, #130)', () => {
-    for (const p of [at(), at([0, 0.5], [0.4, 1.7]), at([0.1, 1.3]), at([0.1, 1.2], [0.3, 1.5])]) {
+    expect([above12 > 1.2, below12 < 1.2]).toEqual([true, true])
+    for (const p of [at(), at([0, 0.5], [0.4, 1.7]), at([0.1, 1.3])]) {
       const w = farWidthScale(p, 0.55, 1.35)
       expect(Object.is(w, 1), `${w}`).toBe(true)
     }
+  })
+  it('leaves out the vertices on the edges of the band, and takes those just inside', () => {
+    expect(farWidthScale(at([0.1, 1.5], [0.3, 1.5]), 0.55, 1.35)).toBe(1)
+    expect(farWidthScale(at([0.1, below12], [0.3, below12]), 0.55, 1.35)).toBe(1)
+    expect(farWidthScale(at([-0.25, above12], [0.25, above12]), 0.6, 1.35)).toBeCloseTo((0.95 * 0.6) / 0.5, 6)
   })
 })
 

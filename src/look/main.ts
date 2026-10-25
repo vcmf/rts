@@ -54,7 +54,7 @@ import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
-import { SHADOW_LOOK, applyLookParams, shadowModes, stencilFor } from './shadow-look.ts'
+import { SHADOW_LOOK, applyLookParams, shadowModes, simpleShadowsDraw, stencilFor } from './shadow-look.ts'
 
 declare global {
   interface Window {
@@ -678,7 +678,7 @@ if (armiesParam !== null) {
   if (decalLift !== null) units.decalLift = +decalLift
   // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
   // after the bounce map (the season, the shadows' switch, the grain) and when the occlusion's switch changes
-  if (units.simpleFar && unitShadowParam !== '0') {
+  if (simpleShadowsDraw(params)) {
     const shade = (units.shade = bakes.unitShade())
     let ao = S.ao
     scene.onBeforeRenderObservable.add(() => {

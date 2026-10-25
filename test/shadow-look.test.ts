@@ -14,6 +14,7 @@ import {
   lookBetween,
   parseNumbers,
   shadowModes,
+  simpleShadowsDraw,
   stencilFor,
 } from '../src/look/shadow-look.ts'
 import { decodeUnits, shadowShape } from '../src/look/units-data.ts'
@@ -173,8 +174,20 @@ describe('where the stencil goes (stencilFor, #134)', () => {
       expect(stencilFor(q(params))).toBe(at)
     })
   }
+  // (?armies=0 never gets here: the page refuses a count outside 1 to 40, src/look/main.ts)
   it('refuses another value', () => {
     for (const v of ['1', 'engine', '']) expect(() => stencilFor(q(`stencil=${v}`)), v).toThrow(/\?stencil must be/)
+  })
+})
+
+describe('whether the simple shadows draw (simpleShadowsDraw)', () => {
+  it('only with armies, their shadows on and the simple ones beyond close zoom', () => {
+    expect(simpleShadowsDraw(q(''))).toBe(false)
+    expect(simpleShadowsDraw(q('armies=20'))).toBe(true)
+    expect(simpleShadowsDraw(q('armies=20&ushadowclose=map'))).toBe(true)
+    expect(simpleShadowsDraw(q('armies=20&unitshadow=0'))).toBe(false)
+    expect(simpleShadowsDraw(q('armies=20&ushadowfar=map'))).toBe(false)
+    expect(() => simpleShadowsDraw(q('armies=20&ushadowfar=x'))).toThrow(/ushadowfar/)
   })
 })
 
