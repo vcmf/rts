@@ -1,4 +1,4 @@
-// The figures' LOD cross-fade (#188, docs/plans/active/lod-fade.md, decision 0066): a battalion at a LOD switch draws
+// The figures' LOD cross-fade (#188, docs/plans/done/lod-fade.md, decision 0066): a battalion at a LOD switch draws
 // both LODs, each man at his own LOD by his own height on screen, switching at his own point in a band of heights over
 // a short screen-door dither, so no battalion pops from one LOD to the next at once. Pure: src/look/units.ts draws it,
 // src/look/shaders/units.vert and units.frag mirror fadeShare, manHash, lodCover, drawsPixel and dropsMan.

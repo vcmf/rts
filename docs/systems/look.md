@@ -563,7 +563,7 @@ with the blur off unless its URL sets `?dof`, as do the debug views, `?water` an
 distance to alpha). `?benchat=<x>,<z>` (within the play area) makes the
 cameras orbit that point instead of the camera's start, and the JSON records it as `focus` (the forest bench).
 `?benchr=<m>[,<m>…]` measures those radii at the start's pitch instead of close, default and wide (the LOD
-cross-fade's bench, `docs/plans/active/lod-fade.md`).
+cross-fade's bench, `docs/plans/done/lod-fade.md`).
 - **GPU time** comes from our own `EXT_disjoint_timer_query_webgl2` queries (`src/look/gputimer.ts`). Queries
   cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,
   post) on the others, each as segments of consecutive draws, only in the camera's own render pass. Frames with
@@ -712,7 +712,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   palette, lift, growth, the smooth moves between steps); the coat mask dithered by the coat's weight (a 4 × 4 ordered
   dither); it never casts into the map, and its men keep their simple shadows (decision 0049) as the far LOD's do. A
   host's LODs: the figure's nearest first, the shadow proxy, the simple shadow, then the tiny LOD (built only when on).
-- **The LOD cross-fade** (decision 0066, `docs/plans/active/lod-fade.md`, #188; `src/look/lod-fade.ts`, tested in
+- **The LOD cross-fade** (decision 0066, `docs/plans/done/lod-fade.md`, #188; `src/look/lod-fade.ts`, tested in
   `test/lod-fade.test.ts`; `?lodfade=0`: the hard switch): in a band round each switch (`NEAR_FADE`, `TINY_FADE`: 0.8
   to 1.25 × it) a battalion draws both LODs and each man is drawn at his own LOD by his own height on screen (his
   root's distance, as the far palette's), switching at his own point in the band (`manHash` of his index in his

@@ -5,7 +5,7 @@ date: 2026-10-25
 
 # 0066 The figures' LODs cross-faded per man by a screen-door dither
 
-The plan: `docs/plans/active/lod-fade.md` (#188); as built: `docs/systems/look.md` ("The armies").
+The plan: `docs/plans/done/lod-fade.md` (#188); as built: `docs/systems/look.md` ("The armies").
 
 ## Context
 

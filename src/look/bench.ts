@@ -172,7 +172,7 @@ if (closestParam !== null && closestParam !== '0' && closestParam !== '1') {
   throw new Error(`?benchclosest must be 0 or 1, not ${closestParam}`)
 }
 // ?benchr=<m>[,<m>…]: the zooms measured, at these radii and the start's pitch, instead of close, default and wide
-// (the LOD cross-fade's bench: a battalion inside a band and outside, docs/plans/active/lod-fade.md)
+// (the LOD cross-fade's bench: a battalion inside a band and outside, docs/plans/done/lod-fade.md)
 const radiiParam = new URLSearchParams(location.search).get('benchr')
 const benchRadii = radiiParam === null ? null : radiiParam.split(',').map(Number)
 if (benchRadii?.some(r => !(r >= D.spec.camera.rMin && r <= D.spec.camera.rMax))) {
