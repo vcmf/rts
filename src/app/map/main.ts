@@ -344,7 +344,7 @@ function outline(f: Feature): void {
   }
 }
 /** The compiled map's buildings as the lit view stands them: each footprint, its wall height, and whether a church. */
-function housesOf(c: Compiled): { ring: Pt[]; height: number; church: boolean }[] {
+function housesOf(c: Compiled): { ring: Pt[]; height: number; church: boolean; roof: boolean }[] {
   const byId = new Map(c.table.map(r => [r.id, r]))
   return c.map.features.flatMap(f => {
     const r = byId.get(f.id)
@@ -352,9 +352,8 @@ function housesOf(c: Compiled): { ring: Pt[]; height: number; church: boolean }[
     const ring = ringsOf(f)?.[0] // the ring apply paints (a circle's or an ellipse's polygon too)
     if (!ring) return []
     const wall = typeof r.attrs.wall === 'number' ? r.attrs.wall : 4
-    // a house with no roof (burnt, a ruin) stands as its broken walls, low
-    const height = r.attrs.roof === 'none' ? wall * 0.4 : wall
-    return [{ ring, height, church: r.kind.startsWith('built.church') }]
+    // a house with no roof (burnt: its state lowers its walls) stands as its walls alone
+    return [{ ring, height: wall, church: r.kind.startsWith('built.church'), roof: r.attrs.roof !== 'none' }]
   })
 }
 
@@ -437,7 +436,7 @@ function draw(): void {
   groundPath(corners, true)
   ctx.stroke()
   ctx.setLineDash([])
-  if (mode.value !== 'flat') drawNames()
+  if (lit && mode.value !== 'flat') drawNames()
   if (showOutlines.checked) for (const f of current.map.features) outline(f)
   tint()
 }

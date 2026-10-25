@@ -184,3 +184,13 @@ settings (the owner, 2026-10-25).
   wide vanished from the far view; the cells' mask still is). With them: a house's shadow as long as its wall is high;
   a roofless house (a ruin) stands low; the names keep their stroke to themselves (`save`/`restore`); `ccw` from
   `ringArea2`; an empty mask skips its distance transform.
+- **Redesign, round 2**: severe. A feature one cell wide stepping diagonally broke into beads (its cells' shared
+  corners read as the other kind), and the road ink's gate (the ways' cells widened by a cell, mipmapped) let a road
+  draw across a stream that took its cells. Fixed: cells meeting only at a corner are joined, the corner given to one
+  kind (water and barriers their insides, the woods their outsides, so streams, hedges and clearings stay one line);
+  the road's field itself is outside on every cell neither a way's nor beside one, and on water that took a way's
+  cells, so no separate gate; no texture of the view is mipmapped now (the water's depth and its fill read alike at
+  every zoom). With them: a roofless (burnt) house stands at its own wall height with no roof drawn; a long way segment
+  is scanned in 16 m pieces; a closed way has no square cut at its seam; no names over the fallback view.
+  **Open:** far out, features a cell or two wide are sampled, not averaged, and may shimmer while the view moves; a
+  min-filtered mip chain would keep them steady.

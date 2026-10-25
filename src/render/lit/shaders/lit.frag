@@ -8,7 +8,7 @@ precision highp float;
 varying vec3 vW;
 uniform sampler2D uHeight;   // the node heights, m above the datum: one float a node, read by texelFetch
 uniform sampler2D uRelief;   // R the slope's light, G the cast shadow (1 lit), B the exposure (0.5 even), on the nodes
-uniform sampler2D uMask;     // R the water's depth (0..1), G the ways, B the water, A the yards, on the cells
+uniform sampler2D uMask;     // R the water's depth (0..1), B the water, A the yards, on the cells (G unused)
 uniform sampler2D uInk;      // the ink's distance fields on the cells: R ways (their shapes), G water, B barriers, A woods
                              // (their cells), signed m
 uniform sampler2D uPaperT, uFlatT;
@@ -117,11 +117,9 @@ void main() {
        fade from a metre a pixel to three */
     float mpp = 0.5 * (fwidth(vW.x) + fwidth(vW.z));   /* about the metres a pixel spans */
     float far = 1.0 - 0.55 * smoothstep(1.0, 3.0, mpp);
-    /* a way's edges only on its cells: the shapes' line never shows where a rule took the cells away */
-    float onWay = smoothstep(0.0, 0.25, M.g);
     /* a road's ground a little lighter, its two edges in ink */
-    mapC = mix(mapC, min(mapC * 1.06 + 0.02, vec3(1.0)), step(I.r, 0.0) * 0.6 * onWay * inside);
-    mapC = mix(mapC, uLine, hair(I.r) * 0.85 * far * onWay * inside);
+    mapC = mix(mapC, min(mapC * 1.06 + 0.02, vec3(1.0)), step(I.r, 0.0) * 0.6 * inside);
+    mapC = mix(mapC, uLine, hair(I.r) * 0.85 * far * inside);
     /* the water's banks, and a lining 4.5 m and 7.5 m inside a pond's or a river's shore (a stream up to 9 m wide has
        none: its centreline lies nearer its banks than the first lining) */
     mapC = mix(mapC, uLine, hair(I.g) * 0.7 * far * inside);

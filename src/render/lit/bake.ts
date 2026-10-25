@@ -127,30 +127,17 @@ export function bakeRelief(heights: Float64Array, nx: number, nz: number, cell: 
 }
 
 /**
- * The cells' mask, as RGBA bytes, the south row first: R the water's depth (0..1 over 0..WATER_FULL m), G the ways'
- * cells and those next to them (where the road ink may draw: a road's edges never show away from its cells), B the
- * water, A the yards (a
+ * The cells' mask, as RGBA bytes, the south row first: R the water's depth (0..1 over 0..WATER_FULL m), G unused, B
+ * the water, A the yards (a
  * village's, a farm's, ground.yard).
  */
-export function bakeMasks(
-  L: Pick<Layers, 'nx' | 'nz' | 'way' | 'water' | 'depth' | 'table' | 'built' | 'ground'>,
-): Uint8Array {
+export function bakeMasks(L: Pick<Layers, 'nx' | 'nz' | 'water' | 'depth' | 'table' | 'built' | 'ground'>): Uint8Array {
   const n = L.nx * L.nz
   const out = new Uint8Array(n * 4)
   const yard = L.table.map(r => /^(built\.(village|farm)|ground\.yard)(\.|$)/.test(r.kind))
-  // the ways' cells and the cells next to them: a way's edge lies within a cell of its cells, wherever the line runs
-  const nearWay = new Uint8Array(n)
-  for (let j = 0; j < L.nz; j++) {
-    for (let i = 0; i < L.nx; i++) {
-      if (!L.way[j * L.nx + i]) continue
-      for (let b = Math.max(0, j - 1); b <= Math.min(L.nz - 1, j + 1); b++) {
-        for (let a = Math.max(0, i - 1); a <= Math.min(L.nx - 1, i + 1); a++) nearWay[b * L.nx + a] = 1
-      }
-    }
-  }
   for (let c = 0; c < n; c++) {
     out[c * 4] = Math.round(Math.min(1, L.depth[c] / 1000 / WATER_FULL) * 255)
-    out[c * 4 + 1] = nearWay[c] ? 255 : 0
+    out[c * 4 + 1] = 0 // unused
     out[c * 4 + 2] = L.water[c] ? 255 : 0
     out[c * 4 + 3] = (L.built[c] && yard[L.built[c] - 1]) || (L.ground[c] && yard[L.ground[c] - 1]) ? 255 : 0
   }
@@ -170,15 +157,15 @@ export interface InkedLine {
 /**
  * The ink's distance fields on the cells, as RGBA bytes, the south row first: per channel the signed distance from a
  * cell's centre to the nearest edge (negative inside), over ±INK_RANGE m, 128 at the edge.
- * - R the ways' edges, from their centrelines (crisp hairlines at every zoom; the shader draws them only on the ways'
- *   cells), their free ends cut square, as apply paints them;
+ * - R the ways' edges, from their centrelines (crisp hairlines at every zoom), their free ends cut square, as apply
+ *   paints them; outside on every cell neither a way's nor beside one, and on water that took a way's cells;
  * - G the water, B the barriers, A the woods, from their cells: what the sim reads, whatever rule put them there
  *   (priority, `clear`, a hedge's gates). The water's and the woods' fields are smoothed so their edges run through
  *   the cells' steps (within about a metre of the shapes), not along them; the barriers' stay square, on the grid by
  *   design (proposal §3.6).
  */
 export function bakeInk(
-  L: Pick<Layers, 'x0' | 'z0' | 'cell' | 'nx' | 'nz' | 'veg' | 'water' | 'barrier' | 'table'>,
+  L: Pick<Layers, 'x0' | 'z0' | 'cell' | 'nx' | 'nz' | 'veg' | 'water' | 'barrier' | 'way' | 'table'>,
   ways: InkedLine[],
 ): Uint8Array {
   const { x0, z0, cell, nx, nz } = L
@@ -190,11 +177,22 @@ export function bakeInk(
   }
   // the ways, from their shapes
   const sd = new Float32Array(nx * nz).fill(INK_RANGE)
+  const CHUNK = 16 // m: a long segment is scanned in pieces, so a diagonal one scans a strip, not its whole box
   for (const w of ways) {
-    for (let k = 1; k < w.line.length; k++) {
-      const a = w.line[k - 1]
-      const b = w.line[k]
-      const ends: [boolean, boolean] = [k === 1, k === w.line.length - 1]
+    const pts = w.line
+    // a closed line (a loop) has no free end: no square cut at its seam
+    const closed = pts.length > 2 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]
+    const pieces: { a: Pt; b: Pt; ends: [boolean, boolean] }[] = []
+    for (let k = 1; k < pts.length; k++) {
+      const [p, q] = [pts[k - 1], pts[k]]
+      const n = Math.max(1, Math.ceil(Math.sqrt((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) / CHUNK))
+      for (let t = 0; t < n; t++) {
+        const a: Pt = [p[0] + ((q[0] - p[0]) * t) / n, p[1] + ((q[1] - p[1]) * t) / n]
+        const b: Pt = [p[0] + ((q[0] - p[0]) * (t + 1)) / n, p[1] + ((q[1] - p[1]) * (t + 1)) / n]
+        pieces.push({ a, b, ends: [!closed && k === 1 && t === 0, !closed && k === pts.length - 1 && t === n - 1] })
+      }
+    }
+    for (const { a, b, ends } of pieces) {
       const reach = w.half + INK_RANGE
       const i0 = Math.max(0, Math.floor((Math.min(a[0], b[0]) - reach - x0) / cell))
       const i1 = Math.min(nx - 1, Math.floor((Math.max(a[0], b[0]) + reach - x0) / cell))
@@ -208,6 +206,19 @@ export function bakeInk(
       }
     }
   }
+  // a way's ink only on its cells and beside them, and never on water that took its cells (a crossing with no bridge):
+  // the shape's line never shows where the sim has no way
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const c = j * nx + i
+      if (L.way[c]) continue
+      let near = false
+      for (let b = Math.max(0, j - 1); b <= Math.min(nz - 1, j + 1) && !near; b++) {
+        for (let a = Math.max(0, i - 1); a <= Math.min(nx - 1, i + 1); a++) if (L.way[b * nx + a]) near = true
+      }
+      if (!near || L.water[c]) sd[c] = INK_RANGE
+    }
+  }
   store(sd, 0)
   // the water, the barriers and the woods, from their cells
   const wood = L.table.map(r => r.attrs.growth === 'stand')
@@ -217,7 +228,7 @@ export function bakeInk(
   for (let c = 0; c < mask.length; c++) mask[c] = L.barrier[c] ? 1 : 0
   store(cellField(mask, nx, nz, cell, false), 2)
   for (let c = 0; c < mask.length; c++) mask[c] = L.veg[c] && wood[L.veg[c] - 1] ? 1 : 0
-  store(cellField(mask, nx, nz, cell, true), 3)
+  store(cellField(mask, nx, nz, cell, true, 'outside'), 3)
   return out
 }
 
@@ -249,7 +260,14 @@ function segField(a: Pt, b: Pt, x: number, z: number, ends: [boolean, boolean], 
  * curved edge instead of along them, but held on each cell's own side of the edge by at least half its raw distance,
  * so no feature a cell or two wide is blurred away.
  */
-export function cellField(mask: Uint8Array, nx: number, nz: number, cell: number, smooth: boolean): Float32Array {
+export function cellField(
+  mask: Uint8Array,
+  nx: number,
+  nz: number,
+  cell: number,
+  smooth: boolean,
+  join: 'inside' | 'outside' = 'inside',
+): Float32Array {
   if (!mask.includes(1)) return new Float32Array(nx * nz).fill(INK_RANGE) // nothing of the kind: all outside
   const far = INK_RANGE / cell + 2
   const toOther = (inside: number) => {
@@ -290,7 +308,7 @@ export function cellField(mask: Uint8Array, nx: number, nz: number, cell: number
   const inside = toOther(1) // from each cell inside to the nearest outside
   const raw = new Float32Array(nx * nz)
   for (let c = 0; c < raw.length; c++) raw[c] = (mask[c] ? -(inside[c] - 0.5) : outside[c] - 0.5) * cell
-  if (!smooth) return raw
+  if (!smooth) return joinCorners(raw, mask, nx, nz, cell, join)
   // a 5-tap binomial blur along x, then along z; the border cells repeat
   const blur = (from: Float32Array, step: number, n: number, count: number) => {
     const to = new Float32Array(from.length)
@@ -307,7 +325,41 @@ export function cellField(mask: Uint8Array, nx: number, nz: number, cell: number
   // the blur may not carry a cell across its edge, nor more than half a cell toward it: a stream one cell wide stays
   // water a metre wide, a clearing one cell wide stays open, while a wide edge runs smooth through the cells' steps
   for (let c = 0; c < f.length; c++) f[c] = mask[c] ? Math.min(f[c], raw[c] / 2) : Math.max(f[c], raw[c] / 2)
-  return f
+  return joinCorners(f, mask, nx, nz, cell, join)
+}
+
+/**
+ * Joins cells that touch only at a corner. Where two cells of one kind meet diagonally and the two beside them are of
+ * the other, the corner they share is ambiguous; `join` says which kind it belongs to: each cell of the other kind with
+ * neighbours of the joining kind on two adjacent sides (an L) is pulled to within a tenth of a cell of the edge, so the
+ * corner reads on the joining side. Water and barriers join their insides (a stream or a hedge one cell wide stepping
+ * diagonally stays one line); the woods join their outsides (a path cut diagonally through a wood stays one clearing).
+ */
+function joinCorners(
+  f: Float32Array,
+  mask: Uint8Array,
+  nx: number,
+  nz: number,
+  cell: number,
+  join: 'inside' | 'outside',
+): Float32Array {
+  const hold = cell * 0.1
+  const out = Float32Array.from(f)
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const c = j * nx + i
+      const m = mask[c]
+      if ((join === 'inside') === (m === 1)) continue // only the other kind's cells give way
+      const other = (a: number, b: number) => a >= 0 && a < nx && b >= 0 && b < nz && mask[b * nx + a] !== m
+      const w = other(i - 1, j)
+      const e = other(i + 1, j)
+      const s = other(i, j - 1)
+      const n = other(i, j + 1)
+      if (!((w || e) && (s || n))) continue
+      out[c] = m ? Math.max(f[c], -hold) : Math.min(f[c], hold)
+    }
+  }
+  return out
 }
 
 /** The ways of a compiled map's features, as ink: each centreline at the half-width apply paints it (`lineReach`). */

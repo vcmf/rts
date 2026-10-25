@@ -215,11 +215,10 @@ export class LitView {
     const linear = Texture.BILINEAR_SAMPLINGMODE
     this.material.setTexture('uHeight', height)
     this.material.setTexture('uRelief', tex(m.relief, m.nx + 1, m.nz + 1, rgba, linear))
-    // the cells' mask mipmapped (its depth, ways, water and yards fade well when averaged)
-    const tri = Texture.TRILINEAR_SAMPLINGMODE
-    const byte = Constants.TEXTURETYPE_UNSIGNED_BYTE
-    this.material.setTexture('uMask', tex(m.masks, m.nx, m.nz, rgba, tri, byte, true))
-    // the ink's fields are not mipmapped: averaged, a hedge or a brook two cells wide would vanish from the far view
+    // neither the mask nor the ink's fields mipmapped: averaged, a brook or a hedge two cells wide would vanish from
+    // the far view, and the water's depth would part from its fill (docs/plans/active/m6-lit-view.md, open: a
+    // min-filtered mip chain for the far view)
+    this.material.setTexture('uMask', tex(m.masks, m.nx, m.nz, rgba, linear))
     this.material.setTexture('uInk', tex(m.ink, m.nx, m.nz, rgba, linear))
     this.material.setFloat('uInkRange', INK_RANGE)
     this.material.setTexture('uFlatT', tex(m.flat.rgba, m.flat.w, m.flat.h, rgba, Texture.NEAREST_SAMPLINGMODE))
@@ -236,7 +235,7 @@ export class LitView {
     this.material.setColor3('uWaterW', seasonColour(WATER, s))
     this.material.setColor3('uLine', seasonColour(LINE, s))
     this.material.setColor3('uBarrier', Color3.FromHexString(BARRIER))
-    this.light = lightXZ(m.light)
+    this.light = [lx, lz]
     this.material.setFloat('uFlat', this.flat)
     // the plane reaches far past the map (100 km), so the paper fills the screen at every zoom and tilt the page allows
     const pad = 100000
@@ -287,7 +286,7 @@ export class LitView {
    * Stands the map's houses on the paper (M6b): each footprint (a ring, m, convex or not) raised to its wall height,
    * its roof flat, its faces lit by the map's light, and a soft shadow away from the light, as the prototype's bake.
    */
-  setHouses(houses: { ring: [number, number][]; height: number; church: boolean }[]): void {
+  setHouses(houses: { ring: [number, number][]; height: number; church: boolean; roof: boolean }[]): void {
     for (const h of this.houses) h.dispose()
     this.houses = []
     if (!houses.length) return
@@ -307,7 +306,8 @@ export class LitView {
         pos.push(x, h.height, z)
         col.push(base[0], base[1], base[2], 1)
       }
-      for (const [a, b, c] of triangulate(ring)) idx.push(top + a, top + c, top + b)
+      // a roofless house (a ruin, burnt) is its walls alone
+      if (h.roof) for (const [a, b, c] of triangulate(ring)) idx.push(top + a, top + c, top + b)
       // the walls: a quad an edge, lit by how much it faces the light
       for (let k = 0; k < n; k++) {
         const [ax, az] = ring[k]

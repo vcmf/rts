@@ -99,23 +99,45 @@ describe('M6b: the ink distance fields', () => {
     const c = Math.floor((z - grid.z0) / cell) * nx + Math.floor((x - grid.x0) / cell)
     return ((out[c * 4 + ch] - 128) / 127) * INK_RANGE
   }
-  const layers = (o: Partial<{ veg: Uint16Array; water: Uint16Array; barrier: Uint16Array; table: Resolved[] }>) => ({
+  const layers = (
+    o: Partial<{ veg: Uint16Array; water: Uint16Array; barrier: Uint16Array; way: Uint16Array; table: Resolved[] }>,
+  ) => ({
     ...grid,
     veg: o.veg ?? cells(),
     water: o.water ?? cells(),
     barrier: o.barrier ?? cells(),
+    way: o.way ?? cells(),
     table: o.table ?? [],
   })
+  // the way cells along row j0..j1 (columns i0..i1)
+  const wayCells = (i0: number, i1: number, j0: number, j1: number) => {
+    const w = cells()
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) w[at(i, j)] = 1
+    return w
+  }
   it("a way's field is negative inside its width, 0 at its edges, positive beyond, its free ends square", () => {
     const line: Pt[] = [
       [-6, 1],
       [6, 1],
     ]
-    const out = bakeInk(layers({}), [{ line, half: 3 }])
+    const out = bakeInk(layers({ way: wayCells(7, 12, 9, 11) }), [{ line, half: 3 }])
     expect(read(out, 0, 0, 1)).toBeCloseTo(-3, 1) // the cell centred on the line
     expect(read(out, 0, 0, 5)).toBeCloseTo(1, 1) // 4 m from the line, 1 m past its edge
-    expect(read(out, 0, 9, 1)).toBeCloseTo(3, 1) // 3 m past its end, on the centreline: outside by 3 m
+    expect(read(out, 0, 7, 1)).toBeCloseTo(1, 1) // 1 m past its end, beside its cells: outside by 1 m (square)
     expect(read(out, 0, 0, 15)).toBeCloseTo(INK_RANGE, 1) // out of reach
+  })
+  it("a way's ink shows only on and beside its cells, never on water that took them", () => {
+    const line: Pt[] = [
+      [-20, 1],
+      [20, 1],
+    ]
+    const water = cells()
+    for (let j = 0; j < nz; j++) for (let i = 9; i <= 11; i++) water[at(i, j)] = 1 // a stream across the road
+    const way = wayCells(0, 19, 9, 11)
+    for (let j = 9; j <= 11; j++) for (let i = 9; i <= 11; i++) way[at(i, j)] = 0 // the stream took the road's cells
+    const out = bakeInk(layers({ way, water }), [{ line, half: 3 }])
+    expect(read(out, 0, -10, 1)).toBeLessThan(0) // the road
+    expect(read(out, 0, 1, 1)).toBeCloseTo(INK_RANGE, 1) // the stream: no road there
   })
   it('waysOf gives each way the half-width apply paints it at (lineReach: at least just over half a cell)', () => {
     const line: Pt[] = [
@@ -173,6 +195,23 @@ describe('M6b: the ink distance fields', () => {
       expect(f[at(9, 10)]).toBeLessThan(0)
       expect(drawnWidth(f, 10)).toBeGreaterThanOrEqual(cells * cell * 0.5)
     }
+  })
+  it('a feature one cell wide stepping diagonally stays one line: its cells join at their corners', () => {
+    for (const smooth of [true, false]) {
+      const m = new Uint8Array(nx * nz)
+      for (let k = 0; k < nx; k++) m[at(k, k)] = 1
+      const f = cellField(m, nx, nz, cell, smooth)
+      // the corner shared by (9, 9), (10, 10) and the two cells beside them: bilinear, the mean of the four centres
+      const corner = (f[at(9, 9)] + f[at(10, 10)] + f[at(10, 9)] + f[at(9, 10)]) / 4
+      expect(corner).toBeLessThan(0)
+    }
+  })
+  it('a clearing one cell wide stepping diagonally through a wood stays one clearing', () => {
+    const m = new Uint8Array(nx * nz).fill(1)
+    for (let k = 0; k < nx; k++) m[at(k, k)] = 0
+    const f = cellField(m, nx, nz, cell, true, 'outside')
+    const corner = (f[at(9, 9)] + f[at(10, 10)] + f[at(10, 9)] + f[at(9, 10)]) / 4
+    expect(corner).toBeGreaterThan(0)
   })
   it('a clearing one cell wide in a wood stays open after the smoothing', () => {
     const m = new Uint8Array(nx * nz).fill(1)
