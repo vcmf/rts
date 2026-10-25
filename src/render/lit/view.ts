@@ -14,7 +14,6 @@ import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
-import { Viewport } from '@babylonjs/core/Maths/math.viewport.js'
 import type { Season } from '../../map/schema.ts'
 import { lightXZ, RELIEF, type LightDir } from './bake.ts'
 import { paperCanvas } from './paper.ts'
@@ -22,8 +21,9 @@ import LIT_VS from './shaders/lit.vert?raw'
 import LIT_FS from './shaders/lit.frag?raw'
 
 const FOV = 0.52 // rad, vertical (the prototype's)
-// the clip w under which a ground point is too near the camera's plane to project (m in front of the camera)
-export const NEAR_W = 1
+// the overlays' near limit, as a share of the camera's distance to the centre: a ground point nearer the camera's
+// plane is not drawn (it would project to huge or mirrored coordinates)
+const NEAR_SHARE = 0.05
 export const TILT = 20 // degrees off straight down (decision 0055)
 // the relief's tone on the paper: never darker than SHADE_FLOOR (with its warm hue, 0.62 of the paper), never lighter
 // than SHADE_TOP (the prototype's)
@@ -71,13 +71,23 @@ export class LitView {
   private plane: Mesh | null = null
   private textures: Texture[] = []
   private viewProj = Matrix.Identity()
+  private inverse = Matrix.Identity()
+  private rect = { w: 1, h: 1 }
+  private nearW = 1
   private flat = 0
   private readonly canvas: HTMLCanvasElement
 
   /** Throws when the browser has no WebGL2 (the shader reads its heights with texelFetch; decision 0046). */
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
-    this.engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: false }, false)
+    // doNotHandleContextLost: Babylon would otherwise keep every texture's source bytes to restore a lost context
+    // (144 MB at 6 km); a lost context is reported (onLost) and the page recompiles
+    this.engine = new Engine(
+      canvas,
+      true,
+      { preserveDrawingBuffer: true, stencil: false, doNotHandleContextLost: true },
+      false,
+    )
     if (this.engine.webGLVersion < 2) {
       this.engine.dispose()
       throw new Error('the lit map view needs WebGL2 (decision 0046)')
@@ -190,9 +200,36 @@ export class LitView {
     this.plane = plane
   }
 
-  /** Resolves once the plane's shader and textures are ready to draw (the first frame after setMap may not be). */
-  ready(): Promise<void> {
-    return this.scene.whenReadyAsync()
+  /**
+   * Resolves once the plane's shader and textures are ready to draw (the first frame after setMap may not be); rejects
+   * after `ms` with the shader's compile error, if any.
+   */
+  ready(ms = 10000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const t0 = performance.now()
+      const poll = () => {
+        if (this.scene.isReady()) resolve()
+        else if (performance.now() - t0 > ms) {
+          const e = this.material.getEffect()?.getCompilationError()
+          reject(new Error(`the lit view did not get ready${e ? `: ${e}` : ''}`))
+        } else setTimeout(poll, 16)
+      }
+      poll()
+    })
+  }
+
+  /** Clears the view: no map drawn until the next setMap. */
+  clear(): void {
+    for (const t of this.textures) t.dispose()
+    this.textures = []
+    this.plane?.dispose()
+    this.plane = null
+    this.scene.render()
+  }
+
+  /** Calls `fn` when the WebGL context is lost (the view cannot draw again until the page reloads). */
+  onLost(fn: () => void): void {
+    this.engine.onContextLostObservable.add(fn)
   }
 
   /** Shows the flat draft's colours instead of the lit map (a debug setting). */
@@ -204,6 +241,9 @@ export class LitView {
   /** Places the camera: it looks north, leaning `tilt` degrees off straight down, `ppm` px a metre at the centre. */
   setCamera(v: LitCamera): void {
     const r = this.canvas.getBoundingClientRect()
+    // a canvas with no size (a hidden tab, a collapsed layout) or no zoom keeps the last camera
+    if (!(r.width > 0 && r.height > 0 && v.ppm > 0)) return
+    this.rect = { w: r.width, h: r.height }
     const pitch = Math.PI / 2 - (Math.min(45, Math.max(0, v.tilt)) * Math.PI) / 180
     const dist = r.height / (2 * Math.tan(FOV / 2) * v.ppm)
     const fwd = new Vector3(0, -Math.sin(pitch), Math.cos(pitch))
@@ -211,52 +251,45 @@ export class LitView {
     this.camera.rotation.set(pitch, 0, 0)
     this.camera.minZ = Math.max(0.5, dist * 0.05)
     this.camera.maxZ = dist * 20
+    // the overlays' near limit: a twentieth of the distance, where a point still projects to a few screens at most
+    this.nearW = dist * NEAR_SHARE
     this.engine.resize()
     this.viewProj = this.camera.getViewMatrix(true).multiply(this.camera.getProjectionMatrix(true))
+    this.inverse = this.viewProj.clone().invert()
   }
 
-  /** How far a ground point lies in front of the camera (its clip w): at or below NEAR_W it cannot be drawn. */
+  /** How far a ground point lies in front of the camera, less the overlays' near limit: at or below 0, not drawn. */
   depth(x: number, z: number): number {
     const m = this.viewProj.m
-    return x * m[3] + z * m[11] + m[15]
+    return x * m[3] + z * m[11] + m[15] - this.nearW
   }
 
-  /** A ground point to CSS pixels on the canvas, or null when it lies behind the camera (see `depth`). */
+  /** A ground point to CSS pixels on the canvas, or null when it lies behind the near limit (see `depth`). */
   project(x: number, z: number): [number, number] | null {
-    if (this.depth(x, z) <= NEAR_W) return null
-    const r = this.canvas.getBoundingClientRect()
-    const p = Vector3.Project(
-      new Vector3(x, 0, z),
-      Matrix.IdentityReadOnly,
-      this.viewProj,
-      new Viewport(0, 0, r.width, r.height),
-    )
-    return [p.x, p.y]
+    const m = this.viewProj.m
+    const w = x * m[3] + z * m[11] + m[15]
+    if (w - this.nearW <= 0) return null
+    const cx = (x * m[0] + z * m[8] + m[12]) / w
+    const cy = (x * m[1] + z * m[9] + m[13]) / w
+    return [(0.5 + 0.5 * cx) * this.rect.w, (0.5 - 0.5 * cy) * this.rect.h]
   }
 
-  /** CSS pixels on the canvas to the ground point under them, or null above the horizon. */
+  /** CSS pixels on the canvas to the ground point under them, or null at or above the horizon. */
   unproject(sx: number, sy: number): [number, number] | null {
-    const r = this.canvas.getBoundingClientRect()
-    const near = Vector3.Unproject(
-      new Vector3(sx, sy, 0),
-      r.width,
-      r.height,
-      Matrix.IdentityReadOnly,
-      this.camera.getViewMatrix(),
-      this.camera.getProjectionMatrix(),
-    )
-    const far = Vector3.Unproject(
-      new Vector3(sx, sy, 1),
-      r.width,
-      r.height,
-      Matrix.IdentityReadOnly,
-      this.camera.getViewMatrix(),
-      this.camera.getProjectionMatrix(),
-    )
-    const dy = far.y - near.y
-    if (dy > -1e-9) return null
-    const t = -near.y / dy
-    return [near.x + (far.x - near.x) * t, near.z + (far.z - near.z) * t]
+    const xn = (2 * sx) / this.rect.w - 1
+    const yn = 1 - (2 * sy) / this.rect.h
+    // two points of the pixel's ray through the camera, back from clip space
+    const a = Vector3.TransformCoordinates(new Vector3(xn, yn, 0), this.inverse)
+    const b = Vector3.TransformCoordinates(new Vector3(xn, yn, 0.5), this.inverse)
+    const c = this.camera.position
+    const dy = b.y - a.y
+    if (Math.abs(dy) < 1e-12) return null
+    const t = -a.y / dy
+    const x = a.x + (b.x - a.x) * t
+    const z = a.z + (b.z - a.z) * t
+    // the ground point must lie ahead of the camera along the ray, not behind it
+    const ahead = (x - c.x) * (b.x - a.x) + (0 - c.y) * (b.y - a.y) + (z - c.z) * (b.z - a.z)
+    return ahead > 0 ? [x, z] : null
   }
 
   /** Draws a frame; returns its CPU time, ms. */

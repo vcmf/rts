@@ -101,3 +101,17 @@ settings (the owner, 2026-10-25).
   zoom; the slope at the grid's edges is taken over its true span (no seam), with a test; the light travels with the
   bake to the shader; the noise helpers are the look's (`src/look/noise.ts`); the page drops the bakes' buffers once
   they are on the GPU.
+- **Round 2**: moderate and light only, so the review stops. Fixed:
+  - picking another map clears the lit view, so a failed compile no longer shows the last map's picture under the new
+    map's errors, and the error tint shows then too;
+  - without WebGL2 the page projects straight down and flat, as before, so the readout, pan and zoom still work;
+  - the engine no longer keeps every texture's source bytes for a lost context (144 MB at 6 km); a lost context is
+    reported in the panel;
+  - one draw a displayed frame (`requestAnimationFrame`), however many pointer events arrive;
+  - the overlays' near limit is a twentieth of the camera's distance, so a clipped line ends a few screens away at
+    most, not millions of pixels;
+  - one wait for the view's readiness at a time, failing after 10 s with the shader's error;
+  - no camera from a canvas with no size or a zoom of 0;
+  - picking a map keeps the other settings in the URL (`?tilt=`);
+  - `project` and `unproject` read the camera's matrix and its inverse, kept with the canvas's size in `setCamera`:
+    no layout read or matrix inversion per point.

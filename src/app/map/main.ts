@@ -7,7 +7,7 @@ import type { Feature, Pt } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName } from './protocol.ts'
 import { demFileNames } from '../../map/dem.ts'
-import { LitView, NEAR_W, TILT } from '../../render/lit/view.ts'
+import { LitView, TILT } from '../../render/lit/view.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -102,6 +102,17 @@ let height = new Float64Array(0)
 let depth = new Uint16Array(0)
 const log: { reason: string; savedAt?: number; drawnAt: number; ms: number }[] = []
 let frameMs = 0 // the last frame's CPU time in the lit view
+let readyWait: Promise<void> | null = null
+// one draw a displayed frame, however many pointer and wheel events arrive in it
+let queued = false
+function redraw(): void {
+  if (queued) return
+  queued = true
+  requestAnimationFrame(() => {
+    queued = false
+    draw()
+  })
+}
 
 let seq = 0
 let pending: { reason: string; t0: number; savedAt?: number } | null = null
@@ -166,8 +177,19 @@ function onReply(e: MessageEvent<CompileReply>): void {
     })
     // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
     current = { ...r, relief: new ArrayBuffer(0), masks: new ArrayBuffer(0), rgba: new ArrayBuffer(0) }
-    // the first frame after a new map may come before its shader compiles: draw again once it is ready
-    void lit?.ready().then(draw)
+    // the first frame after a new map may come before its shader compiles: draw again once it is ready (one wait at
+    // a time; a shader that never compiles is reported)
+    if (lit && !readyWait) {
+      readyWait = lit
+        .ready()
+        .then(draw, (e: Error) => {
+          litError = e.message
+          panel()
+        })
+        .finally(() => {
+          readyWait = null
+        })
+    }
     if (fresh || !view.ppm) fit()
   } else issues = r.issues
   const now = performance.now()
@@ -209,16 +231,33 @@ function fit(): void {
 }
 // the camera follows the view; every point drawn or picked goes through it
 const place = () => lit?.setCamera({ ...view, tilt })
-const toScreen = (x: number, z: number): [number, number] | null => lit?.project(x, z) ?? null
+// without the lit view (no WebGL2), straight down and flat, as the page drew before it
+const flatScreen = (x: number, z: number): [number, number] => {
+  const r = canvas.getBoundingClientRect()
+  return [r.width / 2 + (x - view.cx) * view.ppm, r.height / 2 - (z - view.cz) * view.ppm]
+}
+const flatWorld = (sx: number, sy: number): Pt => {
+  const r = canvas.getBoundingClientRect()
+  return [view.cx + (sx - r.width / 2) / view.ppm, view.cz - (sy - r.height / 2) / view.ppm]
+}
+const toScreen = (x: number, z: number): [number, number] | null => (lit ? lit.project(x, z) : flatScreen(x, z))
 /**
  * Adds a polyline (or a ring) of ground points to the 2D path, clipped where it passes behind the tilted camera: the
  * part of a segment too near the camera's plane is left out, never drawn mirrored (LitView.depth).
  */
 function groundPath(pts: Pt[], close: boolean): void {
   ctx.beginPath()
-  if (!lit) return
+  if (!lit) {
+    pts.forEach((p, k) => {
+      const [x, y] = flatScreen(p[0], p[1])
+      if (k) ctx.lineTo(x, y)
+      else ctx.moveTo(x, y)
+    })
+    if (close) ctx.closePath()
+    return
+  }
   const L = lit
-  const room = (p: Pt) => L.depth(p[0], p[1]) - NEAR_W // above 0: far enough in front to draw
+  const room = (p: Pt) => L.depth(p[0], p[1]) // above 0: far enough in front to draw
   const along = (q: Pt, p: Pt, t: number): Pt => [q[0] + (p[0] - q[0]) * t, q[1] + (p[1] - q[1]) * t]
   let pen = false
   const to = (p: Pt) => {
@@ -245,7 +284,8 @@ function groundPath(pts: Pt[], close: boolean): void {
     if (rp > 0) to(p)
   }
 }
-const toWorld = (sx: number, sy: number): Pt => lit?.unproject(sx, sy) ?? [view.cx, view.cz]
+const toWorld = (sx: number, sy: number): Pt =>
+  lit ? (lit.unproject(sx, sy) ?? [view.cx, view.cz]) : flatWorld(sx, sy)
 
 const CATEGORY_INK: Record<string, string> = {
   relief: '#7a5a2a',
@@ -312,7 +352,17 @@ function draw(): void {
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, r.width, r.height)
-  if (!current) return
+  const tint = () => {
+    if (!issues.length) return
+    ctx.fillStyle = 'rgba(160, 20, 20, .08)'
+    ctx.fillRect(0, 0, r.width, r.height)
+  }
+  if (!current) {
+    // no map to show (another was picked): not the last map's picture under the new one's errors
+    lit?.clear()
+    tint()
+    return
+  }
   place()
   frameMs = lit?.render() ?? 0
   // the play area
@@ -329,10 +379,7 @@ function draw(): void {
   ctx.stroke()
   ctx.setLineDash([])
   if (showOutlines.checked) for (const f of current.map.features) outline(f)
-  if (issues.length) {
-    ctx.fillStyle = 'rgba(160, 20, 20, .08)'
-    ctx.fillRect(0, 0, r.width, r.height)
-  }
+  tint()
 }
 
 function panel(): void {
@@ -391,7 +438,8 @@ canvas.addEventListener('pointermove', e => {
     const now = toWorld(e.offsetX, e.offsetY)
     view.cx += drag.at[0] - now[0]
     view.cz += drag.at[1] - now[1]
-    draw()
+    place()
+    redraw()
   }
   hover(e.offsetX, e.offsetY)
 })
@@ -405,7 +453,8 @@ canvas.addEventListener(
     const after = toWorld(e.offsetX, e.offsetY)
     view.cx += before[0] - after[0]
     view.cz += before[1] - after[1]
-    draw()
+    place()
+    redraw()
     hover(e.offsetX, e.offsetY)
   },
   { passive: false },
@@ -413,11 +462,17 @@ canvas.addEventListener(
 addEventListener('resize', draw)
 picker.addEventListener('change', () => {
   current = null
-  history.replaceState(null, '', `?map=${picker.selectedOptions[0].text}`)
+  const q = new URLSearchParams(location.search) // the other settings (?tilt=) stay
+  q.set('map', picker.selectedOptions[0].text)
+  history.replaceState(null, '', `?${q}`)
   void compile('pick')
 })
 showOutlines.addEventListener('change', draw)
 lit?.setFlat(mode.value === 'flat') // a value the browser restored on reload
+lit?.onLost(() => {
+  litError = 'the WebGL context was lost: reload the page'
+  panel()
+})
 mode.addEventListener('change', () => {
   lit?.setFlat(mode.value === 'flat')
   draw()
