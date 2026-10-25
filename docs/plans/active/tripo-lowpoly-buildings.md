@@ -73,3 +73,14 @@ at the closest zoom, 15 m).
 - Checks: `npm test` (lint, format, typecheck, Vitest; three timing tests failed under the other agent's load and
   passed on a rerun), `npm run check:data` and the docs check pass; the golden against main differs only where the
   windmill and its shadow are (the start view 1.29 % of a region, the winter one 1.26 %: expected).
+- Review round 1 (2026-10-25): the inlays painted only on wall and timber faces (`building.frag` gates by the role;
+  the tool drops a mask's texel any face of another role covers: a manor's roof showed dark smudges at the default
+  zoom); the B inlay a shutter of its own (a class no face takes, its colour the model's `shutter`, the farmhouse's
+  alone), not the accent (the cottage's terracotta pots: its walls now take no B inlay); the farmhouse without a
+  timber class (its window frames and sills were timber and tiles: its walls any way up now, the sills stone; the
+  manor's slates are too near its shaded stone for that, its sills stay slate); the masks closed by two texels and
+  their holes filled (the shutters' planks, the door); the detail's local mean without the inlays and 1 on them (a
+  painted window darkened the mean and left a pale rim); `--render` paints the inlays; one UV layer; the cut, the sails'
+  rebuild and the shader's sails branch removed (git history keeps them); the vote vectorised. The farmhouse's
+  shutters and green door still read mottled at 15 m: the painter's grain on a colour near its band's edge, as the
+  roofs (the paint, not the mask: the mask is whole there).

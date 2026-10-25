@@ -6,7 +6,7 @@ precision highp float;varying vec3 vW,vN;varying vec2 vUV;varying float vRole,vH
 // DETAIL_BOX; uDetail's R, 128 = 1), uDetailAmt of it,
 // so the stone courses and the slates show under the paint's grain. Painted as the stones and the trunks are: the
 // ramp, the cast shadow, the sky's occlusion from the light map, the ground's bounce, the snow on what faces up, the air
-uniform vec3 uWall,uRoof,uTimber,uOpening,uAccent;uniform float uDetailAmt;uniform sampler2D uDetail;
+uniform vec3 uWall,uRoof,uTimber,uOpening,uAccent,uShutter;uniform float uDetailAmt;uniform sampler2D uDetail;
 #ifdef BLD_BAKED
 // the static light baked (src/look/building-light.ts): R the sun's cast shadow, G the sky's occlusion, B the mist's
 // mask, A the light map's sun (stored from 1/255); the bounce at the instance's root (uBldBounce, a texel an instance)
@@ -41,14 +41,13 @@ void main(){
   pBounce=bounceAt(vRoot,vW.y-vH,vH,0.0);
   #endif
   #endif
-  // (a face the export made, the windmill's sails, has no texel of its own: its UV below 0, its detail 1. The read
-  // made anyway, at a clamped UV, so its derivatives hold in every quad)
-  // (G and B: the openings and accents painted inside a larger face, a low-poly model's windows and shutters, as
-  // inlays over the face's role: tools/building-to-js.py, inlays)
-  vec3 dt=texture2D(uDetail,max(vUV,0.0)).rgb;
+  // (G and B: the openings and shutters a low-poly model paints inside its wall and timber faces, as inlays over the
+  // face's role: tools/building-to-js.py, vote; only on those roles, so a mask's texel at an island's edge or in a
+  // coarser mip never reaches a roof)
+  vec3 dt=texture2D(uDetail,vUV).rgb;
   float d=dt.r*255.0/128.0;
-  if(vUV.x<0.0){d=1.0;dt.gb=vec2(0.0);}
-  vec3 alb=mix(mix(roleCol(vRole),uOpening,dt.g),uAccent,dt.b)*mix(1.0,d,uDetailAmt);
+  float host=(vRole<0.5||abs(vRole-2.0)<0.5)?1.0:0.0;
+  vec3 alb=mix(mix(roleCol(vRole),uOpening,dt.g*host),uShutter,dt.b*host)*mix(1.0,d,uDetailAmt);
   // (the grain breaks the band edges at a third of the ground's: on a flat wall it broke them into pixel specks)
   vec3 c=paint(alb,N,vW,mix(1.0,lm.g,uAO*0.6),0.4,0.3,sh);
   gl_FragColor=lensOut(airOf(c,vW,lm,vH),vW);}
