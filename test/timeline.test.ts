@@ -62,7 +62,7 @@ function run(tl: Timeline, w: World, T: number, at: number[] = []): World {
   }
   return w
 }
-const back = (tl: Timeline, T: number) => goTo(tl, T, fresh, load).w
+const back = (tl: Timeline, T: number, now?: World) => goTo(tl, T, fresh, load, now)
 
 describe('timeline', () => {
   it('going back and playing on gives the first pass, with the orders logged after the tick', () => {
@@ -103,6 +103,13 @@ describe('timeline', () => {
       expect(tl.snaps.length).toBeLessThanOrEqual(MAX_SNAPS)
       expect(tl.every).toBe(2 * SNAP_EVERY)
       expect(tl.snaps.map(s => s.tick)).toEqual(tl.snaps.map((_, k) => (k + 1) * tl.every))
+      // going back among the thinned saves, and a branch early on brings the interval back down
+      const end = hashWorld(run(tl, back(tl, 5 * SNAP_EVERY + 7), (MAX_SNAPS + 10) * SNAP_EVERY))
+      const w = back(tl, 3 * SNAP_EVERY + 7)
+      expect(hashWorld(run(tl, back(tl, 3 * SNAP_EVERY + 7), (MAX_SNAPS + 10) * SNAP_EVERY))).toBe(end)
+      order(tl, back(tl, 3 * SNAP_EVERY + 7), move(-100))
+      expect(tl.every).toBe(SNAP_EVERY)
+      expect(w.meta[M_TICK]).toBe(3 * SNAP_EVERY + 7)
     },
     60_000,
   )
@@ -126,9 +133,45 @@ describe('timeline', () => {
   it('a tick played again that gives another world throws, and leaves the timeline as it was', () => {
     const tl = mkTimeline()
     run(tl, begin(tl, fresh()), 900, [300])
-    tl.hashes.find(h => h.tick === 600)!.hash ^= 1
+    tl.hashes.find(h => h.tick === 600)!.hash += 1
     const before = JSON.stringify({ ...tl, snaps: tl.snaps.length })
     expect(() => back(tl, 700)).toThrow(/played again/)
     expect(JSON.stringify({ ...tl, snaps: tl.snaps.length })).toBe(before)
+  })
+  it("a tick of the page's own world that gives another world breaks the timeline until it goes to a time", () => {
+    const tl = mkTimeline()
+    run(tl, begin(tl, fresh()), 900, [500])
+    const w = back(tl, 590)
+    tl.hashes.find(h => h.tick === 600)!.hash += 1
+    expect(() => run(tl, w, 620)).toThrow(/played again/)
+    expect(w.meta[M_TICK]).toBe(600)
+    // it refuses to tick on, and the world it broke on was handed its next orders
+    expect(() => step(tl, w)).toThrow(/played again/)
+    expect(tl.log[tl.next - 1].tick).toBeLessThanOrEqual(601)
+    // going to a time mends it (the tampered point is the copy's to check again: put it right first)
+    tl.hashes.find(h => h.tick === 600)!.hash -= 1
+    const v = back(tl, 610)
+    expect(tl.broken).toBe('')
+    expect(v.meta[M_TICK]).toBe(610)
+  })
+  it('a branch on a save tick keeps the order already logged for the next tick, and the session replays', () => {
+    const tl = mkTimeline()
+    run(tl, begin(tl, fresh()), 2400, [SNAP_EVERY * 2])
+    // back to the save tick: the order stamped for its next tick is pending, and a new one keeps it
+    const w = back(tl, SNAP_EVERY * 2)
+    order(tl, w, move(-100))
+    expect(tl.log.map(s => s.tick)).toEqual([SNAP_EVERY * 2 + 1, SNAP_EVERY * 2 + 1])
+    run(tl, w, 2000)
+    const replay = { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name }
+    expect(play({ ...replay, seed: 1, ticks: 2000, log: tl.log }, data, cr, scenario, tl.hashes)).toBeNull()
+  })
+  it('going to a time from the world as it stands plays only what is left, and the hash points stay whole', () => {
+    const tl = mkTimeline()
+    const w = run(tl, begin(tl, fresh()), 790, [300])
+    const v = back(tl, 799, w)
+    expect(v.meta[M_TICK]).toBe(799)
+    run(tl, v, 1400)
+    const replay = { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name }
+    expect(play({ ...replay, seed: 1, ticks: 1400, log: tl.log }, data, cr, scenario, tl.hashes)).toBeNull()
   })
 })

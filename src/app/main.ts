@@ -32,7 +32,6 @@ import {
   placeAll,
   mkPlaced,
   type Command,
-  type Stamped,
   type World,
   type HashPoint,
   type Replay,
@@ -77,14 +76,11 @@ async function main(): Promise<void> {
   const mine = (i: number): boolean => scenario.player === undefined || w.f.side[i] === scenario.player
   // the player's orders, the hash points and the saves going back uses (src/app/timeline.ts)
   const tl = mkTimeline()
-  const log: Stamped[] = tl.log
-  const hashes: HashPoint[] = tl.hashes
   const load = (bytes: Uint8Array): World => {
     const v = deserialize(bytes, data, cr, false, w.terrain)
     attachScenario(v, scenario)
     return v
   }
-  const dropped: Dropped[] = []
   const scene = buildScene(w)
   let layer = new SoldierLayer(w, scene)
   let over = new Overlay(w)
@@ -144,11 +140,23 @@ async function main(): Promise<void> {
     for (const i of selected) external(make(formationHandle(w, i)))
   }
   // hash points without section hashes: those would cost a second serialization each time
-  const tick = () => {
-    const r = step(tl, w)
-    layer.sync(0, r.departed)
-    dropped.push(...r.dropped)
-    for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
+  // a tick; false when the timeline is broken (a tick played again gave another world), which pauses the page and says
+  // so until it goes to a time
+  const tick = (): boolean => {
+    try {
+      const r = step(tl, w)
+      layer.sync(0, r.departed)
+    } catch (e) {
+      paused = true
+      acc = 0
+      note = `${e instanceof Error ? e.message : String(e)}: go to a time (G) to go on`
+      noteT = performance.now()
+      console.error(e)
+      return false
+    } finally {
+      for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
+    }
+    return true
   }
 
   // the frame: ticks owed at the game speed, then the men (in game time), then the drawing
@@ -158,17 +166,7 @@ async function main(): Promise<void> {
     const a = performance.now()
     let n = 0
     while (acc >= DT && n < 20) {
-      // a tick that throws (the timeline found a tick played again giving another world) pauses the page, says so
-      try {
-        tick()
-      } catch (e) {
-        paused = true
-        acc = 0
-        note = String(e)
-        noteT = performance.now()
-        console.error(e)
-        break
-      }
+      if (!tick()) break
       acc -= DT
       n++
     }
@@ -254,15 +252,14 @@ async function main(): Promise<void> {
   const stepTick = () => {
     paused = true
     acc = 0
-    tick()
-    layer.step(DT, 0)
+    if (tick()) layer.step(DT, 0)
   }
   const goTo = (target: number) => {
     // as far as the furthest tick played, or the last order logged
-    const T = Math.max(0, Math.min(Math.round(target), Math.max(tl.reached, w.meta[M_TICK], log.at(-1)?.tick ?? 0)))
-    let got: ReturnType<typeof timelineGoTo>
+    const T = Math.max(0, Math.min(Math.round(target), Math.max(tl.reached, w.meta[M_TICK], tl.log.at(-1)?.tick ?? 0)))
+    let got: World
     try {
-      got = timelineGoTo(tl, T, fresh, load)
+      got = timelineGoTo(tl, T, fresh, load, w)
     } catch (e) {
       // the timeline is left as it was, and the page stays where it is
       note = String(e)
@@ -270,14 +267,11 @@ async function main(): Promise<void> {
       console.error(e)
       return
     }
-    w = got.w
+    w = got
     layer = new SoldierLayer(w, scene)
     layer.sync(0, [])
     map.w = w
     over = new Overlay(w)
-    // the orders dropped up to the tick, as the first pass had them
-    dropped.length = 0
-    dropped.push(...got.dropped)
     for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
     paused = true
     acc = 0
@@ -572,7 +566,10 @@ async function main(): Promise<void> {
     }
     // yours: the plan's refusals are not shown
     let d: Dropped | undefined
-    for (let k = dropped.length - 1; k >= 0 && !d; k--) if (dropped[k].seq >= 0) d = dropped[k]
+    // the last of yours the world has reached (after going back, later ones wait for it to be played again)
+    const dropped = tl.dropped
+    for (let k = dropped.length - 1; k >= 0 && !d; k--)
+      {if (dropped[k].seq >= 0 && dropped[k].tick <= w.meta[M_TICK]) d = dropped[k]}
     if (note && performance.now() - noteT < 3000) lines.push(note)
     // the battle (S1e-2): each side's men in the fight, as a share of those it spawned, and the result once decided
     const shares = fightShares(w)
@@ -610,10 +607,10 @@ async function main(): Promise<void> {
       scenario: scenario.name,
       seed: PAGE_SEED,
       ticks: w.meta[M_TICK],
-      log: log.filter(s => s.tick <= w.meta[M_TICK]),
+      log: tl.log.filter(s => s.tick <= w.meta[M_TICK]),
     },
     // after going back, the log and the hash points may hold a future the world has not reached again
-    hashes: hashes.filter(h => h.tick <= w.meta[M_TICK]),
+    hashes: tl.hashes.filter(h => h.tick <= w.meta[M_TICK]),
   })
   // the marks the world has reached (after going back, later ones wait for it to be played again)
   const session = () => ({ ...replay(), marks: tl.marks.filter(m => m.tick <= w.meta[M_TICK]) })
@@ -640,9 +637,15 @@ async function main(): Promise<void> {
       },
       map,
       selected,
-      log,
-      hashes,
-      dropped,
+      get log() {
+        return tl.log
+      },
+      get hashes() {
+        return tl.hashes
+      },
+      get dropped() {
+        return tl.dropped
+      },
       select: (ids: number[]) => {
         selected.clear()
         for (const i of ids) if (mine(i)) selected.add(i)
@@ -661,7 +664,8 @@ async function main(): Promise<void> {
         paused = true
         const sp = speed
         speed = 1
-        for (let n = Math.round(sec * 30); n > 0; n--) advance(1 / 30)
+        // stops where a tick fails, as the page does
+        for (let n = Math.round(sec * 30); n > 0 && !tl.broken; n--) advance(1 / 30)
         speed = sp
         draw()
       },
