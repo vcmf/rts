@@ -37,16 +37,14 @@ const mapsSave: Plugin = {
   name: 'maps-save',
   configureServer(server) {
     server.middlewares.use('/__map/save', (req, res) => {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end()
-        return
+      // every reply is JSON, refusals too, so the page can say why
+      const reply = (status: number, body: object) => {
+        res.statusCode = status
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify(body))
       }
-      if (!mayWrite(req.headers)) {
-        res.statusCode = 403
-        res.end('only the map page saves, as JSON')
-        return
-      }
+      if (req.method !== 'POST') return reply(405, { ok: false, error: 'only POST saves' })
+      if (!mayWrite(req.headers)) return reply(403, { ok: false, error: 'only the map page saves, as JSON' })
       let body = ''
       req.setEncoding('utf8')
       req.on('data', (chunk: string) => (body += chunk))
@@ -55,14 +53,10 @@ const mapsSave: Plugin = {
         try {
           sent = JSON.parse(body) as SaveRequest
         } catch {
-          res.statusCode = 400
-          res.end('not JSON')
-          return
+          return reply(400, { ok: false, error: 'the request is not JSON' })
         }
         const r = saveMapFile(server.config.root, sent)
-        res.statusCode = r.ok ? 200 : r.status
-        res.setHeader('content-type', 'application/json')
-        res.end(JSON.stringify(r))
+        reply(r.ok ? 200 : r.status, r)
       })
     })
   },

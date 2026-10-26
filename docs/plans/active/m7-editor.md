@@ -41,6 +41,12 @@ tools on top).
   feature that did not change keeps its bytes (a hand-written layout included); a changed one is written on one line
   in place (`formatMap`'s layout), a new one appended, a deleted one cut with its separator. A map with no previous
   text is written by `formatMap`.
+- **The validator gates every edit of a shape** (the redesign, the owner, 2026-10-26: "engine gate and one state
+  machine"): the editor proposes (rounding, a barrier's snap through `barrierProblem`) and keeps an edit only if the
+  validator finds no problem it did not find before; deleting a feature is not gated (undo brings it back).
+- **One state machine owns the copy:** idle, pressing, dragging; only an idle editor takes a command; a file changed
+  on disk during a press is a conflict; a save's reply counts only for the file and base it was sent for; unsaved
+  edits are a difference of values from the file, not of text.
 
 ## M7a in detail
 
@@ -111,8 +117,24 @@ tools on top).
   dev server's own origin (another site's page could have written maps); the editor makes its feature writer when it
   reads the file (no hidden cache in `src/map/write.ts`); the outlines' ovals are the editor's `ovalRing`.
 
+- **Round 3**: severe, the third. A click on the selection's handle cleared it, so Delete then removed the whole
+  feature; a dragged barrier point far from a valid place landed on the plain lattice and broke the barrier; a barrier
+  whose kind came from a preset got no lattice at all; a late save reply could land on another map; undo, save and
+  Delete acted on a drag in progress; a file the writer would lay out otherwise read as unsaved; a byte order mark
+  made a file unsaveable; refusals were not JSON. Three rounds had each found the editor's state handled in another
+  handler, or a rule of the engine copied and drifting: the design was wrong, not the code. Stopped and redesigned
+  with the owner (above, decision 0066 amended in this PR before it merged). The review count restarts.
+- **Redesign**: every edit of a shape goes through the validator (`refusal`, in `Editor`); the barrier snap takes the
+  nearest candidate that passes `barrierProblem`, or leaves the point; `isBarrier` reads the kind through presets
+  (`featureKind`, now exported); one mode (idle, pressing, dragging) and `ready()` before every command; a click on a
+  handle keeps the selection and the hover; a save's reply is checked against the file and base it was sent for;
+  `dirty` compares values; the server drops a byte order mark and answers JSON always; segment distance from
+  `src/sim/fire.ts`. The validator takes 0.17–0.32 ms on today's maps (Node), so the drag checks each step.
+
 ## Open questions
 
 1. Editing a generated child moves its parent's handles, not its own: changing one house of a village needs pinning
    (M7c).
 2. A map file that is not valid JSON cannot be edited in the page until it is fixed by hand.
+3. Each finished edit runs the whole compile (validate, apply, the bakes): 0.74 s on two-ridges (2.4 km); about 3 s
+   on a 6 km map by the M6 measures. An incremental path (only the edited feature's cells) if M8's editing needs it.

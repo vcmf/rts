@@ -24,6 +24,13 @@ We will build the editor as follows:
   save is refused and the page says so. The built page has no server to write through and does not edit.
 - **The stable save rewrites only what changed:** an unchanged feature keeps its bytes, a changed one is written on
   one line in its place, a new one appended, a deleted one cut. A file written unedited is byte for byte the same.
+- **The engine's validator gates every edit of a shape** (amended in this PR, before it merged, after the review's
+  third round): an edit that adds a problem the validator did not find before is refused, and the copy keeps its last
+  good state; the editor proposes (rounding, a barrier's snap) but holds no copy of the language's rules. Deleting a
+  feature is not gated: what it breaks shows in place, and undo brings it back.
+- **One state machine owns the page's copy** (amended likewise): idle, pressing, dragging. Only an idle editor takes
+  a command; a file changed on disk during a press is a conflict; a save's reply counts only for the file and base it
+  was sent for.
 
 ## Consequences
 
@@ -33,6 +40,10 @@ We will build the editor as follows:
 - Bad: editing needs the dev server (`npm run dev`); the built page is a viewer.
 - Bad: a changed feature loses a hand-written multi-line layout (it is rewritten on one line).
 - Bad: unsaved edits live only in the page: closing the tab loses them (the page asks first).
+- Good: the editor and the compiler cannot disagree on what a valid feature is; three review rounds found the
+  editor's copies of the barrier rule drifting from the engine's.
+- Bad: the whole map is validated on each step of a drag: well under a millisecond on today's maps (0.3 ms for the
+  valley, measured in Node); to be measured again on Austerlitz's hundreds of features.
 
 ## Alternatives considered
 

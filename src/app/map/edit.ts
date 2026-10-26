@@ -1,9 +1,12 @@
 // The map editor's edits (docs/plans/active/m7-editor.md M7a): what a click picks, a feature's handles, and the edits
 // of its shape, as pure functions on the map's intent features (never the expanded map: decision 0066). Every edit
-// returns a new feature and leaves the old one as it was, so the history can keep both. Tested in
-// test/map-edit.test.ts.
-import type { Feature, Pt } from '../../map/schema.ts'
-import { inRing, isClosedLine, LATTICE, ringArea2 } from '../../map/geometry.ts'
+// returns a new feature and leaves the old one as it was, so the history can keep both. These only propose: the
+// editor keeps an edit only if the validator finds no new problem in it (the engine's rules, never copies of them).
+// Tested in test/map-edit.test.ts.
+import type { Feature, MapFile, Pt } from '../../map/schema.ts'
+import { barrierProblem, inRing, isClosedLine, LATTICE, ringArea2 } from '../../map/geometry.ts'
+import { featureKind } from '../../map/validate.ts'
+import { distToSegment } from '../../sim/fire.ts'
 
 /** A part of a feature's shape that can be dragged. */
 export type Handle =
@@ -24,8 +27,9 @@ export const PICK = { handle: 8, point: 8, line: 6 }
 
 /** Whether a line is closed, as the compiler reads it (a walled yard). */
 const closed = isClosedLine
-/** Whether a feature is a barrier, whose points lie on the lattice (proposal §3.6). */
-export const isBarrier = (f: Feature) => (f.kind ?? '').startsWith('barrier.')
+/** Whether a feature is a barrier (its kind its own or its preset's), whose points lie on the lattice (§3.6). */
+export const isBarrier = (f: Feature, presets: MapFile['presets'] = {}) =>
+  (featureKind(f, presets as Record<string, Record<string, unknown>>) ?? '').startsWith('barrier.')
 
 /** A feature's handles and where they are on the ground. A closed line's repeated last point is not one. */
 export function handles(f: Feature): { handle: Handle; at: Pt }[] {
@@ -68,13 +72,8 @@ export function handleAt(f: Feature, sx: number, sy: number, project: Project): 
 }
 
 /** The screen distance from a point to a segment. */
-function toSegment(px: number, py: number, a: [number, number], b: [number, number]): number {
-  const dx = b[0] - a[0]
-  const dy = b[1] - a[1]
-  const len2 = dx * dx + dy * dy
-  const t = len2 ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / len2)) : 0
-  return Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy)
-}
+const toSegment = (px: number, py: number, a: [number, number], b: [number, number]): number =>
+  distToSegment(px, py, a[0], a[1], b[0], b[1])
 /** The screen distance from a point to a polyline (closed: its last point back to its first). */
 function toPolyline(px: number, py: number, pts: Pt[], loop: boolean, project: Project): number {
   let d = Infinity
@@ -167,26 +166,19 @@ const DIRS: Pt[] = [
   [1, 1],
   [1, -1],
 ]
-/** Whether the segment from a to b runs in one of the 8 directions and is not empty. */
-const eightWay = (a: Pt, b: Pt) => {
-  const dx = b[0] - a[0]
-  const dz = b[1] - a[1]
-  return (dx !== 0 || dz !== 0) && (dx === 0 || dz === 0 || Math.abs(dx) === Math.abs(dz))
-}
 
 /**
- * Where a barrier's dragged point goes (proposal §3.6): on the lattice, at the point nearest `to` where both its
- * segments (to its neighbours) run in the 8 directions, if one is within `reach` metres; else on one of the lines
- * through a neighbour, if within reach; else the lattice point nearest `to`.
+ * Where a barrier's point goes (proposal §3.6): of the lattice points that keep its segments in the 8 directions (on
+ * the lines through its neighbours, and where two such lines meet), and the lattice point nearest `to`, the nearest
+ * to `to` within `reach` metres that `fits` (the line with it passes the engine's barrier rule); null if none does.
  */
-export function snapBarrier(to: Pt, neighbours: Pt[], reach: number): Pt {
-  const both: Pt[] = []
-  const one: Pt[] = []
+export function snapBarrier(to: Pt, neighbours: Pt[], reach: number, fits: (p: Pt) => boolean): Pt | null {
+  const candidates: Pt[] = [onLattice(to)]
   for (const n of neighbours) {
     for (const d of DIRS) {
       // the lattice point on the line through n along d nearest `to`
       const t = Math.round(((to[0] - n[0]) * d[0] + (to[1] - n[1]) * d[1]) / (d[0] * d[0] + d[1] * d[1]) / LATTICE)
-      one.push([n[0] + t * LATTICE * d[0], n[1] + t * LATTICE * d[1]])
+      candidates.push([n[0] + t * LATTICE * d[0], n[1] + t * LATTICE * d[1]])
     }
   }
   if (neighbours.length === 2) {
@@ -198,40 +190,24 @@ export function snapBarrier(to: Pt, neighbours: Pt[], reach: number): Pt {
         // p + s a = q + t b
         const s = ((q[0] - p[0]) * -b[1] + (q[1] - p[1]) * b[0]) / det
         const x: Pt = [p[0] + s * a[0], p[1] + s * a[1]]
-        if (Number.isInteger(x[0] / LATTICE) && Number.isInteger(x[1] / LATTICE)) both.push(x)
+        if (Number.isInteger(x[0] / LATTICE) && Number.isInteger(x[1] / LATTICE)) candidates.push(x)
       }
     }
   }
-  const valid = (c: Pt) => neighbours.every(n => eightWay(n, c))
-  const nearest = (cs: Pt[]) => {
-    let best: Pt | null = null
-    let bestD = reach
-    for (const c of cs) {
-      const d = Math.hypot(c[0] - to[0], c[1] - to[1])
-      if (d <= bestD && valid(c)) {
-        bestD = d
-        best = c
-      }
-    }
-    return best
-  }
-  const oneOk = (c: Pt) => neighbours.some(n => eightWay(n, c)) && !neighbours.some(n => n[0] === c[0] && n[1] === c[1])
-  let fallback: Pt | null = null
-  let fd = reach
-  for (const c of one) {
-    const d = Math.hypot(c[0] - to[0], c[1] - to[1])
-    if (d <= fd && oneOk(c)) {
-      fd = d
-      fallback = c
-    }
-  }
-  return nearest(both) ?? fallback ?? onLattice(to)
+  const dist = (c: Pt) => Math.hypot(c[0] - to[0], c[1] - to[1])
+  return (
+    candidates
+      .filter(c => dist(c) <= reach)
+      .sort((a, b) => dist(a) - dist(b))
+      .find(fits) ?? null
+  )
 }
 
-/** How an edit places points: the rounding step, and the reach of a barrier's snap, m. */
+/** How an edit places points: the rounding step, the reach of a barrier's snap, m, and whether it is a barrier. */
 export interface Place {
   step: number
   reach: number
+  barrier: boolean
 }
 
 /** The feature with one handle moved to a ground point. */
@@ -254,7 +230,12 @@ export function moveHandle(f: Feature, h: Handle, to: Pt, place: Place): Feature
         h.index > 0 ? line[h.index - 1] : loop ? line[n - 1] : null,
         h.index < n - 1 || loop ? line[(h.index + 1) % n] : null,
       ].filter((p): p is Pt => !!p)
-      const p = isBarrier(f) ? snapBarrier(to, neighbours, place.reach) : at
+      const fits = (c: Pt) => {
+        const l = line.map((q, k) => (k === h.index || (loop && h.index === 0 && k === line.length - 1) ? c : q))
+        return barrierProblem(l) === null
+      }
+      // a barrier's point stays where it was when no lattice point near the pointer keeps the barrier whole
+      const p = place.barrier ? (snapBarrier(to, neighbours, place.reach, fits) ?? line[h.index]) : at
       line[h.index] = p
       if (loop && h.index === 0) line[line.length - 1] = [...p]
       out.line = line
@@ -289,7 +270,7 @@ export function moveHandle(f: Feature, h: Handle, to: Pt, place: Place): Feature
 
 /** The feature moved by (dx, dz) m: a barrier by whole lattice steps, the rest rounded to the step. */
 export function moveShape(f: Feature, dx: number, dz: number, place: Place): Feature {
-  const step = isBarrier(f) ? LATTICE : place.step
+  const step = place.barrier ? LATTICE : place.step
   const ddx = roundTo(dx, step)
   const ddz = roundTo(dz, step)
   const by = (p: Pt): Pt => [roundTo(p[0] + ddx, 0.01), roundTo(p[1] + ddz, 0.01)]
@@ -334,12 +315,13 @@ export function insertPoint(
   f.area?.forEach((ring, r) => consider(ring, true, r))
   if (!best) return null
   const { ring, index } = best as { ring: number; index: number }
-  let p = roundPt(at, place.step)
-  if (isBarrier(f) && f.line) {
-    // between its two neighbours, where both new segments run in the 8 directions (none: no point added)
-    const nb = [f.line[index - 1], f.line[index]]
-    p = snapBarrier(at, nb, place.reach)
-    if (!nb.every(n => eightWay(n, p))) return null
+  let p: Pt | null = roundPt(at, place.step)
+  if (place.barrier && ring < 0) {
+    // between its two neighbours, on a lattice point that keeps the barrier whole (none: no point added)
+    const line = f.line!
+    const fits = (c: Pt) => barrierProblem([...line.slice(0, index), c, ...line.slice(index)]) === null
+    p = snapBarrier(at, [line[index - 1], line[index]], place.reach, fits)
+    if (!p) return null
   }
   const out: Feature = { ...f }
   if (ring < 0) out.line = [...f.line!.slice(0, index), p, ...f.line!.slice(index)]
@@ -347,10 +329,8 @@ export function insertPoint(
   return out
 }
 
-/**
- * The feature with a line's or a ring's point removed; null if a line would keep under 2 points (a closed one under
- * 3), a ring under 3, or a barrier's neighbours would not join in one of the 8 directions.
- */
+/** The feature with a line's or a ring's point removed; null if a line would keep under 2 points (a closed one under
+ * 3) or a ring under 3. */
 export function removePoint(f: Feature, h: Handle): Feature | null {
   if (h.kind === 'line') {
     const line = f.line!
@@ -359,7 +339,6 @@ export function removePoint(f: Feature, h: Handle): Feature | null {
     const kept = line.filter((_, k) => k !== h.index)
     // a closed line losing its first point closes on its new first
     if (loop && h.index === 0) kept[kept.length - 1] = [...kept[0]]
-    if (isBarrier(f) && !kept.every((p, k) => k === 0 || eightWay(kept[k - 1], p))) return null
     return { ...f, line: kept }
   }
   if (h.kind === 'ring') {

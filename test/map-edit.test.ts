@@ -14,11 +14,13 @@ import {
   roundStep,
   roundTo,
   snapBarrier,
+  isBarrier,
 } from '../src/app/map/edit.ts'
 
 // a view straight down at 1 px a metre, y down the screen
 const project = (x: number, z: number): [number, number] => [x, -z]
-const place = { step: 0.1, reach: 6 }
+const place = { step: 0.1, reach: 6, barrier: false }
+const lattice = { ...place, barrier: true } // a barrier's
 const wood: Feature = {
   id: 'wood',
   kind: 'veg.wood.broad',
@@ -107,7 +109,7 @@ describe('M7a: handles and moves', () => {
   })
   it('moves a whole shape; a barrier by whole lattice steps', () => {
     expect(moveShape(copse, 3.04, -1, place).circle).toEqual([[53, 49], 10])
-    const h = moveShape(hedge, 3.1, 0.9, place)
+    const h = moveShape(hedge, 3.1, 0.9, lattice)
     expect(h.line![0]).toEqual([4, 0])
     expect(barrierProblem(h.line!)).toBe(null)
   })
@@ -128,23 +130,28 @@ describe('M7a: handles and moves', () => {
 })
 
 describe('M7a: barriers snap to the lattice in 8 directions', () => {
-  it('keeps every dragged point of a barrier valid, wherever it is dropped near a valid place', () => {
+  it("keeps a barrier whole wherever its point is dragged: snapped by the engine's rule, or left where it was", () => {
+    let snapped = 0
     for (let x = -10; x <= 50; x += 0.7) {
       for (let z = -10; z <= 40; z += 0.9) {
-        const moved = moveHandle(hedge, { kind: 'line', index: 1 }, [x, z], place)
-        const p = moved.line![1]
-        expect(Number.isInteger(p[0] / 2) && Number.isInteger(p[1] / 2)).toBe(true)
-        // where a point valid for both segments is within reach, the line is valid
-        const valid = snapBarrier([x, z], [hedge.line![0], hedge.line![2]], place.reach)
-        if (barrierProblem([hedge.line![0], valid, hedge.line![2]]) === null) {
-          expect(barrierProblem(moved.line!)).toBe(null)
-        }
+        const moved = moveHandle(hedge, { kind: 'line', index: 1 }, [x, z], lattice)
+        expect(barrierProblem(moved.line!)).toBe(null)
+        if (moved.line![1][0] !== 20 || moved.line![1][1] !== 0) snapped++
       }
     }
+    expect(snapped).toBeGreaterThan(100) // it does move, where it can
   })
-  it('snaps to the corner both segments allow, when near', () => {
-    expect(snapBarrier([19, 1], [[0, 0] as Pt, [40, 20] as Pt], 6)).toEqual([20, 0])
-    expect(snapBarrier([1, 19], [[0, 0] as Pt, [40, 20] as Pt], 6)).toEqual([0, 20])
+  it('snaps to the corner both segments allow, when near; to nothing when nothing near fits', () => {
+    const fits = (c: Pt) => barrierProblem([[0, 0], c, [40, 20]]) === null
+    expect(snapBarrier([19, 1], [[0, 0] as Pt, [40, 20] as Pt], 6, fits)).toEqual([20, 0])
+    expect(snapBarrier([1, 19], [[0, 0] as Pt, [40, 20] as Pt], 6, fits)).toEqual([0, 20])
+    expect(snapBarrier([9, 25], [[0, 0] as Pt, [40, 20] as Pt], 1, fits)).toBe(null)
+  })
+  it("knows a barrier by its preset's kind too", () => {
+    const presets = { wall: { kind: 'barrier.wall' } }
+    expect(isBarrier({ id: 'w', preset: 'wall', line: [] }, presets)).toBe(true)
+    expect(isBarrier({ id: 'w', preset: 'wall', line: [] })).toBe(false)
+    expect(isBarrier(hedge)).toBe(true)
   })
   it("moves a closed barrier's first point with its last", () => {
     const yard: Feature = {
@@ -156,7 +163,7 @@ describe('M7a: barriers snap to the lattice in 8 directions', () => {
         [0, 0],
       ],
     }
-    const moved = moveHandle(yard, { kind: 'line', index: 0 }, [0.4, 4.2], place)
+    const moved = moveHandle(yard, { kind: 'line', index: 0 }, [0.4, 4.2], lattice)
     expect(moved.line![0]).toEqual(moved.line![3])
   })
 })
@@ -195,7 +202,7 @@ describe('M7a: points added to and removed from a barrier keep it valid', () => 
   it('adds a point only where both new segments run in the 8 directions', () => {
     for (let x = 0.5; x < 10; x += 0.5) {
       for (const z of [0.4, 1.2, 2.5, 4]) {
-        const g = insertPoint(wall, x, -z, [x, z], project, place)
+        const g = insertPoint(wall, x, -z, [x, z], project, lattice)
         if (g) expect(barrierProblem(g.line!)).toBe(null)
       }
     }
@@ -207,9 +214,9 @@ describe('M7a: points added to and removed from a barrier keep it valid', () => 
         [40, 0],
       ],
     }
-    expect(insertPoint(long, 20.3, -0.2, [20.3, 0.2], project, place)!.line![1]).toEqual([20, 0])
+    expect(insertPoint(long, 20.3, -0.2, [20.3, 0.2], project, lattice)!.line![1]).toEqual([20, 0])
   })
-  it('keeps a point whose neighbours would not join in the 8 directions', () => {
+  it("removes a point either way: whether the barrier stays whole is the editor's gate (the validator)", () => {
     const step: Feature = {
       ...wall,
       line: [
@@ -218,7 +225,7 @@ describe('M7a: points added to and removed from a barrier keep it valid', () => 
         [4, 2],
       ],
     }
-    expect(removePoint(step, { kind: 'line', index: 1 })).toBe(null)
+    expect(barrierProblem(removePoint(step, { kind: 'line', index: 1 })!.line!)).not.toBe(null)
     const straight: Feature = {
       ...wall,
       line: [

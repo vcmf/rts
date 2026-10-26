@@ -48,6 +48,8 @@ export function saveMapFile(root: string, req: SaveRequest): SaveResult {
   } catch {
     return { ok: false, status: 400, error: `${req.file} does not exist` }
   }
+  // a byte order mark is not the map's: the page's read drops it, so the comparison does too (and the save writes none)
+  current = current.replace(/^\uFEFF/, '')
   if (current !== req.base) return { ok: false, status: 409, current }
   const tmp = `${file}.${process.pid}.tmp`
   try {

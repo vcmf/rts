@@ -4,7 +4,7 @@
 // mouse, and the validator's errors. Saving the map file (or maps/kinds.json) recompiles and redraws; the last good
 // drawing stays up while a file is broken. The editor (./editor.ts, M7) edits the map in the page and saves it.
 // window.MAP exposes the state for headless checks.
-import type { Feature, Pt } from '../../map/schema.ts'
+import type { Catalogue, Feature, Pt } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName, OverlayReply, OverlayRequest } from './protocol.ts'
 import type { OverlaySpec } from '../../render/lit/overlays.ts'
@@ -242,6 +242,11 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
     const own = editor.file === file && editor.doc
     ;[mapText, kindsText] = await Promise.all([own ? editor.text : read(file, MAPS), read('/maps/kinds.json', KINDS)])
     if (!own && mine === seq) editor.load(file, mapText)
+    try {
+      editor.setCatalogue(JSON.parse(kindsText) as Catalogue) // the editor's gate validates with it
+    } catch {
+      editor.setCatalogue(null)
+    }
     files = await readFiles(mapText)
   } catch (err) {
     if (mine === seq) failed(`cannot read the map: ${(err as Error).message}`)

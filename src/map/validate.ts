@@ -590,7 +590,8 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
   return out
 }
 
-const featureKind = (f: Feature, presets: Record<string, Record<string, unknown>>): string | undefined =>
+/** A feature's kind: its own, or its map preset's. */
+export const featureKind = (f: Feature, presets: Record<string, Record<string, unknown>>): string | undefined =>
   typeof f.kind === 'string'
     ? f.kind
     : typeof f.preset === 'string' && Object.hasOwn(presets, f.preset) && typeof presets[f.preset].kind === 'string'

@@ -69,3 +69,14 @@ describe('M7a: only the map page may save', () => {
     expect(mayWrite({ 'content-type': 'application/json', origin: 'null', host })).toBe(false)
   })
 })
+
+describe('M7a: a file with a byte order mark', () => {
+  it('compares without it (the page reads none) and writes none', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-save-'))
+    fs.mkdirSync(path.join(root, 'maps'))
+    const file = path.join(root, 'maps', 'm.map.json')
+    fs.writeFileSync(file, '﻿old')
+    expect(saveMapFile(root, { file: '/maps/m.map.json', base: 'old', text: 'new' })).toEqual({ ok: true })
+    expect(fs.readFileSync(file, 'utf8')).toBe('new')
+  })
+})

@@ -1,9 +1,12 @@
 // The map page's editor (docs/plans/active/m7-editor.md M7a) driven without a page: a fake host projects straight
 // down at 1 px a metre, and a fake server stands in for the dev server's save.
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import type { MapFile } from '../src/map/schema.ts'
+import fs from 'node:fs'
+import path from 'node:path'
+import type { Catalogue, MapFile } from '../src/map/schema.ts'
 import { formatMap } from '../src/map/format.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
+import { root } from './fx.ts'
 
 const text = formatMap({
   format: 1,
@@ -25,21 +28,21 @@ const text = formatMap({
     },
   ],
 } as MapFile)
-function make() {
+function make(fileText = text) {
   const compiles: string[] = []
   const host: Host = {
     ctx: {} as CanvasRenderingContext2D,
     project: (x, z) => [x, -z],
     toWorld: (sx, sy) => [sx, -sy],
     ppm: () => 1,
-    shown: () => (JSON.parse(text) as MapFile).features,
+    shown: () => (JSON.parse(fileText) as MapFile).features,
     groundPath: () => {},
     recompile: () => compiles.push('edit'),
     redraw: () => {},
     changed: () => {},
   }
   const ed = new Editor(host)
-  ed.load('/maps/t.map.json', text)
+  ed.load('/maps/t.map.json', fileText)
   return { ed, compiles }
 }
 /** Drags from one screen point to another. */
@@ -182,5 +185,116 @@ describe('M7a: the editor under interruptions', () => {
     expect(ed.feature('road')!.line!.length).toBe(2)
     ed.dblclick(0, -50)
     expect(ed.feature('road')!.line!.length).toBe(3)
+  })
+})
+
+describe('M7a redesign: one state machine, the validator as the gate', () => {
+  const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'kinds.json'), 'utf8')) as Catalogue
+  const walled = formatMap({
+    ...(JSON.parse(text) as MapFile),
+    features: [
+      ...(JSON.parse(text) as MapFile).features,
+      {
+        id: 'wall',
+        kind: 'barrier.wall',
+        line: [
+          [0, -100],
+          [40, -100],
+          [40, -80],
+        ],
+      },
+    ],
+  } as MapFile)
+  it('keeps the hover through a click on a handle, so Delete then removes that point, not the feature', () => {
+    const { ed } = make()
+    ed.select('road')
+    ed.dblclick(0, -50) // a middle point
+    ed.move(0, -50)
+    ed.click(0, -50)
+    ed.remove()
+    expect(ed.feature('road')!.line!.length).toBe(2)
+  })
+  it("refuses an edit the validator finds a new problem in, and says which: a wall's corner removed", () => {
+    const { ed } = make(walled)
+    ed.setCatalogue(cat)
+    ed.select('wall')
+    ed.move(40, 100) // over the corner
+    ed.remove()
+    expect(ed.feature('wall')!.line!.length).toBe(3)
+    expect(ed.message).toMatch(/^not done: \[wall\] .*8 directions/)
+    expect(ed.canUndo).toBe(false)
+  })
+  it('takes no command during a press: undo, Delete, save, a selection, a double click', async () => {
+    const { ed } = make()
+    ed.select('road')
+    drag(ed, [-100, -50], [-90, -50])
+    expect(ed.down(-90, -50)).toBe(true)
+    ed.move(-70, -50)
+    const during = ed.doc
+    ed.undo()
+    ed.remove()
+    ed.select('hill')
+    ed.dblclick(0, -50)
+    expect(await ed.save()).toBe(false)
+    expect(ed.doc).toBe(during)
+    expect(ed.selected).toBe('road')
+    expect(ed.message).toBe('finish the drag first')
+    ed.up()
+    expect(ed.feature('road')!.line![0]).toEqual([-70, 50])
+  })
+  it('makes a change on disk during a press a conflict, not a new copy under the drag', () => {
+    const { ed } = make()
+    ed.select('road')
+    expect(ed.down(-100, -50)).toBe(true)
+    expect(ed.onDisk(text.replace('"height":4', '"height":5'))).toBe(false)
+    expect(ed.conflict).not.toBe(null)
+    ed.move(-90, -50)
+    ed.up()
+    expect(ed.feature('road')!.line![0]).toEqual([-90, 50])
+  })
+  it('ignores a save reply for a file or base the editor no longer holds', async () => {
+    const { ed } = make()
+    let release = () => {}
+    vi.stubGlobal(
+      'fetch',
+      () =>
+        new Promise<Response>(res => {
+          release = () => res(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+        }),
+    )
+    ed.select('road')
+    drag(ed, [-100, -50], [-90, -50])
+    const saved = ed.save()
+    await new Promise(r => setTimeout(r, 0))
+    ed.load('/maps/other.map.json', text) // another map picked meanwhile
+    release()
+    await saved
+    expect(ed.base).toBe(text)
+    expect(ed.dirty).toBe(false)
+  })
+  it('says why a refusal that is not JSON was refused', async () => {
+    const { ed } = make()
+    vi.stubGlobal('fetch', async () => new Response('forbidden here', { status: 403 }))
+    ed.select('road')
+    drag(ed, [-100, -50], [-90, -50])
+    expect(await ed.save()).toBe(false)
+    expect(ed.message).toBe('not saved: 403 forbidden here')
+  })
+  it('has no unsaved edits right after reading a file the writer would lay out otherwise', () => {
+    const { ed } = make('{"format":1,"features":[{"id":"a","kind":"relief.hill","point":[0,0]},{"id":"a"}]}')
+    expect(ed.dirty).toBe(false)
+  })
+  it("treats a barrier by its preset's kind: its point stays on the lattice", () => {
+    const m = JSON.parse(walled) as MapFile
+    m.presets = { stone: { kind: 'barrier.wall' } }
+    const w = m.features.find(f => f.id === 'wall')!
+    delete w.kind
+    w.preset = 'stone'
+    const { ed } = make(formatMap(m))
+    ed.setCatalogue(cat)
+    ed.select('wall')
+    drag(ed, [0, 100], [3.3, 100.7])
+    const p = ed.feature('wall')!.line![0]
+    expect(Number.isInteger(p[0] / 2) && Number.isInteger(p[1] / 2)).toBe(true)
   })
 })
