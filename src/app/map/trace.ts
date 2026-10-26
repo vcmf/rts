@@ -3,9 +3,11 @@
 // relief piece cut from its frame's file, moved as the piece is. A control point is two clicks through the editor
 // (one edit): where a landmark shows on the scan, then where it is on the map. Points show as pairs joined by their
 // residual and are listed with a button to remove each.
-// - The lit view is tilted, so the image is drawn as a mesh of small triangles, each mapped by its own affine
-//   transform (the ground to the screen is no affine map). Pieces are drawn into an offscreen canvas at full opacity
-//   in painting order, clipped to their areas, then onto the view at the set opacity.
+// - The lit view is tilted, so the image is drawn on the GPU (./scan-gl.ts) through the view's own matrix: a mesh of
+//   frame points over the image, its perspective exact, so the pixel drawn at a point is the pixel a click there takes.
+//   Each piece of its frame is drawn there with its shift, composited into an offscreen canvas at full opacity in
+//   painting order, clipped to its area (another file's piece on top erases what it covers), then onto the view at the
+//   set opacity.
 // - The opacity is a setting of the page, kept per map and scan in the browser, never in the file.
 import type { Catalogue, MapFile, Pt, Source } from '../../map/schema.ts'
 import type { Editor } from './editor.ts'
@@ -14,12 +16,14 @@ import {
   frameAt,
   inPiece,
   nearPoint,
+  scanMesh,
   scanPieces,
   type ControlPoint,
   type Piece,
   type ScanFit,
 } from './scan.ts'
 import { setField } from './fields.ts'
+import { ScanGl } from './scan-gl.ts'
 
 /** What the overlay needs from the page. */
 export interface TraceHost {
@@ -30,6 +34,8 @@ export interface TraceHost {
   redraw(): void
   /** Gives the map the keyboard (a capture's Escape and Backspace). */
   focus(): void
+  /** The view's matrix: a ground point (x, 0, z, 1) to clip space, column-major (the lit view's, or the flat one's). */
+  viewMatrix(): Float32Array
   /** The map's file, which names the browser's settings. */
   file(): string | null
   /** The catalogue the pieces are resolved with (none yet: no scan shows). */
@@ -44,8 +50,6 @@ export interface TraceUi {
   points: HTMLElement
 }
 
-const MESH = 16 // cells of the mesh along each side of the image
-const SEAM = 0.5 // px each triangle is widened by, so neighbours leave no hairline between them
 const PAIR = '#7a1fa2' // the control points' colour
 const OPACITY = 0.6
 
@@ -82,11 +86,22 @@ export class Trace {
   /** The scan shown and its placement, worked out once per copy, catalogue and image. */
   private shown: { scan: Source; fit: ScanFit; pieces: Piece[]; img: ImageBitmap } | null = null
   private last: unknown[] = []
+  /** The placement, worked out again only when the scan or its image changes (not on every edit of the copy). */
+  private fitFor: { scan: Source; img: ImageBitmap; fit: ScanFit } | null = null
+  /** The GPU's part, or why there is none (no WebGL2). */
+  private gl: ScanGl | string
+  /** The scan (by map and id) whose opacity the slider shows: read from the browser only when it changes. */
+  private opacityFor = ''
 
   constructor(host: TraceHost, editor: Editor, ui: TraceUi) {
     this.host = host
     this.editor = editor
     this.ui = ui
+    try {
+      this.gl = new ScanGl()
+    } catch (err) {
+      this.gl = (err as Error).message
+    }
     ui.pick.addEventListener('change', () => {
       keep(this.key('scan'), ui.pick.value)
       this.update(true)
@@ -127,11 +142,22 @@ export class Trace {
     const key = [doc, cat, scan, image]
     if (!force && key.length === this.last.length && key.every((k, i) => k === this.last[i])) return
     this.last = key
-    this.ui.opacity.value = setting(this.key(`opacity:${scan?.id ?? ''}`)) ?? String(OPACITY)
+    const which = this.key(`opacity:${scan?.id ?? ''}`)
+    if (which !== this.opacityFor) {
+      this.opacityFor = which
+      this.ui.opacity.value = setting(which) ?? String(OPACITY)
+    }
     this.shown = null
     if (scan && cat && doc && image?.state === 'ready') {
       const img = image.img
-      const fit = fitScan(scan.points ?? [], img.width, img.height, doc.extent)
+      const f = this.fitFor
+      const same = f && f.scan === scan && f.img === img
+      const fit = same ? f.fit : fitScan(scan.points ?? [], img.width, img.height, doc.extent)
+      this.fitFor = { scan, img, fit }
+      if (typeof this.gl !== 'string') {
+        this.gl.setImage(img)
+        if (!same) this.gl.setMesh(scanMesh(fit.toFrame, img.width, img.height))
+      }
       this.shown = { scan, fit, pieces: scanPieces(doc, cat, scan), img }
     }
     this.panel(scan, image)
@@ -148,6 +174,16 @@ export class Trace {
     // decoded once, off the page's thread, into a bitmap that stays decoded: a 16-megapixel scan drawn from the image
     // element took seconds on the draws that decoded it again
     img.onload = () => {
+      // a scan larger than the GPU takes is not shown (shrunk, its control points would no longer name its pixels)
+      const max = typeof this.gl === 'string' ? Infinity : this.gl.maxSide
+      if (Math.max(img.naturalWidth, img.naturalHeight) > max) {
+        this.images.set(file, {
+          state: 'missing',
+          why: `maps/${file} is ${img.naturalWidth} × ${img.naturalHeight} px: this GPU takes ${max} px a side at most`,
+        })
+        this.update()
+        return
+      }
       createImageBitmap(img).then(
         bmp => {
           // gone meanwhile (its scan removed): not kept
@@ -156,12 +192,14 @@ export class Trace {
           this.update()
         },
         (err: Error) => {
+          if (this.images.get(file) !== im) return
           this.images.set(file, { state: 'missing', why: `maps/${file} could not be decoded: ${err.message}` })
           this.update()
         },
       )
     }
     img.onerror = () => {
+      if (this.images.get(file) !== im) return // gone meanwhile, or read again
       this.images.set(file, {
         state: 'missing',
         why: `maps/${file} is not here: a scan is kept out of git; fetch it (tools/scan-wms.ts) or copy it there`,
@@ -177,7 +215,8 @@ export class Trace {
     const s = this.shown
     this.ui.add.disabled = !s || !this.editor.enabled || !this.editor.doc
     this.ui.opacity.disabled = !s
-    if (!scan) this.ui.state.textContent = ''
+    if (scan && typeof this.gl === 'string') this.ui.state.textContent = this.gl
+    else if (!scan) this.ui.state.textContent = ''
     else if (image?.state === 'missing') this.ui.state.textContent = image.why
     else if (!s) this.ui.state.textContent = image?.state === 'loading' ? 'reading the image…' : ''
     else {
@@ -193,8 +232,8 @@ export class Trace {
                 ? `${n} points: ${s.fit.problem}`
                 : n === 3
                   ? 'three points: an affine fit through them (a fourth tells its error)'
-                  : `${n} points, bent through each: ${s.fit.rms!.toFixed(1)} m root mean square where the others put each`
-      const where = s.pieces.length ? '' : ' · its frame has no relief piece on the map: it shows nowhere'
+                  : `${n} points, bent through each: ${s.fit.rms === null ? '—' : `${s.fit.rms.toFixed(1)} m`} root mean square where the others put each`
+      const where = s.pieces.some(p => p.own) ? '' : ' · its frame has no relief piece on the map: it shows nowhere'
       this.ui.state.textContent = `${s.img.width} × ${s.img.height} px · ${how}${where}`
     }
     this.ui.points.replaceChildren(
@@ -207,7 +246,8 @@ export class Trace {
         })
         rm.dataset.point = String(k)
         rm.addEventListener('click', () => this.removePoint(k))
-        li.append(`${r.toFixed(1)} m `, rm) // the list numbers the points as the map does
+        // the list numbers the points as the map does; a residual the others cannot give (in a line) shows as —
+        li.append(`${Number.isFinite(r) ? `${r.toFixed(1)} m` : '—'} `, rm)
         return li
       }),
     )
@@ -275,7 +315,7 @@ export class Trace {
   /** Where a pixel of the shown scan lies on the map, through its first piece (for checks), or null. */
   mapPoint(u: number, v: number): Pt | null {
     const s = this.shown
-    const p = s?.pieces[0]
+    const p = s?.pieces.find(q => q.own)
     if (!s || !p) return null
     const [x, z] = s.fit.toFrame(u, v)
     return [x - p.shift.x, z - p.shift.z]
@@ -286,7 +326,7 @@ export class Trace {
   /** Draws the scan under the outlines, at the set opacity, and its control points. */
   draw(width: number, height: number, dpr: number): void {
     const s = this.shown
-    if (!s) return
+    if (!s || typeof this.gl === 'string') return
     const t0 = performance.now()
     const { ctx } = this.host
     const off = this.offscreen
@@ -297,7 +337,7 @@ export class Trace {
     const o = off.getContext('2d')!
     o.setTransform(dpr, 0, 0, dpr, 0, 0)
     o.clearRect(0, 0, width, height)
-    for (const p of s.pieces) this.drawPiece(o, p, width, height)
+    for (const p of s.pieces) this.drawPiece(o, p, width, height, dpr)
     ctx.save()
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.globalAlpha = Number(this.ui.opacity.value)
@@ -307,49 +347,27 @@ export class Trace {
     this.ms = performance.now() - t0
   }
 
-  /** One piece of the scan: its mesh, clipped to the piece's area. */
-  private drawPiece(o: CanvasRenderingContext2D, p: Piece, width: number, height: number): void {
-    const s = this.shown!
-    const { img, fit } = s
-    const [w, h] = [img.width, img.height]
-    const screen = (u: number, v: number) => {
-      const [x, z] = fit.toFrame(u, v)
-      return this.host.project(x - p.shift.x, z - p.shift.z)
-    }
+  /**
+   * One piece of the scan: its mesh, clipped to the piece's area; or, for another file's piece, the scan erased where
+   * it lies on top.
+   */
+  private drawPiece(o: CanvasRenderingContext2D, p: Piece, width: number, height: number, dpr: number): void {
     o.save()
-    if (p.area) {
-      // the piece's rings as one path: its holes left out (even-odd)
-      const path = new Path2D()
-      for (const ring of p.area) this.host.ringPath(path, ring)
-      o.clip(path, 'evenodd')
+    const path = new Path2D()
+    if (p.area) for (const ring of p.area) this.host.ringPath(path, ring)
+    if (!p.own) {
+      o.globalCompositeOperation = 'destination-out'
+      if (p.area) o.fill(path, 'evenodd')
+      else o.fillRect(0, 0, width, height)
+      o.restore()
+      return
     }
-    // the mesh's nodes on screen, then each cell as two triangles
-    const n = MESH
-    const nodes: ([number, number] | null)[][] = []
-    for (let j = 0; j <= n; j++) {
-      const row: ([number, number] | null)[] = []
-      for (let i = 0; i <= n; i++) row.push(screen((w * i) / n, (h * j) / n))
-      nodes.push(row)
-    }
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const u0 = (w * i) / n
-        const u1 = (w * (i + 1)) / n
-        const v0 = (h * j) / n
-        const v1 = (h * (j + 1)) / n
-        const a = nodes[j][i]
-        const b = nodes[j][i + 1]
-        const c = nodes[j + 1][i]
-        const d = nodes[j + 1][i + 1]
-        if (!a || !b || !c || !d) continue
-        // off screen: skipped
-        const xs = [a[0], b[0], c[0], d[0]]
-        const ys = [a[1], b[1], c[1], d[1]]
-        if (Math.max(...xs) < 0 || Math.min(...xs) > width || Math.max(...ys) < 0 || Math.min(...ys) > height) continue
-        triangle(o, img, [u0, v0, u1, v0, u0, v1], [a, b, c])
-        triangle(o, img, [u1, v0, u1, v1, u0, v1], [b, d, c])
-      }
-    }
+    // the piece's rings as one path: its holes left out (even-odd)
+    if (p.area) o.clip(path, 'evenodd')
+    // the scan through the view, moved as the piece is, on the GPU's canvas, then into the clip
+    const gl = this.gl as ScanGl
+    gl.render(Math.round(width * dpr), Math.round(height * dpr), this.host.viewMatrix(), p.shift)
+    o.drawImage(gl.canvas, 0, 0, width, height)
     o.restore()
   }
 
@@ -369,7 +387,8 @@ export class Trace {
       const [px, pz] = s.fit.toFrame(u, v)
       for (const p of s.pieces) {
         const at: Pt = [x - p.shift.x, z - p.shift.z]
-        if (!inPiece(p, at[0], at[1])) continue
+        // shown where its piece is on top there
+        if (!p.own || !inPiece(p, at[0], at[1]) || frameAt(s.pieces, at[0], at[1]) === null) continue
         const a = this.host.project(px - p.shift.x, pz - p.shift.z)
         const b = this.host.project(at[0], at[1])
         if (!a || !b) continue
@@ -395,52 +414,4 @@ export class Trace {
     }
     ctx.restore()
   }
-}
-
-/**
- * Draws one triangle of an image: the pixels (u, v) of `src`'s three corners onto the screen points `dst`, by the
- * affine map that takes the one to the other, clipped to the triangle widened by SEAM.
- */
-function triangle(
-  o: CanvasRenderingContext2D,
-  img: ImageBitmap,
-  src: [number, number, number, number, number, number],
-  dst: [number, number][],
-): void {
-  const [u0, v0, u1, v1, u2, v2] = src
-  const [[x0, y0], [x1, y1], [x2, y2]] = dst
-  const det = (u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0)
-  if (det === 0) return
-  // the affine map pixel → screen: [a c e; b d f]
-  const a = ((x1 - x0) * (v2 - v0) - (x2 - x0) * (v1 - v0)) / det
-  const c = ((x2 - x0) * (u1 - u0) - (x1 - x0) * (u2 - u0)) / det
-  const b = ((y1 - y0) * (v2 - v0) - (y2 - y0) * (v1 - v0)) / det
-  const d = ((y2 - y0) * (u1 - u0) - (y1 - y0) * (u2 - u0)) / det
-  const e = x0 - a * u0 - c * v0
-  const f = y0 - b * u0 - d * v0
-  // the clip: the triangle pushed out from its centre by SEAM px
-  const cx = (x0 + x1 + x2) / 3
-  const cy = (y0 + y1 + y2) / 3
-  const out = (x: number, y: number): [number, number] => {
-    const l = Math.hypot(x - cx, y - cy) || 1
-    return [x + ((x - cx) / l) * SEAM, y + ((y - cy) / l) * SEAM]
-  }
-  o.save()
-  o.beginPath()
-  const p0 = out(x0, y0)
-  const p1 = out(x1, y1)
-  const p2 = out(x2, y2)
-  o.moveTo(p0[0], p0[1])
-  o.lineTo(p1[0], p1[1])
-  o.lineTo(p2[0], p2[1])
-  o.closePath()
-  o.clip()
-  o.transform(a, b, c, d, e, f)
-  // only the triangle's pixels are read: its box of the image
-  const su = Math.max(0, Math.floor(Math.min(u0, u1, u2)) - 1)
-  const sv = Math.max(0, Math.floor(Math.min(v0, v1, v2)) - 1)
-  const sw = Math.min(img.width, Math.ceil(Math.max(u0, u1, u2)) + 1) - su
-  const sh = Math.min(img.height, Math.ceil(Math.max(v0, v1, v2)) + 1) - sv
-  o.drawImage(img, su, sv, sw, sh, su, sv, sw, sh)
-  o.restore()
 }

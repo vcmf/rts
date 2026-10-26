@@ -317,6 +317,18 @@ function groundPath(pts: Pt[], close: boolean): void {
  * A ring of ground points as a closed part of a path (a clip's: a scan's piece, M7e): where it passes behind the
  * camera it runs along the near limit instead (the region behind is not drawn), so it stays one closed ring.
  */
+/**
+ * The view's matrix, column-major: a ground point (x, 0, z, 1) to clip space, as the GPU takes it (a scan, M7e): the
+ * lit view's camera, or the flat view's scale and centre.
+ */
+function viewMatrix(): Float32Array {
+  if (lit) return lit.viewProjection
+  const r = canvas.getBoundingClientRect()
+  const sx = (2 * view.ppm) / r.width
+  const sz = (2 * view.ppm) / r.height
+  // clip x = (x - cx) sx, clip y = (z - cz) sz: north up
+  return new Float32Array([sx, 0, 0, 0, 0, 0, 0, 0, 0, sz, 0, 0, -view.cx * sx, -view.cz * sz, 0, 1])
+}
 function ringPath(path: Path2D, ring: Pt[]): void {
   pathThrough(path, ring, true, true)
   path.closePath()
@@ -403,6 +415,7 @@ const trace = new Trace(
     ringPath,
     redraw,
     focus: () => canvas.focus(),
+    viewMatrix,
     file: () => editor.file,
     catalogue: () => catalogue,
   },

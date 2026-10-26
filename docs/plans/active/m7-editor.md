@@ -596,6 +596,20 @@ file, moved as the piece is: the period map follows the terrain it was cut with.
   WebP. Tests for each (each fails without its fix); the page check refuses a point placed twice and drops a capture
   by Escape.
 
+- **Round 2**: severe. The scan was drawn as a fixed 16 × 16 mesh of triangles on the 2D canvas, each stretched flat:
+  in the tilted view the pixel drawn at a point was not the one a click there takes (tens of metres when zoomed in),
+  and cells crossing the near limit left a gap. A mesh split on screen fixed the geometry but not the cost: thousands
+  of clipped `drawImage` calls took 0.2 to 6.6 s a frame, and hung the page zoomed in. Fixed by drawing on the GPU
+  (`src/app/map/scan-gl.ts`): a 64 × 64 mesh of frame points over the image, through the lit view's own matrix
+  (perspective exact, the near limit clipped by the GPU), built once a placement; per frame only the matrix and a
+  piece's shift change (0.1 ms of the CPU at every zoom). With it: a piece cut from another file on top hides the scan
+  and takes no click; the scan tool checks, with `--frame`, that the dem source's file was cropped around the centre
+  given (`--map`); a quick click after a capture is no double click; the opacity is read from the browser only when
+  the scan changes; bad points from a hand edit say why (on one pixel, on one place: no click lands); a residual the
+  others cannot give shows as —; residuals are fitted forward only, and the placement only when the scan changes; a
+  late image error for a file no scan names is ignored; the page check writes its test scan inside its cleanup.
+  Tests for each (each fails without its fix), the mesh by its nodes.
+
 ## Results (M7e)
 
 - The Habsburg First Military Survey over Austerlitz, fetched with `tools/scan-wms.ts` from Chartae Antiquae's WMS
@@ -610,9 +624,9 @@ file, moved as the piece is: the period map follows the terrain it was cut with.
     where the other six put it, 150 to 990 m, 559 m RMS. That is the image's own error at about a kilometre between
     points; tracing adds points near what is traced. Austerlitz's map carries the seven points; the screenshot for the
     owner shows the villages on their sites and the Goldbach's wooded valley along the relief's.
-- The overlay's draw on Austerlitz (16 megapixels, 40 views panned and zoomed): 0.6 ms median, 3 ms at the 90th
-  percentile, 8.5 ms at most (the dev server in headless Chrome under a load of 77 from other sessions: an
-  estimate). Drawn from the image element, some draws took seconds decoding it again; a bitmap decoded once fixed it.
+- The overlay's draw on Austerlitz (16 megapixels, on the GPU): 0.1 ms of the CPU a frame at every zoom from the
+  whole map to 4 px a metre (the dev server in headless Chrome: an estimate; the GPU's own time is not measured
+  there). The 2D canvas's mesh before it took up to seconds (review round 2).
 - The page check: a test scan shown, three points by clicks, each block then on its place, saved with only the
   sources changed, undone to the original bytes. `test/map-scan.test.ts`: the fit, the pieces, the validator, the
   projection.

@@ -442,6 +442,14 @@ export class LitView {
     this.inverse = this.viewProj.clone().invert()
   }
 
+  /**
+   * The camera's view and projection as one matrix, as a shader takes it (column-major): a ground point (x, 0, z, 1)
+   * to clip space, the very map `project` divides out. For overlays the page draws on the GPU (a scan, M7e).
+   */
+  get viewProjection(): Float32Array {
+    return Float32Array.from(this.viewProj.m)
+  }
+
   /** How far a ground point lies in front of the camera, less the overlays' near limit: at or below 0, not drawn. */
   depth(x: number, z: number): number {
     const m = this.viewProj.m

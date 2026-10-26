@@ -58,10 +58,11 @@ const original = fs.readFileSync(mapFile, 'utf8')
 // the new map the check draws (step 6), removed at the end
 const NEW = `check-new-${process.pid}`
 const newFile = path.join(ROOT, 'maps', `${NEW}.map.json`)
-// the test scan (step 9): 200 × 100 px, white, with a red, a blue and a green block; removed at the end
+// the test scan (step 9), written once the check runs (inside its cleanup), removed at the end
 const SCAN = `check-${process.pid}`
 const scanFile = path.join(ROOT, 'maps', 'scans', `${SCAN}.png`)
-{
+/** Writes the test scan: 200 × 100 px, white, with a red, a blue and a green block. */
+function writeScan() {
   const w = 200
   const h = 100
   const data = Buffer.alloc(w * h * 4, 255)
@@ -114,6 +115,7 @@ process.on('SIGTERM', () => {
   process.exit(143)
 })
 try {
+  writeScan()
   await new Promise((res, rej) => {
     vite.stdout.on('data', d => {
       if (/Local:/.test(String(d))) res()

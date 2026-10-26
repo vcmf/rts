@@ -3,11 +3,14 @@
 // place it in the transverse Mercator centred there, which is the relief importer's frame (tools/dem-import.ts), so it
 // lands on the heights at once. Points are then added or moved by hand on the map page against the relief.
 //   node tools/scan-wms.ts <service url> <layer> <lat> <lon> <width km> <height km> <maps/scans/name.png|.jpg>
-//     [--px 4096] [--id name] [--frame dem-source-id] [--ref text] [--credit text] [--licence text]
-// The image goes under maps/scans/, which git ignores: a scan is committed only where its source says public domain.
+//     [--px 4096] [--id name] [--frame dem-source-id --map maps/x.map.json] [--ref text] [--credit text]
+//     [--licence text]
+// With --frame, the centre must be the one the dem source's file was cropped around (its ref says it, as
+// tools/dem-import.ts writes it): the points are in that file's frame. The image goes under maps/scans/, which git
+// ignores: a scan is committed only where its source says public domain.
 // Example (the Habsburg First Military Survey over Austerlitz, Chartae Antiquae, docs/research/period-maps.md):
 //   node tools/scan-wms.ts http://www.chartae-antiquae.cz/WMS/Military1/ Military1 49.118 16.737 6 6 \
-//     maps/scans/austerlitz-first-survey.jpg --frame cuzk
+//     maps/scans/austerlitz-first-survey.jpg --frame cuzk --map maps/austerlitz.map.json
 import fs from 'node:fs'
 import path from 'node:path'
 import { geoBox, geoPoints, transverseMercator } from './geo.ts'
@@ -42,6 +45,7 @@ async function main(): Promise<void> {
   const px = Number(flag('px') ?? MAX_PX)
   const id = flag('id')
   const frame = flag('frame')
+  const mapFile = flag('map')
   const ref = flag('ref')
   const credit = flag('credit')
   const licence = flag('licence')
@@ -52,9 +56,27 @@ async function main(): Promise<void> {
   if (!service || !layer || ![lat, lon, wKm, hKm, px].every(Number.isFinite) || !SCAN_FILE.test(file)) {
     console.error(
       'usage: node tools/scan-wms.ts <service url> <layer> <lat> <lon> <width km> <height km> <maps/scans/name.png|.jpg>' +
-        ' [--px 4096] [--id name] [--frame dem-source-id] [--ref text] [--credit text] [--licence text]',
+        ' [--px 4096] [--id name] [--frame dem-source-id --map maps/x.map.json] [--ref text] [--credit text] [--licence text]',
     )
     process.exit(2)
+  }
+  if (frame) {
+    // the points are in the dem file's frame: a transverse Mercator centred where that file was cropped
+    const map = mapFile
+      ? (JSON.parse(fs.readFileSync(mapFile, 'utf8')) as { sources?: { id: string; ref?: string }[] })
+      : null
+    const ref = map?.sources?.find(x => x.id === frame)?.ref ?? ''
+    const m = /(-?\d+(?:\.\d+)?) N (-?\d+(?:\.\d+)?) E/.exec(ref)
+    if (!m) {
+      console.error(`--frame ${frame} needs --map with that dem source, whose ref gives its centre ("<lat> N <lon> E")`)
+      process.exit(2)
+    }
+    if (Number(m[1]) !== lat || Number(m[2]) !== lon) {
+      console.error(
+        `${frame}'s file is centred on ${m[1]} N ${m[2]} E: give that centre, so the points are in its frame`,
+      )
+      process.exit(2)
+    }
   }
   const box = geoBox(lat, lon, wKm * 1000, hKm * 1000)
   // pixels about square on the ground: the box's sides in metres, through the local projection

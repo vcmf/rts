@@ -784,6 +784,7 @@ export class Editor {
     const out = m.then(pts)
     if (typeof out === 'string') return this.note(out)
     this.mode = { kind: 'idle' }
+    this.lastClick = null // the last click was the capture's: a quick click after it is a click of its own
     this.commit(out, null)
     this.settle()
   }

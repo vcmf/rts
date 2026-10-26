@@ -171,7 +171,7 @@ function affinePlacement(t: Affine): Pick<ScanFit, 'toFrame' | 'toImage'> {
 }
 
 /** The map of pixels to frame points through a set of points: affine through three, a spline through more. */
-function through(points: ControlPoint[]): Pick<ScanFit, 'toFrame' | 'toImage'> | null {
+function through(points: ControlPoint[], back = true): Pick<ScanFit, 'toFrame' | 'toImage'> | null {
   if (points.length === 3) {
     const t = leastSquares(points)
     return t ? affinePlacement(t) : null
@@ -180,14 +180,15 @@ function through(points: ControlPoint[]): Pick<ScanFit, 'toFrame' | 'toImage'> |
   const fr = points.map(([, , x, z]): Pt => [x, z])
   const fwd = spline(px, fr)
   if (!fwd) return null
+  if (!back) return { toFrame: (u, v) => fwd([u, v]), toImage: () => null }
   // the way back: the forward spline inverted, from a first guess (a spline the other way, or the affine fit's)
-  const back = spline(fr, px)
+  const guessSpline = spline(fr, px)
   const ls = leastSquares(points)
   const lsBack = ls ? invert(ls) : null
   return {
     toFrame: (u, v) => fwd([u, v]),
     toImage: (x, z) => {
-      const g = back ? back([x, z]) : lsBack ? apply(lsBack, x, z) : null
+      const g = guessSpline ? guessSpline([x, z]) : lsBack ? apply(lsBack, x, z) : null
       return g ? inverse(fwd, x, z, g) : null
     },
   }
@@ -247,7 +248,8 @@ export function fitScan(points: ControlPoint[], w: number, h: number, extent: { 
       return Math.hypot(px - x, pz - z)
     }),
     rms: null,
-    problem,
+    // two points on one place: the image shrunk to a point, which no click lands on
+    problem: problem ?? (invert(a) ? null : 'the points put the image on a line or a point: no click lands on it'),
   })
   if (points.length === 0) return exact('extent', t)
   if (points.length === 1) {
@@ -257,7 +259,9 @@ export function fitScan(points: ControlPoint[], w: number, h: number, extent: { 
     return exact('moved', t)
   }
   const sim = similarity(points)
-  if (points.length === 2) return exact('similarity', sim ?? t)
+  if (points.length === 2) {
+    return sim ? exact('similarity', sim) : exact('extent', t, 'the two points are on one pixel: over the map')
+  }
   const fit = through(points)
   if (!fit) {
     // two points on one pixel or one place: no spline goes through both; the affine fit of them all still holds
@@ -267,17 +271,25 @@ export function fitScan(points: ControlPoint[], w: number, h: number, extent: { 
     }
     return exact('similarity', sim ?? t, 'the points lie in a line: placed by the first two')
   }
-  if (points.length === 3) return { ...fit, how: 'affine', residuals: [0, 0, 0], rms: null, problem: null }
+  // a placement with no way back (points on one place: the image folded to a line or a point) takes no clicks
+  const mid = fit.toFrame(w / 2, h / 2)
+  const folded = !fit.toImage(mid[0], mid[1])
+    ? 'the points put the image on a line or a point: no click lands on it'
+    : null
+  if (points.length === 3) return { ...fit, how: 'affine', residuals: [0, 0, 0], rms: null, problem: folded }
   // the image's own error at each point: where the other points alone put its pixel
   const residuals = points.map(([u, v, x, z], k) => {
-    const rest = through(points.filter((_, i) => i !== k))
+    const rest = through(
+      points.filter((_, i) => i !== k),
+      false,
+    )
     if (!rest) return NaN
     const [px, pz] = rest.toFrame(u, v)
     return Math.hypot(px - x, pz - z)
   })
   const known = residuals.filter(Number.isFinite)
   const rms = known.length ? Math.sqrt(known.reduce((a, r) => a + r * r, 0) / known.length) : null
-  return { ...fit, how: 'spline', residuals, rms, problem: null }
+  return { ...fit, how: 'spline', residuals, rms, problem: folded }
 }
 
 /** Where a scan shows on the map: an area (none: the whole extent), and the shift from a map point to its frame. */
@@ -285,18 +297,19 @@ export interface Piece {
   id: string | null // the relief.dem feature, or none for a scan in the map's own frame
   area: Pt[][] | null
   shift: { x: number; z: number }
+  /** Cut from the scan's frame's file (it shows the scan); another file's piece hides what lies under it. */
+  own: boolean
 }
 
 /**
- * The pieces a scan shows in, in painting order (priority, then id, as apply paints them: the last on top): each
- * relief.dem piece of its frame's dem source; for a scan in the map's own frame, the whole map unmoved. A piece that
- * cannot be read (an unknown preset) is left out.
+ * The relief pieces a scan lies under, in painting order (priority, then id, as apply paints them: the last on top):
+ * each relief.dem piece, those of its frame's dem source showing it, the others hiding it where they lie on top; for
+ * a scan in the map's own frame, the whole map unmoved. A piece that cannot be read (an unknown preset) is left out.
  */
 export function scanPieces(map: MapFile, cat: Catalogue, scan: Source): Piece[] {
-  if (scan.frame === undefined) return [{ id: null, area: null, shift: { x: 0, z: 0 } }]
+  if (scan.frame === undefined) return [{ id: null, area: null, shift: { x: 0, z: 0 }, own: true }]
   const out: { p: Piece; priority: number }[] = []
   for (const f of map.features) {
-    if (f.source !== scan.frame) continue
     let r: ReturnType<typeof resolve>
     try {
       r = resolve(f as Feature, map, cat)
@@ -304,7 +317,8 @@ export function scanPieces(map: MapFile, cat: Catalogue, scan: Source): Piece[] 
       continue
     }
     if (r.kind !== 'relief.dem') continue
-    out.push({ p: { id: f.id, area: f.area ?? null, shift: demShift(r.attrs) }, priority: r.priority })
+    const own = f.source === scan.frame
+    out.push({ p: { id: f.id, area: f.area ?? null, shift: demShift(r.attrs), own }, priority: r.priority })
   }
   out.sort((a, b) => a.priority - b.priority || (a.p.id! < b.p.id! ? -1 : a.p.id! > b.p.id! ? 1 : 0))
   return out.map(o => o.p)
@@ -316,11 +330,52 @@ export function inPiece(piece: Piece, x: number, z: number): boolean {
   return inRing(piece.area[0], [x, z]) && !piece.area.slice(1).some(h => inRing(h, [x, z]))
 }
 
-/** The frame point a map point shows: through the piece on top there, or null where the scan shows nowhere. */
+/** The frame point a map point shows: through the piece on top there, or null where none of the scan's is on top. */
 export function frameAt(pieces: Piece[], x: number, z: number): Pt | null {
   for (let k = pieces.length - 1; k >= 0; k--) {
     const p = pieces[k]
-    if (inPiece(p, x, z)) return [x + p.shift.x, z + p.shift.z]
+    if (inPiece(p, x, z)) return p.own ? [x + p.shift.x, z + p.shift.z] : null
   }
   return null
+}
+
+const MESH = 64 // the mesh's cells along each side of the image: its spline bends no more within one
+
+/** A scan as a mesh for the GPU: each node's place in the frame (x, z), its texture coordinate (u / w, v / h). */
+export interface ScanMesh {
+  pos: Float32Array
+  uv: Float32Array
+  index: Uint32Array
+}
+/**
+ * The mesh a scan (w × h px) is drawn with: an n × n grid over the image, each node at its place in the frame. The
+ * view's perspective is the GPU's (exact, and the near limit clipped there); the grid follows the placement's bending,
+ * which is smooth over a cell.
+ */
+export function scanMesh(toFrame: (u: number, v: number) => Pt, w: number, h: number, n = MESH): ScanMesh {
+  const pos = new Float32Array((n + 1) * (n + 1) * 2)
+  const uv = new Float32Array((n + 1) * (n + 1) * 2)
+  for (let j = 0; j <= n; j++) {
+    for (let i = 0; i <= n; i++) {
+      const k = (j * (n + 1) + i) * 2
+      const [x, z] = toFrame((w * i) / n, (h * j) / n)
+      pos[k] = x
+      pos[k + 1] = z
+      uv[k] = i / n
+      uv[k + 1] = j / n
+    }
+  }
+  const index = new Uint32Array(n * n * 6)
+  let t = 0
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const a = j * (n + 1) + i
+      const b = a + 1
+      const c = a + n + 1
+      const d = c + 1
+      index.set([a, b, c, b, d, c], t)
+      t += 6
+    }
+  }
+  return { pos, uv, index }
 }

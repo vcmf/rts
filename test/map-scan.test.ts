@@ -3,10 +3,11 @@
 // the scan tool places a georeferenced image with.
 import { describe, it, expect, vi } from 'vitest'
 import fs from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import type { Catalogue, MapFile, Pt, Source } from '../src/map/schema.ts'
 import { validate } from '../src/map/validate.ts'
-import { apply, fitScan, frameAt, nearPoint, scanPieces, type Affine } from '../src/app/map/scan.ts'
+import { apply, fitScan, frameAt, nearPoint, scanMesh, scanPieces, type Affine } from '../src/app/map/scan.ts'
 import { geoBox, geoPoints, transverseMercator } from '../tools/geo.ts'
 import { root } from './fx.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
@@ -141,6 +142,32 @@ describe('a scan placed by its control points', () => {
     // still placed by all of them, not by the first two alone
     expect(near(f.toFrame(250, 200), apply(TRUE, 250, 200), 5)).toBe(true)
   })
+  it('says so when bad points leave it with no way back, as a hand edit may', () => {
+    // two points on one pixel: no similarity, the image left over the map
+    const one = fitScan(
+      [
+        [10, 10, 0, 0],
+        [10, 10, 50, 50],
+      ],
+      100,
+      100,
+      EXTENT,
+    )
+    expect(one.how).toBe('extent')
+    expect(one.problem).toMatch(/one pixel/)
+    // two points on one place: the image shrunk to a point, which no click lands on
+    const point = fitScan(
+      [
+        [10, 10, 5, 5],
+        [90, 60, 5, 5],
+      ],
+      100,
+      100,
+      EXTENT,
+    )
+    expect(point.toImage(5, 5)).toBeNull()
+    expect(point.problem).toMatch(/no click lands on it/)
+  })
   it('places points in a line by the first two', () => {
     const f = fitScan([pair(0, 0), pair(100, 100), pair(200, 200), pair(300, 300)], 500, 400, EXTENT)
     expect(f.problem).toMatch(/in a line/)
@@ -177,7 +204,40 @@ const square = (x0: number, z0: number, s: number) => [
   ] as [number, number][],
 ]
 
+describe('the mesh a scan is drawn with', () => {
+  it('puts each node of a grid over the image at its place in the frame', () => {
+    const f = fitScan([pair(0, 0), pair(500, 20), pair(30, 400), pair(480, 390), pair(250, 200)], 500, 400, EXTENT)
+    const m = scanMesh(f.toFrame, 500, 400, 4)
+    expect(m.pos.length).toBe(25 * 2)
+    expect(m.index.length).toBe(16 * 6)
+    // node (i, j) = pixel (125 i, 100 j), its texture coordinate (i / 4, j / 4)
+    const k = (2 * 5 + 3) * 2
+    expect(near([m.pos[k], m.pos[k + 1]], apply(TRUE, 375, 200), 1e-3)).toBe(true)
+    expect([m.uv[k], m.uv[k + 1]]).toEqual([0.75, 0.5])
+    // every index names a node
+    expect(Math.max(...m.index)).toBe(24)
+  })
+})
+
 describe('where a scan shows', () => {
+  it("is hidden where another file's piece lies on top, and takes no click there", () => {
+    const scan: Source = { id: 's', kind: 'scan', file: 'scans/s.png', frame: 'dem' }
+    const other: Source = { ...DEM, id: 'dem2', file: 'y.rdem' }
+    const map = base(
+      [DEM, other, scan],
+      [
+        { id: 'a', kind: 'relief.dem', source: 'dem' },
+        { id: 'b', kind: 'relief.dem', source: 'dem2', area: square(0, 0, 100), priority: 5 },
+      ],
+    )
+    const pieces = scanPieces(map, cat, scan)
+    expect(pieces.map(p => [p.id, p.own])).toEqual([
+      ['a', true],
+      ['b', false],
+    ])
+    expect(frameAt(pieces, 50, 50)).toBeNull()
+    expect(frameAt(pieces, -50, 50)).toEqual([-50, 50])
+  })
   it("shows in each piece of its frame's file, moved as the piece is, the one on top winning", () => {
     const scan: Source = { id: 's', kind: 'scan', file: 'scans/s.png', frame: 'dem' }
     const map = base(
@@ -345,6 +405,38 @@ describe("the editor's capture of points for a scan", () => {
     expect(ed.drawing).toBe(false)
     expect(ed.doc!.sources![0].points).toEqual([[1, 1, 1, 1]])
   })
+  it('takes a quick click after the capture ends as a click, never the second of a double click', () => {
+    // a road selected, the capture's last click on it, then a click there a moment later: no point added to the road
+    const text = formatMap(
+      base(
+        [{ id: 's', kind: 'scan', file: 'scans/s.png' }],
+        [
+          {
+            id: 'road',
+            kind: 'way.road.lane',
+            line: [
+              [-100, 50],
+              [100, 50],
+            ],
+          },
+        ],
+      ),
+    )
+    const ed = make()
+    ed.load('/maps/t.map.json', text)
+    ed.select('road')
+    // clicks a second apart, then one 50 ms after the last: within a double click of it
+    let now = 0
+    let gap = 1000
+    vi.spyOn(performance, 'now').mockImplementation(() => (now += gap))
+    ed.capture(['a', 'b'], () => withPoint(ed, [1, 1, 1, 1]))
+    ed.click(0, 0)
+    ed.click(0, -50)
+    expect(ed.drawing).toBe(false)
+    gap = 50
+    ed.click(0, -50)
+    expect(ed.feature('road')!.line).toHaveLength(2)
+  })
   it('says how to end a capture when a command waits for it', () => {
     const ed = make()
     ed.capture(['a', 'b'], () => withPoint(ed, [0, 0, 0, 0]))
@@ -373,5 +465,20 @@ describe("the editor's capture of points for a scan", () => {
     ed.click(10, 20)
     ed.click(30, 40)
     expect(ed.doc!.sources![0].points).toEqual([[0, 0, 0, 0]])
+  })
+})
+
+describe('the scan tool', () => {
+  const run = (...args: string[]) =>
+    spawnSync(process.execPath, [path.join(root, 'tools', 'scan-wms.ts'), ...args], { cwd: root, encoding: 'utf8' })
+  it('refuses a frame whose file was cropped around another centre, before asking the service', () => {
+    const base = ['http://localhost:1/', 'L', '49.12', '16.74', '1', '1', 'maps/scans/never.png', '--frame', 'cuzk']
+    const off = run(...base, '--map', 'maps/austerlitz.map.json')
+    expect(off.status).toBe(2)
+    expect(off.stderr).toMatch(/centred on 49\.118 N 16\.737 E/)
+    const none = run(...base)
+    expect(none.status).toBe(2)
+    expect(none.stderr).toMatch(/needs --map/)
+    expect(fs.existsSync(path.join(root, 'maps', 'scans', 'never.png'))).toBe(false)
   })
 })
