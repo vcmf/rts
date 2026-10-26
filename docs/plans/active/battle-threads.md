@@ -301,6 +301,20 @@ tile) is no sim map. Two PRs, then PR 4.
   the look page's views).
 - **Stop**: the spike's sharing not possible without a per-mesh upload: keep per-mesh buffers with the 16 B pose
   alone (step 2), and say so.
+- **Outcome** (2026-10-26; the same bench, steps 1 and 2 interleaved, two rounds, load 5 to 31): steps 1 and 2 done.
+  At `?sim`, per frame mean / p95: uploads **94 / 193 KB** (13 % of the baseline's 732; step 1 alone: 348 / 679),
+  `tiMs` **0.24 / 0.10 ms**, 16.5 / 34 uploads; the script's 6 / 63 KB (15 / 144 before: its matrices were a quarter
+  of its uploads too). Sharing needed no per-mesh upload; the pose rides in `world0`, the thin instances' first matrix
+  column (an attribute of its own put the tiny LOD's material over WebGL's 16 attributes), Babylon's matrices a static
+  list kept for its instance count. The GPU frame against step 1's, close / default / wide: the sim's 14.1 / 16.5 / 17.6 ms
+  against 13.9 / 17.2 / 18.1, the script's 13.3 / 14.1 / 12.0 against 13.4 / 13.4 / 11.9: within 5 % but the script's
+  default view, 5.1 % (+2 % in one round, +8.5 % in the other: the rounds differ as much).
+  **Not met**: the sim's frame p95 against the script's, 11.3 / 13.7 / 14.0 ms against 10.2 / 11.6 / 10.3 (close,
+  default, wide). The rest of the gap is what is drawn, not the uploads: at the bench's moment the sim's lines put
+  1.6, 2.4 and 1.8 × the script's triangles on screen (4.6 M against 1.9 M at default) in 8 to 60 more draws, its GPU
+  frame 16.6 ms against 13.7 at default. The script's page: `tools/golden.mjs` on the look page at `?armies=40` (step
+  1 against itself: identical) differs on the men alone, at most 0.45 % of a region's pixels (mean 0.1 of 255) in
+  the wide and far views: their turn's sine and cosine now taken in float32 on the GPU, not on the CPU.
 
 ## PR 5 and PR 6: only if measured
 
