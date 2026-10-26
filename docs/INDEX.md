@@ -87,6 +87,7 @@ designs written before building (frozen once built, their lasting content moves 
 ## Research (background)
 
 - [`research/formation-collision-and-commands.md`](research/formation-collision-and-commands.md): formation collision and command queues: per-soldier games' blobs and breakthroughs, open engines' order-independent contact, the formation literature, bins as bodies, suspend rather than clear.
+- [`research/melee-outcomes.md`](research/melee-outcomes.md): how games and rule sets give ground in melee: fixed steps, a graded result from one margin, a blocked loser worse off, flank attacks and several units as one combat.
 - [`research/colour-and-light-review.md`](research/colour-and-light-review.md): the owner's colour and light references, and the coats' colour lost to the warm light, measured.
 - [`research/grass-and-fields.md`](research/grass-and-fields.md): grass and fields at an RTS camera: Tiny Glade, Total War, the techniques (ground pattern, blades, cards, shells) and their pitfalls.
 - [`research/painterly-grass.md`](research/painterly-grass.md): Tiny Glade's grass, the techniques that read as painted, what fits the RTS camera and the budget.
