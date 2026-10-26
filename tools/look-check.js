@@ -102,8 +102,9 @@
   }
   // the soldiers (?armies): no thin-instance matrices, each man's pose (src/look/units.ts poses; one not drawn far
   // under the ground)
-  for (const p of window.__units?.poses() ?? []) {
-    for (let o = 0; o < p.length; o += 4) if (p[o + 1] > -1e4) stands(p[o], p[o + 1], p[o + 2])
+  const u = window.__units
+  for (const p of u?.poses() ?? []) {
+    for (let o = 0; o < p.length; o += 4) if (!u.isHidden(p[o + 1])) stands(p[o], p[o + 1], p[o + 2])
   }
   out.instances = { tested, floating, worstFloat: +worstFloat.toFixed(3), inBand }
   if (tested < 1000) fail.push(`instances: only ${tested} tested`)

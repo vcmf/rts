@@ -786,9 +786,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   is `forcedInstanceCount`. A man's place is a 16 B pose (x, y, z, his turn about y) in place of a 64 B matrix, read
   as `world0`, the instance matrix's first column that Babylon's instanced materials declare (`world1..3` unread and
   unbound; an attribute of its own put the tiny LOD's material over WebGL's 16 attributes); `units.vert` and
-  `unitdecal.vert` build his matrix from it (`#include<unitPose>`, registered in `units.ts`; a man under −HIDDEN/2 m
-  at no size), so the meshes stay at the identity. The sim's men have no moves between steps: theirs (`aNext`) are
-  sent once, as zeros (again when the source is set). The page's checks read the men by `poses()`
+  `unitdecal.vert` build his matrix from it (`#include<unitPose>`, `src/look/pose.ts`, tested against Babylon's
+  `Matrix.RotationY`; a man under −HIDDEN/2 m at no size), so the meshes stay at the identity. The moves (`aNext`) are sent only when a placing changes them: the
+  sim's men have none between steps, so theirs are sent once, as zeros. The page's checks read the men by `poses()`
   (`tools/look-check.js`).
 - **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
