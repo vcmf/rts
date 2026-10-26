@@ -22,6 +22,7 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
 import '@babylonjs/core/Engines/Extensions/engine.alphaToCoverage.js'
 import { MSAA } from './post.ts'
+import type { MenSource, SourceMan } from './sim-men.ts'
 import type { ThinEngine } from '@babylonjs/core/Engines/thinEngine.js'
 import { D } from './spec.ts'
 import type { Scene } from '@babylonjs/core/scene.js'
@@ -241,6 +242,11 @@ export class Units {
   private readonly slot: ReturnType<typeof slots>
   private readonly speed: { march: number; run: number }
   private readonly man: ManState = { x: 0, z: 0, face: 0, role: 'halt', since: 0, moving: false }
+  /** Where the men stand when not the script (?sim: the sim's, src/look/sim-men.ts); null: the script. */
+  source: MenSource | null = null
+  // the new frames the source has given (each battalion records the count it was placed at, in its `cycle`)
+  private sourceSeq = 0
+  private readonly sourceMan: SourceMan = { x: 0, z: 0, yaw: 0, role: 'halt', since: 0, shown: false }
   /** the far LOD's switch by default (main.ts checks ?tinypx under it) */
   static readonly LOD_PX = 48
   /** the figure height in pixels below which a battalion draws its far LOD (±10%, so it does not flicker) */
@@ -853,26 +859,53 @@ export class Units {
     let changed = false
     const ls = moving ? Math.max(0, local - back) : local
     const ln = ls + 1 / fps
+    // the men from the sim (?sim: src/look/sim-men.ts), stepped as published: no script, no moves between steps
+    const src = this.source
+    const sm = this.sourceMan
     // (a reserve stands in column)
-    const p = h.b.reserve ? RESERVE : phaseAt(this.drill, ls, this.speed.march, this.speed.run)
+    const p = src || h.b.reserve ? RESERVE : phaseAt(this.drill, ls, this.speed.march, this.speed.run)
     // (the next step's phase; none past the cycle's end, where the script starts afresh)
-    const pn = moving && !h.b.reserve && ln < CYCLE ? phaseAt(this.drill, ln, this.speed.march, this.speed.run) : null
+    const pn =
+      !src && moving && !h.b.reserve && ln < CYCLE ? phaseAt(this.drill, ln, this.speed.march, this.speed.run) : null
     for (let i = 0; i < this.slot.line.length; i++) {
       let nx = 0
       let nz = 0
-      if (pn) {
-        manAt(this.drill, this.slot, i, ln, pn, this.speed.run, this.speed.march, jitter[i * 4 + 3], man)
-        nx = man.x
-        nz = man.z
+      let x: number
+      let z: number
+      let a: number
+      let role: ManState['role']
+      let start: number
+      if (src) {
+        src.man(h.index, i, sm)
+        if (!sm.shown) {
+          // no such man standing (fallen, or the battalion gone): drawn nowhere
+          matrices.fill(0, i * 16, i * 16 + 16)
+          next.fill(0, i * 3, i * 3 + 3)
+          continue
+        }
+        x = sm.x
+        z = sm.z
+        // the figure faces -z in its own frame: turned by his way (and a little jitter)
+        a = sm.yaw + Math.PI + jitter[i * 4 + 2]
+        role = sm.role
+        start = sm.since
+      } else {
+        if (pn) {
+          manAt(this.drill, this.slot, i, ln, pn, this.speed.run, this.speed.march, jitter[i * 4 + 3], man)
+          nx = man.x
+          nz = man.z
+        }
+        manAt(this.drill, this.slot, i, ls, p, this.speed.run, this.speed.march, jitter[i * 4 + 3], man)
+        const lx = man.x + jitter[i * 4]
+        const lz = man.z + jitter[i * 4 + 1]
+        x = b.x + c * lx + s * lz
+        z = b.z - s * lx + c * lz
+        // the figure faces -z in its own frame: turned by the battalion's heading and his own way (and a little jitter)
+        a = b.heading + man.face + Math.PI + jitter[i * 4 + 2]
+        role = man.role
+        start = cycleStart + man.since
       }
-      manAt(this.drill, this.slot, i, ls, p, this.speed.run, this.speed.march, jitter[i * 4 + 3], man)
-      const lx = man.x + jitter[i * 4]
-      const lz = man.z + jitter[i * 4 + 1]
-      const x = b.x + c * lx + s * lz
-      const z = b.z - s * lx + c * lz
       const y = reuse ? matrices[i * 16 + 13] + next[i * 3 + 1] : groundAt(x, z)
-      // the figure faces -z in its own frame: turned by the battalion's heading and his own way (and a little jitter)
-      const a = b.heading + man.face + Math.PI + jitter[i * 4 + 2]
       const ca = Math.cos(a)
       const sa = Math.sin(a)
       const o = i * 16
@@ -920,9 +953,8 @@ export class Units {
       next[i * 3 + 1] = dy
       next[i * 3 + 2] = dz
       // the clip: the role's range; its phase in steps puts its first step at his start (global time)
-      const r = this.data.ranges[man.role]
+      const r = this.data.ranges[role]
       const steps = r.end - r.start
-      const start = cycleStart + man.since
       const ph = ((-Math.floor(start * fps) % steps) + steps) % steps
       const k = i * 3
       if (settings[k] !== r.start || settings[k + 1] !== steps || settings[k + 2] !== ph) {
@@ -1163,8 +1195,26 @@ export class Units {
     if ((this.hasNearest && this.nearestPx > 0) || (mapOn && this.tightCull)) {
       Frustum.GetPlanesToRef(cam.getTransformationMatrix(), this.camPlanes)
     }
+    // the sim's men (?sim): a new published frame counted, so each battalion is re-placed at its next step
+    if (this.source?.frame(T)) this.sourceSeq++
     for (const h of this.hosts) {
       if (!this.shown) continue
+      if (this.source) {
+        // stepped: once a step at most, when a frame newer than its last placing has come (cycle: that frame's count)
+        if (h.step < 0 || (step !== h.step && h.cycle !== this.sourceSeq)) {
+          const tp = trNow()
+          this.place(h, 0, 0, false, 0, false)
+          h.step = step
+          h.cycle = this.sourceSeq
+          moved = true
+          anyMoved = true
+          if (TRACE.on) {
+            tr(TR.placed)
+            tr(TR.placeMs, performance.now() - tp)
+          }
+        }
+        h.moving = false
+      }
       const t = T - h.b.offset
       const cycle = Math.floor(t / CYCLE)
       const local = t - cycle * CYCLE
@@ -1172,7 +1222,7 @@ export class Units {
       const p = h.b.reserve ? RESERVE.phase : phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
       // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
       const moving = p === 'column' || p === 'deploy'
-      if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) {
+      if (!this.source && (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step))) {
         const tp = trNow()
         this.place(
           h,
@@ -1192,7 +1242,7 @@ export class Units {
           tr(TR.placeMs, performance.now() - tp)
         }
       }
-      h.moving = moving
+      if (!this.source) h.moving = moving
       const px =
         (FIGURE * pxPerM) / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
       // the nearest LOD: looked at only when the battalion's nearest point (its bounds) is within 90 % of its switch

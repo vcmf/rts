@@ -8,7 +8,7 @@ import { s1dArms } from './s1d-arms.ts'
 import { s1dCharge } from './s1d-charge.ts'
 import { s1dGuns } from './s1d-guns.ts'
 import { s1eBattle } from './s1e-battle.ts'
-import { lookCross } from './look-world.ts'
+import { lookCross, lookArmies } from './look-world.ts'
 
 export const PAGE_SCENARIOS: Record<string, Scenario> = {
   's1c-firefight': s1cFirefight,
@@ -18,6 +18,7 @@ export const PAGE_SCENARIOS: Record<string, Scenario> = {
   's1d-guns': s1dGuns,
   's1e-battle': s1eBattle,
   'look-cross': lookCross,
+  'look-armies': lookArmies,
   ...S1B_SCENARIOS,
 }
 export const DEFAULT_SCENARIO = 's1c-firefight'

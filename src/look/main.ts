@@ -1,6 +1,7 @@
 // The look page (app/look.html): the painted world in the game's toolchain, ported from
 // prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
+import type { SimPlay } from './sim-armies.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Engine } from '@babylonjs/core/Engines/engine.js'
@@ -574,6 +575,9 @@ if (
 ) {
   throw new Error(`?ushadowswitch must be <r0>,<r1> m with r0 < r1, not ${uShadowSwitch}`)
 }
+// ?sim: the armies played by the sim, not the script (battle threads PR 4b; needs ?armies)
+const simParam = params.has('sim')
+if (simParam && armiesParam === null) throw new Error('?sim plays the armies: give ?armies=<battalions a side> too')
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 40)) {
   throw new Error(
     `?armies must be 1 to 40 battalions a side (the demo map holds 40: docs/plans/active/armies-32k.md), not ${armiesParam}`,
@@ -703,7 +707,19 @@ if (armiesParam !== null) {
   // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
   units.setSmooth(smoothMove ?? true)
   armiesFocus = facingAt(units.battalions)
-  Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
+  // ?sim: the sim plays the armies (src/look/sim-armies.ts, battle threads PR 4b) in place of the script
+  let sim: SimPlay | null = null
+  if (simParam) {
+    const { playSim } = await import('./sim-armies.ts')
+    sim = await playSim(units.battalions, drill.companies * drill.files * drill.ranks, armiesFocus)
+    units.source = sim.source
+    const s = sim
+    scene.onBeforeRenderObservable.add(() => s.tick(Math.min(engine.getDeltaTime() / 1000, 0.1)))
+  }
+  Object.assign(window, {
+    __units: units,
+    __armies: { blocked, focus: armiesFocus, coats: units.coats(), sim: sim?.link },
+  })
 }
 if (flag('rt16')) MSAA.byte = false
 // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
