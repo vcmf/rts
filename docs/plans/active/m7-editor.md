@@ -130,6 +130,18 @@ tools on top).
   handle keeps the selection and the hover; a save's reply is checked against the file and base it was sent for;
   `dirty` compares values; the server drops a byte order mark and answers JSON always; segment distance from
   `src/sim/fire.ts`. The validator takes 0.17–0.32 ms on today's maps (Node), so the drag checks each step.
+- **Redesign, round 1**: severe. The gate matched problems word for word, and a problem's message and path carry
+  indices and coordinates that shift as a broken feature is mended, so a repair read as a new problem and was
+  refused; a second Delete (or a held key) removed the whole feature once its point was gone. Fixed: the gate counts
+  each feature's problems (a feature with more than before is refused); Delete removes the line's or ring's point
+  under the pointer, does nothing on the shape's line or edge, and removes the feature only off the shape (or on a
+  point feature's or a centre's handle); the hover follows the pointer after a removal and clears when it leaves the
+  map. With them: a click on the selection's line or edge keeps it (a double click there adds a point to it, not to
+  what lies under); a conflict that came during a press that edited nothing reads the file in when the press ends; a
+  barrier's snap checks only the moved point and its two segments, so a barrier broken elsewhere can be mended point
+  by point; Cmd or Ctrl S, Z and Y work with a list or a box of the panel focused; the panel follows a cancelled drag;
+  the panel and the view are refreshed only when a move changed something; `dirty` is remembered per copy; the
+  segment distance is the editor's own again (the sim's is for combat), rounding uses `cm`.
 
 ## Open questions
 

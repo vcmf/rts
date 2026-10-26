@@ -10,7 +10,8 @@
 //   5. the editor (M7a): the map's first line (not a barrier) selected, its middle point dragged through pointer
 //      events, compiled from the page's copy, saved through the dev server (the file's diff: that feature's line
 //      alone), undone and saved again (the file byte for byte the original); with the largest area selected, a click
-//      on a line inside it selects the line.
+//      on a line inside it selects the line; Cmd S with a list of the panel focused is the page's save, not the
+//      browser's.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -160,6 +161,16 @@ try {
         return 'RESELECT ' + JSON.stringify({ area: area.id, line: line.id, selected: MAP.selected })
       })()`,
     ],
+    [
+      'eval',
+      `(() => {
+        const sel = document.getElementById('overlay')
+        sel.focus()
+        const ev = new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true, cancelable: true })
+        sel.dispatchEvent(ev)
+        return 'KEYS ' + JSON.stringify({ taken: ev.defaultPrevented })
+      })()`,
+    ],
   ]
   shot = spawn(
     'node',
@@ -252,6 +263,8 @@ try {
     seen.UNDONE.ok && !seen.UNDONE.dirty && seen.UNDONE.disk === original,
     'undone and saved, the file is byte for byte the original',
   )
+  await until('KEYS')
+  check(seen.KEYS.taken, "Cmd S with the overlay list focused is the page's save, not the browser's")
   await until('RESELECT')
   check(
     seen.RESELECT.selected === seen.RESELECT.line,

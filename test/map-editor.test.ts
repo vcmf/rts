@@ -298,3 +298,102 @@ describe('M7a redesign: one state machine, the validator as the gate', () => {
     expect(Number.isInteger(p[0] / 2) && Number.isInteger(p[1] / 2)).toBe(true)
   })
 })
+
+describe('M7a redesign, round 1', () => {
+  const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'kinds.json'), 'utf8')) as Catalogue
+  const withRoad = (line: number[][]) =>
+    formatMap({
+      ...(JSON.parse(text) as MapFile),
+      features: [
+        (JSON.parse(text) as MapFile).features[0],
+        { id: 'road', kind: 'way.road.lane', line },
+        {
+          id: 'wood',
+          kind: 'veg.wood.broad',
+          area: [
+            [
+              [-150, -150],
+              [-50, -150],
+              [-50, -50],
+              [-150, -50],
+            ],
+          ],
+        },
+      ],
+    } as MapFile)
+  it('lets a broken feature be mended: a point added to a line that crosses itself shifts its problem, adds none', () => {
+    const { ed } = make(
+      withRoad([
+        [-100, 50],
+        [100, 50],
+        [100, 60],
+        [0, 40],
+      ]),
+    )
+    ed.setCatalogue(cat)
+    ed.select('road')
+    ed.dblclick(-50, -50)
+    expect(ed.message).toBe('')
+    expect(ed.feature('road')!.line!.length).toBe(5)
+  })
+  it('removes points one Delete at a time, and never the feature while the pointer is on its shape', () => {
+    const { ed } = make(
+      withRoad([
+        [-100, 50],
+        [-50, 50],
+        [0, 50],
+        [50, 50],
+        [100, 50],
+      ]),
+    )
+    ed.select('road')
+    ed.move(0, -50) // over the middle point
+    ed.remove()
+    expect(ed.feature('road')!.line!.length).toBe(4)
+    ed.remove() // again, the pointer where the point was: on the line, on no point
+    expect(ed.feature('road')!.line!.length).toBe(4)
+    ed.move(50, -50) // the next point
+    ed.remove()
+    expect(ed.feature('road')!.line!.length).toBe(3)
+    ed.leave() // off the map: Delete is the feature's
+    ed.remove()
+    expect(ed.feature('road')).toBe(undefined)
+  })
+  it("keeps the selection on a click on its ring's edge, just outside it, so a double click there adds a point", () => {
+    const { ed } = make(
+      withRoad([
+        [-100, 50],
+        [100, 50],
+      ]),
+    )
+    ed.select('wood')
+    ed.click(-100, 152) // 2 px outside the south edge
+    expect(ed.selected).toBe('wood')
+    ed.dblclick(-100, 152)
+    expect(ed.feature('wood')!.area![0].length).toBe(5)
+  })
+  it('settles a conflict that came during a press that edited nothing: the file is read in', () => {
+    const { ed, compiles } = make()
+    ed.select('road')
+    expect(ed.down(-100, -50)).toBe(true)
+    const byHand = text.replace('"height":4', '"height":5')
+    ed.onDisk(byHand)
+    ed.up()
+    expect(ed.conflict).toBe(null)
+    expect(ed.base).toBe(byHand)
+    expect(compiles.length).toBe(1)
+  })
+  it('refreshes the panel when a drag is cancelled', () => {
+    let changed = 0
+    const { ed } = make()
+    ;(ed as unknown as { host: Host }).host.changed = () => changed++
+    ed.select('road')
+    drag(ed, [-100, -50], [-90, -50])
+    expect(ed.down(-90, -50)).toBe(true)
+    ed.move(-60, -50)
+    const before = changed
+    ed.cancel()
+    expect(changed).toBeGreaterThan(before)
+    expect(ed.feature('road')!.line![0]).toEqual([-90, 50])
+  })
+})

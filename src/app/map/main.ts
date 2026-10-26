@@ -632,6 +632,7 @@ const interrupted = () => {
   drag = null
 }
 canvas.addEventListener('pointercancel', interrupted)
+canvas.addEventListener('pointerleave', () => editor.leave())
 canvas.addEventListener('lostpointercapture', () => {
   if (drag) interrupted()
 })
@@ -697,9 +698,10 @@ showIds.addEventListener('change', draw)
 
 // the editor's keys: save, undo, redo, clear the selection, delete; not while typing in a field
 addEventListener('keydown', e => {
-  // not while typing in a field or choosing in a list; Delete and Escape only on the map, not on a focused button
+  // not while typing text; Delete and Escape only on the map (not on a focused list, box or button), the shortcuts
+  // with Cmd or Ctrl from anywhere else
   const target = e.target as HTMLElement
-  if (target.closest?.('input, textarea, select')) return
+  if (target.closest?.('textarea, input:not([type=checkbox]):not([type=radio]):not([type=button])')) return
   const onMap = target === document.body || target === canvas
   const mod = e.metaKey || e.ctrlKey
   const key = e.key.toLowerCase()

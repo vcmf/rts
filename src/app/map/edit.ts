@@ -6,7 +6,7 @@
 import type { Feature, MapFile, Pt } from '../../map/schema.ts'
 import { barrierProblem, inRing, isClosedLine, LATTICE, ringArea2 } from '../../map/geometry.ts'
 import { featureKind } from '../../map/validate.ts'
-import { distToSegment } from '../../sim/fire.ts'
+import { cm } from '../../map/util.ts'
 
 /** A part of a feature's shape that can be dragged. */
 export type Handle =
@@ -72,18 +72,41 @@ export function handleAt(f: Feature, sx: number, sy: number, project: Project): 
 }
 
 /** The screen distance from a point to a segment. */
-const toSegment = (px: number, py: number, a: [number, number], b: [number, number]): number =>
-  distToSegment(px, py, a[0], a[1], b[0], b[1])
-/** The screen distance from a point to a polyline (closed: its last point back to its first). */
-function toPolyline(px: number, py: number, pts: Pt[], loop: boolean, project: Project): number {
-  let d = Infinity
+function toSegment(px: number, py: number, a: [number, number], b: [number, number]): number {
+  const dx = b[0] - a[0]
+  const dy = b[1] - a[1]
+  const len2 = dx * dx + dy * dy
+  const t = len2 ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / len2)) : 0
+  return Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy)
+}
+/** The segments of a polyline on screen (a loop's last back to its first), each with the index of its end point. */
+function* screenSegments(pts: Pt[], loop: boolean, project: Project) {
   const n = loop ? pts.length : pts.length - 1
   for (let k = 0; k < n; k++) {
     const a = project(...pts[k])
     const b = project(...pts[(k + 1) % pts.length])
-    if (a && b) d = Math.min(d, toSegment(px, py, a, b))
+    if (a && b) yield { a, b, end: k + 1 }
   }
+}
+/** The screen distance from a point to a polyline (closed: its last point back to its first). */
+function toPolyline(px: number, py: number, pts: Pt[], loop: boolean, project: Project): number {
+  let d = Infinity
+  for (const { a, b } of screenSegments(pts, loop, project)) d = Math.min(d, toSegment(px, py, a, b))
   return d
+}
+/**
+ * Whether a screen point is on a feature's drawn shape: one of its handles, or within PICK.line of its line, a ring's
+ * edge, a circle's or an ellipse's outline (not merely inside an area: what lies inside can still be picked).
+ */
+export function onShape(f: Feature, sx: number, sy: number, project: Project): boolean {
+  if (handleAt(f, sx, sy, project)) return true
+  const rings = [...(f.area ?? [])]
+  if (f.circle) rings.push(ovalRing(f.circle[0], f.circle[1], f.circle[1], 0))
+  if (f.ellipse) rings.push(ovalRing(...f.ellipse))
+  return (
+    (!!f.line && toPolyline(sx, sy, f.line, false, project) <= PICK.line) ||
+    rings.some(r => toPolyline(sx, sy, r, true, project) <= PICK.line)
+  )
 }
 /** A circle's or an ellipse's outline as a ring of points (as the page draws it). */
 export function ovalRing(c: Pt, a: number, b: number, ang: number, n = 48): Pt[] {
@@ -155,7 +178,7 @@ export function roundStep(ppm: number): number {
   return 0.01
 }
 /** A number rounded to a step, with no binary fraction left over (0.1 × 3 is 0.3). */
-export const roundTo = (v: number, step: number): number => Number((Math.round(v / step) * step).toFixed(2)) || 0
+export const roundTo = (v: number, step: number): number => cm(Math.round(v / step) * step) || 0
 const roundPt = (p: Pt, step: number): Pt => [roundTo(p[0], step), roundTo(p[1], step)]
 const onLattice = (p: Pt): Pt => roundPt(p, LATTICE)
 
@@ -230,11 +253,11 @@ export function moveHandle(f: Feature, h: Handle, to: Pt, place: Place): Feature
         h.index > 0 ? line[h.index - 1] : loop ? line[n - 1] : null,
         h.index < n - 1 || loop ? line[(h.index + 1) % n] : null,
       ].filter((p): p is Pt => !!p)
-      const fits = (c: Pt) => {
-        const l = line.map((q, k) => (k === h.index || (loop && h.index === 0 && k === line.length - 1) ? c : q))
-        return barrierProblem(l) === null
-      }
-      // a barrier's point stays where it was when no lattice point near the pointer keeps the barrier whole
+      // the engine's rule on the point and its two segments only, so a barrier broken elsewhere can be mended a point
+      // at a time
+      const fits = (c: Pt) =>
+        barrierProblem(neighbours.length === 2 ? [neighbours[0], c, neighbours[1]] : [...neighbours, c]) === null
+      // a barrier's point stays where it was when no lattice point near the pointer keeps its segments whole
       const p = place.barrier ? (snapBarrier(to, neighbours, place.reach, fits) ?? line[h.index]) : at
       line[h.index] = p
       if (loop && h.index === 0) line[line.length - 1] = [...p]
@@ -301,12 +324,9 @@ export function insertPoint(
 ): Feature | null {
   let best: { ring: number; index: number; d: number } | null = null
   const consider = (pts: Pt[], loop: boolean, ring: number) => {
-    const n = loop ? pts.length : pts.length - 1
-    for (let k = 0; k < n; k++) {
-      const a = project(...pts[k])
-      const b = project(...pts[(k + 1) % pts.length])
-      const d = a && b ? toSegment(sx, sy, a, b) : Infinity
-      if (d <= PICK.line && (!best || d < best.d)) best = { ring, index: k + 1, d }
+    for (const { a, b, end } of screenSegments(pts, loop, project)) {
+      const d = toSegment(sx, sy, a, b)
+      if (d <= PICK.line && (!best || d < best.d)) best = { ring, index: end, d }
     }
   }
   // on an existing point, nothing is added (it would repeat it)
@@ -317,9 +337,9 @@ export function insertPoint(
   const { ring, index } = best as { ring: number; index: number }
   let p: Pt | null = roundPt(at, place.step)
   if (place.barrier && ring < 0) {
-    // between its two neighbours, on a lattice point that keeps the barrier whole (none: no point added)
+    // between its two neighbours, on a lattice point that keeps its two new segments whole (none: no point added)
     const line = f.line!
-    const fits = (c: Pt) => barrierProblem([...line.slice(0, index), c, ...line.slice(index)]) === null
+    const fits = (c: Pt) => barrierProblem([line[index - 1], c, line[index]]) === null
     p = snapBarrier(at, [line[index - 1], line[index]], place.reach, fits)
     if (!p) return null
   }

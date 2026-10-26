@@ -246,11 +246,12 @@ maps/kinds.json ──► checkCatalogue ─┐
     shape, rounded to the coarsest of 1, 0.1 and 0.01 m under a screen pixel; a barrier's points stay on the 2 m
     lattice, snapped where both their segments run in the 8 directions (`snapBarrier`), and a barrier moves by whole
     lattice steps (a barrier known by its kind or its preset's). Every edit of a shape is gated by the validator: an
-    edit that adds a problem is refused with the validator's message, and a drag shows only shapes that pass (a
+    edit that gives a feature more problems than it had is refused with the validator's message (a broken feature
+    can be mended), and a drag shows only shapes that pass (a
     barrier's snap takes the nearest lattice point that passes `barrierProblem`, or leaves the point); deleting a
     feature is not gated. One state machine (idle, pressing, dragging) owns the copy: a press must move 4 px to
-    drag, commands wait for it to end, and a file changed on disk during it is a conflict. A double click adds a point, Delete removes the line's or ring's point under the pointer or
-    else the feature, undo and redo keep 200 edits (a change on disk read in clears them). The save (Cmd or Ctrl S) goes through the dev server (`POST /__map/save`,
+    drag, commands wait for it to end, and a file changed on disk during it is a conflict. A double click adds a point, Delete removes the line's or ring's point under the pointer (on the
+    shape's line but no point, nothing; off the shape, the feature), undo and redo keep 200 edits (a change on disk read in clears them). The save (Cmd or Ctrl S) goes through the dev server (`POST /__map/save`,
     `tools/map-save.ts`, JSON from the page's own origin only) with the text the page read, and is refused if the file
     changed on disk since (the page
     then offers to overwrite it or take the file). It rewrites only what changed (`writeMap`, `src/map/write.ts`):
