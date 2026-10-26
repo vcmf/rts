@@ -35,7 +35,12 @@ Annihilation, Supreme Commander).
   clip and phase), a per-tick mirror of the `World`'s arrays (the main thread's read-only `World` view for the staff
   map, the HUD and command validation) and an event ring, in `SharedArrayBuffer`s with a three-slot `Atomics` protocol
   (the writer never writes the slot the reader holds); the main thread never waits. Without cross-origin isolation, the
-  same slots go by transferred buffers.
+  same slots go by transferred buffers. **Revised by PR 3's build (2026-10-26)**: one published frame, not a
+  mirror per tick and a separate soldier frame (the world's columns are 2.5 MB, measured, so a copy per tick is
+  400 MB/s at 8×): the world's columns, the men and the clock together, at most 120 times a second, in three shared
+  slots; the page reads a slot in place through a `World` and a `SoldierLayer` over it. Events (the log, orders
+  dropped, hash points) go by message, which loses none, not a ring. Without cross-origin isolation the battle runs on
+  the main thread as before (the measured cost of plan PRs 1–2), not by transferred buffers.
 - **The sim's code is unchanged** (decisions 0005, 0006, 0013 hold); no WebAssembly or native code for the sim now.
 
 ## Consequences

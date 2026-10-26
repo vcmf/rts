@@ -148,6 +148,29 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
   the HUD and `formationHandle`; the worker's game-time clock; COOP/COEP on Vite's dev and preview servers, the
   `crossOriginIsolated` check and the transfer fallback; **a browser replay harness** (headless Chrome running a
   replay in the worker and on the main thread, comparing the hashes; Firefox later, sim-design's S2).
+- **Approach** (2026-10-26, after PR 2; where it departs from the design's §5, why):
+  - **One published frame, not a mirror per tick.** The world's columns (`columnsOf`: meta, rng, formations, sides,
+    free list, order pool) are 2.5 MB at the shipped ruleset (measured; the formations table is 2.36 MB of it, the
+    trails and per-company arrays of 128 formations), against the design's 1.5 MB est. A copy per tick is 160 a
+    second at 8×, 400 MB/s. So the worker publishes one frame at most 120 times a real second, when a tick or a
+    sub-step changed something: the world's columns, the men (x, z, vx, vz, slot, flags: what the readers read), the
+    battalion table (formation index, its men's indices) and the clock (tick, the leftover game time, the speed, the
+    publish time, for the anchors' alpha). Three slots, the design's protocol, one `SharedArrayBuffer` each.
+  - **The main thread's views**: per slot a `World` made by `makeWorld` whose columns are views on the slot, and a
+    `SoldierLayer` on that world never stepped, its `men` and `units` read from the slot; the page swaps to the slot
+    it holds each frame. `map.ts`, the HUD, `formationHandle`, picking and box select read them unchanged.
+  - **Growth**: a frame sized for the men present; when the worker's men outgrow it, it makes new buffers at twice
+    the size and posts them, and the main thread switches when they arrive (PR 2's `reallocs`).
+  - **Events by `postMessage`**, not a ring: dropped orders, the stamped log, hash points, departures. They are a few
+    a second and a message queue loses none.
+  - **The fallback is the main thread**: without cross-origin isolation the same battle runs on the main thread as
+    today (`?thread=main` forces it), not the design's transferred buffers. It costs what PR 2 costs (measured), and it
+    is the browser harness's other side.
+  - **The 12 fps publish gate is PR 4's**: the sim page draws the latest frame, whose men step at their group's rate.
+  - **Measured by** `tools/bench-sim.mjs` (new): the bench scenario in headless Chrome on the production build, per
+    frame the `requestAnimationFrame` interval and the main thread's battle time (stepping in-thread, or reading the
+    held slot), long tasks from a `PerformanceObserver`; and the worker's tick, sub-step and publish times. The
+    baselines are the same tool with `?thread=main`.
 - **Acceptance** (16,000 and 32,000 men, 120 Hz, 1× and 8×): the main thread's sim + layer + hash time **mean ≤ 0.3 ms, p99 ≤ 0.5
   ms** per frame (reading the buffers and the uploads only); **no long task** from a tick or the hash; the frame
   interval's **p99 ≤ 8.33 ms** on the sim page; the worker's tick mean ≤ 1.8 ms at 16,000 men (at 32,000 stated:

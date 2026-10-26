@@ -29,4 +29,5 @@ export const PAGE_VIEWS: Record<string, [number, number, number]> = {
   's1d-charge': [-85, 40, 1.9],
   's1d-guns': [25, 50, 1.6],
   's1e-battle': [0, 0, 0.6],
+  's1b-bench-80': [0, 0, 0.6],
 }
