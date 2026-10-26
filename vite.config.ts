@@ -27,11 +27,11 @@ const mapsHot: Plugin = {
   hotUpdate: {
     // after Vite's own (its glob import would reload the page for a new file)
     order: 'post',
-    handler({ file, server }) {
+    handler({ file, server, type }) {
       if (this.environment.name !== 'client') return
       const rel = '/' + path.relative(server.config.root, file).split(path.sep).join('/')
       if (!/^\/maps\/[^/]+\.(json|rdem)$/.test(rel)) return
-      server.ws.send({ type: 'custom', event: 'map-changed', data: { file: rel, at: Date.now() } })
+      server.ws.send({ type: 'custom', event: 'map-changed', data: { file: rel, at: Date.now(), type } })
       return []
     },
   },

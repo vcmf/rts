@@ -6,8 +6,7 @@
 // window.MAP exposes the state for headless checks.
 import type { Catalogue, Feature, MapFile, Pt, ShapeName } from '../../map/schema.ts'
 import { ID, REFS, SEASONS } from '../../map/schema.ts'
-import { kindChain, kindMeta } from '../../map/catalogue.ts'
-import { featureKind } from '../../map/validate.ts'
+import { kindMetaOf } from '../../map/catalogue.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName, OverlayReply, OverlayRequest } from './protocol.ts'
 import type { OverlaySpec } from '../../render/lit/overlays.ts'
@@ -112,7 +111,9 @@ const tiltParam = Number(new URLSearchParams(location.search).get('tilt'))
 const tilt = Number.isFinite(tiltParam) && new URLSearchParams(location.search).has('tilt') ? tiltParam : TILT
 
 const names = Object.keys(MAPS).sort()
-for (const n of names) picker.append(new Option(n.replace('/maps/', '').replace('.map.json', ''), n))
+/** The picker's entry for a map file, named by its id. */
+const mapOption = (file: string) => new Option(file.replace('/maps/', '').replace('.map.json', ''), file)
+for (const n of names) picker.append(mapOption(n))
 const asked = new URLSearchParams(location.search).get('map')
 picker.value =
   names.find(n => n.endsWith(`/${asked}.map.json`)) ?? names.find(n => n.includes('two-ridges')) ?? names[0]
@@ -347,6 +348,10 @@ const toWorld = (sx: number, sy: number): Pt =>
 
 // the editor (M7): it compiles its copy of the map through the page, and draws its selection over the outlines
 const addGo = $<HTMLButtonElement>('addGo')
+/** A new map never saved has no file to come back to: its entry goes when the page leaves it. */
+const dropUnsavedNew = () => {
+  if (editor.isNew) [...picker.options].find(o => o.value === editor.file)?.remove()
+}
 const editor = new Editor({
   ctx,
   project: (x, z) => toScreen(x, z),
@@ -406,8 +411,7 @@ function kindList(): void {
 }
 /** The shapes the kind picked takes ('none': drawn by its references alone). */
 function shapeList(): void {
-  const chain = catalogue && addKind.value ? kindChain(catalogue, addKind.value) : null
-  const shapes = chain ? kindMeta(catalogue!, chain).shapes : []
+  const shapes = (catalogue && addKind.value && kindMetaOf(catalogue, addKind.value)?.shapes) || []
   const was = addShape.value
   addShape.replaceChildren(...shapes.map(sh => new Option(sh === 'none' ? 'by its references' : sh, sh)))
   if (shapes.includes(was as ShapeName)) addShape.value = was
@@ -420,10 +424,7 @@ function proposeAddId(): void {
 }
 /** The selection's references, each with a button to set it again by clicking its target. */
 function refButtons(f: Feature | undefined): void {
-  const kind =
-    f && editor.doc ? featureKind(f, (editor.doc.presets ?? {}) as Record<string, Record<string, unknown>>) : undefined
-  const chain = catalogue && kind ? kindChain(catalogue, kind) : null
-  const refs = chain ? kindMeta(catalogue!, chain).refs : {}
+  const refs = (f && editor.metaOf(f)?.refs) || {}
   const buttons = REFS.filter(r => refs[r]).map(r => {
     const b = document.createElement('button')
     const v = f![r]
@@ -761,8 +762,7 @@ picker.addEventListener('change', () => {
     picker.value = editor.file!
     return
   }
-  // a new map never saved has no file to come back to
-  if (editor.isNew) [...picker.options].find(o => o.value === editor.file)?.remove()
+  dropUnsavedNew()
   current = null
   const q = new URLSearchParams(location.search) // the other settings (?tilt=) stay
   q.set('map', picker.selectedOptions[0].text)
@@ -820,6 +820,7 @@ addEventListener('keydown', e => {
 saveButton.addEventListener('click', () => void editor.save())
 addKind.addEventListener('change', shapeList)
 addGo.addEventListener('click', () => {
+  // the map takes the drawing's keys (Enter, Backspace, Escape)
   if (editor.add(addKind.value, addShape.value as ShapeName | 'none', addId.value.trim())) canvas.focus()
 })
 // a new map (M7b): a copy with no file yet, the first save creates maps/<id>.map.json
@@ -845,7 +846,7 @@ $('newMake').addEventListener('click', () => {
           : ''
   if (why) return editor.note(`no new map: ${why}`)
   if (editor.dirty && !confirm('The map has unsaved edits. Drop them and make a new map?')) return
-  if (editor.isNew) [...picker.options].find(o => o.value === editor.file)?.remove()
+  dropUnsavedNew()
   const file = `/maps/${id}.map.json`
   const doc: MapFile = {
     format: 1,
@@ -857,7 +858,7 @@ $('newMake').addEventListener('click', () => {
     play: { w: play, h: play },
     features: [],
   }
-  picker.append(new Option(id, file))
+  picker.append(mapOption(file))
   picker.value = file
   current = null
   sightAt = null
@@ -880,10 +881,16 @@ addEventListener('beforeunload', e => {
 // seen); any heightfield recompiles, since the map's text alone says which it reads
 const diskRead = newestOnly()
 if (import.meta.hot) {
-  import.meta.hot.on('map-changed', (d: { file: string; at: number }) => {
-    // a map file made since the page loaded (by hand, or another page's new map): it joins the list
-    if (d.file.endsWith('.map.json') && ![...picker.options].some(o => o.value === d.file)) {
-      picker.append(new Option(d.file.replace('/maps/', '').replace('.map.json', ''), d.file))
+  import.meta.hot.on('map-changed', (d: { file: string; at: number; type: 'create' | 'update' | 'delete' }) => {
+    // a map file made since the page loaded (by hand, or another page's new map) joins the list; one deleted leaves
+    // it, unless the page shows it (its copy can still be saved back)
+    if (d.file.endsWith('.map.json')) {
+      const listed = [...picker.options].find(o => o.value === d.file)
+      if (d.type === 'delete') {
+        if (listed && d.file !== picker.value) listed.remove()
+        return
+      }
+      if (!listed) picker.append(mapOption(d.file))
     }
     if (d.file.endsWith('.rdem')) {
       // a heightfield is large and written in one go: wait until the saves stop before reading it, so a file still

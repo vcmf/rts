@@ -210,10 +210,12 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
   save creates the file. The save route takes `base: null` as "create": written only if no file is there (409 with the
   file's text otherwise, as a conflict). The map joins the page's list; leaving it unsaved asks first and drops it.
 - **Adding a feature** (the panel's "add"): a kind from the catalogue (by category), one of the shapes it takes, and an
-  id proposed from the kind's last name (`wheat`, then `wheat-2`…), editable before drawing. Then a drawing mode, the
+  id proposed from the kind's last name (`wheat`, then `wheat2`…: never `wheat-2`, a generated child's form), editable
+  before drawing. Then a drawing mode, the
   state machine's fourth, which takes clicks (a press that moves still pans):
   - a point: one click; a line: clicks, Enter or a double click ends it (2 points at least); an area: likewise
-    (3 points), its ring closing itself; a circle: its centre, then a point on its edge; an ellipse: its centre, the
+    (3 points), its ring closing itself; a click back on the first point closes an area or a line (a barrier's with a
+    lattice point between when its last segment needs one); a circle: its centre, then a point on its edge; an ellipse: its centre, the
     end of its first radius (which sets its angle), then a point giving the second radius;
   - points rounded as a drag rounds them; a barrier's on the lattice, each new point snapped where its segment runs in
     one of the 8 directions (`snapBarrier`, the engine's rule as the check);
@@ -228,9 +230,9 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
 - **A reference of the selected feature** set again by clicking (the panel lists the kind's references, each with a
   button): the same picking, one edit.
 - The pure parts in `src/app/map/draw.ts` (the draft, its steps, the proposed id, the feature it makes, what a click
-  picks as a reference, a point's distance along a line), tested in `test/map-draw.test.ts`; the editor's mode in
-  `Editor`, tested in `test/map-editor.test.ts`.
-- `window.MAP` gains `create`, `add` (start a drawing), `finish`, `issues`.
+  picks as a reference, a point's distance along a line); the editor's mode in `Editor`; both tested in
+  `test/map-draw.test.ts`.
+- `window.MAP` gains `add` (start a drawing), `enter`, `prompt`, `drawing`, `isNew`.
 - The page check: makes a new map, draws a meadow (an area), a stream (a line), a ford on it (references by clicks),
   a road and a bridge, a hedge (a barrier) and a hill (a circle); saves; checks that the new file validates with no
   problem, that the page reads it back unchanged, and that one more edit changes one line; removes the file.
@@ -238,11 +240,23 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
 ## Acceptance (M7b)
 
 - A map drawn from scratch in the page validates, and its file round-trips with no diff but the edits (the page check;
-  `test/map-write.test.ts` for a written new map read back and written unedited).
+  `test/map-draw.test.ts` for a new map saved, read back and written unedited).
 - Every shape and every reference of the catalogue's kinds can be drawn (`test/map-draw.test.ts`, through the kinds'
   own `shapes` and `refs`), every drawn barrier passes `barrierProblem`.
 - `test/map-save.test.ts`: a create writes a new file and refuses to overwrite one.
 - `npm test`, `check:data`, the build, the docs check and the page check pass.
+
+## Review rounds (M7b)
+
+- **Round 1** (`/code-review high`): severe. The proposed id for a second feature of a kind (`wood-2`) is the form of
+  a generated child's id, reserved while a feature of that name generates; a click back on an area's first corner (the
+  usual way to close one) added it again, and the area then crossed itself. Fixed: ids are numbered `wood2`; a click
+  back on the first point closes an area or a line, a barrier's with a lattice point between when its last segment
+  needs one (a hedge round a field can be drawn). With them: the create writes a temporary file and links it into
+  place (a failed write leaves no partial map; a path there but unreadable is answered); the map takes the focus
+  after the draw button, so Enter, Backspace and Escape work at once; a deleted map file leaves the page's list (the
+  hot update sends its type); one `kindMetaOf` (`src/map/catalogue.ts`) and `Editor.metaOf` for the four lookups of a
+  kind's metadata; the picker's entries made and dropped in one place each; this plan's hooks and test files.
 
 ## Open questions
 

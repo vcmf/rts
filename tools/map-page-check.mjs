@@ -249,13 +249,19 @@ try {
         draw('built.bridge', 'none', 'bridge', [[63.2, -200], [300, 11.8]], true)
         draw('barrier.hedge', 'line', 'hedge', [[-200, -300], [-100, -300], [-100, -200]], true)
         draw('relief.hill', 'circle', 'hill', [[300, -300], [380, -300]])
+        // the panel's draw button, then Escape where the focus then is: the map takes the drawing's keys
+        set('addKind', 'way.path'); document.getElementById('addKind').dispatchEvent(new Event('change'))
+        document.getElementById('addGo').click()
+        const started = MAP.drawing
+        document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+        const escaped = started && !MAP.drawing
         const n = MAP.log.length
         await until(() => MAP.log.length > n && MAP.idle)
         await sleep(300)
         const ok = await MAP.save()
         const disk = await (await fetch('/maps/${NEW}.map.json', { cache: 'no-store' })).text()
         return 'NEWMAP ' + JSON.stringify({ ok, disk, text: MAP.text, dirty: MAP.dirty, isNew: MAP.isNew,
-          issues: MAP.issues, prompts, features: JSON.parse(MAP.text).features })
+          issues: MAP.issues, prompts, escaped, features: JSON.parse(MAP.text).features })
       })()`,
     ],
     ['shot', 'new-map'],
@@ -382,6 +388,7 @@ try {
     ids === 'terrain,meadow,brook,ford,road,bridge,hedge,hill',
     `a new map drawn by clicks: ${ids} (prompts: ${[...new Set(nm.prompts)].join(' | ')})`,
   )
+  check(nm.escaped, "after the panel's draw button, Escape drops the drawing (the map has the focus)")
   const ford = nm.features.find(f => f.id === 'ford')
   const bridge = nm.features.find(f => f.id === 'bridge')
   check(

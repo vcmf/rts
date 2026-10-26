@@ -27,13 +27,16 @@ export interface Draft {
   barrier: boolean // its points lie on the lattice
 }
 
-/** The id proposed for a new feature of a kind: the kind's last name, numbered from 2 when taken. */
+/**
+ * The id proposed for a new feature of a kind: the kind's last name, numbered from 2 when taken (`wood2`: never
+ * `wood-2`, the form of a generated child's id, reserved while its parent generates).
+ */
 export function proposeId(kind: string, taken: Iterable<string>): string {
   const ids = new Set(taken)
   const name = kind.split('.').pop()!.toLowerCase()
   const base = ID.test(name) ? name : 'feature'
   if (!ids.has(base)) return base
-  for (let n = 2; ; n++) if (!ids.has(`${base}-${n}`)) return `${base}-${n}`
+  for (let n = 2; ; n++) if (!ids.has(`${base}${n}`)) return `${base}${n}`
 }
 
 /** The steps of drawing a kind (its inherited `KindMeta`) as one of its shapes ('none': by its references alone). */
@@ -81,11 +84,13 @@ export function prompt(d: Draft): string {
       case 'point':
         return 'click where it is'
       case 'line':
-        return n === 0 ? "click the line's first point" : 'click the next point; Enter or a double click ends the line'
+        return n === 0
+          ? "click the line's first point"
+          : `click the next point; Enter or a double click ends the line${n >= 3 ? ', its first point closes it' : ''}`
       case 'area':
         return n === 0
           ? "click the area's first corner"
-          : `click the next corner${n >= 3 ? '; Enter or a double click closes the area' : ''}`
+          : `click the next corner${n >= 3 ? '; Enter, a double click or its first corner closes the area' : ''}`
       case 'circle':
         return n === 0 ? 'click the centre' : 'click a point on its edge'
       case 'ellipse':
@@ -115,6 +120,21 @@ function nextPoint(d: Draft, to: Pt, place: Place): Pt {
   return snapBarrier(to, [prev], place.reach, fits) ?? onLattice(to)
 }
 
+/**
+ * A line closed on its first point: that point repeated at its end. A barrier's last segment must run in the 8
+ * directions: if it does not, a lattice point between its last and first that makes both segments whole goes in
+ * between; null when none is near.
+ */
+function closeLine(d: Draft, place: Place): Pt[] | null {
+  const first = d.pts[0]
+  const last = d.pts[d.pts.length - 1]
+  if (!d.barrier || barrierProblem([last, first]) === null) return [...d.pts, [...first]]
+  const fits = (c: Pt) => barrierProblem([last, c, first]) === null
+  const mid: Pt = [(last[0] + first[0]) / 2, (last[1] + first[1]) / 2]
+  const c = snapBarrier(mid, [last, first], Math.max(place.reach, dist(last, first)), fits)
+  return c ? [...d.pts, c, [...first]] : null
+}
+
 /** A click on the ground in the shape step; returns the draft with it (a point, a circle or an ellipse may end it). */
 export function addPoint(d: Draft, to: Pt, place: Place): Draft {
   const s = stepOf(d)
@@ -126,6 +146,11 @@ export function addPoint(d: Draft, to: Pt, place: Place): Draft {
       return advance(d, { ...d.feature, point: at })
     case 'line':
     case 'area': {
+      // a click back on the first point closes the shape (an area ends; a line ends closed, its last point its first)
+      if (d.pts.length >= 3 && dist(to, d.pts[0]) <= place.reach) {
+        const closed = s.shape === 'area' ? d.pts : closeLine(d, place)
+        if (closed) return advance(d, { ...d.feature, [s.shape]: s.shape === 'area' ? [closed] : closed })
+      }
       const p = nextPoint(d, to, place)
       const last = d.pts[d.pts.length - 1]
       // the same point again (a double click's second click, a snap that did not move) adds nothing

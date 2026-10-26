@@ -20,6 +20,24 @@ describe('M7b: a new map saved', () => {
     })
     expect(fs.readFileSync(file, 'utf8')).toBe('made')
   })
+  it('leaves no file and no temporary file when the create fails, and answers when the path cannot be read', () => {
+    fs.mkdirSync(path.join(root, 'maps', 'dir.map.json'))
+    const r = saveMapFile(root, { file: '/maps/dir.map.json', base: null, text: 'x' })
+    expect(r).toMatchObject({ ok: false, status: 500 })
+    expect(fs.readdirSync(path.join(root, 'maps')).filter(f => f.endsWith('.tmp'))).toEqual([])
+    const ro = path.join(root, 'ro')
+    fs.mkdirSync(path.join(ro, 'maps'), { recursive: true })
+    fs.chmodSync(path.join(ro, 'maps'), 0o555)
+    try {
+      expect(saveMapFile(ro, { file: '/maps/a.map.json', base: null, text: 'x' })).toMatchObject({
+        ok: false,
+        status: 500,
+      })
+      expect(fs.readdirSync(path.join(ro, 'maps'))).toEqual([])
+    } finally {
+      fs.chmodSync(path.join(ro, 'maps'), 0o755)
+    }
+  })
   it('creates only a map file', () => {
     expect(saveMapFile(root, { file: '/maps/../x.map.json', base: null, text: 'x' }).ok).toBe(false)
     expect(fs.existsSync(path.join(root, 'x.map.json'))).toBe(false)

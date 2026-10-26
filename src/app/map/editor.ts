@@ -17,7 +17,7 @@
 // Tested in test/map-editor.test.ts.
 import type { Catalogue, Feature, MapFile, Pt, RefName, ShapeName } from '../../map/schema.ts'
 import { ID } from '../../map/schema.ts'
-import { kindChain, kindMeta } from '../../map/catalogue.ts'
+import { kindMetaOf, type KindMeta } from '../../map/catalogue.ts'
 import { featureKind, validate, type Issue } from '../../map/validate.ts'
 import { sameJson, writeMap, writerFrom, type FeatureWriter } from '../../map/write.ts'
 import {
@@ -492,8 +492,7 @@ export class Editor {
    */
   add(kind: string, shape: ShapeName | 'none', id: string): boolean {
     if (!this.enabled || !this.doc || !this.ready()) return false
-    const chain = this.cat ? kindChain(this.cat, kind) : null
-    const meta = chain && kindMeta(this.cat!, chain)
+    const meta = this.cat && kindMetaOf(this.cat, kind)
     const why = !meta
       ? `no kind ${kind} in the catalogue`
       : !meta.shapes.includes(shape)
@@ -513,13 +512,16 @@ export class Editor {
     this.begin(draft, null)
     return true
   }
+  /** A feature's kind's metadata (its kind its own or its preset's), or null when the catalogue has none. */
+  metaOf(f: Feature): KindMeta | null {
+    const kind = featureKind(f, (this.doc?.presets ?? {}) as Record<string, Record<string, unknown>>)
+    return this.cat && kind ? kindMetaOf(this.cat, kind) : null
+  }
   /** Sets one reference of the selection again by clicking its target. Returns whether it started; says why not. */
   pickRef(ref: RefName): boolean {
     const f = this.selected ? this.feature(this.selected) : undefined
     if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return false
-    const kind = featureKind(f, (this.doc.presets ?? {}) as Record<string, Record<string, unknown>>)
-    const chain = this.cat && kind ? kindChain(this.cat, kind) : null
-    const want = chain ? kindMeta(this.cat!, chain).refs[ref] : undefined
+    const want = this.metaOf(f)?.refs[ref]
     if (!want) {
       this.message = `${f.id} takes no "${ref}"`
       this.host.changed()

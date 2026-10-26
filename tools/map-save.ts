@@ -45,15 +45,26 @@ export function saveMapFile(root: string, req: SaveRequest): SaveResult {
     return { ok: false, status: 400, error: 'a map file is /maps/<name>.map.json, with its base and its text' }
   }
   const file = path.join(root, req.file)
-  // a new map: its file is created, never over one already there (another map of that name, made meanwhile)
+  // a new map: its file is created whole (a temporary file linked into place, which fails if a file is there), never
+  // over one already there (another map of that name, made meanwhile)
   if (req.base === null) {
+    const tmp = `${file}.${process.pid}.tmp`
     try {
-      fs.writeFileSync(file, req.text, { flag: 'wx' })
+      fs.writeFileSync(tmp, req.text)
+      fs.linkSync(tmp, file)
       return { ok: true }
     } catch (e) {
       const err = e as NodeJS.ErrnoException
-      if (err.code !== 'EEXIST') return { ok: false, status: 500, error: `${req.file} was not written: ${err.message}` }
-      return { ok: false, status: 409, current: fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '') }
+      if (err.code === 'EEXIST') {
+        try {
+          return { ok: false, status: 409, current: fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '') }
+        } catch (e2) {
+          return { ok: false, status: 500, error: `${req.file} is there but cannot be read: ${(e2 as Error).message}` }
+        }
+      }
+      return { ok: false, status: 500, error: `${req.file} was not written: ${err.message}` }
+    } finally {
+      fs.rmSync(tmp, { force: true })
     }
   }
   let current: string

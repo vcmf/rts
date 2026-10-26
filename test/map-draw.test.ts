@@ -198,9 +198,45 @@ describe('M7b: drawing a feature', () => {
     d = back(back(d))
     expect(d.pts).toEqual([])
   })
-  it('proposes an id from the kind, numbered when taken', () => {
+  it("proposes an id from the kind, numbered when taken, never as a generated child's", () => {
     expect(proposeId('ground.field.wheat', [])).toBe('wheat')
-    expect(proposeId('ground.field.wheat', ['wheat', 'wheat-2'])).toBe('wheat-3')
+    expect(proposeId('ground.field.wheat', ['wheat', 'wheat2'])).toBe('wheat3')
+    // a second wood beside one that generates: wood-2 would be one of its children's ids
+    const wood: Feature = { id: 'wood', kind: 'veg.wood', circle: [[0, 0], 80], gen: { clump: {} } }
+    const id = proposeId('veg.wood', ['wood'])
+    const second: Feature = { id, kind: 'veg.wood', circle: [[300, 0], 50] }
+    expect(validate({ ...base, features: [wood, second] }, cat).filter(i => i.id === id)).toEqual([])
+  })
+  it('closes an area, a line and a barrier on a click back on the first point', () => {
+    const steps = (shape: ShapeName) => [{ kind: 'shape' as const, shape }]
+    const clicks = (d: Draft, pts: Pt[], p: Place) => pts.reduce((x, c) => addPoint(x, c, p), d)
+    const ring: Pt[] = [
+      [0, 0],
+      [100, 0],
+      [100, 80],
+      [1, 2], // within reach of the first
+    ]
+    const area = clicks(startDraft({ id: 'a', kind: 'ground.meadow' }, steps('area'), false), ring, place(false))
+    expect(done(area)).toBe(true)
+    expect(area.feature.area).toEqual([ring.slice(0, 3)])
+    expect(validate({ ...base, features: [...base.features, area.feature] }, cat).filter(i => i.id === 'a')).toEqual([])
+    const line = clicks(startDraft({ id: 'l', kind: 'way.path' }, steps('line'), false), ring, place(false))
+    expect(line.feature.line).toEqual([...ring.slice(0, 3), [0, 0]])
+    // a hedge whose last segment back to its start is no 8-direction: a lattice point between makes it whole
+    const hedge = clicks(
+      startDraft({ id: 'h', kind: 'barrier.hedge' }, steps('line'), true),
+      [
+        [0, 0],
+        [40, 0],
+        [40, 30],
+        [1, 1],
+      ],
+      place(true),
+    )
+    expect(done(hedge)).toBe(true)
+    const h = hedge.feature.line!
+    expect(h[0]).toEqual(h[h.length - 1])
+    expect(barrierProblem(h)).toBeNull()
   })
 })
 

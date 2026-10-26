@@ -11,6 +11,7 @@
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   #map { cursor: grab; }
   #map:active { cursor: grabbing; }
+  #map:focus { outline: none; }
   .card { position: fixed; padding: 12px 14px; background: rgba(246, 243, 236, .95); border: 1px solid var(--rule); border-radius: 4px; }
   #panel { top: 16px; left: 16px; width: 300px; }
   #panel .t { font: 700 20px/1 var(--display); margin-bottom: 8px; }
@@ -41,7 +42,7 @@
 </head>
 <body>
 <canvas id="lit"></canvas>
-<canvas id="map"></canvas>
+<canvas id="map" tabindex="-1"></canvas>
 <div id="panel" class="card">
   <div class="t">Map</div>
   <select id="picker" aria-label="Map"></select>
