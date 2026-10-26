@@ -4,7 +4,8 @@
 //    at sampled points on the tile and on the far ring;
 // 2. the camera cannot leave yaw ±SPEC.camera.yawRange (decision 0010), whatever is asked of it;
 // 3. every placed instance stands on the drawn ground: Babylon's reading of the tile or far mesh under its pivot
-//    (instances may sink, never float), and none stands in the apron band, which the heightfield does not describe.
+//    (instances may sink, never float), and none stands in the apron band, which the heightfield does not describe;
+//    the soldiers by their poses (?armies: their meshes have no thin-instance matrices).
 // Run (after npm run build and npx vite preview): node tools/shot.mjs <look page URL> renders/tmp 800 600 \
 //        "$(python3 -c 'import json;print(json.dumps([["eval",open("tools/look-check.js").read()]]))')"
 // Prints the measurements; every failed limit is a console.error, so shot.mjs exits non-zero.
@@ -79,22 +80,30 @@
   let worstFloat = 0
   let tested = 0
   let inBand = 0
+  const stands = (x, y, z) => {
+    const e = Math.max(Math.abs(x), Math.abs(z))
+    tested++
+    if (e > S.tile / 2 && e < BAND) {
+      inBand++
+      return
+    }
+    const g = (e <= S.tile / 2 ? tileGround : farGround).getHeightAtCoordinates(x, z)
+    if (y > g + 1e-3) {
+      floating++
+      worstFloat = Math.max(worstFloat, y - g)
+    }
+  }
   for (const m of scene.meshes) {
     if (!m.thinInstanceCount) continue
     for (const W of m.thinInstanceGetWorldMatrices()) {
       const o = W.getTranslation()
-      const e = Math.max(Math.abs(o.x), Math.abs(o.z))
-      tested++
-      if (e > S.tile / 2 && e < BAND) {
-        inBand++
-        continue
-      }
-      const g = (e <= S.tile / 2 ? tileGround : farGround).getHeightAtCoordinates(o.x, o.z)
-      if (o.y > g + 1e-3) {
-        floating++
-        worstFloat = Math.max(worstFloat, o.y - g)
-      }
+      stands(o.x, o.y, o.z)
     }
+  }
+  // the soldiers (?armies): no thin-instance matrices, each man's pose (src/look/units.ts poses; one not drawn far
+  // under the ground)
+  for (const p of window.__units?.poses() ?? []) {
+    for (let o = 0; o < p.length; o += 4) if (p[o + 1] > -1e4) stands(p[o], p[o + 1], p[o + 2])
   }
   out.instances = { tested, floating, worstFloat: +worstFloat.toFixed(3), inBand }
   if (tested < 1000) fail.push(`instances: only ${tested} tested`)

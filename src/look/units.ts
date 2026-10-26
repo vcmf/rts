@@ -20,6 +20,8 @@ import { Matrix, Vector2, Vector3, Vector4 } from '@babylonjs/core/Maths/math.ve
 import type { Plane } from '@babylonjs/core/Maths/math.plane.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { Buffer } from '@babylonjs/core/Buffers/buffer.js'
+import type { AbstractEngine } from '@babylonjs/core/Engines/abstractEngine.js'
+import { ShaderStore } from '@babylonjs/core/Engines/shaderStore.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
 import '@babylonjs/core/Engines/Extensions/engine.alphaToCoverage.js'
 import { MSAA } from './post.ts'
@@ -60,6 +62,7 @@ import {
   splitLists,
   type BattalionAt,
   type Lods,
+  type ManLists,
 } from './lod-fade.ts'
 import {
   TINY_ROLES,
@@ -95,11 +98,8 @@ interface Host {
   lod: Mesh[]
   near: boolean
   tiny: boolean
-  // each man's pose (x, y, z, his turn about y; 4 a man): what he is drawn at, read as world0 (the thin instances'
-  // first matrix column: the shaders build his matrix from it, world1..3 unread; a new attribute would pass WebGL's 16)
+  // each man's pose (x, y, z, his turn about y; 4 a man): what he is drawn at (Lists)
   pose: Float32Array
-  // a matrix a man, never filled nor sent again: Babylon's count of the meshes' thin instances (world0 is the pose's)
-  count: Float32Array
   settings: Float32Array
   man: Float32Array // each man's index (aMan: the LOD cross-fade's hash), in the battalion's order
   jitter: Float32Array
@@ -117,6 +117,8 @@ interface Host {
   restN: Float32Array
   nearI: Float32Array // (and their indices, aMan)
   restI: Float32Array
+  nearB: Lists | null // (the near and rest lists on the GPU: made at the first split)
+  restB: Lists | null
   resplit: boolean
   lods: Lods // the LODs drawn this frame (battalionLods)
   fading: boolean // more than one of them: its figure meshes fade each man (uLodFade)
@@ -133,31 +135,49 @@ interface Host {
   staleNext: boolean[] // per LOD: its GPU copy of the men's moves is older
   cycle: number // the cycle its settings were written in (each cycle's clips start afresh)
   index: number // its place in hosts (its flag's instance)
+  shared: Lists // its own lists on the GPU, which its LOD meshes read (all but the nearest, and the next while split)
   srcStep: number // the sim's men (?sim): the real-time step it was placed at (−1: never)
-  shared: Shared // its own lists on the GPU, which its LOD meshes read (all but the nearest, and the next while split)
   srcAny: boolean // (and whether it had men to draw, and its centre then: its colours')
   srcX: number
   srcZ: number
 }
 
-/** A battalion's own lists on the GPU: its men's poses, clips, moves and indices, each one buffer. */
-interface Shared {
+/** A list of men on the GPU (battle threads PR 4): their poses, clips, moves and indices, each one instanced buffer
+ *  of the battalion's, read by every mesh bound to it (bindLists). The meshes have no Babylon thin instances (no
+ *  matrices): their count is forcedInstanceCount, and the pose rides in world0, the instance matrix's first column
+ *  that Babylon's instanced materials declare (the shaders build the matrix: unitPose; world1..3 unread and unbound;
+ *  an attribute of its own put the tiny LOD's material over WebGL's 16). */
+interface Lists {
   p: Buffer
   s: Buffer
   n: Buffer
   i: Buffer
 }
-/** Mesh `m` draws its instances from `sh`'s buffers (in place of the ones its thin instances made it). */
-function bindShared(m: Mesh, sh: Shared): void {
-  m.setVerticesBuffer(sh.p.createVertexBuffer('world0', 0, 4))
-  m.setVerticesBuffer(sh.s.createVertexBuffer('aVAT', 0, 3))
-  m.setVerticesBuffer(sh.n.createVertexBuffer('aNext', 0, 3))
-  m.setVerticesBuffer(sh.i.createVertexBuffer('aMan', 0, 1))
+/** Lists `l` (poses, clips, moves, indices) on the GPU: updatable but the indices when `fixedIndices`. */
+function listsOf(engine: AbstractEngine, l: ManLists, fixedIndices: boolean): Lists {
+  return {
+    p: new Buffer(engine, l.p, true, 4, false, true),
+    s: new Buffer(engine, l.s, true, 3, false, true),
+    n: new Buffer(engine, l.n, true, 3, false, true),
+    i: new Buffer(engine, l.i, !fixedIndices, 1, false, true),
+  }
+}
+/** Mesh `m` draws its men from the lists `b`. */
+function bindLists(m: Mesh, b: Lists): void {
+  m.setVerticesBuffer(b.p.createVertexBuffer('world0', 0, 4))
+  m.setVerticesBuffer(b.s.createVertexBuffer('aVAT', 0, 3))
+  m.setVerticesBuffer(b.n.createVertexBuffer('aNext', 0, 3))
+  m.setVerticesBuffer(b.i.createVertexBuffer('aMan', 0, 1))
 }
 
 const SM_SIZE = 2048 // the figures' shadow map, fitted to the ground in view each frame
 // m: where a man not drawn is put (x and z this far out, y as far under: off the map and out of every view)
 const HIDDEN = 1e5
+// a man's world matrix from his pose (world0: x, y, z, his turn about y), for units.vert and unitdecal.vert
+// (#include<unitPose>): turned about y and set at his place; at no size under −HIDDEN/2 (a man not drawn). The pose is
+// the whole of it: the men's meshes stay at the identity (add, hostMesh, setSplit), their own world matrix unread
+ShaderStore.IncludesShadersStore.unitPose = `mat4 poseWorld(vec4 p){float c=cos(p.w),s=sin(p.w),k=p.y<${(-HIDDEN / 2).toFixed(1)}?0.0:1.0;
+  return mat4(c*k,0.0,-s*k,0.0,0.0,k,0.0,0.0,s*k,0.0,c*k,0.0,p.xyz,1.0);}`
 const SM_REACH = 900 // m: a view ray that meets no ground is cut here (the widest zoom looks far)
 const SM_BIAS = 0.02 // m along the sun: no receiver is drawn into the map, so it only absorbs float rounding
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1] // the view's corners in clip space
@@ -270,7 +290,15 @@ export class Units {
   private readonly speed: { march: number; run: number }
   private readonly man: ManState = { x: 0, z: 0, face: 0, role: 'halt', since: 0, moving: false }
   /** Where the men stand when not the script (?sim: the sim's, src/look/sim-men.ts); null: the script. */
-  source: MenSource | null = null
+  get source(): MenSource | null {
+    return this.src
+  }
+  set source(src: MenSource | null) {
+    this.src = src
+    // (the moves sent so far are the script's: the sim's men have none, zeros sent once)
+    for (const h of this.hosts) h.staleNext.fill(true)
+  }
+  private src: MenSource | null = null
   // the sim's placing: the battalion it looks at first next frame (round robin), the ones picked this frame, and the
   // real time of the last frame (its share of a step)
   private sourceNext = 0
@@ -773,9 +801,10 @@ export class Units {
     scene.onBeforeRenderObservable.add(() => this.frame())
   }
 
-  /** A battalion's mesh for a LOD (li: its place in h.lod): a clone of the LOD's, its own geometry (thin-instance
-   *  matrices are vertex buffers on the geometry, and clones share it: without its own every battalion would draw with
-   *  the last one's men), its material, drawn into the shadow map (when there is one) with the depth material */
+  /** A battalion's mesh for a LOD (li: its place in h.lod): a clone of the LOD's, its own geometry (its men's lists
+   *  are vertex buffers on the geometry, and clones share it: without its own every battalion would draw with the last
+   *  one's men), its material, drawn into the shadow map (when there is one) with the depth material. It stays at the
+   *  identity: a man's pose is his whole world matrix (unitPose) */
   private hostMesh(li: number, b: Battalion, index: number): Mesh {
     const src = this.lods[li]
     const host = src.clone(`${src.name}_${index}`)
@@ -820,31 +849,18 @@ export class Units {
       jitter[i * 4 + 3] = rnd() * 2 - 1
     }
     const pose = new Float32Array(men * 4)
-    const count = new Float32Array(men * 16)
     const settings = new Float32Array(men * 3)
     const next = new Float32Array(men * 3)
     const man = Float32Array.from({ length: men }, (_, i) => i)
-    // (the nearest LOD's buffers its own, made at the first split; the next LOD's swapped to the rest's while split)
+    // the battalion's own lists on the GPU once, read by every LOD mesh that draws them (sharesLists): one upload a
+    // placing, not one a mesh (battle threads PR 4: the uploads were the sim's whole extra cost); the nearest LOD's
+    // lists its own, made at the first split, the next LOD's swapped to the rest's while split (setSplit)
+    const shared = listsOf(this.scene.getEngine(), { p: pose, s: settings, n: next, i: man }, true)
     lod.forEach((m, li) => {
       if (this.hasNearest && li === 0) return
-      m.thinInstanceSetBuffer('matrix', count, 16, true)
-      m.thinInstanceSetBuffer('world0', pose, 4, false)
-      m.thinInstanceSetBuffer('aVAT', settings, 3, false)
-      m.thinInstanceSetBuffer('aNext', next, 3, false)
-      m.thinInstanceSetBuffer('aMan', man, 1, true)
-      m.doNotSyncBoundingInfo = true // (its bounds are place()'s: a buffer swapped in must not refit them)
-    })
-    // the battalion's own lists on the GPU once, read by every LOD mesh that draws them (sharedBy): one upload a
-    // placing, not one a mesh (battle threads PR 4: the uploads were the sim's whole extra cost)
-    const engine = this.scene.getEngine()
-    const shared: Shared = {
-      p: new Buffer(engine, pose, true, 4, false, true),
-      s: new Buffer(engine, settings, true, 3, false, true),
-      n: new Buffer(engine, next, true, 3, false, true),
-      i: new Buffer(engine, man, false, 1, false, true),
-    }
-    lod.forEach((m, li) => {
-      if (!(this.hasNearest && li === 0)) bindShared(m, shared)
+      bindLists(m, shared)
+      m.forcedInstanceCount = men
+      m.doNotSyncBoundingInfo = true // (its bounds are place()'s)
     })
     const all = () => lod.map(() => true)
     const none = () => new Float32Array(0)
@@ -854,7 +870,6 @@ export class Units {
       near: false,
       tiny: false,
       pose,
-      count,
       settings,
       man,
       jitter,
@@ -881,11 +896,13 @@ export class Units {
       restN: none(),
       nearI: none(),
       restI: none(),
+      nearB: null,
+      restB: null,
       resplit: true,
       lods: { near: false, far: false, tiny: false },
       fading: false,
-      srcStep: -1,
       shared,
+      srcStep: -1,
       srcAny: false,
       srcX: b.x,
       srcZ: b.z,
@@ -1077,34 +1094,30 @@ export class Units {
       h.restN = new Float32Array(men * 3)
       h.nearI = new Float32Array(men)
       h.restI = new Float32Array(men)
+      const engine = this.scene.getEngine()
+      h.nearB = listsOf(engine, { p: h.nearP, s: h.nearS, n: h.nearN, i: h.nearI }, false)
+      h.restB = listsOf(engine, { p: h.restP, s: h.restS, n: h.restN, i: h.restI }, false)
       const m = this.hostMesh(0, h.b, h.index)
-      m.thinInstanceSetBuffer('matrix', h.count, 16, true)
-      m.thinInstanceSetBuffer('world0', h.nearP, 4, false)
-      m.thinInstanceSetBuffer('aVAT', h.nearS, 3, false)
-      m.thinInstanceSetBuffer('aNext', h.nearN, 3, false)
-      m.thinInstanceSetBuffer('aMan', h.nearI, 1, false)
+      bindLists(m, h.nearB)
+      // (none drawn until share() counts them, this frame)
+      m.forcedInstanceCount = 0
       m.doNotSyncBoundingInfo = true
       m.getBoundingInfo().reConstruct(h.lo, h.hi)
       h.lod[0] = m
       if (h.fading) this.fadingMeshes.add(m) // (made while its battalion fades: faded with the rest)
     }
     const l = h.lod[this.nextLod]
-    const own = { p: h.pose, s: h.settings, n: h.next, i: h.man }
-    const buf = nextLodBuffers(on, own, { p: h.restP, s: h.restS, n: h.restN, i: h.restI })
-    // (all its men drawn again when not split: share() sets the counts while split)
-    if (!on) l.thinInstanceCount = men
-    l.thinInstanceSetBuffer('world0', buf.p, 4, false)
-    l.thinInstanceSetBuffer('aVAT', buf.s, 3, false)
-    l.thinInstanceSetBuffer('aNext', buf.n, 3, false)
-    l.thinInstanceSetBuffer('aMan', buf.i, 1, !on)
-    // (back to the battalion's own lists: read from its shared buffers again)
-    if (!on) bindShared(l, h.shared)
+    // the rest's lists while split (share() counts them), else the battalion's own, all its men
+    bindLists(l, nextLodBuffers(on, h.shared, h.restB!))
+    if (!on) l.forcedInstanceCount = men
     h.lod[0].setEnabled(on && this.shown)
     if (on) {
       h.sel.fill(0)
       h.resplit = true
     }
-    h.stale[this.nextLod] = h.staleSet[this.nextLod] = h.staleNext[this.nextLod] = true
+    h.stale[this.nextLod] = h.staleSet[this.nextLod] = true
+    // (the sim's men have no moves: theirs are zeros on the GPU from the first)
+    if (!this.source) h.staleNext[this.nextLod] = true
   }
 
   // Each man of a split battalion at the nearest LOD while he is in the view (his sphere inside the camera's planes)
@@ -1146,15 +1159,10 @@ export class Units {
       { p: h.nearP, s: h.nearS, n: h.nearN, i: h.nearI },
       { p: h.restP, s: h.restS, n: h.restN, i: h.restI },
     )
-    h.lod[0].thinInstanceCount = a
-    h.lod[this.nextLod].thinInstanceCount = b
-    h.stale[0] =
-      h.staleSet[0] =
-      h.staleNext[0] =
-      h.stale[this.nextLod] =
-      h.staleSet[this.nextLod] =
-      h.staleNext[this.nextLod] =
-        true
+    h.lod[0].forcedInstanceCount = a
+    h.lod[this.nextLod].forcedInstanceCount = b
+    h.stale[0] = h.staleSet[0] = h.stale[this.nextLod] = h.staleSet[this.nextLod] = true
+    if (!this.source) h.staleNext[0] = h.staleNext[this.nextLod] = true
     return changed
   }
 
@@ -1166,14 +1174,22 @@ export class Units {
   /** One of a battalion's shared buffers sent to the GPU from `data`, and every mesh reading it marked fresh in
    * `stale` (per LOD), counted for the bench's trace as one upload. */
   private uploadShared(h: Host, buf: Buffer, data: Float32Array, stale: boolean[]): void {
-    const t = TRACE.on ? performance.now() : 0
-    buf.updateDirectly(data, 0)
+    this.uploadList(buf, data)
     for (let k = 0; k < stale.length; k++) if (this.sharesLists(h, k)) stale[k] = false
-    if (TRACE.on) {
-      TRACE.c[TR.tiUploads]++
-      TRACE.c[TR.tiKB] += (data.length * 4) / 1024
-      TRACE.c[TR.tiMs] += performance.now() - t
+  }
+  /** A list's buffer sent to the GPU from `data` (all of it, or its first `n` men of `stride` floats), counted for
+   * the bench's trace. */
+  private uploadList(buf: Buffer, data: Float32Array, n = -1, stride = 0): void {
+    const d = n < 0 ? data : data.subarray(0, n * stride)
+    if (!TRACE.on) {
+      buf.updateDirectly(d, 0)
+      return
     }
+    const t = performance.now()
+    buf.updateDirectly(d, 0)
+    TRACE.c[TR.tiUploads]++
+    TRACE.c[TR.tiKB] += (d.length * 4) / 1024
+    TRACE.c[TR.tiMs] += performance.now() - t
   }
   // a thin-instance buffer sent to the GPU (n floats), counted for the bench's trace
   private upload(m: Mesh, kind: string, n: number): void {
@@ -1379,11 +1395,11 @@ export class Units {
       const tiny = d.tiny
       h.near = near
       h.tiny = tiny
-      h.lod[this.nextLod].isVisible = near && (!split || h.lod[this.nextLod].thinInstanceCount > 0)
+      h.lod[this.nextLod].isVisible = near && (!split || h.lod[this.nextLod].forcedInstanceCount > 0)
       h.lod[this.farLod].isVisible = d.far
       h.lod[this.decalLod].isVisible = decalOn
       if (this.tinyLod >= 0) h.lod[this.tinyLod].isVisible = tiny
-      if (h.sel.length) h.lod[0].isVisible = split && h.lod[0].thinInstanceCount > 0 // (made at the first split)
+      if (h.sel.length) h.lod[0].isVisible = split && h.lod[0].forcedInstanceCount > 0 // (made at the first split)
       this.setFading(h, this.fade && lodCount(d) > 1)
       // the LODs drawn, the one that casts for the battalion, the simple shadows while they show; a hidden one is
       // updated when drawn again
@@ -1410,18 +1426,25 @@ export class Units {
           }
           continue
         }
+        // a split battalion's near or rest list, as many men as it draws
+        const own = k === 0 ? h.nearB! : h.restB!
+        const l =
+          k === 0
+            ? { p: h.nearP, s: h.nearS, n: h.nearN, i: h.nearI }
+            : { p: h.restP, s: h.restS, n: h.restN, i: h.restI }
+        const n = h.lod[k].forcedInstanceCount
         if (h.stale[k]) {
-          this.upload(h.lod[k], 'world0', h.pose.length)
+          this.uploadList(own.p, l.p, n, 4)
           h.stale[k] = false
         }
         if (h.staleSet[k]) {
-          this.upload(h.lod[k], 'aVAT', h.settings.length)
-          // (a split battalion's lists: their men's indices with their clips)
-          if (split && (k === 0 || k === this.nextLod)) this.upload(h.lod[k], 'aMan', h.man.length)
+          // (their men's indices with their clips)
+          this.uploadList(own.s, l.s, n, 3)
+          this.uploadList(own.i, l.i, n, 1)
           h.staleSet[k] = false
         }
         if (h.staleNext[k] && (k === this.decalLod || this.smooth)) {
-          this.upload(h.lod[k], 'aNext', h.next.length)
+          this.uploadList(own.n, l.n, n, 3)
           h.staleNext[k] = false
         }
       }
@@ -1489,7 +1512,7 @@ export class Units {
       if (TRACE.on) {
         tr(TR.sm)
         tr(TR.smCasters, this.culled.length)
-        for (const m of this.culled) tr(TR.smTris, (m.thinInstanceCount * m.getTotalIndices()) / 3)
+        for (const m of this.culled) tr(TR.smTris, (m.forcedInstanceCount * m.getTotalIndices()) / 3)
       }
     })
     rt.onAfterRenderObservable.add(() => {
@@ -1720,8 +1743,8 @@ export class Units {
       if (!this.shown || !l.isInFrustum(this.planes)) continue
       if (this.tightCull && !this.shadowInView(h)) continue
       // (a split battalion's lists may be empty: a mesh of no instances would draw its one figure at the origin)
-      if (l.thinInstanceCount > 0) this.culled.push(l)
-      if (h.split && l === h.lod[this.nextLod] && h.lod[0].thinInstanceCount > 0) this.culled.push(h.lod[0])
+      if (l.forcedInstanceCount > 0) this.culled.push(l)
+      if (h.split && l === h.lod[this.nextLod] && h.lod[0].forcedInstanceCount > 0) this.culled.push(h.lod[0])
       if (h.moving) this.culledMoving = true
     }
     return was.length !== this.culled.length || was.some((m, i) => m !== this.culled[i])
@@ -2266,6 +2289,11 @@ export class Units {
     this.smStep = -1
   }
 
+  /** Each battalion's men's poses (x, y, z, his turn; 4 a man; a man not drawn far under the ground), for the page's
+   *  checks (tools/look-check.js): the men's meshes have no thin-instance matrices. */
+  poses(): Float32Array[] {
+    return this.hosts.map(h => h.pose)
+  }
   /** figures drawn last frame, by LOD (the data's names, and tiny): battalions shown at that LOD and in the camera's
    *  view */
   drawn(): Record<string, number> {
@@ -2274,13 +2302,13 @@ export class Units {
     this.data.lods.forEach((l, j) => {
       out[l.name] = this.hosts.reduce((a, h) => {
         const m = h.lod[j]
-        return a + (m.isEnabled() && m.isVisible && m.isInFrustum(planes) ? m.thinInstanceCount : 0)
+        return a + (m.isEnabled() && m.isVisible && m.isInFrustum(planes) ? m.forcedInstanceCount : 0)
       }, 0)
     })
     if (this.tinyLod >= 0) {
       out.tiny = this.hosts.reduce((a, h) => {
         const m = h.lod[this.tinyLod]
-        return a + (m.isEnabled() && m.isVisible && m.isInFrustum(planes) ? m.thinInstanceCount : 0)
+        return a + (m.isEnabled() && m.isVisible && m.isInFrustum(planes) ? m.forcedInstanceCount : 0)
       }, 0)
     }
     return out

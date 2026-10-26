@@ -197,6 +197,6 @@ export function splitLists(
 
 /** The buffers the near LOD draws a battalion from (setSplit): its rest list while split, else its own; each buffer
  *  with its own index list, so a man's hash goes with his pose */
-export function nextLodBuffers(split: boolean, own: ManLists, rest: ManLists): ManLists {
+export function nextLodBuffers<L>(split: boolean, own: L, rest: L): L {
   return split ? rest : own
 }

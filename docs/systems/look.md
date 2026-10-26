@@ -779,15 +779,17 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (every one once a step at any frame rate), looked at in turn. Its
   battalions are matched to the sim's formations by side and spawn place (and their generation), its figures to the
   formation's men in their order.
-- **The men's instance lists** (battle threads PR 4): a battalion's men are four lists, each one GPU buffer of the
-  battalion's that all its LOD meshes read (`Shared`, `bindShared`: a Babylon `Buffer` behind each mesh's instanced
-  vertex buffers), so a battalion placed is one upload a list, not one a mesh; the nearest LOD's and, while split, the
-  next's lists are their own (`setSplit`, `share`). A man's place is a 16 B pose (x, y, z, his turn about y) in
-  place of a 64 B matrix, read as `world0`, the thin instances' first matrix column (`units.vert` and `unitdecal.vert`
-  build his matrix from it, a man under −HIDDEN/2 m at no size; `world1..3` are unread: an attribute of its own put
-  the tiny LOD's material over WebGL's 16); Babylon's thin-instance matrices are a static list never sent again, kept
-  for its instance count. The
-  sim's men have no moves between steps: theirs (`aNext`) are sent once, as zeros.
+- **The men's instance lists** (battle threads PR 4): a battalion's men are four lists (poses, clips, moves,
+  indices), each one instanced GPU buffer of the battalion's that all its LOD meshes read (`Lists`, `bindLists`), so a
+  battalion placed is one upload a list, not one a mesh; the nearest LOD's and, while split, the next's lists are
+  their own (`setSplit`, `share`; only the men each draws sent). The meshes have no Babylon thin instances: their count
+  is `forcedInstanceCount`. A man's place is a 16 B pose (x, y, z, his turn about y) in place of a 64 B matrix, read
+  as `world0`, the instance matrix's first column that Babylon's instanced materials declare (`world1..3` unread and
+  unbound; an attribute of its own put the tiny LOD's material over WebGL's 16 attributes); `units.vert` and
+  `unitdecal.vert` build his matrix from it (`#include<unitPose>`, registered in `units.ts`; a man under −HIDDEN/2 m
+  at no size), so the meshes stay at the identity. The sim's men have no moves between steps: theirs (`aNext`) are
+  sent once, as zeros (again when the source is set). The page's checks read the men by `poses()`
+  (`tools/look-check.js`).
 - **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
 - **The bench**: `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions in
