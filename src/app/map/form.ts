@@ -13,9 +13,9 @@ import { SEASONS } from '../../map/schema.ts'
 import { kindChain, kindStates, type Issue } from '../../map/catalogue.ts'
 import { featureKind } from '../../map/validate.ts'
 import type { Editor } from './editor.ts'
-import { attrInput, attrRows, parseInput, problemsAt, showValue } from './fields.ts'
+import { attrInput, attrRows, parseInput, presetsOf, problemsAt, showValue } from './fields.ts'
 
-type Input = 'text' | 'number' | 'json'
+type Input = 'text' | 'number' | 'json' | 'any'
 /** One row of the form: its key, label, input and the hint beside it. */
 interface Row {
   key: string
@@ -129,7 +129,7 @@ export class Form {
 
   private feature(f: Feature, doc: MapFile, cat: Catalogue | null): View {
     const i = doc.features.indexOf(f)
-    const presets = (doc.presets ?? {}) as Record<string, Record<string, unknown>>
+    const presets = presetsOf(doc)
     const kind = featureKind(f, presets)
     const chain = cat && kind ? kindChain(cat, kind) : null
     const states = cat && chain ? Object.keys(kindStates(cat, chain)) : []
@@ -172,7 +172,7 @@ export class Form {
         label: s?.unit ? `${r.name} (${s.unit})` : r.name,
         value: r.own,
         as: attrInput(s),
-        options: s?.type === 'enum' ? ['', ...s.values!] : undefined,
+        options: s?.type === 'enum' ? ['', ...(s.values ?? [])] : undefined,
         hint,
       })
     }
@@ -278,7 +278,7 @@ export class Form {
     const r = view.rows.find(x => x.key === key)!
     const s = this.shown.get(key)!
     const p = this.pending.get(key)
-    const value = p ? p.text : showValue(r.value)
+    const value = p ? p.text : showValue(r.value, r.as)
     if (s.input instanceof HTMLSelectElement) {
       // a value the choice does not offer (a hand edit's slip) is shown all the same, for the validator names it
       const opts = r.options!.includes(value) ? r.options! : [...r.options!, value]

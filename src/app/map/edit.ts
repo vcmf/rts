@@ -503,6 +503,11 @@ export class History<T> {
     this.past = []
     this.future = []
   }
+  /** Every step changed by `f` (a change that holds for the whole history, such as a new map's id). */
+  map(f: (s: T) => T): void {
+    this.past = this.past.map(f)
+    this.future = this.future.map(f)
+  }
   get canUndo(): boolean {
     return this.past.length > 0
   }

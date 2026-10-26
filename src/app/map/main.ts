@@ -380,6 +380,7 @@ function mapIdProblem(id: string): string {
 }
 const form = new Form(formBox, editor)
 form.onMapId = id => {
+  if (id === editor.doc?.id) return null // its own id again: nothing to change
   const file = `/maps/${id}.map.json`
   const why = mapIdProblem(id)
   if (why) {
@@ -845,8 +846,9 @@ addEventListener('keydown', e => {
   const key = e.key.toLowerCase()
   const typing = !!target.closest?.('textarea, input:not([type=checkbox]):not([type=radio]):not([type=button])')
   // in a field of the form: Cmd or Ctrl S applies what it holds and saves; Z and Y are the field's own text undo while
-  // it holds text not applied, else the map's
-  if (typing && !(mod && (key === 's' || ((key === 'z' || key === 'y') && !form.holds(target))))) return
+  // it holds text not applied, else the map's. Any other field (the add box, the new map's) keeps the browser's keys
+  const inForm = formBox.contains(target)
+  if (typing && !(inForm && mod && (key === 's' || ((key === 'z' || key === 'y') && !form.holds(target))))) return
   if (mod && ['s', 'z', 'y'].includes(key)) form.flush()
   const onMap = target === document.body || target === canvas
   if (mod && key === 's') {

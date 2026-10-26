@@ -23,7 +23,8 @@ export interface AttrRow {
   effective: AttrValue | undefined
 }
 
-const presetsOf = (map: MapFile) => (map.presets ?? {}) as Record<string, Record<string, unknown>>
+/** A map's presets, as the validator reads them. */
+export const presetsOf = (map: MapFile) => (map.presets ?? {}) as Record<string, Record<string, unknown>>
 
 /**
  * The attributes of a feature's form: each the kind's category takes, in the catalogue's order, then any other the
@@ -59,10 +60,13 @@ export function attrRows(cat: Catalogue, f: Feature, map: MapFile): AttrRow[] {
   return rows
 }
 
-/** A value as the form shows it: text as it is, numbers plainly, anything else as JSON; none as empty. */
-export function showValue(v: unknown): string {
+/**
+ * A value as the form shows it: text as it is (quoted in a field read as JSON, so it reads back as text), numbers
+ * plainly, anything else as JSON; none as empty.
+ */
+export function showValue(v: unknown, as: 'text' | 'number' | 'json' | 'any' = 'text'): string {
   if (v === undefined) return ''
-  if (typeof v === 'string') return v
+  if (typeof v === 'string') return as === 'json' || as === 'any' ? JSON.stringify(v) : v
   if (typeof v === 'number' || typeof v === 'boolean') return String(v)
   return JSON.stringify(v)
 }
@@ -75,7 +79,7 @@ export type Parsed = { value: unknown } | { remove: true } | { error: string }
  * note), `number` for a number (text that is no number stays text, for the validator to name), `json` for the rest
  * (objects, lists, ramps, seasons). A number field that may be a ramp takes JSON when its text is an object.
  */
-export function parseInput(as: 'text' | 'number' | 'json', text: string): Parsed {
+export function parseInput(as: 'text' | 'number' | 'json' | 'any', text: string): Parsed {
   const t = text.trim()
   if (t === '') return { remove: true }
   if (as === 'text') return { value: t }
@@ -86,13 +90,16 @@ export function parseInput(as: 'text' | 'number' | 'json', text: string): Parsed
   try {
     return { value: JSON.parse(t) as unknown }
   } catch {
+    // a field of no known kind (an attribute the catalogue does not have): JSON when it is, else text
+    if (as === 'any') return { value: t }
     return { error: `"${t.length > 40 ? t.slice(0, 40) + '…' : t}" is no JSON` }
   }
 }
-/** How an attribute's text is read: by its spec's type (one it does not know: as JSON). */
-export function attrInput(spec: AttrSpec | undefined): 'text' | 'number' | 'json' {
-  if (spec?.type === 'number' || spec?.type === 'int') return 'number'
-  if (spec?.type === 'enum' || spec?.type === 'string') return 'text'
+/** How an attribute's text is read: by its spec's type (none: JSON when it is, else text). */
+export function attrInput(spec: AttrSpec | undefined): 'text' | 'number' | 'json' | 'any' {
+  if (!spec) return 'any'
+  if (spec.type === 'number' || spec.type === 'int') return 'number'
+  if (spec.type === 'enum' || spec.type === 'string') return 'text'
   return 'json'
 }
 

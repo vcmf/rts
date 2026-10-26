@@ -272,13 +272,20 @@ try {
         const typedKept = document.querySelector('#form [data-key="note"]').value === 'half typed'
         note.dispatchEvent(new Event('change')) // applied after all, then undone below
         MAP.undo()
+        // Cmd Z in a box outside the form (the add box's id) is that box's own text undo, not the map's
+        const textBefore = MAP.text
+        const addId = document.getElementById('addId')
+        addId.focus()
+        addId.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true }))
+        const ownUndo = MAP.text === textBefore
+        addId.blur()
         const ok = await MAP.save()
         const disk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
         const issues = MAP.issues.length
         MAP.undo(); MAP.undo()
         const back = await MAP.save()
         const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
-        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id, refused, dropped, kept, jsonRead, flushed, typedKept })
+        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id, refused, dropped, kept, jsonRead, flushed, typedKept, ownUndo })
       })()`,
     ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
@@ -490,6 +497,7 @@ try {
   check(fl.refused && fl.dropped, 'an id in use typed in the form is refused and stays typed with why; Escape drops it')
   check(fl.kept, 'the field the focus moved to is still the same after the edit the move applied')
   check(fl.jsonRead, "the feature's JSON is to read only")
+  check(fl.ownUndo, "Cmd Z in a box outside the form is the box's own, never the map's undo")
   check(fl.flushed, 'text typed in a field and not applied is applied before a press on the map acts')
   check(fl.typedKept, 'a field typed in and not applied is left as typed when the form is refreshed')
   await until('NEWMAP')

@@ -393,6 +393,13 @@ edit. No new decision.
   renamed keeps the view; the hint says what a season or state makes a field; Cmd S in a field applies and saves,
   Cmd Z there is the field's text undo while it holds text; the page check takes the lines a rename changes from
   `renameFeature` (any map), presses the map with text typed, and drops a refused id with Escape.
+- **Redesign, round 1**: severe. Cmd or Ctrl Z in any box of the page (a new map's id, the add box) undid the map's
+  last edit instead of the box's text. Fixed: only the form's fields take the map's keys. With it: the note of a
+  rename is forgotten at the next step, an undo or another map (a stale one kept another feature's text); a new map's
+  own id applied again changes nothing; an attribute of no known kind is read as JSON when it is, else as text, and
+  shown quoted; undo keeps the selection where it is, the step's only when the current one is gone from the copy;
+  every refusal says why (no stale message under a field); an enum with no values in a catalogue being edited no
+  longer breaks the form; a new map renamed keeps its history (`History.map`); one `presetsOf`.
 
 ## Open questions
 

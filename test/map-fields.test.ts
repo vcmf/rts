@@ -130,6 +130,13 @@ describe('M7c: every attribute through the form', () => {
     expect(parseInput('text', ' summer ')).toEqual({ value: 'summer' })
     expect('error' in parseInput('json', '{"w": ')).toBe(true)
   })
+  it('reads a field of no known kind as JSON when it is, else as text, and shows its text quoted', () => {
+    expect(attrInput(undefined)).toBe('any')
+    expect(parseInput('any', 'gravel')).toEqual({ value: 'gravel' })
+    expect(parseInput('any', '{"a": 1}')).toEqual({ value: { a: 1 } })
+    expect(parseInput('any', showValue('12', 'any'))).toEqual({ value: '12' }) // text that looks like a number stays text
+    expect(showValue('mud', 'json')).toBe('"mud"')
+  })
   it("shows what an attribute inherits from its kind and its preset, and the feature's own others", () => {
     const map: MapFile = { ...base, presets: { tall: { kind: 'veg.wood.broad', height: 30 } } }
     const f: Feature = { id: 'w', preset: 'tall', circle: [[0, 0], 10], density: 0.4, odd: 1 }
@@ -317,6 +324,28 @@ describe('M7c: the editor sets fields', () => {
     expect(ed.setField('id', 'knoll')).toBe(false)
     expect(ed.message).toMatch(/children .* rename it in the file/)
   })
+  it('keeps the selection where it is through undo, and forgets a rename once another step is taken', () => {
+    const ed = make()
+    ed.select('hill')
+    ed.setField('height', 9)
+    ed.select('brook')
+    ed.undo()
+    expect(ed.feature('hill')!.height).toBe(4)
+    expect(ed.selected).toBe('brook')
+    ed.setField('id', 'stream')
+    expect(ed.renamed).toEqual({ from: 'brook', to: 'stream' })
+    ed.undo()
+    expect(ed.renamed).toBeNull()
+    expect(ed.selected).toBe('brook')
+  })
+  it('says why whenever it refuses a field', () => {
+    const ed = make()
+    ed.note('saved')
+    expect(ed.setField('height', 3)).toBe(false)
+    expect(ed.message).toBe('no feature is selected')
+    expect(ed.setMapField('features', [])).toBe(false)
+    expect(ed.message).toMatch(/not set as a field/)
+  })
   it('reselects a deleted feature on undo', () => {
     const ed = make()
     ed.select('hill')
@@ -335,6 +364,15 @@ describe('M7c: the editor sets fields', () => {
     expect(fresh.file).toBe('/maps/u.map.json')
     expect(fresh.doc!.id).toBe('u')
     expect(fresh.noFile).toBe(true)
+  })
+  it("keeps a new map's history through a rename, every step under the new id", () => {
+    const fresh = make(true)
+    fresh.setMapField('seed', 9)
+    expect(fresh.renameMap('/maps/u.map.json', 'u')).toBe(true)
+    expect(fresh.canUndo).toBe(true)
+    fresh.undo()
+    expect(fresh.doc!.seed).toBe(1)
+    expect(fresh.doc!.id).toBe('u')
   })
   it('keeps a new map on its id while its first save is on its way', async () => {
     const fresh = make(true)

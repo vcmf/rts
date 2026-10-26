@@ -57,7 +57,7 @@ import {
   stepOf,
   type Draft,
 } from './draw.ts'
-import { hasChildren, renameFeature, setField } from './fields.ts'
+import { hasChildren, presetsOf, renameFeature, setField } from './fields.ts'
 
 /** What the editor needs from the page. */
 export interface Host {
@@ -193,6 +193,7 @@ export class Editor {
     if (file !== this.file) this.selected = null
     this.mode = { kind: 'idle' }
     this.lastClick = null
+    this.renamed = null
     this.history.clear()
     this.hover = null
     this.found = []
@@ -341,6 +342,7 @@ export class Editor {
   }
   /** Makes an edit: the copy before it goes into the history, the copy is checked, compiled and drawn. */
   private commit(doc: MapFile, edited: string | null, select = this.selected): void {
+    this.renamed = null // a rename says so after its commit
     this.history.push({ doc: this.doc!, selected: this.selected })
     this.doc = doc
     this.selected = select
@@ -553,8 +555,12 @@ export class Editor {
   }
   /** Back or forward to a step: its copy, and the selection it had (an undone rename's feature by its old id). */
   private restore(step: Snapshot): void {
+    this.renamed = null
     this.doc = step.doc
-    this.selected = step.selected && this.feature(step.selected) ? step.selected : null
+    // the selection stays where it is; gone from this copy (a rename undone, a feature deleted), it is the step's
+    if (!this.selected || !this.feature(this.selected)) {
+      this.selected = step.selected && this.feature(step.selected) ? step.selected : null
+    }
     this.hover = null
     this.check(this.selected)
     this.hoverAt()
@@ -590,14 +596,24 @@ export class Editor {
    */
   setField(key: string, value: unknown): boolean | null {
     const f = this.selected ? this.feature(this.selected) : undefined
-    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return false
+    if (!this.canEdit(f) || !f || !this.doc || !this.editable(f)) return false
     if (key === 'id') return this.rename(typeof value === 'string' ? value : '')
     const g = setField(f, key, value)
     if (sameJson(g, f)) return null
     this.commit(this.replace(this.doc, g), f.id)
     return true
   }
-  /** The last rename (its old and new id), so the form can tell it from another selection. */
+  /**
+   * Whether an edit may be made now (of `f`, a feature; null: of the map); says why not (a refusal always does).
+   */
+  private canEdit(f: Feature | null | undefined): boolean {
+    if (!this.enabled) this.note('editing needs the dev server (npm run dev)')
+    else if (!this.doc) this.note(`the file cannot be edited: ${this.readOnly}`)
+    else if (f === undefined) this.note('no feature is selected')
+    else return this.ready()
+    return false
+  }
+  /** The last edit, when it was a rename (its old and new id), so the form can tell it from another selection. */
   renamed: { from: string; to: string } | null = null
   /**
    * The selection's id changed, and every place that names it (`renameFeature`). Refused for an empty id, one another
@@ -606,7 +622,7 @@ export class Editor {
    */
   rename(id: string): boolean | null {
     const f = this.selected ? this.feature(this.selected) : undefined
-    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return false
+    if (!this.canEdit(f) || !f || !this.doc || !this.editable(f)) return false
     if (id === f.id) return null
     const refuse = (why: string) => {
       this.note(why)
@@ -617,13 +633,17 @@ export class Editor {
     if (hasChildren(this.doc, f.id)) {
       return refuse(`${f.id} has children whose ids carry its own: rename it in the file`)
     }
-    this.renamed = { from: f.id, to: id }
     this.commit(renameFeature(this.doc, f.id, id), id, id)
+    this.renamed = { from: f.id, to: id }
     return true
   }
   /** A field of the map itself set, or removed; its features are the features' own edits, its id `renameMap`'s. */
   setMapField(key: string, value: unknown): boolean | null {
-    if (!this.enabled || !this.doc || !this.ready() || key === 'features' || key === 'id') return false
+    if (!this.canEdit(null) || !this.doc) return false
+    if (key === 'features' || key === 'id') {
+      this.note(`the map's ${key} is not set as a field`)
+      return false
+    }
     const doc = setField(this.doc, key, value)
     if (sameJson(doc, this.doc)) return null
     this.commit(doc, null)
@@ -634,7 +654,7 @@ export class Editor {
    * made under it: its history goes. A map with a file keeps its id (it names the file). Returns whether it did.
    */
   renameMap(file: string, id: string): boolean {
-    if (!this.enabled || !this.doc || !this.ready()) return false
+    if (!this.canEdit(null)) return false
     if (this.exists) {
       this.note('a map with a file keeps its id: it names the file')
       return false
@@ -643,11 +663,14 @@ export class Editor {
       this.note('the map is being saved under its id: rename it once the save is done')
       return false
     }
-    const doc = { ...this.doc, id }
-    const selected = this.selected
-    this.take(file, null, doc, '')
-    this.selected = selected && this.feature(selected) ? selected : null
+    // the copy and every step of its history take the id (an undo never brings back the old one under the new file)
+    const withId = (d: MapFile) => ({ ...d, id })
+    this.history.map(s => ({ ...s, doc: withId(s.doc) }))
+    this.file = file
+    this.doc = withId(this.doc!)
+    this.check(null)
     this.host.recompile()
+    this.host.changed()
     this.host.redraw()
     return true
   }
@@ -658,7 +681,7 @@ export class Editor {
 
   /** A feature's kind's metadata (its kind its own or its preset's), or null when the catalogue has none. */
   metaOf(f: Feature): KindMeta | null {
-    const kind = featureKind(f, (this.doc?.presets ?? {}) as Record<string, Record<string, unknown>>)
+    const kind = this.doc ? featureKind(f, presetsOf(this.doc)) : undefined
     return this.cat && kind ? kindMetaOf(this.cat, kind) : null
   }
   /** Sets one reference of the selection again by clicking its target. Returns whether it started; says why not. */

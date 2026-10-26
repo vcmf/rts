@@ -307,7 +307,9 @@ maps/kinds.json ──► checkCatalogue ─┐
         use, and a feature with children (`hasChildren`: it generates them, or some are pinned), whose ids carry its
         own; it is renamed in the file.
       - The form is built again only when its fields change (another kind); otherwise its inputs are given their
-        values in place, so the field the focus moved to stays. Each history step keeps the selection it had.
+        values in place, so the field the focus moved to stays. Undo and redo keep the selection where it is; one gone
+        from the other copy (a rename undone, a feature deleted) is the step's own. A new map renamed keeps its
+        history, each step under the new id. A field of no known kind is read as JSON when it is, else as text.
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes
