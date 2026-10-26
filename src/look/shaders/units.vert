@@ -24,9 +24,32 @@ varying float vD;
 #else
 // a side's colours by role (the bake's palette, src/look/world/armies.ts): a palette swap recolours the side
 uniform vec3 uPal[PAL_N];
-#if defined(FAR)||defined(FAR_SCALE)
+#if defined(FAR)||defined(FAR_SCALE)||defined(LODFADE)
 // the far figure's size on screen: uFarK.x, a figure's height in pixels at 1 m; uFarK.y, the LOD switch's
 uniform vec2 uFarK;uniform vec3 uCamPos;
+#endif
+// the share of the switch below which the far palette, lift and growth start (FAR_FROM, src/look/lod-fade.ts: the
+// near band's foot with the cross-fade, so they are 0 across it)
+#ifndef FAR_FROM
+#define FAR_FROM 0.9
+#endif
+#ifdef LODFADE
+// the LOD cross-fade (#188, decision 0066; src/look/lod-fade.ts mirrors manHash, fadeShare, lodCover): each man at his
+// own LOD by his own height on screen. uLodBand: the near band's px (x to y) and the tiny's (z to w; 0: none);
+// uLodFade: 1 when the battalion draws more than one LOD, 0 to draw every man (no per-man work); aMan: the man's index
+// in his battalion, whatever list he is drawn from (a split battalion's); LOD_SLOT: this material's LOD (0 near, 1
+// far, 2 tiny). vFade: his cover (lodCover: near, far), snapped to the dither's 16 levels (snapCover: every pixel as
+// unsnapped, and 1/32 from any threshold, so interpolating it cannot flip one; a flat varying cost 1.5 to 4 ms of GPU
+// on ANGLE's Metal, which emulates the provoking vertex), the thresholds in units.frag; a man with no share here is
+// dropped (off screen: dropsMan)
+uniform vec4 uLodBand;uniform float uLodFade;varying vec2 vFade;
+#ifdef INSTANCES
+attribute float aMan;
+#endif
+float manHash(float m){uint x=uint(m+0.5)*0x9e3779b9u;x^=x>>16;x*=0x21f0aaadu;x^=x>>15;x*=0x735a2d97u;x^=x>>15;
+  return float(x>>8)/16777216.0;}
+float fadeShare(float px,vec2 b,float h){if(b.y<=0.0)return 1.0;
+  float t=log(max(px,1e-6)/b.x)/log(b.y/b.x);return clamp((t-h*(1.0-LOD_FADE_W))/LOD_FADE_W,0.0,1.0);}
 #endif
 #ifdef FAR
 // the far LOD's palette (its uniform's far rule: farPalette, src/look/world/armies.ts), crossfaded in as the figure
@@ -56,6 +79,18 @@ void main(){
   #if defined(SMOOTH)&&defined(INSTANCES)
   finalWorld[3].xyz+=aNext*uStepFrac;
   #endif
+  #if defined(LODFADE)&&!defined(DEPTH)
+  vFade=vec2(LOD_SLOT==0?1.0:0.0,LOD_SLOT==2?0.0:1.0);
+  #ifdef INSTANCES
+  // (before the pose's fetches: a man this LOD does not draw costs one test; the branch is the same for his vertices)
+  if(uLodFade>0.5){
+    float mh=manHash(aMan),mpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz));
+    float fn=fadeShare(mpx,uLodBand.xy,mh),ff=max(fn,fadeShare(mpx,uLodBand.zw,mh));
+    bool none=LOD_SLOT==0?fn<=0.0:LOD_SLOT==1?fn>=1.0||ff<=0.0:ff>=1.0;
+    if(none){gl_Position=vec4(0.0,0.0,2.0,1.0);return;}
+    vFade=floor(vec2(fn,ff)*16.0+0.5)/16.0;}
+  #endif
+  #endif
   vec3 r=vec3(0.0,1.0,0.0);
   #ifdef INSTANCES
   r=aVAT;
@@ -68,7 +103,7 @@ void main(){
   vec3 lp=(sk*vec4(position,1.0)).xyz,ln=mat3(sk)*normal;
   #endif
   #ifdef FAR_SCALE
-  float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fk=clamp((0.9*uFarK.y-fpx)/(0.65*uFarK.y),0.0,1.0);
+  float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fk=clamp((FAR_FROM*uFarK.y-fpx)/((FAR_FROM-0.25)*uFarK.y),0.0,1.0);
   lp*=vec3(mix(1.0,uFarScale.x,fk),mix(1.0,uFarScale.y,fk),mix(1.0,uFarScale.x,fk));
   #endif
   vec4 w=finalWorld*vec4(lp,1.0);
@@ -84,7 +119,7 @@ void main(){
   #endif
   #ifdef FAR
   float px=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz));
-  vFar=1.0-smoothstep(uFarK.y*0.35,uFarK.y*0.9,px);
+  vFar=1.0-smoothstep(uFarK.y*0.35,uFarK.y*FAR_FROM,px);
   vec3 cf=uPalFar[int(aRole+0.5)];
   #ifdef TINY
   cf=palMix(uPalFar);

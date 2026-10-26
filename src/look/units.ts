@@ -47,9 +47,20 @@ import {
 } from './shadow-look.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
 import {
+  FADE_WIDTH,
+  FAR_FROM,
+  NEAR_FADE,
+  TINY_FADE,
+  battalionLods,
+  boxPxRange,
+  lodCount,
+  nextLodBuffers,
+  splitLists,
+  type BattalionAt,
+  type Lods,
+} from './lod-fade.ts'
+import {
   TINY_ROLES,
-  drawsNear,
-  drawsTiny,
   farWidthScale,
   posedMesh,
   posedVertices,
@@ -84,6 +95,7 @@ interface Host {
   tiny: boolean
   matrices: Float32Array
   settings: Float32Array
+  man: Float32Array // each man's index (aMan: the LOD cross-fade's hash), in the battalion's order
   jitter: Float32Array
   // the nearest LOD (a figure with three LODs, its men tall on screen: setSplit, share): each man drawn at the nearest
   // LOD or the next by his own size on screen. split: the battalion's men are shared out; sel: a man at the nearest
@@ -97,7 +109,11 @@ interface Host {
   restM: Float32Array
   restS: Float32Array
   restN: Float32Array
+  nearI: Float32Array // (and their indices, aMan)
+  restI: Float32Array
   resplit: boolean
+  lods: Lods // the LODs drawn this frame (battalionLods)
+  fading: boolean // more than one of them: its figure meshes fade each man (uLodFade)
   next: Float32Array // each man's move to his next step's place (x, y, z): the places between two steps (aNext)
   moving: boolean // re-placed at every step (its phase moves its men)
   cx: number
@@ -166,6 +182,16 @@ export const SHADOW_SWITCH: readonly [number, number] = [60, 85]
  *  look's gradient ends */
 const SHADOW_TIP = (FIGURE * Math.hypot(SUN.x, SUN.z)) / SUN.y
 const SOFT_BLUR = 0.12 // m: the soft bake's sigma (shadowShape's soft)
+// the LOD cross-fade's uniforms (units.vert: the bands, and a draw's men in order, set by bindFade)
+const FADE_UNIFORMS = ['uLodBand', 'uLodFade']
+
+/** The LOD cross-fade's defines for a figure material (decision 0066): its LOD (slot: 0 near, 1 far, 2 tiny), a man's
+ *  own fade (FADE_WIDTH), and the fade on (setLodFade turns it off) */
+function fadeDefines(slot: 0 | 1 | 2): string[] {
+  return [`#define LOD_SLOT ${slot}`, `#define LOD_FADE_W ${FADE_WIDTH.toFixed(4)}`, ...FADE_ON]
+}
+// the defines the cross-fade turns on (setLodFade): the fade, and the far ramps' start at the near band's foot
+const FADE_ON = ['#define LODFADE', `#define FAR_FROM ${FAR_FROM.toFixed(4)}`]
 
 // an axis-aligned box wholly outside one of the planes (its corner most along the plane's normal behind it)
 function boxOutside(planes: Plane[], x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): boolean {
@@ -228,6 +254,17 @@ export class Units {
    *  battalions whose bounds are out of the view or whose nearest point is under 90 % of it never look:
    *  ?nearestpx=<px>, 0 for none) */
   nearestPx = 100
+  /** the LOD cross-fade (decision 0066; ?lodfade=0: the hard switch, a battalion at one LOD): setLodFade */
+  private fade = true
+  // the bands this frame, px (NEAR_FADE, TINY_FADE of lodPx, tinyPx), and as the materials' uniform
+  private readonly nearBand: [number, number] = [0, 0]
+  private readonly tinyBandV: [number, number] = [0, 0]
+  private readonly bandV = new Vector4()
+  // the figure meshes of the battalions that draw more than one LOD (h.fading): each man faded (uLodFade 1); the
+  // others draw every man
+  private readonly fadingMeshes = new Set<Mesh>()
+  private readonly pxRange: [number, number] = [0, 0] // (scratch: boxPxRange)
+  private readonly at: BattalionAt = { pLo: 0, pHi: 0, px: 0, split: false, wasNear: false, wasTiny: false }
   // the LODs' places in a host's meshes: the far LOD (the data's last), the near one before it, then the shadow proxy
   // and the simple shadow; the nearest LOD is the first when the figure has three (the data says which it has)
   private readonly farLod: number
@@ -414,7 +451,7 @@ export class Units {
       Constants.TEXTURETYPE_HALF_FLOAT,
     )
     vat.name = 'figureVAT'
-    const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT', 'aVid', 'aNext']
+    const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT', 'aVid', 'aNext', 'aMan']
     const n = data.palette.length
     // the far figure's growth (setFarScale): across up to FAR_SCALE_XZ, but never wider than 95 % of a file
     // (farWidthScale), and FAR_SCALE_Y tall
@@ -438,22 +475,33 @@ export class Units {
       })
       const m = mats.make(`units_${id}`, UNITS_VS, UNITS_FS, {
         attributes,
-        uniforms: ['uVATStep', 'uStepFrac', 'uPal', 'uMask', 'uCoatRole'],
+        uniforms: ['uVATStep', 'uStepFrac', 'uPal', 'uMask', 'uCoatRole', 'uFarK', ...FADE_UNIFORMS],
         samplers: ['uVAT'],
-        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`],
+        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, ...fadeDefines(0)],
       })
       m.setTexture('uVAT', vat)
       m.setColor3Array('uPal', pal)
       m.setFloat('uMask', -1)
       m.setFloat('uCoatRole', data.palette.indexOf('coat'))
       this.mats.set(id, m)
+      this.bindFade(m)
       // the far LOD's: its far palette and its lift crossfaded in below the LOD switch under its far rule (FAR,
       // setFarRule; units.vert, units.frag), its vertices posed (VAT_POS, setPosed)
       const f = mats.make(`units_${id}_far`, UNITS_VS, UNITS_FS, {
         attributes,
-        uniforms: ['uVATStep', 'uStepFrac', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'],
+        uniforms: [
+          'uVATStep',
+          'uStepFrac',
+          'uPal',
+          'uPalFar',
+          'uFarK',
+          'uFarScale',
+          'uMask',
+          'uCoatRole',
+          ...FADE_UNIFORMS,
+        ],
         samplers: ['uVAT', 'uVATP'],
-        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`],
+        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, ...fadeDefines(1)],
       })
       const far = farPalette(u.colours)
       f.setTexture('uVAT', vat)
@@ -466,13 +514,31 @@ export class Units {
       f.setFloat('uCoatRole', data.palette.indexOf('coat'))
       f.setVector2('uFarScale', farScale)
       this.farMats.set(id, f)
+      this.bindFade(f)
       // the tiny LOD's: the far LOD's material on the tiny mesh (its own posed vertices: uVATP below)
       if (!tinyPx) continue
       const t = mats.make(`units_${id}_tiny`, UNITS_VS, UNITS_FS, {
         attributes: [...attributes, 'aRW0', 'aRW1', 'aRW2'],
-        uniforms: ['uVATStep', 'uStepFrac', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'],
+        uniforms: [
+          'uVATStep',
+          'uStepFrac',
+          'uPal',
+          'uPalFar',
+          'uFarK',
+          'uFarScale',
+          'uMask',
+          'uCoatRole',
+          ...FADE_UNIFORMS,
+        ],
         samplers: ['uVAT', 'uVATP'],
-        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, '#define TINY'],
+        defines: [
+          '#define NOSNOW',
+          '#define KEEP_HUE',
+          '#define BOUNCE',
+          `#define PAL_N ${n}`,
+          '#define TINY',
+          ...fadeDefines(2),
+        ],
       })
       t.setTexture('uVAT', vat)
       t.setColor3Array('uPal', pal)
@@ -484,6 +550,7 @@ export class Units {
       t.setFloat('uCoatRole', data.palette.indexOf('coat'))
       t.setVector2('uFarScale', farScale)
       this.tinyMats.set(id, t)
+      this.bindFade(t)
     }
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
     this.depthMat = new ShaderMaterial(
@@ -715,12 +782,14 @@ export class Units {
     const matrices = new Float32Array(men * 16)
     const settings = new Float32Array(men * 3)
     const next = new Float32Array(men * 3)
+    const man = Float32Array.from({ length: men }, (_, i) => i)
     // (the nearest LOD's buffers its own, made at the first split; the next LOD's swapped to the rest's while split)
     lod.forEach((m, li) => {
       if (this.hasNearest && li === 0) return
       m.thinInstanceSetBuffer('matrix', matrices, 16, false)
       m.thinInstanceSetBuffer('aVAT', settings, 3, false)
       m.thinInstanceSetBuffer('aNext', next, 3, false)
+      m.thinInstanceSetBuffer('aMan', man, 1, true)
       m.doNotSyncBoundingInfo = true // (its bounds are place()'s: a buffer swapped in must not refit them)
     })
     const all = () => lod.map(() => true)
@@ -732,6 +801,7 @@ export class Units {
       tiny: false,
       matrices,
       settings,
+      man,
       jitter,
       next,
       moving: false,
@@ -754,7 +824,11 @@ export class Units {
       restM: none(),
       restS: none(),
       restN: none(),
+      nearI: none(),
+      restI: none(),
       resplit: true,
+      lods: { near: false, far: false, tiny: false },
+      fading: false,
     })
   }
 
@@ -905,18 +979,25 @@ export class Units {
       h.restM = new Float32Array(men * 16)
       h.restS = new Float32Array(men * 3)
       h.restN = new Float32Array(men * 3)
+      h.nearI = new Float32Array(men)
+      h.restI = new Float32Array(men)
       const m = this.hostMesh(0, h.b, h.index)
       m.thinInstanceSetBuffer('matrix', h.nearM, 16, false)
       m.thinInstanceSetBuffer('aVAT', h.nearS, 3, false)
       m.thinInstanceSetBuffer('aNext', h.nearN, 3, false)
+      m.thinInstanceSetBuffer('aMan', h.nearI, 1, false)
       m.doNotSyncBoundingInfo = true
       m.getBoundingInfo().reConstruct(h.lo, h.hi)
       h.lod[0] = m
+      if (h.fading) this.fadingMeshes.add(m) // (made while its battalion fades: faded with the rest)
     }
     const l = h.lod[this.nextLod]
-    l.thinInstanceSetBuffer('matrix', on ? h.restM : h.matrices, 16, false)
-    l.thinInstanceSetBuffer('aVAT', on ? h.restS : h.settings, 3, false)
-    l.thinInstanceSetBuffer('aNext', on ? h.restN : h.next, 3, false)
+    const own = { m: h.matrices, s: h.settings, n: h.next, i: h.man }
+    const buf = nextLodBuffers(on, own, { m: h.restM, s: h.restS, n: h.restN, i: h.restI })
+    l.thinInstanceSetBuffer('matrix', buf.m, 16, false)
+    l.thinInstanceSetBuffer('aVAT', buf.s, 3, false)
+    l.thinInstanceSetBuffer('aNext', buf.n, 3, false)
+    l.thinInstanceSetBuffer('aMan', buf.i, 1, !on)
     h.lod[0].setEnabled(on && this.shown)
     if (on) {
       h.sel.fill(0)
@@ -958,24 +1039,12 @@ export class Units {
     }
     if (!changed && !h.resplit) return false
     h.resplit = false
-    let a = 0
-    let b = 0
-    for (let i = 0; i < sel.length; i++) {
-      const mi = m.subarray(i * 16, i * 16 + 16)
-      const si = s.subarray(i * 3, i * 3 + 3)
-      const ni = n.subarray(i * 3, i * 3 + 3)
-      if (sel[i]) {
-        h.nearM.set(mi, a * 16)
-        h.nearS.set(si, a * 3)
-        h.nearN.set(ni, a * 3)
-        a++
-      } else {
-        h.restM.set(mi, b * 16)
-        h.restS.set(si, b * 3)
-        h.restN.set(ni, b * 3)
-        b++
-      }
-    }
+    const [a, b] = splitLists(
+      sel,
+      { m, s, n },
+      { m: h.nearM, s: h.nearS, n: h.nearN, i: h.nearI },
+      { m: h.restM, s: h.restS, n: h.restN, i: h.restI },
+    )
     h.lod[0].thinInstanceCount = a
     h.lod[this.nextLod].thinInstanceCount = b
     h.stale[0] =
@@ -1076,8 +1145,18 @@ export class Units {
     const pxPerM = (cam.getProjectionMatrix().m[5] * engine.getRenderHeight()) / 2
     const camPos = cam.globalPosition
     this.farK.set(FIGURE * pxPerM, this.lodPx)
-    for (const m of this.farMats.values()) m.setVector2('uFarK', this.farK)
-    for (const m of this.tinyMats.values()) m.setVector2('uFarK', this.farK)
+    this.nearBand[0] = this.lodPx * NEAR_FADE[0]
+    this.nearBand[1] = this.lodPx * NEAR_FADE[1]
+    this.tinyBandV[0] = this.tinyPx * TINY_FADE[0]
+    this.tinyBandV[1] = this.tinyPx * TINY_FADE[1]
+    const tinyBand = this.tinyLod >= 0 ? this.tinyBandV : null
+    this.bandV.set(this.nearBand[0], this.nearBand[1], tinyBand ? tinyBand[0] : 0, tinyBand ? tinyBand[1] : 0)
+    for (const map of [this.mats, this.farMats, this.tinyMats]) {
+      for (const m of map.values()) {
+        m.setVector2('uFarK', this.farK)
+        m.setVector4('uLodBand', this.bandV)
+      }
+    }
     let moved = step !== this.smStep // (the map changes with the poses' step, the men's places, the casters' LOD)
     let anyMoved = false // (a battalion's men written this frame: the trodden ground follows)
     // the camera's planes, once a frame: the nearest LOD's tests and the shadow casters' cull (cull) read them
@@ -1128,27 +1207,32 @@ export class Units {
         split = (FIGURE * pxPerM) / Math.max(1, Math.hypot(dx, dy, dz)) >= this.nearestPx * (h.split ? 0.8 : 0.9)
         if (split) split = !boxOutside(this.camPlanes, lo.x, lo.y, lo.z, hi.x, hi.y, hi.z)
       }
-      const near = split || drawsNear(px, h.near, this.lodPx)
+      const d = this.drawsAt(h, px, split, camPos, FIGURE * pxPerM, tinyBand)
+      const near = d.near
       if (near !== h.near && this.casterNear) moved = true
       if (split !== h.split) {
         this.setSplit(h, split)
         if (this.casterNear) moved = true
       }
       if (split && this.share(h, camPos, pxPerM) && this.casterNear) moved = true
-      // the tiny LOD below tinyPx (±10 %, as the near one), never where the near LOD is drawn
-      const tiny = !near && this.tinyLod >= 0 && drawsTiny(px, h.tiny, this.tinyPx)
+      const tiny = d.tiny
       h.near = near
       h.tiny = tiny
       h.lod[this.nextLod].isVisible = near && (!split || h.lod[this.nextLod].thinInstanceCount > 0)
-      h.lod[this.farLod].isVisible = !near && !tiny
+      h.lod[this.farLod].isVisible = d.far
       h.lod[this.decalLod].isVisible = decalOn
       if (this.tinyLod >= 0) h.lod[this.tinyLod].isVisible = tiny
       if (h.sel.length) h.lod[0].isVisible = split && h.lod[0].thinInstanceCount > 0 // (made at the first split)
+      this.setFading(h, this.fade && lodCount(d) > 1)
       // the LODs drawn, the one that casts for the battalion, the simple shadows while they show; a hidden one is
       // updated when drawn again
       const kc = this.casterOf(h)
       for (let k = 0; k < h.lod.length; k++) {
-        const drawn = near ? k === this.nextLod || (split && k === 0) : k === (tiny ? this.tinyLod : this.farLod)
+        const drawn =
+          (k === this.nextLod && near) ||
+          (split && k === 0) ||
+          (k === this.farLod && d.far) ||
+          (k === this.tinyLod && tiny)
         if (
           !drawn &&
           !(mapOn && (k === kc || (split && k === 0 && kc === this.nextLod))) &&
@@ -1162,6 +1246,8 @@ export class Units {
         }
         if (h.staleSet[k]) {
           this.upload(h.lod[k], 'aVAT', h.settings.length)
+          // (a split battalion's lists: their men's indices with their clips)
+          if (split && (k === 0 || k === this.nextLod)) this.upload(h.lod[k], 'aMan', h.man.length)
           h.staleSet[k] = false
         }
         if (h.staleNext[k] && (k === this.decalLod || this.smooth)) {
@@ -1538,6 +1624,7 @@ export class Units {
         `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`,
         ...(this.coverage ? ['#define COVERAGE'] : []),
         ...(this.farScaleOn ? ['#define FAR_SCALE'] : []),
+        ...(this.fade ? [FADE_ON[1]] : []),
       ],
     })
     m.backFaceCulling = false
@@ -1700,6 +1787,48 @@ export class Units {
     for (const map of [this.farMats, this.tinyMats]) {
       for (const [id, m] of map) m.setDefine('#define FAR', force ?? farRule(this.uniforms[id]) === 'coat')
     }
+  }
+  /** The LOD cross-fade on (decision 0066: each man at his own LOD in a band round each switch) or off (?lodfade=0:
+   *  the hard switch, a battalion wholly at one LOD by its centre's height on screen, ±10 %) */
+  setLodFade(on: boolean): void {
+    this.fade = on
+    for (const map of [this.mats, this.farMats, this.tinyMats]) {
+      for (const m of map.values()) {
+        m.setDefine('#define LODFADE', on)
+        m.setDefine('#define FAR_FROM', on ? FAR_FROM.toFixed(4) : false)
+      }
+    }
+    this.decal?.setDefine('#define FAR_FROM', on ? FAR_FROM.toFixed(4) : false) // (their shadows grow with them)
+  }
+  /** A figure material's draws told whether their battalion fades each man (uLodFade, set as each mesh binds it: the
+   *  material is shared by the battalions of a uniform; one drawing a single LOD draws every man, no per-man work) */
+  private bindFade(m: ShaderMaterial): void {
+    m.onBindObservable.add(mesh => m.getEffect()?.setFloat('uLodFade', this.fadingMeshes.has(mesh as Mesh) ? 1 : 0))
+  }
+  /** A battalion's figure meshes (the nearest's list, the near, far and tiny LODs) faded or not (fadingMeshes) */
+  private setFading(h: Host, on: boolean): void {
+    if (on === h.fading) return
+    h.fading = on
+    for (const k of [0, this.nextLod, this.farLod, this.tinyLod]) {
+      // (none for the tiny LOD off; nor the nearest's place before its first split: the shared source mesh holds it)
+      if (k < 0 || (k === 0 && this.hasNearest && h.sel.length === 0)) continue
+      if (on) this.fadingMeshes.add(h.lod[k])
+      else this.fadingMeshes.delete(h.lod[k])
+    }
+  }
+  /** The LODs a battalion draws this frame (battalionLods, src/look/lod-fade.ts, into h.lods): by its bounds' heights
+   *  on screen (k, a figure's height in pixels at 1 m) with the cross-fade, else by its centre's (px) */
+  private drawsAt(h: Host, px: number, split: boolean, cam: Vector3, k: number, tiny: [number, number] | null): Lods {
+    const [lo, hi] = boxPxRange(h.lo, h.hi, cam, k, this.pxRange)
+    const at = this.at
+    at.pLo = lo
+    at.pHi = hi
+    at.px = px
+    at.split = split
+    at.wasNear = h.near
+    at.wasTiny = h.tiny
+    const tinyPx = this.tinyLod >= 0 ? this.tinyPx : 0
+    return battalionLods(at, this.fade, this.lodPx, tinyPx, this.nearBand, tiny, h.lods)
   }
   /** the far figures drawn larger as they shrink on screen (?farscale=0: their own size) */
   setFarScale(on: boolean): void {

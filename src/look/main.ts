@@ -533,6 +533,8 @@ if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixe
 if (shadowLod !== null && shadowLod !== 'far') throw new Error(`?shadowlod must be far, not ${shadowLod}`)
 // batch C: ?farscale=0, the far figures at their own size
 const farScale = bit('farscale')
+// ?lodfade=0: the LODs' hard switch, a battalion wholly at one LOD (decision 0066: else each man at his own, faded)
+const lodFade = bit('lodfade')
 // ?trample=0: no trodden ground; ?flags=0: no colours
 const trample = bit('trample')
 const flags = bit('flags')
@@ -692,6 +694,7 @@ if (armiesParam !== null) {
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
   units.setFarScale(farScale ?? true)
+  units.setLodFade(lodFade ?? true)
   units.setTrample(trample ?? true)
   units.setFlags(flags ?? true)
   units.setFarRule(farPal) // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
