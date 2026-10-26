@@ -25,7 +25,7 @@ optimisations, `docs/plans/active/s1d1-unit-types.md`):
   cost, not a per-tick one).
 - **The state hash** (every 20 ticks): **2.7–4.1 ms** (issue #38), landing whole in one frame: **the biggest single-frame
   hitch**, more than a tick.
-- **The 3D armies** (branch `look/armies`, `src/look/units.ts`): every man of a moving battalion has its 16-float
+- **The 3D armies** (`src/look/units.ts`): every man of a moving battalion has its 16-float
   matrix written on the CPU at 12 Hz; the 3D page does not run the sim yet (its moves are scripted). When it does, the
   costs above join the renderer's on one thread.
 
@@ -68,7 +68,7 @@ second: with the renderer it cannot hold 8.33 ms at the 99th percentile.
 **The owner's decision (2026-10-22), per the art bible** (`docs/art-bible.md`: "Units animated at 12 fps, with the
 camera always smooth"): **soldiers move stepped at 12 fps, poses and positions together**, with no display-rate
 interpolation. So the soldier layer steps at `MEN_HZ = 12`, tied to the figures' bake rate (the animation baked at
-12 fps by the figure bake on branch look/armies), and the renderer draws the latest published step as is. The camera
+12 fps by the figure bake), and the renderer draws the latest published step as is. The camera
 stays smooth (it is the main thread's, at display rate).
 
 - **The rate is per real second**, not per game second: at 8× speed a fixed rate per game second would multiply the
