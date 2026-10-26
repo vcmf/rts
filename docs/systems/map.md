@@ -1,8 +1,8 @@
 ---
 status: current
 last_reviewed: 2026-10-26
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, src/app/map/pin.ts, test/map-fields.test.ts, test/map-pin.test.ts, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place, 0067-ids-are-named-when-made]
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, src/app/map/pin.ts, test/map-fields.test.ts, test/map-pin.test.ts, src/app/map/scan.ts, src/app/map/scan-gl.ts, src/app/map/trace.ts, test/map-scan.test.ts, tools/geo.ts, tools/scan-wms.ts, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place, 0067-ids-are-named-when-made, 0069-scans-placed-in-their-relief-frame]
 ---
 
 # The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a–c, M7a–c)
@@ -28,7 +28,7 @@ maps/kinds.json ──► checkCatalogue ─┐
   is a data change.
 - The draft page shows exactly what the code computes: the page's worker and the CLI run the same functions.
 - Not yet: works' earthworks, compiling to the look's data (M4), areas sharing edges with other areas (only lines
-  are shared), the tracing overlay on the page (M7e).
+  are shared).
 
 ## Constraints
 
@@ -48,7 +48,8 @@ maps/kinds.json ──► checkCatalogue ─┐
   - `kinds` as presets along dotted paths. A kind inherits its shapes, references, priority and states from the
     deepest preset along its path that sets them (`kindMeta` in `src/map/catalogue.ts`).
 - **Validation** (`src/map/validate.ts`):
-  - the map's own fields, sources and presets;
+  - the map's own fields, sources and presets: a `dem` source's file, hash, credit and licence; a `scan` source's image
+    under `scans/`, the dem source its `frame` names, its control `points` (decision 0069);
   - ids, then each feature's kind, shape and geometry (`src/map/geometry.ts`): rings that do not cross
     themselves, holes inside, everything inside the extent, barriers on the lattice;
   - references and their target categories, attributes against the catalogue, seasons, states and generator
@@ -330,6 +331,25 @@ maps/kinds.json ──► checkCatalogue ─┐
       edit, and Pin waits for its expansion to be drawn. The engine throwing (a catalogue the validator does not
       check) is a refusal saying so. Selected after: the feature, or its first child. A file read in,
       or a new catalogue, lists its own problems at once (the form never shows another text's).
+    - The tracing overlay (M7e, decision 0069; `src/app/map/scan.ts` pure, `src/app/map/trace.ts` the page's): a
+      `scan` source's image (under the git-ignored `maps/scans/`) drawn under the outlines at an opacity the panel's
+      scan box sets (kept per map and scan in the browser), in each `relief.dem` piece cut from its `frame`'s file
+      (clipped to its area, painted in the pieces' priority and id order; a piece of another file on top hides it and
+      takes no click), moved by the piece's `shift`; with no frame, over the map unmoved. Its placement from its control points `[u, v, x, z]`: none, over the extent; one, moved;
+      two, a similarity; three, the affine map through them; four or more, a thin-plate spline through every point,
+      and back by Newton's method on it (a second spline the other way its first guess), each point's residual where
+      the others alone put it, and their root mean square, shown in the panel; two points on one pixel or place keep
+      the affine fit of them all, saying so (the page refuses a point where one is). The image is drawn on the GPU
+      (`src/app/map/scan-gl.ts`): a 64 × 64 mesh of frame points over it (`scanMesh`), through the view's own matrix
+      (`LitView.viewProjection`), so the tilted view's perspective is exact and the near limit is clipped there; each
+      piece is drawn with its shift and composited through its area's clip into an offscreen canvas at full opacity,
+      then onto the view. The image is decoded once into a bitmap; one larger than the GPU's texture limit is not
+      shown, saying so. A point is added by two clicks (the editor's capture: Escape drops it, Backspace takes a click back),
+      one edit of the map's sources: where a landmark shows on the scan, then where it is on the map; each listed
+      point can be removed. `tools/scan-wms.ts` fetches an image of a WMS layer in WGS 84 around a centre and prints
+      the source with its first points in the relief importer's transverse Mercator (`tools/geo.ts`, Snyder's
+      series). `maps/austerlitz.map.json` carries the Habsburg First Military Survey's source with seven points at
+      dated landmarks (Wikidata); the image itself is fetched by that tool.
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes
@@ -369,7 +389,9 @@ saved adds one line (the file is removed after); through the form a note and ano
 saved diff their lines alone, undone back to the original bytes, text typed and not applied kept or applied as it
 should be; a clump's generator removed, chosen again and a parameter set (its outline redrawn, its line alone
 changed), a village's expansion problem under its generator, the village pinned and saved (its line rewritten, its
-houses appended, the same houses compiled), all undone back to the original bytes; no console errors.
+houses appended, the same houses compiled), all undone back to the original bytes; a test scan added to the map's
+sources and shown, three control points added by clicks (each block of the image then on its place), saved (only the
+sources changed), undone back to the original bytes; no console errors.
 
 `test/map-write.test.ts` (M7a): every map in `maps/` written back unedited is byte for byte its file; a moved point
 changes one line; a feature added, deleted (first, middle, last), reordered; a map field changed, added, removed; a
@@ -391,7 +413,11 @@ unknown field); the editor's field and map edits, its refusals, undo's selection
 generator set from good text with no problem and from bad text with one at its path, the parameter rows, the
 generator edits, the editor's pin (one edit, the selection after, its refusals). `test/map-pin.test.ts`: every
 generated feature of `maps/` pinned, alone and all together, validates and expands to the same expanded map as the
-original, and the stable save changes its line and appends its children, nothing else.
+original, and the stable save changes its line and appends its children, nothing else. `test/map-scan.test.ts`
+(M7e): a scan's placement from 0 to many points (an affine image kept affine, a bent one followed between its points,
+a point that is off told by its residual, points in a line), its inverse; the pieces it shows in, moved and on top;
+the validator's checks of a scan source; the transverse Mercator against Snyder's worked example and a WMS image's
+points.
 
 `test/map-gen.test.ts`:
 - seeds: stable, and local (another feature, the file's order, the map's seed);

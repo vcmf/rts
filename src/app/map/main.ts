@@ -19,6 +19,7 @@ import { ovalRing } from './edit.ts'
 import { newestOnly } from './latest.ts'
 import { proposeId } from './draw.ts'
 import { Form } from './form.ts'
+import { Trace } from './trace.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -310,13 +311,40 @@ const toScreen = (x: number, z: number): [number, number] | null => (lit ? lit.p
  */
 function groundPath(pts: Pt[], close: boolean): void {
   ctx.beginPath()
+  pathThrough(ctx, pts, close, false)
+}
+/**
+ * The view's matrix, column-major: a ground point (x, 0, z, 1) to clip space, as the GPU takes it (a scan, M7e): the
+ * lit view's camera, or the flat view's scale and centre.
+ */
+function viewMatrix(): Float32Array {
+  if (lit) return lit.viewProjection
+  const r = canvas.getBoundingClientRect()
+  const sx = (2 * view.ppm) / r.width
+  const sz = (2 * view.ppm) / r.height
+  // clip x = (x - cx) sx, clip y = (z - cz) sz: north up
+  return new Float32Array([sx, 0, 0, 0, 0, 0, 0, 0, 0, sz, 0, 0, -view.cx * sx, -view.cz * sz, 0, 1])
+}
+/**
+ * A ring of ground points as a closed part of a path (a clip's: a scan's piece, M7e): where it passes behind the
+ * camera it runs along the near limit instead (the region behind is not drawn), so it stays one closed ring.
+ */
+function ringPath(path: Path2D, ring: Pt[]): void {
+  pathThrough(path, ring, true, true)
+  path.closePath()
+}
+/**
+ * Adds ground points to a path through the view (the context's or a Path2D), cut where the line passes behind the
+ * tilted camera: lifted there, or with `bridge` carried on along the near limit.
+ */
+function pathThrough(sink: CanvasPath, pts: Pt[], close: boolean, bridge: boolean): void {
   if (!lit) {
     pts.forEach((p, k) => {
       const [x, y] = flatScreen(p[0], p[1])
-      if (k) ctx.lineTo(x, y)
-      else ctx.moveTo(x, y)
+      if (k) sink.lineTo(x, y)
+      else sink.moveTo(x, y)
     })
-    if (close) ctx.closePath()
+    if (close) sink.closePath()
     return
   }
   const L = lit
@@ -326,8 +354,8 @@ function groundPath(pts: Pt[], close: boolean): void {
   const to = (p: Pt) => {
     const s = L.project(p[0], p[1])
     if (!s) return
-    if (pen) ctx.lineTo(s[0], s[1])
-    else ctx.moveTo(s[0], s[1])
+    if (pen) sink.lineTo(s[0], s[1])
+    else sink.moveTo(s[0], s[1])
     pen = true
   }
   const seq = close ? [...pts, pts[0]] : pts
@@ -341,7 +369,7 @@ function groundPath(pts: Pt[], close: boolean): void {
         // where the segment meets the near limit (the depth is linear along it), a hair on the drawable side
         const t = rq / (rq - rp)
         to(along(q, p, rp > 0 ? t + 1e-6 : t - 1e-6))
-        if (rp <= 0) pen = false
+        if (rp <= 0 && !bridge) pen = false
       }
     }
     if (rp > 0) to(p)
@@ -379,6 +407,27 @@ function mapIdProblem(id: string): string {
   if (!ID.test(id)) return 'its id names its file: lower-case letters and digits, in words joined by "-"'
   return [...picker.options].some(o => o.value === `/maps/${id}.map.json`) ? `a map ${id} exists` : ''
 }
+// the scan to trace from (M7e), under the outlines
+const trace = new Trace(
+  {
+    ctx,
+    project: (x, z) => toScreen(x, z),
+    ringPath,
+    redraw,
+    focus: () => canvas.focus(),
+    viewMatrix,
+    file: () => editor.file,
+    catalogue: () => catalogue,
+  },
+  editor,
+  {
+    pick: $('scanPick') as HTMLSelectElement,
+    opacity: $('scanOpacity') as HTMLInputElement,
+    add: $('scanAdd') as HTMLButtonElement,
+    state: $('scanState'),
+    points: $('scanPoints'),
+  },
+)
 // its problems are the page's: the validator's at once after an edit, then the compile's of that copy (M7d)
 const form = new Form(formBox, editor, () => issues)
 // Text typed in the form and not applied yet: a press on another control takes the focus from the field, whose change
@@ -389,6 +438,7 @@ for (const b of [undoButton, redoButton]) b.addEventListener('mousedown', e => e
 function editPanel(): void {
   const f = editor.selected ? editor.feature(editor.selected) : undefined
   form.update(catalogue)
+  trace.update()
   const dirty = editor.dirty
   editState.textContent = !editor.enabled
     ? 'editing needs the dev server (npm run dev)'
@@ -619,6 +669,7 @@ function draw(): void {
   }
   place()
   frameMs = lit?.render() ?? 0
+  trace.draw(r.width, r.height, dpr)
   // the play area
   const p = current.map.play
   const corners: Pt[] = [
@@ -1012,6 +1063,11 @@ window.MAP = {
     draw()
   },
   compile: () => compile('manual'),
+  // the scan shown (M7e): where a pixel of it lies on the map, and its last draw's time, ms
+  scanAt: (u: number, v: number) => trace.mapPoint(u, v),
+  get traceMs() {
+    return trace.ms
+  },
   // a feature of the last compiled (expanded) map, or null (M7d: a generator's output redrawn)
   expanded: (id: string) => current?.map.features.find(f => f.id === id) ?? null,
   // the editor (M7): select a feature, the selection, what a save would write, save, undo, redo, unsaved edits, and

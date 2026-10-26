@@ -9,7 +9,8 @@
   "extent": { "w": 6000, "h": 6000 },
   "play": { "w": 6000, "h": 6000 },
   "sources": [
-    { "id": "cuzk", "kind": "dem", "ref": "ČÚZK DMR 4G, 49.118 N 16.737 E, a transverse Mercator centred there", "file": "austerlitz.rdem", "hash": "sha256:9e2dec99f07e5c56a5ccf525a7f0b915a1c3ad1202c54e0600de938ee76bb7f5", "credit": "© ČÚZK, 2026 (DMR 4G)", "licence": "CC BY 4.0" }
+    {"id":"cuzk","kind":"dem","ref":"ČÚZK DMR 4G, 49.118 N 16.737 E, a transverse Mercator centred there","file":"austerlitz.rdem","hash":"sha256:9e2dec99f07e5c56a5ccf525a7f0b915a1c3ad1202c54e0600de938ee76bb7f5","credit":"© ČÚZK, 2026 (DMR 4G)","licence":"CC BY 4.0"},
+    {"id":"first-survey","kind":"scan","file":"scans/austerlitz-first-survey.jpg","ref":"Habsburg First Military Survey (Josephine), Moravia, 1764-1768, 1:28,800; WMS layer Military1 of Chartae Antiquae (VÚGTK and HÚ AV ČR)","credit":"© VÚGTK, v.v.i. & HÚ AV ČR, v.v.i.","licence":"none stated; watermarked; kept out of git (docs/research/period-maps.md)","frame":"cuzk","points":[[3180,745,1992.07,2202.36],[1480,3280,-1372.82,-1768.1],[2785,2860,1423.86,-1501.18],[2615,2560,1449,-1003.87],[1100,2060,-788.37,133.51],[1610,710,-380.44,2406.83],[3176,2783,2169.98,-1211.23]],"note":"control points at landmarks (Wikidata, CC0): the churches of Prace, Telnice and Újezd, the chapel of St Anthony, Sokolnice castle, the belfry of Kobylnice, Peclův mill; each pixel read off the scan. The survey is off by about 560 m between them (each point where the others put it: docs/plans/active/m7-editor.md M7e)"}
   ],
   "features": [
     { "id": "field", "kind": "relief.dem", "source": "cuzk", "note": "the real ground: today's terrain, so modern embankments and quarries are still in it until step 4 levels them" }

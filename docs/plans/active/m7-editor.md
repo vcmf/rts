@@ -537,7 +537,115 @@ rules: the choice lists every generator, and what does not fit is the validator'
   bytes.
 - A pin measures 10–13 ms on the example maps (Node).
 
+## M7e in detail
+
+A scan of a period map under the map, to trace from (decision 0069). Which scan, and its licence:
+`docs/research/period-maps.md` (one large-scale survey per battle: the Habsburg First Military Survey for Austerlitz).
+The maps are designed, not copies (decision 0061): pieces of the real relief are cut and placed closer together
+(`relief.dem`, `shift`). So a scan is placed once in its relief file's frame, and drawn inside each piece cut from that
+file, moved as the piece is: the period map follows the terrain it was cut with.
+
+- **In the file:** a source of kind `scan` (the compilers ignore it): its image `file` (under `maps/scans/`, which git
+  ignores: scans are committed only where their source says public domain, by a line in `.gitignore`), its `ref`,
+  `credit` and `licence`, the dem source whose `frame` it is placed in (none: the map's own frame), and its control
+  `points`, each `[u, v, x, z]`: a pixel of the image and the place in the frame it shows. The validator checks the
+  form; nothing else reads it.
+- **The fit** (`src/app/map/scan.ts`, pure, float64: the page's, not the sim's): no point, the image over the map's
+  extent; one, moved onto it; two, moved, turned and scaled (a similarity); three, the affine map through them; four
+  or more, a thin-plate spline through every point (and a second one back), each point's residual where the others
+  alone put it: the image's own error there. First planned as a least-squares affine fit for three or more; the
+  Austerlitz survey showed one affine map cannot hold a hand-drawn sheet (below). Where the scan shows on the map: each `relief.dem` piece of its frame, highest priority
+  first (its area, or the whole extent), moved by its `shift`; a map point's frame point through the piece on top
+  there.
+- **On the page** (`src/app/map/trace.ts`, `src/app/map/scan-gl.ts`): the scan drawn under the editor's outlines, at
+  an opacity set in the panel (a setting of the page, kept per map and scan in the browser, not in the file). It is
+  drawn on the GPU through the view's own matrix (the lit view is tilted): a mesh of frame points over the image, each
+  piece of its frame drawn with its shift and composited through its area's clip, in painting order (the last on
+  top; another file's piece on top hides it), then onto the view at the set opacity. (Round 2 replaced a 2D-canvas
+  mesh, below.) A control point is added by two clicks, one edit: where the landmark shows on the scan, then where it
+  is on the map. The points show as pairs joined by their residual, listed in the panel with their residuals and a
+  button to remove each.
+- **A scan from a map service** (`tools/scan-wms.ts`): an image of a WMS layer in WGS 84 around a centre, and its
+  first control points in a transverse Mercator centred there (the relief importer's frame), so a georeferenced copy
+  is placed at once; points are then added or moved by hand against the relief.
+
+## Acceptance (M7e)
+
+- `test/map-scan.test.ts`: the fit from 0, 1, 2 and many points (exact on an affine image, its residuals on a noisy
+  one), the inverse, the pieces and their shifts, the frame point under a map point; the validator's checks of a scan
+  source; the transverse Mercator against published values.
+- The page check: a test scan written beside a map (a known affine picture of marks), drawn at the set opacity; three
+  points added by clicks, saved in the file (the diff the sources line alone), their residuals shown; undone back to
+  the original bytes.
+- The First Military Survey over Austerlitz's real relief: fetched with `tools/scan-wms.ts`, placed, and checked at
+  landmarks (village churches, from Wikidata: CC0) against where the scan shows them, the residuals within the survey's
+  own error, recorded here with a screenshot for the owner. The scan stays out of git.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
+## Review rounds (M7e)
+
+- **Round 1** (`/code-review high`): severe. From four points the way back (map to pixel) was a second spline, not
+  the inverse of the first: a new control point could take a pixel up to 220 px from the one clicked; two points on
+  one pixel or place made the spline singular, and the whole fit fell to the first two points, called "in a line".
+  Fixed: the way back inverts the forward spline by Newton's method (a thousandth of a pixel), the second spline only
+  its first guess; a point on a pixel or place that has one is refused, saying which, and a fit that still meets one
+  keeps the affine fit of all the points and says why. With them: a piece's clip follows the near limit where it
+  passes behind the camera (as the outlines do), not dropped; a capture checks its first click on its own, takes a
+  quick second click as a click (no double click), says how to end it, and gives the map the keyboard; bitmaps no
+  scan of the copy names are closed, and a missing image is read again when the scan is chosen again; the tool's
+  points are at pixel corners, as the page draws pixels (half a pixel, 0.7 m, before); a .webp scan is asked for as
+  WebP. Tests for each (each fails without its fix); the page check refuses a point placed twice and drops a capture
+  by Escape.
+
+- **Round 2**: severe. The scan was drawn as a fixed 16 × 16 mesh of triangles on the 2D canvas, each stretched flat:
+  in the tilted view the pixel drawn at a point was not the one a click there takes (tens of metres when zoomed in),
+  and cells crossing the near limit left a gap. A mesh split on screen fixed the geometry but not the cost: thousands
+  of clipped `drawImage` calls took 0.2 to 6.6 s a frame, and hung the page zoomed in. Fixed by drawing on the GPU
+  (`src/app/map/scan-gl.ts`): a 64 × 64 mesh of frame points over the image, through the lit view's own matrix
+  (perspective exact, the near limit clipped by the GPU), built once a placement; per frame only the matrix and a
+  piece's shift change (0.1 ms of the CPU at every zoom). With it: a piece cut from another file on top hides the scan
+  and takes no click; the scan tool checks, with `--frame`, that the dem source's file was cropped around the centre
+  given (`--map`); a quick click after a capture is no double click; the opacity is read from the browser only when
+  the scan changes; bad points from a hand edit say why (on one pixel, on one place: no click lands); a residual the
+  others cannot give shows as —; residuals are fitted forward only, and the placement only when the scan changes; a
+  late image error for a file no scan names is ignored; the page check writes its test scan inside its cleanup.
+  Tests for each (each fails without its fix), the mesh by its nodes.
+
+- **Round 3**: moderate and light only, so the review stops here. Fixed: a piece of a kind under `relief.dem` counts
+  as the validator counts it (`isDemKind`, shared); a two-point placement with a problem says it; the GPU's mesh
+  buffers are refilled, not made anew for each placement; a placement of fewer than two points follows a new extent;
+  a control point shows through the piece on top at its place alone; texture coordinates at high precision; the
+  WebGL context is made when a scan is first shown; Escape after a capture leaves no click to pair with the next. Not
+  taken: drawing every piece in one GPU pass (a map has a few pieces; the CPU's part is 0.1 ms a frame).
+
+## Results (M7e)
+
+- The Habsburg First Military Survey over Austerlitz, fetched with `tools/scan-wms.ts` from Chartae Antiquae's WMS
+  (4096 × 4094 px, 1.54 m a pixel; kept out of git), checked at seven dated landmarks from Wikidata (the churches of
+  Prace, Telnice and Újezd, the chapel of St Anthony, Sokolnice castle, Kobylnice's belfry, Peclův mill), each pixel
+  read off the scan:
+  - the service's own georeferencing puts them 320 to 690 m off;
+  - one affine fit through five of them leaves 382 m RMS, and from the others it puts a left-out one 390 to 2,400 m
+    off: a sheet drawn with no geodetic basis is distorted place by place, which one affine map cannot hold. So the
+    fit became a thin-plate spline from four points (decision 0069);
+  - the spline through the seven: each landmark on its place, and the survey's own error between them, each point
+    where the other six put it, 150 to 990 m, 559 m RMS. That is the image's own error at about a kilometre between
+    points; tracing adds points near what is traced. Austerlitz's map carries the seven points; the screenshot for the
+    owner shows the villages on their sites and the Goldbach's wooded valley along the relief's.
+- The overlay's draw on Austerlitz (16 megapixels, on the GPU): 0.1 ms of the CPU a frame at every zoom from the
+  whole map to 4 px a metre (the dev server in headless Chrome: an estimate; the GPU's own time is not measured
+  there). The 2D canvas's mesh before it took up to seconds (review round 2).
+- The page check: a test scan shown, three points by clicks, each block then on its place, saved with only the
+  sources changed, undone to the original bytes. `test/map-scan.test.ts`: the fit, the pieces, the validator, the
+  projection.
+
 ## Open questions
+
+(M7e)
+- A scan's corners far from every point are extrapolated (the spline is affine there): more points near the map's
+  edges, or the service's grid points kept where no landmark is, would hold them.
+- Moving a control point (dragging either end) instead of removing and adding it again.
+- The built page has no scans to show (they are not bundled); tracing is a dev-server task.
 
 (M7d)
 - A pinned feature keeps its `origin`; the page could say when its generator now gives something else (another

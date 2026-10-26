@@ -35,3 +35,6 @@ prototypes/.golden-selftest-*
 assets/tripo/
 output/
 __pycache__/
+
+# Scans to trace from (decision 0069): kept locally unless their source says public domain
+maps/scans/
