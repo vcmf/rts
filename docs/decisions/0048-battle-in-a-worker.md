@@ -27,7 +27,7 @@ Annihilation, Supreme Commander).
 - **Soldiers are stepped at 12 fps, poses and positions together** (the owner, per the art bible): the soldier layer
   steps at 12 Hz of real time (tied to the figures' bake), none when paused; its battalions staggered in groups
   (eight: plan PR 1). **Revised by PR 1's measurement (2026-10-26)**: a step covers at most 1/8 s of game time (above
-  it halted men near trunks jitter, the steering's arrival damping gone), so above 1.5× the steps come faster than
+  it halted men near trunks jitter, measured: the steering's gains saturate there), so above 1.5× the steps come faster than
   12 Hz (64 Hz at 8×) and 8× costs more than 1×; the owner moved the 8× main-thread bar to the worker (plan PR 3),
   which takes the layer off the main thread at every speed. The drawn frame stays 12 fps once the worker publishes it. The renderer draws the latest step as is; the camera stays
   smooth.

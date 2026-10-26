@@ -34,7 +34,7 @@ exports as a replay that plays back in Node to the same hashes.
 - Sim plus soldier layer within 4 ms per frame for 40 battalions on the dev Mac. At 400 men a battalion
   (decision 0018) it holds at the halt and firing (0.7 ms). With all 16,000 men marching the layer stepped once a
   frame cost 4.4–6 ms ([#36](https://github.com/vcmf/rts/issues/36)); on its clock it costs 0.5 ms a 120 Hz frame at
-  1× (p99 1.0) and about 2.5 ms at 8× (p99 4–8), the 8× bar moved to the battle worker (battle threads PR 3).
+  1× (p99 1.0) and about 2.5 ms at 8× (p99 4–8 between runs), the 8× bar moved to the battle worker (battle threads PR 3).
   `node tools/bench-cost.ts` measures it by part on the page's release world, at a speed.
 
 ## Design
@@ -42,11 +42,12 @@ exports as a replay that plays back in Node to the same hashes.
 **Loop** (`src/app/main.ts`). Each animation frame adds `dt × speed` to an accumulator and runs the
 ticks owed (at most 20 per frame; the rest is dropped), syncing the soldier layer after each. The layer
 then takes the sub-steps due on its own clock (`src/render/men-clock.ts`, battle threads PR 1,
-`docs/plans/active/battle-threads.md`), not once a frame: 12 rounds a real second (`MEN_HZ`), whatever the frame
-rate, each split into a sub-step per group of battalions (`MEN_GROUPS` = 8, shared out by their men), spread evenly
-over the round. A sub-step covers its group's game time since its last one, at most 1/8 s (`MEN_DT`: above it the
-arrival damping is gone and halted men near trunks jitter), so above 1.5× the rounds come faster (64 Hz at 8×) and
-8× costs more than 1×. A long frame catches up at most seven rounds (`MEN_ROUNDS`). The men are drawn as they
+`docs/plans/active/battle-threads.md`), not once a frame: `MEN_HZ` rounds a real second, whatever the frame rate,
+each split into a sub-step per group of battalions (`MEN_GROUPS`, shared out by their men; a battalion keeps its
+group while it lasts), spread evenly over the round. A sub-step covers its group's game time since its last one, at
+most `MEN_DT` (above it halted men near trunks jitter, measured), so at higher speeds the rounds come faster and 8×
+costs more than 1×. A long frame catches up at most `MEN_ROUNDS` rounds. The values and why: the head of
+`src/render/men-clock.ts`. The men are drawn as they
 stand after their last sub-step, with no interpolation; `alpha = acc / tick`, set every frame, interpolates the
 anchors, the colours and the order lines. The map is redrawn only when the
 view changes; the units every frame, on a second canvas.

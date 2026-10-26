@@ -26,11 +26,13 @@ class Play {
    * the soldiers' sub-steps due on their clock, and the frame's alpha. */
   frame(real: number): void {
     this.acc += real * this.speed
-    for (let n = 0; this.acc >= 0.05 - 1e-9 && n < 20; n++) {
+    let n = 0
+    for (; this.acc >= 0.05 - 1e-9 && n < 20; n++) {
       this.sim.tick()
       this.layer.sync(0, this.sim.takeDeparted())
       this.acc -= 0.05
     }
+    if (n === 20) this.acc = 0
     const a = performance.now()
     this.clock.advance(real, this.speed, this.stepMen)
     this.layerMs += performance.now() - a
@@ -338,14 +340,16 @@ describe('the soldier clock', () => {
   })
   it('the groups take turns, one sub-step at a time; paused, none', () => {
     const steps = run(1, 120, 1)
-    expect(steps.slice(0, 2 * MEN_GROUPS).map(s => s.group)).toEqual([...Array(2 * MEN_GROUPS)].map((_, k) => k % 8))
+    expect(steps.slice(0, 2 * MEN_GROUPS).map(s => s.group)).toEqual(
+      [...Array(2 * MEN_GROUPS)].map((_, k) => k % MEN_GROUPS),
+    )
     expect(run(1, 120, 0)).toEqual([])
   })
   it('a long frame catches up at most MEN_ROUNDS rounds, and drops the rest', () => {
     const c = new MenClock()
     const none = () => {}
-    expect(c.advance(0.1, 8, none)).toBe(Math.floor(0.1 * (8 / MEN_DT) * MEN_GROUPS + 1e-6))
-    expect(c.advance(1, 8, none)).toBe(MEN_ROUNDS * MEN_GROUPS)
+    expect(c.advance(0.05, 8, none)).toBe(Math.floor(0.05 * (8 / MEN_DT) * MEN_GROUPS + 1e-6))
+    expect(c.advance(0.1, 8, none)).toBe(MEN_ROUNDS * MEN_GROUPS)
     expect(c.advance(1 / 120, 8, none)).toBeLessThanOrEqual(5)
   })
 })

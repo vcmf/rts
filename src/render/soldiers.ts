@@ -57,12 +57,10 @@ export interface Man {
 }
 // pose: what the places were last framed from (still: unchanged, so settled men need no new place); type: the
 // unit type's name (cr.types: infantry, cavalry, battery in the Napoleonic ruleset); figure: how its men are drawn
-// (UnitType.figure: foot, mounted, crewed); group: which of `step`'s groups it steps in, and weight: the men it
-// counted for there when it joined
+// (UnitType.figure: foot, mounted, crewed); group: which of `step`'s groups it steps in
 export interface Unit {
   i: number
   group: number
-  weight: number
   gen: number
   side: number
   type: string
@@ -90,10 +88,9 @@ export class SoldierLayer {
   private walkOf: Float64Array
   private runOf: Float64Array
   alphaNow = 1
-  // `step`'s groups: how many (0 before the first step), the units in each and the men they count
+  // `step`'s groups: how many (0 before the first step), and the units in each
   private grouped = 0
   private byGroup: Unit[][] = []
-  private load = new Float64Array(0)
   // the neighbour grid: per cell the first man, per man the next, and the men's positions as the round began
   private cellHead: Int32Array
   private cellNext = new Int32Array(1024)
@@ -285,7 +282,6 @@ export class SoldierLayer {
         u = {
           i,
           group: 0,
-          weight: 0,
           gen: f.gen[i],
           side: f.side[i],
           type: U.name,
@@ -297,7 +293,7 @@ export class SoldierLayer {
           pose: new Float64Array(8 + 2 * w.cr.maxNB).fill(NaN),
         }
         this.units.set(i, u)
-        this.joinGroup(u, menOf(w, i))
+        this.joinGroup(u)
       }
       this.sign(u.sig, i)
       if (u.faces !== f.faces[i]) {
@@ -393,7 +389,7 @@ export class SoldierLayer {
    * @param group the group to step, 0 to `groups` − 1
    * @param groups how many groups a round has (a new count shares every battalion out again)
    */
-  step(dt: number, alpha: number, group = 0, groups = 1): void {
+  step(dt: number, alpha: number, group: number, groups: number): void {
     this.alphaNow = alpha
     if (group === 0) {
       this.sync(alpha)
@@ -407,29 +403,29 @@ export class SoldierLayer {
   private shareOut(groups: number): void {
     this.grouped = groups
     this.byGroup = Array.from({ length: groups }, () => [])
-    this.load = new Float64Array(groups)
-    const standing = (u: Unit) => u.men.reduce((n, m) => n + (m.alive ? 1 : 0), 0)
-    const bySize = [...this.units.values()].map(u => ({ u, n: standing(u) }))
-    bySize.sort((a, b) => b.n - a.n || a.u.i - b.u.i)
-    for (const { u, n } of bySize) this.joinGroup(u, n)
+    const bySize = [...this.units.values()].sort((a, b) => menOf(this.w, b.i) - menOf(this.w, a.i) || a.i - b.i)
+    for (const u of bySize) this.joinGroup(u)
   }
-  /** Puts a new battalion of `men` men in the lightest group (none before the first step: `shareOut` does it). */
-  private joinGroup(u: Unit, men: number): void {
+  /** Puts a battalion in the group with the fewest men now (none before the first step: `shareOut` does it). */
+  private joinGroup(u: Unit): void {
     if (this.grouped === 0) return
     let g = 0
-    for (let k = 1; k < this.grouped; k++) if (this.load[k] < this.load[g]) g = k
+    let least = Infinity
+    for (let k = 0; k < this.grouped; k++) {
+      const men = this.byGroup[k].reduce((n, v) => n + menOf(this.w, v.i), 0)
+      if (men < least) {
+        least = men
+        g = k
+      }
+    }
     u.group = g
-    u.weight = men
-    this.load[g] += men
     this.byGroup[g].push(u)
   }
   /** Takes a battalion that is gone out of its group. */
   private leaveGroup(u: Unit): void {
     const list = this.byGroup[u.group]
     const k = list ? list.indexOf(u) : -1
-    if (k < 0) return
-    list.splice(k, 1)
-    this.load[u.group] -= u.weight
+    if (k >= 0) list.splice(k, 1)
   }
   /** Rebuilds the neighbour grid (cells and linked lists in typed arrays) from where the men stand now. */
   private buildGrid(): void {

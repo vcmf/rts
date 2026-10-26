@@ -59,7 +59,8 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
   this measurement); the steering's goldens (`slotError`, the wood and halt tests) within
   their limits; the owner's eye on the 12 fps step at 1× and 8×.
 - **Stop** (measurable): if the layer's p99 per frame at 120 Hz exceeds 2.0 ms, or the goldens fail at the stepped rate
-  and cannot be re-tuned, revert PR 1 and re-plan.
+  and cannot be re-tuned, revert PR 1 and re-plan. **Met at 8×, re-planned by the owner (2026-10-26)**: PR 1 is kept
+  for its 1× bars, and its 8× bars are PR 3's (the Outcome below); the acceptance above holds at 1× only.
 - **Outcome** (2026-10-26; `src/render/men-clock.ts`): met at 1×, missed at 8×, re-planned by the owner. The layer's
   cost per 120 Hz frame, main thread, 40 battalions marching through their shapes (Node on the dev Mac, the clock
   driving `SoldierLayer.step` as the page does; mean / p99 ms):
@@ -77,7 +78,8 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
   - **A step covers at most `MEN_DT` = 1/8 s of game time**, so above 1.5× the rounds come faster than 12 Hz (64 Hz
     at 8×), and 8× costs more work per real second than 1×. The plan's "larger dt" does not hold: halted men in the
     wood (six halt points, 10 s) moved up to 0.34–1.29 m with steps of 1/6 to 2/3 s, against 0.01 m at 1/8 s and
-    under. The arrival damping, `1 − 8·dt`, is gone at 1/8 s. Damping and smoothing made exponential fixed 2× but not
+    under. The steering's gains saturate there (the arrival damping `1 − 8·dt` is clamped at 0 from 1/8 s,
+    the velocity blend `5·dt` at 1 from 1/5 s) and the explicit step overshoots the pushes. Damping and smoothing made exponential fixed 2× but not
     4× (0.45 m), so the steering is kept and the step capped.
   - **The owner's call**: the 8× bar moves to PR 3. The worker takes the layer off the main thread at every speed, and
     the clock moves into it as it is (the worker has no frames). PR 3 measures that the worker keeps up at 8× (est.

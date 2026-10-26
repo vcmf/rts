@@ -73,7 +73,8 @@ const tStep: number[] = []
 let ticks = 0
 const frame = (timed: boolean) => {
   acc += FRAME * speed
-  for (let n = 0; acc >= 0.05 && n < 20; n++) {
+  let n = 0
+  for (; acc >= 0.05 && n < 20; n++) {
     const a = now()
     advanceTick(w)
     const b = now()
@@ -86,6 +87,7 @@ const frame = (timed: boolean) => {
       ticks++
     }
   }
+  if (n === 20) acc = 0 // the rest dropped, as src/app/main.ts does
   const a = now()
   clock.advance(FRAME, speed, (group, dt) => layer.step(dt, acc / 0.05, group, clock.groups))
   if (timed) tStep.push(now() - a)
