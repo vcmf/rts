@@ -5,8 +5,9 @@ last_reviewed: 2026-10-26
 
 # Ground changes hands in steps, not in a slide
 
-Every game and rule set surveyed that resolves a fight between formed bodies moves the loser a fixed distance or not
-at all. None lets it give way continuously. The tabletop rules move it a base depth, a hex, 2", 6" or one full move;
+Every game and rule set surveyed that resolves a fight between formed bodies moves the loser in discrete steps, or
+not at all: a fixed distance, a hex, or a distance set once by the margin or a die. None lets it give way
+continuously. The tabletop rules move it a base depth, a hex, 2", 6", a die roll or one full move;
 the grid games a square or a hex; the one wargame designer who tried pushes and follow-ups in a free-form melee gave
 them up because they "get very complex when multiple BGs are engaged". The video games that model formed units at
 the unit level (Ultimate General, Scourge of War, Grand Tactician) have the loser withdraw or retreat as a whole;

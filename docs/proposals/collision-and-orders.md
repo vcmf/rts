@@ -89,7 +89,7 @@ own, and free to take orders after.
 | X-14 | Forty battalions march through each other's paths | no overlap, no lock; the cost per tick |
 | X-15 | A veteran regiment charges a raw one at the halt, open ground behind it | the raw one steps back round by round, the veteran following, until it breaks |
 | X-16 | The same, a friendly regiment just behind the raw one | the raw one steps back until the friend is in the way, then is pinned and breaks sooner |
-| X-17 | The same, an enemy regiment just behind the raw one | the raw one is pinned at once and breaks sooner still |
+| X-17 | The same, an enemy regiment just behind the raw one | the raw one is pinned at once and breaks sooner than in X-15 |
 | X-18 | A pair in melee, a second enemy charging the loser's flank | the loser is pinned from the flank charge on; the second enemy does not move |
 | Q-01 | Shift-chained: move, form line, face about, move | each runs in turn |
 | Q-02 | A chain with a charge in it | the charge runs, then the next order |
@@ -215,8 +215,12 @@ an indivisible one. Every other formation is **moving**.
   `docs/systems/melee.md` does with its target today: a charge that strikes a square it was not aimed at takes that
   square's test at the impact (X-03).
 - **A melee** stands in contact, and is judged in rounds (`docs/research/melee-outcomes.md`). Every game and rule
-  set surveyed moves a loser a fixed distance or not at all; none lets it give way continuously, and a continuous
-  give way with a bend failed five reviews here (§ Alternatives considered).
+  set surveyed moves a loser in discrete steps (a fixed distance, a hex, or a distance by the margin), or not at
+  all; none lets it give way continuously, and a continuous give way with a bend failed five reviews here (§
+  Alternatives considered). **Its geometry is settled on the bench first:** the rules below are the first design,
+  to be prototyped on C1's claim grid and rewritten from what the bench shows (whose bodies a step is tested
+  against, offset lines, brigade lines, a second enemy, whether a lone step ends the melee), with this proposal's
+  collision core (§ Resolution).
   - **Ahead of:** a body stands ahead of a battalion when its places' centre lies beyond the battalion's front line
     (its anchor's line across its heading) and within its frontage. It is a test of the two shapes, not of the
     angle between anchors, which calls two wide lines a little offset a flank fight.
@@ -224,11 +228,11 @@ an indivisible one. Every other formation is **moving**.
     pair's lower handle is a whole number of rounds: no clock is kept per melee, and the pairs on the field are not
     judged together. A melee shorter than a round may see none. Between rounds the melee is as today: each side
     strikes, owes losses and takes their shock.
-  - **Where:** a round is judged and moved in the melee step (step 10), after the strikes, on the bodies as the
-    movement step committed them, within the tick: nothing is carried to the next. It is not a proposal of the
-    movement step.
+  - **Where:** a round is judged and moved at the end of the melee step (step 10), after the strikes, the shocks and
+    the step's own engagements, on the bodies as the movement step committed them, within the tick: nothing of the
+    world is carried to the next. It is not a proposal of the movement step.
   - **Only a pair is judged:** two battalions each the other's foe, both in the fight, neither changing shape nor in
-    a march column, one ahead of the other. Each one's push on the other is the losses its strike owes the other
+    a trail shape (a march column, limbered guns), one ahead of the other. Each one's push on the other is the losses its strike owes the other
     this tick, as expected (`rate × DT × men in contact × strength`, before they are drawn as whole men), times its
     morale (taken as 0 below 0). Strength already falls with the morale's level, so the nerve counts twice: what
     decides a melee between like units is whose nerve goes first, and a kind stronger in melee (cavalry against
@@ -239,8 +243,10 @@ an indivisible one. Every other formation is **moving**.
     ahead of it). It keeps its heading either way: it gives ground, it does not turn.
   - **The pair's move:** the loser steps `collision.step` (about 2 m) as one rigid move, its shape and its lags as
     they stand, and its foe follows by the same displacement, so the two stand as they stood. It is granted whole
-    or not at all. Its test: neither's places at the end of the move meet another formed body's places or margin
-    (the friend or the enemy margin), a reserved path, or the ground of a pair moved before it in this tick. The
+    or not at all. Its test, first design: neither's places at the end of the move meet impassable ground, the map's
+    edge, another body's places or margin (the friend or the enemy margin, loose enemies included), a reserved path,
+    or the ground of a pair moved before it in this tick; a body it already stood inside at the start refuses the
+    move only if the move brings it closer. The
     pairs move in a keyed draw for the tick on the loser's handle, ties by handle, as the indivisible proposals are
     ordered. The move sets no velocity: in melee both stand (`vx`, `vz` 0), and the soldier layer walks the men to
     their new slots.
