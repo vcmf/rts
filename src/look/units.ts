@@ -42,6 +42,7 @@ import {
   farShare,
   footUniform,
   lookBetween,
+  type ShadowContact,
   type ShadowLook,
   type ShapeBox,
 } from './shadow-look.ts'
@@ -62,6 +63,7 @@ import {
 import {
   TINY_ROLES,
   farWidthScale,
+  contactOvals,
   posedMesh,
   posedVertices,
   shadowProxy,
@@ -328,6 +330,11 @@ export class Units {
    *  only with simpleClose (else the far look at every zoom, as before) */
   look: { close: ShadowLook; far: ShadowLook } = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
   lookBand: [number, number] = [...SHADOW_LOOK_BAND]
+  /** the contact shadow under each man's feet and the cap on every shadow's darkness
+   *  (docs/plans/active/shadow-contact.md; ?ushcontact, ?ushcap: applyContactParams), or null: the shadows as before.
+   *  Read once, when the shadows' material is made */
+  contact: ShadowContact | null = null
+  private contactReach = 0 // m: how far the contact reaches from a man's root (the strip holds it: decalStrip)
   // the look this frame (lookAt), given to the decal's material (setDecalLook)
   private readonly lookNow: ShadowLook = { ...SHADOW_LOOK.far }
   // the look last given to the decal's material (setDecalLook: only when it changes)
@@ -1120,6 +1127,7 @@ export class Units {
     this.depthMat.setFloat('uVATStep', step)
     this.depthVatMat.setFloat('uVATStep', step)
     this.depthProxyMat.setFloat('uVATStep', step)
+    if (this.contact) this.decal?.setFloat('uVATStep', step)
     // (stepped with the figures under ?smoothmove=0)
     if (decalOn) {
       this.decal?.setFloat('uStepFrac', this.smooth ? this.stepFrac : 0)
@@ -1615,8 +1623,10 @@ export class Units {
         'uShFoot',
         'uStrip',
         'uRows',
+        'uShContact',
+        'uVATStep',
       ],
-      samplers: ['uShapeTex', 'uUnitShade'],
+      samplers: ['uShapeTex', 'uUnitShade', 'uContactTex'],
       alpha: true,
       defines: [
         `#define FACINGS ${SHAPE_FACINGS.toFixed(1)}`,
@@ -1626,8 +1636,10 @@ export class Units {
         ...(this.coverage ? ['#define COVERAGE'] : []),
         ...(this.farScaleOn ? ['#define FAR_SCALE'] : []),
         ...(this.fade ? [FADE_ON[1]] : []),
+        ...(this.contact ? ['#define SH_CAP', `#define CONTACT_ROWS ${d.vat.height.toFixed(1)}`] : []),
       ],
     })
+    if (this.contact) this.useContact(m, this.contact)
     m.backFaceCulling = false
     m.disableDepthWrite = true
     m.setTexture('uShapeTex', tex)
@@ -1692,6 +1704,36 @@ export class Units {
     for (const h of this.hosts) h.lod[this.decalLod].material = m
   }
 
+  /** The contact shadow's ovals (contactOvals, a texel a baked step) and its uniform on the shadows' material m, and
+   *  how far it reaches from a man's root (the strip grown to hold it: decalStrip) */
+  private useContact(m: ShaderMaterial, c: ShadowContact): void {
+    const pv = this.posedFar ?? posedVertices(this.data, this.data.lods[this.farLod].name)
+    const ov = contactOvals(this.data, pv, c.mode)
+    const rows = ov.length / 4
+    const tex = new RawTexture(
+      ov,
+      rows,
+      1,
+      Constants.TEXTUREFORMAT_RGBA,
+      this.scene,
+      false,
+      false,
+      Constants.TEXTURE_NEAREST_SAMPLINGMODE,
+      Constants.TEXTURETYPE_FLOAT,
+    )
+    tex.name = 'figureContactOvals'
+    tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
+    m.setTexture('uContactTex', tex)
+    m.setVector4('uShContact', new Vector4(c.pad, c.dark, c.soft, c.cap))
+    m.setFloat('uVATStep', 0)
+    let reach = 0
+    for (let i = 0; i < rows; i++) {
+      const o = i * 4
+      reach = Math.max(reach, Math.hypot(ov[o], ov[o + 1]) + Math.max(ov[o + 2], ov[o + 3]) + c.pad)
+    }
+    this.contactReach = c.dark > 0 ? reach * (1 + c.soft) : 0
+  }
+
   /** the figures' cast shadows on or off: off, the receivers compile without them (the bench's baseline arm). On, the
    *  simple shadows at every zoom (decision 0062); with ?ushadowclose=map the map up close and the simple shadows
    *  beyond (decision 0049); with ?ushadowfar=map the map at every zoom (frame() draws each while it shows). The map,
@@ -1740,7 +1782,7 @@ export class Units {
     m.setFloat('uShGain', l.gain)
     m.setFloat('uShLen', l.len)
     m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
-    const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP)
+    const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP, this.contactReach)
     m.setVector4('uStrip', this.stripV.set(...strip.box))
     m.setVector4('uRows', this.rowsV.set(...strip.rows))
   }

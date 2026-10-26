@@ -883,3 +883,69 @@ export function drawsNear(px: number, wasNear: boolean, lodPx: number): boolean 
 export function drawsTiny(px: number, wasTiny: boolean, tinyPx: number): boolean {
   return wasTiny ? px < tinyPx * 1.1 : px < tinyPx * 0.9
 }
+
+/** m: how high over a clip's lowest point a vertex still counts as a foot on the ground (contactOvals) */
+const FOOT_H = 0.12
+/** m: an oval's least half-size (a foot seen end on) */
+const FOOT_MIN = 0.05
+
+/** The oval holding the points (x, z): centred on their box, its half-sizes the box's in proportion, grown until every
+ *  point lies in it; [cx, cz, ax, az] (m) */
+export function enclosingOval(pts: readonly (readonly [number, number])[]): [number, number, number, number] {
+  if (pts.length === 0) return [0, 0, 0, 0]
+  const xs = pts.map(p => p[0])
+  const zs = pts.map(p => p[1])
+  const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)]
+  const c = [(x0 + x1) / 2, (z0 + z1) / 2]
+  const h = [Math.max(FOOT_MIN, (x1 - x0) / 2), Math.max(FOOT_MIN, (z1 - z0) / 2)]
+  const k = Math.max(...pts.map(p => Math.hypot((p[0] - c[0]) / h[0], (p[1] - c[1]) / h[1])))
+  return [c[0], c[1], h[0] * k, h[1] * k]
+}
+
+/** The contact shadow's oval at each of the figure's baked steps (docs/plans/active/shadow-contact.md), in his own
+ *  frame (x across him, z along him, m from his root): [cx, cz, ax, az] a step, over his feet (the posed LOD's
+ *  vertices within FOOT_H of his clip's lowest). step: the feet at that step (it follows them); stride: the feet over
+ *  the step's whole clip (one oval a clip); root: none (a disc about the root, its radius the contact's pad). No era
+ *  names: the clips are the figure's own (decision 0015). posed: posedVertices of the LOD */
+export function contactOvals(
+  d: UnitData,
+  posed: ReturnType<typeof posedVertices>,
+  mode: 'root' | 'stride' | 'step',
+): Float32Array {
+  const rows = posed.height
+  const nv = posed.width / 2
+  const out = new Float32Array(rows * 4)
+  if (mode === 'root') return out
+  const at = (s: number, v: number) => (s * nv * 2 + v * 2) * 4
+  const feet = (s: number, floor: number): [number, number][] => {
+    const p: [number, number][] = []
+    for (let v = 0; v < nv; v++) {
+      const o = at(s, v)
+      if (posed.data[o + 1] <= floor + FOOT_H) p.push([posed.data[o], posed.data[o + 2]])
+    }
+    return p
+  }
+  const lowest = (s0: number, s1: number) => {
+    let y = Infinity
+    for (let s = s0; s < s1; s++) for (let v = 0; v < nv; v++) y = Math.min(y, posed.data[at(s, v) + 1])
+    return y
+  }
+  const clipOf = (s: number) => Object.values(d.ranges).find(r => s >= r.start && s < r.end) ?? { start: s, end: s + 1 }
+  const floors = new Map<number, number>()
+  const strides = new Map<number, [number, number, number, number]>()
+  for (let s = 0; s < rows; s++) {
+    const c = clipOf(s)
+    if (!floors.has(c.start)) floors.set(c.start, lowest(c.start, c.end))
+    const floor = floors.get(c.start) ?? 0
+    if (mode === 'step') {
+      out.set(enclosingOval(feet(s, floor)), s * 4)
+      continue
+    }
+    if (!strides.has(c.start)) {
+      const pts = Array.from({ length: c.end - c.start }, (_, i) => feet(c.start + i, floor))
+      strides.set(c.start, enclosingOval(pts.flat()))
+    }
+    out.set(strides.get(c.start) ?? [0, 0, 0, 0], s * 4)
+  }
+  return out
+}

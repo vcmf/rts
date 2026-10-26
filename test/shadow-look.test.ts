@@ -4,15 +4,21 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
+  CONTACT_CAP,
+  CONTACT_SOFT,
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
   SHADE_LUMA,
+  applyContactParams,
   applyLookParams,
+  cappedCover,
+  contactShare,
   decalFragment,
   decalStrip,
   farShare,
   footUniform,
   lookBetween,
+  luma,
   decalPixel,
   parseNumbers,
   shadowModes,
@@ -20,7 +26,7 @@ import {
   simpleShadowsDraw,
   stencilFor,
 } from '../src/look/shadow-look.ts'
-import { decodeUnits, shadowShape } from '../src/look/units-data.ts'
+import { contactOvals, decodeUnits, enclosingOval, posedVertices, shadowShape } from '../src/look/units-data.ts'
 
 const q = (s: string) => new URLSearchParams(s)
 const looks = () => ({ close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } })
@@ -371,5 +377,134 @@ describe('the shape with its soft bake', () => {
         expect(past / body, `${roles[r]} ${k}`).toBeLessThan(0.15)
       }
     }
+  })
+})
+
+describe('the contact shadow and the cap (docs/plans/active/shadow-contact.md)', () => {
+  const k = [0.25, 0.3, 0.42]
+  it('are off without their switches: the shadows exactly as before', () => {
+    expect(applyContactParams(q('armies=20'))).toBeNull()
+    expect(applyContactParams(q('ushcontact=0,1'))).toBeNull()
+    expect(applyContactParams(q('ushcontact=0.1,0'))).toBeNull()
+  })
+  it('parse the contact, its place and the cap, the cap on by default with a contact', () => {
+    expect(applyContactParams(q('ushcontact=0.1,1'))).toEqual({
+      mode: 'stride',
+      pad: 0.1,
+      dark: 1,
+      soft: CONTACT_SOFT,
+      cap: CONTACT_CAP,
+    })
+    expect(applyContactParams(q('ushcontact=0.35,0.8,0.2&ushcontactat=root&ushcap=2'))).toEqual({
+      mode: 'root',
+      pad: 0.35,
+      dark: 0.8,
+      soft: 0.2,
+      cap: 2,
+    })
+    expect(applyContactParams(q('ushcap=1.3'))).toMatchObject({ pad: 0, dark: 0, cap: 1.3 })
+    expect(() => applyContactParams(q('ushcontact=0.1'))).toThrow(/ushcontact/)
+    expect(() => applyContactParams(q('ushcontact=0.1,1&ushcap=0.5'))).toThrow(/ushcap/)
+    expect(() => applyContactParams(q('ushcontact=0.1,1&ushcontactat=feet'))).toThrow(/ushcontactat/)
+  })
+  it('the contact is solid over its oval and fades to nothing past it', () => {
+    expect(contactShare([0.5, 0.5], 1, 0.35)).toBe(1)
+    expect(contactShare([0, 1], 0.8, 0.35)).toBe(0.8)
+    expect(contactShare([0, 1.35], 1, 0.35)).toBe(0)
+    expect(contactShare([0, 1.1], 1, 0.35)).toBeGreaterThan(contactShare([0, 1.2], 1, 0.35))
+  })
+  // a pixel's luminance with one shadow: the covered samples take the shade, the rest none
+  const pixel = (c: { cover: number; shade: number[] }) => 1 - c.cover * (1 - luma(c.shade))
+  const looks = [
+    { s: 1, g: 0, foot: 1.05, dark: 0.55, gain: 2, cap: 1.15 },
+    { s: 0.6, g: 0.7, foot: 1.05, dark: 0.55, gain: 2, cap: 1.15 },
+    { s: 1, g: 1, foot: 1, dark: 1, gain: 3, cap: 1.15 },
+    { s: 0.3, g: 0.2, foot: 1.5, dark: 0.5, gain: 1, cap: 1.5 },
+  ]
+  it('never goes darker than the cap, at any gain, with or without the contact', () => {
+    for (const l of looks) {
+      for (const contact of [0, 0.5, 1]) {
+        const c = cappedCover(k, 1, l, contact)
+        expect(pixel(c)).toBeGreaterThanOrEqual(luma(k) ** l.cap - 1e-12)
+      }
+    }
+  })
+  it('gives the sun shadow the darkening it had wherever that was lighter than the cap', () => {
+    const l = { s: 0.4, g: 0.8, foot: 1.05, dark: 0.55, gain: 1.25, cap: 1.15 }
+    const fr = decalFragment(l.s, l.g, l.foot, l.dark)
+    const was = 1 - fr.cover * (1 - luma(shadowShade(k, fr.dark, l.gain)))
+    expect(was).toBeGreaterThan(luma(k) ** l.cap)
+    expect(pixel(cappedCover(k, 1, l, 0))).toBeCloseTo(was, 12)
+  })
+  it("the contact at full darkness is the cap, the hue the ground shade's", () => {
+    const c = cappedCover(k, 1, { s: 0, g: 0, foot: 1.05, dark: 0.55, gain: 2, cap: 1.15 }, 1)
+    expect(c.cover).toBe(1)
+    expect(luma(c.shade)).toBeCloseTo(luma(k) ** 1.15, 12)
+    expect(c.shade[0] / c.shade[2]).toBeCloseTo(k[0] / k[2], 12)
+  })
+  it('darkens nothing with the shadows off or where the ground is already in full shadow', () => {
+    expect(cappedCover(k, 0, looks[0], 1).cover).toBe(0)
+    expect(cappedCover([1, 1, 1], 1, looks[0], 1).cover).toBe(0)
+  })
+  it('keeps the overlap rule: one shade for every shadow at a pixel, the darkest share wins whatever the order', () => {
+    const thresholds = [0.125, 0.375, 0.625, 0.875]
+    const resolve = (fr: { cover: number; shade: number[] }[]) =>
+      thresholds.map(t => (fr.find(f => f.cover > t) ? luma(fr[0].shade) : 1)).reduce((a, b) => a + b, 0) / 4
+    const a = cappedCover(k, 1, looks[1], 0)
+    const b = cappedCover(k, 1, looks[0], 0.6)
+    expect(a.shade).toEqual(b.shade)
+    expect(resolve([a, b])).toBe(resolve([b, a]))
+    expect(resolve([a, b])).toBe(Math.min(resolve([a]), resolve([b])))
+  })
+  it("the strip holds the contact's reach, never past the shape's cell, and is as before without it", () => {
+    const base = { across: [-1, 1], along: [-0.3, 5] } as const
+    const full = { across: [-1.4, 1.4], along: [-0.9, 5.4] } as const
+    expect(decalStrip(base, full, 1, 1, 1.5, 0)).toEqual(decalStrip(base, full, 1, 1, 1.5))
+    expect(decalStrip(base, full, 1, 1, 1.5, 0.7).box.map(v => +v.toFixed(9))).toEqual([-1, -0.7, 2, 5.7])
+    expect(decalStrip(base, full, 1, 1, 1.5, 2).box.map(v => +v.toFixed(9))).toEqual([-1.4, -0.9, 2.8, 5.9])
+  })
+})
+
+describe("the contact's ovals over the figure's feet (contactOvals)", () => {
+  it('an oval holds every point it is made from, centred on their box', () => {
+    const pts: [number, number][] = [
+      [0.1, -0.5],
+      [-0.15, 0.3],
+      [0.17, 0.34],
+      [-0.1, -0.2],
+    ]
+    const [cx, cz, ax, az] = enclosingOval(pts)
+    expect([cx, cz].map(v => +v.toFixed(9))).toEqual([0.01, -0.08])
+    for (const [x, z] of pts) expect(Math.hypot((x - cx) / ax, (z - cz) / az)).toBeLessThanOrEqual(1 + 1e-9)
+    expect(enclosingOval([])).toEqual([0, 0, 0, 0])
+  })
+  const d = decodeUnits(
+    new Uint8Array(readFileSync(new URL('../data/figures/fr-line-infantry.unitdata', import.meta.url))).buffer,
+  )
+  const lod = d.lods[d.lods.length - 1].name
+  const pv = posedVertices(d, lod)
+  const nv = pv.width / 2
+  // each step's feet: the vertices within 0.12 m of its clip's lowest
+  const feetOf = (s: number, floor: number) =>
+    Array.from({ length: nv }, (_, v) => pv.data.slice((s * nv * 2 + v * 2) * 4, (s * nv * 2 + v * 2) * 4 + 3)).filter(
+      p => p[1] <= floor + 0.12,
+    )
+  it('keep the feet on the contact at every step of every clip, following them (step) or over the stride', () => {
+    const step = contactOvals(d, pv, 'step')
+    const stride = contactOvals(d, pv, 'stride')
+    for (const r of Object.values(d.ranges)) {
+      let floor = Infinity
+      for (let s = r.start; s < r.end; s++) for (const p of feetOf(s, Infinity)) floor = Math.min(floor, p[1])
+      for (let s = r.start; s < r.end; s++) {
+        expect([...stride.slice(s * 4, s * 4 + 4)]).toEqual([...stride.slice(r.start * 4, r.start * 4 + 4)])
+        for (const ov of [step, stride]) {
+          for (const p of feetOf(s, floor)) {
+            const q = Math.hypot((p[0] - ov[s * 4]) / ov[s * 4 + 2], (p[2] - ov[s * 4 + 1]) / ov[s * 4 + 3])
+            expect(q).toBeLessThanOrEqual(1 + 1e-5)
+          }
+        }
+      }
+    }
+    expect(contactOvals(d, pv, 'root').every(v => v === 0)).toBe(true)
   })
 })

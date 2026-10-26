@@ -33,6 +33,15 @@ uniform vec2 uFarK,uFarScale;
 #endif
 #endif
 varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
+#ifdef SH_CAP
+// the contact shadow (docs/plans/active/shadow-contact.md): its oval at each of the figure's baked steps, in his own
+// frame (uContactTex: cx, cz, ax, az, m; CONTACT_ROWS of them, contactOvals in src/look/units-data.ts), grown by its
+// pad (uShContact.x, m); his step his clip's first (aVAT.x) plus the clock's steps since it began (uVATStep, aVAT.z his
+// phase, aVAT.y the clip's length: units.vert's); vCt: the vertex in the oval's frame (1 at its edge), linear on the
+// ground so the fragment's is exact
+uniform sampler2D uContactTex;uniform float uVATStep;uniform vec4 uShContact;
+varying vec2 vCt;
+#endif
 void main(){
   #include<instancesVertex>
   vec3 p=finalWorld[3].xyz+aNext*uStepFrac;
@@ -46,6 +55,12 @@ void main(){
   #endif
   l.y*=l.y>0.0?uShLen:1.0;
   vec2 C=vec2(-uShDir.y,uShDir.x),xz=p.xz+C*l.x+uShDir*l.y;
+  #ifdef SH_CAP
+  float st=aVAT.x+mod(uVATStep+aVAT.z,aVAT.y);
+  vec4 ov=textureLod(uContactTex,vec2((st+0.5)/CONTACT_ROWS,0.5),0.0);
+  vec2 P=C*l0.x+uShDir*vAlong;
+  vCt=(vec2(dot(P,normalize(finalWorld[0].xz)),dot(P,normalize(finalWorld[2].xz)))-ov.xy)/max(ov.zw+uShContact.x,1.0e-3);
+  #endif
   float gy=textureLod(uMeadow,(xz+TILE_HALF)/TILE_W,0.0).r;
   vec3 g=vec3(xz.x,gy,xz.y),toCam=normalize(uCamPos-g);
   float lift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);

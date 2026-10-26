@@ -72,14 +72,17 @@ export interface Strip {
  *  soles (each triangle on one side of them, so a strip shortened past them keeps the feet where they are) and its
  *  third where the lift's ramp ends (liftRamp m along the drawn shadow, liftRamp / len along the shape), so the lift,
  *  linear between rows, is whole there and the grass and legs do not poke through near the feet. Between, the rows'
- *  places (m) and the box blended */
-export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: number, liftRamp: number): Strip {
+ *  places (m) and the box blended. reach (m, 0 by default: as before): the base box grown to hold a disc of that radius
+ *  about the root (the contact shadow's, docs/plans/active/shadow-contact.md), never past the full box (the shape's
+ *  cell: the strip never reads a neighbour's) */
+export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: number, liftRamp: number, reach = 0): Strip {
   const boxOf = (b: ShapeBox): Strip['box'] => [
     b.across[0],
     b.along[0],
     b.across[1] - b.across[0],
     b.along[1] - b.along[0],
   ]
+  if (reach > 0) base = grownBox(base, full, reach)
   if (t >= 1) return { box: boxOf(base), rows: [0, 1 / 3, 2 / 3, 1] }
   if (!(full.along[0] < 0 && full.along[1] > 0)) throw new Error('decalStrip: the box must hold the soles (along 0)')
   const ramp = Math.min(liftRamp / Math.max(len, 1e-3), full.along[1] * 0.9)
@@ -92,6 +95,15 @@ export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: numbe
   const box = fb.map((v, i) => mix(v, bb[i])) as Strip['box']
   const rows = closeRows.map((v, i) => (mix(v, farRows[i]) - box[1]) / box[3]) as Strip['rows']
   return { box, rows }
+}
+
+/** box grown to hold a disc of radius r (m) about the root, within full */
+function grownBox(box: ShapeBox, full: ShapeBox, r: number): ShapeBox {
+  const grow = (b: readonly [number, number], f: readonly [number, number]): [number, number] => [
+    Math.max(f[0], Math.min(b[0], -r)),
+    Math.min(f[1], Math.max(b[1], r)),
+  ]
+  return { across: grow(box.across, full.across), along: grow(box.along, full.along) }
 }
 
 /** The decal's rule at a fragment (src/look/shaders/unitdecal.frag, mirrored here for its tests): of the shape's value
@@ -224,4 +236,76 @@ export function applyLookParams(
   const band = parseNumbers(q, 'ushband', [2], [0, 1000])
   if (band && !(band[1] > band[0])) throw new Error(`?ushband must be <r0>,<r1> with r0 < r1, not ${q.get('ushband')}`)
   return { band: band ? [band[0], band[1]] : null }
+}
+
+/** Where the contact shadow sits (docs/plans/active/shadow-contact.md): root, a disc about the man's root; stride, an
+ *  oval over his feet's whole travel in his clip (one a role, turned with his facing); step, an oval over his feet at
+ *  the clip's step he is posed at (it follows them) */
+export type ContactMode = 'root' | 'stride' | 'step'
+/** The contact shadow under each soldier's feet and the cap on every shadow's darkness (the plan above). pad (m): how
+ *  far the oval reaches past the feet (root: the disc's radius); dark: its share of the cap's darkening (1: as dark as
+ *  the cap allows, 0: none); soft: its fade past the oval, a share of its size; cap: the darkest any covered sample
+ *  goes, the ground's shade's luminance raised to it (1: the ground's painted cast shadow, k; CONTACT_CAP: about a
+ *  tree's cast shadow in the frame) */
+export interface ShadowContact {
+  mode: ContactMode
+  pad: number
+  dark: number
+  soft: number
+  cap: number
+}
+/** The cap's exponent on the ground's shade by default: a tree's cast shadow in the frame is darker than the shade k
+ *  (its crown hides sky too); measured in the plan, L(k)^CONTACT_CAP ≈ the tree's shadow */
+export const CONTACT_CAP = 1.15
+/** The contact's softness by default (its fade past the oval, a share of its size) */
+export const CONTACT_SOFT = 0.35
+
+/** ?ushcontact=<pad m 0..1>,<dark 0..1>[,<soft 0..1>] (pad 0 or dark 0: none), ?ushcontactat=root|stride|step (by
+ *  default stride), ?ushcap=<1..4> (the cap's exponent; by default CONTACT_CAP with a contact, none without): the
+ *  contact and cap, or null for neither (the shadows exactly as before) */
+export function applyContactParams(q: URLSearchParams): ShadowContact | null {
+  const c = parseNumbers(q, 'ushcontact', [2, 3], [0, 1])
+  const capN = parseNumbers(q, 'ushcap', [1], [1, 4])
+  const at = q.get('ushcontactat') ?? 'stride'
+  if (!['root', 'stride', 'step'].includes(at)) throw new Error(`?ushcontactat must be root, stride or step, not ${at}`)
+  const on = c !== null && c[0] > 0 && c[1] > 0
+  if (!on && !capN) return null
+  return {
+    mode: at as ContactMode,
+    pad: on ? c[0] : 0,
+    dark: on ? c[1] : 0,
+    soft: c?.[2] ?? CONTACT_SOFT,
+    cap: capN ? capN[0] : CONTACT_CAP,
+  }
+}
+
+/** The contact's share of the cap's darkening at q (the fragment's place in the oval's own frame: 1 at its edge), dark
+ *  its darkness, soft its fade: solid over the oval, fading to nothing at 1 + soft */
+export function contactShare(q: readonly [number, number], dark: number, soft: number): number {
+  return dark * (1 - sstep(1, 1 + Math.max(soft, 1e-4), Math.hypot(q[0], q[1])))
+}
+
+/** The luminance of a colour (SHADE_LUMA) */
+export function luma(c: readonly number[]): number {
+  return c[0] * SHADE_LUMA[0] + c[1] * SHADE_LUMA[1] + c[2] * SHADE_LUMA[2]
+}
+
+/** The capped decal at a fragment (unitdecal.frag under SH_CAP, mirrored here for its tests): every covered sample
+ *  takes the cap's darkening (shadowShade(k, f, cap): the same for every shadow at a pixel, so the darkest share still
+ *  wins whatever the order), and the share is what gives the pixel the darkening the uncapped look would (the sun's
+ *  shadow as decalFragment and the gain make it: its share of the gained full darkness), or the contact's, whichever
+ *  is more, at most all of it: so no pixel goes darker than the cap, at any gain. k: the ground's shade; f: the zoom's
+ *  cross-fade share (the shadows on); s, g, foot, dark, gain: the sun's shadow as before; contact: contactShare */
+export function cappedCover(
+  k: readonly number[],
+  f: number,
+  look: { s: number; g: number; foot: number; dark: number; gain: number; cap: number },
+  contact: number,
+): { cover: number; shade: [number, number, number] } {
+  const fr = decalFragment(look.s, look.g, look.foot, look.dark)
+  const lg = luma(shadowShade(k, f * fr.dark, look.gain))
+  const shade = shadowShade(k, f, look.cap)
+  const room = 1 - luma(shade)
+  if (room < 1e-3) return { cover: 0, shade }
+  return { cover: Math.min(1, Math.max((fr.cover * (1 - lg)) / room, contact)), shade }
 }

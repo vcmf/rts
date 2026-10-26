@@ -1,6 +1,12 @@
 #extension GL_OES_standard_derivatives : enable
 precision highp float;uniform sampler2D uShapeTex,uUnitShade;uniform vec2 uShapeSize;uniform float uUnitFar,uShSoft,uShGain;uniform vec4 uShFoot;
 varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
+#ifdef SH_CAP
+// the contact shadow and the cap (docs/plans/active/shadow-contact.md): uShContact (its pad, m: the vertex's; its
+// darkness, a share of the cap's darkening; its fade past the oval; the cap's exponent on the ground's shade); vCt: the
+// fragment in the contact's oval (1 at its edge, unitdecal.vert)
+uniform vec4 uShContact;varying vec2 vCt;
+#endif
 #include<painter>
 // The simple shadows (src/look/units.ts): the shape's two facings blended, read through its mips where a pixel spans
 // more than its texel (a soft footprint) but never past SHAPE_MIPS (a cell's border holds no further: no bleed between
@@ -30,12 +36,30 @@ void main(){
   float g=smoothstep(uShFoot.z,uShFoot.w,vAlong);
   vec2 b=mix(textureLod(uShapeTex,vUV0,lod).rg,textureLod(uShapeTex,vUV1,lod).rg,vT);float s=mix(b.r,b.g,uShSoft*g);
   float dm=max(max(uShFoot.x,uShFoot.y),1e-4),a=min(1.0,s*mix(uShFoot.x,uShFoot.y,g)/dm);
+  #ifdef SH_CAP
+  // the capped look (cappedCover in src/look/shadow-look.ts mirrors it): every covered sample takes the cap's
+  // darkening (the ground's shade's luminance raised to uShContact.w, its hue kept: the same for every shadow at a
+  // pixel, so the darkest share still wins), on the share that gives the pixel the sun's shadow's darkening as the
+  // uncapped look and the gain would, or the contact's, whichever is more, at most all: never darker than the cap
+  float ct=uShContact.y*(1.0-smoothstep(1.0,1.0+uShContact.z,length(vCt)));
+  #ifndef COVERAGE
+  if(s<0.02&&ct<0.02)discard;
+  #endif
+  vec3 k=texture2D(uUnitShade,vLM).rgb;float fz=uUnitFar*uShadowsOn;
+  vec3 d=max(mix(vec3(1.0),k,fz*dm),0.0);float ld=dot(d,vec3(0.2126,0.7152,0.0722));
+  float lg=ld*pow(max(ld,1.0e-3),uShGain-1.0);
+  d=max(mix(vec3(1.0),k,fz),0.0);ld=dot(d,vec3(0.2126,0.7152,0.0722));
+  d*=pow(max(ld,1.0e-3),uShContact.w-1.0);
+  float room=1.0-dot(d,vec3(0.2126,0.7152,0.0722));
+  a=room<1.0e-3?0.0:min(1.0,max(a*(1.0-lg)/room,ct));
+  #else
   #ifndef COVERAGE
   if(s<0.02)discard;
   #endif
   vec3 k=texture2D(uUnitShade,vLM).rgb;float f=uUnitFar*uShadowsOn*dm;
   vec3 d=max(mix(vec3(1.0),k,f),0.0);
   d*=pow(max(dot(d,vec3(0.2126,0.7152,0.0722)),1.0e-3),uShGain-1.0);
+  #endif
   #ifdef COVERAGE
   gl_FragColor=vec4(d,a);
   #else
