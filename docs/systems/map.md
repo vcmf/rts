@@ -270,8 +270,8 @@ maps/kinds.json ──► checkCatalogue ─┐
       over a file already there). A new map file reaches the page as `map-changed` like any other (the plugin's
       hot update runs after Vite's, whose glob of maps would reload the page) and joins the list.
     - Adding a feature (M7b, `src/app/map/draw.ts`): a kind from the catalogue, one of its shapes and an id proposed
-      from the kind's last name; then clicks draw it (a point; a line's or an area's points, Enter or a double
-      click ending it; a circle's centre and edge; an ellipse's centre, long radius and side), a barrier's points
+      from the kind's last name (`wood2` when `wood` is taken: never a generated child's form); then clicks draw it
+      (a point; a line's or an area's points, Enter, a double click or a click back on the first point ending it; a circle's centre and edge; an ellipse's centre, long radius and side), a barrier's points
       snapped as a drag snaps them, and each reference the kind takes is set by clicking its target (`on`,
       `carries`, `crosses`: a feature of the category and shape the catalogue names; `near`: a point; `along`: two
       clicks on the line, in metres along it; an optional one skipped with Enter). Backspace takes a click back,
