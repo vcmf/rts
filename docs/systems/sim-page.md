@@ -52,7 +52,7 @@ sim, the soldier layer and its clock, the log), which `?thread=main` forces. The
 points, replays. After every tick it writes the world's columns into the **tick ring** (`src/app/tick-ring.ts`, 8
 shared slots stamped with their tick; the writer skips the slot the reader holds, the reader checks the stamp around
 its hold), the tick's departures into a shared log, and the game clock, stamped with its tick, into the ring's header
-(a sequence count around each write). The **men worker** (`src/app/men-host.ts`) takes the ticks in order into its
+(in three slots, the frames' protocol). The **men worker** (`src/app/men-host.ts`) takes the ticks in order into its
 own world, the layer synced after each with the departures since its last (behind the ring, it takes the oldest it
 still holds, the departures whole from the log), steps the men on their clock at the sim's speed (the alpha the game
 time since its own world's tick), and publishes a frame at most 120
@@ -62,8 +62,9 @@ publish time). Three slots in shared memory: the worker fills the one neither ne
 newest for its frame; neither waits. The page
 reads a slot in place: a `World` whose columns are views on it and a `SoldierLayer` on that world that is never
 stepped, so the map, the HUD, picking and box select read them as they read the battle itself. Commands and
-requests go to the sim worker by message (the headless checks' advance to the sim, then to the men, which step `sec`
-of game time to their places); the log, the orders dropped and the hash points come back by message. The men outgrowing a
+requests go to the sim worker by message (the headless checks' advance: the sim runs it at speed 0 for the men,
+its ticks logging their departures only, then writes its last world; the men take it and step `sec` of game time to
+their places, so where they stand does not hang on the threads' timing); the log, the orders dropped and the hash points come back by message. The men outgrowing a
 frame's room get new slots, sent again. Workers that fail to start leave the battle on the page (said on the
 console); one that fails later stops for good, its requests rejected, and the readout says the battle stopped. The
 battle is held (speed 0) while the page is hidden and while a mark's prompt is open, as when it ran in the page's
@@ -217,8 +218,9 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
   hash, the map's places); a frame with no room for the men is refused; the slot protocol over thousands of
   interleavings; the tick ring: tick 0 to a reader that has taken none, the ticks in order with their departures, a
   reader behind the ring taking the oldest tick it holds with every departure since its last, the clock read against
-  the reader's own tick, and the writer reusing the slot found between the reader's
-  look and hold (and the same race without the reader's check fails); the battle in two Node worker threads (the
+  the reader's own tick, a departures-only write leaving the slots as they were, the writer reusing the slot found
+  between the reader's look and hold, and the writer running while the reader holds a slot; the advance leaving the
+  men where two runs agree; the battle in two Node worker threads (the
   same host code, `test/fx-battle-workers.ts`): on its own clock with commands arriving whenever, its stamped log
   replayed on the test's thread reproduces every hash point; outgrown, the men worker sends new slots; workers that
   fail reject; it runs while the page only reads.

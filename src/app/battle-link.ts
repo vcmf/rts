@@ -234,8 +234,8 @@ export class WorkerLink implements BattleLink {
     this.toSim({ type: 'speed', speed })
   }
   async advance(sec: number): Promise<void> {
-    // the men held first (confirmed), so the ticks they take after it are the ring's last whatever the threads' timing
-    await this.ask(id => this.toMen({ type: 'hold', id }))
+    // the sim advances (its men's clock at speed 0, its ticks logging departures only), then the men take its last
+    // world and step to their places
     await this.ask(id => this.toSim({ type: 'advance', id, sec }))
     await this.ask(id => this.toMen({ type: 'advance', id, sec }))
   }

@@ -5,7 +5,7 @@
 // own world for the soldier layer's sync; fallen behind the ring, it takes the oldest it has not seen. Neither waits:
 // the writer skips the slot the reader holds, and the reader checks the stamp around its hold.
 import { M_TICK, DT, type World } from '../sim/index.ts'
-import { layoutFor, copyColumns, readColumns, Slots, type Layout } from './battle-frame.ts'
+import { layoutFor, Slots, type Layout } from './battle-frame.ts'
 
 export const RING = 8
 // departures kept for a reader behind: far more than the formations there can be
@@ -58,23 +58,29 @@ class RingEnd {
   protected readonly clock: Float64Array
   protected readonly clockSlots: Slots
   protected readonly log: Int32Array
-  protected readonly L: Layout
-  protected readonly slots: SharedArrayBuffer[]
+  // per slot, each column as bytes in the world and in the slot: built once (the world's arrays and the slots stay)
+  protected readonly pairs: [Uint8Array, Uint8Array][][]
   constructor(w: World, b: RingBuffers) {
     this.ctl = new Int32Array(b.ctl)
     this.clock = new Float64Array(b.clock)
     this.clockSlots = new Slots(new Int32Array(b.clockCtl))
     this.log = new Int32Array(b.log)
-    this.L = layoutFor(w, 0)
-    this.slots = b.slots
+    const L: Layout = layoutFor(w, 0)
+    this.pairs = b.slots.map(buf =>
+      L.cols.map(c => {
+        const a = c.table(w)[c.key]
+        return [new Uint8Array(a.buffer, a.byteOffset, c.bytes), new Uint8Array(buf, c.off, c.bytes)]
+      }),
+    )
   }
 }
 
 /** The sim worker's end: writes each tick, its departures and the clock. */
 export class RingWriter extends RingEnd {
   /** Writes the world as it stands after its tick into the slot holding the oldest tick the reader does not hold,
-   * and the formations that left the field in that tick into the log. */
-  write(w: World, departed: readonly { id: number; men: number }[]): void {
+   * and the formations that left the field in that tick into the log; with `world` false the departures only (the
+   * checks' advance, whose men are held: only its last world is read). */
+  write(w: World, departed: readonly { id: number; men: number }[], world = true): void {
     const tick = w.meta[M_TICK]
     const g = this.log
     let n = g[0]
@@ -87,6 +93,7 @@ export class RingWriter extends RingEnd {
     }
     // the entries, then the count that shows them
     Atomics.store(g, 0, n)
+    if (!world) return
     const c = this.ctl
     for (;;) {
       let s = -1
@@ -106,7 +113,7 @@ export class RingWriter extends RingEnd {
         Atomics.store(c, STAMP + s, oldest)
         continue
       }
-      copyColumns(w, this.slots[s], this.L)
+      for (const [own, slot] of this.pairs[s]) slot.set(own)
       Atomics.store(c, STAMP + s, tick)
       return
     }
@@ -151,10 +158,10 @@ export class RingReader extends RingEnd {
 
   /**
    * Copies into `w` the tick after `last` (−1: none taken yet), or the oldest after it the ring still holds; null
-   * when there is none. With it, the departures of every tick up to it since `last`. `between` (tests) runs between
-   * finding the slot and holding it.
+   * when there is none. With it, the departures of every tick up to it since `last`. Tests: `between` runs between
+   * finding the slot and holding it, `during` while it is held, before the copy.
    */
-  take(w: World, last: number, between?: () => void): Taken | null {
+  take(w: World, last: number, between?: () => void, during?: () => void): Taken | null {
     const c = this.ctl
     for (;;) {
       let s = -1
@@ -174,7 +181,8 @@ export class RingReader extends RingEnd {
         Atomics.store(c, HELD, -1)
         continue
       }
-      readColumns(w, this.slots[s], this.L)
+      during?.()
+      for (const [own, slot] of this.pairs[s]) own.set(slot)
       Atomics.store(c, HELD, -1)
       return { tick, departed: this.departures(tick), skipped: tick - last - 1 }
     }

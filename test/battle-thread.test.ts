@@ -176,6 +176,20 @@ describe('the tick ring', () => {
   })
   // regression (PR 5 review): a reader behind jumped to the newest tick, and the departures of the ticks it passed
   // over were lost, so a formation that left the field was drawn as fallen
+  // the checks' advance writes its ticks' departures only (its men read its last world): no world in between exists
+  // for a men worker to take, whatever the threads' timing (PR 5 review)
+  it('a departures-only write leaves the slots as they were; its departures come with the next world', () => {
+    const { b, writer, copy, reader } = setup()
+    b.advance(DT)
+    writer.write(b.w, [])
+    expect(reader.take(copy, -1)!.tick).toBe(1)
+    b.advance(DT)
+    writer.write(b.w, [{ id: 5, men: 40 }], false)
+    expect(reader.take(copy, 1)).toBeNull()
+    b.advance(DT)
+    writer.write(b.w, [])
+    expect(reader.take(copy, 1)).toMatchObject({ tick: 3, skipped: 1, departed: [{ id: 5, men: 40 }] })
+  })
   it('a reader behind the ring takes the oldest tick it still holds, and every departure since its last', () => {
     const { b, writer, copy, reader } = setup()
     for (let k = 1; k <= RING + 3; k++) {
@@ -197,6 +211,28 @@ describe('the tick ring', () => {
     expect(accSince(reader.clockNow(), 4, now)).toBe(DT)
     expect(accSince(reader.clockNow(), 6, now)).toBe(0)
     expect(reader.clockNow()).toMatchObject({ tick: 5, acc: 0.02, speed: 0, tickMs: 1.5 })
+  })
+  // the writer's half: a writer that finds the slot it claimed held puts its stamp back and takes another
+  it('a writer never fills the slot the reader holds: the tick copied while held is the tick it was', () => {
+    const { b, writer, copy, reader } = setup()
+    let wrote = 0
+    let last = -1
+    for (let n = 0; n < 100; n++) {
+      b.advance(DT)
+      writer.write(b.w, [])
+      const t = reader.take(copy, last, undefined, () => {
+        // the whole ring rewritten while the reader holds its slot: every other slot, never that one
+        for (let k = 0; k < 2 * RING; k++) {
+          b.advance(DT)
+          writer.write(b.w, [])
+          wrote++
+        }
+      })
+      if (!t) continue
+      last = t.tick
+      expect(copy.meta[M_TICK]).toBe(t.tick)
+    }
+    expect(wrote).toBe(100 * 2 * RING)
   })
   // the race the reader's check exists for: the writer reuses the slot between the reader finding it and holding it
   it('the writer never fills the slot the reader is taking: a tick taken is always whole', () => {
@@ -235,6 +271,9 @@ function nodeWorker(which: 'sim' | 'men'): { w: Worker; asBrowser: globalThis.Wo
   const asBrowser = {
     postMessage: (m: unknown) => w.postMessage(m),
     terminate: () => void w.terminate(),
+    set onerror(fn: (e: { message: string }) => void) {
+      w.on('error', e => fn({ message: e.message }))
+    },
     set onmessage(fn: (e: { data: unknown }) => void) {
       w.on('message', d => fn({ data: d }))
     },
@@ -301,6 +340,27 @@ describe('the battle in a worker thread', () => {
     } finally {
       await stop()
     }
+  })
+  // the checks' advance, end to end: the men stand where they always do after it, whatever the threads' timing
+  it("the checks' advance leaves the men where it always does: two runs, the same men", async () => {
+    const run = async () => {
+      const { link, stop } = startLink('s1b-field')
+      try {
+        await link.ready()
+        link.command({ type: 'move', id: makeHandle(KIND_FORMATION, 1, 1), points: [[-40, 30]], append: false })
+        await link.advance(0)
+        // the clock ran before the hold for as long as start-up took: the advance starts from wherever that was
+        const t0 = link.see().w.meta[M_TICK]
+        await link.advance(6)
+        const M = link.see().layer.men
+        return { ticks: link.see().w.meta[M_TICK] - t0, x: [...M.x.subarray(0, M.n)].map(v => Math.round(v * 1e3)) }
+      } finally {
+        await stop()
+      }
+    }
+    const [a, b] = [await run(), await run()]
+    expect(a.ticks).toBe(120)
+    expect(b).toEqual(a)
   })
   it('runs on its own clock: frames arrive while the page only reads', async () => {
     const { link, stop } = startLink('s1b-field')

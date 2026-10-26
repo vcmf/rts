@@ -40,6 +40,8 @@ export function serveSim(port: Port<ToSim>): void {
   let ring: RingWriter | null = null
   let sent = { log: 0, dropped: 0, hashes: 0 }
   let rec: SimRecording | null = null
+  // in the checks' advance: the men are held and read only its last world, so its ticks log their departures only
+  let advancing = false
   let tickMs = 0
   // the time the turn's ticks spent writing the ring (left out of the tick's cost: the sim's own is what is measured)
   let ringMs = 0
@@ -59,7 +61,8 @@ export function serveSim(port: Port<ToSim>): void {
   }
   const clock = () => ring!.setClock(battle!.w.meta[M_TICK], battle!.acc, battle!.speed, tickMs)
   // one turn: the ticks owed since the last (none at speed 0: paused, or held after the checks' advance), the clock
-  const step = () => {
+  // `record`: false for the time owed before a change of speed (not a turn of the loop)
+  const step = (record = true) => {
     const now = performance.now()
     const dt = Math.min(0.1, (now - last) / 1000)
     last = now
@@ -68,7 +71,7 @@ export function serveSim(port: Port<ToSim>): void {
     const simMs = r.tickMs - ringMs
     if (r.ticks) tickMs = tickMs * 0.9 + (simMs / r.ticks) * 0.1
     clock()
-    if (rec) {
+    if (rec && record) {
       rec.loopMs.push(dt * 1000)
       rec.tickMs.push(simMs)
       rec.ringMs.push(ringMs)
@@ -82,16 +85,15 @@ export function serveSim(port: Port<ToSim>): void {
       if (!scenario) throw new Error(`sim worker: no scenario ${m.scenario}`)
       const data = loadSimData(m.data, m.version)
       // the world before the first tick too, so the men worker starts from the scenario as set up
-      let writer: RingWriter | null = null
       battle = new Battle(data, scenario, undefined, {
         men: false,
         onTick: (w, r) => {
           const a = performance.now()
-          writer!.write(w, r.departed)
+          ring!.write(w, r.departed, !advancing)
           ringMs += performance.now() - a
         },
       })
-      writer = ring = new RingWriter(battle.w, m.ring)
+      ring = new RingWriter(battle.w, m.ring)
       ring.write(battle.w, [])
       clock()
       last = performance.now()
@@ -107,17 +109,23 @@ export function serveSim(port: Port<ToSim>): void {
     } else if (m.type === 'speed') {
       // the game time owed at the old speed first (the men have been running at it since the clock's last), then the
       // new one: a pause holds them where they are, not a part of a tick back
-      step()
+      step(false)
       b.speed = m.speed
       clock()
     } else if (m.type === 'advance') {
-      // held first (the men read the speed, and stand while it advances), then held after, as the page held itself
-      // before: until the page sets a speed again
-      step()
+      // the time owed first, then held, as the page held itself before: until the page sets a speed again. The men read
+      // the speed 0 and stand; the ticks log their departures only, so no world in between is there for the men to
+      // take whatever the threads' timing, and the last is written once
+      step(false)
       b.speed = 0
       clock()
-      b.advanceBy(m.sec)
-      b.speed = 0
+      advancing = true
+      try {
+        b.advanceBy(m.sec)
+      } finally {
+        advancing = false
+      }
+      ring!.write(b.w, [])
       clock()
       flush()
       host.send({ type: 'reply', id: m.id, value: null })

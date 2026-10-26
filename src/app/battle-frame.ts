@@ -247,11 +247,6 @@ export function copyColumns(w: World, buf: ArrayBufferLike, L: Layout): void {
 /** Column `c` as a view on `buf`. */
 const columnIn = (buf: ArrayBufferLike, c: Layout['cols'][number]) => new c.ctor(buf, c.off, c.bytes / bytesPer(c.ctor))
 
-/** Copies the columns `L` lays in `buf` into `w`'s own. */
-export function readColumns(w: World, buf: ArrayBufferLike, L: Layout): void {
-  for (const c of L.cols) c.table(w)[c.key].set(columnIn(buf, c) as never)
-}
-
 // the slot protocol's words (docs/proposals/battle-threads.md §5): the newest complete slot (−1: none yet), the slot
 // the reader holds (−1: none)
 const LATEST = 0

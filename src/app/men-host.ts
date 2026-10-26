@@ -14,7 +14,6 @@ import { Host, type Port, type Failed } from './host.ts'
 /** What the page sends the men worker: the map's bytes and the tick ring, then requests. */
 export type ToMen =
   | { type: 'init'; data: Uint8Array; version: number; ring: RingBuffers }
-  | { type: 'hold'; id: number } // the checks' advance: take no ticks and step nothing until its `advance`
   | { type: 'advance'; id: number; sec: number }
   | { type: 'record'; id: number; on: boolean }
 
@@ -114,10 +113,7 @@ export function serveMen(port: Port<ToMen>): void {
     changed = false
   }
   // one turn: the ticks waiting, then the men's sub-steps due at the sim's speed, then the frame when due
-  // held for the checks' advance (`hold`), so which ticks it syncs does not hang on the threads' timing
-  let held = false
   const step = () => {
-    if (held) return
     const t0 = performance.now()
     const dt = Math.min(0.1, (t0 - last) / 1000)
     last = t0
@@ -157,10 +153,7 @@ export function serveMen(port: Port<ToMen>): void {
       return
     }
     if (!slots) throw new Error(`men worker: ${m.type} before init`)
-    if (m.type === 'hold') {
-      held = true
-      host.send({ type: 'reply', id: m.id, value: null })
-    } else if (m.type === 'advance') {
+    if (m.type === 'advance') {
       // after the sim's advance (the page asks it first): the ticks it can take, the newest at least, then its clock
       // `sec` of game time at 1× in 1/30 s frames, so the men stand where the battle now has them
       while (take(TAKE).taken);
@@ -169,7 +162,6 @@ export function serveMen(port: Port<ToMen>): void {
       layer.alphaNow = src.acc / DT
       changed = true
       publish()
-      held = false
       last = performance.now()
       host.send({ type: 'reply', id: m.id, value: null })
     } else if (m.type === 'record') {
