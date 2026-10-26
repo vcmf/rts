@@ -1,7 +1,8 @@
 // The cost benches outside vitest, split by part (S1c-5): 40 battalions marching through every shape, or
-// 40 firing at the halt, at 400 men (or the ceiling's 800), on the formation field. Prints ms per tick for the
-// sim, ms per frame for the soldier layer's step and its syncs, and the hash. Run with --cpu-prof to profile.
-// Usage: node tools/bench-cost.ts [march|fire] [400|800] [frames=360] [warm-up seconds=1]
+// 40 firing at the halt, at 400 men (or the ceiling's 800), on the formation field, in 120 Hz frames at a game
+// speed. Prints ms per tick for the sim, the soldier layer's ms per frame (stepped on its clock as the page does,
+// src/render/men-clock.ts: mean and p99) and its syncs, and the hash. Run with --cpu-prof to profile.
+// Usage: node tools/bench-cost.ts [march|fire] [400|800] [frames=1440] [warm-up seconds=2] [speed=1]
 import fs from 'node:fs'
 import {
   loadSimData,
@@ -19,11 +20,13 @@ import {
 import { napoleonic, ceiling } from '../src/rulesets/napoleonic.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer } from '../src/render/soldiers.ts'
+import { MenClock } from '../src/render/men-clock.ts'
 
 const mode = process.argv[2] ?? 'march'
 const men = Number(process.argv[3] ?? 400)
-const frames = Number(process.argv[4] ?? 360)
-const warm = Number(process.argv[5] ?? 1)
+const frames = Number(process.argv[4] ?? 1440)
+const warm = Number(process.argv[5] ?? 2)
+const speed = Number(process.argv[6] ?? 1)
 const data = loadSimData(new Uint8Array(fs.readFileSync(new URL('../data/formation-field.simdata', import.meta.url))))
 const shippedCr = compileRuleset(napoleonic)
 const rs = men > shippedCr.types[0].slots ? ceiling : napoleonic
@@ -59,15 +62,17 @@ if (mode === 'fire') {
   })
 }
 const layer = new SoldierLayer(w, buildScene(w))
+const clock = new MenClock()
+const FRAME = 1 / 120
 const now = () => Number(process.hrtime.bigint()) / 1e6
 let acc = 0
 let tSim = 0
 let tSync = 0
-let tStep = 0
+const tStep: number[] = []
 let ticks = 0
 const frame = (timed: boolean) => {
-  acc += 1 / 60
-  while (acc >= 0.05) {
+  acc += FRAME * speed
+  for (let n = 0; acc >= 0.05 && n < 20; n++) {
     const a = now()
     advanceTick(w)
     const b = now()
@@ -81,10 +86,10 @@ const frame = (timed: boolean) => {
     }
   }
   const a = now()
-  layer.step(1 / 60, acc / 0.05)
-  if (timed) tStep += now() - a
+  for (const s of clock.advance(FRAME, speed)) layer.step(s.dt, acc / 0.05, s.group, clock.groups)
+  if (timed) tStep.push(now() - a)
 }
-for (let n = 0; n < warm * 60; n++) frame(false)
+for (let n = 0; n < warm * 120; n++) frame(false)
 const t0 = now()
 for (let n = 0; n < frames; n++) frame(true)
 const total = now() - t0
@@ -94,6 +99,9 @@ for (let n = 0; n < 10; n++) {
   hashWorld(w)
   tHash += now() - a
 }
+const sorted = [...tStep].sort((a, b) => a - b)
+const stepMean = sorted.reduce((a, b) => a + b, 0) / frames
+const stepP99 = sorted[Math.floor(frames * 0.99)]
 console.log(
-  `${mode} 40 × ${men}: ${(total / frames).toFixed(2)} ms per frame; sim ${(tSim / ticks).toFixed(2)} ms per tick, sync ${(tSync / frames).toFixed(2)} and step ${(tStep / frames).toFixed(2)} ms per frame; hash ${(tHash / 10).toFixed(2)} ms`,
+  `${mode} 40 × ${men} at ${speed}×: ${(total / frames).toFixed(2)} ms per 120 Hz frame; sim ${(tSim / ticks).toFixed(2)} ms per tick, sync ${(tSync / frames).toFixed(2)} ms and step ${stepMean.toFixed(2)} (p99 ${stepP99.toFixed(2)}) ms per frame; hash ${(tHash / 10).toFixed(2)} ms`,
 )

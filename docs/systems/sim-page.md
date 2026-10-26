@@ -32,16 +32,23 @@ exports as a replay that plays back in Node to the same hashes.
 - The soldier layer is cosmetic: it reads the sim and never writes to it; it uses its own RNG
   (`cosmeticRng`), so its choices never change a hash.
 - Sim plus soldier layer within 4 ms per frame for 40 battalions on the dev Mac. At 400 men a battalion
-  (decision 0018) it holds at the halt and firing (0.7 ms) but not with all 16,000 men marching (4.4–6 ms):
-  [#36](https://github.com/vcmf/rts/issues/36). `node tools/bench-cost.ts` measures it by part on the page's release world.
+  (decision 0018) it holds at the halt and firing (0.7 ms). With all 16,000 men marching the layer stepped once a
+  frame cost 4.4–6 ms ([#36](https://github.com/vcmf/rts/issues/36)); on its clock it costs 0.5 ms a 120 Hz frame at
+  1× (p99 1.0) and about 2.5 ms at 8× (p99 4–8), the 8× bar moved to the battle worker (battle threads PR 3).
+  `node tools/bench-cost.ts` measures it by part on the page's release world, at a speed.
 
 ## Design
 
 **Loop** (`src/app/main.ts`). Each animation frame adds `dt × speed` to an accumulator and runs the
 ticks owed (at most 20 per frame; the rest is dropped), syncing the soldier layer after each. The layer
-then steps once per frame, for up to 0.2 s of game time (`MEN_DT`, the step the 8× test uses); a longer
-frame takes more steps, at most four (`MEN_STEPS`). At 60 fps that is one step at every speed: 8× costs
-more than 1× only by its extra ticks. `alpha = acc / tick` interpolates. The map is redrawn only when the
+then takes the sub-steps due on its own clock (`src/render/men-clock.ts`, battle threads PR 1,
+`docs/plans/active/battle-threads.md`), not once a frame: 12 rounds a real second (`MEN_HZ`), whatever the frame
+rate, each split into a sub-step per group of battalions (`MEN_GROUPS` = 8, shared out by their men), spread evenly
+over the round. A sub-step covers its group's game time since its last one, at most 1/8 s (`MEN_DT`: above it the
+arrival damping is gone and halted men near trunks jitter), so above 1.5× the rounds come faster (64 Hz at 8×) and
+8× costs more than 1×. A long frame catches up at most seven rounds (`MEN_ROUNDS`). The men are drawn as they
+stand after their last sub-step, with no interpolation; `alpha = acc / tick`, set every frame, interpolates the
+anchors, the colours and the order lines. The map is redrawn only when the
 view changes; the units every frame, on a second canvas.
 
 **Commands.** Every input goes through `issue` with the external log. The page keeps the hash points the
@@ -71,8 +78,9 @@ the shape it changes to, the lean bit and the `faces` counter.
 - the place is the slot extrapolated 0.6 s ahead along the battalion's motion, falling back to the
   current place when that one is impassable;
 - personal sway while the battalion moves, wider among trees;
-- separation from neighbours found through a grid (`SC` in `src/render/soldiers.ts`), from where they
-  stood as the frame began (so the order men move in does not matter);
+- separation from neighbours found through a grid (`SC` in `src/render/soldiers.ts`), rebuilt at the start of
+  each round from where the men stood then (so the order men and groups move in does not matter; men lost or added
+  within a round show in it at the next);
 - going round the cosmetic tree trunks: the trunks near each cell of the scene's obstacle grid are listed
   once, so a man away from the woods looks at none;
 - speed from the ground (`groundG`).

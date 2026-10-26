@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { Sim, STREAM_X, longIt, ceiling, small, openBattlefield, OPEN_DATA } from './fx.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer } from '../src/render/soldiers.ts'
-import { MenClock, MEN_DT, MEN_GROUPS, MEN_HZ, type MenStep } from '../src/render/men-clock.ts'
+import { MenClock, MEN_DT, MEN_GROUPS, MEN_HZ, MEN_ROUNDS, type MenStep } from '../src/render/men-clock.ts'
 import { occupied, advanceTick, MS_SHATTERED, type Meter } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
@@ -36,6 +36,7 @@ class Play {
       for (const s of this.clock.advance(d, this.speed)) {
         this.layer.step(s.dt, this.acc / 0.05, s.group, this.clock.groups)
       }
+      this.layer.alphaNow = this.acc / 0.05
     }
   }
   // worst slot error sampled every 0.5 s while `sec` pass
@@ -303,43 +304,64 @@ describe('at 8× (rounds at 64 Hz, MEN_DT steps)', () => {
 })
 
 describe('the soldier clock', () => {
-  const run = (sec: number, frame: number, speed: number) => {
+  const run = (sec: number, fps: number, speed: number) => {
     const c = new MenClock()
     const steps: MenStep[] = []
-    for (let t = 0; t < sec - 1e-9; t += frame) steps.push(...c.advance(frame, speed))
+    for (let n = 0; n < Math.round(sec * fps); n++) steps.push(...c.advance(1 / fps, speed))
     return steps
   }
-  it('at 1× each group steps 12 times a real second, whatever the frame rate, and covers the game time', () => {
-    for (const fps of [60, 120, 144]) {
-      const steps = run(2, 1 / fps, 1)
-      for (let g = 0; g < MEN_GROUPS; g++) {
-        const mine = steps.filter(s => s.group === g)
-        expect({ fps, g, n: Math.abs(mine.length - 2 * MEN_HZ) <= 1 }).toEqual({ fps, g, n: true })
-        // up to the group's last step, at most a round before the end
-        const covered = mine.reduce((a, s) => a + s.dt, 0)
-        expect({ fps, g, covered: covered <= 2 + 1e-9 && covered > 2 - 1 / MEN_HZ - 1e-9 }).toEqual({
-          fps,
-          g,
-          covered: true,
-        })
+  // regression (review): one round a frame at most, with each step capped at MEN_DT, lost game time above 1.5× at
+  // 60 fps and below (7.5 game s a real second at 8×, 3.75 at 30 fps)
+  it('each group covers the game time at every speed and frame rate, no step longer than MEN_DT', () => {
+    for (const speed of [1, 2, 8]) {
+      for (const fps of [30, 60, 120, 144]) {
+        const steps = run(2, fps, speed)
+        const rounds = Math.max(MEN_HZ, speed / MEN_DT)
+        for (let g = 0; g < MEN_GROUPS; g++) {
+          const mine = steps.filter(s => s.group === g)
+          // up to the group's last step, at most a round before the end
+          const covered = mine.reduce((a, s) => a + s.dt, 0)
+          const ok = covered <= 2 * speed + 1e-9 && covered > 2 * speed - speed / rounds - 1e-9
+          expect({ speed, fps, g, ok, n: Math.abs(mine.length - 2 * rounds) <= 1 }).toEqual({
+            speed,
+            fps,
+            g,
+            ok: true,
+            n: true,
+          })
+        }
+        expect(Math.max(...steps.map(s => s.dt))).toBeLessThanOrEqual(MEN_DT + 1e-9)
       }
     }
   })
-  it('the groups take turns, one sub-step at a time', () => {
-    const steps = run(1, 1 / 120, 1)
+  it('the groups take turns, one sub-step at a time; paused, none', () => {
+    const steps = run(1, 120, 1)
     expect(steps.slice(0, 2 * MEN_GROUPS).map(s => s.group)).toEqual([...Array(2 * MEN_GROUPS)].map((_, k) => k % 8))
+    expect(run(1, 120, 0)).toEqual([])
   })
-  it('above 4× the rounds come faster, no step longer than MEN_DT; paused, none', () => {
-    const steps = run(1, 1 / 120, 8)
-    expect(Math.max(...steps.map(s => s.dt))).toBeLessThanOrEqual(MEN_DT + 1e-9)
-    expect(steps.reduce((a, s) => a + s.dt, 0) / MEN_GROUPS).toBeCloseTo(8, 0)
-    expect(run(1, 1 / 120, 0)).toEqual([])
-  })
-  it('a long frame owes at most one round', () => {
+  it('a long frame catches up at most MEN_ROUNDS rounds, and drops the rest', () => {
     const c = new MenClock()
-    c.advance(1 / 120, 1)
-    expect(c.advance(1, 1).length).toBe(MEN_GROUPS)
-    expect(c.advance(1 / 120, 1).length).toBeLessThanOrEqual(1)
+    expect(c.advance(0.1, 8).length).toBe(Math.floor(0.1 * (8 / MEN_DT) * MEN_GROUPS + 1e-6))
+    expect(c.advance(1, 8).length).toBe(MEN_ROUNDS * MEN_GROUPS)
+    expect(c.advance(1 / 120, 8).length).toBeLessThanOrEqual(5)
+  })
+})
+
+describe('the soldier groups', () => {
+  it('share the battalions out by their men, each group stepping only its own', () => {
+    const p = new Play(new Sim(1, napoleonic))
+    const sizes = [400, 400, 400, 400, 200, 200, 200, 200, 100, 100]
+    sizes.forEach((men, k) => p.sim.spawn(-120 + (k % 5) * 40, -100 + Math.floor(k / 5) * 60, 0, 'line', men))
+    p.frames(1)
+    const load = new Array(MEN_GROUPS).fill(0)
+    for (const u of p.layer.units.values()) load[u.group] += u.men.length
+    expect(Math.max(...load)).toBe(400)
+    expect(Math.min(...load)).toBeGreaterThanOrEqual(200)
+    // a step of group g moves no man of another group
+    const others = [...p.layer.units.values()].filter(u => u.group !== 3)
+    const before = others.map(u => u.men.map(m => [m.x, m.z]))
+    p.layer.step(0.1, 0, 3, MEN_GROUPS)
+    expect(others.every((u, k) => u.men.every((m, j) => m.x === before[k][j][0] && m.z === before[k][j][1]))).toBe(true)
   })
 })
 

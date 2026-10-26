@@ -57,9 +57,10 @@ export interface Man {
 }
 // pose: what the places were last framed from (still: unchanged, so settled men need no new place); type: the
 // unit type's name (cr.types: infantry, cavalry, battery in the Napoleonic ruleset); figure: how its men are drawn
-// (UnitType.figure: foot, mounted, crewed)
+// (UnitType.figure: foot, mounted, crewed); group: which of `step`'s groups it steps in
 export interface Unit {
   i: number
+  group: number
   gen: number
   side: number
   type: string
@@ -87,6 +88,9 @@ export class SoldierLayer {
   private walkOf: Float64Array
   private runOf: Float64Array
   alphaNow = 1
+  // the group count the units were last shared out for (`step`), and whether units came or went since
+  private grouped = 0
+  private regroup = false
   // the neighbour grid: per cell the first man, per man the next, and the men's positions as the frame began
   private cellHead: Int32Array
   private cellNext = new Int32Array(1024)
@@ -262,6 +266,7 @@ export class SoldierLayer {
           this.fallen.push(m)
         }
         this.units.delete(i)
+        this.regroup = true
       }
     }
     for (let i = 0; i < N; i++) {
@@ -276,6 +281,7 @@ export class SoldierLayer {
       if (!u) {
         u = {
           i,
+          group: 0,
           gen: f.gen[i],
           side: f.side[i],
           type: U.name,
@@ -287,6 +293,7 @@ export class SoldierLayer {
           pose: new Float64Array(8 + 2 * w.cr.maxNB).fill(NaN),
         }
         this.units.set(i, u)
+        this.regroup = true
       }
       this.sign(u.sig, i)
       if (u.faces !== f.faces[i]) {
@@ -372,15 +379,34 @@ export class SoldierLayer {
   }
 
   /**
-   * One step: sync, then the men of one group of battalions (slot `i % groups === group`) steer to their places for
-   * `dt` seconds of game time. The neighbour grid is rebuilt at group 0, so a full round of groups shares one grid,
-   * as one ungrouped step does (each man pushed by where the others stood when the round began).
+   * One step: the men of one group of battalions steer to their places for `dt` seconds of game time. A round
+   * (groups 0 to `groups` − 1) starts with a sync, the units shared out among the groups if they changed, and the
+   * neighbour grid's rebuild, so the round's groups share one grid as one ungrouped step does (each man pushed by
+   * where the others stood when the round began). Men lost or added within a round show in the grid at the next.
    */
   step(dt: number, alpha: number, group = 0, groups = 1): void {
     this.alphaNow = alpha
-    this.sync(alpha)
-    if (group === 0) this.buildGrid()
-    this.steer(dt, alpha, group, groups)
+    if (group === 0) {
+      this.sync(alpha)
+      if (this.regroup || groups !== this.grouped) this.shareOut(groups)
+      this.buildGrid()
+    }
+    this.steer(dt, alpha, group)
+  }
+  // the units among `groups` groups, about the same men in each: the largest first, each to the lightest group
+  private shareOut(groups: number): void {
+    const load = new Float64Array(groups)
+    const standing = (u: Unit) => u.men.reduce((n, m) => n + (m.alive ? 1 : 0), 0)
+    const bySize = [...this.units.values()].map(u => ({ u, n: standing(u) }))
+    bySize.sort((a, b) => b.n - a.n || a.u.i - b.u.i)
+    for (const { u, n } of bySize) {
+      let g = 0
+      for (let k = 1; k < groups; k++) if (load[k] < load[g]) g = k
+      u.group = g
+      load[g] += n
+    }
+    this.grouped = groups
+    this.regroup = false
   }
   // the neighbour grid: cells and linked lists in typed arrays, with the men's positions as it is built
   private buildGrid(): void {
@@ -410,7 +436,7 @@ export class SoldierLayer {
       }
     }
   }
-  private steer(dt: number, alpha: number, group: number, groups: number): void {
+  private steer(dt: number, alpha: number, group: number): void {
     const w = this.w
     const f = w.f
     const t = w.terrain
@@ -431,7 +457,7 @@ export class SoldierLayer {
     const next = this.cellNext
     for (const u of this.units.values()) {
       const i = u.i
-      if (i % groups !== group) continue
+      if (u.group !== group) continue
       this.frame(i, alpha)
       const busy = !!(f.trans[i] || f.ordHead[i] >= 0)
       // sway eases out at the halt, so the ranks come to rest

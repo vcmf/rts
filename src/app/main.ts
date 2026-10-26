@@ -137,6 +137,8 @@ async function main(): Promise<void> {
     }
     if (n === 20) acc = 0
     for (const s of menClock.advance(dt, speed)) layer.step(s.dt, acc / DT, s.group, menClock.groups)
+    // the map draws the anchors at this frame's alpha, whether or not a sub-step was due
+    layer.alphaNow = acc / DT
     simMs = simMs * 0.9 + (performance.now() - a) * 0.1
   }
   const draw = () => {

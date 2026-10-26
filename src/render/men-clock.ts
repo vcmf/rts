@@ -10,6 +10,8 @@ export const MEN_HZ = 12
 // p99 per 120 Hz frame was 1.72 ms; at eight, 0.95 ms (bench in the plan's PR 1 outcome)
 export const MEN_GROUPS = 8
 export const MEN_DT = 1 / 8
+// the most rounds one frame catches up: the page's longest frame (0.1 s) at 8× is 0.8 s of game time, 6.4 rounds
+export const MEN_ROUNDS = 7
 
 /** One sub-step: the group of battalions to step, and the game seconds it covers. */
 export interface MenStep {
@@ -21,6 +23,7 @@ export class MenClock {
   readonly groups: number
   private readonly hz: number
   private readonly maxDt: number
+  // real seconds owed to the sub-steps not yet taken, and the game time the sub-steps taken have reached
   private owed = 0
   private game = 0
   private next = 0
@@ -34,24 +37,26 @@ export class MenClock {
   }
 
   /**
-   * Advances by a frame of `realDt` seconds at `speed` (0: paused, nothing due) and returns the sub-steps now due, at
-   * most one round: a frame longer than a round drops the rest, and the steps after it cover at most MEN_DT (the
-   * men fall behind the sim and catch up, as they did when the layer stepped per frame).
+   * Advances by a frame of `realDt` seconds at `speed` (0: paused, nothing due) and returns the sub-steps now due.
+   * Each sub-step moves the clock's game time on by its share of a round, so the steps cover the frame's game time
+   * at any frame rate. A frame owing more than MEN_ROUNDS rounds drops the rest (the men fall behind the sim and
+   * catch up, as they did when the layer stepped per frame).
    */
   advance(realDt: number, speed: number): MenStep[] {
     if (speed <= 0) return []
     const every = 1 / (Math.max(this.hz, speed / this.maxDt) * this.groups)
-    this.game += realDt * speed
     this.owed += realDt
     const due: MenStep[] = []
-    while (this.owed >= every - 1e-9 && due.length < this.groups) {
+    while (this.owed >= every - 1e-9 && due.length < MEN_ROUNDS * this.groups) {
       this.owed -= every
+      this.game += every * speed
       const g = this.next
       this.next = (g + 1) % this.groups
+      // at most MEN_DT: only a change of speed within the round makes it more
       due.push({ group: g, dt: Math.min(this.maxDt, this.game - this.last[g]) })
       this.last[g] = this.game
     }
-    if (due.length === this.groups) this.owed = Math.min(this.owed, every)
+    if (this.owed >= every) this.owed = 0
     return due
   }
 }
