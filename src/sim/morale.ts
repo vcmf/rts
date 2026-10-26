@@ -52,17 +52,21 @@ import {
   fillRetire,
   cutChange,
 } from './formation.ts'
-import { formedFits, freeSpot } from './claims.ts'
+import { formedFits, freeSpot, enemyClaimAhead } from './claims.ts'
 import { sin, cos, PI } from './num.ts'
 import { TICK_HZ, DT } from './time.ts'
 
 const RUN = 800 // how far a router is sent, metres (kept on the map)
+const unit = (x: number, z: number): [number, number] => {
+  const d = Math.sqrt(x * x + z * z) || 1
+  return [x / d, z / d]
+}
 // the runs: the stored direction first, then turned from it by these angles, one every RETRY ticks while the
 // router is halted; after the last it stays where it is (pinned), unless enemies hold it there (RP_TRAPPED)
 const FAN = [0, PI / 3, -PI / 3, (2 * PI) / 3, (-2 * PI) / 3]
 const RETRY = 100
-// s a run may stand held by other formations' cells before it counts as halted there (the claim grid's prototype;
-// routers pass through friends, so those cells are enemies')
+// s a run may stand held by other formations' cells before it counts as halted there, if an enemy's claim lies on its
+// way (the claim grid's prototype)
 const HELD = 2
 
 // what a battalion reads of the others this step (scratch): the contagion shock, its secured flanks, and the
@@ -267,7 +271,14 @@ function rout(w: World, i: number, now: number, men: number): void {
 // trapped; otherwise it got where it was going (or as near as it could) and has fled
 function routStep(w: World, i: number): void {
   const f = w.f
-  if (f.routPhase[i] === RP_RUNNING && f.status[i] === ST_BLOCKED && f.blockedFor[i] > HELD) {
+  const n = f.ordHead[i]
+  if (
+    f.routPhase[i] === RP_RUNNING &&
+    f.status[i] === ST_BLOCKED &&
+    f.blockedFor[i] > HELD &&
+    n >= 0 &&
+    enemyClaimAhead(w, i, ...unit(w.ord.x[n] - f.x[i], w.ord.z[n] - f.z[i]))
+  ) {
     clearOrders(w, i)
     f.routPhase[i] = f.runs[i] >= FAN.length ? RP_TRAPPED : RP_HALTED
   }

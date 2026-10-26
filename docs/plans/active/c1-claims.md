@@ -140,10 +140,12 @@ keeps:
   the core does not. They used to pass freely into each other, and when one broke the router stood on its foe's
   cells and could not move off them (X-18: shattered, held for good).
 - **A charge reaches its target's core only;** any other enemy's margin stops it (X-16: the veteran pursued the router
-  into the friend behind it). A pursuit stops at the router's margin: it rides it down from behind, never into it.
-- **A router held by enemies** (`routStep`, `src/sim/morale.ts`): a run held for 2 s by others' cells counts as
-  halted and tries the fan's next direction at its retry, as at impassable ground. Held by enemies on the last, it
-  surrenders: it leaves the field at the tick's end, its men counted as left until saves count the captured (C2).
+  into the friend behind it). A pursuit stops at the router's margin and rides it down from there: its reach grows by
+  the margin's width (`marginWidth`), a cell, 2 m on the bench and 7.16 m on the battle maps.
+- **A router held by enemies** (`routStep`, `src/sim/morale.ts`): a run held for 2 s, with an enemy's claim one cell
+  along its way (`enemyClaimAhead`: not a friend, a crowded cell or the ground), counts as halted and tries the fan's
+  next direction at its retry, as at impassable ground. Held so on the last, it surrenders: it leaves the field at the
+  tick's end, its men counted as left until saves count the captured (C2).
 - **The tuning** (`HELD`) is in the code while it is a prototype: ruleset data is hashed into saves.
 
 Six cases, a veteran regiment (quality 0.95) charging a raw one (0.75) at the halt unless said:
@@ -163,5 +165,6 @@ What the bench shows:
 - **Offset lines:** at 30 m and more the charge's impact reads the offset as a flank (`quarter`, an angle from centre
   to anchor) and breaks the target at once. That is the charge's impact; C2 moves it onto a test of the shapes.
 
-Not done yet: Face about's end pose against others (it turns in place; no case shows a problem), and a break
-mid-change snapping into a neighbour.
+Not done yet: Face about's end pose against others (it turns in place; no case shows a problem), a break
+mid-change snapping into a neighbour, and a charge whose way another enemy stands across: it halts at that enemy's
+margin with its order kept, until the player gives another (before step 4 it halted at the core the same way).
