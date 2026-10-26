@@ -15,6 +15,10 @@ const K_ORDER = 0x434c // the keyed draw that orders the formations in a tick
 // a change of shape claims the ground it will sweep until it ends, sampled at this many poses ahead
 const SWEEP = 6
 
+/** The width of the margin round a formation's cells, metres (0 with the claim grid off): how much farther off it
+ * keeps an enemy than the enemy would stand (melee.ts, the ride-down's reach). */
+export const marginWidth = (w: World): number => (w.claims ? MARGIN * w.terrain.cell : 0)
+
 /** Claims per cell: SLOTS entries per terrain cell (owner slot + 1, times 2, plus 1 for its core), and a mark for
  * a cell claimed by more formations than that. */
 export interface Claims {

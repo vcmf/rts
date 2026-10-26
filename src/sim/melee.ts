@@ -48,6 +48,8 @@ import {
   targetShape,
 } from './formation.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
+import { marginWidth } from './claims.ts'
+import { enemyNear } from './morale.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
 import { sin, cos } from './num.ts'
@@ -253,38 +255,23 @@ export function meleeStep(w: World): void {
   for (let i = 0; i < N; i++) if (S.shockTo[i] >= 0) f.shockIn[S.shockTo[i]] += S.shockBy[i]
 }
 
+// the ride-down's reach, metres: contact and hold, and the router's margin with the claim grid on
+const reachOf = (w: World): number => w.cr.rs.melee.contact + w.cr.rs.melee.hold + marginWidth(w)
 /**
  * Enemy i cuts router j down: if the gap between them (metres) is within reach, the men of each in contact are found,
  * and j owes losses at the melee's rate for i's men in contact and strength, drawn from `rs`. j does not fight back.
- * The reach is contact and hold, and with the claim grid on a cell more: a router's margin keeps an enemy up to a cell
- * farther off than it would stand.
+ * The reach is `reachOf`: a router's margin keeps an enemy farther off than it would stand.
  */
 function rideDown(w: World, G: FireGeo, S: Melee, i: number, j: number, gap: number, rs: Uint32Array): void {
   const M = w.cr.rs.melee
-  const lim = M.contact + M.hold + (w.claims ? w.terrain.cell : 0)
+  const lim = reachOf(w)
   if (gap > lim) return
   const men = inContact(w, G, i, j, lim, S.mi)
   inContact(w, G, j, i, lim, S.mj)
   owe(w, j, S.mj, M.rate * DT * men * strengthOf(w, i), rs)
 }
-// anchors farther apart than this (metres) are never within reach: a column of route is at most about 340 m from its
-// head (the anchor) to its tail
-const NEAR = 500
-// whether formations i and j stand within NEAR of each other, anchor to anchor
-const near2 = (w: World, i: number, j: number): boolean => {
-  const dx = w.f.x[i] - w.f.x[j]
-  const dz = w.f.z[i] - w.f.z[j]
-  return dx * dx + dz * dz <= NEAR * NEAR
-}
-/** Whether router j (with the claim grid on) has an enemy in the fight within NEAR: the melee step looks at it. */
-function hunted(w: World, j: number): boolean {
-  const f = w.f
-  if (!w.claims || !f.alive[j] || !fleeing(f.mstate[j])) return false
-  for (let i = 0; i < MAX_FORMATIONS; i++) {
-    if (f.alive[i] && f.side[i] !== f.side[j] && !outOfFight(f.mstate[i]) && near2(w, i, j)) return true
-  }
-  return false
-}
+/** Whether router j (with the claim grid on) has an enemy in the fight near it (`enemyNear`): the melee step looks. */
+const hunted = (w: World, j: number): boolean => w.claims && !!w.f.alive[j] && fleeing(w.f.mstate[j]) && enemyNear(w, j)
 /**
  * With the claim grid on, every enemy in the fight that reaches router j cuts it down (`rideDown`), as a pursuit does,
  * whether the router runs, is held or has no way left: an enemy in melee with another does not, nor j's own pursuer
@@ -295,8 +282,13 @@ function cutDown(w: World, G: FireGeo, S: Melee, j: number, tick: number): void 
   const f = w.f
   const hj = handleOf(w, j)
   for (let i = 0; i < MAX_FORMATIONS; i++) {
-    if (!f.alive[i] || f.side[i] === f.side[j] || outOfFight(f.mstate[i]) || f.foe[i] || !near2(w, i, j)) continue
+    if (!f.alive[i] || f.side[i] === f.side[j] || outOfFight(f.mstate[i]) || f.foe[i]) continue
     if (f.chPhase[i] === CH_PURSUIT && f.chTarget[i] === hj) continue
+    // the blocks of each reach G.reach from its anchor: anchors farther apart than both and the reach are out of it
+    const dx = f.x[i] - f.x[j]
+    const dz = f.z[i] - f.z[j]
+    const d = sqrt(dx * dx + dz * dz)
+    if (d - G.reach[i] - G.reach[j] > reachOf(w)) continue
     rideDown(w, G, S, i, j, gapOf(w, G, i, j), keyedStream(ks, w.meta[M_SEED], tick, handleOf(w, i), j, K_CUT))
   }
 }
