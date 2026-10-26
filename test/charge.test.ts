@@ -321,7 +321,7 @@ describe('melee', () => {
     expect(s.orders(cav)).toBe(0)
   })
   it('with the claim grid on, the pursuit rides the router down from its margin', () => {
-    // the pursuit stops at the router's margin, a cell out (2 m here; `standOff` scales with the cell)
+    // the pursuit stops at the router's margin, a cell out, and its reach is a cell longer (rideDown)
     const s = new S(1, noSquare)
     s.w.claims = true
     const foe = s.inf(0, 60, PI, 1, 'line', 0.6)

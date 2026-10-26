@@ -20,7 +20,7 @@ import {
   sectionHashes,
   typeOf,
   MS_ROUTING,
-  cornered,
+  RP_HALTED,
   menOf,
   M_TICK,
   TICK_HZ,
@@ -195,6 +195,8 @@ describe('with claims: invariant 4, the keyed order', () => {
   }
 })
 
+// whether slot 0, broken, has tried every direction of its fan and is halted (morale.ts: five)
+const noWay = (w: World): boolean => w.f.mstate[0] >= MS_ROUTING && w.f.routPhase[0] === RP_HALTED && w.f.runs[0] >= 5
 // a melee holds (docs/plans/active/c1-claims.md, step 4): a veteran regiment charges a raw one at the halt (X-15),
 // with a friend (X-16) or an enemy (X-17) just behind the raw one. Played to its end: where the watched stood when
 // the raw one's (slot 0's) melee began and at its last tick in it (a break, or a fall-back after it, faces it about),
@@ -243,26 +245,26 @@ describe('with claims: a melee holds', () => {
     expect(w.f.alive[0]).toBe(1)
     expect(w.f.z[0]).toBeGreaterThan(80)
   })
-  it('X-17: a router with an enemy just behind it tries every way out; cornered, the enemies in contact cut it down', () => {
-    let cornerAt = -1
+  it('X-17: a router with an enemy just behind it, held on every way out, is cut down where it stands', () => {
+    let pinned = -1
     let menThen = 0
     const w = play(caseOf('x17-enemy-behind-claims'), {
       every: 1,
       each: w => {
-        if (cornerAt >= 0 || !w.f.alive[0] || !cornered(w, 0)) return
-        cornerAt = w.meta[M_TICK]
+        if (pinned >= 0 || !w.f.alive[0] || !noWay(w)) return
+        pinned = w.meta[M_TICK]
         menThen = menOf(w, 0)
       },
     })
     // held 2 s, then the fan's four other directions, one every 5 s
-    expect(cornerAt / TICK_HZ).toBeGreaterThan(29.4 + 20)
+    expect(pinned / TICK_HZ).toBeGreaterThan(29.4 + 20)
     expect(menThen).toBeGreaterThan(0)
     // no one leaves the field: it is cut down where it stands
     expect(w.sides.left[1]).toBe(0)
     expect(w.f.alive[0] ? menOf(w, 0) : 0).toBeLessThan(menThen / 2)
   })
-  it('X-17: a cornered router runs once its way clears', () => {
-    // the regiment just behind it is gone (its men struck off, reaped that tick) once the router is cornered
+  it('X-17: a router held on every way out runs once its way clears', () => {
+    // the regiment just behind it is gone (its men struck off, reaped that tick) once every way has been tried
     let at = -1
     let far = 0
     play(caseOf('x17-enemy-behind-claims'), {
@@ -271,17 +273,12 @@ describe('with claims: a melee holds', () => {
       each: w => {
         if (!w.f.alive[0]) return
         if (at >= 0) far = Math.max(far, w.f.z[0])
-        if (at >= 0 || !cornered(w, 0)) return
+        if (at >= 0 || !noWay(w)) return
         at = w.meta[M_TICK]
         w.f.men.fill(0, 2 * w.cr.maxC, 3 * w.cr.maxC)
       },
     })
     expect(at).toBeGreaterThan(0)
     expect(far).toBeGreaterThan(80)
-  })
-  it('X-15: a router that runs clear is never cornered', () => {
-    let seen = false
-    play(caseOf('x15-melee-holds-claims'), { every: 1, each: w => void (seen ||= !!w.f.alive[0] && cornered(w, 0)) })
-    expect(seen).toBe(false)
   })
 })

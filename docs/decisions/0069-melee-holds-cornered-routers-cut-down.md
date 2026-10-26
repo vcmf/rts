@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-26
 ---
 
-# 0069 A melee holds until one side breaks; a cornered router is cut down, never surrenders
+# 0069 A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders
 
 ## Context
 
@@ -20,8 +20,9 @@ and the owner dropped the concept (Total War has none; Ultimate General has).
 - **A broken battalion runs as a block**, faced about, in the direction fixed at its break (its side's rear, else away
   from the nearest enemy, else straight back), and tries a fan of other directions when held
   (docs/systems/fire-morale.md). Wavering and shattered battalions keep their block.
-- **No surrender.** A broken battalion with no direction left is cornered: every enemy in the fight near it cuts it
-  down, and it does not fight back. With the claim grid on it goes on trying its directions and runs once one clears.
+- **No surrender.** Every enemy in the fight that reaches a broken battalion cuts it down, as a pursuit rides a router
+  down, and it does not fight back; one with no direction left is cut down where it stands. With the claim grid on, a
+  router held by others goes on trying its directions and runs once one clears. (Built with the claim grid, C1.)
 - Owner decisions for later work, recorded here: every type but artillery has a firearm and a melee mode, a player
   toggle (skirmishers firearm only, some militia melee only), and a battalion an enemy reaches in melee fights in
   melee as a whole; a retreat out of a firefight within enemy range turns its back (no fire, struck as from the rear)
