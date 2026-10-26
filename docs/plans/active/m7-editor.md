@@ -295,6 +295,25 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
   it). With them, from round 3: a create without hard links falls back to an exclusive copy; the new-map button and
   the map list wait for a drawing or a drag; the editor's picking is one `pickAt`. Tests: the editor's tests click
   through a clock (`test/map-clock.ts`); the page check deletes the new map's file and writes it again.
+- **Redesign, round 1**: moderate and light only, so the review stops. Fixed: the watcher's echo of the page's own
+  save no longer clears the panel's message ("saved", a problem), only a conflict or the note of a deletion; a deletion
+  seen while a save is on its way is the save's rename and is left to its reply; the end of an `along` stretch picks
+  only the line it starts on (another may be nearer at a junction); a pan, a zoom or a drag between two clicks makes
+  them no double click (`Editor.forgetClick`); Backspace back into an area closed on its first corner reopens it with
+  every corner however many steps followed (the draft keeps which steps were closed); a click on a barrier's first
+  point that cannot close it adds no point there (a guard: from lattice points a closing point is always found); the
+  page check notes the file's deletion from the step before (it raced the watcher); the reference buttons are rebuilt
+  only when they change (a button replaced under a press lost its click); one layout of an empty list (`formatValue`),
+  one radius rounding (`radiusTo`) and one `isPts` for the drag and the drawing.
+
+## Results (M7b)
+
+- The page check draws a new map from scratch by clicks (a base, a meadow, a stream and a ford on it, a road and a
+  bridge, a hedge, a hill), saves it into a new file that validates with no problem and reads back unchanged; one more
+  feature saved adds one line; the file deleted and written again with its bytes settles with no conflict.
+- `test/map-draw.test.ts`: every kind of the catalogue drawn as every shape it takes, its references clicked, its
+  shape and references valid.
+- `npm test`, `check:data`, the build and the docs check pass.
 
 ## Open questions
 

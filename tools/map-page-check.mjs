@@ -275,6 +275,10 @@ try {
           { clientX: b.left + s[0], clientY: b.top + s[1], bubbles: true, pointerId: 1, isPrimary: true }))
         const ok = await MAP.save()
         const disk = await (await fetch('/maps/${NEW}.map.json', { cache: 'no-store' })).text()
+        // from here the page notes the file going (Node deletes it once it reads this step), so the next step cannot
+        // miss it
+        window.__gone = false
+        const watch = setInterval(() => { if (MAP.noFile) { window.__gone = true; clearInterval(watch) } }, 10)
         return 'NEWEDIT ' + JSON.stringify({ ok, disk })
       })()`,
     ],
@@ -284,14 +288,9 @@ try {
       'eval',
       `(async () => {
         const sleep = ms => new Promise(r => setTimeout(r, ms))
-        let gone = false
-        for (let t = 0; t < 400; t++) {
-          if (MAP.noFile) gone = true
-          else if (gone) break
-          await sleep(25)
-        }
+        for (let t = 0; t < 400 && !(window.__gone && !MAP.noFile); t++) await sleep(25)
         await sleep(300)
-        return 'RECREATED ' + JSON.stringify({ gone, noFile: MAP.noFile, conflict: MAP.conflict, dirty: MAP.dirty })
+        return 'RECREATED ' + JSON.stringify({ gone: window.__gone, noFile: MAP.noFile, conflict: MAP.conflict, dirty: MAP.dirty })
       })()`,
     ],
   ]

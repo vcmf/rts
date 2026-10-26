@@ -59,6 +59,12 @@ const base: MapFile = {
   ],
 }
 const place = (barrier: boolean): Place => ({ step: 0.1, reach: 5, barrier })
+/** A click in a shape step, which these tests expect to take. */
+const addPt = (d: Draft, to: Pt, p: Place): Draft => {
+  const next = addPoint(d, to, p)
+  if (typeof next === 'string') throw new Error(next)
+  return next
+}
 
 /** Draws a kind as a shape through its clicks, its references clicked on their first target; the feature it makes. */
 function drawKind(map: MapFile, kind: string, shape: ShapeName | 'none', id: string): Feature {
@@ -91,7 +97,7 @@ function drawKind(map: MapFile, kind: string, shape: ShapeName | 'none', id: str
   for (let guard = 0; !done(d) && guard < 20; guard++) {
     const s = stepOf(d)!
     if (s.kind === 'shape') {
-      for (const c of clicks[s.shape]) d = addPoint(d, c, p)
+      for (const c of clicks[s.shape]) d = addPt(d, c, p)
       if (!done(d) && stepOf(d) === s) d = endStep(d) as Draft
       continue
     }
@@ -174,7 +180,7 @@ describe('M7b: drawing a feature', () => {
       [61, 25],
       [62, 70],
     ] as Pt[]) {
-      d = addPoint(d, c, place(true))
+      d = addPt(d, c, place(true))
     }
     const line = (endStep(d) as Draft).feature.line!
     expect(line).toHaveLength(4)
@@ -182,8 +188,8 @@ describe('M7b: drawing a feature', () => {
   })
   it('adds nothing for a click on the last point (a double click), and needs 2 points to end a line', () => {
     let d = startDraft({ id: 'r', kind: 'way.path' }, [{ kind: 'shape', shape: 'line' }])
-    d = addPoint(d, [5, 5], place(false))
-    d = addPoint(d, [5.01, 5.02], place(false))
+    d = addPt(d, [5, 5], place(false))
+    d = addPt(d, [5.01, 5.02], place(false))
     expect(d.pts).toHaveLength(1)
     expect(typeof endStep(d)).toBe('string')
   })
@@ -210,8 +216,8 @@ describe('M7b: drawing a feature', () => {
   it('takes clicks back, into the step before', () => {
     const meta = kindMeta(cat, kindChain(cat, 'veg.reeds')!)
     let d = startDraft({ id: 'r', kind: 'veg.reeds' }, drawSteps(meta, 'circle'))
-    d = addPoint(d, [0, 0], place(false))
-    d = addPoint(d, [10, 0], place(false))
+    d = addPt(d, [0, 0], place(false))
+    d = addPt(d, [10, 0], place(false))
     expect(done(d)).toBe(true)
     d = back(d)
     expect(d.feature.circle).toBeUndefined()
@@ -227,14 +233,27 @@ describe('M7b: drawing a feature', () => {
       [100, 80],
       [0, 80],
     ]
-    let d = corners.reduce(
-      (x, c) => addPoint(x, c, place(false)),
-      startDraft({ id: 'a', kind: 'ground.meadow' }, steps),
-    )
-    const closed = back(addPoint(d, [1, 1], place(false)))
+    let d = corners.reduce((x, c) => addPt(x, c, place(false)), startDraft({ id: 'a', kind: 'ground.meadow' }, steps))
+    const closed = back(addPt(d, [1, 1], place(false)))
     expect(closed.pts).toEqual(corners)
     d = back(endStep(d) as Draft)
     expect(d.pts).toEqual(corners.slice(0, 3))
+  })
+  it('reopens an area closed on its first corner with every corner, after the steps that followed are taken back', () => {
+    const meta = kindMeta(cat, kindChain(cat, 'built.village')!)
+    let d = startDraft({ id: 'v', kind: 'built.village' }, drawSteps(meta, 'area'))
+    const corners: Pt[] = [
+      [20, -300],
+      [60, -300],
+      [60, -260],
+    ]
+    for (const c of corners) d = addPt(d, c, place(false))
+    d = addPt(d, [20.5, -300.5], place(false)) // closes it
+    d = setRef(d, base.features[1], [1, -100], place(false)) as Draft
+    d = setRef(d, base.features[1], [8, 300], place(false)) as Draft
+    expect(done(d)).toBe(true)
+    d = back(back(d))
+    expect(d.pts).toEqual(corners)
   })
   it("proposes an id from the kind, numbered when taken, never as a generated child's", () => {
     expect(proposeId('ground.field.wheat', [])).toBe('wheat')
@@ -247,7 +266,7 @@ describe('M7b: drawing a feature', () => {
   })
   it('closes an area, a line and a barrier on a click back on the first point', () => {
     const steps = (shape: ShapeName) => [{ kind: 'shape' as const, shape }]
-    const clicks = (d: Draft, pts: Pt[], p: Place) => pts.reduce((x, c) => addPoint(x, c, p), d)
+    const clicks = (d: Draft, pts: Pt[], p: Place) => pts.reduce((x, c) => addPt(x, c, p), d)
     const ring: Pt[] = [
       [0, 0],
       [100, 0],
@@ -428,6 +447,33 @@ describe('M7b: the end of a drawing by a double click', () => {
     expect(ed.feature('field')!.area![0]).toHaveLength(3)
     ed.undo()
     expect(ed.feature('field')).toBeUndefined()
+  })
+  it('ends a stretch on the line it starts on, though another is nearer at a junction', () => {
+    let ed: Editor | null = null
+    const lane: Feature = {
+      id: 'lane',
+      kind: 'way.path',
+      line: [
+        [-400, 50],
+        [400, 50],
+      ],
+    }
+    const { h } = host(() => ed!.doc!.features)
+    ed = new Editor(h)
+    ed.setCatalogue(cat)
+    ed.load('/maps/t.map.json', formatMap({ ...base, features: [...base.features, lane] }))
+    ed.add('built.village', 'none', 'village')
+    ed.click(1, 100) // on the road, 100 m south of the lane
+    ed.click(3, -50.5) // at the junction: the lane is nearer
+    expect(ed.feature('village')!.along!.id).toBe('road')
+  })
+  it('pairs no clicks across a pan or a zoom', () => {
+    const ed = make()
+    ed.select('road')
+    ed.click(5, -100) // on the road's line: keeps the selection
+    ed.forgetClick() // the view moved
+    again(ed, 5, -100)
+    expect(ed.feature('road')!.line).toHaveLength(2)
   })
   it("gives a double click's second click to no step after the one its first click ended", () => {
     const ed = make()

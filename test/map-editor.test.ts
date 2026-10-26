@@ -585,6 +585,26 @@ describe('M7a redesign 2, round 1', () => {
     again(ed, 0, -50)
     expect(ed.feature('road')!.line!.length).toBe(2)
   })
+  it("keeps the save's message through the watcher's echo of it, and a deletion seen during the save", async () => {
+    const { ed } = make()
+    ed.select('road')
+    drag(ed, [-100, -50], [-90, -50])
+    let reply = () => {}
+    vi.stubGlobal('fetch', () => new Promise<Response>(r => (reply = () => r(new Response('{"ok":true}')))))
+    const saving = ed.save()
+    await Promise.resolve()
+    const ours = ed.text
+    // the save's rename seen as the file gone, then back, before the reply
+    ed.onDisk('/maps/t.map.json', null)
+    expect(ed.noFile).toBe(false)
+    reply()
+    expect(await saving).toBe(true)
+    expect(ed.message).toBe('saved')
+    ed.onDisk('/maps/t.map.json', ours) // the watcher's echo, after the reply
+    expect(ed.message).toBe('saved')
+    expect(ed.conflict).toBeNull()
+    expect(ed.dirty).toBe(false)
+  })
   it("ignores the watcher's report of a save still on its way, so an undo made meanwhile stands", async () => {
     const { ed } = make()
     let reply = () => {}

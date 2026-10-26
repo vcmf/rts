@@ -185,6 +185,7 @@ export class Editor {
   private take(file: string, base: string | null, doc: MapFile | null, why: string): void {
     if (file !== this.file) this.selected = null
     this.mode = { kind: 'idle' }
+    this.lastClick = null
     this.history.clear()
     this.hover = null
     this.found = []
@@ -211,7 +212,8 @@ export class Editor {
    */
   onDisk(file: string, text: string | null): boolean {
     if (file !== this.file) return false // a read of another map than the one the editor holds
-    if (text !== null && text === this.inFlight) return false // a save of ours before its reply: the reply settles it
+    // a save of ours on its way (the watcher may see its rename as the file gone, then back): its reply settles it
+    if (this.inFlight !== null && (text === null || text === this.inFlight)) return false
     if (text === null) {
       if (!this.exists) return false
       this.exists = false
@@ -220,9 +222,11 @@ export class Editor {
       this.host.changed()
       return false
     }
+    const wasGone = !this.exists
     this.exists = true
     if (text === this.base) {
-      if (this.conflict !== null || this.message) {
+      // a conflict, or the file's deletion, is over; any other message (a save's, a problem's) stands
+      if (this.conflict !== null || wasGone) {
         this.conflict = null
         this.message = ''
         this.host.changed()
@@ -365,6 +369,13 @@ export class Editor {
   /** The last click, which the next may make a double click. */
   private lastClick: FirstClick | null = null
   /**
+   * The view moved (a pan, a zoom) or a press dragged: the next click at the same spot on screen is another place
+   * on the map, never the second of a double click.
+   */
+  forgetClick(): void {
+    this.lastClick = null
+  }
+  /**
    * The feature under a screen point among the shapes on screen (the last good compile's) and the copy's own (a map
    * that does not compile yet, or a feature an edit broke, can still be picked), of those `accept` takes.
    */
@@ -410,6 +421,7 @@ export class Editor {
       return false
     }
     if (m.kind === 'pressing' && Math.hypot(sx - m.at[0], sy - m.at[1]) < DRAG_PX) return true
+    if (m.kind === 'pressing') this.lastClick = null // a drag: no double click across it
     m.kind = 'dragging'
     const at = this.host.toWorld(sx, sy)
     if (!at) return true // no ground under the pointer: the shape stays where it last was
@@ -601,9 +613,11 @@ export class Editor {
     }
     const self = m.draft.feature.id
     const presets = this.doc!.presets
+    // the end of a stretch is on the line it starts on: only that line picks (another may be nearer at a junction)
+    const from = m.draft.from
     const accepts = (id: string) => {
       const t = this.feature(id)
-      return !!t && refAccepts(s.ref, s.want, self, t, presets)
+      return !!t && (!from || id === from.id) && refAccepts(s.ref, s.want, self, t, presets)
     }
     const id = this.pickAt(sx, sy, accepts)
     this.step(setRef(m.draft, id ? this.feature(id)! : null, at, place))

@@ -421,9 +421,16 @@ function proposeAddId(): void {
   addId.value = id
   addId.dataset.proposed = id
 }
-/** The selection's references, each with a button to set it again by clicking its target. */
+/**
+ * The selection's references, each with a button to set it again by clicking its target; rebuilt only when what they
+ * show changes (a button replaced under a press would lose its click).
+ */
+let refsShown = ''
 function refButtons(f: Feature | undefined): void {
   const refs = (f && editor.metaOf(f)?.refs) || {}
+  const shown = JSON.stringify([f?.id, REFS.map(r => (refs[r] ? (f![r] ?? null) : undefined)), editor.drawing])
+  if (shown === refsShown) return
+  refsShown = shown
   const buttons = REFS.filter(r => refs[r]).map(r => {
     const b = document.createElement('button')
     const v = f![r]
@@ -728,6 +735,7 @@ canvas.addEventListener('pointermove', e => {
   if (!drag || drag.edit) editor.move(e.offsetX, e.offsetY)
   else {
     const now = toWorld(e.offsetX, e.offsetY)
+    if (Math.hypot(e.offsetX - drag.sx, e.offsetY - drag.sy) >= 4) editor.forgetClick() // a pan, not a click
     view.cx += drag.at[0] - now[0]
     view.cz += drag.at[1] - now[1]
     place()
@@ -739,6 +747,7 @@ canvas.addEventListener(
   'wheel',
   e => {
     e.preventDefault()
+    editor.forgetClick() // the spot on screen is another place on the map now
     const before = toWorld(e.offsetX, e.offsetY)
     view.ppm = Math.max(0.05, Math.min(40, view.ppm * Math.exp(-e.deltaY * 0.0015)))
     place()

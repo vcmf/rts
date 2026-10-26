@@ -8,9 +8,9 @@ import type { Ellipse, Feature, MapFile, Pt, RefName, ShapeName } from '../../ma
 import { ID, REFS } from '../../map/schema.ts'
 import type { KindMeta } from '../../map/catalogue.ts'
 import { refTargetProblem } from '../../map/validate.ts'
-import { barrierProblem, isClosedLine, isPt, lineLength } from '../../map/geometry.ts'
+import { barrierProblem, isClosedLine, lineLength } from '../../map/geometry.ts'
 import { cm } from '../../map/util.ts'
-import { onLattice, roundPt, roundTo, snapBarrier, type Place } from './edit.ts'
+import { isPts, onLattice, radiusTo, roundPt, roundTo, snapBarrier, type Place } from './edit.ts'
 
 /**
  * One step of a drawing: the shape, click by click, or one reference, by clicking its target (`want`, as the catalogue
@@ -25,7 +25,7 @@ export interface Draft {
   step: number // the step in progress; steps.length when every step is done
   pts: Pt[] // the shape step's clicks so far
   from: { id: string; s: number } | null // `along`'s first click: the line and the metres along it
-  closed: boolean // the shape step ended by a click back on the first point (which Backspace takes back)
+  closed: number[] // the shape steps ended by a click back on their first point (which Backspace takes back)
 }
 
 /**
@@ -57,7 +57,7 @@ export const startDraft = (feature: Feature, steps: Step[]): Draft => ({
   step: 0,
   pts: [],
   from: null,
-  closed: false,
+  closed: [],
 })
 
 /** The step in progress, or null when every step is done. */
@@ -70,7 +70,7 @@ const advance = (d: Draft, feature: Feature, closed = false): Draft => ({
   step: d.step + 1,
   pts: [],
   from: null,
-  closed,
+  closed: closed ? [...d.closed, d.step] : d.closed,
 })
 const dist = (a: Pt, b: Pt) => Math.hypot(b[0] - a[0], b[1] - a[1])
 const same = (a: Pt, b: Pt) => a[0] === b[0] && a[1] === b[1]
@@ -143,8 +143,11 @@ function closeLine(d: Draft, place: Place): Pt[] | null {
   return c ? [...d.pts, c, [...first]] : null
 }
 
-/** A click on the ground in the shape step; returns the draft with it (a point, a circle or an ellipse may end it). */
-export function addPoint(d: Draft, to: Pt, place: Place): Draft {
+/**
+ * A click on the ground in the shape step; returns the draft with it (a point, a circle or an ellipse may end it), or
+ * why the click adds nothing.
+ */
+export function addPoint(d: Draft, to: Pt, place: Place): Draft | string {
   const s = stepOf(d)
   if (s?.kind !== 'shape') return d
   const { step } = place
@@ -158,6 +161,9 @@ export function addPoint(d: Draft, to: Pt, place: Place): Draft {
       if (d.pts.length >= 3 && dist(to, d.pts[0]) <= place.reach) {
         const closed = s.shape === 'area' ? d.pts : closeLine(d, place)
         if (closed) return advance(d, { ...d.feature, [s.shape]: s.shape === 'area' ? [closed] : closed }, true)
+        // a barrier no lattice point closes from its last point: no point on its first (the line would run through
+        // its start, open)
+        return 'no lattice point closes the barrier from its last point: click a point nearer its start first'
       }
       const p = nextPoint(d, to, place)
       const last = d.pts[d.pts.length - 1]
@@ -167,7 +173,7 @@ export function addPoint(d: Draft, to: Pt, place: Place): Draft {
     }
     case 'circle':
       if (!d.pts.length) return { ...d, pts: [at] }
-      return advance(d, { ...d.feature, circle: [d.pts[0], Math.max(step, roundTo(dist(d.pts[0], to), step))] })
+      return advance(d, { ...d.feature, circle: [d.pts[0], radiusTo(d.pts[0], to, step)] })
     case 'ellipse':
       if (d.pts.length < 2) return { ...d, pts: [...d.pts, d.pts.length ? to : at] }
       return advance(d, { ...d.feature, ellipse: ellipseOf(d.pts[0], d.pts[1], to, step) })
@@ -177,8 +183,7 @@ export function addPoint(d: Draft, to: Pt, place: Place): Draft {
 function ellipseOf(c: Pt, a: Pt, b: Pt, step: number): Ellipse {
   const angle = Math.atan2(a[1] - c[1], a[0] - c[0])
   const across = Math.abs(-(b[0] - c[0]) * Math.sin(angle) + (b[1] - c[1]) * Math.cos(angle))
-  const r = (v: number) => Math.max(step, roundTo(v, step))
-  return [c, r(dist(c, a)), r(across), roundTo(angle, 0.01)]
+  return [c, radiusTo(c, a, step), Math.max(step, roundTo(across, step)), roundTo(angle, 0.01)]
 }
 
 /**
@@ -212,10 +217,11 @@ export function back(d: Draft): Draft {
   else {
     const f = d.feature
     // a closed line's repeated first point goes with the closing click (a barrier's point put in to close it stays)
+    const closed = d.closed.includes(d.step - 1)
     if (s.shape === 'line') {
-      pts = d.closed ? f.line!.slice(0, isClosedLine(f.line!) ? -1 : f.line!.length) : f.line!.slice(0, -1)
+      pts = closed ? f.line!.slice(0, isClosedLine(f.line!) ? -1 : f.line!.length) : f.line!.slice(0, -1)
     }
-    if (s.shape === 'area') pts = d.closed ? f.area![0] : f.area![0].slice(0, -1)
+    if (s.shape === 'area') pts = closed ? f.area![0] : f.area![0].slice(0, -1)
     if (s.shape === 'circle') pts = [f.circle![0]]
     if (s.shape === 'ellipse') {
       const [c, rx, , a] = f.ellipse!
@@ -223,11 +229,11 @@ export function back(d: Draft): Draft {
     }
     delete feature[s.shape]
   }
-  return { ...d, feature, step: d.step - 1, pts, from: null, closed: false }
+  return { ...d, feature, step: d.step - 1, pts, from: null, closed: d.closed.filter(k => k !== d.step - 1) }
 }
 
 /** Whether a value is a line the editor can measure along: 2 points at least. */
-const isLine = (v: unknown): v is Pt[] => Array.isArray(v) && v.length >= 2 && v.every(isPt)
+const isLine = (v: unknown): v is Pt[] => isPts(v, 2)
 
 /**
  * Whether a click may pick a feature as a reference's target: by the validator's rule (`refTargetProblem`: of the

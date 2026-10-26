@@ -255,6 +255,10 @@ export function snapBarrier(to: Pt, neighbours: Pt[], reach: number, fits: (p: P
   )
 }
 
+/** A radius from a centre to a ground point, rounded to the step and never under it (a circle needs one). */
+export const radiusTo = (c: Pt, to: Pt, step: number): number =>
+  Math.max(step, roundTo(Math.hypot(to[0] - c[0], to[1] - c[1]), step))
+
 /** How an edit places points: the rounding step, the reach of a barrier's snap, m, and whether it is a barrier. */
 export interface Place {
   step: number
@@ -304,13 +308,13 @@ export function moveHandle(f: Feature, h: Handle, to: Pt, place: Place): Feature
       break
     case 'radius': {
       const c = f.circle![0]
-      out.circle = [c, Math.max(place.step, roundTo(Math.hypot(to[0] - c[0], to[1] - c[1]), place.step))]
+      out.circle = [c, radiusTo(c, to, place.step)]
       break
     }
     case 'rx':
     case 'rz': {
       const [c, rx, rz] = f.ellipse!
-      const r = Math.max(place.step, roundTo(Math.hypot(to[0] - c[0], to[1] - c[1]), place.step))
+      const r = radiusTo(c, to, place.step)
       // the first radius turns the ellipse toward the pointer; the second follows a quarter turn behind
       const a = Math.atan2(to[1] - c[1], to[0] - c[0]) - (h.kind === 'rz' ? Math.PI / 2 : 0)
       const angle = roundTo(a, 0.01)
@@ -420,7 +424,8 @@ export function removePoint(f: Feature, h: Handle): Feature | null {
   return null
 }
 
-const isPts = (v: unknown, least: number): v is Pt[] => Array.isArray(v) && v.length >= least && v.every(isPt)
+/** Whether a value is a list of at least `least` points. */
+export const isPts = (v: unknown, least: number): v is Pt[] => Array.isArray(v) && v.length >= least && v.every(isPt)
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 /**
