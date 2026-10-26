@@ -4,6 +4,7 @@
 // (docs/plans/active/battle-threads.md, PR 3); without cross-origin isolation, or at ?thread=main, on this thread.
 import fieldUrl from '../../data/formation-field.simdata?url'
 import battleUrl from '../../data/battlefield.simdata?url'
+import lookUrl from '../../data/painted-world.simdata?url'
 import {
   compileRuleset,
   loadSimData,
@@ -43,7 +44,11 @@ async function main(): Promise<void> {
   const scenario = PAGE_SCENARIOS[key]
   // the scenario's map, at the version it was placed for
   const mapName = scenario.map ?? DEFAULT_MAP
-  const urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl }
+  const urls: Record<string, string> = {
+    'formation-field': fieldUrl,
+    battlefield: battleUrl,
+    'painted-world': lookUrl,
+  }
   if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) {
     throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
   }

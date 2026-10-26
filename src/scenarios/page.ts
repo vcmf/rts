@@ -8,6 +8,7 @@ import { s1dArms } from './s1d-arms.ts'
 import { s1dCharge } from './s1d-charge.ts'
 import { s1dGuns } from './s1d-guns.ts'
 import { s1eBattle } from './s1e-battle.ts'
+import { lookCross } from './look-world.ts'
 
 export const PAGE_SCENARIOS: Record<string, Scenario> = {
   's1c-firefight': s1cFirefight,
@@ -16,6 +17,7 @@ export const PAGE_SCENARIOS: Record<string, Scenario> = {
   's1d-charge': s1dCharge,
   's1d-guns': s1dGuns,
   's1e-battle': s1eBattle,
+  'look-cross': lookCross,
   ...S1B_SCENARIOS,
 }
 export const DEFAULT_SCENARIO = 's1c-firefight'
@@ -29,5 +31,6 @@ export const PAGE_VIEWS: Record<string, [number, number, number]> = {
   's1d-charge': [-85, 40, 1.9],
   's1d-guns': [25, 50, 1.6],
   's1e-battle': [0, 0, 0.6],
+  'look-cross': [70, 0, 1.2],
   's1b-bench-80': [0, 0, 0.6],
 }

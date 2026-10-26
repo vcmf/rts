@@ -220,6 +220,12 @@ tile) is no sim map. Two PRs, then PR 4.
   Acceptance: `check:data` rebuilds it byte for byte; a test that the sim's classes and water match the look's cover
   and river at sample points (and the heights within 1 cm of the look's heightfield); a sim battle on it runs (a
   scenario of a few battalions marching across, its replay reproduced).
+  - **Outcome** (2026-10-26): met. `data/painted-world.simdata` (0x55e25528, 2.1 MB; `check:data` rebuilds it byte
+    for byte, the other maps unchanged); `test/painted-world.test.ts`: every sim height node is the look's ground
+    there exactly, every 2 m cell wet in the look's water data is the sim's water (as deep, in mm) or a bridge and
+    every other cell dry, and `look-cross` runs (the south marching 54 m in its first minute) and replays to every hash
+    point; `app-check` plays it on the sim page in the workers. The look tile has no woods (its trees are lone and
+    hedgerow trees, the scatter's: not obstacles to the sim's men); the buildings are `denseWood`.
 - **PR 4b, the look page plays the sim**: at `?sim=<scenario>` the look page runs the battle in the workers (PR 5),
   and its armies are the sim's formations and the men worker's men: `units.ts` takes each man's place, facing and
   role from a source, the script's (`manAt`, the default, unchanged) or the frame's (position; facing from his
