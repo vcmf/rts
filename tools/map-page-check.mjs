@@ -11,7 +11,8 @@
 //      events, compiled from the page's copy, saved through the dev server (the file's diff: that feature's line
 //      alone), undone and saved again (the file byte for byte the original); with the largest area selected, a click
 //      on a line inside it selects the line; Cmd S with a list of the panel focused is the page's save, not the
-//      browser's; a second pointer pressed during a press on the selection leaves the editor idle once both are up.
+//      browser's; a second pointer pressed during a press on the selection leaves the editor idle once both are up;
+//      a point hovered and then zoomed away from is not the one Delete removes.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -189,6 +190,27 @@ try {
         return 'TWO ' + JSON.stringify({ idle: MAP.idle, dirty: MAP.dirty })
       })()`,
     ],
+    [
+      'eval',
+      `(() => {
+        const f = JSON.parse(MAP.text).features.find(f => f.line && f.line.length > 2 && !String(f.kind).startsWith('barrier.'))
+        const p = f.line[1]
+        MAP.select(f.id)
+        MAP.look(p[0], p[1], 2)
+        const c = document.getElementById('map'), b = c.getBoundingClientRect()
+        const [sx, sy] = MAP.project(p[0], p[1])
+        const at = { clientX: b.left + sx + 30, clientY: b.top + sy, bubbles: true }
+        // the pointer on the point, then zooming in about a place 30 px off it carries the point out of reach
+        c.dispatchEvent(new PointerEvent('pointermove', { ...at, clientX: b.left + sx, pointerId: 1 }))
+        c.dispatchEvent(new WheelEvent('wheel', { ...at, deltaY: -1500, cancelable: true }))
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }))
+        const after = JSON.parse(MAP.text).features.find(g => g.id === f.id)
+        // the stale point must not go: the feature keeps every point, or (the pointer now off it) goes whole
+        const kept = !after || after.line.length === f.line.length
+        if (MAP.dirty) MAP.undo()
+        return 'ZOOM ' + JSON.stringify({ kept, dirty: MAP.dirty })
+      })()`,
+    ],
   ]
   shot = spawn(
     'node',
@@ -285,6 +307,8 @@ try {
   check(seen.KEYS.taken, "Cmd S with the overlay list focused is the page's save, not the browser's")
   await until('TWO')
   check(seen.TWO.idle && !seen.TWO.dirty, 'a second pointer during a press leaves the editor idle once both are up')
+  await until('ZOOM')
+  check(seen.ZOOM.kept, 'a point hovered before a zoom is not removed by Delete once it is far from the pointer')
   await until('RESELECT')
   check(
     seen.RESELECT.selected === seen.RESELECT.line,

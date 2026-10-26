@@ -4,15 +4,17 @@
 // with only what changed rewritten (src/map/write.ts). The built page has no server to save through: it selects but
 // does not edit.
 //
-// One state machine owns the copy: idle, pressing (on the selection, not yet moved 4 px), dragging. Only an idle
-// editor takes a command (undo, redo, Delete, a double click, a save, a selection); a file read in during a press is
-// a conflict, never swapped under it. Every edit of a shape is gated by the validator (the engine's rules): an edit
-// that adds a problem is refused and the copy keeps its last good state. Deleting a feature is not gated: what it
-// breaks (a bridge's road) shows in place, and undo brings it back. A save's reply is taken only for the file and base
-// it was sent for. Tested in test/map-editor.test.ts.
+// - One state machine owns the copy: idle, pressing (on the selection's outline or a handle, not yet moved 4 px),
+//   dragging. Only an idle editor takes a command (undo, redo, Delete, a double click, a save, a selection); a file
+//   read in during a press is a conflict, never swapped under it.
+// - An edit always applies, as a hand edit does: what the validator finds in it is shown at once (the selection drawn
+//   red, the problem in the panel, the page's list), and undo is one key. The editor holds no copy of the language's
+//   rules; snapping only helps.
+// - A file whose structure the editor cannot read (`wellFormed`) opens read-only, saying why.
+// - A save's reply is taken only for the file and base it was sent for.
+// Tested in test/map-editor.test.ts.
 import type { Catalogue, Feature, MapFile, Pt } from '../../map/schema.ts'
 import { validate, type Issue } from '../../map/validate.ts'
-import { barrierProblem } from '../../map/geometry.ts'
 import { sameJson, writeMap, writerFrom, type FeatureWriter } from '../../map/write.ts'
 import {
   handleAt,
@@ -21,13 +23,14 @@ import {
   insertPoint,
   isBarrier,
   movable,
-  onShape,
   moveHandle,
   moveShape,
+  onShape,
   ovalRing,
   pick,
   removePoint,
   roundStep,
+  wellFormed,
   type Handle,
   type Place,
   type Project,
@@ -37,26 +40,17 @@ import {
 export interface Host {
   ctx: CanvasRenderingContext2D
   project: Project
-  toWorld(sx: number, sy: number): Pt
+  toWorld(sx: number, sy: number): Pt | null // null where the view shows no ground
   ppm(): number
   shown(): Feature[] // the shapes on screen: the last compiled (expanded) map's
   groundPath(pts: Pt[], close: boolean): void // a path of ground points through the view
   recompile(): void // compile the editor's copy
+  problems(issues: Issue[]): void // what the validator finds in the copy, at once (the compile's list follows)
   redraw(): void
   changed(): void // the selection, the copy or the save's state changed: refresh the panel
 }
 
-/** A map file's text as the editor's copy: null unless it is a JSON object with a list of features. */
-function parseDoc(text: string): MapFile | null {
-  try {
-    const doc = JSON.parse(text) as MapFile
-    return typeof doc === 'object' && doc !== null && Array.isArray(doc.features) ? doc : null
-  } catch {
-    return null
-  }
-}
-
-/** A press on the selection: on one of its handles, or on its shape; a drag once it moves DRAG_PX. */
+/** A press on the selection: on one of its handles, or on its outline; a drag once it moves DRAG_PX. */
 interface Press {
   kind: 'pressing' | 'dragging'
   handle: Handle | null
@@ -70,7 +64,20 @@ type Mode = { kind: 'idle' } | Press
 const DRAG_PX = 4 // a press that moves less is a click
 const SNAP_PX = 14 // a barrier's point snaps to a valid place within this many pixels
 const SELECTED = '#d0601a'
+const WRONG = '#c0201a'
 const BUSY = 'finish the drag first'
+
+/** A file's text as a copy the editor can work on, or why it cannot. */
+function parseDoc(text: string): { doc: MapFile | null; why: string } {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return { doc: null, why: 'the file is not valid JSON' }
+  }
+  const why = wellFormed(raw)
+  return why ? { doc: null, why } : { doc: raw as MapFile, why: '' }
+}
 
 export class Editor {
   /** Whether the page edits (the dev server saves); the built page only selects. */
@@ -78,8 +85,10 @@ export class Editor {
   file: string | null = null
   /** The file's text as last read or saved: the save's base. */
   base: string | null = null
-  /** The map's intent as edited, or null when the file is not a map's JSON. */
+  /** The map's intent as edited, or null when the file cannot be edited (`readOnly` says why). */
   doc: MapFile | null = null
+  /** Why the file cannot be edited, or '' when it can. */
+  readOnly = ''
   selected: string | null = null
   /** The file's text on disk when it changed under unsaved edits (or a press), else null. */
   conflict: string | null = null
@@ -94,21 +103,20 @@ export class Editor {
   /** Writes a changed feature: in the file's bytes as last read from disk, when an undo brought it back. */
   private writer: FeatureWriter = writerFrom(null)
   private textCache: { doc: MapFile; base: string | null; text: string } | null = null
-  /** The validator's problems of a copy, by feature id ('' for the map's own), for the gate. */
-  private problems = new WeakMap<MapFile, Map<string, Issue[]>>()
+  private dirtyCache: { doc: MapFile | null; baseDoc: MapFile | null; dirty: boolean } | null = null
+  /** What the validator found in the copy, after the last edit. */
+  private found: Issue[] = []
   /** The pointer's last place on the map, or null when it left: where the handle under it is looked for. */
   private pointer: [number, number] | null = null
-  private dirtyCache: { doc: MapFile | null; baseDoc: MapFile | null; dirty: boolean } | null = null
   private saving: Promise<boolean> | null = null
 
   constructor(host: Host) {
     this.host = host
   }
 
-  /** The catalogue the gate validates with (the page reads it with every compile). */
+  /** The catalogue the validator reads the copy with (the page's newest compile's). */
   setCatalogue(cat: Catalogue | null): void {
     this.cat = cat
-    this.problems = new WeakMap()
   }
 
   /**
@@ -120,12 +128,15 @@ export class Editor {
     this.mode = { kind: 'idle' }
     this.history.clear()
     this.hover = null
+    this.found = []
     this.file = file
     this.base = text
     this.writer = writerFrom(text)
     this.conflict = null
-    this.doc = parseDoc(text)
-    this.baseDoc = this.doc
+    const { doc, why } = parseDoc(text)
+    this.doc = doc
+    this.readOnly = why
+    this.baseDoc = doc
     if (this.selected && !this.feature(this.selected)) this.selected = null
     this.host.changed()
   }
@@ -194,6 +205,13 @@ export class Editor {
   private replace(doc: MapFile, f: Feature, old = this.feature(f.id)): MapFile {
     return { ...doc, features: doc.features.map(x => (x === old ? f : x)) }
   }
+  /** Whether a command may run now; says why not when it may not. */
+  private ready(): boolean {
+    if (this.mode.kind === 'idle') return true
+    this.message = BUSY
+    this.host.changed()
+    return false
+  }
   /**
    * Whether a feature can be edited: its id must be its own (two features sharing one, a hand edit's slip, cannot be
    * told apart: the file is fixed first); says why not.
@@ -204,67 +222,26 @@ export class Editor {
     this.host.changed()
     return false
   }
-  /** Whether a command may run now; says why not when it may not. */
-  private ready(): boolean {
-    if (this.mode.kind === 'idle') return true
-    this.message = BUSY
-    this.host.changed()
-    return false
-  }
 
-  /** The validator's problems in a copy, by feature (remembered per copy). */
-  private problemsOf(doc: MapFile): Map<string, Issue[]> {
-    let p = this.problems.get(doc)
-    if (!p) {
-      p = new Map()
-      const add = (i: Issue) => p!.set(i.id ?? '', [...(p!.get(i.id ?? '') ?? []), i])
-      if (this.cat) validate(doc, this.cat).forEach(add)
-      // the validator names a barrier's first bad point only: each segment is counted too (the engine's rule on it),
-      // so a barrier broken in one place cannot be broken in another unseen
-      for (const f of this.cat ? doc.features : []) {
-        if (!f.line || !isBarrier(f, doc.presets)) continue
-        for (let k = 0; k + 1 < f.line.length; k++) {
-          const bad = barrierProblem([f.line[k], f.line[k + 1]])
-          if (bad) add({ id: f.id, path: `line[${k + bad[0]}]`, message: bad[1] })
-        }
-      }
-      this.problems.set(doc, p)
-    }
-    return p
-  }
   /**
-   * The gate: a problem of a feature (or of the map) that has more problems in `after` than in `before`, or null when
-   * none has. Counted, not matched word for word: a problem's message and path carry indices and coordinates that
-   * shift as a broken feature is mended, which is no new problem. With no catalogue (it failed to read), nothing can
-   * be checked: the edit passes, and the compile reports.
+   * Shows what the validator finds in the copy, at once: the page's list, the selection drawn red, and in the panel
+   * the first problem of the feature just edited (none: the message clears).
    */
-  private refusal(before: MapFile, after: MapFile): string | null {
-    if (!this.cat) return null
-    const old = this.problemsOf(before)
-    for (const [id, issues] of this.problemsOf(after)) {
-      const had = old.get(id) ?? []
-      if (issues.length <= had.length) continue
-      const i = issues.find(x => !had.some(y => y.message === x.message)) ?? issues[issues.length - 1]
-      return `${id ? `[${id}] ` : ''}${i.path ? `${i.path}: ` : ''}${i.message}`
-    }
-    return null
+  private check(edited: string | null): void {
+    this.found = this.cat && this.doc ? validate(this.doc, this.cat) : []
+    this.host.problems(this.found)
+    const mine = edited ? this.found.find(i => i.id === edited) : undefined
+    this.message = mine ? `now wrong: [${mine.id}] ${mine.path ? `${mine.path}: ` : ''}${mine.message}` : ''
   }
-  /** Makes an edit if the gate lets it: the copy before it goes into the history, and the copy is compiled. */
-  private commit(doc: MapFile): boolean {
-    const why = this.refusal(this.doc!, doc)
-    if (why) {
-      this.message = `not done: ${why}`
-      this.host.changed()
-      return false
-    }
+  /** Makes an edit: the copy before it goes into the history, the copy is checked, compiled and drawn. */
+  private commit(doc: MapFile, edited: string | null): void {
     this.history.push(this.doc!)
     this.doc = doc
-    this.message = ''
+    this.check(edited)
     this.hoverAt() // the handle now under the pointer: the old one's indices may be the old shape's
     this.host.recompile()
     this.host.changed()
     this.host.redraw()
-    return true
   }
 
   /**
@@ -287,23 +264,18 @@ export class Editor {
     this.host.redraw()
   }
 
-  /** A press: on one of the selection's handles, or on the selected shape, it is the editor's. Returns whether. */
+  /**
+   * A press on one of the selection's handles or on its outline (its line, a ring's edge) is the editor's: a drag
+   * moves the handle or the whole shape. Inside an area the press is the page's (a pan). Returns whether.
+   */
   down(sx: number, sy: number): boolean {
     const f = this.selected ? this.feature(this.selected) : undefined
-    if (!this.enabled || !this.doc || !f || !movable(f) || this.mode.kind !== 'idle' || !this.editable(f)) return false
+    if (!this.enabled || !this.doc || !f || !movable(f) || this.mode.kind !== 'idle') return false
+    if (!onShape(f, sx, sy, this.host.project)) return false
+    const from = this.host.toWorld(sx, sy)
+    if (!from || !this.editable(f)) return false
     const handle = handleAt(f, sx, sy, this.host.project)
-    if (!handle) {
-      const on = pick([f], new Set([f.id]), sx, sy, this.host.toWorld(sx, sy), this.host.project)
-      if (on !== f.id) return false
-    }
-    this.mode = {
-      kind: 'pressing',
-      handle,
-      before: this.doc,
-      f0: f,
-      from: this.host.toWorld(sx, sy),
-      at: [sx, sy],
-    }
+    this.mode = { kind: 'pressing', handle, before: this.doc, f0: f, from, at: [sx, sy] }
     return true
   }
   /** The pointer moved: a press past DRAG_PX drags; else the handle under it is noted. Returns whether it drags. */
@@ -317,20 +289,16 @@ export class Editor {
     if (m.kind === 'pressing' && Math.hypot(sx - m.at[0], sy - m.at[1]) < DRAG_PX) return true
     m.kind = 'dragging'
     const at = this.host.toWorld(sx, sy)
+    if (!at) return true // no ground under the pointer: the shape stays where it last was
     const place = this.place(m.f0)
     const f = m.handle
       ? moveHandle(m.f0, m.handle, at, place)
       : moveShape(m.f0, at[0] - m.from[0], at[1] - m.from[1], place)
-    // the drag shows only shapes the gate lets through: a refused one leaves the last good one
     const next = this.replace(m.before, f, m.f0)
-    const why = this.refusal(m.before, next)
-    const [doc, message] = why ? [this.doc, `not there: ${why}`] : [next, '']
-    // the panel and the view only when something changed (a pointer sends many moves)
-    if (doc === this.doc && message === this.message) return true
-    if (!sameJson(doc?.features, this.doc?.features)) this.host.redraw()
-    this.doc = doc
-    this.message = message
-    this.host.changed()
+    if (!sameJson(next.features, this.doc?.features)) {
+      this.doc = next
+      this.host.redraw()
+    }
     return true
   }
   /** The pointer left the map: no handle is under it. */
@@ -360,11 +328,8 @@ export class Editor {
     const after = this.doc!
     this.doc = m.before
     // a press that did not move, or moved less than the rounding, changes nothing and leaves no step in the history
-    if (m.kind === 'dragging' && !sameJson(after.features, m.before.features)) this.commit(after)
-    else {
-      this.host.redraw()
-      this.host.changed()
-    }
+    if (m.kind === 'dragging' && !sameJson(after.features, m.before.features)) this.commit(after, m.f0.id)
+    else this.host.redraw()
     this.settle()
     return true
   }
@@ -374,7 +339,6 @@ export class Editor {
     if (m.kind === 'idle') return
     this.mode = { kind: 'idle' }
     this.doc = m.before
-    this.message = ''
     this.host.redraw()
     this.host.changed()
     this.settle()
@@ -383,8 +347,9 @@ export class Editor {
   dblclick(sx: number, sy: number): void {
     const f = this.selected ? this.feature(this.selected) : undefined
     if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return
-    const g = insertPoint(f, sx, sy, this.host.toWorld(sx, sy), this.host.project, this.place(f))
-    if (g) this.commit(this.replace(this.doc, g))
+    const at = this.host.toWorld(sx, sy)
+    const g = at && insertPoint(f, sx, sy, at, this.host.project, this.place(f))
+    if (g) this.commit(this.replace(this.doc, g), f.id)
   }
   /** Delete: the line's or the ring's point under the pointer; with the pointer off the shape, the feature. */
   remove(): void {
@@ -392,9 +357,9 @@ export class Editor {
     if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return
     const h = this.hover
     if (h && (h.kind === 'line' || h.kind === 'ring')) {
-      const g = removePoint(f, h)
       // the hover follows the pointer: the next Delete takes the point now there
-      if (g) this.commit(this.replace(this.doc, g))
+      const g = removePoint(f, h)
+      if (g) this.commit(this.replace(this.doc, g), f.id)
       else {
         this.message = 'that point stays: a line keeps 2 points, a ring 3'
         this.host.changed()
@@ -409,15 +374,8 @@ export class Editor {
       this.host.changed()
       return
     }
-    // the feature itself: not gated (what it breaks shows in place; undo brings it back)
-    this.history.push(this.doc)
-    this.hover = null
     this.selected = null
-    this.doc = { ...this.doc, features: this.doc.features.filter(x => x !== f) }
-    this.message = ''
-    this.host.recompile()
-    this.host.changed()
-    this.host.redraw()
+    this.commit({ ...this.doc, features: this.doc.features.filter(x => x !== f) }, null)
   }
   undo(): void {
     if (!this.doc || !this.ready()) return
@@ -432,6 +390,7 @@ export class Editor {
   private restore(d: MapFile): void {
     this.doc = d
     if (this.selected && !this.feature(this.selected)) this.selected = null
+    this.check(this.selected)
     this.hoverAt()
     this.host.recompile()
     this.host.changed()
@@ -455,9 +414,9 @@ export class Editor {
   private async write(overwrite: boolean): Promise<boolean> {
     if (!this.enabled || !this.doc || !this.file) return false
     if (overwrite && this.conflict !== null) {
-      // the file on disk becomes the base; a file that is no map is written afresh
+      // the file on disk becomes the base (a file the editor cannot read is written afresh)
       this.base = this.conflict
-      this.baseDoc = parseDoc(this.conflict)
+      this.baseDoc = parseDoc(this.conflict).doc
       this.conflict = null
       this.host.changed()
     }
@@ -486,8 +445,9 @@ export class Editor {
     if (r.ok) {
       this.base = sent.text
       this.baseDoc = sent.doc
-      this.conflict = null
-      this.message = 'saved'
+      // a change on disk seen while the save was out, other than the save itself, still stands
+      if (this.conflict === sent.text) this.conflict = null
+      if (this.conflict === null) this.message = 'saved'
     } else if (status === 409 && typeof r.current === 'string') {
       this.conflict = r.current
       this.message = 'the file changed on disk: keep your edits and overwrite it, or take the file'
@@ -504,20 +464,21 @@ export class Editor {
     this.host.changed()
   }
 
-  /** Draws the selection: its intent shape and its handles. */
+  /** Draws the selection: its intent shape (red while the validator finds it wrong) and its handles. */
   draw(): void {
     const f = this.selected ? this.feature(this.selected) : undefined
     if (!f) return
     const { ctx } = this.host
     ctx.save()
-    ctx.strokeStyle = SELECTED
+    ctx.strokeStyle = this.found.some(i => i.id === f.id) ? WRONG : SELECTED
     ctx.lineWidth = 2
     const path = (pts: Pt[], close: boolean) => {
       this.host.groundPath(pts, close)
       ctx.stroke()
     }
     if (f.line) path(f.line, false)
-    f.area?.forEach(r => path(r, true))
+    // an outer ring whose rest is a shared edge is drawn open: the edge is the line it follows
+    f.area?.forEach((r, k) => path(r, !(k === 0 && f.follow !== undefined)))
     if (f.circle) path(ovalRing(f.circle[0], f.circle[1], f.circle[1], 0), true)
     if (f.ellipse) path(ovalRing(...f.ellipse), true)
     const barrier = isBarrier(f, this.doc?.presets)

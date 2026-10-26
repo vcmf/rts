@@ -1,13 +1,15 @@
 // The map editor's edits (docs/plans/active/m7-editor.md M7a): what a click picks, a feature's handles, and the edits
 // of its shape, as pure functions on the map's intent features (never the expanded map: decision 0066). Every edit
-// returns a new feature and leaves the old one as it was, so the history can keep both. These only propose: the
-// editor keeps an edit only if the validator finds no new problem in it (the engine's rules, never copies of them).
+// returns a new feature and leaves the old one as it was, so the history can keep both. Snapping only helps: an edit
+// always applies, and what the validator then finds is shown at once (the engine's rules, never copies of them). A
+// field that names a point by its place in a list (a shared edge's `at`) is kept in step as points come and go.
 // Tested in test/map-edit.test.ts.
 import type { Feature, MapFile, Pt } from '../../map/schema.ts'
-import { barrierProblem, inRing, isClosedLine, LATTICE, ringArea2 } from '../../map/geometry.ts'
+import { barrierProblem, inRing, isClosedLine, isPt, LATTICE, ringArea2 } from '../../map/geometry.ts'
 import { featureKind } from '../../map/validate.ts'
 import { categoryOf } from '../../map/catalogue.ts'
-import { cm } from '../../map/util.ts'
+import { cm, listOf } from '../../map/util.ts'
+import type { FollowEdge } from '../../map/follow.ts'
 
 /** A part of a feature's shape that can be dragged. */
 export type Handle =
@@ -131,7 +133,7 @@ export function pick(
   intent: Set<string>,
   sx: number,
   sy: number,
-  ground: Pt,
+  ground: Pt | null, // the click's ground point; null where the view shows no ground (only points and lines pick)
   project: Project,
 ): string | null {
   const owner = (f: Feature): string | null => {
@@ -156,6 +158,7 @@ export function pick(
   }
   if (best) return (best as { id: string }).id
   let small: { id: string; area: number } | null = null
+  if (!ground) return null
   for (const f of shown) {
     const id = owner(f)
     if (!id) continue
@@ -260,8 +263,9 @@ export function moveHandle(f: Feature, h: Handle, to: Pt, place: Place): Feature
       // at a time
       const fits = (c: Pt) =>
         barrierProblem(neighbours.length === 2 ? [neighbours[0], c, neighbours[1]] : [...neighbours, c]) === null
-      // a barrier's point stays where it was when no lattice point near the pointer keeps its segments whole
-      const p = place.barrier ? (snapBarrier(to, neighbours, place.reach, fits) ?? line[h.index]) : at
+      // a barrier's point goes where its segments stay whole, if such a lattice point is near; else to the nearest
+      // lattice point, and the validator says what is wrong
+      const p = place.barrier ? (snapBarrier(to, neighbours, place.reach, fits) ?? onLattice(to)) : at
       line[h.index] = p
       if (loop && h.index === 0) line[line.length - 1] = [...p]
       out.line = line
@@ -340,20 +344,38 @@ export function insertPoint(
   const { ring, index } = best as { ring: number; index: number }
   let p: Pt | null = roundPt(at, place.step)
   if (place.barrier && ring < 0) {
-    // between its two neighbours, on a lattice point that keeps its two new segments whole (none: no point added)
+    // between its two neighbours, on a lattice point that keeps its two new segments whole, else the nearest one
     const line = f.line!
     const fits = (c: Pt) => barrierProblem([line[index - 1], c, line[index]]) === null
-    p = snapBarrier(at, [line[index - 1], line[index]], place.reach, fits)
-    if (!p) return null
+    p = snapBarrier(at, [line[index - 1], line[index]], place.reach, fits) ?? onLattice(at)
   }
   const out: Feature = { ...f }
   if (ring < 0) out.line = [...f.line!.slice(0, index), p, ...f.line!.slice(index)]
-  else out.area = f.area!.map((r, k) => (k === ring ? [...r.slice(0, index), p, ...r.slice(index)] : r))
+  else {
+    out.area = f.area!.map((r, k) => (k === ring ? [...r.slice(0, index), p, ...r.slice(index)] : r))
+    if (ring === 0) shiftFollow(out, index, +1)
+  }
   return out
 }
 
-/** The feature with a line's or a ring's point removed; null if a line would keep under 2 points (a closed one under
- * 3) or a ring under 3. */
+/**
+ * Keeps a shared edge's place in step with its outer ring (decision 0030: `at` is the index of the ring's point the
+ * edge goes before): a point added at `index` or before moves it on by one, one removed before it moves it back.
+ */
+function shiftFollow(f: Feature, index: number, by: 1 | -1): void {
+  if (f.follow === undefined) return
+  const shift = (e: FollowEdge): FollowEdge => {
+    const at = e.at ?? 0
+    const moves = by > 0 ? index <= at : index < at
+    return moves ? { ...e, at: at + by } : e
+  }
+  f.follow = Array.isArray(f.follow) ? f.follow.map(e => shift(e as FollowEdge)) : shift(f.follow as FollowEdge)
+}
+
+/**
+ * The feature with a line's or a ring's point removed; null if a line would keep under 2 points (a closed one under
+ * 3), a ring under 3, or an outer ring whose rest is a shared edge (`follow`) under 1.
+ */
 export function removePoint(f: Feature, h: Handle): Feature | null {
   if (h.kind === 'line') {
     const line = f.line!
@@ -365,8 +387,56 @@ export function removePoint(f: Feature, h: Handle): Feature | null {
     return { ...f, line: kept }
   }
   if (h.kind === 'ring') {
-    if (f.area![h.ring].length <= 3) return null
-    return { ...f, area: f.area!.map((r, k) => (k === h.ring ? r.filter((_, i) => i !== h.index) : r)) }
+    const least = h.ring === 0 && listOf(f.follow).length ? 1 : 3
+    if (f.area![h.ring].length <= least) return null
+    const out: Feature = { ...f, area: f.area!.map((r, k) => (k === h.ring ? r.filter((_, i) => i !== h.index) : r)) }
+    if (h.ring === 0) shiftFollow(out, h.index, -1)
+    return out
+  }
+  return null
+}
+
+const isPts = (v: unknown, least: number): v is Pt[] => Array.isArray(v) && v.length >= least && v.every(isPt)
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+
+/**
+ * Why a map's copy cannot be edited, or null when it can: the editor works on a map whose structure it can read (an
+ * object, its features objects with a text id, its presets objects, each shape as its kind of value). What is wrong
+ * inside that (a line that crosses itself, a barrier off its lattice) is the validator's to report, and can be mended
+ * in the editor.
+ */
+export function wellFormed(doc: unknown): string | null {
+  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) return 'the file is not a JSON object'
+  const m = doc as Record<string, unknown>
+  if (!Array.isArray(m.features)) return 'the file has no list of features'
+  const presets = m.presets
+  if (presets !== undefined) {
+    const ok = typeof presets === 'object' && presets !== null && !Array.isArray(presets)
+    if (!ok || Object.values(presets).some(p => typeof p !== 'object' || p === null || Array.isArray(p))) {
+      return 'its presets are not objects'
+    }
+  }
+  for (const [k, f] of m.features.entries()) {
+    if (typeof f !== 'object' || f === null || Array.isArray(f)) return `features[${k}] is not an object`
+    const g = f as Record<string, unknown>
+    if (typeof g.id !== 'string') return `features[${k}] has no text id`
+    const bad = (shape: string) => `${g.id}: its ${shape} is not one`
+    if (g.point !== undefined && !isPt(g.point)) return bad('point')
+    if (g.near !== undefined && !isPt(g.near)) return bad('near point')
+    if (g.line !== undefined && !isPts(g.line, 1)) return bad('line')
+    if (g.area !== undefined && !(Array.isArray(g.area) && g.area.length > 0 && g.area.every(r => isPts(r, 1)))) {
+      return bad('area')
+    }
+    if (g.circle !== undefined && !(Array.isArray(g.circle) && isPt(g.circle[0]) && isNum(g.circle[1]))) {
+      return bad('circle')
+    }
+    const e = g.ellipse
+    if (e !== undefined && !(Array.isArray(e) && isPt(e[0]) && isNum(e[1]) && isNum(e[2]) && isNum(e[3]))) {
+      return bad('ellipse')
+    }
+    if (g.follow !== undefined && listOf(g.follow).some(x => typeof x !== 'object' || x === null)) {
+      return bad('shared edge')
+    }
   }
   return null
 }

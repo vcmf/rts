@@ -15,6 +15,7 @@ import {
   roundTo,
   snapBarrier,
   isBarrier,
+  wellFormed,
 } from '../src/app/map/edit.ts'
 
 // a view straight down at 1 px a metre, y down the screen
@@ -130,16 +131,21 @@ describe('M7a: handles and moves', () => {
 })
 
 describe('M7a: barriers snap to the lattice in 8 directions', () => {
-  it("keeps a barrier whole wherever its point is dragged: snapped by the engine's rule, or left where it was", () => {
-    let snapped = 0
+  it('puts a dragged barrier point on the lattice, where its segments stay whole when such a point is near', () => {
+    let whole = 0
     for (let x = -10; x <= 50; x += 0.7) {
       for (let z = -10; z <= 40; z += 0.9) {
         const moved = moveHandle(hedge, { kind: 'line', index: 1 }, [x, z], lattice)
-        expect(barrierProblem(moved.line!)).toBe(null)
-        if (moved.line![1][0] !== 20 || moved.line![1][1] !== 0) snapped++
+        const p = moved.line![1]
+        expect(Number.isInteger(p[0] / 2) && Number.isInteger(p[1] / 2)).toBe(true)
+        const fits = (c: Pt) => barrierProblem([hedge.line![0], c, hedge.line![2]]) === null
+        if (snapBarrier([x, z], [hedge.line![0], hedge.line![2]], lattice.reach, fits)) {
+          expect(barrierProblem(moved.line!)).toBe(null)
+          whole++
+        }
       }
     }
-    expect(snapped).toBeGreaterThan(100) // it does move, where it can
+    expect(whole).toBeGreaterThan(100)
   })
   it('snaps to the corner both segments allow, when near; to nothing when nothing near fits', () => {
     const fits = (c: Pt) => barrierProblem([[0, 0], c, [40, 20]]) === null
@@ -200,11 +206,13 @@ describe('M7a: points added to and removed from a barrier keep it valid', () => 
       [10, 0],
     ],
   }
-  it('adds a point only where both new segments run in the 8 directions', () => {
+  it('adds a point on the lattice, keeping both new segments whole when such a point is near', () => {
     for (let x = 0.5; x < 10; x += 0.5) {
       for (const z of [0.4, 1.2, 2.5, 4]) {
         const g = insertPoint(wall, x, -z, [x, z], project, lattice)
-        if (g) expect(barrierProblem(g.line!)).toBe(null)
+        if (!g) continue // on an end point: nothing added
+        const fits = (c: Pt) => barrierProblem([wall.line![0], c, wall.line![1]]) === null
+        if (snapBarrier([x, z], wall.line!, lattice.reach, fits)) expect(barrierProblem(g.line!)).toBe(null)
       }
     }
     // on a longer wall, away from its ends (a click within PICK.handle of a point adds nothing)
@@ -250,5 +258,63 @@ describe('M7a: points added to and removed from a barrier keep it valid', () => 
       ],
     }
     expect(handles(back).length).toBe(3)
+  })
+})
+
+describe('M7a: a shared edge kept in step, a structure the editor can read', () => {
+  const wood: Feature = {
+    id: 'w',
+    kind: 'veg.wood.broad',
+    area: [
+      [
+        [0, 0],
+        [100, 0],
+        [100, 100],
+        [0, 100],
+      ],
+    ],
+    follow: { id: 'brook', at: 2 },
+  }
+  it("moves a shared edge's place on when a point is added before it, back when one is removed before it", () => {
+    const added = insertPoint(wood, 50, -1, [50, 1], project, place)! // on the first segment: the new point 1
+    expect(added.area![0][1]).toEqual([50, 1])
+    expect(added.follow).toEqual({ id: 'brook', at: 3 })
+    const after = insertPoint(wood, 50, -100, [50, 100], project, place)! // on the third: point 3, after the edge
+    expect(after.follow).toEqual({ id: 'brook', at: 2 })
+    expect(removePoint(wood, { kind: 'ring', ring: 0, index: 0 })!.follow).toEqual({ id: 'brook', at: 1 })
+    expect(removePoint(wood, { kind: 'ring', ring: 0, index: 2 })!.follow).toEqual({ id: 'brook', at: 2 })
+    const list = { ...wood, follow: [{ id: 'brook', at: 2 }, { id: 'road' }] }
+    expect(removePoint(list, { kind: 'ring', ring: 0, index: 1 })!.follow).toEqual([
+      { id: 'brook', at: 1 },
+      { id: 'road' },
+    ])
+  })
+  it('lets an outer ring whose rest is a shared edge keep a single point', () => {
+    const two: Feature = {
+      ...wood,
+      area: [
+        [
+          [0, 0],
+          [100, 0],
+        ],
+      ],
+      follow: { id: 'brook' },
+    }
+    expect(removePoint(two, { kind: 'ring', ring: 0, index: 1 })!.area![0]).toEqual([[0, 0]])
+    expect(removePoint({ ...two, area: [[[0, 0]]] }, { kind: 'ring', ring: 0, index: 0 })).toBe(null)
+  })
+  it('reads a map it can edit, and says why not otherwise', () => {
+    const ok = { format: 1, features: [wood], presets: { p: { kind: 'veg.wood' } } }
+    expect(wellFormed(ok)).toBe(null)
+    expect(wellFormed([])).toMatch(/not a JSON object/)
+    expect(wellFormed({ features: null })).toMatch(/no list of features/)
+    expect(wellFormed({ features: [null] })).toMatch(/features\[0\] is not an object/)
+    expect(wellFormed({ features: [{ kind: 'x' }] })).toMatch(/no text id/)
+    expect(wellFormed({ features: [], presets: null })).toMatch(/presets/)
+    expect(wellFormed({ features: [], presets: { p: null } })).toMatch(/presets/)
+    expect(wellFormed({ features: [{ id: 'a', line: 5 }] })).toMatch(/a: its line/)
+    expect(wellFormed({ features: [{ id: 'a', area: [[[0, 0]], 'x'] }] })).toMatch(/a: its area/)
+    expect(wellFormed({ features: [{ id: 'a', circle: [[0, 0], 'r'] }] })).toMatch(/a: its circle/)
+    expect(wellFormed({ features: [{ id: 'a', follow: [null] }] })).toMatch(/a: its shared edge/)
   })
 })

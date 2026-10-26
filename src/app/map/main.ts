@@ -337,11 +337,17 @@ const toWorld = (sx: number, sy: number): Pt =>
 const editor = new Editor({
   ctx,
   project: (x, z) => toScreen(x, z),
-  toWorld,
+  // where the view shows no ground (a ray off the tilted plane), none: the editor neither picks nor moves there
+  toWorld: (sx, sy) => (lit ? lit.unproject(sx, sy) : flatWorld(sx, sy)),
   ppm: () => view.ppm,
   shown: () => current?.map.features ?? [],
   groundPath,
   recompile: () => void compile('edit'),
+  // what the validator finds in the edited copy, listed and outlined at once; the compile's list replaces it
+  problems: found => {
+    issues = found
+    panel()
+  },
   redraw,
   changed: () => editPanel(),
 })
@@ -354,7 +360,7 @@ function editPanel(): void {
   editState.textContent = !editor.enabled
     ? 'editing needs the dev server (npm run dev)'
     : !editor.doc
-      ? 'the file is not valid JSON: fix it by hand to edit'
+      ? `read-only: ${editor.readOnly}; fix it by hand to edit`
       : `${dirty ? 'unsaved edits' : 'no unsaved edits'}${editor.message ? ` · ${editor.message}` : ''}`
   saveButton.disabled = !editor.enabled || !dirty
   undoButton.disabled = !editor.enabled || !editor.canUndo
@@ -636,6 +642,7 @@ canvas.addEventListener('pointerup', e => {
     requestOverlay()
   } else if (click) editor.click(e.offsetX, e.offsetY)
   drag = null
+  editor.move(e.offsetX, e.offsetY) // the handle under the pointer, after a pan or a drag
 })
 // an interrupted press (touch or pen cancelled, the capture lost): a drag of the editor's is undone, a pan ends
 const interrupted = (e: PointerEvent) => {
@@ -675,6 +682,7 @@ canvas.addEventListener(
     place()
     redraw()
     hover(e.offsetX, e.offsetY)
+    editor.move(e.offsetX, e.offsetY) // the handle under the pointer, after the zoom
   },
   { passive: false },
 )

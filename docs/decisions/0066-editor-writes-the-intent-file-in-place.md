@@ -24,10 +24,16 @@ We will build the editor as follows:
   save is refused and the page says so. The built page has no server to write through and does not edit.
 - **The stable save rewrites only what changed:** an unchanged feature keeps its bytes, a changed one is written on
   one line in its place, a new one appended, a deleted one cut. A file written unedited is byte for byte the same.
-- **The engine's validator gates every edit of a shape** (amended in this PR, before it merged, after the review's
-  third round): an edit that adds a problem the validator did not find before is refused, and the copy keeps its last
-  good state; the editor proposes (rounding, a barrier's snap) but holds no copy of the language's rules. Deleting a
-  feature is not gated: what it breaks shows in place, and undo brings it back.
+- **An edit always applies; the validator says what is wrong at once** (amended in this PR before it merged, twice:
+  first to a gate that refused edits adding a problem, then, after that design's own three review rounds, to this):
+  the problems the edit leaves show in the panel and in place as soon as it is made, and undo is one key. The editor
+  holds no copy of the language's rules; snapping only helps. A gate was dropped because the validator is no complete
+  oracle: it names a line's first problem of each kind only, and some checks wait for expansion (a shared edge's).
+- **The editor edits only a map whose structure it can read** (amended likewise): an object, its features objects
+  with a text id, its presets objects, each shape as its kind of value; any other file opens read-only, saying why.
+  What is wrong inside that structure is the validator's to report, and can be mended in the editor.
+- **A field that names a point by its place keeps in step** (amended likewise): adding or removing a point before a
+  shared edge's `at` moves it with the ring.
 - **One state machine owns the page's copy** (amended likewise): idle, pressing, dragging. Only an idle editor takes
   a command; a file changed on disk during a press is a conflict; a save's reply counts only for the file and base it
   was sent for.
@@ -40,10 +46,11 @@ We will build the editor as follows:
 - Bad: editing needs the dev server (`npm run dev`); the built page is a viewer.
 - Bad: a changed feature loses a hand-written multi-line layout (it is rewritten on one line).
 - Bad: unsaved edits live only in the page: closing the tab loses them (the page asks first).
-- Good: the editor and the compiler cannot disagree on what a valid feature is; three review rounds found the
-  editor's copies of the barrier rule drifting from the engine's.
-- Bad: the whole map is validated on each step of a drag: well under a millisecond on today's maps (0.3 ms for the
-  valley, measured in Node); to be measured again on Austerlitz's hundreds of features.
+- Good: the editor and the compiler cannot disagree on what a valid feature is (the first design's copies of the
+  barrier rule drifted from the engine's), and a broken feature can be mended in the page.
+- Bad: an edit can leave the map wrong, as a hand edit can; it shows red at once, and the save does not refuse it.
+- Bad: the whole map is validated after each edit: 0.17–0.32 ms on today's maps (Node); to be measured again on
+  Austerlitz's hundreds of features.
 
 ## Alternatives considered
 

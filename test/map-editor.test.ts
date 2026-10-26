@@ -4,6 +4,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Catalogue, MapFile } from '../src/map/schema.ts'
+import type { Issue } from '../src/map/validate.ts'
 import { formatMap } from '../src/map/format.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
 import { root } from './fx.ts'
@@ -31,6 +32,7 @@ const text = formatMap({
 } as MapFile)
 function make(fileText = text) {
   const compiles: string[] = []
+  const found: Issue[][] = []
   const host: Host = {
     ctx: {} as CanvasRenderingContext2D,
     project: (x, z) => [x, -z],
@@ -39,12 +41,13 @@ function make(fileText = text) {
     shown: () => (JSON.parse(fileText) as MapFile).features,
     groundPath: () => {},
     recompile: () => compiles.push('edit'),
+    problems: f => found.push(f),
     redraw: () => {},
     changed: () => {},
   }
   const ed = new Editor(host)
   ed.load('/maps/t.map.json', fileText)
-  return { ed, compiles }
+  return { ed, compiles, found }
 }
 /** Drags from one screen point to another. */
 function drag(ed: Editor, from: [number, number], to: [number, number]) {
@@ -215,15 +218,19 @@ describe('M7a redesign: one state machine, the validator as the gate', () => {
     ed.remove()
     expect(ed.feature('road')!.line!.length).toBe(2)
   })
-  it("refuses an edit the validator finds a new problem in, and says which: a wall's corner removed", () => {
-    const { ed } = make(walled)
+  it("applies an edit the validator finds wrong, and shows it at once: a wall's corner removed", () => {
+    const { ed, found } = make(walled)
     ed.setCatalogue(cat)
     ed.select('wall')
     ed.move(40, 100) // over the corner
     ed.remove()
+    expect(ed.feature('wall')!.line!.length).toBe(2)
+    expect(ed.message).toMatch(/^now wrong: \[wall\] .*8 directions/)
+    expect(found.at(-1)!.some(i => i.id === 'wall')).toBe(true)
+    ed.undo()
     expect(ed.feature('wall')!.line!.length).toBe(3)
-    expect(ed.message).toMatch(/^not done: \[wall\] .*8 directions/)
-    expect(ed.canUndo).toBe(false)
+    expect(ed.message).toBe('')
+    expect(found.at(-1)!.length).toBe(0)
   })
   it('takes no command during a press: undo, Delete, save, a selection, a double click', async () => {
     const { ed } = make()
@@ -322,7 +329,7 @@ describe('M7a redesign, round 1', () => {
         },
       ],
     } as MapFile)
-  it('lets a broken feature be mended: a point added to a line that crosses itself shifts its problem, adds none', () => {
+  it('edits a broken feature like any other: a point added to a line that crosses itself', () => {
     const { ed } = make(
       withRoad([
         [-100, 50],
@@ -334,8 +341,8 @@ describe('M7a redesign, round 1', () => {
     ed.setCatalogue(cat)
     ed.select('road')
     ed.dblclick(-50, -50)
-    expect(ed.message).toBe('')
     expect(ed.feature('road')!.line!.length).toBe(5)
+    expect(ed.message).toMatch(/^now wrong: \[road\] .*crosses itself/)
   })
   it('removes points one Delete at a time, and never the feature while the pointer is on its shape', () => {
     const { ed } = make(
@@ -403,8 +410,8 @@ describe('M7a redesign, round 2', () => {
   const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'kinds.json'), 'utf8')) as Catalogue
   const withFeatures = (features: MapFile['features']) =>
     formatMap({ ...(JSON.parse(text) as MapFile), features } as MapFile)
-  it('refuses a second break in a barrier already broken elsewhere', () => {
-    // broken at its second point (off the lattice); removing its fourth leaves a joint out of the 8 directions
+  it('says what is wrong with a barrier after an edit, though it was wrong before', () => {
+    // broken at its second point (off the lattice); removing its fourth also leaves a joint out of the 8 directions
     const wall = {
       id: 'wall',
       kind: 'barrier.wall',
@@ -421,8 +428,8 @@ describe('M7a redesign, round 2', () => {
     ed.select('wall')
     ed.move(40, 80)
     ed.remove()
-    expect(ed.feature('wall')!.line!.length).toBe(5)
-    expect(ed.message).toMatch(/^not done: \[wall\]/)
+    expect(ed.feature('wall')!.line!.length).toBe(4)
+    expect(ed.message).toMatch(/^now wrong: \[wall\]/)
   })
   it('edits neither of two features sharing an id, and says so', () => {
     const a = { id: 'wood', kind: 'veg.wood.broad', circle: [[0, 0], 10] }
@@ -476,6 +483,88 @@ describe('M7a redesign, round 2', () => {
     const b = newest(Promise.resolve('B'))
     expect(await b).toBe('B')
     first('A')
+    expect(await a).toBe(null)
+  })
+})
+
+describe('M7a redesign 2: edits apply, the structure checked, the inside pans', () => {
+  const withFeatures = (features: unknown[]) => formatMap({ ...(JSON.parse(text) as MapFile), features } as MapFile)
+  it('opens a file whose structure it cannot read read-only, and a click does not throw', () => {
+    const { ed } = make('{"format":1,"features":[null,{"id":"a"}]}')
+    expect(ed.doc).toBe(null)
+    expect(ed.readOnly).toMatch(/features\[0\] is not an object/)
+    expect(() => ed.click(0, 0)).not.toThrow()
+    expect(ed.down(0, 0)).toBe(false)
+  })
+  it("pans from inside a selected area (the press is not the editor's), drags from its edge", () => {
+    const wood = {
+      id: 'wood',
+      kind: 'veg.wood.broad',
+      area: [
+        [
+          [-50, -50],
+          [50, -50],
+          [50, 50],
+          [-50, 50],
+        ],
+      ],
+    }
+    const { ed } = make(withFeatures([wood]))
+    ed.select('wood')
+    expect(ed.down(0, 0)).toBe(false) // inside
+    expect(ed.down(0, 50)).toBe(true) // on its south edge (z −50)
+    ed.move(0, 60)
+    ed.up()
+    expect(ed.feature('wood')!.area![0][0]).toEqual([-50, -60])
+  })
+  it('leaves the shape where it was while the pointer is over no ground', () => {
+    const { ed } = make()
+    let ground = true
+    ;(ed as unknown as { host: Host }).host.toWorld = (sx, sy) => (ground ? [sx, -sy] : null)
+    ed.select('road')
+    expect(ed.down(-100, -50)).toBe(true)
+    ed.move(-90, -50)
+    ground = false
+    ed.move(500, -900)
+    ed.up()
+    expect(ed.feature('road')!.line![0]).toEqual([-90, 50])
+  })
+  it("keeps a conflict from another write seen while a save was out; drops the save's own", async () => {
+    const { ed } = make()
+    let reply = () => {}
+    vi.stubGlobal(
+      'fetch',
+      () =>
+        new Promise<Response>(res => {
+          reply = () => res(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+        }),
+    )
+    ed.select('road')
+    drag(ed, [-100, -50], [-90, -50])
+    const ours = ed.text
+    const saved = ed.save()
+    await new Promise(r => setTimeout(r, 0))
+    ed.onDisk(ours) // the watcher sees the save itself
+    ed.onDisk('{"format":1,"features":[]}') // and then another tool's write
+    reply()
+    expect(await saved).toBe(true)
+    expect(ed.conflict).toBe('{"format":1,"features":[]}')
+  })
+  it('says nothing about a shared id when the press is not on the selection', () => {
+    const a = { id: 'wood', kind: 'veg.wood.broad', circle: [[0, 0], 10] }
+    const b = { id: 'wood', kind: 'veg.wood.broad', circle: [[100, 0], 10] }
+    const { ed } = make(withFeatures([a, b]))
+    ed.select('wood')
+    expect(ed.down(300, -300)).toBe(false)
+    expect(ed.message).toBe('')
+  })
+  it("drops an overtaken read's failure too", async () => {
+    const newest = newestOnly()
+    let fail: (e: Error) => void = () => {}
+    const a = newest(new Promise<string>((_, rej) => (fail = rej)))
+    const b = newest(Promise.resolve('B'))
+    expect(await b).toBe('B')
+    fail(new Error('gone mid-rename'))
     expect(await a).toBe(null)
   })
 })

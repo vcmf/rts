@@ -41,12 +41,17 @@ tools on top).
   feature that did not change keeps its bytes (a hand-written layout included); a changed one is written on one line
   in place (`formatMap`'s layout), a new one appended, a deleted one cut with its separator. A map with no previous
   text is written by `formatMap`.
-- **The validator gates every edit of a shape** (the redesign, the owner, 2026-10-26: "engine gate and one state
-  machine"): the editor proposes (rounding, a barrier's snap through `barrierProblem`) and keeps an edit only if the
-  validator finds no problem it did not find before; deleting a feature is not gated (undo brings it back).
+- **An edit always applies** (the second redesign, the owner, 2026-10-26, after analysing six review rounds): what the
+  validator finds in it shows at once (the selection drawn red, the problem in the panel, the page's list), and undo
+  is one key. The first redesign's gate (refuse an edit that adds a problem) is dropped: the validator names a line's
+  first problem of each kind only, and some checks wait for expansion, so a gate is either incomplete or a copy of
+  the rules. Snapping only helps.
 - **One state machine owns the copy:** idle, pressing, dragging; only an idle editor takes a command; a file changed
   on disk during a press is a conflict; a save's reply counts only for the file and base it was sent for; unsaved
   edits are a difference of values from the file, not of text.
+- **The editor edits only a map whose structure it can read** (`wellFormed`); any other file opens read-only.
+- **Point edits keep index fields in step:** a shared edge's `at` (the place in the outer ring it goes before).
+- **Only the selection's outline and handles drag it;** a press inside a selected area pans.
 
 ## M7a in detail
 
@@ -152,6 +157,22 @@ tools on top).
   nothing to write clears the conflict on screen; the selection redraws at once on an edit, an undo or a redo (not
   when the compile comes back), and the handle under the pointer is found again after them; `isBarrier` takes the
   kind's category as the validator does (`categoryOf`). Tests for each; the page check presses a second pointer.
+- **Redesign, round 3**: severe, the redesign's third. Point edits shifted a shared edge's place in its ring
+  (`follow.at`), and the gate let it through (the validator checks that edge after expansion); a file of valid JSON
+  but a malformed structure (a `null` feature or preset) crashed the editor; a conflict from another write seen while
+  a save was out was cleared by the save's reply. Stopped and asked the owner, who asked whether the design itself
+  was wrong. The analysis: most findings across the six rounds were event handling, fixed; four came from the design.
+  (1) The gate rested on the validator being a complete oracle, which it is not: each precision fix led to the next
+  finding. (2) Index fields (`follow.at`) shift under point edits. (3) No trust boundary on what the editor reads.
+  (4) A press inside a selected area both moved it and was meant to pan. The owner chose all four changes (above;
+  decision 0066 amended in this PR). The review count restarts.
+- **Second redesign**: the gate is gone; `check` validates the copy after each edit and shows what it finds;
+  `wellFormed` on reading, read-only otherwise; `shiftFollow` keeps `at` in step (an outer ring that is a shared
+  edge's rest may keep one point); `down` takes only the outline and the handles. With it, round 3's other findings:
+  the hover follows a zoom and the end of a pan; an overtaken read's failure is dropped too; the shared-id message
+  only for a press on the selection; no ground under the pointer is no pick and no move (not the view's centre); the
+  drag no longer validates or refreshes the panel on every move. Tests for each; the page check zooms away from a
+  hovered point and presses Delete.
 
 ## Open questions
 
