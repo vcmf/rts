@@ -1179,17 +1179,19 @@ function heldCells(w: World, i: number, pass: number, seen: Int32Array, ep: numb
  */
 export function stepWhole(w: World, i: number, dx: number, dz: number, pass: number): boolean {
   const f = w.f
-  const n = w.terrain.n * w.terrain.n
-  const s = w.scratch
-  if (!s.stepCells || s.stepCells.length !== n) s.stepCells = new Int32Array(n)
-  const ep = (s.stepEpoch = ((s.stepEpoch ?? 0) + 1) & 0x3fffffff)
-  const off = heldCells(w, i, pass, s.stepCells, ep, true)
-  f.x[i] += dx
-  f.z[i] += dz
-  const after = heldCells(w, i, pass, s.stepCells, ep, false)
+  const C = w.scratch.claims
+  if (!C) return false
+  // the claims' own per-cell stamps (nothing claims between the two passes)
+  const ep = ++C.epoch
+  const x0 = f.x[i]
+  const z0 = f.z[i]
+  const off = heldCells(w, i, pass, C.seen, ep, true)
+  f.x[i] = x0 + dx
+  f.z[i] = z0 + dz
+  const after = heldCells(w, i, pass, C.seen, ep, false)
   if (after < 0 || after > off) {
-    f.x[i] -= dx
-    f.z[i] -= dz
+    f.x[i] = x0
+    f.z[i] = z0
     return false
   }
   f.onRoad[i] = 0

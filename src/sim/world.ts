@@ -247,9 +247,6 @@ export interface World {
     menNow?: Int32Array
     melee?: Melee
     fireGeoTick?: number
-    // a melee's step (stepWhole): per cell, the epoch of the last step that found it held under the stepping formation
-    stepCells?: Int32Array
-    stepEpoch?: number
   }
 }
 
