@@ -13,7 +13,6 @@ import {
   CYCLE,
   FAR_COAT_BELOW,
   FAR_ROLES,
-  coatOverride,
   extents,
   facingAt,
   farPalette,
@@ -26,7 +25,9 @@ import {
   type Drill,
   type ManState,
 } from '../src/look/world/armies.ts'
-import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
+import { UNIFORMS as DRESS } from '../src/rulesets/napoleonic-uniforms.ts'
+import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
+import { dressAll } from '../src/look/world/dyes.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
 import {
@@ -43,6 +44,9 @@ import {
   type Part,
   type UnitData,
 } from '../src/look/units-data.ts'
+
+// the era's uniforms as the page paints them (resolved from their dyes, decision 0068)
+const UNIFORMS = dressAll(DRESS, DYES)
 
 const g = napoleonic.types.infantry.geometry
 const drill: Drill = {
@@ -182,6 +186,8 @@ describe('armies: the layout', () => {
     const j = Math.floor((z + R) / S)
     return bit(i, j) || bit(i + 1, j) || bit(i, j + 1) || bit(i + 1, j + 1)
   }
+  // the uniforms' ids when the fixture was hashed (the layout does not depend on them; decision 0068 renamed them)
+  const FIXTURE_SIDES = ['fr-line-1808', 'at-line-white']
   it('lays out 20 a side and fewer exactly as before the close reserves (hashes of the layouts at 084d6e0)', () => {
     const want = JSON.parse(
       readFileSync(new URL('./fixtures/armies-layout-20.json', import.meta.url), 'utf8'),
@@ -195,7 +201,7 @@ describe('armies: the layout', () => {
       for (let n = 1; n <= 20; n++) {
         expect(
           createHash('sha256')
-            .update(JSON.stringify(layout(n, drill, b, ARMIES_DEMO.sides)))
+            .update(JSON.stringify(layout(n, drill, b, FIXTURE_SIDES)))
             .digest('hex')
             .slice(0, 16),
           `${k} ${n}`,
@@ -634,35 +640,5 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     }
     expect(() => shadowShape(d, d.lods[d.lods.length - 1].name, [1, 0, 0], roles)).toThrow(/horizon/)
     expect(s.channels).toBe(1) // (the soft bake's channel: test/shadow-look.test.ts)
-  })
-})
-
-describe('coatOverride (?coat=)', () => {
-  it('keeps the uniforms as they are without the switch', () => {
-    expect(coatOverride(null, UNIFORMS)).toBe(UNIFORMS)
-    expect(coatOverride('', UNIFORMS)).toBe(UNIFORMS)
-  })
-  it('swaps the named coats only, the far palette and rule following, the flag and the era data untouched', () => {
-    const u = coatOverride('fr-line-1808:#1a2340;at-line-white:2C4FA8', UNIFORMS)
-    expect(u['fr-line-1808'].colours.coat).toBe('#1A2340')
-    expect(u['fr-line-1808'].colours.facings).toBe(UNIFORMS['fr-line-1808'].colours.facings)
-    expect(u['fr-line-1808'].flag).toEqual(UNIFORMS['fr-line-1808'].flag)
-    expect(u['at-line-white'].colours.coat).toBe('#2C4FA8')
-    expect(farRule(u['at-line-white'])).toBe('coat')
-    expect(farPalette(u['fr-line-1808'].colours).dark).toBe(farPalette({ coat: '#1A2340' }).dark)
-    expect(UNIFORMS['fr-line-1808'].colours.coat).toBe('#2C4FA8')
-  })
-  it('fails loudly on a malformed entry, an unknown uniform or one named twice', () => {
-    for (const bad of [
-      'fr-line-1808',
-      'fr-line-1808:#12345',
-      'fr-line-1808:#GGGGGG',
-      ':#123456',
-      'fr-line-1808:#123456;',
-    ]) {
-      expect(() => coatOverride(bad, UNIFORMS), bad).toThrow(/must be/)
-    }
-    expect(() => coatOverride('nope:#123456', UNIFORMS)).toThrow(/no uniform nope/)
-    expect(() => coatOverride('fr-line-1808:#123456;fr-line-1808:#654321', UNIFORMS)).toThrow(/twice/)
   })
 })

@@ -1,12 +1,22 @@
 // The army-colour blocks on the look page (src/look/lab.ts, __look.lab.addBlocks): the coats, and the cover's spots,
-// shared by the readability guard (tools/guard.mjs) and L5b's judging kit (tools/ablation-kit.mjs).
-// docs/art-bible.md §4
+// shared by the readability guard (tools/guard.mjs), the coat check (tools/coat-check.mjs) and L5b's judging kit
+// (tools/ablation-kit.mjs)
+import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
+import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
+
+// The blocks' coats: four of the era's uniforms (decision 0068), their coat's dye; the blocks are named by uniform.
 // ARMY_COATS=<name>=<#rrggbb>,… (four, names without dots) in the environment: other coats for a test (the dye
-// palette's, docs/plans/active/dye-palette.md); the art bible's otherwise
-const ART_BIBLE = { France: '#2C4FA8', Russia: '#2F6B3C', Austria: '#E9E3D3', Britain: '#B3302A' }
-/** the blocks' coats from an ARMY_COATS spec, the art bible's without one; a malformed spec throws */
+// palette's, docs/plans/active/dye-palette.md)
+export const BLOCK_UNIFORMS = ['fr-line', 'ru-line', 'at-line', 'br-line']
+const coatOf = id => {
+  const hex = DYES.dyes[UNIFORMS[id]?.parts.coat]
+  if (!hex) throw new Error(`army-blocks: no coat dye for the uniform ${id}`)
+  return hex
+}
+const ERA = Object.fromEntries(BLOCK_UNIFORMS.map(id => [id, coatOf(id)]))
+/** the blocks' coats from an ARMY_COATS spec, the era's uniforms' without one; a malformed spec throws */
 export function coatsFrom(spec) {
-  if (!spec) return ART_BIBLE
+  if (!spec) return ERA
   const out = {}
   for (const e of spec.split(',')) {
     const m = /^([^=.,]+)=(#[0-9a-fA-F]{6})$/.exec(e)

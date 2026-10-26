@@ -1,7 +1,7 @@
-// The dye palette's test (docs/plans/active/dye-palette.md, decision 0068, proposed): an era's uniforms named as dyes
-// by cloth part (src/rulesets/<era>-dyes.ts), resolved here into the colours by the figure's roles that the renderer
-// paints (a Uniform, src/sim/ruleset.ts). No era named (decision 0015): the dyes and the dress are data; the parts
-// are garments any era's figure wears. No Babylon: the tests read it in Node.
+// The dye palette (docs/plans/active/dye-palette.md, decision 0068): an era's uniforms name dyes by cloth part
+// (src/rulesets/<era>-uniforms.ts, <era>-dyes.ts), resolved here into the colours by the figure's roles that the
+// renderer paints (a Uniform, src/sim/ruleset.ts). No era named (decision 0015): the dyes and the dress are data;
+// the parts are garments any era's figure wears. No Babylon: the tests read it in Node.
 import type { ClothPart, Dress, DyeSet, Uniform } from '../../sim/ruleset.ts'
 import type { Battalion } from './armies.ts'
 
@@ -22,20 +22,19 @@ export const FIGURE_PARTS: Readonly<Record<string, ClothPart | 'boots' | { mater
   metal: { material: 'metal' },
 }
 
-/** the greatcoat worn: always when the dress says so, in winter when it names one (worn, it covers the coat) */
-export const wearsGreatcoat = (d: Dress, winter: boolean): boolean =>
-  d.parts.greatcoat !== undefined && (d.greatcoat === 'always' || winter)
-
-/** a dress resolved into a uniform for the figure's roles (FIGURE_PARTS): each part's dye looked up by name; the boots
- *  the set's; under a worn greatcoat the coat and the facings show the greatcoat (it has no coloured facings; the
- *  belts, the trousers below it and the headgear stay). An unknown dye, material or part: a loud failure */
-export function dressed(d: Dress, set: DyeSet, { winter = false } = {}): Uniform {
-  const dye = (name: string, what: string) => {
-    const hex = set.dyes[name]
-    if (!hex) throw new Error(`dyes: ${d.id}'s ${what} names no dye ${name} (${Object.keys(set.dyes).join(', ')})`)
+/** a dress resolved into a uniform for the figure's roles (FIGURE_PARTS): each part's dye looked up by name, the
+ *  flag's bands among the flag dyes; the boots the set's. greatcoat: worn by every man (the all-greatcoat test; the
+ *  share by the cold is a later step), over the coat and the facings (it has no coloured facings; the belts, the
+ *  trousers below it and the headgear stay); a dress without one keeps its coat. An unknown dye, flag dye, material
+ *  or part: a loud failure */
+export function dressed(d: Dress, set: DyeSet, { greatcoat = false } = {}): Uniform {
+  const look = (table: Readonly<Record<string, string>>, name: string, what: string) => {
+    const hex = table[name]
+    if (!hex) throw new Error(`dyes: ${d.id}'s ${what} names no dye ${name} (${Object.keys(table).join(', ')})`)
     return hex
   }
-  const over = wearsGreatcoat(d, winter) ? d.parts.greatcoat : undefined
+  const dye = (name: string, what: string) => look(set.dyes, name, what)
+  const over = greatcoat ? d.parts.greatcoat : undefined
   const colours: Record<string, string> = {}
   for (const [role, part] of Object.entries(FIGURE_PARTS)) {
     if (typeof part === 'object') {
@@ -53,7 +52,7 @@ export function dressed(d: Dress, set: DyeSet, { winter = false } = {}): Uniform
   return {
     id: d.id,
     colours,
-    flag: d.flag.map(n => dye(n, 'flag')),
+    flag: d.flag.map(n => look(set.flags, n, 'flag')),
     ...(d.far ? { far: d.far } : {}),
   }
 }
@@ -62,11 +61,12 @@ export function dressed(d: Dress, set: DyeSet, { winter = false } = {}): Uniform
 export const dressAll = (
   dress: Readonly<Record<string, Dress>>,
   set: DyeSet,
-  opts: { winter?: boolean } = {},
+  opts: { greatcoat?: boolean } = {},
 ): Record<string, Uniform> => Object.fromEntries(Object.entries(dress).map(([id, d]) => [id, dressed(d, set, opts)]))
 
-/** ?dye=<dye>:<#rrggbb>[;…], a test switch: the set with those dyes' values swapped (every uniform that names the dye
- *  follows). null or '': the set as it is. A malformed entry, an unknown dye or a dye named twice: a loud failure */
+/** ?dye=<dye>:<#rrggbb>[;…], a test switch: the set with those cloth dyes' values swapped (every uniform that names
+ *  the dye follows). null or '': the set as it is. A malformed entry, an unknown dye or a dye named twice: a loud
+ *  failure */
 export function dyeOverride(spec: string | null, set: DyeSet): DyeSet {
   if (spec === null || spec === '') return set
   const dyes: Record<string, string> = { ...set.dyes }

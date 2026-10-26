@@ -6,10 +6,10 @@ export const ARMIES_DEMO = {
   ruleset: 'napoleonic',
   unitType: 'infantry',
   figure: 'fr-line-infantry',
-  sides: ['fr-line-1808', 'at-line-white'],
-  // ?uniforms=dyes (the dye palette's test, docs/plans/active/dye-palette.md): each side's battalions wear these
-  // dressed uniforms in turn (src/rulesets/<era>-dyes.ts)
-  dyeSides: [
+  sides: ['fr-line', 'at-line'],
+  // ?uniforms=all (the dye palette's review, docs/plans/active/dye-palette.md): each side's battalions wear these in
+  // turn
+  reviewSides: [
     ['fr-line', 'fr-guard-grenadier', 'fr-dragoon'],
     ['at-line', 'ru-line', 'br-line', 'at-grenzer', 'br-rifles'],
   ],

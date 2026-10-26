@@ -1,25 +1,23 @@
-// Era data: the Napoleonic dyes and the uniforms dressed in them (docs/plans/active/dye-palette.md, decision 0068,
-// proposed). A TEST SET, behind ?uniforms=dyes on the look page: the page's default uniforms stay those of
-// src/rulesets/napoleonic-uniforms.ts. Each dye is one sRGB value, chosen once against the landscape (the epic mood's
-// ground sits at L* 50 to 63 in summer, 65 and up on snow, at a C* of 25 to 30 under the battalions: the plan's
-// measures); a uniform names a dye per cloth part, never a colour. The values are a first proposal for the owner to
-// judge on the sheets (output/armies-review/21-dye-palette), not settled.
-import type { DyeSet, Dress } from '../sim/ruleset.ts'
+// Era data: the Napoleonic dyes (docs/plans/active/dye-palette.md, decision 0068): the cloth colours every uniform
+// is painted from (src/rulesets/napoleonic-uniforms.ts names them by cloth part), each one sRGB value chosen once
+// against the landscape (the epic ground under the battalions: L* 47 to 81 and C* 13 to 44 in summer, L* 52 to 68 on
+// snow: the plan's measures); the flags' own dyes, brighter and cleaner, so a side reads by its colours; the materials
+// that are not cloth; the boots' dye. The owner's picks, 2026-10-26
+import type { DyeSet } from '../sim/ruleset.ts'
 
 export const DYES: DyeSet = {
   dyes: {
-    // the French coat (bleu impérial, indigo and woad): the owner's navy test, #1F2B52 (the darker of the two offered:
-    // #26386E is the other, ?dye=imperial-blue:%2326386E)
-    'imperial-blue': '#1F2B52',
+    // the French coat (bleu impérial, indigo and woad): the owner's dark blue (2026-10-26; the navy #1F2B52 was the
+    // other candidate)
+    'imperial-blue': '#26386E',
     // the hussars' and the Hungarian trousers' light blue
     'sky-blue': '#7F9CC6',
     // madder: the French facings, the British rankers' coat (brick red, not an officer's scarlet)
     'madder-red': '#A8322B',
     // the Austrian and the Guard's darker reds (regimental facings)
     crimson: '#8E2F3A',
-    // buff and yellow: British facings, the Austrian colours' field
+    // buff: British facings
     buff: '#C9A862',
-    yellow: '#D6AE3C',
     // undyed wool and pipeclay: the Austrian coat, the breeches, the waistcoats, the belts
     white: '#E8E2D2',
     // three greens kept apart: the Russian line's dark green, the French dragoons' lighter, yellower green, the
@@ -39,109 +37,17 @@ export const DYES: DyeSet = {
     // black: boots, gaiters, shakos, bearskins, the rifles' facings
     black: '#24252B',
   },
-  // not cloth: the figure's neutral roles, as today's uniforms paint them
+  // the flags' own dyes (the owner: beautiful and standing out, not out of the painted palette): the colours the
+  // flags flew before the dye set, the Russian green the art bible's
+  flags: {
+    'flag-blue': '#2C4FA8',
+    'flag-white': '#EDE6D6',
+    'flag-red': '#B8322A',
+    'flag-yellow': '#E3B935',
+    'flag-black': '#1E1E1E',
+    'flag-green': '#2F6B3C',
+  },
+  // not cloth: the figure's neutral roles, per era (the owner, 2026-10-26)
   materials: { skin: '#C89474', leather: '#7A5C3E', pack: '#8C7152', wood: '#5E3F26', metal: '#A3A6AB' },
   boots: 'black',
-}
-
-// The test's uniforms (the brief's eight; the figure is the French line infantryman for all of them, recoloured: the
-// shapes, a bearskin, a helmet, a rifle, are later steps)
-export const DRESS: Readonly<Record<string, Dress>> = {
-  // the French line infantry after 1808: blue coat, red collar and cuffs (the lapels are the figure's white role),
-  // white waistcoat and breeches, black shako; the beige-grey capote in winter
-  'fr-line': {
-    id: 'fr-line',
-    parts: {
-      coat: 'imperial-blue',
-      facings: 'madder-red',
-      trousers: 'white',
-      waistcoat: 'white',
-      headgear: 'black',
-      greatcoat: 'greatcoat-beige',
-    },
-    flag: ['imperial-blue', 'white', 'madder-red'],
-  },
-  // the Guard's grenadier: the line's colours on this figure (his bearskin, epaulettes and white lapels are shapes it
-  // lacks); his capote is dark blue, so he differs from the line in winter
-  'fr-guard-grenadier': {
-    id: 'fr-guard-grenadier',
-    parts: {
-      coat: 'imperial-blue',
-      facings: 'madder-red',
-      trousers: 'white',
-      waistcoat: 'white',
-      headgear: 'black',
-      greatcoat: 'imperial-blue',
-    },
-    flag: ['imperial-blue', 'white', 'madder-red'],
-  },
-  // a French dragoon regiment on foot: green coat, red facings, white breeches (his brass helmet: the figure's
-  // headgear shares its role with the boots); the white-grey cloak
-  'fr-dragoon': {
-    id: 'fr-dragoon',
-    parts: {
-      coat: 'dragoon-green',
-      facings: 'madder-red',
-      trousers: 'white',
-      headgear: 'black',
-      greatcoat: 'greatcoat-beige',
-    },
-    flag: ['imperial-blue', 'white', 'madder-red'],
-  },
-  // the Austrian line (German regiments): white coat, regimental facings (a crimson), white breeches; the grey
-  // greatcoat in winter (the owner, 2026-10-17)
-  'at-line': {
-    id: 'at-line',
-    parts: { coat: 'white', facings: 'crimson', trousers: 'white', headgear: 'black', greatcoat: 'greatcoat-grey' },
-    flag: ['yellow', 'black', 'yellow'],
-  },
-  // the Grenz infantry: brown coat, red facings, light blue Hungarian trousers
-  'at-grenzer': {
-    id: 'at-grenzer',
-    parts: {
-      coat: 'grenzer-brown',
-      facings: 'madder-red',
-      trousers: 'sky-blue',
-      headgear: 'black',
-      greatcoat: 'greatcoat-brown',
-    },
-    flag: ['yellow', 'black', 'yellow'],
-  },
-  // the Russian line: dark green coat, red collar and cuffs, white summer trousers; the grey-brown greatcoat
-  'ru-line': {
-    id: 'ru-line',
-    parts: {
-      coat: 'russian-green',
-      facings: 'madder-red',
-      trousers: 'white',
-      headgear: 'black',
-      greatcoat: 'greatcoat-brown',
-    },
-    flag: ['russian-green', 'white', 'russian-green'],
-  },
-  // the British line: madder red coat, buff facings, grey trousers (1812 on); the grey greatcoat
-  'br-line': {
-    id: 'br-line',
-    parts: {
-      coat: 'madder-red',
-      facings: 'buff',
-      trousers: 'pike-grey',
-      headgear: 'black',
-      greatcoat: 'greatcoat-grey',
-    },
-    flag: ['imperial-blue', 'madder-red', 'imperial-blue'], // the Union's blue and red, not the tricolour
-  },
-  // the British rifles: rifle green coat and trousers, black facings and belts (the figure's belts share the
-  // trousers' role); the rifles carried no colours (a flag here because every battalion draws one today)
-  'br-rifles': {
-    id: 'br-rifles',
-    parts: {
-      coat: 'rifle-green',
-      facings: 'black',
-      trousers: 'rifle-green',
-      headgear: 'black',
-      greatcoat: 'greatcoat-grey',
-    },
-    flag: ['rifle-green', 'black', 'rifle-green'],
-  },
 }

@@ -56,30 +56,6 @@ export const FAR_COAT_BELOW = 0.18
 export const farRule = (u: Uniform): 'coat' | 'own' =>
   u.far ?? (luminance(u.colours.coat) < FAR_COAT_BELOW ? 'coat' : 'own')
 
-/** ?coat=<uniform id>:<#hex>[;…], a test switch: the uniforms with those coats swapped in (the near palette, the far
- *  palette and the far rule follow the coat; the flag keeps its own colours). Names a uniform by id, not an army
- *  (decision 0015). null or '': the uniforms as they are. A malformed entry, an unknown uniform or a uniform named
- *  twice: a loud failure */
-export function coatOverride(
-  spec: string | null,
-  uniforms: Readonly<Record<string, Uniform>>,
-): Readonly<Record<string, Uniform>> {
-  if (spec === null || spec === '') return uniforms
-  const out: Record<string, Uniform> = { ...uniforms }
-  const seen = new Set<string>()
-  for (const e of spec.split(';')) {
-    const m = /^([^:;]+):#?([0-9a-fA-F]{6})$/.exec(e)
-    if (!m) throw new Error(`?coat must be <uniform id>:<#rrggbb>[;…], not ${e}`)
-    const [, id, hex] = m
-    const u = uniforms[id]
-    if (!u) throw new Error(`?coat: no uniform ${id} (${Object.keys(uniforms).join(', ')})`)
-    if (seen.has(id)) throw new Error(`?coat names the uniform ${id} twice`)
-    seen.add(id)
-    out[id] = { ...u, colours: { ...u.colours, coat: `#${hex.toUpperCase()}` } }
-  }
-  return out
-}
-
 /** the script's phases a battalion goes through, in order, each cycle (the roles its men are given) */
 export type Phase = 'column' | 'halt' | 'deploy' | 'fire'
 /** reserve: it stands in column of companies, out of the script (layout's reserves) */
