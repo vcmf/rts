@@ -29,18 +29,22 @@ export const FIGURE_PARTS: Readonly<Record<string, ClothPart | 'boots' | { mater
  *  or part: a loud failure */
 export function dressed(d: Dress, set: DyeSet, { greatcoat = false } = {}): Uniform {
   const look = (table: Readonly<Record<string, string>>, name: string, what: string) => {
-    const hex = table[name]
-    if (!hex) throw new Error(`dyes: ${d.id}'s ${what} names no dye ${name} (${Object.keys(table).join(', ')})`)
-    return hex
+    if (!Object.hasOwn(table, name)) {
+      throw new Error(`dyes: ${d.id}'s ${what} names no dye ${name} (${Object.keys(table).join(', ')})`)
+    }
+    return table[name]
   }
   const dye = (name: string, what: string) => look(set.dyes, name, what)
+  // every part the dress names, drawn on this figure or not (a waistcoat, a headgear): a misspelt dye fails here
+  for (const [part, name] of Object.entries(d.parts)) dye(name, part)
   const over = greatcoat ? d.parts.greatcoat : undefined
   const colours: Record<string, string> = {}
   for (const [role, part] of Object.entries(FIGURE_PARTS)) {
     if (typeof part === 'object') {
-      const hex = set.materials[part.material]
-      if (!hex) throw new Error(`dyes: the set has no material ${part.material} (the figure's ${role} role)`)
-      colours[role] = hex
+      if (!Object.hasOwn(set.materials, part.material)) {
+        throw new Error(`dyes: the set has no material ${part.material} (the figure's ${role} role)`)
+      }
+      colours[role] = set.materials[part.material]
     } else if (part === 'boots') {
       colours[role] = dye(set.boots, 'boots')
     } else {
@@ -64,9 +68,9 @@ export const dressAll = (
   opts: { greatcoat?: boolean } = {},
 ): Record<string, Uniform> => Object.fromEntries(Object.entries(dress).map(([id, d]) => [id, dressed(d, set, opts)]))
 
-/** ?dye=<dye>:<#rrggbb>[;…], a test switch: the set with those cloth dyes' values swapped (every uniform that names
- *  the dye follows). null or '': the set as it is. A malformed entry, an unknown dye or a dye named twice: a loud
- *  failure */
+/** ?dye=<dye>:<rrggbb>[;…], a test switch: the set with those cloth dyes' values swapped (every uniform that names
+ *  the dye follows); the hex with or without its '#' (in a URL, '%23'). null or '': the set as it is. A malformed
+ *  entry, an unknown dye or a dye named twice: a loud failure */
 export function dyeOverride(spec: string | null, set: DyeSet): DyeSet {
   if (spec === null || spec === '') return set
   const dyes: Record<string, string> = { ...set.dyes }
@@ -75,7 +79,7 @@ export function dyeOverride(spec: string | null, set: DyeSet): DyeSet {
     const m = /^([^:;]+):#?([0-9a-fA-F]{6})$/.exec(e)
     if (!m) throw new Error(`?dye must be <dye>:<#rrggbb>[;…], not ${e}`)
     const [, name, hex] = m
-    if (!set.dyes[name]) throw new Error(`?dye: no dye ${name} (${Object.keys(set.dyes).join(', ')})`)
+    if (!Object.hasOwn(set.dyes, name)) throw new Error(`?dye: no dye ${name} (${Object.keys(set.dyes).join(', ')})`)
     if (seen.has(name)) throw new Error(`?dye names the dye ${name} twice`)
     seen.add(name)
     dyes[name] = `#${hex.toUpperCase()}`

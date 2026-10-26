@@ -10,16 +10,20 @@ export const DYES: DyeSet = {
     // the French coat (bleu impérial, indigo and woad): the owner's dark blue (2026-10-26; the navy #1F2B52 was the
     // other candidate)
     'imperial-blue': '#26386E',
-    // the hussars' and the Hungarian trousers' light blue
+    // light blue: the Grenzer's Hungarian trousers (and hussars, when they are added)
     'sky-blue': '#7F9CC6',
-    // madder: the French facings, the British rankers' coat (brick red, not an officer's scarlet)
+    // madder: the British rankers' coat (brick red, not an officer's scarlet); the French line's, the Guard's, the
+    // dragoons', the Grenzer's and the Russian line's facings
     'madder-red': '#A8322B',
-    // the Austrian and the Guard's darker reds (regimental facings)
+    // a darker red: the Austrian line's facings (a regimental colour)
     crimson: '#8E2F3A',
     // buff: British facings
     buff: '#C9A862',
-    // undyed wool and pipeclay: the Austrian coat, the breeches, the waistcoats, the belts
+    // undyed wool and pipeclay: the Austrian coat; the French and the Russian breeches, waistcoats and belts
     white: '#E8E2D2',
+    // a greyer white for the breeches and belts worn with a white coat, so they still read against it (the Austrian
+    // line's; as far from the coat as its white role was before the dyes, #DCD6C8)
+    'off-white': '#DCD6C8',
     // three greens kept apart: the Russian line's dark green, the French dragoons' lighter, yellower green, the
     // British rifles' near-black green
     'russian-green': '#2A5434',
@@ -27,7 +31,7 @@ export const DYES: DyeSet = {
     'rifle-green': '#22402F',
     // the Grenz infantry's brown
     'grenzer-brown': '#5E4030',
-    // pike grey (hechtgrau): the Austrian Jäger, the British trousers
+    // pike grey (hechtgrau): the British trousers (and the Austrian Jäger's coat, when they are added)
     'pike-grey': '#8693A0',
     // greatcoats: undyed grey, the French beige-grey capote, the Russian grey-brown; darker than the summer ground's
     // middle so they read on snow, where they are worn

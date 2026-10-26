@@ -504,8 +504,8 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dar
 // default: the goldens and the look checks never see them
 // The uniforms are the era's, named by dye and resolved onto the figure's roles (world/dyes.ts, decision 0068). Test
 // switches (with ?armies): ?uniforms=all, each side's battalions wearing the scenario's reviewSides in turn;
-// ?uniforms=all-greatcoats, the same with every man in his greatcoat; ?dye=<dye>:<#hex>[;…], those cloth dyes' values
-// swapped for every uniform that names them (dyeOverride)
+// ?uniforms=all-greatcoats, the same with every man in his greatcoat; ?dye=<dye>:<rrggbb>[;…] (bare, or '#' as
+// %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride)
 const armiesParam = params.get('armies')
 const unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every

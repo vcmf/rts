@@ -52,7 +52,8 @@ Step 2 (the dyes become the era's uniforms; the default look changes):
 - `src/rulesets/napoleonic-uniforms.ts` holds the era's eight uniforms as dress (`UNIFORMS`, by dye name; the demo's
   sides `fr-line` and `at-line`, as before but renamed from `fr-line-1808` and `at-line-white`);
   `src/rulesets/napoleonic-dyes.ts` the dye set with `imperial-blue` #26386E, the flag dyes (`flags`), the materials
-  and the boots; `yellow` dropped (it was only on flags). `RULESETS` carries the uniforms and the dyes; the page
+  and the boots; `yellow` dropped (it was only on flags); `off-white` added for the Austrian breeches and belts (as
+  white as the coat, they no longer read against it; the old white role's value, ΔE 4.3 from the coat). `RULESETS` carries the uniforms and the dyes; the page
   resolves them (`dressAll`).
 - The checks' blocks take four uniforms' coats from the data (`tools/army-blocks.mjs`, `BLOCK_UNIFORMS`: fr-line,
   ru-line, at-line, br-line; tested against the resolver); the blocks are named by uniform.
@@ -75,7 +76,8 @@ battalions: L\* 47–81, C\* 13–44 in summer; L\* 52–68, C\* 0–7 on snow):
 | madder-red | #A8322B | 39/57 | French and Russian facings, the British rankers' coat (brick, not scarlet) |
 | crimson | #8E2F3A | 34/44 | Austrian facings |
 | buff | #C9A862 | 70/41 | British facings |
-| white | #E8E2D2 | 90/9 | undyed wool and pipeclay: the Austrian coat, breeches, belts |
+| white | #E8E2D2 | 90/9 | undyed wool and pipeclay: the Austrian coat; French and Russian breeches, belts |
+| off-white | #DCD6C8 | 86/8 | the Austrian breeches and belts, so they read against the white coat (review round 1) |
 | russian-green | #2A5434 | 32/27 | darker than the art bible's #2F6B3C |
 | dragoon-green | #3E6E3C | 42/36 | lighter and yellower than the Russian |
 | rifle-green | #22402F | 24/17 | near black; #263F2E turned olive in the coat check (but see #208) |
@@ -105,7 +107,7 @@ references, show one); the bearskin, the helmet, the rifle are shapes; the Briti
 rifles' black leather are materials per uniform.
 
 **How the dyes feed the checks.** `tools/army-blocks.mjs`'s `ARMY_HEX` (the guard's blocks and the coat check's) is
-built from the era's data (step 2: four uniforms' coat dyes); `ARMY_COATS=<name>=<#hex>,…` (four) tries others. The guard's `--figures` measures per side; per uniform, the sheets' scripts mask one uniform's
+built from the era's data (step 2: four uniforms' coat dyes); `ARMY_COATS=<name>=<rrggbb>,…` (four, the `#` optional) tries others; `?dye=<dye>:<rrggbb>` takes the hex bare or with `%23`. The guard's `--figures` measures per side; per uniform, the sheets' scripts mask one uniform's
 material (`uMask`). The far rule follows the worn coat: the Austrian white keeps its own, its grey greatcoat takes the
 coat's (tested).
 

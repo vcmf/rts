@@ -47,6 +47,8 @@ The owner's answers:
 - Bad: opposing sides can wear near-equal coats (ΔE 7 on screen); until the banner, the flag and the layout tell them
   apart.
 - The default look changes: the French coat darker; the other colours move a little toward their dyes.
+- A part worn with a coat of the same colour needs its own dye to read against it: the Austrian breeches and belts
+  take `off-white`, not the coat's `white`.
 
 ## Alternatives considered
 

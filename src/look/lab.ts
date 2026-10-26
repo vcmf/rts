@@ -1,5 +1,5 @@
 // Test objects for the look checks (docs/plans/active/l2-detail.md), added to the page by the tools, never by the
-// page itself. The readability guard's army blocks: one coat colour each (docs/art-bible.md §4), battalion size (a
+// page itself. The readability guard's army blocks: one coat colour each (tools/army-blocks.mjs), battalion size (a
 // line of about 100 men in three ranks: 20 m × 3 m, 1.8 m tall, decision 0007), painted at unit crispness. The
 // detail check's test hill: a turned profile with faces at 15° to 90° in 15° steps and a flat top, all around, so the
 // ground's projection meets every slope and facing.

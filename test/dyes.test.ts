@@ -10,10 +10,15 @@ import { FIGURE_PARTS, deltaE, dressAll, dressed, dyeOverride, labOf, wearInTurn
 import { farRule, type Battalion } from '../src/look/world/armies.ts'
 import type { Dress } from '../src/sim/ruleset.ts'
 // @ts-expect-error: a JavaScript tool, untyped
-import { ARMY_HEX, BLOCK_UNIFORMS, coatsFrom } from '../tools/army-blocks.mjs'
+import { BLOCK_UNIFORMS, ERA_COATS, coatsFrom } from '../tools/army-blocks.mjs'
+import { readFileSync } from 'node:fs'
+import { decodeUnits } from '../src/look/units-data.ts'
 
 const HEX = /^#[0-9A-F]{6}$/
-const PALETTE_ROLES = ['coat', 'facings', 'white', 'dark', 'skin', 'leather', 'pack', 'wood', 'metal']
+// the baked figure's colour roles, as the page reads them (tools/bake-figure.py's palette)
+const PALETTE_ROLES = decodeUnits(
+  new Uint8Array(readFileSync(new URL('../data/figures/fr-line-infantry.unitdata', import.meta.url))).buffer,
+).palette
 
 describe('the dye set', () => {
   it('is a short list of named colours, each one sRGB value, every one worn', () => {
@@ -28,6 +33,16 @@ describe('the dye set', () => {
     expect(Object.keys(DYES.flags).filter(n => !flown.has(n))).toEqual([])
   })
   it('names the boots by a dye', () => expect(DYES.dyes[DYES.boots]).toBeDefined())
+  it('has a dye for every part every uniform names, and a flag dye for every band', () => {
+    for (const d of Object.values(UNIFORMS)) {
+      for (const [part, n] of Object.entries(d.parts)) expect(Object.hasOwn(DYES.dyes, n), `${d.id}.${part}`).toBe(true)
+      for (const n of d.flag) expect(Object.hasOwn(DYES.flags, n), `${d.id} flag`).toBe(true)
+    }
+  })
+  it('keeps the Austrian breeches and belts apart from its white coat', () => {
+    const u = dressed(UNIFORMS['at-line'], DYES).colours
+    expect(deltaE(u.coat, u.white)).toBeGreaterThan(4)
+  })
 })
 
 describe('dressed', () => {
@@ -59,7 +74,7 @@ describe('dressed', () => {
     const w = dressed(d, DYES, { greatcoat: true })
     expect(w.colours.coat).toBe(DYES.dyes['greatcoat-grey'])
     expect(w.colours.facings).toBe(DYES.dyes['greatcoat-grey'])
-    expect(w.colours.white).toBe(DYES.dyes.white) // the belts and the trousers below it
+    expect(w.colours.white).toBe(DYES.dyes['off-white']) // the belts and the trousers below it
     const none: Dress = { ...d, parts: { coat: 'white', facings: 'crimson', trousers: 'white' } }
     expect(dressed(none, DYES, { greatcoat: true }).colours.coat).toBe(DYES.dyes.white)
   })
@@ -68,7 +83,11 @@ describe('dressed', () => {
     expect(farRule(dressed(UNIFORMS['at-line'], DYES, { greatcoat: true }))).toBe('coat')
     expect(farRule(dressed(UNIFORMS['fr-line'], DYES))).toBe('coat')
   })
-  it('fails loudly on a dye the set lacks, or a cloth dye on a flag', () => {
+  it('fails loudly on a dye the set lacks, even on a part the figure does not show, or a cloth dye on a flag', () => {
+    const hat: Dress = { ...UNIFORMS['fr-line'], parts: { ...UNIFORMS['fr-line'].parts, headgear: 'blak' } }
+    expect(() => dressed(hat, DYES)).toThrow(/headgear names no dye blak/)
+    const proto: Dress = { ...UNIFORMS['fr-line'], parts: { ...UNIFORMS['fr-line'].parts, coat: 'constructor' } }
+    expect(() => dressed(proto, DYES)).toThrow(/names no dye constructor/)
     const bad: Dress = { ...UNIFORMS['fr-line'], parts: { ...UNIFORMS['fr-line'].parts, coat: 'woad' } }
     expect(() => dressed(bad, DYES)).toThrow(/names no dye woad/)
     expect(() => dressed({ ...UNIFORMS['fr-line'], flag: ['white'] }, DYES)).toThrow(/flag names no dye white/)
@@ -81,6 +100,7 @@ describe('dyeOverride (?dye=)', () => {
     expect(dyeOverride('', DYES)).toBe(DYES)
   })
   it('swaps a dye for every uniform that names it, the era data and the flags untouched', () => {
+    expect(dyeOverride('imperial-blue:1f2b52', DYES).dyes['imperial-blue']).toBe('#1F2B52') // '#' optional
     const s = dyeOverride('imperial-blue:#1f2b52', DYES)
     expect(s.dyes['imperial-blue']).toBe('#1F2B52')
     expect(DYES.dyes['imperial-blue']).toBe('#26386E')
@@ -110,11 +130,12 @@ describe('wearInTurn (?uniforms=all)', () => {
 
 describe("the checks' blocks (tools/army-blocks.mjs)", () => {
   it("take the four uniforms' coats from the era's dyes", () => {
-    expect(Object.keys(ARMY_HEX)).toEqual(BLOCK_UNIFORMS)
-    for (const id of BLOCK_UNIFORMS) expect(ARMY_HEX[id]).toBe(dressed(UNIFORMS[id], DYES).colours.coat)
+    expect(Object.keys(ERA_COATS)).toEqual(BLOCK_UNIFORMS)
+    expect(coatsFrom(undefined)).toBe(ERA_COATS)
+    for (const id of BLOCK_UNIFORMS) expect(ERA_COATS[id]).toBe(dressed(UNIFORMS[id], DYES).colours.coat)
   })
   it('take four other coats from ARMY_COATS, and refuse a malformed one', () => {
-    expect(coatsFrom('a=#1f2b52,b=#2A5434,c=#E8E2D2,d=#A8322B')).toEqual({
+    expect(coatsFrom('a=#1f2b52,b=2A5434,c=#E8E2D2,d=#A8322B')).toEqual({
       a: '#1F2B52',
       b: '#2A5434',
       c: '#E8E2D2',
@@ -122,6 +143,7 @@ describe("the checks' blocks (tools/army-blocks.mjs)", () => {
     })
     expect(() => coatsFrom('a=#1f2b52')).toThrow(/not 4/)
     expect(() => coatsFrom('a.b=#1f2b52,b=#2A5434,c=#E8E2D2,d=#A8322B')).toThrow(/must be/)
+    expect(() => coatsFrom('a=#1f2b52,a=#2A5434,c=#E8E2D2,d=#A8322B')).toThrow(/distinct/)
   })
 })
 

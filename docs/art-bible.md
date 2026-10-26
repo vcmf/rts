@@ -34,7 +34,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 | Target | For |
 |---|---|
 | `design/refs/north-star-painted-v1.png` | **Summer master.** Composition (one hill, few formations, negative space), battalions of about 100 (decision 0007), dry-brush ground, smoke puffs, the warm and cool split, figures without bases. Ignore its cypresses and its scrub, which fill the negative space; its terrain is louder than the armies should allow. |
-| `design/refs/austerlitz-pratzen-v2.png` | **Winter master.** Grey frosted ground with the armies as the most saturated objects, ploughed stripes, mist and smoke that hide no formation. Ignore the brief's 300 men a battalion. |
+| `design/refs/austerlitz-pratzen-v2.png` | **Winter master.** Grey frosted ground with the armies standing out by colour and value, ploughed stripes, mist and smoke that hide no formation. Ignore the brief's 300 men a battalion. |
 | `design/refs/austerlitz-goldbach-v1.png` | **Close zoom: river and village** (§6c): meander, gravel bars, stones, reeds, bare willows, bridge, red roofs. Ignore its saturated gold ground, which is late autumn, not December. |
 | `design/refs/wagram-grand-battery-v1.png` | **Pulled-back summer plain:** tan and olive fields, sculpted cannon smoke, Austrian white read on tan. Ignore the brief's 300 men a battalion, the oversized foreground staff and smoke over the Austrian line. |
 
@@ -67,7 +67,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 - **December painted as late autumn.** The v1 Austerlitz images use saturated gold-orange ground
   (§4b value 2). Winter is the v2 grey with pale gold light only on ridges and roofs.
 - **Busyness.** Many wide shots carry the same fine texture everywhere and fill the frame with units,
-  against §11 and "terrain never matches army saturation".
+  against §11 and "terrain never matches a coat's colour".
 - **Concept images have baked light** (warm side, cool side), so the Tripo output needs the clean-up
   pass in §10.
 
@@ -168,7 +168,7 @@ default, `temperate`, keeps 60 % of their chroma, turned slightly warm-grey.
   banner above it (a later step), not by its coat alone.
 - **Uniforms are painted from the era's dye palette** (decision 0068): a short list of named dyes, each one value
   chosen against the landscape (`src/rulesets/napoleonic-dyes.ts`), and each uniform naming a dye per cloth part:
-  coat, facings, trousers, greatcoat; boots always black (`src/rulesets/napoleonic-uniforms.ts`). Colours belong to
+  coat, facings, trousers, waistcoat, headgear, greatcoat; boots always black (`src/rulesets/napoleonic-uniforms.ts`). Colours belong to
   a uniform, not a nation. Flags have their own dyes, brighter and cleaner, so a side reads by its flag. The plan,
   with the dyes' values measured on the ground: `docs/plans/active/dye-palette.md`.
 

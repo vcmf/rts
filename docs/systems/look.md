@@ -713,9 +713,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   forces the rule off or on for every uniform. Test switches: `?uniforms=all` dresses each side's battalions in the
   scenario's `reviewSides` in turn (`wearInTurn`: the era's eight uniforms on the demo map), `?uniforms=all-greatcoats`
   the same with every man in his greatcoat (over the coat and facings; the share by the cold is the plan's later
-  step); `?dye=<dye>:<#rrggbb>[;…]` swaps cloth dyes' values for every uniform that names them (`dyeOverride`). A
+  step); `?dye=<dye>:<rrggbb>[;…]` (the hex bare or with its `#` as `%23`, e.g. `?dye=imperial-blue:1F2B52`) swaps cloth dyes' values for every uniform that names them (`dyeOverride`). A
   malformed value, an unknown dye or uniform throws. The checks' blocks take four uniforms' coats from the same data
-  (`tools/army-blocks.mjs`, `BLOCK_UNIFORMS`; `ARMY_COATS=<name>=<#hex>,…`, four, for other coats).
+  (`tools/army-blocks.mjs`, `BLOCK_UNIFORMS`; `ARMY_COATS=<name>=<rrggbb>,…`, four, the `#` optional, for other coats).
 - **The tiny LOD** (`docs/plans/active/armies-32k.md`, step 3, experimental; `?tinylod=0`: none, `?tinypx=<px>`: its
   switch): a man whose figure falls under 12 px tall draws the far LOD's parts as boxes instead, each man at his own
   height in the 9.6 to 15 px band (the LOD cross-fade, below; `?lodfade=0`: a battalion under 12 px, ±10 %; `tinyMesh`,

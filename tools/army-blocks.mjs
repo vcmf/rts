@@ -5,25 +5,28 @@ import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 
 // The blocks' coats: four of the era's uniforms (decision 0068), their coat's dye; the blocks are named by uniform.
-// ARMY_COATS=<name>=<#rrggbb>,… (four, names without dots) in the environment: other coats for a test (the dye
-// palette's, docs/plans/active/dye-palette.md)
+// ARMY_COATS=<name>=<rrggbb>,… (four, names without dots, the '#' optional) in the environment: other coats for a
+// test (the dye palette's, docs/plans/active/dye-palette.md)
 export const BLOCK_UNIFORMS = ['fr-line', 'ru-line', 'at-line', 'br-line']
 const coatOf = id => {
-  const hex = DYES.dyes[UNIFORMS[id]?.parts.coat]
-  if (!hex) throw new Error(`army-blocks: no coat dye for the uniform ${id}`)
-  return hex
+  const coat = Object.hasOwn(UNIFORMS, id) ? UNIFORMS[id].parts.coat : undefined
+  if (coat === undefined || !Object.hasOwn(DYES.dyes, coat)) {
+    throw new Error(`army-blocks: no coat dye for the uniform ${id}`)
+  }
+  return DYES.dyes[coat]
 }
-const ERA = Object.fromEntries(BLOCK_UNIFORMS.map(id => [id, coatOf(id)]))
+/** the four uniforms' coats, from the era's data (whatever the environment says) */
+export const ERA_COATS = Object.fromEntries(BLOCK_UNIFORMS.map(id => [id, coatOf(id)]))
 /** the blocks' coats from an ARMY_COATS spec, the era's uniforms' without one; a malformed spec throws */
 export function coatsFrom(spec) {
-  if (!spec) return ERA
+  if (!spec) return ERA_COATS
   const out = {}
   for (const e of spec.split(',')) {
-    const m = /^([^=.,]+)=(#[0-9a-fA-F]{6})$/.exec(e)
-    if (!m || m[1] in out) {
-      throw new Error(`ARMY_COATS must be four distinct <name>=<#rrggbb>, comma-separated, not ${e}`)
+    const m = /^([^=.,]+)=#?([0-9a-fA-F]{6})$/.exec(e)
+    if (!m || Object.hasOwn(out, m[1])) {
+      throw new Error(`ARMY_COATS must be four distinct <name>=<rrggbb> ('#' optional), comma-separated, not ${e}`)
     }
-    out[m[1]] = m[2].toUpperCase()
+    out[m[1]] = `#${m[2].toUpperCase()}`
   }
   if (Object.keys(out).length !== 4) throw new Error(`ARMY_COATS names ${Object.keys(out).length} coats, not 4`)
   return out

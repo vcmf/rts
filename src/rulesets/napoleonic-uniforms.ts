@@ -48,11 +48,18 @@ export const UNIFORMS: Readonly<Record<string, Dress>> = {
     },
     flag: ['flag-blue', 'flag-white', 'flag-red'],
   },
-  // the Austrian line (German regiments): white coat, regimental facings (a crimson), white breeches; the grey
+  // the Austrian line (German regiments): white coat, regimental facings (a crimson), off-white breeches and belts
+  // (they read against the coat); the grey
   // greatcoat in winter (the owner, 2026-10-17)
   'at-line': {
     id: 'at-line',
-    parts: { coat: 'white', facings: 'crimson', trousers: 'white', headgear: 'black', greatcoat: 'greatcoat-grey' },
+    parts: {
+      coat: 'white',
+      facings: 'crimson',
+      trousers: 'off-white',
+      headgear: 'black',
+      greatcoat: 'greatcoat-grey',
+    },
     flag: ['flag-yellow', 'flag-black', 'flag-yellow'],
   },
   // the Grenz infantry: brown coat, red facings, light blue Hungarian trousers
