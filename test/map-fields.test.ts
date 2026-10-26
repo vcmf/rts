@@ -21,6 +21,7 @@ import {
   withParam,
 } from '../src/app/map/fields.ts'
 import { GENERATOR_SPECS, type ParamSpec } from '../src/map/generators.ts'
+import { EXPAND_VERSION } from '../src/map/expand.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
 import type { Issue } from '../src/map/catalogue.ts'
 import { root } from './fx.ts'
@@ -476,6 +477,20 @@ describe('M7d: the editor pins', () => {
     expect(ed.selected).toBe('poplars-1')
     // its children are features now: one moves on its own
     expect(ed.feature('poplars-2')!.origin?.parent).toBe('poplars')
+  })
+  it('selects a child the pin added, not one the file had (pinned before)', () => {
+    const ed = make()
+    // a tree pinned from the group before, under its own name; the group generating again
+    const tall: Feature = {
+      id: 'tall',
+      kind: 'veg.tree.poplar',
+      point: [150, -200],
+      origin: { generator: 'group', params: { count: 2 }, version: EXPAND_VERSION, parent: 'poplars' },
+    }
+    ed.load('/maps/t.map.json', formatMap({ ...ed.doc!, features: [...ed.doc!.features, tall] }))
+    ed.select('poplars')
+    expect(ed.pin()).toBe(true)
+    expect(ed.selected).toBe('poplars-1')
   })
   it('says why it does not pin', () => {
     const ed = make()

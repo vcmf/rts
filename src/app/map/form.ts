@@ -43,9 +43,9 @@ interface Row {
   disabled?: boolean
   lines?: boolean // several lines (a note): a text box, which keeps its line breaks
   path?: string // its problems' path, from the view's base (default: its key)
-  // the field it sets and that field's new value, from the value read, or why it cannot be set; default: the field
-  // named by its key, to the value
-  to?: (value: unknown) => [string, unknown] | string
+  // the field it sets and that field's new value, from the value read; default: the field named by its key, to the
+  // value
+  to?: (value: unknown) => [string, unknown]
 }
 /** Sets a field: whether the copy changed (true), was refused (false: the editor's message says why), or not (null). */
 type Setter = (key: string, value: unknown) => boolean | null
@@ -117,10 +117,10 @@ function attrRow(r: AttrRow): Row {
 /**
  * A feature's generator and its parameters (M7d): the generator a choice of every one the engine has (what fits the
  * feature is the validator's to say), or JSON when its `gen` is not one generator's (a hand edit's slip, to mend); each
- * parameter read as its spec's type, its unit, range and whether it is required as hints. `current` is the feature as
- * the copy holds it when a row is applied.
+ * parameter read as its spec's type, its unit, range and whether it is required as hints. The view is built again
+ * whenever the copy changes, so `f` is the feature as the copy holds it when a row is applied.
  */
-function genRows(f: Feature, current: () => Feature | undefined): Row[] {
+function genRows(f: Feature): Row[] {
   const g = genOf(f)
   if (f.gen !== undefined && !g) {
     return [{ key: 'gen', label: 'generator', value: f.gen, as: 'json', hint: '{ "<generator>": { params } }' }]
@@ -135,10 +135,11 @@ function genRows(f: Feature, current: () => Feature | undefined): Row[] {
     // the same generator keeps its parameters; another starts with none
     to: v => ['gen', v === g?.name ? f.gen : withGenerator(v as string | undefined)],
   }
-  return [gen, ...paramRows(f).map(r => paramRow(r, g!.name, current))]
+  return [gen, ...paramRows(f).map(r => paramRow(r, f))]
 }
-/** A generator's parameter's row. */
-function paramRow(r: ParamRow, gen: string, current: () => Feature | undefined): Row {
+/** A parameter's row of a feature's generator. */
+function paramRow(r: ParamRow, f: Feature): Row {
+  const gen = genOf(f)!.name
   const s = r.spec
   const selects = Object.hasOwn(GENERATOR_SPECS, gen) && !!GENERATOR_SPECS[gen].selects?.includes(r.name)
   const hint = [
@@ -157,11 +158,7 @@ function paramRow(r: ParamRow, gen: string, current: () => Feature | undefined):
     options: s?.type === 'enum' ? ['', ...(s.values ?? [])] : undefined,
     hint,
     path: `gen.${gen}.${r.name}`,
-    to: v => {
-      const now = current()
-      const g = now ? withParam(now, r.name, v) : null
-      return g === null ? 'it has no generator now' : ['gen', g]
-    },
+    to: v => ['gen', withParam(f, r.name, v)],
   }
 }
 
@@ -264,13 +261,8 @@ export class Form {
     if ('error' in parsed) done = false
     else {
       const value = 'remove' in parsed ? undefined : parsed.value
-      const to = row.to ? row.to(value) : ([key, value] as [string, unknown])
-      if (typeof to === 'string') {
-        this.pending.set(key, { text: p.text, why: to })
-        this.update(this.cat, true)
-        return
-      }
-      done = this.view!.set(to[0], to[1])
+      const [field, v] = row.to ? row.to(value) : [key, value]
+      done = this.view!.set(field, v)
     }
     if (done === false) {
       const why = 'error' in parsed ? parsed.error : this.editor.message || 'refused'
@@ -284,12 +276,11 @@ export class Form {
    * no field; its JSON.
    */
   private feature(f: Feature, doc: MapFile, cat: Catalogue | null): View {
-    const id = f.id
     const rows = [
       ...this.ownRows(f, doc, cat),
       ...(cat ? attrRows(cat, f, doc).map(attrRow) : []),
       { key: 'seasons', label: 'seasons', value: f.seasons, as: 'json', hint: '{ "winter": { … } }' } satisfies Row,
-      ...genRows(f, () => this.editor.feature(id)),
+      ...genRows(f),
     ]
     const base = `features[${doc.features.indexOf(f)}]`
     // the problems of no row (its shape, its references, a shared edge): above the feature's JSON
@@ -376,7 +367,8 @@ export class Form {
       rows,
       set: (key, value) => this.editor.setMapField(key, value),
       byRow,
-      rest: rest.filter(x => x.id === null),
+      // not the page's own (a read that failed, the worker gone: path ''), which its list shows
+      rest: rest.filter(x => x.id === null && x.path !== ''),
       json: null,
       pin: false,
     }

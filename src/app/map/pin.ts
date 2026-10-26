@@ -30,9 +30,13 @@ export function pinned(map: MapFile, cat: Catalogue, id: string): MapFile | stri
   if (problems.length) return `the map has a problem to fix first: ${say(problems[0])}`
   const ex = expand(map, cat)
   if (ex.issues.length) return `the map does not expand: ${say(ex.issues[0])}`
+  // its expanded form; a ring sharing a line's edge never stays (a village's own area may not follow a line, a
+  // scatter's region leaves the map: its children keep off the line through their `clear`)
   const self = ex.map.features.find(x => x.id === id)
+  // the children the expansion makes: not a feature already in the file that names it as its parent (one pinned before)
   const n = (c: Feature) => childOf(c.id)?.n ?? 0
-  const children = ex.map.features.filter(x => x.origin?.parent === id).sort((a, b) => n(a) - n(b))
+  const own = new Set(map.features.map(x => x.id))
+  const children = ex.map.features.filter(x => x.origin?.parent === id && !own.has(x.id)).sort((a, b) => n(a) - n(b))
   const features = map.features.flatMap(x => (x === f ? (self ? [self] : []) : [x]))
   const out = { ...map, features: [...features, ...children] }
   // pinning must change nothing the map makes: checked, never assumed

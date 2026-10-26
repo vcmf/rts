@@ -647,7 +647,8 @@ export class Editor {
       return false
     }
     const stays = out.features.some(x => x.id === f.id)
-    const first = out.features.find(x => x.origin?.parent === f.id)
+    // its first child the pin added (not one the file had before, pinned earlier)
+    const first = out.features.find(x => x.origin?.parent === f.id && !this.feature(x.id))
     this.commit(out, f.id, stays ? f.id : (first?.id ?? null))
     return true
   }

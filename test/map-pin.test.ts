@@ -9,6 +9,7 @@ import { validate } from '../src/map/validate.ts'
 import { expand } from '../src/map/expand.ts'
 import { writeMap } from '../src/map/write.ts'
 import { pinned } from '../src/app/map/pin.ts'
+import { GENERATOR_SPECS } from '../src/map/generators.ts'
 import { root } from './fx.ts'
 
 const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'kinds.json'), 'utf8')) as Catalogue
@@ -125,6 +126,65 @@ describe('pinning', () => {
     // pinned, the region leaves the map with no child to stand for it, and "woods" would name nothing
     expect(pinned(map, cat, 'region')).toMatch(/^pinned, the map would not expand as it does: \[woods\]/)
     expect(typeof pinned(map, cat, 'woods')).toBe('object')
+  })
+
+  it('appends only the children the expansion makes, never one the file already has (pinned before, renamed)', () => {
+    const map = JSON.parse(read('two-ridges.map.json')) as MapFile
+    const once = pin(map, 'hamlet')
+    // one house renamed (it keeps its record of its parent), the rest dropped, and the village generating again
+    const kept = once.features
+      .filter(f => !/^hamlet-\d+$/.test(f.id) || f.id === 'hamlet-1')
+      .map(f =>
+        f.id === 'hamlet-1' ? { ...f, id: 'church' } : f.id === 'hamlet' ? { ...f, gen: { 'street-village': {} } } : f,
+      )
+    const again = { ...once, features: kept }
+    expect(validate(again, cat)).toEqual([])
+    const out = pin(again, 'hamlet')
+    expect(out.features.filter(f => f.id === 'church')).toHaveLength(1)
+    expect(out.features.filter(f => f.origin?.parent === 'hamlet' && f.id !== 'church').map(f => f.id)).toEqual(
+      out.features.filter(f => /^hamlet-\d+$/.test(f.id)).map(f => f.id),
+    )
+  })
+
+  it("keeps no ring that shares a line's edge: no generator that keeps its own feature takes one", () => {
+    // what pinned() relies on (a pinned ring would bake the line's points in): a village's own area may not follow a
+    // line; a scatter's region, which may, leaves the map
+    const map: MapFile = {
+      format: 1,
+      id: 't',
+      name: 'T',
+      seed: 1,
+      season: 'summer',
+      extent: { w: 1000, h: 1000 },
+      play: { w: 800, h: 800 },
+      features: [
+        {
+          id: 'road',
+          kind: 'way.road.lane',
+          line: [
+            [-400, 0],
+            [400, 0],
+          ],
+        },
+        {
+          id: 'v',
+          kind: 'built.village',
+          along: { id: 'road', from: 450, to: 650 },
+          area: [
+            [
+              [250, -60],
+              [50, -60],
+            ],
+          ],
+          follow: { id: 'road', offset: 6, from: [50, 0], to: [250, 0] },
+          gen: { 'street-village': {} },
+        },
+      ],
+    }
+    expect(validate(map, cat).map(i => i.path)).toEqual(['features[1].follow'])
+    for (const [name, spec] of Object.entries(GENERATOR_SPECS)) {
+      if (spec.input.includes('area') && !spec.removesSelf) expect(name).toBe('street-village')
+    }
   })
 
   it('refuses a feature with no generator, and a map that does not validate or expand', () => {

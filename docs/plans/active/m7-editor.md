@@ -506,6 +506,16 @@ rules: the choice lists every generator, and what does not fit is the validator'
   ms), one shared reader of `gen` (the validator's must judge any input, the form's only reads), one form update per
   edit (the second is cut short by its key check). Tests for each (each fails without its fix); the page check pins
   with refused text.
+- **Round 2**: severe. A pin appended a child the file already had (one pinned before and renamed keeps its record of
+  its parent), so its id came twice, and the editor could select it as the pin's first child. Fixed: only the
+  children the expansion made are appended and selected. With them: the map's form leaves the page's own failures (a
+  read, the worker: path '') to the page's list; a clean compile reuses one empty list, so the form is not built
+  again for nothing; the parameter rows apply from the view's feature (the view is built again on every change), not a
+  second lookup. A pinned ring sharing a line's edge would bake the line's points in, but no generator that keeps its
+  feature takes one (a village's own area may not follow a line; a scatter's region leaves the map): a test holds
+  the language to it. Not taken: validating once fewer per pin (measured 10–13 ms); a structured path for a child's
+  problem (expand's text, matched by `problemsAt`; a change of either is caught by its test); one shared issue
+  formatter.
 
 ## Open questions
 

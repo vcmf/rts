@@ -123,7 +123,8 @@ picker.value =
 // the view: world point at the canvas centre, and pixels per metre; kept across reloads of the same map
 let view = { cx: 0, cz: 0, ppm: 0 }
 let current: Compiled | null = null
-let issues: Issue[] = []
+const NO_ISSUES: Issue[] = []
+let issues: Issue[] = NO_ISSUES
 let layers: Partial<Record<LayerName, Uint16Array>> = {}
 let height = new Float64Array(0)
 let depth = new Uint16Array(0)
@@ -189,7 +190,7 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
   if (r.ok) {
     // another map (the list cleared `current`): fitted to the view; the same one again keeps the view
     const fresh = !current
-    issues = []
+    issues = NO_ISSUES // the same list each time: the form, which follows it by identity, is not built again
     layers = Object.fromEntries(Object.entries(r.layers).map(([k, b]) => [k, new Uint16Array(b)]))
     height = new Float64Array(r.height)
     depth = new Uint16Array(r.depth)

@@ -321,7 +321,8 @@ maps/kinds.json ──► checkCatalogue ─┐
       that cannot place its count) show under the generator; each problem under the most specific row its path falls
       in. **Pin** (`src/app/map/pin.ts`, `Editor.pin`, one edit) runs the engine's expansion on the copy as it is,
       replaces the feature by its expanded form (no `gen`, with its `origin`) or removes it when its generator takes
-      it off the map (a scatter's region, a group's point), and appends its children after the last feature, so the
+      it off the map (a scatter's region, a group's point), and appends the children the expansion made (never one
+      the file already has, pinned before) after the last feature, so the
       stable save rewrites its line and appends theirs. A copy that does not validate or expand is refused with its
       first problem, and so is a pin whose result would not validate or expand to the same map (checked, not
       assumed: a scatter that placed nothing and is named by another's `avoid` leaves nothing to name), and a pin
