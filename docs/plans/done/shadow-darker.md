@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-26
 ---
 
@@ -111,9 +111,13 @@ needed. (The page has three moods, golden, temperate and epic, the default with 
 ## Acceptance
 
 - `?ushgain=1,1` (both values: one alone sets only the close one): the frame as #175 shipped it (the shader's gain
-  step is exact at 1).
+  step is exact at 1). Done: `node tools/golden.mjs`, main (aae9c97) against this branch, both
+  `?armies=20&ushgain=1,1`: a match, 0 differing pixels at all 8 cameras.
 - Darker at every gain above 1, at every zoom, the hue kept, no black, the foot still darker than the tip.
 - Overlapping shadows no darker than the darker one alone (the rule's tests in `test/shadow-look.test.ts`).
 - The owner picks the gain from the sheet (done: 2 up close, 1.5 far); then the default, the Metal bench (done: no
   measurable cost) and the system doc.
-- The goldens against main: only the soldiers' shadows darker.
+- The goldens against main: only the soldiers' shadows darker. Done: the default page matches at all 8 cameras;
+  `?armies=20` differs only on the battalions (worst regions: close 14.9 %, wide 6.1 %, far-edge 2.1 %, the rest
+  under 1 %), every pixel that differs by more than 6 levels darker (102 to 11,404 a camera), none brighter by more
+  than 1 level; `?armies=20&season=3` the same.

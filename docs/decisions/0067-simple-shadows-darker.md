@@ -6,7 +6,7 @@ date: 2026-10-26
 # 0067 The soldiers' simple shadows darker: a gain on their darkening
 
 Amends 0062 (the simple shadow at every zoom): its look gains one setting, the strength of the darkening; the
-shadows' shape, size, softness, length and foot gradient stay 0062's. The plan: `docs/plans/active/shadow-darker.md`;
+shadows' shape, size, softness, length and foot gradient stay 0062's. The plan: `docs/plans/done/shadow-darker.md`;
 as built: `docs/systems/look.md` ("The armies").
 
 ## Context

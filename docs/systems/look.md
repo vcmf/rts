@@ -671,7 +671,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `?ushband=<r0>,<r1>` and `?ushgain` (`<close>[,<far>]`, 1 to 3; decision 0067: the full darkening's strength,
   its luminance raised to that power and the channels scaled alike, then spread over the pixel by the coverage as
   before; the hue kept where no channel is clamped at 0; `shadowShade`, `decalPixel`; by default 2 up close and 1.5
-  far, the owner's, 2026-10-26: `docs/plans/active/shadow-darker.md`; under `?ushadowclose=map` the cross-fade blends
+  far, the owner's, 2026-10-26: `docs/plans/done/shadow-darker.md`; under `?ushadowclose=map` the cross-fade blends
   the map's shadow, which has no gain, against the gained decal) tune it live; `Units.lookNow` is
   this frame's. The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first

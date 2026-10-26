@@ -109,7 +109,8 @@ describe('where shadows overlap (the decal at a fragment, decalFragment)', () =>
     const colour = (s: number, g: number) => ({ cover: s, dark: c.foot + (c.dark - c.foot) * g })
     expect(resolve([colour(1, 1), colour(1, 0)])).not.toBe(resolve([colour(1, 0), colour(1, 1)]))
   })
-  it("keeps that rule at any gain, on the samples' colour: order free, no darker than the darkest alone", () => {
+  // (a smoke test: the gain is one colour for every shadow, so it cannot reorder them; the rule itself is above)
+  it('the gain, one colour for every shadow, leaves the rule as it was', () => {
     const k = [0.42, 0.5, 0.66]
     const luma = (d: number[]) => 0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2]
     // each sample the first covering shadow's colour (its full darkness through the gain), else the ground as it is
@@ -180,6 +181,7 @@ describe("the darkening's gain (shadowShade)", () => {
     expect(frag.indexOf('vec3d=max(mix(vec3(1.0),k,f),0.0);')).toBeGreaterThan(0)
     expect(frag.indexOf('gl_FragColor=vec4(d,a);')).toBeGreaterThan(at)
     expect(frag.indexOf('gl_FragColor=vec4(mix(vec3(1.0),d,a),0.0);')).toBeGreaterThan(at)
+    expect(frag).toContain('#ifndefCOVERAGEif(s<0.02)discard;#endif')
     expect(frag).not.toContain('k,f*a')
   })
   it('never brightens a channel at any gain the switch takes (1 to 3)', () => {

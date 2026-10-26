@@ -22,7 +22,7 @@ export interface ShadowLook {
 /** Up close (the owner, 2026-10-24: smaller, lighter, fuzzier, then darker and solid at the feet, lighter and softer
  *  away from them; softness 0.75 chosen from the review's sheet 7) and far (decision 0049's: one value end to
  *  end). The gain: the owner, 2026-10-26, "a bit too weak, can we make it darker": 2 up close, 1.5 far, chosen from
- *  the sheets of docs/plans/active/shadow-darker.md (no measurable cost on Metal) */
+ *  the sheets of docs/plans/done/shadow-darker.md (no measurable cost on Metal) */
 export const SHADOW_LOOK: { readonly close: ShadowLook; readonly far: ShadowLook } = {
   close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7, gain: 2 },
   far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1, gain: 1.5 },
