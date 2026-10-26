@@ -493,8 +493,8 @@ built on a visual bench of the hard cases. The rules a player sees, which it kee
   formed again only on free ground, and never passes through an enemy.
 - **Enemies stand at contact and fire;** a charge or an assault that reaches any enemy strikes it, and the melee
   follows. In a clash ground changes hands only through the fight, in steps: a battalion losing a round of melee
-  steps back as a whole and its foe follows; one that cannot step back (something behind it, or an enemy on its
-  flank) loses nerve instead.
+  steps back as a whole and its foe follows; one that cannot step back (anything in the way, or a second enemy
+  fighting it) loses nerve instead.
 - **Nothing is pushed.** A formation that meets a friend waits or goes round; until pathfinding (U8) it halts with
   the status "blocked by a friend".
 - **A router stopped by an enemy** is halted, as one stopped by impassable ground is today, so it tries the next

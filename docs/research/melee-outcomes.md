@@ -16,7 +16,7 @@ one margin; a loser that cannot retreat is worse off, not stuck; a flank or rear
 category, not only its odds; and several units in one fight resolve as one combat.
 
 This note is the background to the clash's second design (`docs/proposals/collision-and-orders.md`, § Contact), after
-the first, a continuous give way with a bend (C1 step 4, `docs/plans/active/c1-claims.md`), failed five reviews. It
+the first, a continuous give way with a bend (C1 step 4, on the claim grid's prototype), failed five reviews. It
 complements `docs/research/formation-collision-and-commands.md`, which argued that formed bodies block and only
 combat decides who yields; this note is about how the yielding is done.
 
@@ -117,8 +117,8 @@ earlier note covers the blobs and pass-through of these games in detail.
    per-tick give way, no lags to keep.
 2. **The winner follows by the same step,** so the two stay in contact, and only its foe: other units fighting do not
    move (Field of Glory II's drawn-out winners are the warning).
-3. **A blocked step costs, once.** Anything in the way (a friend, an enemy, the ground) turns the step into a cost
-   on the loser's nerve, rather than a geometry problem of who blocked it.
-4. **Fighting more than one enemy pins.** A loser with an enemy on its flank or rear cannot step back (DBA,
-   Impetus): one rule, no geometry of sideways retreats.
+3. **A blocked step costs, once a round.** Anything in the way (a friend, an enemy, the ground) turns the step into
+   a cost on the loser's nerve, rather than a geometry problem of who blocked it.
+4. **Fighting more than one enemy pins.** A loser fighting a second enemy cannot step back (DBA and Impetus pin or
+   destroy a loser with an enemy on its flank): one rule, no geometry of sideways retreats.
 5. **No extra deaths.** The step and the nerve it costs are the price of losing; the men lost stay the strike's.
