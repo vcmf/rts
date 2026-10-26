@@ -1,7 +1,7 @@
 ---
 status: current
-last_reviewed: 2026-10-25
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, test/map-fields.test.ts, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
+last_reviewed: 2026-10-26
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, src/app/map/pin.ts, test/map-fields.test.ts, test/map-pin.test.ts, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
 decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place, 0067-ids-are-named-when-made]
 ---
 
@@ -28,7 +28,7 @@ maps/kinds.json ──► checkCatalogue ─┐
   is a data change.
 - The draft page shows exactly what the code computes: the page's worker and the CLI run the same functions.
 - Not yet: works' earthworks, compiling to the look's data (M4), areas sharing edges with other areas (only lines
-  are shared), choosing a generator and pinning on the page (M7d).
+  are shared), the tracing overlay on the page (M7e).
 
 ## Constraints
 
@@ -312,6 +312,19 @@ maps/kinds.json ──► checkCatalogue ─┐
         stays none); a feature they bring back that was selected when its step was taken is selected again (a
         deletion undone). They leave text typed in a field typed. A field of no known kind is read as JSON when it is,
         else as text; a note is kept as typed.
+    - Generators and pinning (M7d): the form's last rows are the selection's generator, a choice of every generator
+      the engine has (what fits the feature is the validator's to say; a `gen` that is not one generator's shows as
+      JSON, to mend), and its parameters from the generator's spec (`paramRows`), each read as its spec's type with
+      its unit, range and whether it is required as hints. Another generator starts with no parameters. Each change
+      is one edit, so the expansion is redrawn on each. The form shows the page's problems: the validator's at once
+      after an edit, then the compile's of that copy, so the expansion's own (a village short of houses, a scatter
+      that cannot place its count) show under the generator; each problem under the most specific row its path falls
+      in. **Pin** (`src/app/map/pin.ts`, `Editor.pin`, one edit) runs the engine's expansion on the copy as it is,
+      replaces the feature by its expanded form (no `gen`, with its `origin`) or removes it when its generator takes
+      it off the map (a scatter's region, a group's point), and appends its children after the last feature, so the
+      stable save rewrites its line and appends theirs. A copy that does not validate or expand is refused with its
+      first problem. The pinned map expands to the same map as the original. Selected after: the feature, or its
+      first child.
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes
@@ -349,7 +362,9 @@ the line; a new map made in the panel and drawn by clicks (a base, an area, a st
 bridge, a hedge, a circle) is saved into a new file that validates and reads back unchanged, and one more feature
 saved adds one line (the file is removed after); through the form a note and another feature's attribute set, the
 saved diff their lines alone, undone back to the original bytes, text typed and not applied kept or applied as it
-should be; no console errors.
+should be; a clump's generator removed, chosen again and a parameter set (its outline redrawn, its line alone
+changed), a village's expansion problem under its generator, the village pinned and saved (its line rewritten, its
+houses appended, the same houses compiled), all undone back to the original bytes; no console errors.
 
 `test/map-write.test.ts` (M7a): every map in `maps/` written back unedited is byte for byte its file; a moved point
 changes one line; a feature added, deleted (first, middle, last), reordered; a map field changed, added, removed; a
@@ -367,7 +382,11 @@ id refused, a reference set again); a new map saved with no base, read back and 
 `test/map-save.test.ts` also creates a new file and refuses to create over one. `test/map-fields.test.ts` (M7c):
 every attribute of the catalogue set through the form's reading of text, good with no problem on a kind it means
 something on, bad with one at its field; reading text by kind (decimal numbers, untrimmed notes, JSON or text for an
-unknown field); the editor's field and map edits, its refusals, undo's selection.
+unknown field); the editor's field and map edits, its refusals, undo's selection; (M7d) every parameter of every
+generator set from good text with no problem and from bad text with one at its path, the parameter rows, the
+generator edits, the editor's pin (one edit, the selection after, its refusals). `test/map-pin.test.ts`: every
+generated feature of `maps/` pinned, alone and all together, validates and expands to the same expanded map as the
+original, and the stable save changes its line and appends its children, nothing else.
 
 `test/map-gen.test.ts`:
 - seeds: stable, and local (another feature, the file's order, the map's seed);

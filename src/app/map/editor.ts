@@ -58,6 +58,7 @@ import {
   type Draft,
 } from './draw.ts'
 import { setField } from './fields.ts'
+import { pinned } from './pin.ts'
 
 /** What the editor needs from the page. */
 export interface Host {
@@ -626,6 +627,25 @@ export class Editor {
     // the field alone is compared (not the whole map, its features with it)
     if (sameJson(value, (this.doc as unknown as Record<string, unknown>)[key])) return null
     this.commit(setField(this.doc, key, value), null)
+    return true
+  }
+  /**
+   * Pins the selection (M7d, ./pin.ts): its expanded form and its children copied into the copy, one edit, from the
+   * engine's expansion of the copy as it is now. Selected after: the feature, or its first child when its generator
+   * takes it off the map (a scatter's region). Returns whether it pinned; says why not (no generator, a copy that does
+   * not validate or expand).
+   */
+  pin(): boolean {
+    const f = this.selected ? this.feature(this.selected) : undefined
+    if (!this.canEdit(f) || !f || !this.doc || !this.editable(f)) return false
+    const out = this.cat ? pinned(this.doc, this.cat, f.id) : 'the catalogue is not read yet'
+    if (typeof out === 'string') {
+      this.note(out)
+      return false
+    }
+    const stays = out.features.some(x => x.id === f.id)
+    const first = out.features.find(x => x.origin?.parent === f.id)
+    this.commit(out, f.id, stays ? f.id : (first?.id ?? null))
     return true
   }
   /** What the validator found in the copy at the last edit. */

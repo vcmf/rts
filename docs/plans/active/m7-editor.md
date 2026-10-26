@@ -1,13 +1,13 @@
 ---
 status: active
-last_reviewed: 2026-10-25
+last_reviewed: 2026-10-26
 ---
 
 # Plan: M7, the editor on the lit map
 
 Track M, on `epic/map-engine` (decision 0020). Phase M7 of `docs/proposals/map-engine.md` §10, step 3 of
 `docs/plans/active/one-map-austerlitz.md`. Several PRs into the epic (below); this plan covers them all and details
-each as it starts (M7a merged in #192, M7b in #199; M7c below). M7c as first planned (fields, generators, pinning,
+each as it starts (M7a merged in #192, M7b in #199, M7c in #202; M7d below). M7c as first planned (fields, generators, pinning,
 sources) is split in two here (M7a and M7b each needed a redesign; a smaller PR reviews better): M7c the fields, M7d
 generators and pinning; tracing becomes M7e. M6d waits (the owner, 2026-10-25: `docs/plans/active/m6-lit-view.md`).
 
@@ -455,7 +455,54 @@ file.
   button, refused with why (and no save while refused); a form built again keeps the focus.
 - `npm test`, `check:data`, the build and the docs check pass.
 
+## M7d in detail
+
+Decision 0066 holds: the form sets values, the validator and expansion judge them; each change is one edit, and each
+edit compiles, so the expansion is redrawn on every change already (M7a). Nothing here re-implements a generator's
+rules: the choice lists every generator, and what does not fit is the validator's to say.
+
+- `src/app/map/fields.ts` (pure):
+  - `genOf`: a feature's generator and its parameters, or null (none, or not the one-key form the validator wants);
+  - `paramRows`: the chosen generator's parameters from its spec (`GENERATOR_SPECS`), in the spec's order, then any
+    other the feature sets (no spec: the validator names it);
+  - `withGenerator`, `withParam`: the feature's `gen` with another generator (its parameters start empty: another
+    generator's do not carry over) or one parameter set or removed.
+- The form: below the attributes, the generator (a choice of every generator, or none) and its parameters, each read
+  as its spec's type (`attrInput` takes any field spec), its unit, range and whether it is required as hints. A `gen`
+  that is not one generator's (a hand edit's slip) shows as JSON, to mend. Each problem shows under the most
+  specific row its path falls in (a parameter's under the parameter, the generator's under the generator).
+- The expansion's own problems (a scatter that cannot place its count, a village short of houses) come from the
+  compile, not the validator: the form shows the page's list (the validator's at once after an edit, then the compile's
+  of that copy), so they show under the generator.
+- **Pinning** (`src/app/map/pin.ts`, pure; `Editor.pin`, one edit): the selected generated feature replaced by its
+  expanded form (no `gen`, with its `origin`), or removed when its generator takes it off the map (a scatter's region,
+  a group's point), and its children appended after the last feature (the stable save then rewrites one line and
+  appends). The rules are the language's (`docs/systems/map.md`: a village keeps its expanded form and its houses, a
+  scatter goes and its children stay). The expansion is the engine's (`expand`) run on the page's copy at the press,
+  so it is never a stale compile's; a copy that does not validate or expand is refused with the first problem.
+  Selected after: the feature, or its first child when it left the map.
+- The page check: chooses a generator for a feature and sets a parameter (the file's diff is that line), then pins a
+  generated feature and saves (its line rewritten, its children appended).
+
+## Acceptance (M7d)
+
+- `test/map-pin.test.ts`: every generated feature of `maps/` pinned, alone and all together: the pinned map validates
+  and expands to the same expanded map as the original (a pinned child equals its expansion); the stable save
+  changes the pinned feature's line and appends its children, nothing else.
+- `test/map-fields.test.ts`: the parameter rows and the generator edits; every parameter of every generator set from
+  good text and from bad text, judged by the validator at its path.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
 ## Open questions
+
+(M7d)
+- A pinned feature keeps its `origin`; the page could say when its generator now gives something else (another
+  `EXPAND_VERSION`, or its parameters run again), as the proposal (§3.4) foresees.
+- One child cannot be pinned alone: a parent's children's ids are reserved while it generates, so pinning takes the
+  feature and all its children (the language's rule). Pinning one house of a village would need the language to let
+  a pinned child stand beside a generating parent.
+- Pinning runs the validator and the expansion on the page's thread (no compile reply can be stale): 13 ms a pin on
+  `generated.map.json`, 10 ms on `two-ridges` (Node, the dev Mac); to measure again when Austerlitz has generators.
 
 (M7c)
 - Renames in the page: a later PR, once the engine says what a feature's id seeds and names (its generator's output,

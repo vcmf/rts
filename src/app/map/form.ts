@@ -1,19 +1,35 @@
-// The map page's form (docs/plans/active/m7-editor.md M7c): the selected feature's fields, or with no selection the
-// map's own, built from the catalogue and set through the editor (./editor.ts) one edit at a time.
+// The map page's form (docs/plans/active/m7-editor.md M7c, M7d): the selected feature's fields (its generator and its
+// parameters too), or with no selection the map's own, built from the catalogue and set through the editor
+// (./editor.ts) one edit at a time.
 // - A field shows the editor's copy, unless it holds text typed and not applied yet (`pending`). That text is applied
 //   when the field changes (Enter, the focus leaving it) and before any command of the editor (`flush`: a press on the
 //   map, a key, a button), so it is never lost to a drag nor applied to a copy that moved on. Refused (no value, or the
 //   editor said no), it stays with its reason under it until it is changed or Escape drops it.
-// - The validator's problems show under their fields, those of no field above the feature's JSON, which is to read
-//   and copy only (its shape and references are edited on the map).
+// - The page's problems (the validator's at once after an edit, then the compile's of that copy: a generator that
+//   cannot place what it was asked) show under the most specific field their path falls in, those of no field above
+//   the feature's JSON, which is to read and copy only (its shape and references are edited on the map).
+// - A generated feature can be pinned (its expansion copied into the file: ./pin.ts).
 // - The form is built again only when its fields change (another kind); otherwise its inputs are given their values
 //   in place, so the field the focus moved to stays.
 import type { Catalogue, Feature, MapFile } from '../../map/schema.ts'
-import { SEASONS } from '../../map/schema.ts'
+import { GENERATORS, SEASONS } from '../../map/schema.ts'
 import { kindChain, kindStates, type Issue } from '../../map/catalogue.ts'
 import { featureKind, presetsOf } from '../../map/validate.ts'
 import type { Editor } from './editor.ts'
-import { attrInput, attrRows, parseInput, problemsAt, showValue, type AttrRow, type InputKind } from './fields.ts'
+import {
+  attrInput,
+  attrRows,
+  genOf,
+  paramRows,
+  parseInput,
+  problemsAt,
+  showValue,
+  withGenerator,
+  withParam,
+  type AttrRow,
+  type InputKind,
+  type ParamRow,
+} from './fields.ts'
 
 /** One row of the form: its key, label, input and the hint beside it. */
 interface Row {
@@ -25,18 +41,22 @@ interface Row {
   hint?: string
   disabled?: boolean
   lines?: boolean // several lines (a note): a text box, which keeps its line breaks
+  path?: string // its problems' path, from the view's base (default: its key)
+  // the field it sets and that field's new value, from the value read (null: refused, the editor says why); default:
+  // the field named by its key, to the value
+  to?: (value: unknown) => [string, unknown] | null
 }
 /** Sets a field: whether the copy changed (true), was refused (false: the editor's message says why), or not (null). */
 type Setter = (key: string, value: unknown) => boolean | null
-/** What the form shows: its rows, the problems of no row, the feature as JSON (none for the map's form). */
+/** What the form shows: its rows, their problems and those of no row, the feature as JSON (none for the map's form). */
 interface View {
   sig: string // the fields: a change builds the form again
-  base: string // the path its rows' paths start from
   rows: Row[]
   set: Setter
+  byRow: Map<string, Issue[]> // the problems of each row, by its key
   rest: Issue[]
-  found: Issue[] // the validator's problems of what it shows (looked for once, then by field)
   json: string | null
+  pin: boolean // a generated feature: it can be pinned
 }
 /** A row's elements, to be given new values in place. */
 interface Shown {
@@ -45,10 +65,33 @@ interface Shown {
   bad: HTMLElement
 }
 
+/** A field spec's range as a hint ('' for none). */
+const rangeOf = (s: { min?: number; max?: number } | undefined) =>
+  s && (s.min !== undefined || s.max !== undefined) ? `${s.min ?? '…'} to ${s.max ?? '…'}` : ''
+
+/**
+ * The problems by the row each falls in: the most specific one whose path is the problem's or holds it (a generator's
+ * parameter rather than the generator), and those of no row.
+ */
+function assign(issues: Issue[], rows: Row[], base: string): { byRow: Map<string, Issue[]>; rest: Issue[] } {
+  const byRow = new Map<string, Issue[]>()
+  const rest: Issue[] = []
+  const pathOf = (r: Row) => (base ? `${base}.${r.path ?? r.key}` : (r.path ?? r.key))
+  for (const i of issues) {
+    let best: Row | null = null
+    for (const r of rows) {
+      if (problemsAt([i], pathOf(r)).length && (!best || pathOf(r).length > pathOf(best).length)) best = r
+    }
+    if (best) byRow.set(best.key, [...(byRow.get(best.key) ?? []), i])
+    else rest.push(i)
+  }
+  return { byRow, rest }
+}
+
 /** An attribute's row: its value, and as hints its range, what it inherits, what overrides it, its ramp. */
 function attrRow(r: AttrRow): Row {
   const s = r.spec
-  const range = s && (s.min !== undefined || s.max !== undefined) ? `${s.min ?? '…'} to ${s.max ?? '…'}` : ''
+  const range = rangeOf(s)
   // its own value overridden by the map's season or the feature's state: what it is there
   const over = r.own !== undefined && r.effective !== undefined && showValue(r.effective) !== showValue(r.own)
   const hint = [
@@ -67,6 +110,56 @@ function attrRow(r: AttrRow): Row {
     as: attrInput(s),
     options: s?.type === 'enum' ? ['', ...(s.values ?? [])] : undefined,
     hint,
+  }
+}
+
+/**
+ * A feature's generator and its parameters (M7d): the generator a choice of every one the engine has (what fits the
+ * feature is the validator's to say), or JSON when its `gen` is not one generator's (a hand edit's slip, to mend); each
+ * parameter read as its spec's type, its unit, range and whether it is required as hints. `current` is the feature as
+ * the copy holds it when a row is applied.
+ */
+function genRows(f: Feature, current: () => Feature | undefined): Row[] {
+  const g = genOf(f)
+  if (f.gen !== undefined && !g) {
+    return [{ key: 'gen', label: 'generator', value: f.gen, as: 'json', hint: '{ "<generator>": { params } }' }]
+  }
+  const gen: Row = {
+    key: 'gen',
+    label: 'generator',
+    value: g?.name,
+    as: 'text',
+    options: ['', ...GENERATORS],
+    hint: g ? 'Pin copies what it makes into the file' : '',
+    // the same generator keeps its parameters; another starts with none
+    to: v => ['gen', v === g?.name ? f.gen : withGenerator(v as string | undefined)],
+  }
+  return [gen, ...paramRows(f).map(r => paramRow(r, g!.name, current))]
+}
+/** A generator's parameter's row. */
+function paramRow(r: ParamRow, gen: string, current: () => Feature | undefined): Row {
+  const s = r.spec
+  const hint = [
+    rangeOf(s),
+    s?.required ? 'required' : '',
+    s?.type === 'list' ? 'ids, categories or kinds' : '',
+    s ? '' : `not a parameter of ${gen}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  return {
+    key: `gen:${r.name}`,
+    label: s?.unit ? `${r.name} (${s.unit})` : r.name,
+    value: r.own,
+    as: attrInput(s),
+    options: s?.type === 'enum' ? ['', ...(s.values ?? [])] : undefined,
+    hint,
+    path: `gen.${gen}.${r.name}`,
+    to: v => {
+      const now = current()
+      const g = now ? withParam(now, r.name, v) : null
+      return g === null ? null : ['gen', g]
+    },
   }
 }
 
@@ -99,14 +192,18 @@ export class Form {
   private shown = new Map<string, Shown>()
   private rest = el('div')
   private json: HTMLTextAreaElement | null = null
+  private pinButton: HTMLButtonElement | null = null
+  /** The page's problems of the copy: the validator's at once after an edit, then the compile's. */
+  private issues: () => Issue[]
   /** Text typed in a field and not applied yet, by the field's key, and why it was refused ('' : not tried yet). */
   private pending = new Map<string, { text: string; why: string }>()
   /** Whose fields the pending text is (the file, and the feature or none for the map's): another's drops it. */
   private whose: string | null = null
 
-  constructor(box: HTMLElement, editor: Editor) {
+  constructor(box: HTMLElement, editor: Editor, issues: () => Issue[]) {
     this.box = box
     this.editor = editor
+    this.issues = issues
   }
 
   /**
@@ -121,7 +218,7 @@ export class Form {
     const whose = `${ed.file}#${f ? f.id : ''}`
     if (whose !== this.whose) this.pending.clear()
     this.whose = whose
-    const key = [ed.doc, f, ed.issues, cat, ed.enabled, ed.idle, ed.noFile]
+    const key = [ed.doc, f, this.issues(), cat, ed.enabled, ed.idle, ed.noFile]
     if (!force && key.length === this.last.length && key.every((k, i) => k === this.last[i])) return
     this.last = key
     const view = !ed.doc ? null : f ? this.feature(f, ed.doc, cat) : this.map(ed.doc)
@@ -163,7 +260,11 @@ export class Form {
     const parsed = parseInput(row.as, p.text)
     let done: boolean | null
     if ('error' in parsed) done = false
-    else done = this.view!.set(key, 'remove' in parsed ? undefined : parsed.value)
+    else {
+      const value = 'remove' in parsed ? undefined : parsed.value
+      const to = row.to ? row.to(value) : [key, value]
+      done = to === null ? false : this.view!.set(to[0] as string, to[1])
+    }
     if (done === false) {
       const why = 'error' in parsed ? parsed.error : this.editor.message || 'refused'
       this.pending.set(key, { text: p.text, why })
@@ -171,27 +272,32 @@ export class Form {
     this.update(this.cat, true)
   }
 
-  /** A feature's view: its own fields, its attributes, its seasons; its problems of no field; its JSON. */
+  /**
+   * A feature's view: its own fields, its attributes, its seasons, its generator and its parameters; its problems of
+   * no field; its JSON.
+   */
   private feature(f: Feature, doc: MapFile, cat: Catalogue | null): View {
+    const id = f.id
     const rows = [
       ...this.ownRows(f, doc, cat),
       ...(cat ? attrRows(cat, f, doc).map(attrRow) : []),
       { key: 'seasons', label: 'seasons', value: f.seasons, as: 'json', hint: '{ "winter": { … } }' } satisfies Row,
+      ...genRows(f, () => this.editor.feature(id)),
     ]
     const base = `features[${doc.features.indexOf(f)}]`
-    // the problems of no row (its shape, its references, a shared edge, a generator): above the feature's JSON
-    const found = problemsAt(this.editor.issues, base)
-    const rest = found.filter(x => !rows.some(r => problemsAt([x], `${base}.${r.key}`).length))
+    // the problems of no row (its shape, its references, a shared edge): above the feature's JSON
+    const { byRow, rest } = assign(problemsAt(this.issues(), base), rows, base)
+    const pin = f.gen !== undefined
     return {
       // the fields, not the feature: another feature of the kind keeps the form (and the focus a Tab moved on to)
       // its fields' kinds, not their choices (a new choice is given in place)
-      sig: JSON.stringify(['feature', rows.map(r => [r.key, r.label, r.as, !!r.options, r.lines])]),
-      base,
+      sig: JSON.stringify(['feature', rows.map(r => [r.key, r.label, r.as, !!r.options, r.lines]), pin]),
       rows,
       set: (key, value) => this.editor.setField(key, value),
+      byRow,
       rest,
-      found,
       json: shortJson(f),
+      pin,
     }
   }
   /** A feature's own fields: its id (shown), kind, preset, priority, state, source and note. */
@@ -252,17 +358,20 @@ export class Form {
       { key: 'sources', label: 'sources', value: doc.sources, as: 'json', hint: '[{ "id", "kind", "ref"?, "note"? }]' },
       { key: 'presets', label: 'presets', value: doc.presets, as: 'json', hint: '{ "name": { "kind", … } }' },
     ]
+    // the map's problems (its features' are theirs); of no row, those of no feature
+    const { byRow, rest } = assign(
+      this.issues().filter(x => !x.path.startsWith('features')),
+      rows,
+      '',
+    )
     return {
       sig: JSON.stringify(['map', rows.map(r => [r.key, r.label, r.as, !!r.options, r.lines])]),
-      base: '',
       rows,
       set: (key, value) => this.editor.setMapField(key, value),
-      found: this.editor.issues.filter(x => !x.path.startsWith('features')),
-      // the map's problems of no row (its features' are theirs)
-      rest: this.editor.issues.filter(
-        x => x.id === null && !rows.some(r => problemsAt([x], r.key).length) && !x.path.startsWith('features'),
-      ),
+      byRow,
+      rest: rest.filter(x => x.id === null),
       json: null,
+      pin: false,
     }
   }
 
@@ -300,7 +409,21 @@ export class Form {
       this.shown.set(r.key, { input, hint, bad })
     }
     this.rest = el('div')
-    const parts: HTMLElement[] = [table, this.rest]
+    const parts: HTMLElement[] = [table]
+    this.pinButton = null
+    if (view.pin) {
+      this.pinButton = el('button', {
+        type: 'button',
+        textContent: 'Pin',
+        title: 'copy what its generator makes into the file: the feature stops being generated, its children stay',
+      })
+      this.pinButton.addEventListener('click', () => {
+        this.flush()
+        this.editor.pin()
+      })
+      parts.push(this.pinButton)
+    }
+    parts.push(this.rest)
     this.json = null
     if (view.json !== null) {
       this.json = el('textarea', {
@@ -325,6 +448,7 @@ export class Form {
   /** Gives the form's inputs, hints and problems the view's values, in place. */
   private fill(view: View): void {
     for (const r of view.rows) this.fillRow(r.key)
+    if (this.pinButton) this.pinButton.disabled = !this.editor.enabled || !this.editor.idle
     this.rest.replaceChildren(...this.problems(view.rest.map(i => i.message)))
     // only when it changed: a part selected in it to copy stays selected
     if (this.json && view.json !== null && this.json.value !== view.json) this.json.value = view.json
@@ -349,7 +473,7 @@ export class Form {
     if (s.input instanceof HTMLSelectElement) s.input.disabled = off
     else s.input.readOnly = off
     s.hint.textContent = r.hint ?? ''
-    const found = problemsAt(view.found, view.base ? `${view.base}.${r.key}` : r.key).map(i => i.message)
+    const found = (view.byRow.get(key) ?? []).map(i => i.message)
     s.bad.replaceChildren(...this.problems(p?.why ? [`not applied: ${p.why}`, ...found] : found))
   }
 

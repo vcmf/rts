@@ -1,9 +1,11 @@
-// The map editor's fields (docs/plans/active/m7-editor.md M7c): what the form shows of a feature and of the map, and
-// the edits it makes, as pure functions on the map's intent. A form sets values; the validator judges them at once
-// (decision 0066): nothing here checks a range or a type beyond reading the text as the field's kind of value.
+// The map editor's fields (docs/plans/active/m7-editor.md M7c, M7d): what the form shows of a feature (its generator
+// and its parameters too) and of the map, and the edits it makes, as pure functions on the map's intent. A form sets
+// values; the validator judges them at once (decision 0066): nothing here checks a range or a type beyond reading the
+// text as the field's kind of value.
 // Tested in test/map-fields.test.ts.
-import type { AttrSpec, AttrValue, Catalogue, Feature, MapFile } from '../../map/schema.ts'
+import type { AttrSpec, AttrValue, Catalogue, Feature, FieldSpec, MapFile } from '../../map/schema.ts'
 import { RESERVED } from '../../map/schema.ts'
+import { GENERATOR_SPECS, type ParamSpec } from '../../map/generators.ts'
 import { allowedIn, categoryOf, kindChain, type Issue } from '../../map/catalogue.ts'
 import { featureKind, presetsOf } from '../../map/validate.ts'
 import { resolve } from '../../map/resolve.ts'
@@ -106,8 +108,8 @@ export function parseInput(as: InputKind, text: string): Parsed {
     return { error: `"${t.length > 40 ? t.slice(0, 40) + '…' : t}" is no JSON` }
   }
 }
-/** How an attribute's text is read: by its spec's type (none: JSON when it is, else text). */
-export function attrInput(spec: AttrSpec | undefined): InputKind {
+/** How an attribute's or a parameter's text is read: by its spec's type (none: JSON when it is, else text). */
+export function attrInput(spec: FieldSpec | undefined): InputKind {
   if (!spec) return 'any'
   if (spec.type === 'number' || spec.type === 'int') return 'number'
   if (spec.type === 'enum' || spec.type === 'string') return 'text'
@@ -125,4 +127,52 @@ export function setField<T extends object>(o: T, key: string, value: unknown): T
 /** The validator's problems at a field's path (`features[3].height`, `seed`), and anything under it. */
 export function problemsAt(issues: Issue[], path: string): Issue[] {
   return issues.filter(i => i.path === path || i.path.startsWith(path + '.') || i.path.startsWith(path + '['))
+}
+
+/** A feature's generator and its parameters, or null: none, or a `gen` not of the one form `{ name: { params } }`. */
+export function genOf(f: Feature): { name: string; params: Record<string, unknown> } | null {
+  const g = f.gen as unknown
+  if (typeof g !== 'object' || g === null || Array.isArray(g)) return null
+  const names = Object.keys(g)
+  const params = names.length === 1 ? (g as Record<string, unknown>)[names[0]] : undefined
+  if (typeof params !== 'object' || params === null || Array.isArray(params)) return null
+  return { name: names[0], params: params as Record<string, unknown> }
+}
+
+/** A parameter of a feature's generator in the form: its spec (none for one the generator does not take), its value. */
+export interface ParamRow {
+  name: string
+  spec: ParamSpec | undefined
+  own: unknown
+}
+/**
+ * The parameters of a feature's generator: each its spec takes, in the spec's order, then any other the feature sets
+ * (so it can be seen and removed). None for no generator, or one the engine does not have.
+ */
+export function paramRows(f: Feature): ParamRow[] {
+  const g = genOf(f)
+  if (!g) return []
+  const spec = Object.hasOwn(GENERATOR_SPECS, g.name) ? GENERATOR_SPECS[g.name] : undefined
+  const rows: ParamRow[] = Object.entries(spec?.params ?? {}).map(([name, s]) => ({
+    name,
+    spec: s,
+    own: g.params[name],
+  }))
+  for (const [name, v] of Object.entries(g.params)) {
+    if (!rows.some(r => r.name === name)) rows.push({ name, spec: undefined, own: v })
+  }
+  return rows
+}
+
+/**
+ * A feature's `gen` with another generator, its parameters empty (another generator's do not carry over: what one
+ * means by `count` is not what another does), or none (`undefined`).
+ */
+export function withGenerator(name: string | undefined): Feature['gen'] {
+  return name === undefined ? undefined : { [name]: {} }
+}
+/** A feature's `gen` with one parameter set, or removed (`undefined`); null when it has no generator to set it on. */
+export function withParam(f: Feature, key: string, value: unknown): Feature['gen'] | null {
+  const g = genOf(f)
+  return g ? { [g.name]: setField(g.params, key, value) } : null
 }

@@ -378,7 +378,8 @@ function mapIdProblem(id: string): string {
   if (!ID.test(id)) return 'its id names its file: lower-case letters and digits, in words joined by "-"'
   return [...picker.options].some(o => o.value === `/maps/${id}.map.json`) ? `a map ${id} exists` : ''
 }
-const form = new Form(formBox, editor)
+// its problems are the page's: the validator's at once after an edit, then the compile's of that copy (M7d)
+const form = new Form(formBox, editor, () => issues)
 // Text typed in the form and not applied yet: a press on another control takes the focus from the field, whose change
 // applies it; a press on the map does not wait for that (its drag would start first), so it applies it itself (below).
 // The undo and redo buttons keep the focus where it is, so the text stays typed, for the copy they bring back.
@@ -653,6 +654,7 @@ function draw(): void {
 }
 
 function panel(): void {
+  form.update(catalogue) // the compile's problems under their fields (a generator that cannot place what it was asked)
   const c = current
   status.textContent =
     (litError ? `${litError}: only the panel works. ` : '') +
@@ -1009,6 +1011,8 @@ window.MAP = {
     draw()
   },
   compile: () => compile('manual'),
+  // a feature of the last compiled (expanded) map, or null (M7d: a generator's output redrawn)
+  expanded: (id: string) => current?.map.features.find(f => f.id === id) ?? null,
   // the editor (M7): select a feature, the selection, what a save would write, save, undo, redo, unsaved edits, and
   // a ground point's screen position (to drive the pointer in checks)
   select: (id: string | null) => editor.select(id),
