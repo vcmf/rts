@@ -82,7 +82,7 @@ The first runs, and seven review rounds of the earlier design, leave these. The 
 | 1 | W5, cost: 4.6 ms a tick at 40 battalions (1.55 ms without claims, budget 2 ms) | stamp each core cell's margin once; claim each bin as a rectangle instead of every man; a 16 m mask of who is near, so the gate's quick rejects come back; cells held by three or more formations block only those that do not own them | X-14 |
 | 2 | W1, jams: three battalions on one point all stop; a block by a formation takes the terrain stall, which drops orders | "blocked by a formation" its own status that keeps the orders; a formation blocked by a settled friend at its goal counts as arrived, the radius growing while it stays blocked; the order of a tick by how long each has been blocked, then a keyed draw held for 2 s, kept until it makes progress | X-05, X-06, X-07, X-14 |
 | 3 | W2, acts that cannot be cut short: a change of shape checked only at its start (X-09); a rally inside a friend (X-11) | a change's swept ground reserved when it starts, refused (or the next shape that fits) if that ground is taken; a break mid-change snaps inside that ground; a router forms only where its formed footprint fits, else runs on or takes the nearest free place by a ring search | X-09, X-11, X-12 |
-| 4 | W3, the clash: melee pairs pass into each other | a melee holds: the pair stands at each other's core, nobody gives ground, it ends when one breaks; a router held by enemies on every way out surrenders | X-01, X-15 to X-20 |
+| 4 | W3, the clash: melee pairs pass into each other | a melee holds: the pair stands at each other's core, nobody gives ground, it ends when one breaks; a router with no way left is cut down by the enemies near it | X-01, X-15 to X-20 |
 
 W4 (today's code paths: the stall path, orders that read the head, reactions that clear the queue) and W9 (the
 queue) are the orders work (C4); W6 (the cell's size) is measured on the bench as the steps land; W8 (two
@@ -140,14 +140,13 @@ keeps:
   the core does not. They used to pass freely into each other, and when one broke the router stood on its foe's
   cells and could not move off them (X-18: shattered, held for good).
 - **A charge reaches its target's core only;** any other enemy's margin stops it (X-16: the veteran pursued the router
-  into the friend behind it). A pursuit stops at the router's margin and rides it down from there: the men in contact
-  are counted as if it stood as near as it may, up to `standOff` (a margin and a cell, so it scales with the cell).
+  into the friend behind it). A pursuit stops at the router's margin (riding into it, it stood on the router's cells
+  and held it, #198) and rides it down from there: the men in contact are counted as if it stood as near as it may, up
+  to `standOff` (a margin and a cell).
 - **A held router** (`routStep`, `src/sim/morale.ts`): a run held for 2 s by others' cells counts as halted and tries
-  the fan's next direction at its retry, as at impassable ground, whoever holds it. Held on the last by an enemy in the
-  fight, it surrenders: it leaves the field at the tick's end, its men counted as left until saves count the captured
-  (C2). Who held it is recorded when it happens: the lag model's look-ahead, finding a man's next step blocked, notes
-  an enemy in the fight claiming that place (`noteHolder`); a friend, a crowded cell, the ground or a broken enemy is
-  not one.
+  the fan's next direction at its retry, as at impassable ground. After the last it is cornered (`cornered`), and every
+  enemy in the fight near it, neither charging nor in melee, cuts it down as a pursuit would (`cutDown`,
+  `src/sim/melee.ts`); it does not fight back. No surrender (the owner, 2026-10-26).
 - **The tuning** (`HELD`) is in the code while it is a prototype: ruleset data is hashed into saves.
 
 Six cases, a veteran regiment (quality 0.95) charging a raw one (0.75) at the halt unless said:
@@ -156,7 +155,7 @@ Six cases, a veteran regiment (quality 0.95) charging a raw one (0.75) at the ha
 |---|---|---|
 | X-15, open ground behind | it stands until it breaks (3.4 s), then runs clear | it stands |
 | X-16, a friend 9 m behind | the same; the router passes through its friend, the pursuer stops at the friend's margin | the veteran pursues the router through the friend |
-| X-17, an enemy 9 m behind | the same; the router finds every way out held, and surrenders 28 s after it broke | the same overlap |
+| X-17, an enemy 9 m behind | the same; the router finds every way out held and is cut down where it stands | the same overlap |
 | X-18, a second regiment charging its flank (the target steadier, 0.9) | it breaks under the front charge and runs clear of its pursuer | the pursuer rides over the router |
 | X-19, the veteran 20 m to the east | over a minute in melee with few squadrons in contact; it stands until it breaks | — |
 | X-20, two raw regiments abreast, each charged | both stand, then break | — |

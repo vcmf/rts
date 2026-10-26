@@ -34,6 +34,7 @@ import {
   formationHandle as handleOf,
   typeOf,
 } from './world.ts'
+import { cornered } from './morale.ts'
 import { standOff } from './claims.ts'
 import {
   allocOrder,
@@ -61,6 +62,7 @@ const K_BREACH = 13
 const K_IMPACT = 14
 const K_RECOIL = 15
 const K_MELEE = 16
+const K_CORNERED = 17
 export const Q_FRONT = 0
 export const Q_FLANK = 1
 export const Q_REAR = 2 // the side a charge comes from, in the target's frame
@@ -217,7 +219,7 @@ export function meleeStep(w: World): void {
   const f = w.f
   const N = MAX_FORMATIONS
   let any = false
-  for (let i = 0; i < N && !any; i++) if (f.alive[i] && (f.chPhase[i] || f.foe[i])) any = true
+  for (let i = 0; i < N && !any; i++) if (f.alive[i] && (f.chPhase[i] || f.foe[i] || cornered(w, i))) any = true
   if (!any) return
   const tick = w.meta[M_TICK] + 1
   const rev = w.scratch.reverse === true
@@ -242,8 +244,34 @@ export function meleeStep(w: World): void {
     const j = slotOf(w, f.foe[i])
     if (j >= 0 && !f.foe[j] && !outOfFight(f.mstate[j])) engage(w, j, i)
   }
+  for (let j = 0; j < N; j++) if (f.alive[j] && cornered(w, j)) cutDown(w, G, S, j, tick)
   // the shocks, added to each receiver in its attackers' slot order
   for (let i = 0; i < N; i++) if (S.shockTo[i] >= 0) f.shockIn[S.shockTo[i]] += S.shockBy[i]
+}
+
+// enemy i cuts router j down, `gap` from it: the men in contact strike at the melee's rate and it does not fight back.
+// With claims, i stops at most `standOff` from it (a margin): the men in contact are counted as if it stood as near as
+// it may
+function rideDown(w: World, G: FireGeo, S: Melee, i: number, j: number, gap: number, rs: Uint32Array): void {
+  const M = w.cr.rs.melee
+  const off = Math.min(standOff(w), Math.max(0, gap - M.contact))
+  const lim = M.contact + M.hold + off
+  if (gap > lim) return
+  const men = inContact(w, G, i, j, lim, S.mi)
+  inContact(w, G, j, i, lim, S.mj)
+  owe(w, j, S.mj, M.rate * DT * men * strengthOf(w, i), rs)
+}
+/**
+ * Broken battalion j has no way left to run (`cornered`, morale.ts): every enemy in the fight near it, neither charging
+ * nor in melee, cuts it down as a pursuit rides a router down. Each attacker's draws are its own, keyed by the pair,
+ * and the losses owed only add up, so the order the attackers are visited in changes nothing.
+ */
+function cutDown(w: World, G: FireGeo, S: Melee, j: number, tick: number): void {
+  const f = w.f
+  for (let i = 0; i < MAX_FORMATIONS; i++) {
+    if (!f.alive[i] || f.side[i] === f.side[j] || outOfFight(f.mstate[i]) || f.chPhase[i] || f.foe[i]) continue
+    rideDown(w, G, S, i, j, gapOf(w, G, i, j), keyedStream(ks, w.meta[M_SEED], tick, handleOf(w, i), j, K_CORNERED))
+  }
 }
 
 // battalion i leaves its melee with j: the pairing ends both ways (j, left without a foe, takes on another of its
@@ -354,15 +382,8 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
       endCharge(w, i, tick, true)
       return
     }
-    // riding down the router: it does not fight back. With claims it stops at the router's margin, up to `standOff`
-    // away: the men in contact are counted as if it stood as near as it may
-    const off = Math.min(standOff(w), Math.max(0, gap - M.contact))
-    const reach = M.contact + M.hold + off
-    if (gap - off <= M.contact + M.hold) {
-      const men = inContact(w, G, i, j, reach, S.mi)
-      inContact(w, G, j, i, reach, S.mj)
-      owe(w, j, S.mj, M.rate * DT * men * strengthOf(w, i), keyedStream(ks, seed, tick, h, j, K_MELEE))
-    }
+    // riding down the router: it does not fight back
+    rideDown(w, G, S, i, j, gap, keyedStream(ks, seed, tick, h, j, K_MELEE))
     return
   }
   // the target broke before contact: ride it down

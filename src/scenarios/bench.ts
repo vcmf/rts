@@ -300,7 +300,7 @@ export const BENCH_CASES: BenchCase[] = [
   ]),
   charged(
     'x17-enemy-behind',
-    'X-17: as X-15, with an enemy regiment just behind the raw one: broken, it has no way out and surrenders',
+    'X-17: as X-15, with an enemy regiment just behind the raw one: broken, it has no way out and is cut down',
     [{ side: 0, x: 0, z: 49, heading: N, shape: LINE, unit: CAV }],
   ),
   bench(

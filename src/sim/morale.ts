@@ -8,8 +8,8 @@
 //
 // A battalion that routs drops its orders and runs; the run's direction is fixed at the break (its side's
 // rear, else away from the nearest enemy, else straight back), and its phase is kept: running, halted at
-// impassable ground (or, with claims, by enemies), fled, or trapped by enemies on its last way out (it
-// surrenders). Only a halted router tries again, the next direction of a fan about the stored one. A router
+// impassable ground (or, with claims, by others), or fled. Only a halted router tries again, the next direction of a
+// fan about the stored one; after the last it is cornered, and enemies in contact cut it down. A router
 // whose run has ended, safe and calm, rallies: its losses so far are written off and its quality drops. A
 // battalion that breaks too often, or routs below half strength, shatters and runs for good. A wavering
 // battalion left without orders, its morale still falling and the enemy in front of it, falls back once (not
@@ -35,8 +35,8 @@ import {
   RP_RUNNING,
   RP_HALTED,
   RP_FLED,
-  RP_TRAPPED,
   outOfFight,
+  fleeing,
 } from './world.ts'
 import {
   allocOrder,
@@ -52,20 +52,24 @@ import {
   fillRetire,
   cutChange,
 } from './formation.ts'
-import { formedFits, freeSpot, heldByEnemy } from './claims.ts'
+import { formedFits, freeSpot } from './claims.ts'
 import { sin, cos, PI } from './num.ts'
 import { TICK_HZ, DT } from './time.ts'
 
 const RUN = 800 // how far a router is sent, metres (kept on the map)
 // the runs: the stored direction first, then turned from it by these angles, one every RETRY ticks while the
-// router is halted; after the last it stays where it is (pinned), unless enemies hold it there (RP_TRAPPED)
+// router is halted; after the last it stays where it is (`cornered`)
 const FAN = [0, PI / 3, -PI / 3, (2 * PI) / 3, (-2 * PI) / 3]
 const RETRY = 100
 // s a run may stand held by other formations' cells before it counts as halted there (the claim grid's prototype)
 const HELD = 2
-// ticks within which an enemy's hold on a man's next step counts as holding the router (a held formation tests its way
-// only every BLOCK_RETRY ticks, formation.ts)
-const HELD_RECENT = 10
+
+/**
+ * Whether broken battalion i has no way left to run: halted after the last of its fan's directions. Every enemy in
+ * contact cuts it down (the melee step, docs/systems/melee.md).
+ */
+export const cornered = (w: World, i: number): boolean =>
+  fleeing(w.f.mstate[i]) && w.f.routPhase[i] === RP_HALTED && w.f.runs[i] >= FAN.length
 
 // what a battalion reads of the others this step (scratch): the contagion shock, its secured flanks, and the
 // nearest enemy in the fight (its distance, and the unit vector from it to the battalion)
@@ -266,15 +270,14 @@ function rout(w: World, i: number, now: number, men: number): void {
 }
 /**
  * A router's step: a run ends when its orders do, or when other formations' cells hold it for HELD seconds. Halted at
- * impassable ground or by others, it tries the fan's next direction every RETRY ticks; held on the last by an enemy in
- * the fight, it is trapped and surrenders (tick.ts); otherwise it got where it was going (or as near as it could) and
- * has fled.
+ * impassable ground or by others, it tries the fan's next direction every RETRY ticks (after the last it is
+ * `cornered`); otherwise it got where it was going (or as near as it could) and has fled.
  */
 function routStep(w: World, i: number): void {
   const f = w.f
   if (f.routPhase[i] === RP_RUNNING && f.status[i] === ST_BLOCKED && f.blockedFor[i] > HELD) {
     clearOrders(w, i)
-    f.routPhase[i] = f.runs[i] >= FAN.length && heldByEnemy(w, i, HELD_RECENT) ? RP_TRAPPED : RP_HALTED
+    f.routPhase[i] = RP_HALTED
   }
   if (f.routPhase[i] === RP_RUNNING && f.ordHead[i] < 0) {
     f.routPhase[i] = f.status[i] === ST_HALTED ? RP_HALTED : RP_FLED

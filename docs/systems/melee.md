@@ -125,8 +125,8 @@ men of its companies within `contact + hold` of each.
 **With the claim grid's prototype on** (`w.claims`; docs/plans/active/c1-claims.md, step 4): nobody in melee gives
 ground; it ends when one side breaks. A melee pair, and a charge with its target, stand at each other's core (the
 margin between them gives way); a pursuit stops at the router's margin and rides it down from there, and a charge
-stops at any other enemy's. A router held for 2 s tries its fan's next direction; held on the last by an enemy in the
-fight, it surrenders and leaves the field (`src/sim/morale.ts`, `src/sim/tick.ts`).
+stops at any other enemy's. A router held for 2 s tries its fan's next direction; with none left it is cornered, and
+every enemy in the fight near it, neither charging nor in melee, cuts it down (`cutDown`).
 
 **Shocks** (`shockIn`): the test's and the impact's shocks are owed to the target and taken by its morale step
 with contagion, after relaxing (`morale.ts`).
