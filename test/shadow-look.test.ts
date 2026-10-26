@@ -41,6 +41,10 @@ describe('the look a zoom', () => {
     expect(SHADOW_LOOK.close.core).toBeGreaterThan(0)
     expect([SHADOW_LOOK.far.foot, SHADOW_LOOK.far.dark, SHADOW_LOOK.far.soft]).toEqual([1, 1, 0])
   })
+  it("is darker than decision 0062 shipped it: the owner's gain, 2 up close and 1.5 far (2026-10-26)", () => {
+    expect([SHADOW_LOOK.close.gain, SHADOW_LOOK.far.gain]).toEqual([2, 1.5])
+    expect(lookBetween(SHADOW_LOOK.close, SHADOW_LOOK.far, 0.5, { ...SHADOW_LOOK.far }).gain).toBeCloseTo(1.75, 12)
+  })
   it("packs the gradient: the soles' and the tip's darkness, the core short of the tip, the tip shortened", () => {
     const l = { ...SHADOW_LOOK.close, len: 0.5, core: 3 }
     const [foot, dark, core, tip] = footUniform(l, 3.6)
@@ -167,11 +171,11 @@ describe("the page's switches", () => {
       close,
       far,
     )
-    expect(close).toEqual({ soft: 0.4, dark: 0.6, foot: 1.1, core: 0.3, len: 0.8, gain: 1 })
+    expect(close).toEqual({ ...SHADOW_LOOK.close, soft: 0.4, dark: 0.6, foot: 1.1, core: 0.3, len: 0.8 })
     expect(far).toEqual({ ...SHADOW_LOOK.far, dark: 0.9, foot: 1, core: 0.1 })
     const g = looks()
-    applyLookParams(q('ushgain=1.5'), g.close, g.far)
-    expect([g.close.gain, g.far.gain]).toEqual([1.5, 1])
+    applyLookParams(q('ushgain=1'), g.close, g.far)
+    expect([g.close.gain, g.far.gain]).toEqual([1, SHADOW_LOOK.far.gain]) // (1: as decision 0062 shipped it)
     applyLookParams(q('ushgain=1.75,1.25'), g.close, g.far)
     expect([g.close.gain, g.far.gain]).toEqual([1.75, 1.25])
     expect(r.band).toEqual([30, 70])

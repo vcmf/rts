@@ -20,7 +20,8 @@ In:
 - A comparison sheet for the owner (gains 1, 1.25, 1.5, 1.75 and 2 at the close, default and wide zooms, a tree's
   cast shadow in frame as the reference) and the shadow's contrast measured at each.
 - Then, once the owner picks: the chosen gain as the default in `SHADOW_LOOK`, a Metal bench, and the system doc
-  (`docs/systems/look.md`).
+  (`docs/systems/look.md`). **The owner's choice (2026-10-26): 2 up close, 1.5 far** (`?ushgain=2,1.5`), turned
+  from one to the other over the band (1.75 at its middle, about 65 m), the bench showing no cost (below).
 
 Out: the shadow's shape, size, softness, length and foot gradient (decision 0062's, unchanged); a figure shadow map.
 
@@ -40,14 +41,13 @@ Out: the shadow's shape, size, softness, length and foot gradient (decision 0062
   decision 0062's rule holds at any gain (every shadow darkens a covered sample alike, the stencil lets the first
   through, the darkest share wins whatever the draw order). `decalFragment` takes the gain and its tests check the
   rule with it.
-- Cost: a dot, a `pow` and a multiply a fragment, no reads (an estimate: ALU only; the Metal bench comes with the
-  default).
+- Cost: a dot, a `pow` and a multiply a fragment, no reads; measured on Metal below (no measurable cost).
 
 ## Measurements (2026-10-26, before the default changes)
 
 The look page's production build, `?armies=20`, Metal, 1600 × 900, the same camera (alpha −1.92, beta 0.8, target
-(142, 4.7, −96): the front of the battalion nearest the armies' focus, beside a clump of trees) at 20, 63 and 125 m. Linear luminance of the frame with the
-soldiers' shadows over the same frame with `?unitshadow=0`, over the pixels the shadow darkens at gain 1 (more than
+(142, 4.7, −96): the front of the battalion nearest the armies' focus, beside a clump of trees) at 20, 63 and 125 m,
+each gain the same close and far (`?ushgain=<g>,<g>`). Linear luminance of the frame with the soldiers' shadows over the same frame with `?unitshadow=0`, over the pixels the shadow darkens at gain 1 (more than
 3 %): the median and the darkest 10 %. The tree's cast shadow: two patches in it against lit ground beside them.
 
 | zoom | tree shadow | gain 1 (today) | 1.25 | 1.5 | 1.75 | 2 |
@@ -59,16 +59,32 @@ soldiers' shadows over the same frame with `?unitshadow=0`, over the pixels the 
 (median / darkest 10 %, the shadowed ground's luminance as a share of the same ground unshadowed.) Today even the
 darkest tenth of a soldier's shadow keeps about twice the light of a tree's shadow (0.29 to 0.38 against 0.17). The
 darkest tenth reaches the tree's at about gain 1.5 at the wide zoom and 2 up close (where the look is lighter at the
-tip by design). The sheets: `output/armies-review/18-shadow-darker/` in the main checkout (not in git).
+tip by design). The sheets: `output/armies-review/18-shadow-darker/` in the main checkout (not in git). The chosen
+2 up close and 1.5 far match the tree's shadow in their darkest tenth at those zooms.
+
+### The cost (Metal, 2026-10-26)
+
+`node tools/bench-look.mjs <url> <json> --gpu metal`, production builds (main aae9c97 against this branch), both
+`?armies=20&benchr=40,63,125,250`, the arms alternated, 2 rounds; each value the mean over the three yaws of the
+default arm's (`l2`) p50, ms, the two rounds in brackets.
+
+| zoom | main frame | main GPU | 1.5 frame | 1.5 GPU | 2,1.5 frame | 2,1.5 GPU |
+|---|---|---|---|---|---|---|
+| 40 m | 9.11 (9.02, 9.20) | 13.29 (13.15, 13.43) | 9.14 (9.03, 9.25) | 13.32 (13.07, 13.56) | 9.09 (9.10, 9.08) | 13.23 (13.26, 13.21) |
+| 63 m | 10.09 (9.80, 10.38) | 14.49 (13.90, 15.08) | 9.89 (9.75, 10.03) | 14.06 (13.85, 14.27) | 9.93 (9.95, 9.90) | 14.11 (14.11, 14.11) |
+| 125 m | 10.65 (10.35, 10.95) | 14.16 (13.53, 14.78) | 10.57 (10.38, 10.77) | 13.79 (13.49, 14.09) | 10.58 (10.42, 10.75) | 13.89 (13.70, 14.07) |
+| 250 m | 6.68 (6.63, 6.72) | 9.78 (9.59, 9.97) | 6.91 (6.85, 6.97) | 9.88 (9.69, 10.07) | 7.03 (6.68, 7.37) | 10.46 (9.75, 11.17) |
+
+A first two-arm run (main against 1.5, the same way) gave GPU p50s of 13.24 / 13.60, 14.12 / 14.25, 14.05 / 13.93
+and 10.00 / 9.85 ms. Every difference lies within the run-to-run spread (main's own two rounds differ by up to
+1.25 ms of GPU p50); no arm is consistently slower. At 250 m both gained arms draw the same (the far gain 1.5), so
+their 0.6 ms gap there, one round at 11.17 ms, is the spread.
 
 ## Acceptance
 
 - `?ushgain` absent or 1: the frame as #175 shipped it (the shader's gain step is exact at 1).
 - Darker at every gain above 1, at every zoom, the hue kept, no black, the foot still darker than the tip.
 - Overlapping shadows no darker than the darker one alone (the rule's tests in `test/shadow-look.test.ts`).
-- The owner picks the gain from the sheet; then the default, the Metal bench (no measurable cost expected) and the
-  system doc.
-
-## Open questions
-
-- One gain at every zoom, or a different one close and far (the switch takes both)?
+- The owner picks the gain from the sheet (done: 2 up close, 1.5 far); then the default, the Metal bench (done: no
+  measurable cost) and the system doc.
+- The goldens against main: only the soldiers' shadows darker.

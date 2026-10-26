@@ -9,7 +9,8 @@ import { sstep } from './noise.ts'
  *  share of the ground's full shadow at the tip; foot: the share at the soles and over the contact's core (core, m
  *  from the soles), from where it turns to soft and dark toward the tip; len: its length along the sun from the soles
  *  (1: the shape's); gain: the strength of its darkening at every point along it, foot and tip alike (1: the ground's
- *  own shade as it was; above, the darkening's luminance raised to that power, its hue kept: shadowShade) */
+ *  own shade, as decision 0062 shipped it; above, the darkening's luminance raised to that power, its hue kept:
+ *  shadowShade) */
 export interface ShadowLook {
   soft: number
   dark: number
@@ -20,10 +21,11 @@ export interface ShadowLook {
 }
 /** Up close (the owner, 2026-10-24: smaller, lighter, fuzzier, then darker and solid at the feet, lighter and softer
  *  away from them; softness 0.75 chosen from the review's sheet 7) and far (decision 0049's: one value end to
- *  end) */
+ *  end). The gain: the owner, 2026-10-26, "a bit too weak, can we make it darker": 2 up close, 1.5 far, chosen from
+ *  the sheets of docs/plans/active/shadow-darker.md (no measurable cost on Metal) */
 export const SHADOW_LOOK: { readonly close: ShadowLook; readonly far: ShadowLook } = {
-  close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7, gain: 1 },
-  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1, gain: 1 },
+  close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7, gain: 2 },
+  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1, gain: 1.5 },
 }
 /** The band of the camera's distance to its focus (m) over which the close look turns into the far one */
 export const SHADOW_LOOK_BAND: readonly [number, number] = [45, 85]
