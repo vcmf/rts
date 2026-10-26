@@ -6,12 +6,14 @@ import { describe, expect, it } from 'vitest'
 import {
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
+  SHADE_LUMA,
   applyLookParams,
   decalFragment,
   decalStrip,
   farShare,
   footUniform,
   lookBetween,
+  decalPixel,
   parseNumbers,
   shadowModes,
   shadowShade,
@@ -107,17 +109,29 @@ describe('where shadows overlap (the decal at a fragment, decalFragment)', () =>
     const colour = (s: number, g: number) => ({ cover: s, dark: c.foot + (c.dark - c.foot) * g })
     expect(resolve([colour(1, 1), colour(1, 0)])).not.toBe(resolve([colour(1, 0), colour(1, 1)]))
   })
-  it('keeps that rule at any gain: the coverage as it was, the darkness every shadow takes alike', () => {
-    for (const gain of [1.25, 2]) {
+  it("keeps that rule at any gain, on the samples' colour: order free, no darker than the darkest alone", () => {
+    const k = [0.42, 0.5, 0.66]
+    const luma = (d: number[]) => 0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2]
+    // each sample the first covering shadow's colour (its full darkness through the gain), else the ground as it is
+    const colour = (frags: { cover: number; dark: number }[], gain: number) =>
+      luma(
+        thresholds
+          .map(t => {
+            const f = frags.find(x => x.cover > t)
+            return f ? shadowShade(k, f.dark, gain) : [1, 1, 1]
+          })
+          .reduce((p, q) => p.map((v, i) => v + q[i] / thresholds.length), [0, 0, 0]),
+      )
+    for (const gain of [1, 1.5, 2]) {
       for (const [s1, g1, s2, g2] of [
         [1, 1, 1, 0],
         [0.6, 0.3, 0.9, 0.8],
+        [0.2, 0, 1, 1],
       ]) {
-        const a = decalFragment(s1, g1, c.foot, c.dark, gain)
-        const b = decalFragment(s2, g2, c.foot, c.dark, gain)
-        expect(a.cover).toBe(decalFragment(s1, g1, c.foot, c.dark).cover)
-        expect([a.dark, a.gain]).toEqual([b.dark, b.gain])
-        expect(resolve([a, b])).toBe(resolve([b, a]))
+        const a = decalFragment(s1, g1, c.foot, c.dark)
+        const b = decalFragment(s2, g2, c.foot, c.dark)
+        expect(colour([a, b], gain)).toBe(colour([b, a], gain))
+        expect(colour([a, b], gain)).toBe(Math.min(colour([a], gain), colour([b], gain)))
       }
     }
   })
@@ -153,7 +167,39 @@ describe("the darkening's gain (shadowShade)", () => {
   })
   it('darkens nothing where the ground is already in full shadow, and stays finite where the shade is black', () => {
     expect(shadowShade([1, 1, 1], 1, 2)).toEqual([1, 1, 1])
-    for (const gain of [0.5, 2]) expect(shadowShade([0, 0, 0], 1, gain).every(Number.isFinite)).toBe(true)
+    for (const gain of [1, 2, 3]) expect(shadowShade([0, 0, 0], 1, gain).every(Number.isFinite)).toBe(true)
+  })
+  it('is what the shader does: the full darkness gained by its luminance, then the coverage or the share', () => {
+    const frag = readFileSync(new URL('../src/look/shaders/unitdecal.frag', import.meta.url), 'utf8').replace(
+      /\s+/g,
+      '',
+    )
+    const gainLine = `d*=pow(max(dot(d,vec3(${SHADE_LUMA.join(',')})),1.0e-3),uShGain-1.0);`
+    const at = frag.indexOf(gainLine)
+    expect(at).toBeGreaterThan(frag.indexOf('vec3d=max(mix(vec3(1.0),k,f),0.0);'))
+    expect(frag.indexOf('vec3d=max(mix(vec3(1.0),k,f),0.0);')).toBeGreaterThan(0)
+    expect(frag.indexOf('gl_FragColor=vec4(d,a);')).toBeGreaterThan(at)
+    expect(frag.indexOf('gl_FragColor=vec4(mix(vec3(1.0),d,a),0.0);')).toBeGreaterThan(at)
+    expect(frag).not.toContain('k,f*a')
+  })
+  it('never brightens a channel at any gain the switch takes (1 to 3)', () => {
+    for (const gain of [1, 1.5, 3]) {
+      for (const f of [0.3, 1, 1.05]) {
+        const plain = shadowShade(k, f, 1)
+        shadowShade(k, f, gain).forEach((v, i) => expect(v).toBeLessThanOrEqual(plain[i] + 1e-15))
+      }
+    }
+  })
+  it('gives a pixel the same darkening with and without the coverage (the full darkness gained, then shared)', () => {
+    for (const gain of [1, 1.5, 2]) {
+      for (const a of [0, 0.25, 0.5, 0.75, 1]) {
+        const cov = decalPixel(k, 1.05, gain, a, true)
+        decalPixel(k, 1.05, gain, a, false).forEach((v, i) => expect(v).toBeCloseTo(cov[i], 12))
+      }
+    }
+    // (the first order, the share mixed in before the gain, made the soft parts darker without the coverage)
+    const gainedAfter = (a: number, gain: number) => shadowShade(k, 1.05 * a, gain)
+    expect(luma(gainedAfter(0.5, 2))).not.toBeCloseTo(luma(decalPixel(k, 1.05, 2, 0.5, true)), 3)
   })
 })
 
@@ -194,7 +240,7 @@ describe("the page's switches", () => {
       'ushfoot=1,4',
       'ushfoot=1,0.3,1',
       'ushband=70,30',
-      'ushgain=0.4',
+      'ushgain=0.9',
       'ushgain=3.5',
       'ushgain=1.5,',
       'ushband=30',

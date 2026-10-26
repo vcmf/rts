@@ -554,7 +554,7 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
 // share at the tip), ?ushdark=<0..1> (the full shadow's share at the tip), ?ushlen=<0.3..1.5> (their length), each
 // <close>[,<far>] (far: decision 0049's unless given); ?ushfoot=<dark>,<core m>[,<far dark>,<far core m>], the contact
 // at the soles (its darkness, a share of the full shadow, and the core it holds over before turning to the tip's);
-// ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one; ?ushgain=<0.5..3>[,<far>],
+// ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one; ?ushgain=<1..3>[,<far>],
 // the darkening's strength, foot and tip alike (1: as decision 0062 shipped it; by default 2,1.5, the owner's:
 // docs/plans/active/shadow-darker.md)
 // (src/look/shadow-look.ts parses them, a bad value an error at load)
