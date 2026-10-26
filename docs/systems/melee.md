@@ -51,7 +51,7 @@ step 12 morale              the shocks owed (shockIn) are taken with contagion
   and the melee pairs as the step began. Orders come from the shared pool in visiting order, as routs' do
   (`docs/systems/fire-morale.md`).
 - **The exception, with claims:** a melee's rounds, at the end of the step, are judged on that fixed state, then move
-  formations and change pairs (a loser falls back, a winner takes on another enemy) one pair at a time in the tick's
+  formations one pair at a time in the tick's
   keyed order (`claimOrder`), each claiming its new cells before the next. That order does not depend on the slots, so
   the reversed visiting order still gives the same state.
 
@@ -131,7 +131,7 @@ men of its companies within `contact + hold` of each.
 at the end of the melee step, a pair (each the other's foe, both formed, one ahead of the other) is judged every
 `ROUND` seconds from its pushes (the losses each strike owes the foe, times morale). The loser steps back `STEP`
 metres as one rigid move, granted whole or not at all (`stepWhole`), and its foe follows by the same displacement;
-if its foe cannot follow, their melee ends. A loser that cannot step back, or has a second enemy on its flank or rear,
+if its foe cannot follow, the melee goes on until the gap passes contact and hold. A loser that cannot step back, or has a second enemy on its flank or rear,
 takes a morale shock (`PINNED`). The tuning is in `src/sim/melee.ts`.
 
 **Shocks** (`shockIn`): the test's and the impact's shocks are owed to the target and taken by its morale step

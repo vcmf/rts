@@ -256,7 +256,9 @@ export class Overlay {
       // its last round, until the pair's next
       const R = w.scratch.melee
       const since = R && R.roundAt[i] >= 0 ? w.meta[M_TICK] - R.roundAt[i] : Infinity
-      if (R && since < ROUND * TICK_HZ && ROUND_NAME[R.round[i]]) what.push(ROUND_NAME[R.round[i]])
+      if (R && since < ROUND * TICK_HZ && R.roundGen[i] === f.gen[i] && ROUND_NAME[R.round[i]]) {
+        what.push(ROUND_NAME[R.round[i]])
+      }
       if (sheltering(w, i)) what.push('sheltering')
       if (f.mstate[i] !== MS_STEADY) what.push(MORALE_STATES[f.mstate[i]])
       if (f.blownUntil[i] > w.meta[M_TICK]) what.push('blown')
