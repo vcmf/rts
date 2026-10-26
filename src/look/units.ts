@@ -19,6 +19,7 @@ import { Frustum } from '@babylonjs/core/Maths/math.frustum.js'
 import { Matrix, Vector2, Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Plane } from '@babylonjs/core/Maths/math.plane.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
+import { Buffer } from '@babylonjs/core/Buffers/buffer.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
 import '@babylonjs/core/Engines/Extensions/engine.alphaToCoverage.js'
 import { MSAA } from './post.ts'
@@ -129,9 +130,25 @@ interface Host {
   cycle: number // the cycle its settings were written in (each cycle's clips start afresh)
   index: number // its place in hosts (its flag's instance)
   srcStep: number // the sim's men (?sim): the real-time step it was placed at (−1: never)
+  shared: Shared // its own lists on the GPU, which its LOD meshes read (all but the nearest, and the next while split)
   srcAny: boolean // (and whether it had men to draw, and its centre then: its colours')
   srcX: number
   srcZ: number
+}
+
+/** A battalion's own lists on the GPU: its men's matrices, clips, moves and indices, each one buffer. */
+interface Shared {
+  m: Buffer
+  s: Buffer
+  n: Buffer
+  i: Buffer
+}
+/** Mesh `m` draws its instances from `sh`'s buffers (in place of the ones its thin instances made it). */
+function bindShared(m: Mesh, sh: Shared): void {
+  for (let c = 0; c < 4; c++) m.setVerticesBuffer(sh.m.createVertexBuffer(`world${c}`, c * 4, 4))
+  m.setVerticesBuffer(sh.s.createVertexBuffer('aVAT', 0, 3))
+  m.setVerticesBuffer(sh.n.createVertexBuffer('aNext', 0, 3))
+  m.setVerticesBuffer(sh.i.createVertexBuffer('aMan', 0, 1))
 }
 
 const SM_SIZE = 2048 // the figures' shadow map, fitted to the ground in view each frame
@@ -811,6 +828,18 @@ export class Units {
       m.thinInstanceSetBuffer('aMan', man, 1, true)
       m.doNotSyncBoundingInfo = true // (its bounds are place()'s: a buffer swapped in must not refit them)
     })
+    // the battalion's own lists on the GPU once, read by every LOD mesh that draws them (sharedBy): one upload a
+    // placing, not one a mesh (battle threads PR 4: the uploads were the sim's whole extra cost)
+    const engine = this.scene.getEngine()
+    const shared: Shared = {
+      m: new Buffer(engine, matrices, true, 16, false, true),
+      s: new Buffer(engine, settings, true, 3, false, true),
+      n: new Buffer(engine, next, true, 3, false, true),
+      i: new Buffer(engine, man, false, 1, false, true),
+    }
+    lod.forEach((m, li) => {
+      if (!(this.hasNearest && li === 0)) bindShared(m, shared)
+    })
     const all = () => lod.map(() => true)
     const none = () => new Float32Array(0)
     this.hosts.push({
@@ -849,6 +878,7 @@ export class Units {
       lods: { near: false, far: false, tiny: false },
       fading: false,
       srcStep: -1,
+      shared,
       srcAny: false,
       srcX: b.x,
       srcZ: b.z,
@@ -1071,6 +1101,8 @@ export class Units {
     l.thinInstanceSetBuffer('aVAT', buf.s, 3, false)
     l.thinInstanceSetBuffer('aNext', buf.n, 3, false)
     l.thinInstanceSetBuffer('aMan', buf.i, 1, !on)
+    // (back to the battalion's own lists: read from its shared buffers again)
+    if (!on) bindShared(l, h.shared)
     h.lod[0].setEnabled(on && this.shown)
     if (on) {
       h.sel.fill(0)
@@ -1130,6 +1162,23 @@ export class Units {
     return changed
   }
 
+  /** Whether battalion `h`'s LOD mesh `k` reads the battalion's shared buffers (all but the nearest LOD's, and the
+   * next's while split: those read lists of their own). */
+  private sharesLists(h: Host, k: number): boolean {
+    return !(k === 0 && this.hasNearest) && !(h.split && k === this.nextLod)
+  }
+  /** One of a battalion's shared buffers sent to the GPU from `data`, and every mesh reading it marked fresh in
+   * `stale` (per LOD), counted for the bench's trace as one upload. */
+  private uploadShared(h: Host, buf: Buffer, data: Float32Array, stale: boolean[]): void {
+    const t = TRACE.on ? performance.now() : 0
+    buf.updateDirectly(data, 0)
+    for (let k = 0; k < stale.length; k++) if (this.sharesLists(h, k)) stale[k] = false
+    if (TRACE.on) {
+      TRACE.c[TR.tiUploads]++
+      TRACE.c[TR.tiKB] += (data.length * 4) / 1024
+      TRACE.c[TR.tiMs] += performance.now() - t
+    }
+  }
   // a thin-instance buffer sent to the GPU (n floats), counted for the bench's trace
   private upload(m: Mesh, kind: string, n: number): void {
     if (!TRACE.on) {
@@ -1354,6 +1403,14 @@ export class Units {
           !(mapOn && (k === kc || (split && k === 0 && kc === this.nextLod))) &&
           !(decalOn && k === this.decalLod)
         ) {
+          continue
+        }
+        if (this.sharesLists(h, k)) {
+          // its lists are the battalion's shared buffers: one upload for every mesh that reads them
+          if (h.stale[k]) this.uploadShared(h, h.shared.m, h.matrices, h.stale)
+          if (h.staleSet[k]) this.uploadShared(h, h.shared.s, h.settings, h.staleSet)
+          if (h.staleNext[k] && (k === this.decalLod || this.smooth))
+            {this.uploadShared(h, h.shared.n, h.next, h.staleNext)}
           continue
         }
         if (h.stale[k]) {
