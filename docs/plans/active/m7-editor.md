@@ -364,6 +364,15 @@ edit. No new decision.
   save is out; what an attribute inherits is `resolve`'s (its season and state too), not a copy of its order;
   `renameFeature` compares with `sameJson`. Tests for each; the page check renames a new map and back, types an id in
   use, and keeps the field the focus moved to.
+- **Round 2**: severe. A rename moved a parent's children onto ids in use (two features of one id, neither editable
+  after); it renamed references to an author's feature only named like a child (`farm-2` beside a parent with pinned
+  children); JSON refused after a click on "apply JSON" was replaced by the feature's. Fixed: only real children
+  follow (a generator's, which the validator keeps author ids off, or pinned ones by their recorded parent); a rename
+  whose ids would clash is refused (`newClashes`); refused JSON stays as typed. With them: a field typed in and not
+  applied is left as typed by a refresh from elsewhere; a new catalogue refreshes the form; each history step keeps
+  the selection it had (an undone rename or deletion selects its feature), no guess by place; a pinned child's record
+  of its generator's selectors follows a rename; the feature's JSON on one line, and given once a change; problems
+  under their input; one check of a new map's id.
 
 ## Open questions
 

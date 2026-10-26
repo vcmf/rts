@@ -245,13 +245,28 @@ try {
         const next = document.querySelector('#form [data-key="height"]')
         field('width', String((other.width ?? 100) + 7))
         const kept = next.isConnected && document.querySelector('#form [data-key="height"]') === next
+        // JSON that is refused stays as typed, to be mended
+        const json = document.querySelector('#form textarea')
+        json.value = '{"id": '
+        json.dispatchEvent(new Event('input'))
+        document.querySelector('#form textarea + button').click()
+        const jsonKept = json.value === '{"id": '
+        // a field typed in and not applied is left as typed when the form is refreshed from elsewhere (an edit undone)
+        const note = document.querySelector('#form [data-key="note"]')
+        note.value = 'half typed'
+        note.dispatchEvent(new Event('input'))
+        field('height', '44')
+        MAP.undo()
+        const typedKept = document.querySelector('#form [data-key="note"]').value === 'half typed'
+        note.dispatchEvent(new Event('change')) // applied after all, then undone below
+        MAP.undo()
         const ok = await MAP.save()
         const disk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
         const issues = MAP.issues.length
         MAP.undo(); MAP.undo()
         const back = await MAP.save()
         const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
-        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id, refused, kept })
+        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id, refused, kept, jsonKept, typedKept })
       })()`,
     ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
@@ -459,6 +474,8 @@ try {
   check(fl.back && fl.after === original, 'both undone and saved, the file is byte for byte the original')
   check(fl.refused, "an id in use typed in the form is refused, and the field shows the feature's id again")
   check(fl.kept, 'the field the focus moved to is still the same after the edit the move applied')
+  check(fl.jsonKept, 'JSON the editor refuses stays in its box as typed')
+  check(fl.typedKept, 'a field typed in and not applied is left as typed when the form is refreshed')
   await until('NEWMAP')
   const nm = seen.NEWMAP
   const ids = nm.features.map(f => f.id).join(',')

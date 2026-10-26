@@ -57,7 +57,7 @@ import {
   stepOf,
   type Draft,
 } from './draw.ts'
-import { renameFeature, setField } from './fields.ts'
+import { newClashes, renameFeature, setField } from './fields.ts'
 
 /** What the editor needs from the page. */
 export interface Host {
@@ -97,6 +97,11 @@ interface Drawing {
   old: Feature | null
 }
 type Mode = { kind: 'idle' } | Press | Drawing
+/** A step of the history: the copy, and the selection it had (an undone rename selects its feature by its old id). */
+interface Snapshot {
+  doc: MapFile
+  selected: string | null
+}
 
 const DRAG_PX = 4 // a press that moves less is a click
 const SNAP_PX = 14 // a barrier's point snaps to a valid place within this many pixels
@@ -139,7 +144,7 @@ export class Editor {
   message = ''
   private host: Host
   private mode: Mode = { kind: 'idle' }
-  private history = new History<MapFile>()
+  private history = new History<Snapshot>()
   private hover: Handle | null = null
   private cat: Catalogue | null = null
   /** The copy as the file holds it (parsed from `base`): unsaved edits are a difference from it. */
@@ -166,6 +171,7 @@ export class Editor {
     // what the copy's selection is drawn as follows the new catalogue (the page's list comes with the compile)
     this.found = cat && this.doc ? validate(this.doc, cat) : []
     this.host.redraw()
+    this.host.changed() // the form's rows, hints and problems follow the catalogue
   }
 
   /**
@@ -334,9 +340,10 @@ export class Editor {
     this.message = mine ? `now wrong: [${mine.id}] ${mine.path ? `${mine.path}: ` : ''}${mine.message}` : ''
   }
   /** Makes an edit: the copy before it goes into the history, the copy is checked, compiled and drawn. */
-  private commit(doc: MapFile, edited: string | null): void {
-    this.history.push(this.doc!)
+  private commit(doc: MapFile, edited: string | null, select = this.selected): void {
+    this.history.push({ doc: this.doc!, selected: this.selected })
     this.doc = doc
+    this.selected = select
     this.check(edited)
     this.hoverAt() // the handle now under the pointer: the old one's indices may be the old shape's
     this.host.recompile()
@@ -532,26 +539,23 @@ export class Editor {
       this.host.changed()
       return
     }
-    this.selected = null
-    this.commit({ ...this.doc, features: this.doc.features.filter(x => x !== f) }, null)
+    this.commit({ ...this.doc, features: this.doc.features.filter(x => x !== f) }, null, null)
   }
   undo(): void {
     if (!this.doc || !this.ready()) return
-    const d = this.history.undo(this.doc)
+    const d = this.history.undo({ doc: this.doc, selected: this.selected })
     if (d) this.restore(d)
   }
   redo(): void {
     if (!this.doc || !this.ready()) return
-    const d = this.history.redo(this.doc)
+    const d = this.history.redo({ doc: this.doc, selected: this.selected })
     if (d) this.restore(d)
   }
-  private restore(d: MapFile): void {
-    // a selection whose id the other copy does not have (a rename undone or redone) follows its feature by its place,
-    // when the copies hold as many features (else it went: an addition undone)
-    const at = this.selected ? this.doc!.features.findIndex(f => f.id === this.selected) : -1
-    const same = d.features.length === this.doc!.features.length
-    this.doc = d
-    if (this.selected && !this.feature(this.selected)) this.selected = same && at >= 0 ? d.features[at].id : null
+  /** Back or forward to a step: its copy, and the selection it had (an undone rename's feature by its old id). */
+  private restore(step: Snapshot): void {
+    this.doc = step.doc
+    this.selected = step.selected && this.feature(step.selected) ? step.selected : null
+    this.hover = null
     this.check(this.selected)
     this.hoverAt()
     this.host.recompile()
@@ -601,8 +605,9 @@ export class Editor {
     if (id === '') return this.note('a feature needs an id: it stays ' + f.id)
     if (this.feature(id)) return this.note(`the id ${id} is taken`)
     const doc = renameFeature(this.doc, f.id, id)
-    this.selected = id
-    this.commit(doc, id)
+    const clash = newClashes(this.doc, doc)
+    if (clash.length) return this.note(`its children would take ids in use (${clash.join(', ')}): it stays ${f.id}`)
+    this.commit(doc, id, id)
   }
   /**
    * The selection replaced by a feature written as JSON (an object with a text id; anything in it the validator
@@ -631,8 +636,10 @@ export class Editor {
     if (next.id !== f.id && this.feature(next.id)) return this.note(`the id ${next.id} is taken`)
     const at = this.doc.features.indexOf(f)
     const renamed = next.id === f.id ? this.doc : renameFeature(this.doc, f.id, next.id)
-    this.selected = next.id
-    this.commit({ ...renamed, features: renamed.features.map((x, k) => (k === at ? next : x)) }, next.id)
+    const doc = { ...renamed, features: renamed.features.map((x, k) => (k === at ? next : x)) }
+    const clash = newClashes(this.doc, doc)
+    if (clash.length) return this.note(`ids in use twice (${clash.join(', ')}): nothing changed`)
+    this.commit(doc, next.id, next.id)
   }
   /** A field of the map itself set, or removed; its features are the features' own edits, its id `renameMap`'s. */
   setMapField(key: string, value: unknown): void {
@@ -736,8 +743,7 @@ export class Editor {
       this.host.redraw()
     } else if (m.old) this.commit(this.replace(doc, f, m.old), f.id)
     else {
-      this.selected = f.id
-      this.commit({ ...doc, features: [...doc.features, f] }, f.id)
+      this.commit({ ...doc, features: [...doc.features, f] }, f.id, f.id)
     }
     this.settle()
   }

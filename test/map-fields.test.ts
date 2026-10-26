@@ -9,6 +9,7 @@ import { allowedIn, categoryOf, kindChain, kindMeta } from '../src/map/catalogue
 import { validate } from '../src/map/validate.ts'
 import { formatMap } from '../src/map/format.ts'
 import {
+  newClashes,
   attrInput,
   attrRows,
   parseInput,
@@ -213,6 +214,47 @@ describe('M7c: a rename', () => {
     }
     expect(renameFeature(map, 'hill', 'knoll').features.map(f => f.id)).toEqual(['knoll', 'hill-2'])
   })
+  it("renames a pinned parent's own children only, never an author's feature named like one", () => {
+    const child = (id: string): Feature => ({
+      id,
+      kind: 'built.house',
+      area: SHAPE.area as Feature['area'],
+      origin: { generator: 'scatter', params: { avoid: ['brook'] }, version: 3, parent: 'farm' },
+    })
+    const map: MapFile = {
+      ...base,
+      features: [
+        { id: 'farm', kind: 'built.farm', area: SHAPE.area as Feature['area'] },
+        child('farm-1'),
+        { id: 'farm-2', kind: 'built.house', area: SHAPE.area as Feature['area'] },
+        { id: 'yard', kind: 'ground.yard', circle: [[0, 0], 5], follow: { id: 'farm-2', from: [0, 0], to: [1, 1] } },
+        { id: 'brook', kind: 'water.stream', line: SHAPE.line as Feature['line'] },
+      ],
+    }
+    const after = renameFeature(map, 'farm', 'estate')
+    expect(after.features.map(f => f.id)).toEqual(['estate', 'estate-1', 'farm-2', 'yard', 'brook'])
+    expect((after.features[3].follow as { id: string }).id).toBe('farm-2')
+    // the pinned child's record of its generator's selectors follows a rename of what they name
+    const stream = renameFeature(map, 'brook', 'stream')
+    expect(stream.features[1].origin!.params).toEqual({ avoid: ['stream'] })
+  })
+  it('finds the ids a rename would put twice in the map', () => {
+    const map: MapFile = {
+      ...base,
+      features: [
+        { id: 'wood', kind: 'veg.wood', circle: [[0, 0], 5] },
+        {
+          id: 'wood-1',
+          kind: 'veg.wood',
+          circle: [[0, 0], 5],
+          origin: { generator: 'scatter', params: {}, version: 3, parent: 'wood' },
+        },
+        { id: 'copse-1', kind: 'veg.wood', circle: [[0, 0], 5] },
+      ],
+    }
+    expect(newClashes(map, renameFeature(map, 'wood', 'copse'))).toEqual(['copse-1'])
+    expect(newClashes(map, renameFeature(map, 'wood', 'grove'))).toEqual([])
+  })
   it("hints what an attribute would be in the map's season and the feature's state", () => {
     const map: MapFile = { ...base, season: 'winter' }
     const f: Feature = { id: 'w', kind: 'ground.field.wheat', area: SHAPE.area as Feature['area'], height: 1 }
@@ -290,6 +332,36 @@ describe('M7c: the editor sets fields', () => {
     ed.undo()
     ed.undo()
     expect(ed.dirty).toBe(false)
+  })
+  it('refuses a rename whose children would take an id in use, and reselects a deleted feature on undo', () => {
+    const ed = make()
+    const pinned = {
+      id: 'hill-1',
+      kind: 'relief.hill',
+      point: [0, 0],
+      origin: { generator: 'group', params: {}, version: 3, parent: 'hill' },
+    }
+    ed.load(
+      '/maps/t.map.json',
+      formatMap({
+        ...(JSON.parse(text) as MapFile),
+        features: [
+          ...(JSON.parse(text) as MapFile).features,
+          pinned as Feature,
+          { id: 'mound-1', kind: 'relief.hill', point: [9, 9] },
+        ],
+      }),
+    )
+    ed.select('hill')
+    ed.setField('id', 'mound')
+    expect(ed.message).toMatch(/children would take ids in use \(mound-1\)/)
+    expect(ed.feature('hill')).toBeDefined()
+    ed.setField('id', 'crest')
+    expect(ed.feature('crest-1')!.origin!.parent).toBe('crest')
+    ed.remove()
+    expect(ed.feature('crest')).toBeUndefined()
+    ed.undo()
+    expect(ed.selected).toBe('crest')
   })
   it('refuses an empty id, and follows a renamed selection through undo and redo', () => {
     const ed = make()

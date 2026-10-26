@@ -372,14 +372,15 @@ const editor = new Editor({
   changed: () => editPanel(),
 })
 // the selection's fields, or the map's (M7c); a new map's id moves it to the file of that name
+/** Why an id cannot be a new map's (it names the map's file: the save's rule), or '' when it can. */
+function mapIdProblem(id: string): string {
+  if (!ID.test(id)) return 'its id names its file: lower-case letters and digits, in words joined by "-"'
+  return [...picker.options].some(o => o.value === `/maps/${id}.map.json`) ? `a map ${id} exists` : ''
+}
 const form = new Form(formBox, editor)
 form.onMapId = id => {
   const file = `/maps/${id}.map.json`
-  const why = !ID.test(id)
-    ? 'its id names its file: lower-case letters and digits, in words joined by "-"'
-    : [...picker.options].some(o => o.value === file)
-      ? `a map ${id} exists`
-      : ''
+  const why = mapIdProblem(id)
   if (why) return editor.note(`the id stays: ${why}`)
   // the list first: the editor's recompile reads the map the list shows (its copy, under its new file)
   const was = editor.file!
@@ -876,11 +877,7 @@ $('newMake').addEventListener('click', () => {
     ? 'making maps needs the dev server (npm run dev)'
     : !editor.idle
       ? 'finish the drawing or the drag first'
-      : !ID.test(id)
-        ? 'its id names its file: lower-case letters and digits, in words joined by "-"'
-        : [...picker.options].some(o => o.text === id)
-          ? `a map ${id} exists`
-          : ''
+      : mapIdProblem(id)
   if (why) return editor.note(`no new map: ${why}`)
   if (editor.dirty && !confirm('The map has unsaved edits. Drop them and make a new map?')) return
   dropUnsavedNew()

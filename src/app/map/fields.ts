@@ -106,16 +106,20 @@ export function setField<T extends object>(o: T, key: string, value: unknown): T
  * are kept as they are (the same objects).
  */
 export function renameFeature(map: MapFile, from: string, to: string): MapFile {
-  const parent = map.features.some(
+  // its children: generated ones (an author's feature cannot take `<from>-<n>` while it generates: the validator
+  // reserves the form), and pinned ones by their recorded parent; another feature named like a child is not one
+  const generates = map.features.some(
     f =>
-      f.origin?.parent === from ||
-      (f.id === from &&
-        Object.keys(f.gen ?? {}).some(g => Object.hasOwn(GENERATOR_SPECS, g) && !!GENERATOR_SPECS[g].childKinds)),
+      f.id === from &&
+      Object.keys(f.gen ?? {}).some(g => Object.hasOwn(GENERATOR_SPECS, g) && !!GENERATOR_SPECS[g].childKinds),
+  )
+  const pinned = new Set(
+    map.features.filter(f => f.origin?.parent === from && childOf(f.id)?.parent === from).map(f => f.id),
   )
   const swap = (v: unknown) => {
     if (v === from) return to
-    const c = parent && typeof v === 'string' ? childOf(v) : null
-    return c?.parent === from ? `${to}-${c.n}` : v
+    const c = typeof v === 'string' ? childOf(v) : null
+    return c?.parent === from && (generates || pinned.has(v as string)) ? `${to}-${c.n}` : v
   }
   const ids = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(e => ids(e))
@@ -124,28 +128,45 @@ export function renameFeature(map: MapFile, from: string, to: string): MapFile {
     }
     return v
   }
+  // a generator's selectors, in its parameters or in a pinned child's record of them
+  const selectors = (name: string, params: unknown): unknown => {
+    const selects = Object.hasOwn(GENERATOR_SPECS, name) ? (GENERATOR_SPECS[name].selects ?? []) : []
+    if (typeof params !== 'object' || params === null) return params
+    const p = { ...params } as Record<string, unknown>
+    for (const k of selects) if (Array.isArray(p[k])) p[k] = (p[k] as unknown[]).map(swap)
+    return p
+  }
   const features = map.features.map(f => {
     const g: Feature = { ...f }
-    if (g.id === from || (g.origin?.parent === from && childOf(g.id)?.parent === from)) g.id = swap(g.id) as string
+    if (g.id === from || pinned.has(g.id)) g.id = swap(g.id) as string
     for (const r of ['on', 'carries', 'crosses'] as const) if (g[r] !== undefined) g[r] = swap(g[r]) as string
     if (g.along !== undefined) g.along = ids(g.along) as Feature['along']
     if (g.follow !== undefined) g.follow = ids(g.follow)
     if (g.clear !== undefined) g.clear = ids(g.clear)
     if (g.gen && typeof g.gen === 'object') {
       g.gen = Object.fromEntries(
-        Object.entries(g.gen).map(([name, params]) => {
-          const selects = Object.hasOwn(GENERATOR_SPECS, name) ? (GENERATOR_SPECS[name].selects ?? []) : []
-          if (typeof params !== 'object' || params === null) return [name, params]
-          const p = { ...params } as Record<string, unknown>
-          for (const k of selects) if (Array.isArray(p[k])) p[k] = (p[k] as unknown[]).map(swap)
-          return [name, p]
-        }),
-      )
+        Object.entries(g.gen).map(([name, params]) => [name, selectors(name, params)]),
+      ) as Feature['gen']
     }
-    if (g.origin?.parent === from) g.origin = { ...g.origin, parent: to }
+    if (g.origin && typeof g.origin === 'object') {
+      const params = selectors(g.origin.generator, g.origin.params) as Record<string, unknown>
+      g.origin = { ...g.origin, params, ...(g.origin.parent === from ? { parent: to } : {}) }
+    }
     return sameJson(g, f) ? f : g
   })
   return { ...map, features }
+}
+
+/** The ids a renamed map holds more than once that the map before did not (a rename's children onto taken ids). */
+export function newClashes(before: MapFile, after: MapFile): string[] {
+  const twice = (m: MapFile) => {
+    const seen = new Set<string>()
+    const out = new Set<string>()
+    for (const f of m.features) (seen.has(f.id) ? out : seen).add(f.id)
+    return out
+  }
+  const was = twice(before)
+  return [...twice(after)].filter(id => !was.has(id))
 }
 
 /** The validator's problems at a field's path (`features[3].height`, `seed`), and anything under it. */

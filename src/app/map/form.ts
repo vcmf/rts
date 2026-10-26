@@ -3,7 +3,8 @@
 // when it changes (Enter, or the focus leaving it); the validator's problems are shown under their fields, and those
 // of no field above the feature's JSON. The form is built again only when its fields change (another selection, a new
 // kind); otherwise its inputs are given the values in place, so the field a click or Tab moved to is still there after
-// the edit the move applied, and a refused change shows the value the feature still has.
+// the edit the move applied, and a refused change shows the value the feature still has. Text typed and not yet
+// applied (a field, the JSON) is left as it is by a refresh from elsewhere (a file read in, a save's reply).
 import type { Catalogue, Feature, MapFile } from '../../map/schema.ts'
 import { SEASONS } from '../../map/schema.ts'
 import { kindChain, kindStates, type Issue } from '../../map/catalogue.ts'
@@ -55,6 +56,12 @@ export class Form {
   private shown = new Map<string, Shown>()
   private rest = el('div')
   private json: HTMLTextAreaElement | null = null
+  /** The fields typed in since they were last given their values (the JSON's key is '#json'). */
+  private typed = new Set<string>()
+  /** Whose fields the form shows (another selection's are given their values, typed or not). */
+  private whose: string | null = null
+  /** How many times the form was given its values: a change that gave none (refused, or no change) gives them. */
+  private fills = 0
   /** Called for a change of the map's id (the page moves the new map to its file). */
   onMapId: (id: string) => void = () => {}
 
@@ -75,6 +82,9 @@ export class Form {
     if (!force && key.length === this.last.length && key.every((k, i) => k === this.last[i])) return
     this.last = key
     const view = !ed.doc ? null : f ? this.feature(f, ed.doc, cat) : this.map(ed.doc)
+    const whose = f ? `feature ${f.id}` : 'map'
+    if (whose !== this.whose) this.typed.clear()
+    this.whose = whose
     if (!view) {
       this.sig = ''
       this.box.replaceChildren()
@@ -141,7 +151,7 @@ export class Form {
       rows,
       set: (key, value) => this.editor.setField(key, value),
       rest,
-      json: JSON.stringify(f, null, 1),
+      json: JSON.stringify(f),
     }
   }
 
@@ -192,15 +202,18 @@ export class Form {
       if (r.options) input = el('select')
       else input = el('input', { spellcheck: false })
       input.dataset.key = r.key
+      input.addEventListener('input', () => this.typed.add(r.key))
       input.addEventListener('change', () => {
         const parsed = parseInput(r.as, input.value)
+        const fills = this.fills
+        this.typed.delete(r.key)
         if ('error' in parsed) this.editor.note(`${r.key}: ${parsed.error}; nothing changed`)
         else view.set(r.key, 'remove' in parsed ? undefined : parsed.value)
-        // the values again, whatever came of it: a refused change shows what the field still holds
-        this.update(this.cat, true)
+        // a change the editor refused (or that changed nothing) shows what the field still holds
+        if (this.fills === fills) this.update(this.cat, true)
       })
       const hint = el('span', { className: 'hint' })
-      const bad = el('span')
+      const bad = el('span', { className: 'bads' })
       const row = el('label', { className: 'row' })
       row.append(el('span', { className: 'k', textContent: r.label }), input, hint, bad)
       table.append(row)
@@ -212,9 +225,15 @@ export class Form {
     if (view.json !== null) {
       const json = el('textarea', { spellcheck: false, rows: 6 })
       json.dataset.key = '#json'
+      json.addEventListener('input', () => this.typed.add('#json'))
+      // applied, the JSON is the feature's again; refused, it stays as typed, to be mended
       const apply = () => {
+        const doc = this.editor.doc
         this.editor.setFeature(json.value)
-        this.update(this.cat, true)
+        if (this.editor.doc !== doc) {
+          this.typed.delete('#json')
+          this.update(this.cat, true)
+        }
       }
       const button = el('button', { textContent: 'apply JSON', title: 'Cmd or Ctrl Enter' })
       button.addEventListener('click', apply)
@@ -230,6 +249,7 @@ export class Form {
 
   /** Gives the form's inputs, hints and problems the view's values, in place. */
   private fill(view: View): void {
+    this.fills++
     const off = !this.editor.enabled || !this.editor.idle
     for (const r of view.rows) {
       const s = this.shown.get(r.key)!
@@ -241,7 +261,7 @@ export class Form {
           s.input.replaceChildren(...opts.map(o => new Option(o === '' ? '—' : o, o)))
         }
       }
-      s.input.value = value
+      if (!this.typed.has(r.key)) s.input.value = value
       s.input.disabled = off || !!r.disabled
       s.hint.textContent = r.hint ?? ''
       s.bad.replaceChildren(
@@ -249,8 +269,7 @@ export class Form {
       )
     }
     this.rest.replaceChildren(...this.problems(view.rest))
-    // the JSON being typed in is left alone (a refused one stays, to be mended)
-    if (this.json && view.json !== null && document.activeElement !== this.json) this.json.value = view.json
+    if (this.json && view.json !== null && !this.typed.has('#json')) this.json.value = view.json
   }
 
   private problems(found: Issue[]): HTMLElement[] {
