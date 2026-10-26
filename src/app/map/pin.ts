@@ -14,14 +14,29 @@ import { sameJson } from '../../map/write.ts'
 const say = (i: { id: string | null; path: string; message: string }) =>
   `${i.id ? `[${i.id}] ` : ''}${i.path ? `${i.path}: ` : ''}${i.message}`
 
+/** A pin's result: the map pinned, and the children it appended (none for a generator that writes none). */
+export interface Pinned {
+  map: MapFile
+  children: Feature[]
+}
+
 /**
  * The map with the feature `id` pinned: replaced by its expanded form, or removed when its generator takes it off the
  * map, and its children appended after the last feature in their order (`<id>-1`, `<id>-2`, …), so a stable save
  * rewrites its line and appends. Or why it cannot be: it has no generator, the map does not validate or expand (the
  * first problem), or pinned it would not expand to the same map (a feature naming a generator that made nothing, which
- * pinned leaves nothing to name).
+ * pinned leaves nothing to name). The engine throwing (a catalogue the validator does not check) is a refusal too, as
+ * the compile worker reports it.
  */
-export function pinned(map: MapFile, cat: Catalogue, id: string): MapFile | string {
+export function pinned(map: MapFile, cat: Catalogue, id: string): Pinned | string {
+  try {
+    return pin(map, cat, id)
+  } catch (err) {
+    return `the compiler failed: ${(err as Error).message} (a bug, or a catalogue the validator does not check)`
+  }
+}
+/** `pinned`, its engine's exceptions not caught. */
+function pin(map: MapFile, cat: Catalogue, id: string): Pinned | string {
   const f = map.features.find(x => x.id === id)
   if (!f) return `no feature ${id}`
   if (f.gen === undefined) return `${id} has no generator: it is pinned already, or was never generated`
@@ -45,5 +60,5 @@ export function pinned(map: MapFile, cat: Catalogue, id: string): MapFile | stri
   const why = after[0] ?? again?.issues[0]
   if (why) return `pinned, the map would not expand as it does: ${say(why)}`
   if (!sameJson(again!.map, ex.map)) return 'pinned, the map would not expand as it does'
-  return out
+  return { map: out, children }
 }

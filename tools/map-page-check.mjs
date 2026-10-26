@@ -23,7 +23,7 @@
 //   8. generators (M7d), on the map first opened: a generator removed and chosen again for a clump's feature and a
 //      parameter set through the form, the expansion redrawn, the saved diff that line alone; a village asked for more
 //      houses than fit shows the expansion's problem under its generator; Pin refused while a field holds text it
-//      could not apply; the village pinned and saved (its line
+//      could not apply, and with text typed applies it alone; the village pinned and saved (its line
 //      rewritten, its houses appended, nothing else), the page compiling the same houses; all undone and saved back to
 //      the original bytes.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
@@ -384,20 +384,28 @@ try {
         // text a field refused: no pin (the rows it takes away would lose the text), and why
         field('seasons', '{"winter": ')
         const textBefore = MAP.text
-        document.querySelector('#form button').click()
+        document.getElementById('pin').click()
         const notPinned = MAP.text === textBefore && /could not apply.*not pinned/.test(document.getElementById('editState').textContent) && q('seasons').value === '{"winter": '
         q('seasons').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
         // pinned: one edit, saved; the page compiles the same houses
-        const houses = JSON.stringify(Array.from({ length: 50 }, (_, k) => MAP.expanded(village.id + '-' + (k + 1))).filter(Boolean).map(h => h.area))
-        await compiled(() => document.querySelector('#form button').click())
+        // text typed in a parameter and not applied, then Pin: the text is applied (its own edit), nothing pinned yet
+        q('gen:min').value = '1'
+        q('gen:min').dispatchEvent(new Event('input'))
+        await compiled(() => document.getElementById('pin').click())
+        const typedFirst = features().find(f => f.id === village.id).gen?.['street-village']?.min === 1 && /Pin again/.test(document.getElementById('editState').textContent)
+        await compiled(() => MAP.undo())
+        // every house the village makes, in order
+        const housesOf = () => { const out = []; for (let k = 1, h; (h = MAP.expanded(village.id + '-' + k)); k++) out.push(h.area); return JSON.stringify(out) }
+        const houses = housesOf()
+        await compiled(() => document.getElementById('pin').click())
         const pinnedOk = features().find(f => f.id === village.id).gen === undefined && MAP.selected === village.id
-        const sameHouses = MAP.issues.length === 0 && JSON.stringify(Array.from({ length: 50 }, (_, k) => MAP.expanded(village.id + '-' + (k + 1))).filter(Boolean).map(h => h.area)) === houses
+        const sameHouses = MAP.issues.length === 0 && houses !== '[]' && housesOf() === houses
         const pinOk = await MAP.save()
         const pinDisk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
         MAP.undo()
         const back = await MAP.save()
         const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
-        return 'PIN ' + JSON.stringify({ village: village.id, pinnedOk, notPinned, sameHouses, pinOk, pinDisk, back, after })
+        return 'PIN ' + JSON.stringify({ village: village.id, pinnedOk, notPinned, typedFirst, sameHouses, pinOk, pinDisk, back, after })
       })()`,
     ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
@@ -646,6 +654,7 @@ try {
   )
   check(pn.sameHouses, 'the page compiles the pinned houses where it generated them')
   check(pn.notPinned, 'Pin with text a field refused does not pin, keeps the text, and says why')
+  check(pn.typedFirst, 'Pin with text typed and not applied applies it as its own edit and pins nothing yet')
   check(pn.back && pn.after === original, 'all undone and saved, the file is byte for byte the original')
   await until('NEWMAP')
   const nm = seen.NEWMAP

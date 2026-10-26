@@ -123,7 +123,7 @@ picker.value =
 // the view: world point at the canvas centre, and pixels per metre; kept across reloads of the same map
 let view = { cx: 0, cz: 0, ppm: 0 }
 let current: Compiled | null = null
-const NO_ISSUES: Issue[] = []
+const NO_ISSUES: Issue[] = Object.freeze([]) as unknown as Issue[]
 let issues: Issue[] = NO_ISSUES
 let layers: Partial<Record<LayerName, Uint16Array>> = {}
 let height = new Float64Array(0)

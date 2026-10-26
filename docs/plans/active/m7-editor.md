@@ -516,6 +516,26 @@ rules: the choice lists every generator, and what does not fit is the validator'
   the language to it. Not taken: validating once fewer per pin (measured 10–13 ms); a structured path for a child's
   problem (expand's text, matched by `problemsAt`; a change of either is caught by its test); one shared issue
   formatter.
+- **Round 3**: moderate and light only, so the review stops here. Fixed: the engine throwing during a pin (a
+  catalogue the validator does not check) is a refusal saying so, as the compile worker reports it, not an exception
+  out of the click; Pin with text typed and not applied applies it as its own edit and waits (pinning what was not
+  drawn would make one press two edits); `pinned` returns the children it appended, which the editor selects from;
+  the generator choice lists the engine's specs; the empty list is frozen; the page check finds Pin by its id and
+  compares every house. Not taken: a structured path for a child's problem, dropping the editor's own problem list
+  (its tests read the validator's alone), one issue formatter, fewer allocations in placing problems by row.
+
+## Results (M7d)
+
+- Every generated feature of `maps/` (all five generators) pinned, alone and all together, validates and expands to
+  the same expanded map as the original: a pinned child equals its expansion; the stable save rewrites the feature's
+  line and appends its children (`test/map-pin.test.ts`).
+- Every parameter of every generator set through the form's reading of text: good text gives no problem, bad text
+  one at its path (`test/map-fields.test.ts`).
+- The page check: a clump's generator removed, chosen again and a parameter set (its outline redrawn, its line alone
+  changed); a village's expansion problem under its generator; Pin refused with refused text, and waiting for typed
+  text; the village pinned and saved (12 houses appended, the same houses compiled); all undone to the original
+  bytes.
+- A pin measures 10–13 ms on the example maps (Node).
 
 ## Open questions
 

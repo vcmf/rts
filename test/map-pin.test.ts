@@ -21,7 +21,9 @@ const generated = files.filter(n => (JSON.parse(read(n)) as MapFile).features.so
 function pin(map: MapFile, id: string): MapFile {
   const out = pinned(map, cat, id)
   if (typeof out === 'string') throw new Error(out)
-  return out
+  // the children it says it appended are the ones last in the map
+  expect(out.map.features.slice(out.map.features.length - out.children.length)).toEqual(out.children)
+  return out.map
 }
 
 describe('pinning', () => {
@@ -184,6 +186,24 @@ describe('pinning', () => {
     expect(validate(map, cat).map(i => i.path)).toEqual(['features[1].follow'])
     for (const [name, spec] of Object.entries(GENERATOR_SPECS)) {
       if (spec.input.includes('area') && !spec.removesSelf) expect(name).toBe('street-village')
+    }
+  })
+
+  it('refuses with why when the engine throws, as the compile worker reports it', () => {
+    const map = JSON.parse(read('two-ridges.map.json')) as MapFile
+    const spec = GENERATOR_SPECS['street-village']
+    const reads = spec.reads
+    // a throw outside a generator's run (which expansion reports as an issue): what a catalogue the validator does not
+    // check can cause
+    spec.reads = () => {
+      throw new Error('boom')
+    }
+    try {
+      expect(pinned(map, cat, 'hamlet')).toBe(
+        'the compiler failed: boom (a bug, or a catalogue the validator does not check)',
+      )
+    } finally {
+      spec.reads = reads
     }
   })
 

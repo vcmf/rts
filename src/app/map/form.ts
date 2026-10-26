@@ -12,7 +12,7 @@
 // - The form is built again only when its fields change (another kind); otherwise its inputs are given their values
 //   in place, so the field the focus moved to stays.
 import type { Catalogue, Feature, MapFile } from '../../map/schema.ts'
-import { GENERATORS, SEASONS } from '../../map/schema.ts'
+import { SEASONS } from '../../map/schema.ts'
 import { GENERATOR_SPECS } from '../../map/generators.ts'
 import { kindChain, kindStates, type Issue } from '../../map/catalogue.ts'
 import { featureKind, presetsOf } from '../../map/validate.ts'
@@ -130,7 +130,7 @@ function genRows(f: Feature): Row[] {
     label: 'generator',
     value: g?.name,
     as: 'text',
-    options: ['', ...GENERATORS],
+    options: ['', ...Object.keys(GENERATOR_SPECS)],
     hint: g ? 'Pin copies what it makes into the file' : '',
     // the same generator keeps its parameters; another starts with none
     to: v => ['gen', v === g?.name ? f.gen : withGenerator(v as string | undefined)],
@@ -413,14 +413,19 @@ export class Form {
     if (view.pin) {
       this.pinButton = el('button', {
         type: 'button',
+        id: 'pin',
         textContent: 'Pin',
         title: 'copy what its generator makes into the file: the feature stops being generated, its children stay',
       })
       this.pinButton.addEventListener('click', () => {
+        const before = this.editor.doc
         this.flush()
         // as a save: what a field shows and could not apply would be lost with the rows the pin takes away
         if (this.refused) {
           this.editor.note('a field holds text it could not apply: mend it, or Escape drops it; not pinned')
+        } else if (this.editor.doc !== before) {
+          // text typed and applied now: the pin waits for its expansion to be drawn, and is an edit of its own
+          this.editor.note('the text typed is applied; Pin again once its expansion is drawn')
         } else this.editor.pin()
       })
       parts.push(this.pinButton)

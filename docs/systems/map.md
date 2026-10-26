@@ -326,7 +326,9 @@ maps/kinds.json ──► checkCatalogue ─┐
       stable save rewrites its line and appends theirs. A copy that does not validate or expand is refused with its
       first problem, and so is a pin whose result would not validate or expand to the same map (checked, not
       assumed: a scatter that placed nothing and is named by another's `avoid` leaves nothing to name), and a pin
-      while a field holds text it could not apply. Selected after: the feature, or its first child. A file read in,
+      while a field holds text it could not apply; text typed and not applied is applied by the press as its own
+      edit, and Pin waits for its expansion to be drawn. The engine throwing (a catalogue the validator does not
+      check) is a refusal saying so. Selected after: the feature, or its first child. A file read in,
       or a new catalogue, lists its own problems at once (the form never shows another text's).
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
