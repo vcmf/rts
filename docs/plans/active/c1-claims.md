@@ -144,13 +144,14 @@ settled here before the proposal is written (§ Contact there):
   front line, and their frontages overlapping). A push is the losses a strike owes the foe this step, as expected,
   times the striker's morale (0 below 0). One short by more than `PRESS` of the two loses.
 - **The step:** the loser moves `STEP` (2 m) along the winner's heading if it stands ahead of the winner, else to its
-  own rear, as one rigid move (`stepWhole`, `src/sim/formation.ts`): granted whole or not at all, refused only if a
-  company would have more of its men on ground it may not stand on (impassable, off the map, another's claim but
-  its foe's) than before. So a move away from what it already stood in is granted, and it is never pushed deeper
-  (#198 for every other motion). Its foe follows by the same displacement, by the same test, unless another enemy
+  own rear, as one rigid move (`stepWhole`, `src/sim/formation.ts`): granted whole or not at all, refused if any of
+  its men would stand on a cell it may not stand on (impassable, off the map, another's claim but its foe's) that
+  none of them stood on before. So a move away from what it already stood in is granted, and one deeper into it is
+  not (#198 for every other motion). Its foe follows by the same displacement, by the same test, unless another enemy
   is fighting it; if it cannot, the loser's step alone ends their melee (it fell back).
-- **Pinned:** a loser whose step is refused, or with a second enemy fighting it from a flank or the rear (not ahead
-  of it), takes `PINNED`, a morale shock, once for the round.
+- **Pinned:** a loser whose step is refused, or with a second enemy fighting it now from a flank or the rear (not
+  ahead of it), takes `PINNED`, a morale shock, once for the round. A winner that cannot follow because another enemy
+  is fighting it takes that enemy on as its foe at once.
 - **Order:** every pair due is judged from the step's pushes before any moves; the moves are made in the claims'
   keyed order, each claiming its new cells before the next, so the reversed visiting order gives the same state.
 - **Seen:** the overlay's Statuses layer shows the last round ("stepped back", "followed", "pinned", "fell back")

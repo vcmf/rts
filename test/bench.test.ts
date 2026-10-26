@@ -252,6 +252,13 @@ describe("with claims: a melee's rounds", () => {
     expect(b.pinned).toBeGreaterThan(b.melee)
     expect(b.rout - b.melee).toBeLessThan(a.rout - a.melee)
   })
+  it('X-18: a steady regiment steps back round by round until a charge in its flank breaks it', () => {
+    const a = untilRout('x18-pinned-from-the-flank-claims')
+    expect(a.melee).toBeGreaterThan(0)
+    expect(a.stepped).toBeGreaterThanOrEqual(1)
+    expect(a.followed).toBe(a.stepped)
+    expect(a.rout).toBeGreaterThan(a.melee)
+  })
   it('X-19: two lines offset 20 m are judged and step back as two lines met square on', () => {
     // (after a minute its squadrons in contact are spent and the melee ends; it faces about, wavering)
     const a = untilRout('x19-offset-lines-claims')
