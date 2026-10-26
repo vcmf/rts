@@ -69,7 +69,7 @@ const LINE = 'line'
 const COL = 'column'
 const CAV = 'cavalry'
 
-// the clash's cases (C1, step 4): a veteran regiment charges a raw one at the halt, from 160 m, the veteran `dx`
+// the melee's cases (C1, step 4): a veteran regiment charges a raw one at the halt, from 160 m, the veteran `dx`
 // metres to the east; `extra` stand beside them
 function charged(id: string, title: string, extra: Spawn[] = [], dx = 0): BenchCase {
   return bench(
@@ -291,16 +291,16 @@ export const BENCH_CASES: BenchCase[] = [
     [0, 0, 1.4],
     [200, 300],
   ),
-  charged('x15-pushed-back', 'X-15: a veteran regiment charges a raw one at the halt; open ground behind the raw one'),
-  charged('x16-pushed-onto-friend', 'X-16: as X-15, with a friendly regiment standing just behind the raw one', [
+  charged('x15-melee-holds', 'X-15: a veteran regiment charges a raw one at the halt; the melee holds until one breaks'),
+  charged('x16-friend-behind', 'X-16: as X-15, with a friendly regiment standing just behind the raw one', [
     { side: 1, x: 0, z: 49, heading: S, shape: LINE, unit: CAV },
   ]),
-  charged('x17-pushed-onto-enemy', 'X-17: as X-15, with an enemy regiment standing just behind the raw one', [
+  charged('x17-enemy-behind', 'X-17: as X-15, with an enemy regiment just behind the raw one: broken, it has no way out and surrenders', [
     { side: 0, x: 0, z: 49, heading: N, shape: LINE, unit: CAV },
   ]),
   bench(
-    'x18-pinned-from-the-flank',
-    'X-18: a veteran regiment charges a steady one at the halt; a second regiment charges the steady one in its east flank',
+    'x18-flank-charge',
+    'X-18: a veteran regiment charges a steady one at the halt; a second regiment charges it in its east flank',
     [
       { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.9 },
       { side: 0, x: 0, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },

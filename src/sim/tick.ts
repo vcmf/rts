@@ -3,7 +3,7 @@
 // 8 (fire), 11 (casualties) and 12 (morale; the rout and the wavering fall-back are its standing behaviours);
 // S1d-2 fills 4 (the square against cavalry) and 10 (charges and melee); S1d-3 fills 9 (artillery). The others are
 // named and empty until later parts of S1.
-import { type World, M_TICK, MAX_FORMATIONS, MS_SHATTERED, typeOf, formationHandle } from './world.ts'
+import { type World, M_TICK, MAX_FORMATIONS, MS_SHATTERED, RP_TRAPPED, typeOf, formationHandle } from './world.ts'
 import { placeWorld, type Pose } from './formation.ts'
 import { DT } from './time.ts'
 import { sin, cos } from './num.ts'
@@ -74,8 +74,6 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     meter.add(name, meter.now() - t0)
   }
   let dropped: Dropped[] = []
-  // with claims, the tick's keyed order of the formations (the formation step's, the clash's)
-  let order: number[] = []
   const departed: TickResult['departed'] = []
   step('1 commands', () => {
     dropped = applyCommands(w, t)
@@ -100,8 +98,7 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     // the claim grid's prototype: in a keyed order, each formation's new cells claimed after it steps (its old ones
     // stay claimed until the next tick's rebuild, so two cannot swap places through each other)
     buildClaims(w)
-    order = claimOrder(w)
-    for (const i of order) {
+    for (const i of claimOrder(w)) {
       formationTick(w, i)
       if (w.f.alive[i]) claimFormation(w, i)
     }
@@ -114,9 +111,7 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     artilleryStep(w)
   })
   step('10 charges and melee', () => {
-    // with claims, a melee's rounds at its end: a loser steps back, its foe follows, in the tick's keyed order
-    // (docs/plans/active/c1-claims.md, step 4)
-    meleeStep(w, order)
+    meleeStep(w)
   })
   // all casualties first, then all morale: a rout reads other battalions (the nearest enemy's position and
   // men, final for the tick; its morale state from a copy taken before any changes), so visiting order does
@@ -141,13 +136,14 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     endStep(w)
   })
   // 14: formations with no men are reaped, and shattered formations at the map's edge leave the field: reaped,
-  // their men counted to their side (S1e-1). A router there stays: it may still rally
+  // their men counted to their side (S1e-1). A router there stays: it may still rally. A router enemies hold on its
+  // last way out surrenders: it leaves the field the same way (its men counted as left until saves count the captured)
   step('14 reap', () => {
     for (let i = 0; i < MAX_FORMATIONS; i++) {
       if (!w.f.alive[i]) continue
       const men = menOf(w, i)
       if (men === 0) reapFormation(w, i)
-      else if (w.f.mstate[i] === MS_SHATTERED && atEdge(w, i)) {
+      else if ((w.f.mstate[i] === MS_SHATTERED && atEdge(w, i)) || w.f.routPhase[i] === RP_TRAPPED) {
         w.sides.left[w.f.side[i]] += men
         departed.push({ id: formationHandle(w, i), men })
         reapFormation(w, i)

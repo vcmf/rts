@@ -20,13 +20,12 @@ import {
   fleeing,
   typeOf,
   formationSlot,
-  formationHandle,
 } from './world.ts'
 import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
 import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
 import { cellK, impAt, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
-import { claimedAt, claimBy, claimsNear, claimHit, FREE } from './claims.ts'
+import { claimedAt, claimsNear, claimHit } from './claims.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
@@ -47,7 +46,7 @@ export const ST_HALTED = 1
 const ST_CANNOT_FORM = 2
 const ST_ARRIVED_NEAR = 3
 // the claim grid's prototype (docs/plans/active/c1-claims.md): held by another formation's cells, not the ground
-const ST_BLOCKED = 9
+export const ST_BLOCKED = 9
 const ST_ARRIVED_CROWD = 10
 const ST_CANNOT_WHEEL = 4
 const ST_FACE_WET = 5
@@ -1131,73 +1130,6 @@ function stepBack(w: World, i: number, d: number): void {
   xs.push(f.x[i])
   zs.push(f.z[i])
   setTrail(w, i, xs, zs)
-}
-
-/* ---------------- a melee's rounds (the claim grid's prototype) ---------------- */
-/** Whether formation i is in a melee pair that a round judges: each the other's foe, both in the fight and formed. */
-export function inClashPair(w: World, i: number): boolean {
-  const f = w.f
-  if (!f.foe[i] || outOfFight(f.mstate[i]) || f.trans[i] || snakes(w, i)) return false
-  const j = formationSlot(w, f.foe[i])
-  return j >= 0 && f.foe[j] === formationHandle(w, i) && !outOfFight(f.mstate[j]) && !f.trans[j] && !snakes(w, j)
-}
-
-/**
- * The cells of formation i's places that it may not stand on: impassable ground (beyond the map's edge included, as
- * `impAt` has it) or a claim that blocks it but that of `pass`, the one formation it may stand on (−1: none). With
- * `mark`, stamps each such cell `ep` in `seen`; without, returns −1 at the first such cell not stamped `ep`. Either
- * way returns how many of its places stand off the map (they have no cell).
- */
-function heldCells(w: World, i: number, pass: number, seen: Int32Array, ep: number, mark: boolean): number {
-  const T = w.terrain
-  const U = typeOf(w, i)
-  const imp = T.imp[kindOf(w, i)]
-  const Fl = filledSlots(w, i)
-  const a = i * (w.cr.maxC + 1)
-  const ctx = ctxNow(w, i)
-  let off = 0
-  for (let k = Fl.at[a], e = Fl.at[a + U.C]; k < e; k++) {
-    placeAtSlot(ctx, Fl.s[k], pt)
-    const x = pt[0]
-    const z = pt[1]
-    if (!impAt(T, imp, x, z) && claimBy(w, i, x, z, pass) === FREE) continue
-    const gx = Math.round((x - T.x0) / T.cell)
-    const gz = Math.round((z - T.z0) / T.cell)
-    if (gx < 0 || gz < 0 || gx >= T.n || gz >= T.n) off++
-    else if (mark) seen[gz * T.n + gx] = ep
-    else if (seen[gz * T.n + gx] !== ep) return -1
-  }
-  return off
-}
-
-/**
- * For a formed body in a straight shape, not changing shape (the caller's to check: a trail shape's places follow its
- * trail, which this does not move, and a change's sweep is claimed apart), with claims on.
- * Moves formation i rigidly by (dx, dz) metres, its heading, shape and lags as they stand, if none of its men then
- * stands on a cell it may not stand on (`heldCells`; `pass`: the one formation it may stand on, −1 none) that none of
- * them stood on before, and no more of them stand off the map: the ground it is held on must not grow, so a move away
- * from what it already stood in is granted and one deeper into it is not. Granted whole, or not at all; sets no
- * velocity. Returns whether it moved.
- */
-export function stepWhole(w: World, i: number, dx: number, dz: number, pass: number): boolean {
-  const f = w.f
-  const C = w.scratch.claims
-  if (!C) return false
-  // the claims' own per-cell stamps (nothing claims between the two passes)
-  const ep = ++C.epoch
-  const x0 = f.x[i]
-  const z0 = f.z[i]
-  const off = heldCells(w, i, pass, C.seen, ep, true)
-  f.x[i] = x0 + dx
-  f.z[i] = z0 + dz
-  const after = heldCells(w, i, pass, C.seen, ep, false)
-  if (after < 0 || after > off) {
-    f.x[i] = x0
-    f.z[i] = z0
-    return false
-  }
-  f.onRoad[i] = 0
-  return true
 }
 
 /* ---------------- orders (a list in the order pool) ---------------- */

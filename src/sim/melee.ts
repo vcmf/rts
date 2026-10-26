@@ -45,10 +45,7 @@ import {
   changeProgress,
   startChange,
   targetShape,
-  inClashPair,
-  stepWhole,
 } from './formation.ts'
-import { claimFormation } from './claims.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
@@ -78,12 +75,6 @@ export interface Melee {
   foe0: Int32Array
   mi: Uint8Array
   mj: Uint8Array
-  // a melee's rounds (with claims): each battalion's push on its foe this step; each battalion's last round
-  // (ROUND_*) and its tick, for the bench's overlay
-  push: Float64Array
-  round: Uint8Array
-  roundAt: Int32Array
-  roundGen: Int32Array // the generation of the formation in the slot at its last round
 }
 const ks = new Uint32Array(4)
 const scratchOf = (w: World): Melee =>
@@ -94,10 +85,6 @@ const scratchOf = (w: World): Melee =>
     foe0: new Int32Array(MAX_FORMATIONS),
     mi: new Uint8Array(MAX_COMPANIES),
     mj: new Uint8Array(MAX_COMPANIES),
-    push: new Float64Array(MAX_FORMATIONS),
-    round: new Uint8Array(MAX_FORMATIONS),
-    roundAt: new Int32Array(MAX_FORMATIONS).fill(-1),
-    roundGen: new Int32Array(MAX_FORMATIONS),
   })
 
 /* ---------------- geometry ---------------- */
@@ -116,19 +103,13 @@ function sep(G: FireGeo, i: number, k: number, j: number, m: number): number {
     const q = n < 2 ? k : m
     const nx = n % 2 ? -G.sa[q] : G.ca[q]
     const nz = n % 2 ? G.ca[q] : G.sa[q]
-    const ri = halfOn(G, k, ai, bi, nx, nz)
-    const rj = halfOn(G, m, aj, bj, nx, nz)
+    const ri = ai * Math.abs(G.ca[k] * nx + G.sa[k] * nz) + bi * Math.abs(-G.sa[k] * nx + G.ca[k] * nz)
+    const rj = aj * Math.abs(G.ca[m] * nx + G.sa[m] * nz) + bj * Math.abs(-G.sa[m] * nx + G.ca[m] * nz)
     const d = Math.abs(dx * nx + dz * nz) - ri - rj
     if (d > s) s = d
   }
   return s
 }
-/**
- * The half extent on the unit axis (nx, nz) of block k (G.ca, G.sa: its across axis), `a` its half frontage and `b`
- * its half depth, in metres.
- */
-const halfOn = (G: FireGeo, k: number, a: number, b: number, nx: number, nz: number): number =>
-  a * Math.abs(G.ca[k] * nx + G.sa[k] * nz) + b * Math.abs(-G.sa[k] * nx + G.ca[k] * nz)
 // the gap between battalions i and j: the least separation of any company of one from any of the other (with men)
 function gapOf(w: World, G: FireGeo, i: number, j: number): number {
   const f = w.f
@@ -231,13 +212,7 @@ export const gapBetween = (w: World, i: number, j: number): number => gapOf(w, b
 export const sideStruck = (w: World, i: number, j: number): number => quarter(w, blockGeometry(w), i, j)
 
 /* ---------------- step 10: charges and melee ---------------- */
-/**
- * Step 10, charges and melee: each charge's test, impact or recoil; each melee's strikes; the battalions struck while
- * not in melee engaged; the shocks owed. With claims (`w.claims`), then a melee's rounds (`rounds`), the formations
- * moved in `order`, the tick's keyed order of the formations (`claimOrder`, the formation step's); without, `order` is
- * not read.
- */
-export function meleeStep(w: World, order: readonly number[]): void {
+export function meleeStep(w: World): void {
   const f = w.f
   const N = MAX_FORMATIONS
   let any = false
@@ -256,7 +231,6 @@ export function meleeStep(w: World, order: readonly number[]): void {
     if (f.alive[i] && f.chPhase[i]) chargeStep(w, G, S, i, tick)
   }
   S.foe0.set(f.foe)
-  S.push.fill(0)
   for (let n = 0; n < N; n++) {
     const i = rev ? N - 1 - n : n
     if (f.alive[i] && S.foe0[i]) meleePair(w, G, S, i, tick)
@@ -269,7 +243,6 @@ export function meleeStep(w: World, order: readonly number[]): void {
   }
   // the shocks, added to each receiver in its attackers' slot order
   for (let i = 0; i < N; i++) if (S.shockTo[i] >= 0) f.shockIn[S.shockTo[i]] += S.shockBy[i]
-  if (w.claims) rounds(w, G, S, order, tick)
 }
 
 // battalion i leaves its melee with j: the pairing ends both ways (j, left without a foe, takes on another of its
@@ -466,183 +439,12 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
   const strike = (e: number) => {
     const men = inContact(w, G, i, e, lim, S.mi)
     inContact(w, G, e, i, lim, S.mj)
-    const lambda = M.rate * DT * men * strengthOf(w, i)
-    // a round's push: the losses it owes its foe, as expected, times its nerve
-    if (e === j && w.claims) S.push[i] = lambda * Math.max(0, f.morale[i])
-    owe(w, e, S.mj, lambda, keyedStream(ks, seed, tick, h, e, K_MELEE))
+    owe(w, e, S.mj, M.rate * DT * men * strengthOf(w, i), keyedStream(ks, seed, tick, h, e, K_MELEE))
   }
   strike(j)
   for (let e = 0; e < MAX_FORMATIONS; e++) {
     if (e !== j && f.alive[e] && S.foe0[e] === h && !outOfFight(f.mstate[e])) strike(e)
   }
-}
-
-/* ---------------- step 10, with claims: a melee's rounds ---------------- */
-// The claim grid's prototype (docs/plans/active/c1-claims.md, step 4; the collision proposal's § Contact, on its own
-// branch): a pair in melee (each the other's foe, both formed, one ahead of the other) is judged every ROUND seconds,
-// staggered by the pair's lower handle, from its pushes this tick, a push being the losses a strike owes its foe
-// times the striker's morale. One losing by more than PRESS of the two steps back STEP metres as one rigid move,
-// granted whole or not at all, and its foe follows by the same displacement. If the foe cannot follow (another enemy
-// fighting it, or its move is refused), the loser's step alone ends their melee. A loser that cannot step back
-// (refused, or a second enemy on its flank or rear) is pinned: a shock to its morale.
-/** Seconds between a pair's rounds. */
-export const ROUND = 3
-const STEP = 2 // m
-const PRESS = 0.05 // the share of the two pushes a loser falls short by
-const PINNED = 0.15 // morale shock of a loser that cannot step back
-/** A battalion's last round (Melee.round): it stepped back, followed, was pinned, or fell back out of the melee. */
-export const ROUND_STEPPED = 1
-export const ROUND_FOLLOWED = 2
-export const ROUND_PINNED = 3
-export const ROUND_FELL_BACK = 4
-
-// a pair's judgement this tick: the losers, each one's winner and the step's direction (a unit vector)
-const judged: number[] = []
-const jWin = new Int32Array(MAX_FORMATIONS)
-const jX = new Float64Array(MAX_FORMATIONS)
-const jZ = new Float64Array(MAX_FORMATIONS)
-const jPin = new Uint8Array(MAX_FORMATIONS)
-
-/**
- * The rounds due at tick `tick`, at the end of the melee step (G: its block geometry; `order`: the tick's keyed order
- * of the formations, `claimOrder`): every pair due is judged from this step's pushes and geometry, then each round is
- * played in that order.
- */
-function rounds(w: World, G: FireGeo, S: Melee, order: readonly number[], tick: number): void {
-  judged.length = 0
-  for (const i of order) if (judge(w, G, S, i, tick)) judged.push(i)
-  if (!judged.length) return
-  for (const i of judged) play(w, S, i, tick)
-  // formations moved: the step's geometry no longer holds this tick's positions
-  w.scratch.fireGeoTick = -1
-}
-
-/**
- * Whether battalion i loses a round at tick `tick`: in a pair since the step began, due this tick (a pair's rounds
- * fall every ROUND seconds, at a phase drawn from its lower handle), its push short of its foe's by more than PRESS
- * of the two, one of them ahead of the other. If so, records its winner, the step's direction and whether a second
- * enemy on its flank or rear pins it.
- */
-function judge(w: World, G: FireGeo, S: Melee, i: number, tick: number): boolean {
-  const f = w.f
-  if (!f.alive[i] || !f.foe[i] || S.foe0[i] !== f.foe[i]) return false
-  const j = slotOf(w, f.foe[i])
-  if (j < 0 || S.foe0[j] !== handleOf(w, i)) return false
-  const per = Math.round(ROUND * TICK_HZ)
-  if ((tick + phaseOf(Math.min(handleOf(w, i), handleOf(w, j)), per)) % per !== 0) return false
-  const on = S.push[j]
-  const by = S.push[i]
-  if (!(on + by > 0) || (on - by) / (on + by) <= PRESS || !inClashPair(w, i)) return false
-  // along the winner's heading if the loser stands ahead of it, else to the loser's rear if the winner stands ahead
-  // of the loser; neither (flank to flank): no round
-  if (aheadOf(w, G, j, i)) {
-    jX[i] = sin(f.heading[j])
-    jZ[i] = cos(f.heading[j])
-  } else if (aheadOf(w, G, i, j)) {
-    jX[i] = -sin(f.heading[i])
-    jZ[i] = -cos(f.heading[i])
-  } else return false
-  jWin[i] = j
-  jPin[i] = flankedBy(w, G, i, j) ? 1 : 0
-  return true
-}
-/**
- * A pair's phase in its round of `per` ticks, from its lower handle `h`: an integer hash, so pairs in nearby slots
- * fall on different ticks.
- */
-const phaseOf = (h: number, per: number): number => (Math.imul(h, 0x9e3779b1) >>> 0) % per
-
-/**
- * Plays the round battalion i lost at tick `tick` (`judge`): pinned, a morale shock; else it steps back, and its
- * winner follows if no other enemy is fighting it. A step the winner cannot follow leaves the two further apart, still
- * in melee until the gap passes contact and hold (`meleePair`).
- */
-function play(w: World, S: Melee, i: number, tick: number): void {
-  const f = w.f
-  const j = jWin[i]
-  mark(w, S, j, 0, tick)
-  if (jPin[i] || !stepWhole(w, i, jX[i] * STEP, jZ[i] * STEP, j)) {
-    f.shockIn[i] += PINNED
-    mark(w, S, i, ROUND_PINNED, tick)
-    return
-  }
-  claimFormation(w, i)
-  if (!attackedBy(w, j, i) && stepWhole(w, j, jX[i] * STEP, jZ[i] * STEP, i)) {
-    claimFormation(w, j)
-    mark(w, S, i, ROUND_STEPPED, tick)
-    mark(w, S, j, ROUND_FOLLOWED, tick)
-  } else mark(w, S, i, ROUND_FELL_BACK, tick)
-}
-/** Records battalion i's last round `r` (ROUND_*, 0 none) at tick `tick`, for the overlay. */
-function mark(w: World, S: Melee, i: number, r: number, tick: number): void {
-  S.round[i] = r
-  S.roundAt[i] = tick
-  S.roundGen[i] = w.f.gen[i]
-}
-
-/**
- * Whether battalion b stands ahead of battalion a: its companies' centre (by men) beyond a's front line (a's anchor,
- * across its heading), and its companies' span across a's heading overlapping a's (G: the step's block geometry, each
- * block projected as it lies).
- */
-function aheadOf(w: World, G: FireGeo, a: number, b: number): boolean {
-  const f = w.f
-  const fx = sin(f.heading[a])
-  const fz = cos(f.heading[a])
-  spanAcross(w, G, a, a, fx, fz, span)
-  const alo = span[0]
-  const ahi = span[1]
-  spanAcross(w, G, a, b, fx, fz, span)
-  return span[3] > 0 && span[2] > 0 && span[0] < ahi && alo < span[1]
-}
-const span = [0, 0, 0, 0]
-/**
- * Battalion b's companies seen from battalion a, whose heading is (fx, fz), into `out` (overwritten): [0] and [1] the
- * least and most of their blocks' extents across a's heading from a's anchor, in metres; [2] their centres' distances
- * ahead of a's front line, summed weighted by men; [3] their men.
- */
-function spanAcross(w: World, G: FireGeo, a: number, b: number, fx: number, fz: number, out: number[]): void {
-  const f = w.f
-  const CS = w.cr.maxC
-  const hd = (G.bz1[b] - G.bz0[b]) / 2
-  out[0] = Infinity
-  out[1] = -Infinity
-  out[2] = 0
-  out[3] = 0
-  for (let c = 0; c < typeOf(w, b).C; c++) {
-    const k = b * CS + c
-    if (f.men[k] <= 0) continue
-    const dx = G.cx[k] - f.x[a]
-    const dz = G.cz[k] - f.z[a]
-    const mid = dx * fz - dz * fx
-    const r = halfOn(G, k, G.bx[b], hd, fz, -fx)
-    out[0] = Math.min(out[0], mid - r)
-    out[1] = Math.max(out[1], mid + r)
-    out[2] += (dx * fx + dz * fz) * f.men[k]
-    out[3] += f.men[k]
-  }
-}
-
-/** Whether an enemy in the fight other than j is fighting battalion i now (its foe i). */
-function attackedBy(w: World, i: number, j: number): boolean {
-  const f = w.f
-  const h = handleOf(w, i)
-  for (let e = 0; e < MAX_FORMATIONS; e++) {
-    if (e !== j && f.alive[e] && f.foe[e] === h && !outOfFight(f.mstate[e])) return true
-  }
-  return false
-}
-/**
- * Whether an enemy in the fight other than j is fighting battalion i now from its flank or rear: not ahead of it
- * (`aheadOf`, on G, the step's block geometry).
- */
-function flankedBy(w: World, G: FireGeo, i: number, j: number): boolean {
-  const f = w.f
-  const h = handleOf(w, i)
-  for (let e = 0; e < MAX_FORMATIONS; e++) {
-    if (e !== j && f.alive[e] && f.foe[e] === h && !outOfFight(f.mstate[e]) && !aheadOf(w, G, i, e)) return true
-  }
-  return false
 }
 
 /* ---------------- step 4: the square against cavalry ---------------- */

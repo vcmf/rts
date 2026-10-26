@@ -82,7 +82,7 @@ The first runs, and seven review rounds of the earlier design, leave these. The 
 | 1 | W5, cost: 4.6 ms a tick at 40 battalions (1.55 ms without claims, budget 2 ms) | stamp each core cell's margin once; claim each bin as a rectangle instead of every man; a 16 m mask of who is near, so the gate's quick rejects come back; cells held by three or more formations block only those that do not own them | X-14 |
 | 2 | W1, jams: three battalions on one point all stop; a block by a formation takes the terrain stall, which drops orders | "blocked by a formation" its own status that keeps the orders; a formation blocked by a settled friend at its goal counts as arrived, the radius growing while it stays blocked; the order of a tick by how long each has been blocked, then a keyed draw held for 2 s, kept until it makes progress | X-05, X-06, X-07, X-14 |
 | 3 | W2, acts that cannot be cut short: a change of shape checked only at its start (X-09); a rally inside a friend (X-11) | a change's swept ground reserved when it starts, refused (or the next shape that fits) if that ground is taken; a break mid-change snaps inside that ground; a router forms only where its formed footprint fits, else runs on or takes the nearest free place by a ring search | X-09, X-11, X-12 |
-| 4 | W3, the clash: melee pairs only stand | a melee's rounds: the loser steps back as a whole, the winner follows; one that cannot (anything in the way, a second enemy on its flank) loses nerve | X-01, X-15 to X-20 |
+| 4 | W3, the clash: melee pairs pass into each other | a melee holds: the pair stands at each other's core, nobody gives ground, it ends when one breaks; a router held by enemies on every way out surrenders | X-01, X-15 to X-20 |
 
 W4 (today's code paths: the stall path, orders that read the head, reactions that clear the queue) and W9 (the
 queue) are the orders work (C4); W6 (the cell's size) is measured on the bench as the steps land; W8 (two
@@ -131,57 +131,37 @@ the same state in all of them, X-01 too (#187 does not arise with the keyed orde
 - every bench case with claims now has no overlap (19 of 19), and the reversed visiting order gives the same state
   in all of them. X-14: 2.85 ms a tick (1.84 ms without claims).
 
-**Step 4, a melee's rounds** (2026-10-26), `rounds` in `src/sim/melee.ts`, at the end of the melee step. Its
-first design, a continuous give way (the companies in contact bent back as lags, then the whole stepped back, its foe
-following), failed five reviews: the bend fought the lag model, who held it needed the gate to report every
-blocker, and flank attackers needed rules of their own. Every game and rule set surveyed gives ground in steps
-(the research note on melee outcomes, beside the collision proposal on its branch), so the second design does, and
-its geometry is settled here before the proposal is written (§ Contact there):
-- **A round** of a pair is due every `ROUND` seconds, at a phase hashed from the pair's lower handle: no clock per
-  melee, and pairs are spread over the round.
-- **Only a pair is judged** (`judge`): each the other's foe since the strikes began (after the charges' impacts), and
-  (`inClashPair`) both in the fight, neither changing shape nor in a trail shape, one ahead of the other (`aheadOf`: its companies' centre beyond the other's
-  front line, and their spans across its heading overlapping, each block projected as it lies). A push is the losses
-  a strike owes the foe this step, as expected, times the striker's morale (0 below 0). One short by more than
-  `PRESS` of the two loses.
-- **The step:** the loser moves `STEP` metres along the winner's heading if it stands ahead of the winner, else to its
-  own rear, as one rigid move (`stepWhole`, `src/sim/formation.ts`): granted whole or not at all, refused if any of
-  its men would stand on a cell it may not stand on (impassable, off the map, another's claim but its foe's) that
-  none of them stood on before. So a move away from what it already stood in is granted, and one deeper into it is
-  not (#198 for every other motion). Its foe follows by the same displacement, by the same test, unless another enemy
-  is fighting it; if it cannot, the loser has fallen back alone, and their melee goes on until the gap passes contact
-  and hold.
-- **Pinned:** a loser whose step is refused, or with a second enemy fighting it now from a flank or the rear (not
-  ahead of it), takes `PINNED`, a morale shock, once for the round.
-- **Order:** every pair due is judged from the step's pushes before any moves; the moves are made in the claims'
-  keyed order, each claiming its new cells before the next, so the reversed visiting order gives the same state.
-- **Seen:** the overlay's Statuses layer shows the last round ("stepped back", "followed", "pinned", "fell back")
-  until the pair's next, from the melee step's scratch.
-- **Known limit:** the first round of a pair can come anywhere from a tick to `ROUND` seconds after contact, by its
-  phase: X-15 to X-18 and X-20 meet theirs 0.3 s after the impact, so X-17's raw regiment is pinned and breaks then.
-  A melee's start kept in the world (C2, when the goldens move) would give every pair a full round first.
-- **Its tuning** (`ROUND`, `STEP`, `PRESS`, `PINNED`) is in `src/sim/melee.ts` while it is a prototype: ruleset data
-  is hashed into saves and replays, and the prototype moves none of them. It goes into the ruleset's `melee` with C2.
+**Step 4, a melee holds** (2026-10-26). Two designs that gave ground were built and dropped: a continuous give way
+(the companies in contact bent back as lags, then the whole stepped back; five reviews), then rounds (every 3 s the
+loser stepped back 2 m as a whole and its foe followed; it worked on the bench). The owner then chose the simpler
+rule (as Total War has it): a battalion in melee cannot step back or retreat; it leaves only by breaking. What step 4
+keeps:
+- **A melee pair stands at each other's core** (`blocks`, `src/sim/claims.ts`): the margin between them gives way,
+  the core does not. They used to pass freely into each other, and when one broke the router stood on its foe's
+  cells and could not move off them (X-18: shattered, held for good).
+- **A charge reaches its target's core only;** any other enemy's margin stops it (X-16: the veteran pursued the router
+  into the friend behind it). A pursuit stops at the router's margin: it rides it down from behind, never into it.
+- **A router held by enemies** (`routStep`, `src/sim/morale.ts`): a run held for 2 s by others' cells counts as
+  halted and tries the fan's next direction at its retry, as at impassable ground. Held by enemies on the last, it
+  surrenders: it leaves the field at the tick's end, its men counted as left until saves count the captured (C2).
+- **The tuning** (`HELD`) is in the code while it is a prototype: ruleset data is hashed into saves.
 
 Six cases, a veteran regiment (quality 0.95) charging a raw one (0.75) at the halt unless said:
 
 | Case | With claims | Without |
 |---|---|---|
-| X-15, open ground behind | two rounds lost: it steps back 4 m, the veteran follows; breaks after 3.4 s | it stands |
-| X-16, a friend 9 m behind | one step, then the friend is in the way: pinned; breaks after 3.3 s | the veteran pursues the router through the friend |
-| X-17, an enemy 9 m behind | pinned at the first round; breaks after 0.3 s | the same overlap |
-| X-18, a second regiment charging its flank (the target steadier, 0.9) | two rounds stepped back, then the flank charge's impact breaks it | — |
-| X-19, the veteran 20 m to the east | 21 rounds, each stepped back and followed, over a minute: few squadrons in contact | — |
-| X-20, two raw regiments abreast, each charged | both step back round by round, each followed, in the line | — |
+| X-15, open ground behind | it stands until it breaks (3.4 s), then runs clear | it stands |
+| X-16, a friend 9 m behind | the same; the router passes through its friend, the pursuer stops at the friend's margin | the veteran pursues the router through the friend |
+| X-17, an enemy 9 m behind | the same; the router finds every way out held, and surrenders 28 s after it broke | the same overlap |
+| X-18, a second regiment charging its flank (the target steadier, 0.9) | it breaks under the front charge and runs clear of its pursuer | the pursuer rides over the router |
+| X-19, the veteran 20 m to the east | over a minute in melee with few squadrons in contact; it stands until it breaks | — |
+| X-20, two raw regiments abreast, each charged | both stand, then break | — |
 
 What the bench shows:
-- **The steps read as the melee's trend:** a regiment that keeps losing keeps stepping back, its foe at its heels.
-- **A second enemy on the flank** rarely meets a round: a cavalry charge in the flank breaks the target on impact (X-18).
-  The pin is tested directly (a second enemy set on the flank, the next round pins).
-- **Offset lines:** a 10–20 m offset is judged as square on. At 30 m and more the charge's impact itself reads the
-  offset as a flank (`quarter`, an angle from centre to anchor) and breaks the target at once; the round never comes.
-  That is the charge's impact, not the rounds; C2 moves it onto the same test of the shapes (`aheadOf`).
-- **Brigade lines** (X-20): the follow is granted beside a neighbour standing 2 m off.
+- **A break faces the router about** and its centre moves 3 m at once, with or without claims: the rout's, not
+  step 4's.
+- **Offset lines:** at 30 m and more the charge's impact reads the offset as a flank (`quarter`, an angle from centre
+  to anchor) and breaks the target at once. That is the charge's impact; C2 moves it onto a test of the shapes.
 
-Not done yet: Face about's end pose against others (it turns in place; no case shows a problem), a break mid-change
-snapping into a neighbour, and pushing a friend behind instead of only being pinned by it.
+Not done yet: Face about's end pose against others (it turns in place; no case shows a problem), and a break
+mid-change snapping into a neighbour.

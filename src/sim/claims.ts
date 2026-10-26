@@ -209,54 +209,38 @@ export function buildClaims(w: World): void {
   }
 }
 
-/**
- * Whether formation o's claim (its core, or else its margin) blocks formation i. `pass`: −1 for the rule of every
- * motion, in which a melee pair stands in contact (either the other's foe); else the one enemy i may stand on, for a
- * melee's step and follow (src/sim/melee.ts, `rounds`), which stop at every other.
- */
-function blocks(w: World, i: number, o: number, core: boolean, pass: number): boolean {
+// whether formation o's claim (its core or its halo) blocks formation i
+function blocks(w: World, i: number, o: number, core: boolean): boolean {
   const f = w.f
-  if (f.side[i] === f.side[o]) {
-    // loose bodies (out of the fight) pass through friends, and friends through them
-    return !outOfFight(f.mstate[i]) && !outOfFight(f.mstate[o])
-  }
-  if (pass >= 0) return o !== pass
-  if (f.foe[i] === handleOf(w, o) || f.foe[o] === handleOf(w, i)) return false
-  // a charge reaches its enemy's core
-  if (f.chPhase[i] !== 0) return core
+  const enemy = f.side[i] !== f.side[o]
+  // loose bodies (out of the fight) pass through friends, and friends through them
+  if (!enemy && (outOfFight(f.mstate[i]) || outOfFight(f.mstate[o]))) return false
+  // a melee pair stands in contact, and a charge reaches its target's core: the margin between them gives way, never
+  // the core, so a pair cannot pass into each other and stay tangled when one breaks. A pursuit stops at the router's
+  // margin (it rides it down from behind, never into it), and a charge or pursuit stops at any other's margin
+  if (enemy && (f.foe[i] === handleOf(w, o) || f.foe[o] === handleOf(w, i))) return core
+  if (enemy && f.chPhase[i] !== 0 && f.chTarget[i] === handleOf(w, o)) return core || outOfFight(f.mstate[o])
   return true
 }
 
-/** No claim blocks the place (`claimBy`). */
-export const FREE = -1
-/** A cell claimed by more formations than the grid keeps blocks the place (`claimBy`). */
-export const CROWDED = -2
-
-/**
- * Whose claim blocks formation i at (x, z): the formation's slot, CROWDED for a cell of more owners than the grid
- * keeps, or FREE. `pass` as `blocks` takes it.
- */
-export function claimBy(w: World, i: number, x: number, z: number, pass = -1): number {
+/** Whether the cell at (x, z) is claimed by a formation that blocks formation i there. */
+export function claimedAt(w: World, i: number, x: number, z: number): boolean {
   const C = w.scratch.claims
-  if (!C) return FREE
+  if (!C) return false
   const T = w.terrain
   const gx = Math.round((x - T.x0) / T.cell)
   const gz = Math.round((z - T.z0) / T.cell)
-  if (gx < 0 || gz < 0 || gx >= T.n || gz >= T.n) return FREE
+  if (gx < 0 || gz < 0 || gx >= T.n || gz >= T.n) return false
   const k = gz * T.n + gx
   for (let s = k * SLOTS; s < k * SLOTS + SLOTS; s++) {
     const e = C.own[s]
     if (e === 0) break
-    const o = (e >> 1) - 1
-    if (o !== i && blocks(w, i, o, (e & 1) === 1, pass)) return o
+    if ((e >> 1) - 1 !== i && blocks(w, i, (e >> 1) - 1, (e & 1) === 1)) {
+      C.hit[i] = C.built
+      return true
+    }
   }
-  return C.more[k] === 1 ? CROWDED : FREE
-}
-
-/** Whether the cell at (x, z) is claimed by a formation that blocks formation i there (and so `claimHit`). */
-export function claimedAt(w: World, i: number, x: number, z: number): boolean {
-  if (claimBy(w, i, x, z) === FREE) return false
-  const C = w.scratch.claims!
+  if (C.more[k] !== 1) return false
   C.hit[i] = C.built
   return true
 }
