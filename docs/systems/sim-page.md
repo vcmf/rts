@@ -1,30 +1,33 @@
 ---
 status: current
-last_reviewed: 2026-10-12
-code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, tools/app-check.mjs, tools/battle-report.ts]
+last_reviewed: 2026-10-26
+code: [app/index.html, src/app/main.ts, src/app/battle.ts, src/app/battle-frame.ts, src/app/battle-host.ts, src/app/battle-link.ts, src/app/battle-worker.ts, src/app/page-rules.ts, src/render/men.ts, src/render/men-clock.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, test/battle-thread.test.ts, test/page-rules.test.ts, tools/app-check.mjs, tools/bench-sim.ts, tools/preview.ts, tools/battle-report.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
 ---
 
 # The sim page (S1b)
 
-A Vite page that runs the sim on the main thread and draws it as a staff map, with every soldier as a
+A Vite page that runs the sim in a worker (on its own thread when it cannot) and draws it as a staff map, with every soldier as a
 small circle (a trooper with a stroke the length of his horse, a battery's pieces as barrels ahead of their
 detachments). The mouse selects battalions and orders them; every order is a command, so a session
 exports as a replay that plays back in Node to the same hashes.
 
 ```
- input ──► issue(cmd) ──► sim tick (20 Hz, accumulator × speed) ──► formation state
-                                                                        │ per frame, alpha
-                                     soldier layer (who stands where, steering) ◄──┘
-                                              │
-                        staff map (base image, contours, symbols) + units ──► two canvases
+ page (display rate)                              battle worker (src/app/battle-host.ts)
+ input ──► command ── postMessage ──────────────► issue ──► sim tick (20 Hz × speed) ──► formation state
+                                                                        │ after each tick
+                                                  soldier layer (who stands where, steering, its clock)
+                                                                        │ ≤ 120 a second
+ World + SoldierLayer views ◄── a slot held ◄──── published frame: the world's columns, the men (3 slots, shared)
+   │                       ◄── postMessage ────── the log, orders dropped, hash points
+ staff map (base image, contours, symbols) + units ──► two canvases
 ```
 
 ## Goals / non-goals
 
 - Goals: see the S1a sim with the eyes; drill with the mouse; measure the cost of 40 battalions; keep the
   render side out of the sim (decision 0005).
-- Non-goals: the 3D world, figures, fire and morale (S1c), the worker (S2), the staff map's final art
+- Non-goals: the 3D world, figures, fire and morale (S1c), the staff map's final art
   (`docs/proposals/staff-map/`). The formation prototype stays the reference for the feel.
 
 ## Constraints
@@ -34,12 +37,30 @@ exports as a replay that plays back in Node to the same hashes.
 - Sim plus soldier layer within 4 ms per frame for 40 battalions on the dev Mac. At 400 men a battalion
   (decision 0018) it holds at the halt and firing (0.7 ms). With all 16,000 men marching the layer stepped once a
   frame cost 4.4–6 ms ([#36](https://github.com/vcmf/rts/issues/36)); on its clock it costs 0.5 ms a 120 Hz frame at
-  1× (p99 1.0) and about 2.5 ms at 8× (p99 4–8 between runs), the 8× bar moved to the battle worker (battle threads PR 3).
-  `node tools/bench-cost.ts` measures it by part on the page's release world, at a speed.
+  1× (p99 1.0) and about 2.5 ms at 8× (p99 4–8 between runs). In the battle worker (battle threads PR 3) the page
+  reads the held slot in 0.01 ms a frame (p99 0.02–0.03) at 16,000 and 32,000 men, 1× and 8×.
+  `node tools/bench-cost.ts` measures the battle by part on the page's release world, at a speed (in Node);
+  `node tools/bench-sim.ts` the page itself in Chrome, either thread.
 
 ## Design
 
-**Loop** (`src/app/main.ts`). Each animation frame adds `dt × speed` to an accumulator and runs the
+**Threads** (`src/app/battle-link.ts`, battle threads PR 3). The battle (`src/app/battle.ts`: the sim, the soldier
+layer and its clock, the log) runs in the battle worker when the page is cross-origin isolated (COOP and COEP on
+Vite's servers, `vite.config.ts`), else on the page, which `?thread=main` forces. The worker runs it on its own
+clock (a timer loop) and publishes a frame at most 120 times a second when something changed
+(`src/app/battle-frame.ts`): every column of the world's state, the men (position, velocity, slot, flags), each
+battalion's men, and the clock (the leftover game time, the speed, the publish time). Three slots in shared memory:
+the worker fills the one neither newest nor held, the page holds the newest for its frame; neither waits. The page
+reads a slot in place: a `World` whose columns are views on it and a `SoldierLayer` on that world that is never
+stepped, so the map, the HUD, picking and box select read them as they read the battle itself. Commands and
+requests go by message; the log, the orders dropped and the hash points come back by message. The men outgrowing a
+frame's room get new slots, sent again. A worker that fails to start leaves the battle on the page (said on the
+console); one that fails later stops for good, its requests rejected, and the readout says the battle stopped. The
+battle is held (speed 0) while the page is hidden and while a mark's prompt is open, as when it ran in the page's
+frames (`src/app/page-rules.ts`); the selection is pruned of formations whose slot was reused since they were chosen.
+
+**Loop** (`src/app/battle.ts`, in the worker or on the page). Each frame (the page's, or a turn of the worker's
+loop) adds `dt × speed` to an accumulator and runs the
 ticks owed (at most 20 per frame; the rest is dropped), syncing the soldier layer after each. The layer
 then takes the sub-steps due on its own clock (`src/render/men-clock.ts`, battle threads PR 1,
 `docs/plans/active/battle-threads.md`), not once a frame: `MEN_HZ` rounds a real second, whatever the frame rate,
@@ -49,7 +70,8 @@ most `MEN_DT` (above it halted men near trunks jitter, measured), so at higher s
 costs more than 1×. A long frame catches up at most `MEN_ROUNDS` rounds. The values and why: the head of
 `src/render/men-clock.ts`. The men are drawn as they
 stand after their last sub-step, with no interpolation; `alpha = acc / tick`, set every frame, interpolates the
-anchors, the colours and the order lines. The map is redrawn only when the
+anchors, the colours and the order lines (from the worker, the frame's leftover game time plus the time since it
+was published, at its speed). The map is redrawn only when the
 view changes; the units every frame, on a second canvas.
 
 **Commands.** Every input goes through `issue` with the external log. The page keeps the hash points the
@@ -138,8 +160,12 @@ in `src/scenarios/maps.ts`; `s1e-battle` (6 battalions, a regiment and a battery
 1.2 km battlefield, where you command side 0 against side 1's plan. The readout shows each side's share of its men
 in the fight and, once decided, the result.
 
-**Hooks** (`window.APP`): select, march, charge, form, order, `advance(seconds)` (pauses the clock and steps
-frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`, `session`, `mark(note)`.
+**Hooks** (`window.APP`): `thread`, select, march, charge, form, order, `speed(s)`, `advance(seconds)` (pauses the
+clock and steps frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`, `session`, `mark(note)`,
+`replayHere()` (the session played again on the page's thread against the hash points the worker took: the
+browser's replay harness), `record(seconds)` (the frames' intervals, battle and draw times, long tasks and the
+worker's advances, for `tools/bench-sim.ts`). Those the worker answers (advance, hash, replay, session,
+replayHere, record) return promises; `tools/shot.mjs` evaluates steps in REPL mode, so they can be awaited.
 
 ## Tunables
 
@@ -161,8 +187,10 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
   - troopers at the walk and the trot and through their changes; a battery's gunners falling in after it
     deploys;
   - cost for 40 battalions of 400 (and 800, reported).
-- `npm run check:app` builds and serves the page and drives it headless:
-  - the drill scenario, with screenshots, a multi-selection move, square and Face about;
+- `npm run check:app` builds and serves the page and drives it headless, the battle in the worker (each run fails
+  unless the page reports it there):
+  - the drill scenario, with screenshots, a multi-selection move, square and Face about; its session replayed on the
+    page's thread in Chrome against the worker's hash points (`replayHere`);
   - every panel button logs one command;
   - the 40-battalion bench;
   - the arms: a battery unlimbering, a regiment at the trot and changing shape;
@@ -175,6 +203,11 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
     pass), which must find the mark made on the page and the end.
 
   It fails on any console error or hash mismatch.
+- `test/battle-thread.test.ts`: a published frame read in place is the battle (every column, man and battalion, the
+  hash, the map's places); a frame with no room for the men is refused; the slot protocol over thousands of
+  interleavings; the battle in a Node worker thread (the same host code, `test/fx-battle-worker.ts`): on its own
+  clock with commands arriving whenever, its stamped log replayed on the test's thread reproduces every hash point;
+  outgrown, it sends new slots; it runs while the page only reads.
 - `test/battle-report.test.ts` (the playtest's report, `tools/battle-report.ts`): a session with an order and a
   mark, played back with every formation's place at the mark and the end table; a session that does not reproduce,
   and marks out of order, past the end or without a text note, refused; the first tick played is reported; a

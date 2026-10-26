@@ -1,21 +1,17 @@
-// The S1b page (docs/plans/done/s1b-sim-page.md): the sim on the main thread at 20 Hz, drawn as a
-// staff map with every soldier as a circle; the mouse selects and orders battalions. Every input becomes
-// a command through `issue`, and the external log is kept, so a session can be replayed.
+// The S1b page (docs/plans/done/s1b-sim-page.md): the sim at 20 Hz, drawn as a staff map with every soldier as a
+// circle; the mouse selects and orders battalions. Every input becomes a command, stamped and logged by the battle,
+// so a session can be replayed. The battle runs in the battle worker and the page reads its published frames
+// (docs/plans/active/battle-threads.md, PR 3); without cross-origin isolation, or at ?thread=main, on this thread.
 import fieldUrl from '../../data/formation-field.simdata?url'
 import battleUrl from '../../data/battlefield.simdata?url'
 import {
-  loadSimData,
   compileRuleset,
-  makeWorld,
+  loadSimData,
+  play,
   typeOf,
-  issue,
-  advanceTick,
   formationHandle,
   STATUS,
   menOf,
-  hashWorld,
-  hex,
-  SIM_VERSION,
   M_TICK,
   DT,
   TICK_HZ,
@@ -26,51 +22,65 @@ import {
   M_WINNER,
   END_RESULTS,
   END_DRAW,
-  attachScenario,
   fightShares,
   type Command,
-  type Stamped,
   type World,
-  type HashPoint,
-  type Replay,
   type Dropped,
 } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
-import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS, PAGE_SEED } from '../scenarios/page.ts'
-import { buildScene } from '../render/scene.ts'
-import { SoldierLayer } from '../render/soldiers.ts'
+import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS } from '../scenarios/page.ts'
 import { MAN_ALIVE } from '../render/men.ts'
-import { MenClock } from '../render/men-clock.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
+import { MainLink, WorkerLink, type BattleLink, type Seen } from './battle-link.ts'
+import { pruneSelection, runSpeed } from './page-rules.ts'
 
-// the soldier layer steps on its own clock, 12 rounds a real second staggered over groups of battalions
-// (src/render/men-clock.ts), not once a frame
 const SPEEDS = [0, 1, 2, 4, 8]
 
 async function main(): Promise<void> {
   const asked = new URLSearchParams(location.search).get('scenario') ?? ''
-  const scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
+  const key = Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO
+  const scenario = PAGE_SCENARIOS[key]
   // the scenario's map, at the version it was placed for
   const mapName = scenario.map ?? DEFAULT_MAP
   const urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl }
   if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) {
     throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
   }
-  const data = loadSimData(new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer()), MAP_VERSIONS[mapName])
+  const bytes = new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer())
+  const data = loadSimData(bytes, MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)
-  const w: World = makeWorld(data, cr, PAGE_SEED, false)
-  attachScenario(w, scenario)
-  scenario.setup(w)
+  // the battle worker shares memory with the page only when the page is cross-origin isolated (COOP and COEP); a
+  // worker that fails to start (its script blocked, no module workers) leaves the battle on the page, said so
+  let thread: 'worker' | 'main' =
+    new URLSearchParams(location.search).get('thread') === 'main' || !crossOriginIsolated ? 'main' : 'worker'
+  const start = async (): Promise<BattleLink> => {
+    if (thread === 'worker') {
+      const wl = new WorkerLink(
+        new Worker(new URL('./battle-worker.ts', import.meta.url), { type: 'module' }),
+        bytes,
+        data,
+        cr,
+        key,
+      )
+      try {
+        await wl.ready()
+        return wl
+      } catch (e) {
+        console.warn(`the battle runs on the page: ${e instanceof Error ? e.message : String(e)}`)
+        thread = 'main'
+      }
+    }
+    return new MainLink(data, cr, scenario)
+  }
+  const link = await start()
+  // what this frame reads: the newest frame published (held until the next), or the battle on this thread
+  let seen: Seen = link.see()
+  let w: World = seen.w
   // the side you command (S1e-2): a scenario that names one lets you select only its formations; none, both
   const mine = (i: number): boolean => scenario.player === undefined || w.f.side[i] === scenario.player
-  const log: Stamped[] = []
-  const hashes: HashPoint[] = []
-  const dropped: Dropped[] = []
-  const scene = buildScene(w)
-  const layer = new SoldierLayer(w, scene)
-  const menClock = new MenClock()
-  const map = new StaffMap(w, scene)
+  const dropped: Dropped[] = link.dropped
+  const map = new StaffMap(w, link.scene)
   const t0 = performance.now()
   map.buildBase((a, b) => {
     const c = document.createElement('canvas')
@@ -89,13 +99,20 @@ async function main(): Promise<void> {
   const view: View = { cx: vx, cz: vz, k: vk, W: 0, H: 0 }
   let mapDirty = true
   let speed = 1
-  let acc = 0
   let showSlots = false
   let paused = false
   let simMs = 0
   let drawMs = 0
   let fps = 0
+  // APP.record's frames, while it records
+  let rec: { intervalMs: number[]; battleMs: number[]; drawMs: number[] } | null = null
   const selected = new Set<number>()
+  // the generation each selected formation had when chosen (pruneSelection)
+  const selGen = new Map<number, number>()
+  const choose = (i: number) => {
+    selected.add(i)
+    selGen.set(i, w.f.gen[i])
+  }
   const resize = () => {
     view.W = innerWidth
     view.H = innerHeight
@@ -109,40 +126,34 @@ async function main(): Promise<void> {
   addEventListener('resize', resize)
   resize()
 
-  // commands from the player: stamped, logged, applied at the next tick
-  const external = (c: Command) => issue(w, c, log)
+  // commands from the player: stamped, logged, applied at the next tick (by the battle, wherever it runs)
+  const external = (c: Command) => link.command(c)
   // a panel order also disarms a pending charge (C)
   const forSelection = (make: (h: number) => Command) => {
     charging = false
     for (const i of selected) external(make(formationHandle(w, i)))
   }
-  // hash points without section hashes: those would cost a second serialization each time
-  const tick = () => {
-    const r = advanceTick(w)
-    layer.sync(0, r.departed)
-    dropped.push(...r.dropped)
-    if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] })
-    for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
-  }
-
-  const stepMen = (group: number, d: number) => layer.step(d, acc / DT, group, menClock.groups)
-  // the frame: ticks owed at the game speed, then the men due on their clock, then the drawing
+  // the frame: the battle's frame (on this thread: the ticks owed and the men due), then what to read this frame;
+  // its cost is the page's battle time (sim, men and hash here; reading the held slot with the worker)
   const advance = (dt: number) => {
-    const g = dt * speed
-    acc += g
     const a = performance.now()
-    let n = 0
-    while (acc >= DT && n < 20) {
-      tick()
-      acc -= DT
-      n++
-    }
-    if (n === 20) acc = 0
-    menClock.advance(dt, speed, stepMen)
-    // the map draws the anchors at this frame's alpha, whether or not a sub-step was due
-    layer.alphaNow = acc / DT
-    simMs = simMs * 0.9 + (performance.now() - a) * 0.1
+    link.frame(dt)
+    look()
+    const ms = performance.now() - a
+    simMs = simMs * 0.9 + ms * 0.1
+    rec?.battleMs.push(ms)
   }
+  // the newest frame, and the selection pruned of formations gone
+  const look = () => {
+    seen = link.see()
+    w = seen.w
+    map.w = w
+    pruneSelection(selected, selGen, w.f)
+  }
+  // the speed the battle runs at: the panel's, or 0 while paused (P, or the headless checks' advance)
+  const runAt = () => link.setSpeed(runSpeed(speed, paused, document.hidden))
+  // a hidden page holds the battle, as it did when the battle ran in the page's animation frames (which stop then)
+  document.addEventListener('visibilitychange', runAt)
   const draw = () => {
     if (mapDirty) {
       map.drawMap(mg, view)
@@ -150,16 +161,19 @@ async function main(): Promise<void> {
       mapDirty = false
     }
     const a = performance.now()
-    map.drawUnits(ug, view, layer, selected, showSlots)
-    drawMs = drawMs * 0.9 + (performance.now() - a) * 0.1
+    map.drawUnits(ug, view, seen.layer, selected, showSlots)
+    const ms = performance.now() - a
+    drawMs = drawMs * 0.9 + ms * 0.1
+    rec?.drawMs.push(ms)
   }
   let last: number | null = null
   let frames = 0
   let fpsT = performance.now()
   const frame = (now: number) => {
     const dt = last === null ? 0 : Math.max(0, Math.min(0.1, (now - last) / 1000))
+    if (last !== null) rec?.intervalMs.push(now - last)
     last = now
-    if (!paused) advance(dt)
+    advance(paused ? 0 : dt)
     draw()
     frames++
     if (now - fpsT > 500) {
@@ -197,6 +211,7 @@ async function main(): Promise<void> {
   }
   const setSpeed = (s: number) => {
     speed = s
+    runAt()
     document
       .querySelectorAll<HTMLElement>('[data-speed]')
       .forEach(e => e.classList.toggle('on', +e.dataset.speed! === s))
@@ -221,16 +236,22 @@ async function main(): Promise<void> {
         showSlots = !showSlots
         el.classList.toggle('on', showSlots)
       }
-      if (el.dataset.view === 'replay') saveSession()
+      if (el.dataset.view === 'replay') {
+        saveSession().catch((e: unknown) => {
+          note = `session not saved: ${e instanceof Error ? e.message : String(e)}`
+          noteT = performance.now()
+        })
+      }
     }
   })
   // the session (the replay, its hashes and the moments marked) as a downloaded file, for tools/battle-report.ts
   let note = ''
   let noteT = 0
-  const saveSession = () => {
+  const saveSession = async () => {
+    const s = await session()
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-')
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(session())], { type: 'application/json' }))
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(s)], { type: 'application/json' }))
     a.download = `${scenario.name}-${stamp}.json`
     a.click()
     setTimeout(() => URL.revokeObjectURL(a.href), 10_000) // revoked at once, some browsers cancel the download
@@ -244,7 +265,10 @@ async function main(): Promise<void> {
   const mark = (text?: string) => {
     let said = text ?? null
     if (text === undefined) {
+      // the prompt blocks this thread, not the worker's: the battle is held while it is open, and runs again after
+      link.setSpeed(0)
       said = prompt('What happened here? (optional)')
+      runAt()
       // the prompt swallowed the keyup and pointerup of anything held (space, a drag): let go of them
       releaseHeld()
     }
@@ -266,8 +290,8 @@ async function main(): Promise<void> {
     const r2 = Math.max(1.5, 6 / view.k) ** 2
     let best = -1
     let bd = Infinity
-    const M = layer.men
-    for (const u of layer.units.values()) {
+    const M = seen.layer.men
+    for (const u of seen.layer.units.values()) {
       for (let j = 0; j < u.n; j++) {
         const m = u.ids[j]
         if (M.flags[m] & MAN_ALIVE) {
@@ -364,13 +388,13 @@ async function main(): Promise<void> {
       const [x0, z1] = toW(view, Math.min(d.x, e.clientX), Math.min(d.y, e.clientY))
       const [x1, z0] = toW(view, Math.max(d.x, e.clientX), Math.max(d.y, e.clientY))
       if (!d.shift) selected.clear()
-      const M = layer.men
-      for (const u of layer.units.values()) {
+      const M = seen.layer.men
+      for (const u of seen.layer.units.values()) {
         if (!mine(u.i)) continue
         for (let j = 0; j < u.n; j++) {
           const m = u.ids[j]
           if (M.flags[m] & MAN_ALIVE && M.x[m] > x0 && M.x[m] < x1 && M.z[m] > z0 && M.z[m] < z1) {
-            selected.add(u.i)
+            choose(u.i)
             break
           }
         }
@@ -388,10 +412,10 @@ async function main(): Promise<void> {
     if (hit >= 0) {
       if (d.shift) {
         if (selected.has(hit)) selected.delete(hit)
-        else selected.add(hit)
+        else choose(hit)
       } else {
         selected.clear()
-        selected.add(hit)
+        choose(hit)
       }
       return
     }
@@ -436,6 +460,7 @@ async function main(): Promise<void> {
       if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur()
     } else if (e.key === 'p' || e.key === 'P') {
       paused = !paused
+      runAt()
     } else if (e.key === 'Escape') {
       selected.clear()
       charging = false
@@ -501,86 +526,114 @@ async function main(): Promise<void> {
       `in the fight: ${[0, 1].map(s => `${s === scenario.player ? 'yours' : 'side ' + s} ${Math.round(100 * shares[s])}%`).join(' · ')}`,
     )
     if (d && w.meta[M_TICK] - d.tick < 3 * TICK_HZ) lines.push(`order not carried out: ${d.reason}`) // shown for 3 s
+    if (link.failed) head.unshift(`THE BATTLE STOPPED: ${link.failed}`)
     statsEl.textContent =
       head.join('\n') +
       '\n' +
       (lines.length ? lines.join('\n') : 'nothing selected') +
-      `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\nsim + men ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\nfps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
+      `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\n${costs()}\ndraw ${drawMs.toFixed(2)} ms · fps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
   }
   // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce, as far as it has run:
   // commands issued while paused wait for their tick and are left out
-  const replay = (): { replay: Replay; hashes: HashPoint[] } => ({
-    replay: {
-      simVersion: SIM_VERSION,
-      dataVersion: data.version,
-      ruleset: cr.hash,
-      scenario: scenario.name,
-      seed: PAGE_SEED,
-      ticks: w.meta[M_TICK],
-      log: log.filter(s => s.tick <= w.meta[M_TICK]),
-    },
-    hashes,
-  })
-  const session = () => ({ ...replay(), marks: [...marks] })
+  const replay = () => link.replay()
+  const session = async () => ({ ...(await replay()), marks: [...marks] })
+  // the battle's cost on this page, and the worker's own when it runs there (ms, smoothed)
+  function costs(): string {
+    if (link.mode === 'main') return `sim + men ${simMs.toFixed(2)} ms`
+    const c = link.costs()
+    return `reading ${simMs.toFixed(2)} ms\nworker: ticks ${c.tickMs.toFixed(2)} · men ${c.stepMs.toFixed(2)} · out ${c.pubMs.toFixed(2)} ms`
+  }
 
-  // headless hooks (tools/app-check.mjs): orders and time without real time passing
-  Object.assign(window, {
-    APP: {
-      w,
-      layer,
-      map,
-      selected,
-      log,
-      hashes,
-      dropped,
-      select: (ids: number[]) => {
-        selected.clear()
-        for (const i of ids) if (mine(i)) selected.add(i)
-      },
-      mine,
-      result: () => ({ tick: w.meta[M_END], winner: END_RESULTS[w.meta[M_WINNER]] }),
-      march,
-      charge,
-      order: (name: string) => forSelection(orders[name]),
-      form: (shape: string) => forSelection(id => ({ type: 'form', id, shape })),
-      run: () => {
-        paused = false
-        setSpeed(1)
-      },
-      advance: (sec: number) => {
-        paused = true
-        const sp = speed
-        speed = 1
-        for (let n = Math.round(sec * 30); n > 0; n--) advance(1 / 30)
-        speed = sp
-        draw()
-      },
-      view: (cx: number, cz: number, k: number) => {
-        view.cx = cx
-        view.cz = cz
-        view.k = k
-        mapDirty = true
-        draw()
-      },
-      drawMs: () => {
-        const a = performance.now()
-        for (let n = 0; n < 20; n++) map.drawUnits(ug, view, layer, selected, false)
-        return (performance.now() - a) / 20
-      },
-      mapMs: () => {
-        const a = performance.now()
-        map.drawMap(mg, view)
-        return performance.now() - a
-      },
-      hash: () => hex(hashWorld(w)),
-      replay,
-      session,
-      mark,
-      stats: () => ({ simMs, drawMs, fps }),
-      toS: (x: number, z: number) => toS(view, x, z),
-      buildMs,
+  // headless hooks (tools/app-check.mjs, tools/bench-sim.ts): orders and time without real time passing; those the
+  // worker answers return promises
+  const APP = {
+    get w() {
+      return w
     },
-  })
+    get layer() {
+      return seen.layer
+    },
+    thread,
+    map,
+    selected,
+    log: link.log,
+    hashes: link.hashes,
+    dropped,
+    select: (ids: number[]) => {
+      selected.clear()
+      for (const i of ids) if (mine(i)) choose(i)
+    },
+    mine,
+    result: () => ({ tick: w.meta[M_END], winner: END_RESULTS[w.meta[M_WINNER]] }),
+    march,
+    charge,
+    order: (name: string) => forSelection(orders[name]),
+    form: (shape: string) => forSelection(id => ({ type: 'form', id, shape })),
+    run: () => {
+      paused = false
+      setSpeed(1)
+    },
+    speed: (s: number) => {
+      paused = false
+      setSpeed(s)
+    },
+    // the speed is kept: the battle is held (paused) until the page runs it again
+    advance: async (sec: number) => {
+      paused = true
+      runAt()
+      await link.advance(sec)
+      look()
+      draw()
+    },
+    view: (cx: number, cz: number, k: number) => {
+      view.cx = cx
+      view.cz = cz
+      view.k = k
+      mapDirty = true
+      draw()
+    },
+    drawMs: () => {
+      const a = performance.now()
+      for (let n = 0; n < 20; n++) map.drawUnits(ug, view, seen.layer, selected, false)
+      return (performance.now() - a) / 20
+    },
+    mapMs: () => {
+      const a = performance.now()
+      map.drawMap(mg, view)
+      return performance.now() - a
+    },
+    hash: () => link.hash(),
+    replay,
+    // the browser's replay harness: the session played again on this thread, against the hash points the battle
+    // took (in the worker, normally); null when every one is reproduced, else the first mismatch
+    replayHere: async () => {
+      const { replay: r, hashes } = await replay()
+      return play(r, data, cr, scenario, hashes)
+    },
+    session,
+    mark,
+    stats: () => ({ simMs, drawMs, fps }),
+    // `sec` seconds of the page's frames as they run: each frame's interval, the page's battle time (stepping the
+    // battle here, or reading the held slot) and drawing, the long tasks, and the worker's every advance
+    record: async (sec: number) => {
+      const longs: number[] = []
+      const obs = new PerformanceObserver(l => {
+        for (const e of l.getEntries()) longs.push(e.duration)
+      })
+      obs.observe({ type: 'longtask' })
+      rec = { intervalMs: [], battleMs: [], drawMs: [] }
+      await link.record(true)
+      await new Promise(r => setTimeout(r, sec * 1000))
+      const worker = await link.record(false)
+      const page = rec
+      rec = null
+      obs.disconnect()
+      return { thread, page, longTasks: longs, worker }
+    },
+    toS: (x: number, z: number) => toS(view, x, z),
+    buildMs,
+  }
+  Object.assign(window, { APP })
   requestAnimationFrame(frame)
 }
 main().catch(e => {

@@ -13,12 +13,22 @@ import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { PAGE_SCENARIOS } from '../src/scenarios/page.ts'
 import { DEFAULT_MAP } from '../src/scenarios/maps.ts'
 import { reportSession } from './battle-report.ts'
+import { startPreview } from './preview.ts'
 
 const out = process.argv[2] || 'scratch/app-check'
 const PORT = 4178
-const sleep = ms => new Promise(r => setTimeout(r, ms))
-const READY = ['eval', 'if (!window.APP) throw new Error("the page did not start (no window.APP)"); "ready"']
-const REPLAY = ['eval', '"REPLAY " + JSON.stringify(APP.replay())']
+// the page is served cross-origin isolated, so its battle runs in the battle worker (PR 3 of
+// docs/plans/active/battle-threads.md; ?thread=main runs it on the page)
+const READY = [
+  'eval',
+  'if (!window.APP) throw new Error("the page did not start (no window.APP)"); if (APP.thread !== "worker") throw new Error(`the battle runs on the ${APP.thread} thread, not the worker`); "ready"',
+]
+// the browser's replay harness: the session the worker played, played again on the page's thread in Chrome
+const HERE = [
+  'eval',
+  'const m = await APP.replayHere(); if (m) throw new Error("REPLAY ON THE PAGE " + JSON.stringify(m)); "replayed on the page: every hash point"',
+]
+const REPLAY = ['eval', '"REPLAY " + JSON.stringify(await APP.replay())']
 const drill = [
   ['wait', 1500],
   READY,
@@ -30,12 +40,12 @@ const drill = [
   // a multi-selection order: the three keep their places relative to each other
   [
     'eval',
-    'APP.select([0, 1, 2]); APP.march(-40, 10, false); APP.advance(20); `t ${APP.w.meta[0]} hash ${APP.hash()}`',
+    'APP.select([0, 1, 2]); APP.march(-40, 10, false); await APP.advance(20); `t ${APP.w.meta[0]} hash ${(await APP.hash())}`',
   ],
   ['shot', 'drill-1-advance'],
   [
     'eval',
-    'APP.select([0]); APP.form("square"); APP.select([3]); APP.order("face"); APP.advance(60); APP.select([0]); APP.view(-130, -55, 4); "square and face about"',
+    'APP.select([0]); APP.form("square"); APP.select([3]); APP.order("face"); await APP.advance(60); APP.select([0]); APP.view(-130, -55, 4); "square and face about"',
   ],
   [
     'eval',
@@ -45,10 +55,11 @@ const drill = [
   // every panel order reaches the sim as a command: each button logs one; the sim may refuse some (reported)
   [
     'eval',
-    'APP.select([1]); const n = APP.log.length, bs = [...document.querySelectorAll("#shapes button, #styles button, [data-cmd]")]; for (const b of bs) b.click(); APP.advance(1); `PANEL ${bs.length} ${APP.log.length - n} refused: ${APP.dropped.map(d => d.reason).join("; ")}`',
+    'APP.select([1]); const n = APP.log.length, bs = [...document.querySelectorAll("#shapes button, #styles button, [data-cmd]")]; for (const b of bs) b.click(); await APP.advance(1); `PANEL ${bs.length} ${APP.log.length - n} refused: ${APP.dropped.map(d => d.reason).join("; ")}`',
   ],
   // an order given while paused waits for its tick: the replay exported now must still play back
   ['eval', 'APP.order("halt"); "paused order"'],
+  HERE,
   REPLAY,
 ]
 const bench = [
@@ -56,7 +67,7 @@ const bench = [
   READY,
   [
     'eval',
-    'APP.select([...Array(40).keys()]); APP.march(-35, 40, false); APP.advance(10); APP.view(-66, -10, 1.4); "40 marching"',
+    'APP.select([...Array(40).keys()]); APP.march(-35, 40, false); await APP.advance(10); APP.view(-66, -10, 1.4); "40 marching"',
   ],
   ['eval', 'APP.run(); "running at 1x"'],
   ['wait', 4000], // the page runs on its own clock (headless rAF is throttled: few frames, real per-frame costs)
@@ -76,12 +87,12 @@ const STEP3 = [
   'eval',
   'if (![0, 1].some(' +
     BROKE +
-    ')) APP.advance(180); `t ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states ${[0, 1].map(i => APP.w.f.mstate[i]).join(" ")}`',
+    ')) await APP.advance(180); `t ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states ${[0, 1].map(i => APP.w.f.mstate[i]).join(" ")}`',
 ]
 const fight = [
   ['wait', 1500],
   READY,
-  ['eval', 'APP.view(-120, 120, 3); APP.advance(20); "opening volleys"'],
+  ['eval', 'APP.view(-120, 120, 3); await APP.advance(20); "opening volleys"'],
   ['shot', 'fight-0-volleys'],
   STEP3,
   STEP3,
@@ -92,7 +103,7 @@ const fight = [
     'eval',
     'const r = [0, 1].filter(' +
       BROKE +
-      '); APP.advance(8); APP.view(-100, 120, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.maxC; return APP.w.f.alive[i] ? APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) : "left the field" }).join(" / ")} lost`',
+      '); await APP.advance(8); APP.view(-100, 120, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.maxC; return APP.w.f.alive[i] ? APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) : "left the field" }).join(" / ")} lost`',
   ],
   ['shot', 'fight-1-rout'],
   REPLAY,
@@ -108,12 +119,12 @@ const arms = [
   ['shot', 'arms-0-start'],
   [
     'eval',
-    'APP.select([2]); APP.form("unlimbered"); APP.select([4]); APP.form("column"); APP.select([1]); APP.march(10, 80, false); APP.advance(95); APP.select([]); APP.view(-40, 60, 2.2); `TROT ${' +
+    'APP.select([2]); APP.form("unlimbered"); APP.select([4]); APP.form("column"); APP.select([1]); APP.march(10, 80, false); await APP.advance(95); APP.select([]); APP.view(-40, 60, 2.2); `TROT ${' +
       SHAPES +
       '} at z ${APP.w.f.z[1].toFixed(0)}`',
   ],
   ['shot', 'arms-1-trot'],
-  ['eval', 'APP.select([1]); APP.form("column"); APP.advance(80); APP.select([]); `ARMS ${' + SHAPES + '}`'],
+  ['eval', 'APP.select([1]); APP.form("column"); await APP.advance(80); APP.select([]); `ARMS ${' + SHAPES + '}`'],
   ['shot', 'arms-2-deployed'],
   REPLAY,
 ]
@@ -127,12 +138,12 @@ const charge = [
   ['shot', 'charge-0-start'],
   [
     'eval',
-    'APP.select([0]); APP.charge(1); APP.advance(30); APP.select([]); APP.view(-125, 100, 2.5); `CHARGE line state ${APP.w.f.alive[1] ? APP.w.f.mstate[1] : 5}, ${APP.w.f.alive[1] ? APP.w.f.startMen[1] - APP.w.f.men.slice(APP.w.cr.maxC, 2 * APP.w.cr.maxC).reduce((a, b) => a + b, 0) : "left the field, all"} lost`',
+    'APP.select([0]); APP.charge(1); await APP.advance(30); APP.select([]); APP.view(-125, 100, 2.5); `CHARGE line state ${APP.w.f.alive[1] ? APP.w.f.mstate[1] : 5}, ${APP.w.f.alive[1] ? APP.w.f.startMen[1] - APP.w.f.men.slice(APP.w.cr.maxC, 2 * APP.w.cr.maxC).reduce((a, b) => a + b, 0) : "left the field, all"} lost`',
   ],
   ['shot', 'charge-1-line'],
   [
     'eval',
-    'APP.advance(150); APP.select([0]); APP.charge(2); APP.advance(40); APP.select([]); APP.view(-90, 130, 2.2); `SQUARE state ${APP.w.f.mstate[2]}, regiment phase ${APP.w.f.chPhase[0]} melee ${APP.w.f.foe[0] ? 1 : 0}`',
+    'await APP.advance(150); APP.select([0]); APP.charge(2); await APP.advance(40); APP.select([]); APP.view(-90, 130, 2.2); `SQUARE state ${APP.w.f.mstate[2]}, regiment phase ${APP.w.f.chPhase[0]} melee ${APP.w.f.foe[0] ? 1 : 0}`',
   ],
   ['shot', 'charge-2-square'],
   REPLAY,
@@ -144,7 +155,7 @@ const guns = [
   READY,
   [
     'eval',
-    'APP.view(25, 50, 1.6); APP.select([0]); APP.order("fireAtWill"); APP.select([]); APP.advance(90); `GUNS column lost ${APP.w.f.startMen[1] - APP.w.f.men.slice(APP.w.cr.maxC, 2 * APP.w.cr.maxC).reduce((a, b) => a + b, 0)}, shots ${[...APP.w.f.shotKind.slice(0, 8)].filter(k => k === 1).length}`',
+    'APP.view(25, 50, 1.6); APP.select([0]); APP.order("fireAtWill"); APP.select([]); await APP.advance(90); `GUNS column lost ${APP.w.f.startMen[1] - APP.w.f.men.slice(APP.w.cr.maxC, 2 * APP.w.cr.maxC).reduce((a, b) => a + b, 0)}, shots ${[...APP.w.f.shotKind.slice(0, 8)].filter(k => k === 1).length}`',
   ],
   ['shot', 'guns-0-fire'],
   REPLAY,
@@ -160,18 +171,18 @@ const battle = [
   READY,
   [
     'eval',
-    `APP.view(0, 0, 0.6); APP.advance(5); \`DEPLOYED \${[...APP.w.f.alive].filter(a => a).length} on map \${${ONMAP}}\``,
+    `APP.view(0, 0, 0.6); await APP.advance(5); \`DEPLOYED \${[...APP.w.f.alive].filter(a => a).length} on map \${${ONMAP}}\``,
   ],
   ['shot', 'battle-0-deployed'],
   [
     'eval',
-    'APP.select([3]); APP.form("march"); APP.advance(25); APP.march(-260, -40, false); APP.march(-260, 60, true); APP.select([]); APP.advance(180); "marching"',
+    'APP.select([3]); APP.form("march"); await APP.advance(25); APP.march(-260, -40, false); APP.march(-260, 60, true); APP.select([]); await APP.advance(180); "marching"',
   ],
-  ['eval', 'APP.advance(180); "marching"'],
+  ['eval', 'await APP.advance(180); "marching"'],
   // about 480 s from the ridge at the ordinary pace
   [
     'eval',
-    `APP.advance(180); APP.view(-260, 0, 1.5); \`FORD column at z \${APP.w.f.z[3].toFixed(0)} on map \${${ONMAP}}\``,
+    `await APP.advance(180); APP.view(-260, 0, 1.5); \`FORD column at z \${APP.w.f.z[3].toFixed(0)} on map \${${ONMAP}}\``,
   ],
   ['shot', 'battle-1-ford'],
   // S1e-2: you command side 0 only; side 1 follows its plan (its first line, units 8–11, has come down from its ridge
@@ -181,15 +192,15 @@ const battle = [
     `APP.select([8, 0]); const sel = [...APP.selected].join(","); APP.select([]); \`SIDES selected \${sel}, enemy first line at z \${[8, 9, 10, 11].map(i => APP.w.f.z[i].toFixed(0)).join(" ")}\``,
   ],
   // S1e-3: a moment marked for the playtest; the report of the session prints it (below)
-  ['eval', 'APP.mark("the enemy first line is down"); `MARKS ${APP.session().marks.length}`'],
+  ['eval', 'APP.mark("the enemy first line is down"); `MARKS ${(await APP.session()).marks.length}`'],
   // on to the result (at most the scenario's 40 minutes), in 3-minute steps
   ...Array.from({ length: 12 }, () => [
     'eval',
-    'if (!APP.result().tick) APP.advance(180); `t ${(APP.w.meta[0] / 1200).toFixed(1)} min`',
+    'if (!APP.result().tick) await APP.advance(180); `t ${(APP.w.meta[0] / 1200).toFixed(1)} min`',
   ]),
   ['eval', 'APP.view(0, -60, 0.8); const r = APP.result(); `RESULT ${r.winner} at ${(r.tick / 1200).toFixed(1)} min`'],
   ['shot', 'battle-2-result'],
-  ['eval', '"SESSION " + JSON.stringify(APP.session().marks)'],
+  ['eval', '"SESSION " + JSON.stringify((await APP.session()).marks)'],
   REPLAY,
 ]
 
@@ -198,12 +209,12 @@ const battle = [
 const OUT = '[3, 4, 5].filter(' + BROKE + ').length'
 const STEP3B = [
   'eval',
-  `if (${OUT} < 2) APP.advance(180); \`t \${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states \${[...APP.w.f.mstate.slice(0, 6)].join(" ")}\``,
+  `if (${OUT} < 2) await APP.advance(180); \`t \${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states \${[...APP.w.f.mstate.slice(0, 6)].join(" ")}\``,
 ]
 const brigadeFight = [
   ['wait', 1500],
   READY,
-  ['eval', 'APP.view(-125, -10, 2); APP.advance(20); "opening volleys"'],
+  ['eval', 'APP.view(-125, -10, 2); await APP.advance(20); "opening volleys"'],
   ['shot', 'brigade-0-volleys'],
   STEP3B,
   STEP3B,
@@ -213,17 +224,28 @@ const brigadeFight = [
   STEP3B,
   [
     'eval',
-    `APP.advance(4); APP.view(-100, -10, 2); \`CONTAGION \${${OUT}} out at \${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states \${[...APP.w.f.mstate.slice(0, 6)].join(" ")}\``,
+    `await APP.advance(4); APP.view(-100, -10, 2); \`CONTAGION \${${OUT}} out at \${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states \${[...APP.w.f.mstate.slice(0, 6)].join(" ")}\``,
   ],
   ['shot', 'brigade-1-contagion'],
   REPLAY,
 ]
 
+// a step that awaits the page's battle (APP.advance, hash, replay, session: promises, the battle in the worker) runs in
+// tools/shot.mjs's REPL mode, which allows the top-level await
+const asRepl = steps => steps.map(([op, a, b]) => (op === 'eval' && /\bawait\b/.test(a) ? ['repl', a, b] : [op, a, b]))
+
 async function run(scenario, steps) {
   let text = ''
   const shot = spawn(
     'node',
-    ['tools/shot.mjs', `http://localhost:${PORT}/app/?scenario=${scenario}`, out, '1600', '900', JSON.stringify(steps)],
+    [
+      'tools/shot.mjs',
+      `http://localhost:${PORT}/app/?scenario=${scenario}`,
+      out,
+      '1600',
+      '900',
+      JSON.stringify(asRepl(steps)),
+    ],
     { stdio: ['ignore', 'pipe', 'inherit'] },
   )
   shot.stdout.on('data', d => {
@@ -333,10 +355,9 @@ async function run(scenario, steps) {
 
 const dataOf = name => loadSimData(new Uint8Array(fs.readFileSync(`data/${name}.simdata`)))
 const cr = compileRuleset(napoleonic)
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' })
+const stop = await startPreview(PORT)
 let ok = false
 try {
-  await sleep(2500)
   ok =
     (await run('s1b-field', drill)) &&
     (await run('s1b-bench', bench)) &&
@@ -347,7 +368,7 @@ try {
     (await run('s1d-guns', guns)) &&
     (await run('s1e-battle', battle))
 } finally {
-  preview.kill()
+  stop()
 }
 console.log(ok ? 'app check: ok' : 'app check: FAILED')
 process.exit(ok ? 0 : 1)

@@ -148,6 +148,29 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
   the HUD and `formationHandle`; the worker's game-time clock; COOP/COEP on Vite's dev and preview servers, the
   `crossOriginIsolated` check and the transfer fallback; **a browser replay harness** (headless Chrome running a
   replay in the worker and on the main thread, comparing the hashes; Firefox later, sim-design's S2).
+- **Approach** (2026-10-26, after PR 2; where it departs from the design's §5, why):
+  - **One published frame, not a mirror per tick.** The world's columns (`columnsOf`: meta, rng, formations, sides,
+    free list, order pool) are 2.5 MB at the shipped ruleset (measured; the formations table is 2.36 MB of it, the
+    trails and per-company arrays of 128 formations), against the design's 1.5 MB est. A copy per tick is 160 a
+    second at 8×, 400 MB/s. So the worker publishes one frame at most 120 times a real second, when a tick or a
+    sub-step changed something: the world's columns, the men (x, z, vx, vz, slot, flags: what the readers read), the
+    battalion table (formation index, its men's indices) and the clock (tick, the leftover game time, the speed, the
+    publish time, for the anchors' alpha). Three slots, the design's protocol, one `SharedArrayBuffer` each.
+  - **The main thread's views**: per slot a `World` made by `makeWorld` whose columns are views on the slot, and a
+    `SoldierLayer` on that world never stepped, its `men` and `units` read from the slot; the page swaps to the slot
+    it holds each frame. `map.ts`, the HUD, `formationHandle`, picking and box select read them unchanged.
+  - **Growth**: a frame sized for the men present; when the worker's men outgrow it, it makes new buffers at twice
+    the size and posts them, and the main thread switches when they arrive (PR 2's `reallocs`).
+  - **Events by `postMessage`**, not a ring: dropped orders, the stamped log, hash points, departures. They are a few
+    a second and a message queue loses none.
+  - **The fallback is the main thread**: without cross-origin isolation the same battle runs on the main thread as
+    today (`?thread=main` forces it), not the design's transferred buffers. It costs what PR 2 costs (measured), and it
+    is the browser harness's other side.
+  - **The 12 fps publish gate is PR 4's**: the sim page draws the latest frame, whose men step at their group's rate.
+  - **Measured by** `tools/bench-sim.ts` (new): the bench scenario in headless Chrome on the production build, per
+    frame the `requestAnimationFrame` interval and the main thread's battle time (stepping in-thread, or reading the
+    held slot), long tasks from a `PerformanceObserver`; and the worker's tick, sub-step and publish times. The
+    baselines are the same tool with `?thread=main`.
 - **Acceptance** (16,000 and 32,000 men, 120 Hz, 1× and 8×): the main thread's sim + layer + hash time **mean ≤ 0.3 ms, p99 ≤ 0.5
   ms** per frame (reading the buffers and the uploads only); **no long task** from a tick or the hash; the frame
   interval's **p99 ≤ 8.33 ms** on the sim page; the worker's tick mean ≤ 1.8 ms at 16,000 men (at 32,000 stated:
@@ -156,6 +179,29 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
   min-spec laptop measured if available.
 - **Stop**: if the main-thread frame p99 is no better than after PRs 1–2, revert PR 3 and reject decision 0048; if more
   than 1 % of the worker's sub-steps run late while a tick or the hash runs, go to PR 5.
+- **Outcome** (2026-10-26; `tools/bench-sim.ts`, Chrome on the dev Mac's GPU, no vsync, production build, 10 s
+  each, the machine shared with other work: load 3–9): **met on the page at every size and speed; the worker
+  saturated at 32,000 men, 8×**. Per frame, mean / p99 ms:
+
+  | | page's battle time: on the page | in the worker | frame interval: on the page | with the worker | long tasks |
+  |---|---|---|---|---|---|
+  | 16,000 men, 1× | 0.20 / 1.76 | 0.01 / 0.01 | 2.78 / 4.54 | 2.52 / 2.91 | 0 → 0 |
+  | 16,000 men, 8× | 1.72 / 6.81 | 0.01 / 0.02 | 4.22 / 9.42 | 2.67 / 3.32 | 0 → 0 |
+  | 32,000 men, 1× | 1.03 / 4.28 | 0.01 / 0.03 | 6.70 / 10.32 | 5.68 / 6.25 | 0 → 0 |
+  | 32,000 men, 8× | 22.72 / 68.03 | 0.01 / 0.03 | 28.55 / 77.89 | 5.64 / 6.27 | 99 → 0 |
+
+  - The frames run unthrottled (2–6 ms), so a mean per frame spreads the battle thinner than at 120 Hz; the p99 and
+    the long tasks are the comparison. The page's battle time with the worker is holding a slot and reading its
+    header and battalion table. Drawing the men on the canvas (2 ms at 16,000, 5 ms at 32,000) is now the frame.
+  - **The worker** (mean / p99 ms per advance of its loop): one tick 1.47–1.64 / 5.9–6.4 at 16,000 men (the p99 is
+    the hash's tick, every 20th), 1.88–3.47 / 6.2–8.5 at 32,000; the hash kept whole in the tick that takes it
+    (amortising it is left open: no frame waits for it now). Publishing 0.11–0.21 / 0.29–0.33.
+  - **Sub-steps taken of those due**: 100 % at 16,000 men at 1× and 8× and at 32,000 at 1×; **95.9 % at 32,000, 8×**,
+    where the loop takes 27 / 84 ms an advance (ticking 12.5, stepping 9.6 per advance): the worker is a full core
+    and the men fall behind their battalions (the clock drops what an advance owes past `MEN_ROUNDS` rounds). The
+    stop's PR 5 clause fires there: a second worker for the soldiers, fed by the published world.
+  - Replays identical worker and page: `app-check`'s in-page replay of the worker's session and its Node replays.
+  - The fallback's cost is the "on the page" column.
 
 ## PR 4: the 3D renderer reads the soldier frame
 

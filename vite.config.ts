@@ -16,7 +16,13 @@ const build = (() => {
     return 'unknown'
   }
 })()
+// cross-origin isolation (COOP and COEP), so the sim page shares memory with its battle worker
+// (docs/plans/active/battle-threads.md, PR 3); every asset the pages load is same-origin, so COEP blocks none
+const isolated = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' }
 export default defineConfig({
   define: { __BUILD__: JSON.stringify(build) },
   build: { outDir: 'dist', rollupOptions: { input: ['app/index.html', 'app/look.html'] } },
+  server: { headers: isolated },
+  preview: { headers: isolated },
+  worker: { format: 'es' },
 })
