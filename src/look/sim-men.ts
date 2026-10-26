@@ -3,7 +3,7 @@
 // stands: his place, the way he faces (his velocity's, at rest his formation's heading), his role (run, march, halt;
 // fire while his company's volley is fresh) and when it began. The renderer (src/look/units.ts) asks it in place of
 // the script (src/look/world/armies.ts) at ?sim. No Babylon: the tests read it in Node.
-import { typeOf, DT, M_TICK, type World } from '../sim/index.ts'
+import { typeOf, DT, M_TICK } from '../sim/index.ts'
 import type { Unit } from '../render/soldiers.ts'
 import type { Seen } from '../app/battle-link.ts'
 import { MAN_ALIVE } from '../render/men.ts'
