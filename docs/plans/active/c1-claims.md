@@ -60,7 +60,8 @@ already does that, and the bending of the proposal comes from the same lag model
 - **Jams** get today's statuses: a stall on blocked cells reads as impassable ground, and today's stall halts the
   formation and drops its orders after a second (`haltAtEdge`). The prototype shows how often that happens before
   the proposal decides what should.
-- **Give way in melee**, rallies on free ground, a passage of lines and the queue's rules: later, from the bench.
+- **A passage of lines** and the queue's rules: later, from the bench. (Giving way in melee and rallies on free
+  ground came in steps 3 and 4.)
 
 ## The checks
 
@@ -130,5 +131,44 @@ the same state in all of them, X-01 too (#187 does not arise with the keyed orde
 - every bench case with claims now has no overlap (19 of 19), and the reversed visiting order gives the same state
   in all of them. X-14: 2.85 ms a tick (1.84 ms without claims).
 
+**Step 4, the clash** (2026-10-26), `clashStep` in `src/sim/melee.ts`, after the melee step:
+- **Pair by pair:** only two battalions each the other's foe since the step began clash. Other enemies fighting one
+  of them (from a flank, from the rear) act on its morale only, and block it as any enemy does.
+- **Who is pressed:** each weighs its foe's push against its own, a push being the men its strike owes its foe this
+  step times its morale. The men in contact on both sides are much the same, so the kills alone barely differ (X-01:
+  2%); what decides a melee is whose nerve goes first. Losing by more than `EVEN` of the two, its foe in its front and
+  some of its companies in contact with it, it is pressed by the share past that. A battalion changing shape or in a
+  trail shape stands.
+- **Giving ground** (`giveGround`, `src/sim/formation.ts`): at up to `GIVE` at a full loss (`src/sim/melee.ts`). The companies in contact
+  fall back first (a bend, as the lag model's lags, up to the order preset's lag limit); the rest the whole battalion
+  steps back; bins wholly behind them fall back with them (the accordion), so a deep shape does not fold into
+  itself. The footprint gate holds it as it holds any motion, so other formations' claims and the ground stop it;
+  during the clash the claims let through only the pair's own foe. While the melee lasts a pair holds its line as it
+  stands: no dressing, and its disorder neither recovers nor grows with the bow. A battalion fighting outside such a
+  pair (a flank attacker) dresses as before.
+- **Following** (`followUp`): its foe, each in the other's front, advances its companies in contact with it by at
+  most the ground given (the others fall behind as lags), so the pair stays in contact and never overlaps.
+- **Pinned:** ground it was pressed for and could not give costs it order when a friend holds it (`PINNED_DISORDER`),
+  its nerve when an enemy or the ground does (`PINNED_SHOCK`). A cell crowded past what the grid keeps counts as
+  friends, the likelier.
+- **Order:** each push is one strike's, and the moves are made in the claims' keyed order, each claiming its new
+  cells before the next, so the reversed visiting order gives the same state.
+- **Known limit:** the gate refuses only bins newly on blocked cells, so a bin already on another's claim when the
+  clash starts can be pushed further in. No case starts a melee that way.
+
+Three new cases, a veteran regiment (quality 0.95) charging a raw one (0.75) at the halt:
+
+| Case | With claims | Without |
+|---|---|---|
+| X-15, open ground behind | it gives 3.1 m in a 3.4 s melee; the veteran follows | it stands |
+| X-16, a friend 9 m behind | it gives 2 m, stops at the friend's margin, disorder 0.30 | the veteran pursues the router through the friend |
+| X-17, an enemy 9 m behind | it cannot give ground and breaks after 0.7 s, not 3.4 s | the same overlap |
+
+What the bench shows: today's melees are short. A charge decides most of it, and a melee breaks one side in 0–4 s, so
+the ground given is a few metres, and two equal regiments (X-01) stay even and give none. No case yet bends a line: a
+regiment's four squadrons all reach contact head on, and an offset charge strikes a flank, which breaks the target at
+once. The bend is tested on `giveGround` directly. Long melees, and the bend in play, come with the infantry assault
+(U3); the constants are first guesses until then.
+
 Not done yet: Face about's end pose against others (it turns in place; no case shows a problem), a break mid-change
-snapping into a neighbour, and step 4, the clash.
+snapping into a neighbour, and pushing a friend behind instead of only losing order against it.
