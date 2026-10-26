@@ -167,7 +167,7 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
     today (`?thread=main` forces it), not the design's transferred buffers. It costs what PR 2 costs (measured), and it
     is the browser harness's other side.
   - **The 12 fps publish gate is PR 4's**: the sim page draws the latest frame, whose men step at their group's rate.
-  - **Measured by** `tools/bench-sim.mjs` (new): the bench scenario in headless Chrome on the production build, per
+  - **Measured by** `tools/bench-sim.ts` (new): the bench scenario in headless Chrome on the production build, per
     frame the `requestAnimationFrame` interval and the main thread's battle time (stepping in-thread, or reading the
     held slot), long tasks from a `PerformanceObserver`; and the worker's tick, sub-step and publish times. The
     baselines are the same tool with `?thread=main`.

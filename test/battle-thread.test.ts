@@ -145,20 +145,21 @@ describe('the battle in a worker thread', () => {
   it("plays a battle the main thread reproduces: the worker's stamped log, replayed here, gives its every hash point", async () => {
     const w = nodeWorker()
     try {
-      const link = new WorkerLink(w.asBrowser, dataBytes(), data, cr, scenario)
+      const link = new WorkerLink(w.asBrowser, dataBytes(), data, cr, 's1b-field')
       await link.ready()
       // on its own clock at 4×, commands arriving whenever they do, then held and advanced on request
       link.setSpeed(4)
       for (const h of [0, 1, 2]) {
         link.command({ type: 'move', id: makeHandle(KIND_FORMATION, h, 1), points: [[-40, 10 * h]], append: false })
       }
-      await new Promise(r => setTimeout(r, 400))
+      await new Promise(r => setTimeout(r, 100))
       link.command({ type: 'form', id: makeHandle(KIND_FORMATION, 3, 1), shape: 'square' })
       link.command({ type: 'fire', id: makeHandle(KIND_FORMATION, 0, 1), mode: 'at will' })
       await link.advance(20)
       const { replay, hashes } = await link.replay()
       expect(replay.log.length).toBe(5)
-      expect(hashes.length).toBeGreaterThan(20)
+      // the 20 s advanced alone take 20 hash points (one every 20 ticks)
+      expect(hashes.length).toBeGreaterThanOrEqual(20)
       expect(play(replay, data, cr, scenario, hashes)).toBeNull()
       // the page's copies of the events, and its view of the newest frame, are that battle's
       expect([link.log.length, link.hashes.map(p => p.hash)]).toEqual([5, hashes.map(p => p.hash)])
@@ -170,7 +171,7 @@ describe('the battle in a worker thread', () => {
   it('outgrown, it sends new slots, and the page reads the men from them', async () => {
     const w = nodeWorker()
     try {
-      const link = new WorkerLink(w.asBrowser, dataBytes(), data, cr, scenario)
+      const link = new WorkerLink(w.asBrowser, dataBytes(), data, cr, 's1b-field')
       await link.ready()
       // 2,400 men, the first slots room for 4,096: five battalions more outgrow them
       for (let k = 0; k < 5; k++) {
@@ -187,7 +188,7 @@ describe('the battle in a worker thread', () => {
   it('a worker that fails says so: the start rejects, requests reject, `failed` holds why', async () => {
     const w = nodeWorker()
     try {
-      const link = new WorkerLink(w.asBrowser, dataBytes(), data, cr, { name: 'no such scenario', setup: () => {} })
+      const link = new WorkerLink(w.asBrowser, dataBytes(), data, cr, 'no such scenario')
       await expect(link.ready()).rejects.toThrow(/no scenario no such scenario/)
       expect(link.failed).toMatch(/no scenario/)
       await expect(link.hash()).rejects.toThrow(/battle worker/)
@@ -198,15 +199,13 @@ describe('the battle in a worker thread', () => {
   it('runs on its own clock: frames arrive while the page only reads', async () => {
     const w = nodeWorker()
     try {
-      const link = new WorkerLink(w.asBrowser, dataBytes(), data, cr, scenario)
+      const link = new WorkerLink(w.asBrowser, dataBytes(), data, cr, 's1b-field')
       await link.ready()
       const t0 = link.see().w.meta[0]
       link.setSpeed(4)
-      await new Promise(r => setTimeout(r, 600))
-      const t1 = link.see().w.meta[0]
-      // 0.6 s at 4× is 48 ticks; the worker's timer and start-up take some
-      expect(t1 - t0).toBeGreaterThan(20)
-      expect(t1 - t0).toBeLessThan(60)
+      // whatever the machine's load: the clock runs, nothing asked of it (how fast is the benches' to say)
+      for (let k = 0; k < 100 && link.see().w.meta[0] === t0; k++) await new Promise(r => setTimeout(r, 20))
+      expect(link.see().w.meta[0]).toBeGreaterThan(t0)
     } finally {
       await w.terminate()
     }

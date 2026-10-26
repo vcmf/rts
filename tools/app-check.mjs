@@ -13,10 +13,10 @@ import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { PAGE_SCENARIOS } from '../src/scenarios/page.ts'
 import { DEFAULT_MAP } from '../src/scenarios/maps.ts'
 import { reportSession } from './battle-report.ts'
+import { startPreview } from './preview.ts'
 
 const out = process.argv[2] || 'scratch/app-check'
 const PORT = 4178
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 // the page is served cross-origin isolated, so its battle runs in the battle worker (PR 3 of
 // docs/plans/active/battle-threads.md; ?thread=main runs it on the page)
 const READY = [
@@ -355,10 +355,9 @@ async function run(scenario, steps) {
 
 const dataOf = name => loadSimData(new Uint8Array(fs.readFileSync(`data/${name}.simdata`)))
 const cr = compileRuleset(napoleonic)
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' })
+const stop = await startPreview(PORT)
 let ok = false
 try {
-  await sleep(2500)
   ok =
     (await run('s1b-field', drill)) &&
     (await run('s1b-bench', bench)) &&
@@ -369,7 +368,7 @@ try {
     (await run('s1d-guns', guns)) &&
     (await run('s1e-battle', battle))
 } finally {
-  preview.kill()
+  stop()
 }
 console.log(ok ? 'app check: ok' : 'app check: FAILED')
 process.exit(ok ? 0 : 1)

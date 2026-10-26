@@ -16,7 +16,7 @@ export interface Port {
 /** What the page sends: the battle to play (its scenario and map bytes), then commands and requests (`id` answered
  * by a `reply` with the same id). */
 export type ToHost =
-  | { type: 'init'; scenario: string; data: Uint8Array; version: number }
+  | { type: 'init'; scenario: string; data: Uint8Array; version: number } // scenario: its key in PAGE_SCENARIOS
   | { type: 'command'; c: Command }
   | { type: 'speed'; speed: number }
   | { type: 'advance'; id: number; sec: number }
@@ -101,12 +101,19 @@ export function serveBattle(port: Port): void {
     sent = { log: b.log.length, dropped: b.dropped.length, hashes: b.hashes.length }
   }
   let last = performance.now()
+  // an error anywhere stops the battle for good, the loop and the requests alike, and is said to the page (which shows
+  // it and fails every request): a battle half-run by an exception is not played on
+  let dead = false
+  const die = (err: unknown) => {
+    dead = true
+    send({ type: 'error', message: err instanceof Error ? (err.stack ?? err.message) : String(err) })
+  }
   const loop = () => {
+    if (dead) return
     try {
       step()
     } catch (err) {
-      // the battle stops: said to the page, which shows it on its console
-      send({ type: 'error', message: err instanceof Error ? (err.stack ?? err.message) : String(err) })
+      die(err)
       return
     }
     setTimeout(loop, LOOP_MS)
@@ -137,9 +144,10 @@ export function serveBattle(port: Port): void {
 
   port.onmessage = e => {
     const m = e.data
+    if (dead) return
     try {
       if (m.type === 'init') {
-        const scenario = PAGE_SCENARIOS[m.scenario]
+        const scenario = Object.hasOwn(PAGE_SCENARIOS, m.scenario) ? PAGE_SCENARIOS[m.scenario] : undefined
         if (!scenario) throw new Error(`battle worker: no scenario ${m.scenario}`)
         battle = new Battle(loadSimData(m.data, m.version), scenario)
         publish()
@@ -173,7 +181,7 @@ export function serveBattle(port: Port): void {
         send({ type: 'reply', id: m.id, value: done })
       }
     } catch (err) {
-      send({ type: 'error', message: err instanceof Error ? (err.stack ?? err.message) : String(err) })
+      die(err)
     }
   }
 }

@@ -33,12 +33,14 @@ import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS } from '../scenarios/page.
 import { MAN_ALIVE } from '../render/men.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 import { MainLink, WorkerLink, type BattleLink, type Seen } from './battle-link.ts'
+import { pruneSelection, runSpeed } from './page-rules.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 
 async function main(): Promise<void> {
   const asked = new URLSearchParams(location.search).get('scenario') ?? ''
-  const scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
+  const key = Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO
+  const scenario = PAGE_SCENARIOS[key]
   // the scenario's map, at the version it was placed for
   const mapName = scenario.map ?? DEFAULT_MAP
   const urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl }
@@ -48,21 +50,30 @@ async function main(): Promise<void> {
   const bytes = new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer())
   const data = loadSimData(bytes, MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)
-  // the battle worker shares memory with the page only when the page is cross-origin isolated (COOP and COEP)
-  const thread =
+  // the battle worker shares memory with the page only when the page is cross-origin isolated (COOP and COEP); a
+  // worker that fails to start (its script blocked, no module workers) leaves the battle on the page, said so
+  let thread: 'worker' | 'main' =
     new URLSearchParams(location.search).get('thread') === 'main' || !crossOriginIsolated ? 'main' : 'worker'
-  let link: BattleLink
-  if (thread === 'worker') {
-    const wl = new WorkerLink(
-      new Worker(new URL('./battle-worker.ts', import.meta.url), { type: 'module' }),
-      bytes,
-      data,
-      cr,
-      scenario,
-    )
-    await wl.ready()
-    link = wl
-  } else link = new MainLink(data, cr, scenario)
+  const start = async (): Promise<BattleLink> => {
+    if (thread === 'worker') {
+      const wl = new WorkerLink(
+        new Worker(new URL('./battle-worker.ts', import.meta.url), { type: 'module' }),
+        bytes,
+        data,
+        cr,
+        key,
+      )
+      try {
+        await wl.ready()
+        return wl
+      } catch (e) {
+        console.warn(`the battle runs on the page: ${e instanceof Error ? e.message : String(e)}`)
+        thread = 'main'
+      }
+    }
+    return new MainLink(data, cr, scenario)
+  }
+  const link = await start()
   // what this frame reads: the newest frame published (held until the next), or the battle on this thread
   let seen: Seen = link.see()
   let w: World = seen.w
@@ -96,8 +107,7 @@ async function main(): Promise<void> {
   // APP.record's frames, while it records
   let rec: { intervalMs: number[]; battleMs: number[]; drawMs: number[] } | null = null
   const selected = new Set<number>()
-  // the generation each selected formation had when chosen: the page sees the battle a frame at a time, not each
-  // tick, so a formation can be gone and its slot reused by another between two frames
+  // the generation each selected formation had when chosen (pruneSelection)
   const selGen = new Map<number, number>()
   const choose = (i: number) => {
     selected.add(i)
@@ -138,10 +148,10 @@ async function main(): Promise<void> {
     seen = link.see()
     w = seen.w
     map.w = w
-    for (const i of selected) if (!w.f.alive[i] || w.f.gen[i] !== selGen.get(i)) selected.delete(i)
+    pruneSelection(selected, selGen, w.f)
   }
   // the speed the battle runs at: the panel's, or 0 while paused (P, or the headless checks' advance)
-  const runAt = () => link.setSpeed(paused || document.hidden ? 0 : speed)
+  const runAt = () => link.setSpeed(runSpeed(speed, paused, document.hidden))
   // a hidden page holds the battle, as it did when the battle ran in the page's animation frames (which stop then)
   document.addEventListener('visibilitychange', runAt)
   const draw = () => {
@@ -255,7 +265,10 @@ async function main(): Promise<void> {
   const mark = (text?: string) => {
     let said = text ?? null
     if (text === undefined) {
+      // the prompt blocks this thread, not the worker's: the battle is held while it is open, and runs again after
+      link.setSpeed(0)
       said = prompt('What happened here? (optional)')
+      runAt()
       // the prompt swallowed the keyup and pointerup of anything held (space, a drag): let go of them
       releaseHeld()
     }
@@ -531,7 +544,7 @@ async function main(): Promise<void> {
     return `reading ${simMs.toFixed(2)} ms\nworker: ticks ${c.tickMs.toFixed(2)} · men ${c.stepMs.toFixed(2)} · out ${c.pubMs.toFixed(2)} ms`
   }
 
-  // headless hooks (tools/app-check.mjs, tools/bench-sim.mjs): orders and time without real time passing; those the
+  // headless hooks (tools/app-check.mjs, tools/bench-sim.ts): orders and time without real time passing; those the
   // worker answers return promises
   const APP = {
     get w() {

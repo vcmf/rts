@@ -128,9 +128,9 @@ export class WorkerLink implements BattleLink {
   private onFirst: () => void = () => {}
   private onFail: (e: Error) => void = () => {}
 
-  /** Starts the worker on the scenario (`bytes`: the map's, `data` loaded from them); `ready` resolves at the first
-   * published frame. */
-  constructor(worker: Worker, bytes: Uint8Array, data: SimData, cr: Compiled, scenario: Scenario) {
+  /** Starts the worker on the scenario (`key`: its key in PAGE_SCENARIOS, which the worker looks up; `bytes`: the
+   * map's, `data` loaded from them); `ready` resolves at the first published frame. */
+  constructor(worker: Worker, bytes: Uint8Array, data: SimData, cr: Compiled, key: string) {
     this.worker = worker
     this.data = data
     this.cr = cr
@@ -145,7 +145,7 @@ export class WorkerLink implements BattleLink {
     worker.onmessage = (e: MessageEvent<ToPage>) => this.receive(e.data)
     // the module failed to load, or an error the host did not catch
     worker.onerror = e => this.fail(e.message || 'the worker failed')
-    this.post({ type: 'init', scenario: scenario.name, data: bytes, version: data.version })
+    this.post({ type: 'init', scenario: key, data: bytes, version: data.version })
   }
   /** The worker stopped: said on the console, the start and every request waiting fail with it. */
   private fail(message: string): void {

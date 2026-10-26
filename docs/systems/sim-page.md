@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-26
-code: [app/index.html, src/app/main.ts, src/app/battle.ts, src/app/battle-frame.ts, src/app/battle-host.ts, src/app/battle-link.ts, src/app/battle-worker.ts, src/render/men.ts, src/render/men-clock.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, tools/app-check.mjs, tools/battle-report.ts]
+code: [app/index.html, src/app/main.ts, src/app/battle.ts, src/app/battle-frame.ts, src/app/battle-host.ts, src/app/battle-link.ts, src/app/battle-worker.ts, src/app/page-rules.ts, src/render/men.ts, src/render/men-clock.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, test/battle-thread.test.ts, test/page-rules.test.ts, tools/app-check.mjs, tools/bench-sim.ts, tools/preview.ts, tools/battle-report.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
 ---
 
@@ -40,7 +40,7 @@ exports as a replay that plays back in Node to the same hashes.
   1× (p99 1.0) and about 2.5 ms at 8× (p99 4–8 between runs). In the battle worker (battle threads PR 3) the page
   reads the held slot in 0.01 ms a frame (p99 0.02–0.03) at 16,000 and 32,000 men, 1× and 8×.
   `node tools/bench-cost.ts` measures the battle by part on the page's release world, at a speed (in Node);
-  `node tools/bench-sim.mjs` the page itself in Chrome, either thread.
+  `node tools/bench-sim.ts` the page itself in Chrome, either thread.
 
 ## Design
 
@@ -54,7 +54,10 @@ the worker fills the one neither newest nor held, the page holds the newest for 
 reads a slot in place: a `World` whose columns are views on it and a `SoldierLayer` on that world that is never
 stepped, so the map, the HUD, picking and box select read them as they read the battle itself. Commands and
 requests go by message; the log, the orders dropped and the hash points come back by message. The men outgrowing a
-frame's room get new slots, sent again. An error in the worker is shown on the page's console.
+frame's room get new slots, sent again. A worker that fails to start leaves the battle on the page (said on the
+console); one that fails later stops for good, its requests rejected, and the readout says the battle stopped. The
+battle is held (speed 0) while the page is hidden and while a mark's prompt is open, as when it ran in the page's
+frames (`src/app/page-rules.ts`); the selection is pruned of formations whose slot was reused since they were chosen.
 
 **Loop** (`src/app/battle.ts`, in the worker or on the page). Each frame (the page's, or a turn of the worker's
 loop) adds `dt × speed` to an accumulator and runs the
@@ -161,7 +164,7 @@ in the fight and, once decided, the result.
 clock and steps frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`, `session`, `mark(note)`,
 `replayHere()` (the session played again on the page's thread against the hash points the worker took: the
 browser's replay harness), `record(seconds)` (the frames' intervals, battle and draw times, long tasks and the
-worker's advances, for `tools/bench-sim.mjs`). Those the worker answers (advance, hash, replay, session,
+worker's advances, for `tools/bench-sim.ts`). Those the worker answers (advance, hash, replay, session,
 replayHere, record) return promises; `tools/shot.mjs` evaluates steps in REPL mode, so they can be awaited.
 
 ## Tunables
