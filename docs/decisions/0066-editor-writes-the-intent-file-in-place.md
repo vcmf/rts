@@ -7,7 +7,7 @@ date: 2026-10-25
 
 ## Context
 
-The map editor (M7, `docs/plans/active/m7-editor.md`) works on the map page's lit view (decisions 0058, 0064). Maps
+The map editor (M7, `docs/plans/done/m7-editor.md`) works on the map page's lit view (decisions 0058, 0064). Maps
 are strict JSON files written by hand until now (proposal §13.3: strict JSON so the editor can rewrite the file), some
 in their own layout, each reviewed as a diff. The page already compiles a map in a worker and redraws on every save of
 its file. The editor must write those files without losing a hand edit made meanwhile, and without turning a one-point

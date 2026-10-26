@@ -1,4 +1,4 @@
-// The map editor's save on the dev server (docs/plans/active/m7-editor.md M7a, decision 0066): `vite.config.ts`
+// The map editor's save on the dev server (docs/plans/done/m7-editor.md M7a, decision 0066): `vite.config.ts`
 // serves it as POST /__map/save. The page sends the file's name, the text it last read (`base`) and the new text; the
 // file is written only if it still holds `base`, so a hand edit made meanwhile is never overwritten silently. Tested in
 // test/map-save.test.ts.

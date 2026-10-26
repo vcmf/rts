@@ -1,4 +1,4 @@
-// A scan to trace from (docs/plans/active/m7-editor.md M7e, decision 0069): where its image lies on the map. The image
+// A scan to trace from (docs/plans/done/m7-editor.md M7e, decision 0069): where its image lies on the map. The image
 // is placed in a frame (a dem source's file, or the map itself) by control points, each a pixel [u, v] (v down) and
 // the place [x, z] it shows (m, x east, z north); the map shows it inside each relief.dem piece cut from that file,
 // moved as the piece is (its `shift`), so the period map follows the terrain it was cut with. Pure, float64 (the

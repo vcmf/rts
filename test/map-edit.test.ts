@@ -1,4 +1,4 @@
-// The map editor's edits (docs/plans/active/m7-editor.md M7a): picking, handles, moves, the barrier snap, undo.
+// The map editor's edits (docs/plans/done/m7-editor.md M7a): picking, handles, moves, the barrier snap, undo.
 import { describe, it, expect } from 'vitest'
 import type { Feature, Pt } from '../src/map/schema.ts'
 import { barrierProblem } from '../src/map/geometry.ts'

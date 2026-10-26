@@ -1,4 +1,4 @@
-// The map page's editor (docs/plans/active/m7-editor.md M7a) driven without a page: a fake host projects straight
+// The map page's editor (docs/plans/done/m7-editor.md M7a) driven without a page: a fake host projects straight
 // down at 1 px a metre, and a fake server stands in for the dev server's save.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import fs from 'node:fs'

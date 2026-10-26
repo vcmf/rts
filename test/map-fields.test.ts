@@ -1,4 +1,4 @@
-// The map editor's fields (docs/plans/active/m7-editor.md M7c, M7d): every attribute of the catalogue and every
+// The map editor's fields (docs/plans/done/m7-editor.md M7c, M7d): every attribute of the catalogue and every
 // parameter of every generator set through the form's reading of text and judged by the validator at its field; the
 // editor's field edits and pinning.
 import { describe, it, expect } from 'vitest'

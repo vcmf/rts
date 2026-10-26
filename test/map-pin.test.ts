@@ -1,4 +1,4 @@
-// Pinning (docs/plans/active/m7-editor.md M7d): every generated feature of the maps pinned, alone and all together,
+// Pinning (docs/plans/done/m7-editor.md M7d): every generated feature of the maps pinned, alone and all together,
 // expands to the same map as the original (a pinned child equals its expansion), and the stable save rewrites the
 // pinned feature's line and appends its children.
 import { describe, it, expect } from 'vitest'

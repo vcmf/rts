@@ -1,4 +1,4 @@
-// The map editor's drawing of a new feature (docs/plans/active/m7-editor.md M7b): a kind's shape drawn click by click,
+// The map editor's drawing of a new feature (docs/plans/done/m7-editor.md M7b): a kind's shape drawn click by click,
 // then each reference it takes set by clicking its target, as pure functions on a draft. A draft is never in the map's
 // copy: the editor adds the feature it makes in one edit when the last step is done. The steps come from the
 // catalogue's `shapes` and `refs` (never a kind's name: decision 0015). Points are rounded as a drag rounds them, a

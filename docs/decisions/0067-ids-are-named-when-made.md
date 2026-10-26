@@ -7,7 +7,7 @@ date: 2026-10-26
 
 ## Context
 
-The map editor's fields form (M7c, `docs/plans/active/m7-editor.md`) first let the selection's id be changed, a rename
+The map editor's fields form (M7c, `docs/plans/done/m7-editor.md`) first let the selection's id be changed, a rename
 following every place that names the feature. Two designs and six review rounds kept finding another thing an id is:
 the references to it (`on`, `carries`, `crosses`, `along`, shared edges, a generator's selectors), the ids of its
 children (generated `<id>-<n>`, or pinned ones by their recorded parent), their recorded parameters, and its seed (a

@@ -1,4 +1,4 @@
-// The map editor's drawing of new features (docs/plans/active/m7-editor.md M7b): every kind of the catalogue drawn as
+// The map editor's drawing of new features (docs/plans/done/m7-editor.md M7b): every kind of the catalogue drawn as
 // every shape it takes, its references set by clicking their targets, on a map with targets for them; the editor's
 // drawing mode; a new map made and saved.
 import { describe, it, expect, vi, afterEach } from 'vitest'

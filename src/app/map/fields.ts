@@ -1,4 +1,4 @@
-// The map editor's fields (docs/plans/active/m7-editor.md M7c, M7d): what the form shows of a feature (its generator
+// The map editor's fields (docs/plans/done/m7-editor.md M7c, M7d): what the form shows of a feature (its generator
 // and its parameters too) and of the map, and the edits it makes, as pure functions on the map's intent. A form sets
 // values; the validator judges them at once (decision 0066): nothing here checks a range or a type beyond reading the
 // text as the field's kind of value.
