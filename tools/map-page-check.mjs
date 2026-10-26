@@ -244,7 +244,7 @@ try {
         draw('relief.base', 'none', 'terrain', [])
         draw('ground.meadow', 'area', 'meadow', [[-500, -500], [500, -500], [500, 500], [-500, 500]], true)
         draw('water.stream', 'line', 'brook', [[-550, 20], [0, -10], [550, 30]], true)
-        draw('water.ford', 'none', 'ford', [[-300, 6.4], [-300, 6.4]])
+        draw('water.ford', 'none', 'ford', [[-300, 6.4], [-250, 4]])
         draw('way.road.lane', 'line', 'road', [[60, -550], [70, 550]], true)
         draw('built.bridge', 'none', 'bridge', [[63.2, -200], [300, 11.8]], true)
         draw('barrier.hedge', 'line', 'hedge', [[-200, -300], [-100, -300], [-100, -200]], true)
@@ -260,7 +260,7 @@ try {
         await sleep(300)
         const ok = await MAP.save()
         const disk = await (await fetch('/maps/${NEW}.map.json', { cache: 'no-store' })).text()
-        return 'NEWMAP ' + JSON.stringify({ ok, disk, text: MAP.text, dirty: MAP.dirty, isNew: MAP.isNew,
+        return 'NEWMAP ' + JSON.stringify({ ok, disk, text: MAP.text, dirty: MAP.dirty, noFile: MAP.noFile,
           issues: MAP.issues, prompts, escaped, features: JSON.parse(MAP.text).features })
       })()`,
     ],
@@ -276,6 +276,22 @@ try {
         const ok = await MAP.save()
         const disk = await (await fetch('/maps/${NEW}.map.json', { cache: 'no-store' })).text()
         return 'NEWEDIT ' + JSON.stringify({ ok, disk })
+      })()`,
+    ],
+    // the new file deleted and written again with the same bytes from here (a safe write, a checkout): the page sees
+    // it go and come back, and ends with no conflict and the file there
+    [
+      'eval',
+      `(async () => {
+        const sleep = ms => new Promise(r => setTimeout(r, ms))
+        let gone = false
+        for (let t = 0; t < 400; t++) {
+          if (MAP.noFile) gone = true
+          else if (gone) break
+          await sleep(25)
+        }
+        await sleep(300)
+        return 'RECREATED ' + JSON.stringify({ gone, noFile: MAP.noFile, conflict: MAP.conflict, dirty: MAP.dirty })
       })()`,
     ],
   ]
@@ -401,7 +417,7 @@ try {
   const onDisk = nm.disk
   const problems = onDisk ? validate(JSON.parse(onDisk), kinds) : ['no file']
   check(
-    nm.ok && !nm.dirty && !nm.isNew && nm.issues.length === 0 && problems.length === 0,
+    nm.ok && !nm.dirty && !nm.noFile && nm.issues.length === 0 && problems.length === 0,
     `the first save created maps/${NEW}.map.json, which validates (${JSON.stringify(problems).slice(0, 300)})`,
   )
   check(nm.text === onDisk, 'the page reads the new file back unchanged')
@@ -416,6 +432,14 @@ try {
     `one more feature saved adds one line (${added.length} new)`,
   )
   check(fs.readFileSync(newFile, 'utf8') === seen.NEWEDIT.disk, 'the file on disk is what the page saved')
+  fs.rmSync(newFile)
+  await sleep(400)
+  fs.writeFileSync(newFile, seen.NEWEDIT.disk)
+  await until('RECREATED')
+  check(
+    seen.RECREATED.gone && !seen.RECREATED.noFile && !seen.RECREATED.conflict && !seen.RECREATED.dirty,
+    `the file deleted and written again with its bytes settles: ${JSON.stringify(seen.RECREATED)}`,
+  )
   const code = await done
   check(code === 0, `the page had no exceptions or console errors (shot.mjs exit ${code})`)
 } catch (e) {

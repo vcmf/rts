@@ -8,7 +8,7 @@ import type { Ellipse, Feature, MapFile, Pt, RefName, ShapeName } from '../../ma
 import { ID, REFS } from '../../map/schema.ts'
 import type { KindMeta } from '../../map/catalogue.ts'
 import { refTargetProblem } from '../../map/validate.ts'
-import { barrierProblem, isClosedLine, lineLength } from '../../map/geometry.ts'
+import { barrierProblem, isClosedLine, isPt, lineLength } from '../../map/geometry.ts'
 import { cm } from '../../map/util.ts'
 import { onLattice, roundPt, roundTo, snapBarrier, type Place } from './edit.ts'
 
@@ -226,12 +226,23 @@ export function back(d: Draft): Draft {
   return { ...d, feature, step: d.step - 1, pts, from: null, closed: false }
 }
 
+/** Whether a value is a line the editor can measure along: 2 points at least. */
+const isLine = (v: unknown): v is Pt[] => Array.isArray(v) && v.length >= 2 && v.every(isPt)
+
 /**
- * Whether a feature may be a reference's target: by the validator's rule (`refTargetProblem`: of the category the
- * catalogue names, drawn as its shape if it names one), and not the feature itself.
+ * Whether a click may pick a feature as a reference's target: by the validator's rule (`refTargetProblem`: of the
+ * category the catalogue names, drawn as its shape if it names one), not the feature itself, and for `along` a line
+ * (the stretch is measured along it, whatever the catalogue names).
  */
-export function refAccepts(want: string, self: string, t: Feature, presets: MapFile['presets'] = {}): boolean {
-  return t.id !== self && refTargetProblem('', want, t, presets as Record<string, Record<string, unknown>>) === null
+export function refAccepts(
+  ref: RefName,
+  want: string,
+  self: string,
+  t: Feature,
+  presets: MapFile['presets'] = {},
+): boolean {
+  if (t.id === self || (ref === 'along' && !isLine(t.line))) return false
+  return refTargetProblem(ref, want, t, presets as Record<string, Record<string, unknown>>) === null
 }
 
 /** The metres along a line to the point of it nearest `p`. */
@@ -266,9 +277,10 @@ export function setRef(d: Draft, target: Feature | null, at: Pt, place: Place): 
   if (s.want === 'point') return advance(d, { ...d.feature, [s.ref]: roundPt(at, place.step) })
   if (!target) return `nothing to pick there: ${prompt(d)}`
   if (s.ref !== 'along') return advance(d, { ...d.feature, [s.ref]: target.id })
-  // rounded, but never past the line's end (the validator's limit)
-  const end = cm(Math.floor(lineLength(target.line!) / place.step) * place.step)
-  const sAt = Math.min(roundTo(alongAt(target.line!, at), place.step), end)
+  if (!isLine(target.line)) return `${target.id} is no line to run along: ${prompt(d)}`
+  // a place on the line: rounded, never past its end (a measure along it is at most its length)
+  const end = cm(Math.floor(lineLength(target.line) / place.step) * place.step)
+  const sAt = Math.min(roundTo(alongAt(target.line, at), place.step), end)
   if (!d.from) return { ...d, from: { id: target.id, s: sAt } }
   if (target.id !== d.from.id) return `the stretch ends on the line it starts on: ${prompt(d)}`
   if (sAt === d.from.s) return `the stretch needs a length: ${prompt(d)}`

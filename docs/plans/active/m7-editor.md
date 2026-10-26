@@ -205,14 +205,18 @@ tools on top).
 Creating, with the same state machine and the same save (decision 0066 holds; no new decision):
 
 - **A new map** (the panel's "new map"): its id (also the file's name, `maps/<id>.map.json`, refused when taken), name,
-  size (the extent, square, and the play area inside it), seed (a random uint32 proposed) and season. The page holds it
-  as a copy with no file yet (`Editor.create`): it compiles from memory like any edit, shows "unsaved", and its first
-  save creates the file. The save route takes `base: null` as "create": written only if no file is there (409 with the
-  file's text otherwise, as a conflict). The map joins the page's list; leaving it unsaved asks first and drops it.
+  size (the extent, square, and the play area inside it), seed (a random uint32 proposed, or when left blank) and
+  season, judged by the validator at once like any edit. The page holds it as a copy with no file yet
+  (`Editor.create`): it compiles from memory, shows "unsaved", and its first save creates the file. The save route
+  takes `base: null` as "create": written only if no file is there (409 with the file's text otherwise). The map joins
+  the page's list; leaving it unsaved asks first and drops it.
+- **The disk, explicit** (the redesign below): the editor knows the file's last text and whether it is there. A
+  creation, a change and a deletion on disk take one path; a file there that the page does not know is a conflict,
+  whatever made it. A deletion keeps the copy and its layout; the next save creates the file again.
 - **Adding a feature** (the panel's "add"): a kind from the catalogue (by category), one of the shapes it takes, and an
   id proposed from the kind's last name (`wheat`, then `wheat2`…: never `wheat-2`, a generated child's form), editable
-  before drawing. Then a drawing mode, the
-  state machine's fourth, which takes clicks (a press that moves still pans):
+  before drawing. Then a drawing mode, the state machine's fourth, which takes clicks (a press that moves still pans;
+  the editor pairs clicks, so a double click's second click is never a click of its own):
   - a point: one click; a line: clicks, Enter or a double click ends it (2 points at least); an area: likewise
     (3 points), its ring closing itself; a click back on the first point closes an area or a line (a barrier's with a
     lattice point between when its last segment needs one); a circle: its centre, then a point on its edge; an ellipse: its centre, the
@@ -267,11 +271,36 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
   another kind keeps an id typed in the box; the reference's target rule is the validator's (`refTargetProblem`,
   exported); a draft no longer carries its own barrier flag (the editor's `place`).
 
+- **Round 3**: severe, the third. A file deleted and written again with the same bytes (a safe write, a checkout)
+  showed as a conflict; a new map's id taken meanwhile could still be overwritten through a conflict seen by the
+  watcher; an `along` target the catalogue names without a shape crashed the click (no line to measure); a double
+  click's second click acted in the step its first click had opened (a reference set, a circle of the least radius);
+  a file deleted lost its layout; the new-map form copied the validator's ranges; a create failed where the file
+  system has no hard links; the new-map button and the map list ignored a drawing in progress. Stopped at the limit.
+- **Analysis** (the owner asked for it at the limit, as in M7a): of about 29 findings over three rounds, about 10 were
+  ordinary bugs; the rest fell in three classes each round found again. (1) The file's lifecycle: the editor knew the
+  disk as "base text, or null", and null was made to mean "new, create it", then "deleted"; every patch led to the
+  next finding. (2) Double clicks: the browser's click, click, dblclick were read by each step in its own way, and
+  leaks across steps kept coming. (3) Copies of the rules: the drawing and the form checked what the validator
+  checks (ids, `along`'s range, targets' shapes, seed and play), each copy a little off, one crashing, against
+  decision 0066. The owner chose all three changes (2026-10-26); they apply decision 0066, which is not amended. The
+  review count restarts.
+- **Redesign**: (a) the disk is the file's last text and whether it exists; `onDisk` takes text or none, one rule for
+  made, changed and deleted, a 409 the same conflict, the panel saying which; a deletion keeps the copy and its
+  layout. (b) `Editor.click` pairs clicks (600 ms, 4 px): the second of a double click is that gesture; it ends a line
+  or an area only when its first click added a point, and adds a point to the selection only when its first click did
+  not select; the page's dblclick listener is gone. (c) The drawing sets values and the validator judges them: `add`
+  refuses only a kind the catalogue lacks and an id in use; the form checks only the id (it names the file); a
+  reference's target is the validator's `refTargetProblem`, and `along` a line (a type guard: it is measured along
+  it). With them, from round 3: a create without hard links falls back to an exclusive copy; the new-map button and
+  the map list wait for a drawing or a drag; the editor's picking is one `pickAt`. Tests: the editor's tests click
+  through a clock (`test/map-clock.ts`); the page check deletes the new map's file and writes it again.
+
 ## Open questions
 
 (M7b)
-- A new map whose id another map took between its making and its first save cannot be saved under another id yet:
-  a map's own fields are M7c's form.
+- A new map whose id another map took between its making and its first save is a conflict: overwrite that file or
+  take it. Saving the drawing under another id needs the map's own fields (M7c's form).
 - While drawing, each pointer move redraws the lit view to move the preview (one frame a displayed frame, as a drag
   does since M7a); to measure on Austerlitz, and to draw the overlay alone if it lags.
 

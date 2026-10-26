@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { mayWrite, saveMapFile } from '../tools/map-save.ts'
+import { createFrom, mayWrite, saveMapFile } from '../tools/map-save.ts'
 
 describe('M7b: a new map saved', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-create-'))
@@ -37,6 +37,19 @@ describe('M7b: a new map saved', () => {
     } finally {
       fs.chmodSync(path.join(ro, 'maps'), 0o755)
     }
+  })
+  it('creates by an exclusive copy where the file system has no hard links, never over a file there', () => {
+    const tmp = path.join(root, 'maps', 'c.tmp')
+    const file = path.join(root, 'maps', 'c.map.json')
+    fs.writeFileSync(tmp, 'copied')
+    const noLinks = () => {
+      throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' })
+    }
+    createFrom(tmp, file, noLinks)
+    expect(fs.readFileSync(file, 'utf8')).toBe('copied')
+    fs.writeFileSync(tmp, 'again')
+    expect(() => createFrom(tmp, file, noLinks)).toThrow(/EEXIST|exists/)
+    expect(fs.readFileSync(file, 'utf8')).toBe('copied')
   })
   it('creates only a map file', () => {
     expect(saveMapFile(root, { file: '/maps/../x.map.json', base: null, text: 'x' }).ok).toBe(false)

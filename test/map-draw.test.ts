@@ -27,6 +27,7 @@ import {
 import { isBarrier, type Place } from '../src/app/map/edit.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
 import { root } from './fx.ts'
+import { again, clickClock } from './map-clock.ts'
 
 const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'kinds.json'), 'utf8')) as Catalogue
 // a map with a target for every reference the catalogue names: a stream, a road
@@ -98,7 +99,7 @@ function drawKind(map: MapFile, kind: string, shape: ShapeName | 'none', id: str
       d = setRef(d, null, [-200, 3], p) as Draft
       continue
     }
-    const t = map.features.find(x => refAccepts(s.want, id, x, map.presets))!
+    const t = map.features.find(x => refAccepts(s.ref, s.want, id, x, map.presets))!
     expect(t, `${kind}: a target for ${s.ref}`).toBeDefined()
     const at = (k: number) => pointAt(t.line!, k).slice(0, 2) as Pt
     d = setRef(d, t, at(120), p) as Draft
@@ -188,10 +189,12 @@ describe('M7b: drawing a feature', () => {
   })
   it('refuses a target of another category or shape, and the feature itself', () => {
     const pond: Feature = { id: 'pond', kind: 'water.pond', circle: [[0, 0], 10] }
-    expect(refAccepts('water:line', 'ford', base.features[0])).toBe(true)
-    expect(refAccepts('water:line', 'ford', pond)).toBe(false)
-    expect(refAccepts('water:line', 'ford', base.features[1])).toBe(false)
-    expect(refAccepts('water', 'brook', base.features[0])).toBe(false)
+    expect(refAccepts('on', 'water:line', 'ford', base.features[0])).toBe(true)
+    expect(refAccepts('on', 'water:line', 'ford', pond)).toBe(false)
+    expect(refAccepts('on', 'water:line', 'ford', base.features[1])).toBe(false)
+    expect(refAccepts('on', 'water', 'brook', base.features[0])).toBe(false)
+    // along runs along a line, whatever the catalogue names: an area of the category is no target
+    expect(refAccepts('along', 'water', 'v', pond)).toBe(false)
   })
   it('skips an optional reference with Enter, and refuses to skip a needed one', () => {
     const meta = kindMeta(cat, kindChain(cat, 'built.bridge')!)
@@ -292,6 +295,7 @@ function host(shown: () => Feature[]) {
   return { h, issues }
 }
 afterEach(() => vi.unstubAllGlobals())
+clickClock()
 
 describe('M7b: the editor draws', () => {
   const text = formatMap(base)
@@ -341,7 +345,7 @@ describe('M7b: the editor draws', () => {
     ed.add('way.path', 'line', 'path')
     click(ed, [0, 100])
     click(ed, [50, 100])
-    ed.dblclick(50, -100)
+    again(ed, 50, -100)
     expect(ed.feature('path')!.line).toEqual([
       [0, 100],
       [50, 100],
@@ -352,13 +356,19 @@ describe('M7b: the editor draws', () => {
     expect(ed.feature('path-2')).toBeUndefined()
     expect(ed.canUndo).toBe(true) // the first path only
   })
-  it('refuses a taken or malformed id and a shape the kind does not take', () => {
+  it("refuses only a taken id and a kind not in the catalogue; the rest is the validator's, at once", () => {
     const { ed } = make()
     expect(ed.add('way.path', 'line', 'brook')).toBe(false)
-    expect(ed.add('way.path', 'line', 'Brook 2')).toBe(false)
-    expect(ed.add('way.path', 'area', 'p')).toBe(false)
     expect(ed.add('way.nothing', 'line', 'p')).toBe(false)
     expect(ed.drawing).toBe(false)
+    // a malformed id, a shape the kind does not take: drawn, and named wrong as soon as made
+    expect(ed.add('way.path', 'area', 'Brook 2')).toBe(true)
+    click(ed, [0, 300])
+    click(ed, [50, 300])
+    click(ed, [50, 350])
+    ed.enter()
+    expect(ed.selected).toBe('Brook 2')
+    expect(ed.message).toMatch(/^now wrong: \[Brook 2\]/)
   })
   it('makes a kind with no shape and no reference at once', () => {
     const { ed } = make()
@@ -401,8 +411,7 @@ describe('M7b: the end of a drawing by a double click', () => {
     ed.click(2, -100)
     ed.click(8, -300)
     expect(ed.drawing).toBe(false)
-    ed.click(8, -300)
-    ed.dblclick(8, -300)
+    again(ed, 8, -300)
     expect(ed.selected).toBe('village')
     // an area closed near its first corner (off its handle) by a double click: no point added after
     ed.add('ground.meadow', 'area', 'field')
@@ -415,11 +424,33 @@ describe('M7b: the end of a drawing by a double click', () => {
       ed.click(x, -z)
     }
     expect(ed.drawing).toBe(false)
-    ed.click(210, -202)
-    ed.dblclick(210, -202)
+    again(ed, 210, -202)
     expect(ed.feature('field')!.area![0]).toHaveLength(3)
     ed.undo()
     expect(ed.feature('field')).toBeUndefined()
+  })
+  it("gives a double click's second click to no step after the one its first click ended", () => {
+    const ed = make()
+    // a circle's centre double clicked: no circle of the least radius
+    ed.add('relief.hill', 'circle', 'hill')
+    ed.click(300, -300)
+    again(ed, 300, -300)
+    expect(ed.drawing).toBe(true)
+    expect(ed.prompt).toMatch(/edge/)
+    ed.drop()
+    // a village's area closed on its first corner by a double click: its stretch along the road is still to click
+    ed.add('built.village', 'area', 'village')
+    for (const [x, z] of [
+      [20, 100],
+      [60, 100],
+      [60, 140],
+    ]) {
+      ed.click(x, -z)
+    }
+    ed.click(21, -101)
+    again(ed, 21, -101)
+    expect(ed.drawing).toBe(true)
+    expect(ed.prompt).toMatch(/where it starts/)
   })
 })
 
@@ -430,7 +461,7 @@ describe('M7b: a new map', () => {
     const ed = new Editor(h)
     ed.setCatalogue(cat)
     ed.create('/maps/fresh.map.json', made)
-    expect(ed.isNew).toBe(true)
+    expect(ed.noFile).toBe(true)
     expect(ed.dirty).toBe(true)
     ed.add('relief.base', 'none', 'terrain')
     ed.add('ground.meadow', 'circle', 'meadow')
@@ -443,7 +474,7 @@ describe('M7b: a new map', () => {
     })
     expect(await ed.save()).toBe(true)
     expect(sent!.base).toBeNull()
-    expect(ed.isNew).toBe(false)
+    expect(ed.noFile).toBe(false)
     expect(ed.dirty).toBe(false)
     const saved = sent!.text
     expect(validate(JSON.parse(saved) as MapFile, cat)).toEqual([])
@@ -460,7 +491,7 @@ describe('M7b: a new map', () => {
         .map(l => l.trim()),
     ).toEqual([expect.stringContaining('"id":"hill"')])
   })
-  it('says a new map whose id was taken meanwhile is not saved, and offers no overwrite of the other map', async () => {
+  it('takes a file made under its id meanwhile as a conflict, which says so', async () => {
     const { h } = host(() => [])
     const ed = new Editor(h)
     ed.create('/maps/fresh.map.json', made)
@@ -469,25 +500,50 @@ describe('M7b: a new map', () => {
       async () => new Response(JSON.stringify({ ok: false, status: 409, current: 'another map' }), { status: 409 }),
     )
     expect(await ed.save()).toBe(false)
-    expect(ed.conflict).toBeNull()
-    expect(ed.isNew).toBe(true)
-    expect(ed.message).toMatch(/needs another id/)
+    expect(ed.conflict).toBe('another map')
+    expect(ed.conflictWhy).toMatch(/made on disk since this map was made here/)
+    expect(ed.noFile).toBe(false)
+    // and a file made there seen by the watcher, before any save: the same
+    const other = new Editor(h)
+    other.create('/maps/fresh.map.json', made)
+    expect(other.onDisk('/maps/fresh.map.json', 'another map')).toBe(false)
+    expect(other.conflict).toBe('another map')
   })
-  it('makes a map deleted on disk a new map, which the next save makes again', async () => {
+  // a hand layout, so a save written afresh would show
+  const handText = formatMap(made).replace('"seed": 1', '"seed":   1')
+  it('keeps the copy of a file deleted on disk, and the next save makes it again in its layout', async () => {
     const { h } = host(() => [])
     const ed = new Editor(h)
-    const t = formatMap(made)
-    ed.load('/maps/fresh.map.json', t)
-    ed.deleted('/maps/fresh.map.json')
-    expect(ed.isNew).toBe(true)
+    ed.load('/maps/fresh.map.json', handText)
+    expect(ed.onDisk('/maps/fresh.map.json', null)).toBe(false)
+    expect(ed.noFile).toBe(true)
     expect(ed.dirty).toBe(true)
-    let sent: { base: string | null } | null = null
+    expect(ed.conflict).toBeNull()
+    expect(ed.message).toMatch(/deleted/)
+    let sent: { base: string | null; text: string } | null = null
     vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
       sent = JSON.parse(init.body) as typeof sent
       return new Response('{"ok":true}')
     })
     expect(await ed.save()).toBe(true)
     expect(sent!.base).toBeNull()
+    expect(sent!.text).toBe(handText)
+    expect(ed.noFile).toBe(false)
+  })
+  it('settles a file deleted and written again with the same bytes (a safe write, a checkout), with or without edits', () => {
+    const { h } = host(() => [])
+    for (const edited of [false, true]) {
+      const ed = new Editor(h)
+      ed.setCatalogue(cat)
+      ed.load('/maps/fresh.map.json', handText)
+      if (edited) ed.add('relief.base', 'none', 'terrain')
+      ed.onDisk('/maps/fresh.map.json', null)
+      expect(ed.onDisk('/maps/fresh.map.json', handText)).toBe(false)
+      expect(ed.conflict).toBeNull()
+      expect(ed.noFile).toBe(false)
+      expect(ed.dirty).toBe(edited)
+      expect(ed.message).toBe('')
+    }
   })
   it('writes an empty new map that reads back and takes its first feature', () => {
     const t = formatMap(made)

@@ -9,6 +9,7 @@ import { formatMap } from '../src/map/format.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
 import { root } from './fx.ts'
 import { newestOnly } from '../src/app/map/latest.ts'
+import { again, clickClock, dbl } from './map-clock.ts'
 
 const text = formatMap({
   format: 1,
@@ -56,6 +57,7 @@ function drag(ed: Editor, from: [number, number], to: [number, number]) {
   ed.up()
 }
 afterEach(() => vi.unstubAllGlobals())
+clickClock()
 
 describe('M7a: the editor', () => {
   it('drags a point into the copy, compiles it, and undoes it', () => {
@@ -185,9 +187,9 @@ describe('M7a: the editor under interruptions', () => {
   it('adds no point on a double click over an existing one', () => {
     const { ed } = make()
     ed.select('road')
-    ed.dblclick(100, -50)
+    dbl(ed, 100, -50)
     expect(ed.feature('road')!.line!.length).toBe(2)
-    ed.dblclick(0, -50)
+    dbl(ed, 0, -50)
     expect(ed.feature('road')!.line!.length).toBe(3)
   })
 })
@@ -212,7 +214,7 @@ describe('M7a redesign: one state machine, the validator as the gate', () => {
   it('keeps the hover through a click on a handle, so Delete then removes that point, not the feature', () => {
     const { ed } = make()
     ed.select('road')
-    ed.dblclick(0, -50) // a middle point
+    dbl(ed, 0, -50) // a middle point
     ed.move(0, -50)
     ed.click(0, -50)
     ed.remove()
@@ -242,7 +244,7 @@ describe('M7a redesign: one state machine, the validator as the gate', () => {
     ed.undo()
     ed.remove()
     ed.select('hill')
-    ed.dblclick(0, -50)
+    dbl(ed, 0, -50)
     expect(await ed.save()).toBe(false)
     expect(ed.doc).toBe(during)
     expect(ed.selected).toBe('road')
@@ -340,7 +342,7 @@ describe('M7a redesign, round 1', () => {
     )
     ed.setCatalogue(cat)
     ed.select('road')
-    ed.dblclick(-50, -50)
+    dbl(ed, -50, -50)
     expect(ed.feature('road')!.line!.length).toBe(5)
     expect(ed.message).toMatch(/^now wrong: \[road\] .*crosses itself/)
   })
@@ -377,7 +379,7 @@ describe('M7a redesign, round 1', () => {
     ed.select('wood')
     ed.click(-100, 152) // 2 px outside the south edge
     expect(ed.selected).toBe('wood')
-    ed.dblclick(-100, 152)
+    again(ed, -100, 152)
     expect(ed.feature('wood')!.area![0].length).toBe(5)
   })
   it('settles a conflict that came during a press that edited nothing: the file is read in', () => {
@@ -580,7 +582,7 @@ describe('M7a redesign 2, round 1', () => {
   it('only selects on a double click whose first click selected', () => {
     const { ed } = make()
     ed.click(0, -50) // selects the road
-    ed.dblclick(0, -50)
+    again(ed, 0, -50)
     expect(ed.feature('road')!.line!.length).toBe(2)
   })
   it("ignores the watcher's report of a save still on its way, so an undo made meanwhile stands", async () => {

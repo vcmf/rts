@@ -31,6 +31,26 @@ export function mayWrite(headers: { 'content-type'?: string; origin?: string; ho
 
 const MAP_FILE = /^\/maps\/[a-z0-9]+(-[a-z0-9]+)*\.map\.json$/
 
+// the errors of a file system without hard links (exFAT, some network and container mounts)
+const NO_LINKS = new Set(['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'ENOSYS'])
+/**
+ * Puts a written file in place as a new file, never over one there (EEXIST): a hard link (whole at once), or where the
+ * file system has none an exclusive copy (a copy that fails part way is removed).
+ */
+export function createFrom(tmp: string, file: string, link = fs.linkSync): void {
+  try {
+    link(tmp, file)
+  } catch (e) {
+    if (!NO_LINKS.has((e as NodeJS.ErrnoException).code ?? '')) throw e
+    try {
+      fs.copyFileSync(tmp, file, fs.constants.COPYFILE_EXCL)
+    } catch (e2) {
+      if ((e2 as NodeJS.ErrnoException).code !== 'EEXIST') fs.rmSync(file, { force: true })
+      throw e2
+    }
+  }
+}
+
 /**
  * Writes a map file under `root` if it still holds the text the page read, through a temporary file and a rename; with
  * no base, creates it if it does not exist.
@@ -51,7 +71,7 @@ export function saveMapFile(root: string, req: SaveRequest): SaveResult {
     const tmp = `${file}.${process.pid}.tmp`
     try {
       fs.writeFileSync(tmp, req.text)
-      fs.linkSync(tmp, file)
+      createFrom(tmp, file)
       return { ok: true }
     } catch (e) {
       const err = e as NodeJS.ErrnoException

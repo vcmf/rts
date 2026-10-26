@@ -265,19 +265,29 @@ maps/kinds.json ──► checkCatalogue ─┐
       changed one is written on one line in place (or in the file's first bytes, when an undo brought it back), a new
       one appended, a deleted one cut. A change on disk with no unsaved edits is read in; the page's own save is not
       recompiled. The built page selects but does not edit.
-    - A new map (M7b, the panel's "new map": id, name, size, play area, seed, season) is a copy with no file yet
-      (`Editor.create`); its first save creates `maps/<id>.map.json` (the route takes no base as "create", never
-      over a file already there; a map of that id made meanwhile is said, never overwritten). A map file deleted under
-      the page turns its copy into a new map, which a save makes again. A new map file reaches the page as `map-changed` like any other (the plugin's
-      hot update runs after Vite's, whose glob of maps would reload the page) and joins the list.
+    - The disk (M7b): the editor knows the file's last text (`base`, also the layout a save keeps) and whether the
+      file is there (`exists`). A new map (the panel's "new map": its id names the file; name, size, play area, seed
+      and season are the validator's to judge, at once) has no file yet; a file deleted under the page keeps its copy
+      and layout. A save with no file creates it (the route takes no base as "create", never over a file there). A
+      creation, a change and a deletion on disk come through one path (`Editor.onDisk`, text or none): the text the
+      page knows settles (a delete and a write of the same bytes too); another, with no unsaved edits, is read in;
+      else it is a conflict, whatever made it (a hand edit, another page's map of that id), and the panel says which.
+      A new map file reaches the page as `map-changed` (the plugin's hot update runs after Vite's, whose glob of maps
+      would reload the page) and joins the list.
+    - Clicks are paired by the editor: the second click of a double click (within 600 ms and 4 px) is that gesture,
+      never a click of its own. Idle, a double click on the selection's line or ring adds a point (not when its first
+      click selected); drawing, it ends a line or an area whose point its first click added, and does nothing when
+      that click ended the step.
     - Adding a feature (M7b, `src/app/map/draw.ts`): a kind from the catalogue, one of its shapes and an id proposed
       from the kind's last name (`wood2` when `wood` is taken: never a generated child's form); then clicks draw it
-      (a point; a line's or an area's points, Enter, a double click or a click back on the first point ending it; a circle's centre and edge; an ellipse's centre, long radius and side), a barrier's points
-      snapped as a drag snaps them, and each reference the kind takes is set by clicking its target (`on`,
-      `carries`, `crosses`: a feature of the category and shape the catalogue names; `near`: a point; `along`: two
-      clicks on the line, in metres along it; an optional one skipped with Enter). Backspace takes a click back,
-      Escape drops the drawing. The feature is made in one edit and selected. A press still pans while drawing. The
-      selection's references are listed in the panel, each set again by clicking its target.
+      (a point; a line's or an area's points, Enter, a double click or a click back on the first point ending it; a
+      circle's centre and edge; an ellipse's centre, long radius and side), a barrier's points snapped as a drag
+      snaps them, and each reference the kind takes is set by clicking its target (`on`, `carries`, `crosses`: a
+      feature the validator's `refTargetProblem` accepts; `near`: a point; `along`: two clicks on a line, in metres
+      along it; an optional one skipped with Enter). Backspace takes a click back, Escape drops the drawing. The
+      feature is made in one edit and selected, and what the validator finds in it shows at once (only a kind the
+      catalogue lacks and an id already used are refused). A press still pans while drawing. The selection's
+      references are listed in the panel, each set again by clicking its target.
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes

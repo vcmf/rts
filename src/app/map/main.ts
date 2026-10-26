@@ -93,6 +93,7 @@ const saveButton = $<HTMLButtonElement>('save')
 const undoButton = $<HTMLButtonElement>('undo')
 const redoButton = $<HTMLButtonElement>('redo')
 const conflictBox = $('conflict')
+const conflictWhy = $('conflictWhy')
 const addKind = $<HTMLSelectElement>('addKind')
 const addShape = $<HTMLSelectElement>('addShape')
 const addId = $<HTMLInputElement>('addId')
@@ -348,9 +349,9 @@ const toWorld = (sx: number, sy: number): Pt =>
 
 // the editor (M7): it compiles its copy of the map through the page, and draws its selection over the outlines
 const addGo = $<HTMLButtonElement>('addGo')
-/** A new map never saved has no file to come back to: its entry goes when the page leaves it. */
+/** A map with no file on disk (new, or deleted under the page) has nothing to come back to: its entry goes with it. */
 const dropUnsavedNew = () => {
-  if (editor.isNew) [...picker.options].find(o => o.value === editor.file)?.remove()
+  if (editor.noFile) [...picker.options].find(o => o.value === editor.file)?.remove()
 }
 const editor = new Editor({
   ctx,
@@ -384,6 +385,7 @@ function editPanel(): void {
   undoButton.disabled = !editor.enabled || !editor.canUndo
   redoButton.disabled = !editor.enabled || !editor.canRedo
   conflictBox.hidden = editor.conflict === null
+  conflictWhy.textContent = editor.conflictWhy
   drawPrompt.textContent = editor.prompt
   addGo.disabled = !editor.enabled || !editor.doc || editor.drawing
   // a new feature's id: the proposal follows the copy's ids (it is taken once the feature is made)
@@ -720,9 +722,6 @@ const interrupted = (e: PointerEvent) => {
 canvas.addEventListener('pointercancel', interrupted)
 canvas.addEventListener('pointerleave', () => editor.leave())
 canvas.addEventListener('lostpointercapture', interrupted)
-canvas.addEventListener('dblclick', e => {
-  if (overlaySelect.value !== 'sight' || editor.drawing) editor.dblclick(e.offsetX, e.offsetY)
-})
 canvas.addEventListener('pointermove', e => {
   if (drag && drag.id !== e.pointerId) return
   // the editor drags, or notes the handle under the pointer; a press elsewhere pans
@@ -755,6 +754,11 @@ canvas.addEventListener(
 )
 addEventListener('resize', draw)
 picker.addEventListener('change', () => {
+  if (!editor.idle) {
+    picker.value = editor.file!
+    editor.note('finish the drawing or the drag first')
+    return
+  }
   if (editor.dirty && !confirm('The map has unsaved edits. Drop them and open another map?')) {
     picker.value = editor.file!
     return
@@ -833,14 +837,15 @@ $('newMake').addEventListener('click', () => {
   const play = Number(val('newPlay'))
   // no seed given: a random one
   const seed = val('newSeed') === '' ? Math.floor(Math.random() * 2 ** 32) : Number(val('newSeed'))
-  const why = !ID.test(id)
-    ? 'its id is lower-case letters and digits, in words joined by "-"'
-    : [...picker.options].some(o => o.text === id)
-      ? `a map ${id} exists`
-      : !(size > 0) || !(play > 0) || play > size
-        ? 'the play area is inside the map: 0 < play ≤ size'
-        : !Number.isInteger(seed) || seed < 0 || seed >= 2 ** 32
-          ? 'the seed is a whole number from 0 to 4294967295'
+  // the id names the file (the save's rule); the rest is the validator's to judge, at once, like any edit
+  const why = !editor.enabled
+    ? 'making maps needs the dev server (npm run dev)'
+    : !editor.idle
+      ? 'finish the drawing or the drag first'
+      : !ID.test(id)
+        ? 'its id names its file: lower-case letters and digits, in words joined by "-"'
+        : [...picker.options].some(o => o.text === id)
+          ? `a map ${id} exists`
           : ''
   if (why) return editor.note(`no new map: ${why}`)
   if (editor.dirty && !confirm('The map has unsaved edits. Drop them and make a new map?')) return
@@ -881,15 +886,11 @@ const diskRead = newestOnly()
 if (import.meta.hot) {
   import.meta.hot.on('map-changed', (d: { file: string; at: number; type: 'create' | 'update' | 'delete' }) => {
     // a map file made since the page loaded (by hand, or another page's new map) joins the list; one deleted leaves
-    // it, unless the page shows it: then the editor's copy is a new map, which a save makes again
-    if (d.file.endsWith('.map.json')) {
+    // it, unless the page shows it (the editor keeps its copy, which a save makes again)
+    if (d.file.endsWith('.map.json') && d.file !== picker.value) {
       const listed = [...picker.options].find(o => o.value === d.file)
-      if (d.type === 'delete') {
-        if (d.file === picker.value) editor.deleted(d.file)
-        else listed?.remove()
-        return
-      }
-      if (!listed) picker.append(mapOption(d.file))
+      if (d.type === 'delete') listed?.remove()
+      else if (!listed) picker.append(mapOption(d.file))
     }
     if (d.file.endsWith('.rdem')) {
       // a heightfield is large and written in one go: wait until the saves stop before reading it, so a file still
@@ -899,12 +900,13 @@ if (import.meta.hot) {
       clearTimeout(rdemTimer)
       rdemTimer = setTimeout(() => void compile('save', d.at), RDEM_SETTLE)
     } else if (d.file === picker.value) {
-      // the map file: through the editor, which ignores its own save and keeps unsaved edits (a conflict)
+      // the map file, made, changed or deleted: through the editor, which ignores its own save and keeps unsaved
+      // edits (a conflict); the newest read alone counts, a deletion too (an older read may resolve after it)
       const file = d.file
-      // the newest read alone counts: an older one may resolve after it
-      void diskRead(read(file, MAPS)).then(
-        text => {
-          if (text !== null && picker.value === file && editor.onDisk(file, text)) void compile('save', d.at)
+      const disk = d.type === 'delete' ? Promise.resolve({ text: null }) : read(file, MAPS).then(text => ({ text }))
+      void diskRead<{ text: string | null }>(disk).then(
+        got => {
+          if (got && picker.value === file && editor.onDisk(file, got.text)) void compile('save', d.at)
         },
         // said in the editor's panel: the page's compile in flight (an edit's) must still be drawn
         (err: Error) => editor.note(`cannot read the file on disk: ${err.message}`),
@@ -997,8 +999,11 @@ window.MAP = {
   get drawing() {
     return editor.drawing
   },
-  get isNew() {
-    return editor.isNew
+  get noFile() {
+    return editor.noFile
+  },
+  get conflict() {
+    return editor.conflict
   },
   project: (x: number, z: number) => toScreen(x, z),
   fit: () => {
