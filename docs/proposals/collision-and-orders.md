@@ -152,7 +152,7 @@ like that: each piece would get its own allowance. So C1 splits the movement of 
 1. **Propose.** After commands, the scenario's plan and the standing behaviour (steps 1–4 of the tick), every
    formation works out its whole motion for the tick from its start-of-tick state, without committing it: the turn,
    the advance, the lags' catch-up, a wheel, a step back, a recoil, a router's run. A melee's step back and its
-   follow are indivisible proposals (§ Contact). The result is a proposed end pose and, for each bin, the displacement of its places from start to end.
+   follow are not proposed here: they are made in the melee step (§ Contact). The result is a proposed end pose and, for each bin, the displacement of its places from start to end.
    A Face about, the start of a change of shape and a loose body's ask to form are proposals too, marked
    **indivisible**: they are granted whole or not at all.
 2. **Resolve.** Every proposal is checked against every other at once (§ The clamp, § Indivisible proposals).
@@ -217,31 +217,48 @@ an indivisible one. Every other formation is **moving**.
 - **A melee** stands in contact, and is judged in rounds (`docs/research/melee-outcomes.md`). Every game and rule
   set surveyed moves a loser a fixed distance or not at all; none lets it give way continuously, and a continuous
   give way with a bend failed five reviews here (§ Alternatives considered).
-  - **A round** ends every `collision.round` seconds (about 3 s), on the ticks that are a whole number of rounds: no
-    clock is kept per melee, so a melee shorter than a round may see none. Between rounds the melee is as today: each
-    side strikes, owes losses and takes their shock. A round is judged and moved in the melee step (step 10), after
-    the strikes, on the ground as the movement step left it, within the tick: nothing is carried to the next.
+  - **Ahead of:** a body stands ahead of a battalion when its places' centre lies beyond the battalion's front line
+    (its anchor's line across its heading) and within its frontage. It is a test of the two shapes, not of the
+    angle between anchors, which calls two wide lines a little offset a flank fight.
+  - **A round** of a pair ends every `collision.round` seconds (about 3 s), on the ticks where the tick plus the
+    pair's lower handle is a whole number of rounds: no clock is kept per melee, and the pairs on the field are not
+    judged together. A melee shorter than a round may see none. Between rounds the melee is as today: each side
+    strikes, owes losses and takes their shock.
+  - **Where:** a round is judged and moved in the melee step (step 10), after the strikes, on the bodies as the
+    movement step committed them, within the tick: nothing is carried to the next. It is not a proposal of the
+    movement step.
   - **Only a pair is judged:** two battalions each the other's foe, both in the fight, neither changing shape nor in
-    a march column. Each one's push on the other is the losses its strike owes the other this tick, as expected
-    (`rate × DT × men in contact × strength`, before they are drawn as whole men), times its morale (0..1). The men in
-    contact on both sides are much the same, so the losses alone barely differ (X-01: 2%); what decides a melee is
-    whose nerve goes first. The one whose push is smaller by more than `collision.press` of the two loses the round;
+    a march column, one ahead of the other. Each one's push on the other is the losses its strike owes the other
+    this tick, as expected (`rate × DT × men in contact × strength`, before they are drawn as whole men), times its
+    morale (taken as 0 below 0). Strength already falls with the morale's level, so the nerve counts twice: what
+    decides a melee between like units is whose nerve goes first, and a kind stronger in melee (cavalry against
+    foot) pushes harder. The one whose push is smaller by more than `collision.press` of the two loses the round;
     at most one of a pair loses. Other enemies fighting either of them strike as today, and judge nothing.
-  - **The loser steps back** `collision.step` (about 2 m) straight to its rear, as one rigid move, its shape and its
-    lags as they stand, and **its foe follows** by the same displacement, so the two stand as they stood, in contact.
-    The pair's move is one indivisible proposal, tested against every body but the two: its ground is the loser's
-    places at the end of the step, and the winner's. If it is not granted, the loser's step alone is tried, the
-    winner standing; a gap opened that way may end the melee as today (out of contact). The winner does not follow
-    if another enemy is fighting it: it stands, and the loser's step alone is tried.
-  - **Pinned:** a loser that cannot step back takes `collision.pinned`, a shock to its morale, once for the round.
-    It cannot step back when its step alone is not granted (a friend, an enemy or impassable ground in the way), or
-    when another enemy is fighting it besides its foe: a battalion fighting two has nowhere to give. No more men
-    are lost than the strikes take; the cost of a lost round is the ground, or the nerve.
+  - **The direction:** the loser steps along the winner's heading if the loser stands ahead of the winner (the
+    winner drives into it, from the front, a flank or the rear), else straight to the loser's rear (the winner is
+    ahead of it). It keeps its heading either way: it gives ground, it does not turn.
+  - **The pair's move:** the loser steps `collision.step` (about 2 m) as one rigid move, its shape and its lags as
+    they stand, and its foe follows by the same displacement, so the two stand as they stood. It is granted whole
+    or not at all. Its test: neither's places at the end of the move meet another formed body's places or margin
+    (the friend or the enemy margin), a reserved path, or the ground of a pair moved before it in this tick. The
+    pairs move in a keyed draw for the tick on the loser's handle, ties by handle, as the indivisible proposals are
+    ordered. The move sets no velocity: in melee both stand (`vx`, `vz` 0), and the soldier layer walks the men to
+    their new slots.
+  - **The winner cannot follow** when another enemy is fighting it, or the pair's move is not granted. Then the
+    loser's step alone is tried, by the same test; if it is granted the loser has fallen back out of the fight: both
+    leave the melee as a recoil leaves it, the winner stands, and neither pursues.
+  - **Pinned:** a loser that cannot step back takes `collision.pinned`, a shock to its morale, once for the round. It
+    cannot step back when neither move is granted (a friend, an enemy or impassable ground in the way), or when
+    another enemy is fighting it from a flank or the rear (not ahead of it): a battalion fighting front and flank
+    has nowhere to give. A second enemy ahead of it pins nothing; the step takes it from both. No more men are lost
+    than the strikes take; the cost of a lost round is the ground, or the nerve.
   - **A battalion that keeps losing keeps stepping back,** about `collision.step / collision.round` (0.7 m/s), until
     its nerve goes or the push turns; its foe keeps pace. That is the melee's trend made visible, and the morale it
     loses on the way is the strikes' and, pinned, the shock's.
-  - **The order:** every pair is judged from the tick's strikes before any pair moves; the pairs' moves are then
-    granted in the order of the indivisible proposals, so the reversed visiting order gives the same state.
+  - **The order:** every pair due this tick is judged from the tick's strikes before any pair moves, and the moves
+    are made in the keyed order above, so the reversed visiting order gives the same state.
+  - **Seen:** the bench's Statuses layer shows a pair's last round ("stepping back", "pinned", "fell back") until its
+    next, from the melee step's scratch: a debug view, not world state.
 
   When the loser routs it is loose, and the pursuit is today's.
 
@@ -368,7 +385,8 @@ interruption, so this part is to be playtested.
   loses order against friends and nerve against enemies. Rejected after five reviews: the bend fought the lag model
   (a follower stopped once its flanks reached the lag limit; a held line never dressed, so its disorder stuck), who
   held it needed the gate to report every blocker, and flank attackers needed their own rules. Field of Glory's
-  designers dropped push-backs and follow-ups for the same reason (`docs/research/melee-outcomes.md`).
+  designers dropped push-backs and follow-ups from a free melee of many units for the same complexity
+  (`docs/research/melee-outcomes.md`); the steps keep push-back to a pair, and pin or end the melee otherwise.
 - **Clearing the queue on contact** (today). Rejected: no game does it, and it loses the player's plan (#179).
 
 ## Drawbacks

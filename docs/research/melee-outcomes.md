@@ -31,7 +31,7 @@ text, as their PDFs did not extract; none of the studios has published its engin
 | Black Powder 2 | break test: break, retire a full move and disordered, or hold | chooses: advance, stand, fall back, sweep on | can't retire: up to two moves to a tenable place, else breaks | −1 to hit engaged in flank or rear |
 | Lasalle | decisive (twice the hits): breaks; else staggers back about a base width, disrupted | an attacker that wins must advance; a defender never does | — | flanked: half the dice |
 | Napoleon's Battles | loses figures by the margin; rounds go on until a retreat or a rout | must occupy the ground (1") | surrounded: surrenders | — |
-| Hex games (Napoleon at Waterloo and kin) | retreat a hex out of enemy zones of control, or eliminated | may advance into the vacated hex | no hex to retreat to: eliminated | surrounded: no retreat |
+| Napoleon at War (HexWar; the hex games' rule) | retreat a hex out of enemy zones of control, or eliminated | may advance into the vacated hex | no hex to retreat to: eliminated | surrounded: no retreat |
 | DBA 3 | beaten: recoil a base depth, facing kept; doubled: destroyed | some types pursue a fixed distance | can't start the recoil: destroyed | beaten with an enemy on its flank: destroyed |
 | Basic Impetus | most loss loses: cohesion test, retreat a die roll without turning | some must pursue; contact again is a new melee | pushes friends back and disorders them; ground it cannot cross: routs | attacked there: disordered at once; loses: routs |
 | Warhammer: The Old World | break test: give ground 2", fall back in good order, or flee | follows up into contact on a give ground | can't break contact: locked, fights again as a draw | +1 flank, +2 rear to the result |
@@ -119,6 +119,6 @@ earlier note covers the blobs and pass-through of these games in detail.
    move (Field of Glory II's drawn-out winners are the warning).
 3. **A blocked step costs, once a round.** Anything in the way (a friend, an enemy, the ground) turns the step into
    a cost on the loser's nerve, rather than a geometry problem of who blocked it.
-4. **Fighting more than one enemy pins.** A loser fighting a second enemy cannot step back (DBA and Impetus pin or
-   destroy a loser with an enemy on its flank): one rule, no geometry of sideways retreats.
+4. **An enemy on the flank pins.** A loser fighting a second enemy on its flank or rear cannot step back (DBA and
+   Impetus pin or destroy a loser with an enemy on its flank): one rule, no geometry of sideways retreats.
 5. **No extra deaths.** The step and the nerve it costs are the price of losing; the men lost stay the strike's.
