@@ -8,20 +8,22 @@ import { sstep } from './noise.ts'
  *  of the soft bake at the tip (0: the shape's own blur, 1: the soft one; at the soles the shape's own); dark: the
  *  share of the ground's full shadow at the tip; foot: the share at the soles and over the contact's core (core, m
  *  from the soles), from where it turns to soft and dark toward the tip; len: its length along the sun from the soles
- *  (1: the shape's) */
+ *  (1: the shape's); gain: the strength of its darkening at every point along it, foot and tip alike (1: the ground's
+ *  own shade as it was; above, the darkening's luminance raised to that power, its hue kept: shadowShade) */
 export interface ShadowLook {
   soft: number
   dark: number
   foot: number
   core: number
   len: number
+  gain: number
 }
 /** Up close (the owner, 2026-10-24: smaller, lighter, fuzzier, then darker and solid at the feet, lighter and softer
  *  away from them; softness 0.75 chosen from the review's sheet 7) and far (decision 0049's: one value end to
  *  end) */
 export const SHADOW_LOOK: { readonly close: ShadowLook; readonly far: ShadowLook } = {
-  close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7 },
-  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1 },
+  close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7, gain: 1 },
+  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1, gain: 1 },
 }
 /** The band of the camera's distance to its focus (m) over which the close look turns into the far one */
 export const SHADOW_LOOK_BAND: readonly [number, number] = [45, 85]
@@ -39,6 +41,7 @@ export function lookBetween(close: ShadowLook, far: ShadowLook, t: number, out: 
   out.foot = mix(close.foot, far.foot)
   out.core = mix(close.core, far.core)
   out.len = mix(close.len, far.len)
+  out.gain = mix(close.gain, far.gain)
   return out
 }
 
@@ -92,10 +95,32 @@ export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: numbe
 /** The decal's rule at a fragment (src/look/shaders/unitdecal.frag, mirrored here for its tests): of the shape's value
  *  s at g along the gradient (0 at the core, 1 at the tip), the share of the samples it covers and the darkness every
  *  covered sample takes (the look's darkest, the same for every shadow: so where shadows overlap and the stencil lets
- *  the first through, the darkest share wins whatever their order) */
-export function decalFragment(s: number, g: number, foot: number, dark: number): { cover: number; dark: number } {
+ *  the first through, the darkest share wins whatever their order). The gain (the look's, one value a frame for every
+ *  shadow) strengthens that darkness alike for all and leaves the coverage as it was, so the rule holds at any gain */
+export function decalFragment(
+  s: number,
+  g: number,
+  foot: number,
+  dark: number,
+  gain = 1,
+): { cover: number; dark: number; gain: number } {
   const dm = Math.max(foot, dark, 1e-4)
-  return { cover: Math.min(1, (s * (foot + (dark - foot) * g)) / dm), dark: dm }
+  return { cover: Math.min(1, (s * (foot + (dark - foot) * g)) / dm), dark: dm, gain }
+}
+
+/** The luminance weights the gain measures the darkening by (Rec. 709, as the shader's) */
+export const SHADE_LUMA: readonly [number, number, number] = [0.2126, 0.7152, 0.0722]
+
+/** The darkening a covered sample takes (unitdecal.frag, mirrored here for its tests): toward the ground's shade k (the
+ *  ratio of its painted cast shadow to its light) by f (the zoom's cross-fade share, the shadows on, the look's
+ *  darkest), clamped at 0, as before; then its luminance L raised to the gain, the three channels scaled alike
+ *  (d · L^(gain-1)), so a stronger shadow keeps the ground's shadow hue, never goes negative and darkens nothing where
+ *  the ground is already in full shadow (k 1: d 1); at gain 1 exactly the darkening as it was */
+export function shadowShade(k: readonly number[], f: number, gain: number): [number, number, number] {
+  const d = k.map(c => Math.max(1 + (c - 1) * f, 0))
+  const l = Math.max(d[0] * SHADE_LUMA[0] + d[1] * SHADE_LUMA[1] + d[2] * SHADE_LUMA[2], 1e-3)
+  const m = gain === 1 ? 1 : l ** (gain - 1)
+  return [d[0] * m, d[1] * m, d[2] * m]
 }
 
 /** The figures' shadow modes from the page's switches: simpleFar (?ushadowfar=map: the map at every zoom, false),
@@ -154,9 +179,9 @@ export function parseNumbers(
   return n
 }
 
-/** The looks the page's switches set (main.ts): ?ushsoft, ?ushdark (0 to 1), ?ushlen (0.3 to 1.5), each
- *  <close>[,<far>]; ?ushfoot=<dark 0..1.5>,<core 0..3 m>[,<far dark>,<far core>]; ?ushband=<r0>,<r1> (m, r0 < r1).
- *  Written into close and far; the band returned, or null */
+/** The looks the page's switches set (main.ts): ?ushsoft, ?ushdark (0 to 1), ?ushlen (0.3 to 1.5), ?ushgain (0.5 to
+ *  3, the darkening's strength), each <close>[,<far>]; ?ushfoot=<dark 0..1.5>,<core 0..3 m>[,<far dark>,<far core>];
+ *  ?ushband=<r0>,<r1> (m, r0 < r1). Written into close and far; the band returned, or null */
 export function applyLookParams(
   q: URLSearchParams,
   close: ShadowLook,
@@ -166,6 +191,7 @@ export function applyLookParams(
     ['ushsoft', 'soft', 0, 1],
     ['ushdark', 'dark', 0, 1],
     ['ushlen', 'len', 0.3, 1.5],
+    ['ushgain', 'gain', 0.5, 3],
   ] as const
   for (const [k, f, lo, hi] of pairs) {
     const n = parseNumbers(q, k, [1, 2], [lo, hi])

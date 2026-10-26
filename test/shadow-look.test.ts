@@ -14,6 +14,7 @@ import {
   lookBetween,
   parseNumbers,
   shadowModes,
+  shadowShade,
   simpleShadowsDraw,
   stencilFor,
 } from '../src/look/shadow-look.ts'
@@ -102,12 +103,53 @@ describe('where shadows overlap (the decal at a fragment, decalFragment)', () =>
     const colour = (s: number, g: number) => ({ cover: s, dark: c.foot + (c.dark - c.foot) * g })
     expect(resolve([colour(1, 1), colour(1, 0)])).not.toBe(resolve([colour(1, 0), colour(1, 1)]))
   })
+  it('keeps that rule at any gain: the coverage as it was, the darkness every shadow takes alike', () => {
+    for (const gain of [1.25, 2]) {
+      for (const [s1, g1, s2, g2] of [
+        [1, 1, 1, 0],
+        [0.6, 0.3, 0.9, 0.8],
+      ]) {
+        const a = decalFragment(s1, g1, c.foot, c.dark, gain)
+        const b = decalFragment(s2, g2, c.foot, c.dark, gain)
+        expect(a.cover).toBe(decalFragment(s1, g1, c.foot, c.dark).cover)
+        expect([a.dark, a.gain]).toEqual([b.dark, b.gain])
+        expect(resolve([a, b])).toBe(resolve([b, a]))
+      }
+    }
+  })
   it("darkens the soles' contact more than the tip, and never divides by nothing", () => {
     expect(decalFragment(1, 0, c.foot, c.dark).cover).toBe(1)
     expect(decalFragment(1, 1, c.foot, c.dark).cover).toBeCloseTo(c.dark / c.foot, 12)
     expect(decalFragment(1, 1, c.foot, c.dark).dark).toBe(c.foot)
     const z = decalFragment(1, 0.5, 0, 0)
     expect(Number.isFinite(z.cover) && z.cover === 0).toBe(true)
+  })
+})
+
+describe("the darkening's gain (shadowShade)", () => {
+  const k = [0.42, 0.5, 0.66] // a painted cast shadow's ratio: darker, a little blue
+  const luma = (d: number[]) => 0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2]
+  it('is the darkening as it was at gain 1: toward the shade by f, clamped at 0', () => {
+    shadowShade(k, 1, 1).forEach((v, i) => expect(v).toBeCloseTo(k[i], 15))
+    expect(shadowShade(k, 0, 1)).toEqual([1, 1, 1])
+    expect(shadowShade(k, 0.5, 1).map(v => +v.toFixed(12))).toEqual([0.71, 0.75, 0.83])
+    expect(shadowShade(k, 2, 1)[0]).toBe(0)
+  })
+  it("darkens more the higher it is, its luminance the gain's power, the hue kept, never below 0", () => {
+    let prev = luma(shadowShade(k, 1.05, 1))
+    for (const gain of [1.25, 1.5, 2, 3]) {
+      const d = shadowShade(k, 1.05, gain)
+      const l = luma(d)
+      expect(l).toBeLessThan(prev)
+      expect(l).toBeCloseTo(luma(shadowShade(k, 1.05, 1)) ** gain, 12)
+      expect(d[0] / d[2]).toBeCloseTo(shadowShade(k, 1.05, 1)[0] / shadowShade(k, 1.05, 1)[2], 12)
+      expect(Math.min(...d)).toBeGreaterThan(0)
+      prev = l
+    }
+  })
+  it('darkens nothing where the ground is already in full shadow, and stays finite where the shade is black', () => {
+    expect(shadowShade([1, 1, 1], 1, 2)).toEqual([1, 1, 1])
+    for (const gain of [0.5, 2]) expect(shadowShade([0, 0, 0], 1, gain).every(Number.isFinite)).toBe(true)
   })
 })
 
@@ -125,8 +167,13 @@ describe("the page's switches", () => {
       close,
       far,
     )
-    expect(close).toEqual({ soft: 0.4, dark: 0.6, foot: 1.1, core: 0.3, len: 0.8 })
+    expect(close).toEqual({ soft: 0.4, dark: 0.6, foot: 1.1, core: 0.3, len: 0.8, gain: 1 })
     expect(far).toEqual({ ...SHADOW_LOOK.far, dark: 0.9, foot: 1, core: 0.1 })
+    const g = looks()
+    applyLookParams(q('ushgain=1.5'), g.close, g.far)
+    expect([g.close.gain, g.far.gain]).toEqual([1.5, 1])
+    applyLookParams(q('ushgain=1.75,1.25'), g.close, g.far)
+    expect([g.close.gain, g.far.gain]).toEqual([1.75, 1.25])
     expect(r.band).toEqual([30, 70])
     expect(applyLookParams(q(''), close, far).band).toBeNull()
   })
@@ -143,6 +190,9 @@ describe("the page's switches", () => {
       'ushfoot=1,4',
       'ushfoot=1,0.3,1',
       'ushband=70,30',
+      'ushgain=0.4',
+      'ushgain=3.5',
+      'ushgain=1.5,',
       'ushband=30',
     ]) {
       const { close, far } = looks()
