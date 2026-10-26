@@ -157,11 +157,12 @@ export function pick(
   sy: number,
   ground: Pt | null, // the click's ground point; null where the view shows no ground (only points and lines pick)
   project: Project,
+  accept: (id: string) => boolean = () => true, // which intent features may be picked (a reference's targets)
 ): string | null {
   const owner = (f: Feature): string | null => {
-    if (intent.has(f.id)) return f.id
     const parent = f.origin?.parent ?? childOf(f.id)?.parent
-    return parent !== undefined && intent.has(parent) ? parent : null
+    const id = intent.has(f.id) ? f.id : parent !== undefined && intent.has(parent) ? parent : null
+    return id !== null && accept(id) ? id : null
   }
   let best: { id: string; d: number } | null = null
   const near = (f: Feature, d: number, limit: number) => {
@@ -207,8 +208,8 @@ export function roundStep(ppm: number): number {
 }
 /** A number rounded to a step, with no binary fraction left over (0.1 × 3 is 0.3). */
 export const roundTo = (v: number, step: number): number => cm(Math.round(v / step) * step) || 0
-const roundPt = (p: Pt, step: number): Pt => [roundTo(p[0], step), roundTo(p[1], step)]
-const onLattice = (p: Pt): Pt => roundPt(p, LATTICE)
+export const roundPt = (p: Pt, step: number): Pt => [roundTo(p[0], step), roundTo(p[1], step)]
+export const onLattice = (p: Pt): Pt => roundPt(p, LATTICE)
 
 // the 8 directions as 4 lines through a point
 const DIRS: Pt[] = [

@@ -6,8 +6,8 @@ last_reviewed: 2026-10-25
 # Plan: M7, the editor on the lit map
 
 Track M, on `epic/map-engine` (decision 0020). Phase M7 of `docs/proposals/map-engine.md` §10, step 3 of
-`docs/plans/active/one-map-austerlitz.md`. Several PRs into the epic (below); this plan covers them all and details the
-first. M6d waits (the owner, 2026-10-25: `docs/plans/active/m6-lit-view.md`).
+`docs/plans/active/one-map-austerlitz.md`. Several PRs into the epic (below); this plan covers them all and details
+each as it starts (M7a merged in #192; M7b below). M6d waits (the owner, 2026-10-25: `docs/plans/active/m6-lit-view.md`).
 
 ## Problem
 
@@ -21,7 +21,7 @@ tools on top).
 
 | PR | What | Acceptance |
 |---|---|---|
-| **M7a** (this plan's detail) | Select a feature on the map; move it, move, add and remove its points, resize a circle or an ellipse, delete it; barriers snapped to the lattice in 8 directions; the edits compiled live from the page's memory; undo and redo; the stable save through the dev server | Every map in `maps/` written back unedited is byte for byte the same; one point moved changes one line; undo to the start and save gives the original bytes; the page check drags a point through pointer events and saves |
+| **M7a** (done, #192) | Select a feature on the map; move it, move, add and remove its points, resize a circle or an ellipse, delete it; barriers snapped to the lattice in 8 directions; the edits compiled live from the page's memory; undo and redo; the stable save through the dev server | Every map in `maps/` written back unedited is byte for byte the same; one point moved changes one line; undo to the start and save gives the original bytes; the page check drags a point through pointer events and saves |
 | **M7b** | Create: a new map (id, name, size, seed, season); pick a kind from the catalogue and draw one of its shapes; ids proposed from the kind; references (`on`, `carries`, `crosses`, `along`, `near`) set by clicking their targets | A map drawn from scratch in the page validates, and its file round-trips with no diff but the edits (the phase's acceptance) |
 | **M7c** | The selected feature's fields as a form from the catalogue: attributes with their units, ranges and enums, ramps, seasons, state, priority, note, source; a generator's parameters with the expansion redrawn live; pinning a generated feature; the map's sources | Every attribute of the catalogue editable and checked as the validator checks it; a pinned child equals its expansion |
 | **M7d** | The tracing overlay: an image (a period map, a survey) placed under the lit view by matching points, its opacity a setting, stored beside the map as a source the compilers ignore | The 1805 map of Austerlitz placed over the real relief to within the image's own error |
@@ -199,6 +199,50 @@ tools on top).
   redraw in 0.86 s.
 - The validator on the edited copy: 0.17–0.32 ms on today's maps (Node).
 - `npm test` (822 tests), `check:data`, the build and the docs check pass.
+
+## M7b in detail
+
+Creating, with the same state machine and the same save (decision 0066 holds; no new decision):
+
+- **A new map** (the panel's "new map"): its id (also the file's name, `maps/<id>.map.json`, refused when taken), name,
+  size (the extent, square, and the play area inside it), seed (a random uint32 proposed) and season. The page holds it
+  as a copy with no file yet (`Editor.create`): it compiles from memory like any edit, shows "unsaved", and its first
+  save creates the file. The save route takes `base: null` as "create": written only if no file is there (409 with the
+  file's text otherwise, as a conflict). The map joins the page's list; leaving it unsaved asks first and drops it.
+- **Adding a feature** (the panel's "add"): a kind from the catalogue (by category), one of the shapes it takes, and an
+  id proposed from the kind's last name (`wheat`, then `wheat-2`…), editable before drawing. Then a drawing mode, the
+  state machine's fourth, which takes clicks (a press that moves still pans):
+  - a point: one click; a line: clicks, Enter or a double click ends it (2 points at least); an area: likewise
+    (3 points), its ring closing itself; a circle: its centre, then a point on its edge; an ellipse: its centre, the
+    end of its first radius (which sets its angle), then a point giving the second radius;
+  - points rounded as a drag rounds them; a barrier's on the lattice, each new point snapped where its segment runs in
+    one of the 8 directions (`snapBarrier`, the engine's rule as the check);
+  - then each reference the kind takes, in the catalogue's order, by clicking: a feature for `on`, `carries`,
+    `crosses` (only one of the category and shape the catalogue names picks: `water:line`), a ground point for
+    `near`, and for `along` two clicks on the line (where the stretch starts and ends, in metres along it); an
+    optional reference is skipped with Enter;
+  - Backspace takes back the last click, Escape drops the drawing; the panel says what to click next, and the draft
+    is drawn with a line to the pointer;
+  - the end makes the feature in one edit (one undo step), selects it, and the validator says at once what is still
+    wrong (the kind's attributes come from the catalogue's defaults; the fields form is M7c).
+- **A reference of the selected feature** set again by clicking (the panel lists the kind's references, each with a
+  button): the same picking, one edit.
+- The pure parts in `src/app/map/draw.ts` (the draft, its steps, the proposed id, the feature it makes, what a click
+  picks as a reference, a point's distance along a line), tested in `test/map-draw.test.ts`; the editor's mode in
+  `Editor`, tested in `test/map-editor.test.ts`.
+- `window.MAP` gains `create`, `add` (start a drawing), `finish`, `issues`.
+- The page check: makes a new map, draws a meadow (an area), a stream (a line), a ford on it (references by clicks),
+  a road and a bridge, a hedge (a barrier) and a hill (a circle); saves; checks that the new file validates with no
+  problem, that the page reads it back unchanged, and that one more edit changes one line; removes the file.
+
+## Acceptance (M7b)
+
+- A map drawn from scratch in the page validates, and its file round-trips with no diff but the edits (the page check;
+  `test/map-write.test.ts` for a written new map read back and written unedited).
+- Every shape and every reference of the catalogue's kinds can be drawn (`test/map-draw.test.ts`, through the kinds'
+  own `shapes` and `refs`), every drawn barrier passes `barrierProblem`.
+- `test/map-save.test.ts`: a create writes a new file and refuses to overwrite one.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
 
 ## Open questions
 

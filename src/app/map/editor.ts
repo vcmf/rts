@@ -5,16 +5,20 @@
 // does not edit.
 //
 // - One state machine owns the copy: idle, pressing (on the selection's outline or a handle, not yet moved 4 px),
-//   dragging. Only an idle editor takes a command (undo, redo, Delete, a double click, a save, a selection); a file
-//   read in during a press is a conflict, never swapped under it.
+//   dragging, drawing (a new feature, or a reference set again, click by click: ./draw.ts, M7b). Only an idle editor
+//   takes a command (undo, redo, Delete, a double click, a save, a selection); a file read in during a press or a
+//   drawing is a conflict, never swapped under it.
+// - A new map is a copy with no file yet (`create`): its first save creates the file.
 // - An edit always applies, as a hand edit does: what the validator finds in it is shown at once (the selection drawn
 //   red, the problem in the panel, the page's list), and undo is one key. The editor holds no copy of the language's
 //   rules; snapping only helps.
 // - A file whose structure the editor cannot read (`wellFormed`) opens read-only, saying why.
 // - A save's reply is taken only for the file and base it was sent for.
 // Tested in test/map-editor.test.ts.
-import type { Catalogue, Feature, MapFile, Pt } from '../../map/schema.ts'
-import { validate, type Issue } from '../../map/validate.ts'
+import type { Catalogue, Feature, MapFile, Pt, RefName, ShapeName } from '../../map/schema.ts'
+import { ID } from '../../map/schema.ts'
+import { kindChain, kindMeta } from '../../map/catalogue.ts'
+import { featureKind, validate, type Issue } from '../../map/validate.ts'
 import { sameJson, writeMap, writerFrom, type FeatureWriter } from '../../map/write.ts'
 import {
   handleAt,
@@ -37,6 +41,20 @@ import {
   type Place,
   type Project,
 } from './edit.ts'
+import {
+  addPoint,
+  back,
+  done,
+  drawSteps,
+  endStep,
+  preview,
+  prompt,
+  refAccepts,
+  setRef,
+  startDraft,
+  stepOf,
+  type Draft,
+} from './draw.ts'
 
 /** What the editor needs from the page. */
 export interface Host {
@@ -61,13 +79,21 @@ interface Press {
   from: Pt // the press on the ground
   at: [number, number] // the press on screen
 }
-type Mode = { kind: 'idle' } | Press
+/** A feature being drawn (`old` null), or a reference of `old` being set again, click by click. */
+interface Drawing {
+  kind: 'drawing'
+  draft: Draft
+  old: Feature | null
+}
+type Mode = { kind: 'idle' } | Press | Drawing
 
 const DRAG_PX = 4 // a press that moves less is a click
 const SNAP_PX = 14 // a barrier's point snaps to a valid place within this many pixels
 const SELECTED = '#d0601a'
 const WRONG = '#c0201a'
 const BUSY = 'finish the drag first'
+const DRAWING = 'finish the drawing first (Enter), or drop it (Escape)'
+const DRAFT = '#1a70c0'
 const DOUBLE_MS = 600 // longer than a double click's two clicks apart
 
 /** A file's text as a copy the editor can work on, or why it cannot. */
@@ -132,19 +158,29 @@ export class Editor {
    * save would overwrite it); a new file drops the selection too; a press in progress ends.
    */
   load(file: string, text: string): void {
+    const { doc, why } = parseDoc(text)
+    this.take(file, text, doc, why)
+  }
+  /**
+   * Starts a new map: a copy with no file yet, to be saved as `file` (which the save creates, never over another).
+   * Like a load, the history, the selection and any press go.
+   */
+  create(file: string, doc: MapFile): void {
+    this.take(file, null, doc, '')
+  }
+  private take(file: string, base: string | null, doc: MapFile | null, why: string): void {
     if (file !== this.file) this.selected = null
     this.mode = { kind: 'idle' }
     this.history.clear()
     this.hover = null
     this.found = []
     this.file = file
-    this.base = text
-    this.writer = writerFrom(text)
+    this.base = base
+    this.writer = writerFrom(base)
     this.conflict = null
-    const { doc, why } = parseDoc(text)
     this.doc = doc
     this.readOnly = why
-    this.baseDoc = doc
+    this.baseDoc = base === null ? null : doc
     if (this.selected && !this.feature(this.selected)) this.selected = null
     // what the validator finds in the file as read (the page's list comes with the compile); no message left over
     this.found = this.cat && doc ? validate(doc, this.cat) : []
@@ -200,6 +236,17 @@ export class Editor {
   get idle(): boolean {
     return this.mode.kind === 'idle'
   }
+  /** Whether a drawing is in progress (its clicks are the editor's), and what to click next. */
+  get drawing(): boolean {
+    return this.mode.kind === 'drawing'
+  }
+  get prompt(): string {
+    return this.mode.kind === 'drawing' ? prompt(this.mode.draft) : ''
+  }
+  /** Whether the copy is a new map whose file the first save creates. */
+  get isNew(): boolean {
+    return !!this.doc && this.base === null
+  }
   get canUndo(): boolean {
     return this.history.canUndo
   }
@@ -221,7 +268,7 @@ export class Editor {
   /** Whether a command may run now; says why not when it may not. */
   private ready(): boolean {
     if (this.mode.kind === 'idle') return true
-    this.message = BUSY
+    this.message = this.mode.kind === 'drawing' ? DRAWING : BUSY
     this.host.changed()
     return false
   }
@@ -262,6 +309,7 @@ export class Editor {
    * click there adds a point to it; elsewhere it selects what is under it (or none).
    */
   click(sx: number, sy: number): void {
+    if (this.mode.kind === 'drawing') return this.drawClick(sx, sy)
     if (!this.doc || this.mode.kind !== 'idle') return
     const f = this.selected ? this.feature(this.selected) : undefined
     if (f && onShape(f, sx, sy, this.host.project)) return
@@ -304,6 +352,10 @@ export class Editor {
     this.pointer = [sx, sy]
     if (m.kind === 'idle') {
       this.hoverAt()
+      return false
+    }
+    if (m.kind === 'drawing') {
+      this.host.redraw() // the draft follows the pointer
       return false
     }
     if (m.kind === 'pressing' && Math.hypot(sx - m.at[0], sy - m.at[1]) < DRAG_PX) return true
@@ -352,7 +404,7 @@ export class Editor {
   /** The press ended: a drag that changed the copy is an edit. Returns whether the press was the editor's. */
   up(): boolean {
     const m = this.mode
-    if (m.kind === 'idle') return false
+    if (m.kind !== 'pressing' && m.kind !== 'dragging') return false
     this.mode = { kind: 'idle' }
     const after = this.doc!
     this.doc = m.before
@@ -365,7 +417,7 @@ export class Editor {
   /** An interrupted press (the pointer cancelled, its capture lost): the copy goes back to before it. */
   cancel(): void {
     const m = this.mode
-    if (m.kind === 'idle') return
+    if (m.kind !== 'pressing' && m.kind !== 'dragging') return
     this.mode = { kind: 'idle' }
     this.doc = m.before
     this.host.redraw()
@@ -374,6 +426,8 @@ export class Editor {
   }
   /** A double click on the selected line or ring adds a point there. */
   dblclick(sx: number, sy: number): void {
+    // drawing: a double click ends a line or an area (its clicks added the point already)
+    if (this.mode.kind === 'drawing') return this.enter()
     // a double click whose first click selected the feature only selects it
     if (performance.now() - this.clickSelectedAt < DOUBLE_MS) return
     const f = this.selected ? this.feature(this.selected) : undefined
@@ -429,6 +483,132 @@ export class Editor {
     this.host.changed()
     this.host.redraw()
     this.settle() // back to the file as read: a conflict that came meanwhile is the file read in
+  }
+
+  /**
+   * Starts drawing a new feature of a kind as one of its shapes ('none': by its references alone), with its id. Its
+   * clicks are the editor's until the last step makes the feature (one edit), Escape drops it. Returns whether it
+   * started; says why not.
+   */
+  add(kind: string, shape: ShapeName | 'none', id: string): boolean {
+    if (!this.enabled || !this.doc || !this.ready()) return false
+    const chain = this.cat ? kindChain(this.cat, kind) : null
+    const meta = chain && kindMeta(this.cat!, chain)
+    const why = !meta
+      ? `no kind ${kind} in the catalogue`
+      : !meta.shapes.includes(shape)
+        ? `${kind} takes ${meta.shapes.join(', ')}, not ${shape}`
+        : !ID.test(id)
+          ? 'an id is lower-case letters and digits, in words joined by "-"'
+          : this.feature(id)
+            ? `the id ${id} is taken`
+            : ''
+    if (why) {
+      this.message = why
+      this.host.changed()
+      return false
+    }
+    const f: Feature = { id, kind }
+    const draft = startDraft(f, drawSteps(meta!, shape), isBarrier(f, this.doc.presets))
+    this.begin(draft, null)
+    return true
+  }
+  /** Sets one reference of the selection again by clicking its target. Returns whether it started; says why not. */
+  pickRef(ref: RefName): boolean {
+    const f = this.selected ? this.feature(this.selected) : undefined
+    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return false
+    const kind = featureKind(f, (this.doc.presets ?? {}) as Record<string, Record<string, unknown>>)
+    const chain = this.cat && kind ? kindChain(this.cat, kind) : null
+    const want = chain ? kindMeta(this.cat!, chain).refs[ref] : undefined
+    if (!want) {
+      this.message = `${f.id} takes no "${ref}"`
+      this.host.changed()
+      return false
+    }
+    // set again, it is not skipped: taking an optional reference away is the fields' (M7c)
+    this.begin(startDraft(f, [{ kind: 'ref', ref, want, optional: false }], isBarrier(f, this.doc.presets)), f)
+    return true
+  }
+  private begin(draft: Draft, old: Feature | null): void {
+    this.mode = { kind: 'drawing', draft, old }
+    this.hover = null
+    this.message = ''
+    if (done(draft)) return this.finishDraft() // a kind with no shape and no reference: made at once
+    this.host.changed()
+    this.host.redraw()
+  }
+  /** How a drawing places its points: rounded as a drag rounds them, a barrier's snapped. */
+  private drawPlace(d: Draft): Place {
+    const ppm = this.host.ppm()
+    return { step: roundStep(ppm), reach: SNAP_PX / ppm, barrier: d.barrier }
+  }
+  /** A click while drawing: the shape's next point, or a reference's target (a feature it accepts, or a point). */
+  private drawClick(sx: number, sy: number): void {
+    const m = this.mode as Drawing
+    const at = this.host.toWorld(sx, sy)
+    if (!at) return this.note('no ground there: click on the map')
+    const s = stepOf(m.draft)
+    const place = this.drawPlace(m.draft)
+    if (s?.kind !== 'ref' || s.want === 'point') {
+      return this.step(s?.kind === 'shape' ? addPoint(m.draft, at, place) : setRef(m.draft, null, at, place))
+    }
+    const doc = this.doc!
+    const self = m.draft.feature.id
+    const accepts = (id: string) => {
+      const t = this.feature(id)
+      return !!t && refAccepts(s.want, self, t, doc.presets)
+    }
+    const shapes = [...this.host.shown(), ...doc.features]
+    const ids = new Set(doc.features.map(x => x.id))
+    const id = pick(shapes, ids, sx, sy, at, this.host.project, accepts)
+    this.step(setRef(m.draft, id ? this.feature(id)! : null, at, place))
+  }
+  /** The drawing after a click or a key: on to its next step (the last makes the feature), or why it stays. */
+  private step(next: Draft | string): void {
+    const m = this.mode as Drawing
+    if (typeof next === 'string') return this.note(next)
+    m.draft = next
+    this.message = ''
+    if (done(next)) return this.finishDraft()
+    this.host.changed()
+    this.host.redraw()
+  }
+  /** Ends the drawing: the feature it made is added (or the reference set) in one edit, and selected. */
+  private finishDraft(): void {
+    const m = this.mode as Drawing
+    this.mode = { kind: 'idle' }
+    const f = m.draft.feature
+    const doc = this.doc!
+    if (m.old && sameJson(f, m.old)) {
+      this.host.changed()
+      this.host.redraw()
+    } else if (m.old) this.commit(this.replace(doc, f, m.old), f.id)
+    else {
+      this.selected = f.id
+      this.commit({ ...doc, features: [...doc.features, f] }, f.id)
+    }
+    this.settle()
+  }
+  /** Enter (or a double click) while drawing: ends a line or an area, or skips an optional reference. */
+  enter(): void {
+    if (this.mode.kind === 'drawing') this.step(endStep(this.mode.draft))
+  }
+  /** Backspace while drawing: takes back the last click. */
+  takeBack(): void {
+    if (this.mode.kind !== 'drawing') return
+    this.mode.draft = back(this.mode.draft)
+    this.message = ''
+    this.host.changed()
+    this.host.redraw()
+  }
+  /** Escape while drawing: drops it; the copy is as it was. */
+  drop(): void {
+    if (this.mode.kind !== 'drawing') return
+    this.mode = { kind: 'idle' }
+    this.message = ''
+    this.host.changed()
+    this.host.redraw()
+    this.settle()
   }
 
   /**
@@ -501,13 +681,30 @@ export class Editor {
     this.host.changed()
   }
 
-  /** Draws the selection: its intent shape (red while the validator finds it wrong) and its handles. */
+  /**
+   * Draws the selection (its intent shape, red while the validator finds it wrong, and its handles) and a drawing in
+   * progress (as it would be with the pointer as its next click).
+   */
   draw(): void {
     const f = this.selected ? this.feature(this.selected) : undefined
-    if (!f) return
+    if (f) this.drawFeature(f, this.found.some(i => i.id === f.id) ? WRONG : SELECTED, this.hover)
+    if (this.mode.kind !== 'drawing') return
+    const d = this.mode.draft
+    const p = this.pointer && this.host.toWorld(this.pointer[0], this.pointer[1])
+    this.drawFeature(preview(d, p, this.drawPlace(d)), DRAFT, null)
     const { ctx } = this.host
     ctx.save()
-    ctx.strokeStyle = this.found.some(i => i.id === f.id) ? WRONG : SELECTED
+    ctx.fillStyle = DRAFT
+    for (const q of d.pts) {
+      const s = this.host.project(q[0], q[1])
+      if (s) ctx.fillRect(s[0] - 3, s[1] - 3, 6, 6)
+    }
+    ctx.restore()
+  }
+  private drawFeature(f: Feature, colour: string, hover: Handle | null): void {
+    const { ctx } = this.host
+    ctx.save()
+    ctx.strokeStyle = colour
     ctx.lineWidth = 2
     const path = (pts: Pt[], close: boolean) => {
       this.host.groundPath(pts, close)
@@ -526,7 +723,7 @@ export class Editor {
     for (const { handle, at } of handles(f)) {
       const s = this.host.project(at[0], at[1])
       if (!s) continue
-      const big = this.hover && JSON.stringify(this.hover) === JSON.stringify(handle)
+      const big = hover && JSON.stringify(hover) === JSON.stringify(handle)
       const r = big ? 5 : 3.5
       ctx.fillStyle = barrier ? '#f0e0c0' : '#fff'
       ctx.fillRect(s[0] - r, s[1] - r, 2 * r, 2 * r)

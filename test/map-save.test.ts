@@ -6,6 +6,26 @@ import os from 'node:os'
 import path from 'node:path'
 import { mayWrite, saveMapFile } from '../tools/map-save.ts'
 
+describe('M7b: a new map saved', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-create-'))
+  fs.mkdirSync(path.join(root, 'maps'))
+  it('creates the file with no base, and refuses to write over one already there', () => {
+    const file = path.join(root, 'maps', 'new.map.json')
+    expect(saveMapFile(root, { file: '/maps/new.map.json', base: null, text: 'made' })).toEqual({ ok: true })
+    expect(fs.readFileSync(file, 'utf8')).toBe('made')
+    expect(saveMapFile(root, { file: '/maps/new.map.json', base: null, text: 'again' })).toEqual({
+      ok: false,
+      status: 409,
+      current: 'made',
+    })
+    expect(fs.readFileSync(file, 'utf8')).toBe('made')
+  })
+  it('creates only a map file', () => {
+    expect(saveMapFile(root, { file: '/maps/../x.map.json', base: null, text: 'x' }).ok).toBe(false)
+    expect(fs.existsSync(path.join(root, 'x.map.json'))).toBe(false)
+  })
+})
+
 describe('M7a: the save on the dev server', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-save-'))
   fs.mkdirSync(path.join(root, 'maps'))

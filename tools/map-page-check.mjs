@@ -12,7 +12,11 @@
 //      alone), undone and saved again (the file byte for byte the original); with the largest area selected, a click
 //      on a line inside it selects the line; Cmd S with a list of the panel focused is the page's save, not the
 //      browser's; a second pointer pressed during a press on the selection leaves the editor idle once both are up;
-//      a point hovered and then zoomed away from is not the one Delete removes.
+//      a point hovered and then zoomed away from is not the one Delete removes;
+//   6. a new map (M7b) made in the panel and drawn by clicks: a base, a meadow (an area), a stream (a line), a ford on
+//      it and a bridge (references by clicking their targets), a road, a hedge (a barrier) and a hill (a circle);
+//      saved, the new file must validate with no problem and read back unchanged, and one more feature saved must
+//      change one line. The new file is removed at the end.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -38,6 +42,9 @@ const PORT = await new Promise((res, rej) => {
   })
 })
 const original = fs.readFileSync(mapFile, 'utf8')
+// the new map the check draws (step 6), removed at the end
+const NEW = `check-new-${process.pid}`
+const newFile = path.join(ROOT, 'maps', `${NEW}.map.json`)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 let failed = 0
 const check = (ok, what) => {
@@ -57,6 +64,7 @@ const cleanup = () => {
   if (cleaned) return
   cleaned = true
   fs.writeFileSync(mapFile, original)
+  fs.rmSync(newFile, { force: true })
   shot?.kill('SIGINT')
   try {
     process.kill(-vite.pid, 'SIGTERM')
@@ -211,6 +219,59 @@ try {
         return 'ZOOM ' + JSON.stringify({ kept, dirty: MAP.dirty })
       })()`,
     ],
+    // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
+    [
+      'eval',
+      `(async () => {
+        const sleep = ms => new Promise(r => setTimeout(r, ms))
+        const until = async cond => { for (let t = 0; t < 400 && !cond(); t++) await sleep(25); if (!cond()) throw new Error('timed out') }
+        const set = (id, v) => { document.getElementById(id).value = v }
+        document.getElementById('newbox').open = true
+        set('newId', '${NEW}'); set('newName', 'Check'); set('newSize', '1200'); set('newPlay', '1000'); set('newSeed', '7')
+        document.getElementById('newMake').click()
+        await until(() => MAP.compiled === '${NEW}')
+        const c = document.getElementById('map'), b = c.getBoundingClientRect()
+        const at = (x, z) => { const s = MAP.project(x, z); return { clientX: b.left + s[0], clientY: b.top + s[1], bubbles: true, pointerId: 1, isPrimary: true } }
+        const click = (x, z) => { for (const t of ['pointerdown', 'pointerup']) c.dispatchEvent(new PointerEvent(t, at(x, z))) }
+        const key = k => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }))
+        const prompts = []
+        const draw = (kind, shape, id, pts, end) => {
+          if (!MAP.add(kind, shape, id)) throw new Error('not started: ' + id)
+          for (const p of pts) { prompts.push(MAP.prompt); click(...p) }
+          if (end) key('Enter')
+          if (MAP.drawing) throw new Error(id + ' still drawing: ' + MAP.prompt)
+        }
+        draw('relief.base', 'none', 'terrain', [])
+        draw('ground.meadow', 'area', 'meadow', [[-500, -500], [500, -500], [500, 500], [-500, 500]], true)
+        draw('water.stream', 'line', 'brook', [[-550, 20], [0, -10], [550, 30]], true)
+        draw('water.ford', 'none', 'ford', [[-300, 6.4], [-300, 6.4]])
+        draw('way.road.lane', 'line', 'road', [[60, -550], [70, 550]], true)
+        draw('built.bridge', 'none', 'bridge', [[63.2, -200], [300, 11.8]], true)
+        draw('barrier.hedge', 'line', 'hedge', [[-200, -300], [-100, -300], [-100, -200]], true)
+        draw('relief.hill', 'circle', 'hill', [[300, -300], [380, -300]])
+        const n = MAP.log.length
+        await until(() => MAP.log.length > n && MAP.idle)
+        await sleep(300)
+        const ok = await MAP.save()
+        const disk = await (await fetch('/maps/${NEW}.map.json', { cache: 'no-store' })).text()
+        return 'NEWMAP ' + JSON.stringify({ ok, disk, text: MAP.text, dirty: MAP.dirty, isNew: MAP.isNew,
+          issues: MAP.issues, prompts, features: JSON.parse(MAP.text).features })
+      })()`,
+    ],
+    ['shot', 'new-map'],
+    [
+      'eval',
+      `(async () => {
+        const c = document.getElementById('map'), b = c.getBoundingClientRect()
+        const s = MAP.project(-300, 300)
+        MAP.add('relief.hill', 'point', 'knoll')
+        for (const t of ['pointerdown', 'pointerup']) c.dispatchEvent(new PointerEvent(t,
+          { clientX: b.left + s[0], clientY: b.top + s[1], bubbles: true, pointerId: 1, isPrimary: true }))
+        const ok = await MAP.save()
+        const disk = await (await fetch('/maps/${NEW}.map.json', { cache: 'no-store' })).text()
+        return 'NEWEDIT ' + JSON.stringify({ ok, disk })
+      })()`,
+    ],
   ]
   shot = spawn(
     'node',
@@ -314,6 +375,40 @@ try {
     seen.RESELECT.selected === seen.RESELECT.line,
     `with ${seen.RESELECT.area} selected, a click on ${seen.RESELECT.line} inside it selects ${seen.RESELECT.selected}`,
   )
+  await until('NEWMAP')
+  const nm = seen.NEWMAP
+  const ids = nm.features.map(f => f.id).join(',')
+  check(
+    ids === 'terrain,meadow,brook,ford,road,bridge,hedge,hill',
+    `a new map drawn by clicks: ${ids} (prompts: ${[...new Set(nm.prompts)].join(' | ')})`,
+  )
+  const ford = nm.features.find(f => f.id === 'ford')
+  const bridge = nm.features.find(f => f.id === 'bridge')
+  check(
+    ford?.on === 'brook' && Array.isArray(ford.near) && bridge?.carries === 'road' && bridge.crosses === 'brook',
+    `references set by clicking their targets: ford ${JSON.stringify(ford)}, bridge ${JSON.stringify(bridge)}`,
+  )
+  const { validate } = await import('../src/map/validate.ts')
+  const kinds = JSON.parse(fs.readFileSync(path.join(ROOT, 'maps', 'kinds.json'), 'utf8'))
+  // the file as the page fetched it after its first save (the next step saves again)
+  const onDisk = nm.disk
+  const problems = onDisk ? validate(JSON.parse(onDisk), kinds) : ['no file']
+  check(
+    nm.ok && !nm.dirty && !nm.isNew && nm.issues.length === 0 && problems.length === 0,
+    `the first save created maps/${NEW}.map.json, which validates (${JSON.stringify(problems).slice(0, 300)})`,
+  )
+  check(nm.text === onDisk, 'the page reads the new file back unchanged')
+  await until('NEWEDIT')
+  const lines = t => t.split('\n').map(l => l.replace(/,$/, ''))
+  const added = lines(seen.NEWEDIT.disk).filter(l => !lines(onDisk).includes(l))
+  check(
+    seen.NEWEDIT.ok &&
+      added.length === 1 &&
+      added[0].includes('"id":"knoll"') &&
+      lines(seen.NEWEDIT.disk).length === lines(onDisk).length + 1,
+    `one more feature saved adds one line (${added.length} new)`,
+  )
+  check(fs.readFileSync(newFile, 'utf8') === seen.NEWEDIT.disk, 'the file on disk is what the page saved')
   const code = await done
   check(code === 0, `the page had no exceptions or console errors (shot.mjs exit ${code})`)
 } catch (e) {

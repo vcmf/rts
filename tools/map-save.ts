@@ -8,7 +8,7 @@ import path from 'node:path'
 /** What the page sends to save a map. */
 export interface SaveRequest {
   file: string // '/maps/<name>.map.json'
-  base: string // the text the page last read from the file
+  base: string | null // the text the page last read from the file; null for a new map, whose file must not exist yet
   text: string // the text to write
 }
 /** The save's outcome: written; refused because the file changed on disk (its text now); refused; or failed. */
@@ -31,17 +31,31 @@ export function mayWrite(headers: { 'content-type'?: string; origin?: string; ho
 
 const MAP_FILE = /^\/maps\/[a-z0-9]+(-[a-z0-9]+)*\.map\.json$/
 
-/** Writes a map file under `root` if it still holds the text the page read, through a temporary file and a rename. */
+/**
+ * Writes a map file under `root` if it still holds the text the page read, through a temporary file and a rename; with
+ * no base, creates it if it does not exist.
+ */
 export function saveMapFile(root: string, req: SaveRequest): SaveResult {
   if (
     typeof req?.file !== 'string' ||
-    typeof req.base !== 'string' ||
+    (typeof req.base !== 'string' && req.base !== null) ||
     typeof req.text !== 'string' ||
     !MAP_FILE.test(req.file)
   ) {
     return { ok: false, status: 400, error: 'a map file is /maps/<name>.map.json, with its base and its text' }
   }
   const file = path.join(root, req.file)
+  // a new map: its file is created, never over one already there (another map of that name, made meanwhile)
+  if (req.base === null) {
+    try {
+      fs.writeFileSync(file, req.text, { flag: 'wx' })
+      return { ok: true }
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException
+      if (err.code !== 'EEXIST') return { ok: false, status: 500, error: `${req.file} was not written: ${err.message}` }
+      return { ok: false, status: 409, current: fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '') }
+    }
+  }
   let current: string
   try {
     current = fs.readFileSync(file, 'utf8')
