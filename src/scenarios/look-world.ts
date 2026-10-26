@@ -6,7 +6,7 @@ import { issue } from '../sim/index.ts'
 
 // the look world's sim data (data/painted-world.simdata, built from data/painted-world.lookdata): a rebuilt one
 // fails to load until this is updated
-export const LOOK_DATA_VERSION = 0x92a9c78d
+export const LOOK_DATA_VERSION = 0xd9a8cbc4
 
 function cross(w: World): void {
   for (const side of [0, 1]) {

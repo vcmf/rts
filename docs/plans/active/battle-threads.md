@@ -220,7 +220,7 @@ tile) is no sim map. Two PRs, then PR 4.
   Acceptance: `check:data` rebuilds it byte for byte; a test that the sim's classes and water match the look's cover
   and river at sample points (and the heights within 1 cm of the look's heightfield); a sim battle on it runs (a
   scenario of a few battalions marching across, its replay reproduced).
-  - **Outcome** (2026-10-26): met. `data/painted-world.simdata` (0x92a9c78d, 2.1 MB; `check:data` rebuilds it byte
+  - **Outcome** (2026-10-26): met. `data/painted-world.simdata` (0xd9a8cbc4, 2.1 MB; `check:data` rebuilds it byte
     for byte, the other maps unchanged); `test/painted-world.test.ts`: every sim height node is the look's ground
     there exactly; every 2 m cell wet in the look's water data is the sim's water, as deep (the track's ford too: the
     look has no bridge), every other cell dry; every other node's class the look's cover (the most common of its four
@@ -317,3 +317,6 @@ tile) is no sim map. Two PRs, then PR 4.
 - The hash in the worker: amortised over 20 ticks or incremental.
 - Who makes the sim drive the look page's armies (PR 4's dependency): this epic (the owner, 2026-10-26: PRs 4a, 4b).
 - A terrain class for buildings (impassable to all): the ruleset's, Track S's; the look map uses `denseWood` until then.
+- The look map's river: its crossings (the ford, 0.77–0.80 m, and the shallow reaches) are deeper than guns wade
+  (0.7 m), so no battery crosses it; and the cost grid's half-passable rule needed a per-map spread round deep water
+  (`DEEP_REACH`): a rule in `tools/build-sim-data.ts` for hard blocks (any sample blocked) would serve every map.

@@ -13,8 +13,9 @@ import { D } from '../src/look/spec.ts'
 import { decodeLook, unpackSpans } from '../src/look/world/data.ts'
 import { setHeightfield, heightAt } from '../src/look/heightfield.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from '../src/look/world/water-data.ts'
-import { BUILDINGS } from '../src/look/world/buildings.ts'
-import { WET, lookWorld, inBuilding } from '../maps/painted-world.ts'
+import { BUILDINGS, FOOT, toLocal } from '../src/look/world/buildings.ts'
+import { WET, FROM_COVER } from '../maps/painted-world.ts'
+import { coverAt } from '../src/look/world/cover.ts'
 
 const sim = loadSimData(
   new Uint8Array(fs.readFileSync(path.join(root, 'data', 'painted-world.simdata'))),
@@ -59,19 +60,31 @@ describe('the look world as a sim map', () => {
     expect(wetCells).toBeGreaterThan(1500)
     expect(sim.classes.indexOf('bridge') < 0 || !F.cls.includes(sim.classes.indexOf('bridge'))).toBe(true)
   })
-  it("has every other node's class from the look's cover, the buildings', or the slope's", () => {
-    const { coverClass } = lookWorld()
+  // checked apart from the build's own functions: a node takes one of the four cover cells it is the corner of, a
+  // building's footprint by the look's own toLocal and FOOT
+  it("has every other node's class from a look cover cell at its corner, a building's, or the slope's", () => {
     const F = sim.fine
+    const inFoot = (x: number, z: number) =>
+      BUILDINGS.some(b => {
+        const [lx, lz] = toLocal(b.yaw, x - b.x, z - b.z)
+        const f = FOOT[b.model]
+        return f.r !== undefined
+          ? Math.hypot(lx, lz) <= f.r * b.scale + 1e-9
+          : Math.abs(lx) <= f.hx! * b.scale + 1e-9 && Math.abs(lz) <= f.hz! * b.scale + 1e-9
+      })
     for (let j = 0; j < F.nz; j += 3) {
       for (let i = 0; i < F.nx; i += 3) {
         const x = F.x0 + i * F.cell
         const z = F.z0 + j * F.cell
         const got = sim.classes[F.cls[j * F.nx + i]]
         if (got === 'water') continue
-        const cover = coverClass(x, z)
-        const want = inBuilding(x, z) ? 'denseWood' : cover === 'open' ? ['open', 'rough'] : cover
-        if (Array.isArray(want)) expect(want).toContain(got)
-        else expect(got).toBe(want)
+        if (inFoot(x, z)) {
+          expect(got).toBe('denseWood')
+          continue
+        }
+        const around = [-1, 1].flatMap(dx => [-1, 1].map(dz => FROM_COVER[coverAt(look.cover, x + dx, z + dz)]))
+        if (got === 'rough') expect(around).toContain('open')
+        else expect(around).toContain(got)
       }
     }
   })

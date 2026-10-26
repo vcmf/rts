@@ -160,6 +160,11 @@ const look = [
     'APP.select([...Array(128).keys()].filter(i => APP.w.f.alive[i] && APP.w.f.side[i] === 0)); APP.march(70, 0, false); APP.select([]); await APP.advance(40); `LOOK ${[...APP.w.f.alive].filter(a => a).length} on the look map, the south at z ${Math.round(Math.max(...[...Array(128).keys()].filter(i => APP.w.f.alive[i] && APP.w.f.side[i] === 0).map(i => APP.w.f.z[i])))}`',
   ],
   ['shot', 'look-0-cross'],
+  // the south marched (from z −150) and all eight stand
+  [
+    'eval',
+    'const s = [...Array(128).keys()].filter(i => APP.w.f.alive[i] && APP.w.f.side[i] === 0); if (s.length !== 4 || [...APP.w.f.alive].filter(a => a).length !== 8 || Math.max(...s.map(i => APP.w.f.z[i])) <= -130) throw new Error("the look map\'s battle did not march"); "marched"',
+  ],
   REPLAY,
 ]
 // the guns (S1d-3): the battery on the hill fires on the column across the stream for a minute and a half
