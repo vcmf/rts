@@ -57,6 +57,7 @@ import {
   stepOf,
   type Draft,
 } from './draw.ts'
+import { renameFeature, setField } from './fields.ts'
 
 /** What the editor needs from the page. */
 export interface Host {
@@ -574,6 +575,82 @@ export class Editor {
     this.begin(startDraft(f, drawSteps(meta!, shape)), null)
     return true
   }
+  /**
+   * The fields (M7c): one edit each, judged by the validator at once like any other. A field of the selection set, or
+   * removed (`undefined`: it inherits); its id goes through `rename`.
+   */
+  setField(key: string, value: unknown): void {
+    const f = this.selected ? this.feature(this.selected) : undefined
+    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return
+    if (key === 'id') return this.rename(typeof value === 'string' ? value : String(value ?? ''))
+    const g = setField(f, key, value)
+    if (!sameJson(g, f)) this.commit(this.replace(this.doc, g), f.id)
+  }
+  /**
+   * The selection's id changed, and every place that names it (`renameFeature`). Refused only for an id another
+   * feature has (two features of one id cannot be edited); its form is the validator's to judge.
+   */
+  rename(id: string): void {
+    const f = this.selected ? this.feature(this.selected) : undefined
+    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f) || id === f.id) return
+    if (this.feature(id)) return this.note(`the id ${id} is taken`)
+    const doc = renameFeature(this.doc, f.id, id)
+    this.selected = id
+    this.commit(doc, id)
+  }
+  /**
+   * The selection replaced by a feature written as JSON (an object with a text id; anything in it the validator
+   * judges). A changed id renames it, with every place that names it.
+   */
+  setFeature(json: string): void {
+    const f = this.selected ? this.feature(this.selected) : undefined
+    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return
+    let g: unknown
+    try {
+      g = JSON.parse(json)
+    } catch {
+      return this.note('the feature is no JSON: nothing changed')
+    }
+    if (typeof g !== 'object' || g === null || Array.isArray(g) || typeof (g as Feature).id !== 'string') {
+      return this.note('a feature is an object with a text id: nothing changed')
+    }
+    const next = g as Feature
+    if (sameJson(next, f)) return
+    if (next.id !== f.id && this.feature(next.id)) return this.note(`the id ${next.id} is taken`)
+    const at = this.doc.features.indexOf(f)
+    const renamed = next.id === f.id ? this.doc : renameFeature(this.doc, f.id, next.id)
+    this.selected = next.id
+    this.commit({ ...renamed, features: renamed.features.map((x, k) => (k === at ? next : x)) }, next.id)
+  }
+  /** A field of the map itself set, or removed; its features are the features' own edits, its id `renameMap`'s. */
+  setMapField(key: string, value: unknown): void {
+    if (!this.enabled || !this.doc || !this.ready() || key === 'features' || key === 'id') return
+    const doc = setField(this.doc, key, value)
+    if (!sameJson(doc, this.doc)) this.commit(doc, null)
+  }
+  /**
+   * A map with no file yet takes another id, and with it the file its first save makes (`maps/<id>.map.json`), as if
+   * made under it: its history goes. A map with a file keeps its id (it names the file). Returns whether it did.
+   */
+  renameMap(file: string, id: string): boolean {
+    if (!this.enabled || !this.doc || !this.ready()) return false
+    if (this.exists) {
+      this.note('a map with a file keeps its id: it names the file')
+      return false
+    }
+    const doc = { ...this.doc, id }
+    const selected = this.selected
+    this.take(file, null, doc, '')
+    this.selected = selected && this.feature(selected) ? selected : null
+    this.host.recompile()
+    this.host.redraw()
+    return true
+  }
+  /** What the validator found in the copy at the last edit. */
+  get issues(): Issue[] {
+    return this.found
+  }
+
   /** A feature's kind's metadata (its kind its own or its preset's), or null when the catalogue has none. */
   metaOf(f: Feature): KindMeta | null {
     const kind = featureKind(f, (this.doc?.presets ?? {}) as Record<string, Record<string, unknown>>)

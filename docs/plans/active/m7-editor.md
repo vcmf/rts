@@ -7,7 +7,9 @@ last_reviewed: 2026-10-25
 
 Track M, on `epic/map-engine` (decision 0020). Phase M7 of `docs/proposals/map-engine.md` §10, step 3 of
 `docs/plans/active/one-map-austerlitz.md`. Several PRs into the epic (below); this plan covers them all and details
-each as it starts (M7a merged in #192; M7b below). M6d waits (the owner, 2026-10-25: `docs/plans/active/m6-lit-view.md`).
+each as it starts (M7a merged in #192, M7b in #199; M7c below). M7c as first planned (fields, generators, pinning,
+sources) is split in two here (M7a and M7b each needed a redesign; a smaller PR reviews better): M7c the fields, M7d
+generators and pinning; tracing becomes M7e. M6d waits (the owner, 2026-10-25: `docs/plans/active/m6-lit-view.md`).
 
 ## Problem
 
@@ -23,8 +25,9 @@ tools on top).
 |---|---|---|
 | **M7a** (done, #192) | Select a feature on the map; move it, move, add and remove its points, resize a circle or an ellipse, delete it; barriers snapped to the lattice in 8 directions; the edits compiled live from the page's memory; undo and redo; the stable save through the dev server | Every map in `maps/` written back unedited is byte for byte the same; one point moved changes one line; undo to the start and save gives the original bytes; the page check drags a point through pointer events and saves |
 | **M7b** | Create: a new map (id, name, size, seed, season); pick a kind from the catalogue and draw one of its shapes; ids proposed from the kind; references (`on`, `carries`, `crosses`, `along`, `near`) set by clicking their targets | A map drawn from scratch in the page validates, and its file round-trips with no diff but the edits (the phase's acceptance) |
-| **M7c** | The selected feature's fields as a form from the catalogue: attributes with their units, ranges and enums, ramps, seasons, state, priority, note, source; a generator's parameters with the expansion redrawn live; pinning a generated feature; the map's sources | Every attribute of the catalogue editable and checked as the validator checks it; a pinned child equals its expansion |
-| **M7d** | The tracing overlay: an image (a period map, a survey) placed under the lit view by matching points, its opacity a setting, stored beside the map as a source the compilers ignore | The 1805 map of Austerlitz placed over the real relief to within the image's own error |
+| **M7c** | The selected feature's fields as a form from the catalogue: its id (a rename follows every reference to it), kind, preset, priority, state, source, note, each attribute the kind's category takes (its unit, range and values shown, its inherited value as a hint), seasons and ramps as JSON; the whole feature as JSON; the map's own fields and sources with no selection, its id while it has no file | Every attribute of the catalogue set through the form and judged as the validator judges it, its problem shown at its field; a rename leaves a valid map valid |
+| **M7d** | A generator chosen for the selection and its parameters as a form, the expansion redrawn on each change; pinning a generated feature (its expanded form copied into the file) | A pinned child equals its expansion |
+| **M7e** | The tracing overlay: an image (a period map, a survey) placed under the lit view by matching points, its opacity a setting, stored beside the map as a source the compilers ignore | The 1805 map of Austerlitz placed over the real relief to within the image's own error |
 
 ## Decisions taken here (decision 0066)
 
@@ -314,6 +317,39 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
 - `test/map-draw.test.ts`: every kind of the catalogue drawn as every shape it takes, its references clicked, its
   shape and references valid.
 - `npm test`, `check:data`, the build and the docs check pass.
+
+## M7c in detail
+
+Decision 0066 holds: a form sets values, the validator judges them at once (no copy of the rules); each change is one
+edit. No new decision.
+
+- `src/app/map/fields.ts` (pure, tested in `test/map-fields.test.ts`):
+  - `attrRows`: the attributes a feature's kind's category takes (`allowedIn`), in the catalogue's order, each with
+    its spec, the feature's own value and the value it inherits (the kind's chain, then its preset), for the hint;
+  - `parseInput`: a field's text as a value by its spec's type: empty removes the field (it inherits); a number's
+    text that is no number is kept as text, for the validator to name; objects, ramps, seasons and lists as JSON (text
+    that is no JSON: no edit, and the panel says so);
+  - `setField`, `setMapField`: the feature or the map with one field set or removed, the others in their order;
+  - `renameFeature`: the copy with a feature's id changed and every place that names it: `on`, `carries`, `crosses`,
+    `along.id`, `follow` and `clear` ids, a generator's selectors (`avoid`, `within`), a pinned child's
+    `origin.parent`;
+  - `problemsAt`: the validator's problems whose path is a field's (`features[i].height`, `seed`).
+- `Editor`: `setField(key, value)`, `setFeature(json)` (the whole feature as JSON; a changed id renames),
+  `rename(id)`, `setMapField(key, value)`, `renameMap(id)` (only while the map has no file: it moves the new map to
+  `maps/<id>.map.json`), each one edit.
+- The panel: the selection's form in place of its JSON (each input applies on Enter or when it loses focus, the
+  focus kept across the redraw), the problems under their fields, the feature as JSON below; with no selection the
+  map's form.
+- The page check: renames a feature with references and sets an attribute through the form; the saved diff is
+  those lines alone.
+
+## Acceptance (M7c)
+
+- `test/map-fields.test.ts`: every attribute of the catalogue, on a kind whose category takes it, set from a good
+  text and from a bad one through `parseInput` and `setField`: the good gives no problem, the bad one at its field's
+  path (`problemsAt`); a rename of each map's features in `maps/` leaves its problems as they were, and no reference to
+  the old id.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
 
 ## Open questions
 

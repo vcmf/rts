@@ -18,6 +18,7 @@ import { Editor } from './editor.ts'
 import { ovalRing } from './edit.ts'
 import { newestOnly } from './latest.ts'
 import { proposeId } from './draw.ts'
+import { Form } from './form.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -88,7 +89,7 @@ const overlaySelect = $<HTMLSelectElement>('overlay')
 const overlayHint = $('overlayHint')
 const mode = $<HTMLSelectElement>('mode')
 const editState = $('editState')
-const selection = $('selection')
+const formBox = $('form')
 const saveButton = $<HTMLButtonElement>('save')
 const undoButton = $<HTMLButtonElement>('undo')
 const redoButton = $<HTMLButtonElement>('redo')
@@ -370,11 +371,29 @@ const editor = new Editor({
   redraw,
   changed: () => editPanel(),
 })
+// the selection's fields, or the map's (M7c); a new map's id moves it to the file of that name
+const form = new Form(formBox, editor)
+form.onMapId = id => {
+  const file = `/maps/${id}.map.json`
+  const why = !ID.test(id)
+    ? 'its id names its file: lower-case letters and digits, in words joined by "-"'
+    : [...picker.options].some(o => o.value === file)
+      ? `a map ${id} exists`
+      : ''
+  if (why) return editor.note(`the id stays: ${why}`)
+  const was = editor.file
+  if (!editor.renameMap(file, id)) return
+  const option = [...picker.options].find(o => o.value === was)
+  if (option) option.replaceWith(mapOption(file))
+  picker.value = file
+  const q = new URLSearchParams(location.search)
+  q.set('map', id)
+  history.replaceState(null, '', `?${q}`)
+}
 /** The editor's part of the panel: the selection, unsaved edits, the save's state, a conflict with the disk. */
 function editPanel(): void {
   const f = editor.selected ? editor.feature(editor.selected) : undefined
-  selection.textContent = f ? JSON.stringify(f).slice(0, 4000) : ''
-  selection.hidden = !f
+  form.update(catalogue)
   const dirty = editor.dirty
   editState.textContent = !editor.enabled
     ? 'editing needs the dev server (npm run dev)'

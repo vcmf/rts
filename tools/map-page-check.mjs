@@ -16,7 +16,10 @@
 //   6. a new map (M7b) made in the panel and drawn by clicks: a base, a meadow (an area), a stream (a line), a ford on
 //      it and a bridge (references by clicking their targets), a road, a hedge (a barrier) and a hill (a circle);
 //      saved, the new file must validate with no problem and read back unchanged, and one more feature saved must
-//      change one line. The new file is removed at the end.
+//      change one line. The new file is removed at the end;
+//   7. the fields form (M7c), on the map first opened: a feature with references renamed and another's attribute set
+//      through the form's inputs; the saved diff is the renamed feature, those naming it and the other's line; undone
+//      and saved, the file is its original bytes.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -219,6 +222,32 @@ try {
         return 'ZOOM ' + JSON.stringify({ kept, dirty: MAP.dirty })
       })()`,
     ],
+    // the fields form (M7c): rename the stream that others name, set a ridge's width, save; undo both, save
+    [
+      'eval',
+      `(async () => {
+        const named = JSON.parse(MAP.text).features.filter(f => f.on || f.crosses || f.carries).map(f => [f.on, f.crosses, f.carries]).flat()
+        const target = JSON.parse(MAP.text).features.find(f => named.includes(f.id) && f.line)
+        const other = JSON.parse(MAP.text).features.find(f => f.kind === 'relief.ridge')
+        const field = (key, value) => {
+          const input = document.querySelector('#form [data-key="' + key + '"]')
+          if (!input) throw new Error('no field ' + key)
+          input.value = value
+          input.dispatchEvent(new Event('change'))
+        }
+        MAP.select(target.id)
+        field('id', target.id + 'x')
+        MAP.select(other.id)
+        field('width', String((other.width ?? 100) + 7))
+        const ok = await MAP.save()
+        const disk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
+        const issues = MAP.issues.length
+        MAP.undo(); MAP.undo()
+        const back = await MAP.save()
+        const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
+        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id })
+      })()`,
+    ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
     [
       'eval',
@@ -396,6 +425,22 @@ try {
     seen.RESELECT.selected === seen.RESELECT.line,
     `with ${seen.RESELECT.area} selected, a click on ${seen.RESELECT.line} inside it selects ${seen.RESELECT.selected}`,
   )
+  await until('FIELDS')
+  const fl = seen.FIELDS
+  const changed = fl.disk.split('\n').filter((l, k) => l !== was[k])
+  const changedIds = changed.map(l => /"id": ?"([^"]+)"/.exec(l)?.[1]).sort()
+  const naming = JSON.parse(original)
+    .features.filter(f => [f.on, f.crosses, f.carries, f.along?.id].includes(fl.renamed))
+    .map(f => f.id)
+  const expected = [`${fl.renamed}x`, fl.other, ...naming].sort()
+  check(
+    fl.ok &&
+      fl.issues === 0 &&
+      fl.disk.split('\n').length === was.length &&
+      JSON.stringify(changedIds) === JSON.stringify(expected),
+    `through the form, ${fl.renamed} renamed and ${fl.other}'s width set: the lines of ${changedIds.join(', ')} changed`,
+  )
+  check(fl.back && fl.after === original, 'both undone and saved, the file is byte for byte the original')
   await until('NEWMAP')
   const nm = seen.NEWMAP
   const ids = nm.features.map(f => f.id).join(',')

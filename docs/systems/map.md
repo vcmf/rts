@@ -1,11 +1,11 @@
 ---
 status: current
 last_reviewed: 2026-10-25
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, test/map-fields.test.ts, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
 decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place]
 ---
 
-# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a–c, M7a–b)
+# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a–c, M7a–c)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
@@ -28,7 +28,7 @@ maps/kinds.json ──► checkCatalogue ─┐
   is a data change.
 - The draft page shows exactly what the code computes: the page's worker and the CLI run the same functions.
 - Not yet: works' earthworks, compiling to the look's data (M4), areas sharing edges with other areas (only lines
-  are shared), editing a feature's fields on the page (M7c).
+  are shared), choosing a generator and pinning on the page (M7d).
 
 ## Constraints
 
@@ -288,6 +288,17 @@ maps/kinds.json ──► checkCatalogue ─┐
       feature is made in one edit and selected, and what the validator finds in it shows at once (only a kind the
       catalogue lacks and an id already used are refused). A press still pans while drawing. The selection's
       references are listed in the panel, each set again by clicking its target.
+    - The fields (M7c, `src/app/map/fields.ts`, the panel's form in `src/app/map/form.ts`): the selection's id, kind,
+      preset, priority, state, source, note, each attribute its kind's category takes (in the catalogue's order, with
+      its unit, range or values and what it inherits from its kind and preset as hints; any other it sets, to be
+      seen and removed), its seasons as JSON, and the whole feature as JSON; with no selection the map's own fields
+      (name, note, seed, season, datum, extent, play, sources, presets; its id only while it has no file, which then
+      moves to the file of that name). A field applies when it changes, as one edit; emptied, it is removed (it
+      inherits); its text is read as its kind of value only (a number's that is no number stays text for the
+      validator to name; JSON that does not parse changes nothing). The validator's problems show under their fields
+      (by path). A rename (the id field, or the JSON's id) follows every place that names the feature (`renameFeature`:
+      references, shared edges, kept-off lines, a generator's selectors, a pinned child's parent); an id in use is
+      refused. The form is rebuilt only when what it shows changes, the focus kept on its field.
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes
@@ -323,7 +334,8 @@ selects the map's first line, drags its middle point through pointer events, com
 of the file changed, and undoes and saves back to the original bytes; with the largest area selected, a click on a line inside it selects
 the line; a new map made in the panel and drawn by clicks (a base, an area, a stream and a ford on it, a road and a
 bridge, a hedge, a circle) is saved into a new file that validates and reads back unchanged, and one more feature
-saved adds one line (the file is removed after); no console errors.
+saved adds one line (the file is removed after); through the form a feature others name is renamed and another's
+attribute set, the saved diff their lines alone, undone back to the original bytes; no console errors.
 
 `test/map-write.test.ts` (M7a): every map in `maps/` written back unedited is byte for byte its file; a moved point
 changes one line; a feature added, deleted (first, middle, last), reordered; a map field changed, added, removed; a
@@ -338,7 +350,10 @@ a file from disk that is no map. `test/map-draw.test.ts` (M7b): every kind of th
 takes with its references clicked, its shape and references valid; barriers snapped valid; `along` from two clicks;
 Enter, Backspace, Escape; the editor's drawing (one edit, one undo, no command and a conflict until it ends, a taken
 id refused, a reference set again); a new map saved with no base, read back and written unedited byte for byte.
-`test/map-save.test.ts` also creates a new file and refuses to create over one.
+`test/map-save.test.ts` also creates a new file and refuses to create over one. `test/map-fields.test.ts` (M7c):
+every attribute of the catalogue set through the form's reading of text, good with no problem on a kind it means
+something on, bad with one at its field; a rename of every referenced feature of every map in `maps/` leaves the map
+as valid and no reference to the old id; the editor's field, rename, JSON and map edits.
 
 `test/map-gen.test.ts`:
 - seeds: stable, and local (another feature, the file's order, the map's seed);
