@@ -17,15 +17,11 @@ import {
   mkPlaced,
   placeAll,
   formedOverlaps,
+  contacts,
+  TOUCH,
   sectionHashes,
   typeOf,
   MS_ROUTING,
-  ROUND_PINNED,
-  ROUND_STEPPED,
-  ROUND_FOLLOWED,
-  ROUND_FELL_BACK,
-  stepWhole,
-  formationHandle,
   M_TICK,
   TICK_HZ,
   O_MOVE,
@@ -92,9 +88,9 @@ const OVERLAP_TODAY = new Set([
   'x11-rally-in-a-friend', // the router runs to the map's edge and rallies there, inside the friend that stands there
   'x13-passage-of-lines',
   'x14-forty-crossing',
-  'x16-pushed-onto-friend', // the veteran pursues the router through the regiment behind it
-  'x17-pushed-onto-enemy', // the same, through a regiment of its own side
-  'x18-pinned-from-the-flank', // after the rout two of its regiments pass through each other
+  'x16-friend-behind', // the veteran pursues the router through the regiment behind it
+  'x17-enemy-behind', // the same, through a regiment of its own side
+  'x18-flank-charge', // after the rout two of its regiments pass through each other
 ])
 
 describe('invariant 1: no two formed bodies overlap', () => {
@@ -126,10 +122,10 @@ const stateOf = (w: World) => ({
 // regiments charging each other, or one pursuing a router, depend on their slots today (#187)
 const ORDER_TODAY = new Set([
   'x01-clash',
-  'x15-pushed-back',
-  'x16-pushed-onto-friend',
-  'x17-pushed-onto-enemy',
-  'x18-pinned-from-the-flank',
+  'x15-melee-holds',
+  'x16-friend-behind',
+  'x17-enemy-behind',
+  'x18-flank-charge',
   'x20-brigade-lines',
 ])
 describe('invariant 4: the visiting order changes nothing', () => {
@@ -199,10 +195,12 @@ describe('with claims: invariant 4, the keyed order', () => {
   }
 })
 
-// a melee's rounds (docs/plans/active/c1-claims.md, step 4): a veteran regiment charges a raw one at the halt (X-15),
-// with a friend (X-16) or an enemy (X-17) just behind the raw one. Played until the raw one (slot 0) breaks
+// a melee holds (docs/plans/active/c1-claims.md, step 4): a veteran regiment charges a raw one at the halt (X-15),
+// with a friend (X-16) or an enemy (X-17) just behind the raw one. Played to its end: where the watched stood when
+// the raw one's (slot 0's) melee began and at its last tick in it (a break, or a fall-back after it, faces it about),
+// when it broke, and when it left the field
 function untilRout(id: string, watch = [0, 1]) {
-  const out = { melee: -1, rout: -1, z: [] as number[], at: [] as number[], pinned: -1, stepped: 0, followed: 0 }
+  const out = { melee: -1, rout: -1, z: [] as number[], at: [] as number[], gone: -1 }
   play(caseOf(id), {
     every: 1,
     each: w => {
@@ -210,122 +208,52 @@ function untilRout(id: string, watch = [0, 1]) {
         out.melee = w.meta[M_TICK]
         out.z = watch.map(i => w.f.z[i])
       }
-      const S = w.scratch.melee
-      if (S && S.roundAt[0] === w.meta[M_TICK] && out.rout < 0) {
-        if (out.pinned < 0 && S.round[0] === ROUND_PINNED) out.pinned = w.meta[M_TICK]
-        if (S.round[0] === ROUND_STEPPED) out.stepped++
-        if (S.round[1] === ROUND_FOLLOWED) out.followed++
-      }
-      if (out.rout < 0 && w.f.mstate[0] >= MS_ROUTING) {
-        out.rout = w.meta[M_TICK]
-        out.at = watch.map(i => w.f.z[i])
-      }
+      if (out.rout < 0 && w.f.mstate[0] >= MS_ROUTING) out.rout = w.meta[M_TICK]
+      if (w.f.foe[0] && w.f.mstate[0] < MS_ROUTING) out.at = watch.map(i => w.f.z[i])
+      if (out.gone < 0 && !w.f.alive[0]) out.gone = w.meta[M_TICK]
     },
   })
   return out
 }
-// plays the world on until battalion i's next round; the melee step's record of it
-function untilRound(w: World, i: number) {
-  const start = w.meta[M_TICK]
-  while (!(w.scratch.melee && w.scratch.melee.roundAt[i] > start)) advanceTick(w)
-  return w.scratch.melee
-}
-describe("with claims: a melee's rounds", () => {
-  // X-15 with claims, played once for the cases that compare with it
-  let x15: ReturnType<typeof untilRout> | null = null
-  const open = () => (x15 ??= untilRout('x15-pushed-back-claims'))
-  it('X-15: the raw regiment steps back round by round and the veteran follows it', () => {
-    const a = open()
-    const b = untilRout('x15-pushed-back')
-    expect(a.melee).toBeGreaterThan(0)
-    expect(a.rout).toBeGreaterThan(a.melee)
-    expect(b.rout).toBeGreaterThan(b.melee)
-    // it stood at z 40 facing south: two rounds lost, 2 m each, northward; without claims it stands
-    expect(a.at[0]).toBeCloseTo(44, 6)
-    expect(b.at[0]).toBeCloseTo(40, 6)
-    expect(a.at[1] - a.z[1]).toBeCloseTo(4, 6)
-    expect(a.pinned).toBe(-1)
+describe('with claims: a melee holds', () => {
+  for (const [id, watch] of [
+    ['x15-melee-holds-claims', [0, 1]],
+    ['x16-friend-behind-claims', [0, 1]],
+    ['x17-enemy-behind-claims', [0, 1]],
+    ['x19-offset-lines-claims', [0, 1]],
+    ['x20-brigade-lines-claims', [0, 1, 2, 3]],
+  ] as const) {
+    it(`${id}: nobody gives ground; the raw regiment stands where the melee found it until it ends`, () => {
+      const a = untilRout(id, [...watch])
+      expect(a.melee).toBeGreaterThan(0)
+      expect(a.rout).toBeGreaterThan(a.melee)
+      watch.forEach((_, k) => expect(a.at[k]).toBeCloseTo(a.z[k], 6))
+    })
+  }
+  it('X-18: the broken regiment runs clear of its pursuer, never into it', () => {
+    // the pair once stood in each other's margins and cores, and the router, still on the pursuer's cells, could not
+    // move off them
+    let P: ReturnType<typeof mkPlaced> | null = null
+    let touched = -1
+    let broke = false
+    const w = play(caseOf('x18-flank-charge-claims'), {
+      every: 10,
+      each: w => {
+        broke ||= w.f.mstate[0] >= MS_ROUTING
+        if (!broke || touched >= 0 || !w.f.alive[0]) return
+        P ??= mkPlaced(w)
+        if (contacts(w, placeAll(w, P), TOUCH).some(c => c.i + c.j === 1)) touched = w.meta[M_TICK]
+      },
+    })
+    expect(broke).toBe(true)
+    expect(touched).toBe(-1)
+    expect(w.f.alive[0] ? w.f.z[0] : Infinity).toBeGreaterThan(80)
   })
-  it('X-16: a friend behind it: it steps back until the friend is in the way, then is pinned', () => {
-    const a = open()
-    const b = untilRout('x16-pushed-onto-friend-claims')
-    expect(b.at[0]).toBeCloseTo(42, 6)
-    expect(b.pinned).toBeGreaterThan(b.melee)
-    expect(b.rout).toBeLessThanOrEqual(a.rout)
-  })
-  it('X-17: an enemy just behind it: it is pinned at once and breaks sooner', () => {
-    const a = open()
-    const b = untilRout('x17-pushed-onto-enemy-claims')
-    expect(b.at[0]).toBeCloseTo(40, 6)
-    expect(b.pinned).toBeGreaterThan(b.melee)
-    expect(b.rout - b.melee).toBeLessThan(a.rout - a.melee)
-  })
-  it('X-18: a steady regiment steps back round by round until a charge in its flank breaks it', () => {
-    const a = untilRout('x18-pinned-from-the-flank-claims')
-    expect(a.melee).toBeGreaterThan(0)
-    expect(a.stepped).toBeGreaterThanOrEqual(1)
-    expect(a.followed).toBe(a.stepped)
-    expect(a.rout).toBeGreaterThan(a.melee)
-  })
-  it('X-19: two lines offset 20 m are judged and step back as two lines met square on', () => {
-    // (after a minute its squadrons in contact are spent and the melee ends; it faces about, wavering)
-    const a = untilRout('x19-offset-lines-claims')
-    expect(a.rout).toBeGreaterThan(a.melee)
-    expect(a.stepped).toBeGreaterThanOrEqual(2)
-    expect(a.followed).toBe(a.stepped)
-  })
-  it('X-20: in a brigade line both raw regiments step back, each followed by its own veteran', () => {
-    const a = untilRout('x20-brigade-lines-claims', [0, 1, 2, 3])
-    expect(a.at[0]).toBeGreaterThan(a.z[0] + 3.9)
-    expect(a.at[1]).toBeGreaterThan(a.z[1] + 3.9)
-    expect(a.at[2] - a.z[2]).toBeCloseTo(a.at[0] - a.z[0], 6)
-  })
-  it('a loser with a second enemy on its flank is pinned, not stepped back', () => {
-    // X-16 as the melee starts; the friend behind made an enemy on the raw one's east flank, fighting it
-    const w = play(caseOf('x16-pushed-onto-friend-claims'), { seconds: 26 })
-    const f = w.f
-    expect(f.foe[0]).not.toBe(0)
-    f.side[2] = f.side[1]
-    f.heading[2] = -Math.PI / 2
-    f.x[2] = 80
-    f.z[2] = 42
-    f.foe[2] = formationHandle(w, 0)
-    const R = untilRound(w, 0)
-    expect(R.round[0]).toBe(ROUND_PINNED)
-    expect(f.z[0]).toBeCloseTo(40, 6)
-  })
-  it('a step its foe cannot follow keeps the melee; the loser has fallen back alone', () => {
-    // X-15 as the melee starts; the veteran (the winner) fought on its east flank by a third regiment
-    const w = play(caseOf('x16-pushed-onto-friend-claims'), { seconds: 26 })
-    const f = w.f
-    f.side[2] = f.side[0]
-    f.heading[2] = -Math.PI / 2
-    f.x[2] = 82
-    f.z[2] = 34
-    f.foe[2] = formationHandle(w, 1)
-    const z0 = f.z[0]
-    const z1 = f.z[1]
-    const R = untilRound(w, 0)
-    expect(R.round[0]).toBe(ROUND_FELL_BACK)
-    expect(f.z[0]).toBeCloseTo(z0 + 2, 6)
-    expect(f.z[1]).toBeCloseTo(z1, 6)
-    expect(f.foe[0]).toBe(formationHandle(w, 1))
-  })
-  it('a refused step leaves the formation exactly where it stood', () => {
-    // X-17: the enemy just behind refuses the raw one's step, whatever its direction off the axes
-    const w = play(caseOf('x17-pushed-onto-enemy-claims'), { seconds: 26 })
-    const f = w.f
-    // northward into it, 200 directions and lengths that are not round numbers (an undo by subtraction drifts by an
-    // ulp in about one in a hundred)
-    f.x[0] += 0.37295000000836644
-    f.z[0] += 0.0137219903
-    const x = f.x[0]
-    const z = f.z[0]
-    for (let k = 0; k < 200; k++) {
-      const a = 0.7 * Math.sin(k * 1.618)
-      const d = 8.5 + 0.731 * Math.cos(k * 2.414)
-      expect(stepWhole(w, 0, Math.sin(a) * d, Math.cos(a) * d, -1)).toBe(false)
-      expect([f.x[0], f.z[0]]).toEqual([x, z])
-    }
+  it('X-17: a router with an enemy just behind it tries every way out, then surrenders', () => {
+    const a = untilRout('x17-enemy-behind-claims')
+    expect(a.gone).toBeGreaterThan(a.rout)
+    // held 2 s, then the fan's four other directions, one every 5 s
+    expect((a.gone - a.rout) / TICK_HZ).toBeGreaterThan(20)
+    expect(untilRout('x15-melee-holds-claims').gone).toBe(-1)
   })
 })

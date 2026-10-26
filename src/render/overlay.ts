@@ -16,7 +16,6 @@ import {
   MORALE_STATES,
   CHARGE_PHASES,
   M_TICK,
-  TICK_HZ,
   MS_STEADY,
   O_MOVE,
   O_FORM,
@@ -26,11 +25,6 @@ import {
   O_CHARGE,
   sheltering,
   SLOTS,
-  ROUND_STEPPED,
-  ROUND_FOLLOWED,
-  ROUND_PINNED,
-  ROUND_FELL_BACK,
-  ROUND,
 } from '../sim/index.ts'
 import { toS, type View } from './map.ts'
 
@@ -55,13 +49,6 @@ const CELL_INK: [string, string][] = [
   ['rgba(52,95,140,.10)', 'rgba(52,95,140,.28)'],
   ['rgba(150,60,40,.10)', 'rgba(150,60,40,.28)'],
 ]
-// a melee's last round (the claim grid's prototype), as the melee step's scratch keeps it
-const ROUND_NAME: Record<number, string> = {
-  [ROUND_STEPPED]: 'stepped back',
-  [ROUND_FOLLOWED]: 'followed',
-  [ROUND_PINNED]: 'pinned',
-  [ROUND_FELL_BACK]: 'fell back',
-}
 const ORDER_NAME: Record<number, string> = {
   [O_FORM]: 'form',
   [O_WHEEL]: 'wheel',
@@ -253,12 +240,6 @@ export class Overlay {
       if (STATUS[f.status[i]]) what.push(STATUS[f.status[i]])
       if (f.foe[i]) what.push('in melee')
       else if (f.chPhase[i]) what.push(CHARGE_PHASES[f.chPhase[i]])
-      // its last round, until the pair's next
-      const R = w.scratch.melee
-      const since = R && R.roundAt[i] >= 0 ? w.meta[M_TICK] - R.roundAt[i] : Infinity
-      if (R && since < ROUND * TICK_HZ && R.roundGen[i] === f.gen[i] && ROUND_NAME[R.round[i]]) {
-        what.push(ROUND_NAME[R.round[i]])
-      }
       if (sheltering(w, i)) what.push('sheltering')
       if (f.mstate[i] !== MS_STEADY) what.push(MORALE_STATES[f.mstate[i]])
       if (f.blownUntil[i] > w.meta[M_TICK]) what.push('blown')

@@ -97,10 +97,10 @@ can:
 | X-12 gunners into a square | a battery broken by debug-morale runs past a friendly square |
 | X-13 a passage of lines | a second line marches through the first |
 | X-14 forty crossing | 40 battalions ordered across each other's paths |
-| X-15 pushed back | a veteran regiment charges a raw one at the halt, open ground behind it (added in C1, step 4) |
-| X-16 pushed onto a friend | the same, a friendly regiment just behind the raw one |
-| X-17 pushed onto an enemy | the same, an enemy regiment just behind the raw one |
-| X-18 pinned from the flank | a veteran charges a steady regiment; a second regiment charges its flank (C1, step 4) |
+| X-15 melee holds | a veteran regiment charges a raw one at the halt, open ground behind it (added in C1, step 4) |
+| X-16 friend behind | the same, a friendly regiment just behind the raw one |
+| X-17 enemy behind | the same, an enemy regiment just behind the raw one |
+| X-18 flank charge | a veteran charges a steady regiment; a second regiment charges its flank (C1, step 4) |
 | X-19 offset lines | as X-15, the veteran 20 m to one side |
 | X-20 brigade lines | two raw regiments abreast, each charged by a veteran |
 | Q-01 a shift chain | move, then form, face and move appended |

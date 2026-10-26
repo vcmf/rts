@@ -50,10 +50,6 @@ step 12 morale              the shocks owed (shockIn) are taken with contagion
   What it reads of another was fixed before the step: positions after movement, men, morale states, shapes,
   and the melee pairs as the step began. Orders come from the shared pool in visiting order, as routs' do
   (`docs/systems/fire-morale.md`).
-- **The exception, with claims:** a melee's rounds, at the end of the step, are judged on that fixed state, then move
-  formations one pair at a time in the tick's
-  keyed order (`claimOrder`), each claiming its new cells before the next. That order does not depend on the slots, so
-  the reversed visiting order still gives the same state.
 
 ## Design
 
@@ -66,8 +62,7 @@ step 12 morale              the shocks owed (shockIn) are taken with contagion
 - the target is not a live enemy: "no such target".
 
 A formation in melee refuses every player command but the debug ones ("in melee"); a scenario's plan's orders are
-queued for after the melee (a charge is refused). It stands while it fights, but with the claim grid's prototype
-on (below, **A melee's rounds**).
+queued for after the melee (a charge is refused). It stands while it fights.
 
 **The charge** (`O_CHARGE`, `formation.ts`): an order alone in the formation's list, run by the move order's
 code (turn limits, the lag model, the footprint gate).
@@ -127,12 +122,11 @@ men of its companies within `contact + hold` of each.
   melee losses it does not return, and is then blown. A target that breaks before contact is pursued the same
   way. Infantry holds where it stands.
 
-**A melee's rounds** (only with the claim grid's prototype on, `w.claims`; docs/plans/active/c1-claims.md, step 4):
-at the end of the melee step, a pair (each the other's foe, both formed, one ahead of the other) is judged every
-`ROUND` seconds from its pushes (the losses each strike owes the foe, times morale). The loser steps back `STEP`
-metres as one rigid move, granted whole or not at all (`stepWhole`), and its foe follows by the same displacement;
-if its foe cannot follow, the melee goes on until the gap passes contact and hold. A loser that cannot step back, or has a second enemy on its flank or rear,
-takes a morale shock (`PINNED`). The tuning is in `src/sim/melee.ts`.
+**With the claim grid's prototype on** (`w.claims`; docs/plans/active/c1-claims.md, step 4): nobody in melee gives
+ground; it ends when one side breaks. A melee pair, and a charge with its target, stand at each other's core (the
+margin between them gives way); a pursuit stops at the router's margin and a charge at any other enemy's. A router
+held by enemies' cells for 2 s tries its fan's next direction; held on the last, it surrenders and leaves the field
+(`src/sim/morale.ts`, `src/sim/tick.ts`).
 
 **Shocks** (`shockIn`): the test's and the impact's shocks are owed to the target and taken by its morale step
 with contagion, after relaxing (`morale.ts`).
