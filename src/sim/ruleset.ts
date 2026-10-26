@@ -194,6 +194,27 @@ export interface Uniform {
   flag: readonly string[]
   far?: 'coat' | 'own'
 }
+/** an era's dyes (docs/plans/active/dye-palette.md, decision 0068, proposed): a short list of named cloth colours, each
+ *  one sRGB value chosen once against the landscape; the materials that are not cloth (skin, leather, the pack, wood,
+ *  metal: the figure's neutral roles), and the dye every man's boots take. Era data (src/rulesets/<era>-dyes.ts) */
+export interface DyeSet {
+  dyes: Readonly<Record<string, string>>
+  materials: Readonly<Record<string, string>>
+  boots: string
+}
+/** the cloth parts a dress names a dye for */
+export type ClothPart = 'coat' | 'facings' | 'trousers' | 'waistcoat' | 'headgear' | 'greatcoat'
+/** a uniform as its cloth parts' dyes, by name, never a colour (decision 0068, proposed): its coat, facings, trousers
+ *  (or breeches), waistcoat, headgear and greatcoat, and when the greatcoat is worn ('winter', the default when it
+ *  names one, or 'always'; worn, it covers the coat). Its flag's bands are dyes too. Resolved into a Uniform by the
+ *  figure's roles (src/look/world/dyes.ts) */
+export interface Dress {
+  id: string
+  parts: Readonly<Partial<Record<ClothPart, string>>> & { coat: string; facings: string; trousers: string }
+  greatcoat?: 'winter' | 'always'
+  flag: readonly string[]
+  far?: 'coat' | 'own'
+}
 
 export interface Ruleset {
   name: string

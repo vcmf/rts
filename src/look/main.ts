@@ -504,6 +504,9 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dar
 // default: the goldens and the look checks never see them
 // ?coat=<uniform id>:<#hex>[;…] (with ?armies): a test switch, those uniforms' coats swapped (world/armies.ts
 // coatOverride: the near and far palettes and the far rule follow; the flags keep theirs)
+// ?uniforms=dyes|dyes-winter (with ?armies): the dye palette's test (docs/plans/active/dye-palette.md, decision 0068,
+// proposed): the era's dressed uniforms (world/dyes.ts dressed; -winter: the greatcoats worn), each side's battalions
+// wearing the scenario's dyeSides in turn; ?dye=<dye>:<#hex>[;…] swaps dyes' values (dyeOverride). Not a default
 const armiesParam = params.get('armies')
 const unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
@@ -597,14 +600,21 @@ if (armiesParam !== null) {
   if (mats.webgl1) {
     throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
   }
-  const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt, coatOverride }, { RULESETS }, { ARMIES_DEMO }] =
-    await Promise.all([
-      import('./units.ts'),
-      import('./units-data.ts'),
-      import('./world/armies.ts'),
-      import('../rulesets/index.ts'),
-      import('../scenarios/armies-demo.ts'),
-    ])
+  const [
+    { Units: UnitsC },
+    { decodeUnits },
+    { layout, facingAt, coatOverride },
+    { dressAll, dyeOverride, wearInTurn },
+    { RULESETS },
+    { ARMIES_DEMO },
+  ] = await Promise.all([
+    import('./units.ts'),
+    import('./units-data.ts'),
+    import('./world/armies.ts'),
+    import('./world/dyes.ts'),
+    import('../rulesets/index.ts'),
+    import('../scenarios/armies-demo.ts'),
+  ])
   if (tinyPxParam !== null && +tinyPxParam >= UnitsC.LOD_PX) {
     throw new Error(`?tinypx must be under the far LOD's switch (${UnitsC.LOD_PX} px), not ${tinyPxParam}`)
   }
@@ -657,6 +667,20 @@ if (armiesParam !== null) {
     const q = riverQuery(x, z)
     return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z)
   }
+  const uniformsParam = params.get('uniforms')
+  if (uniformsParam !== null && uniformsParam !== 'dyes' && uniformsParam !== 'dyes-winter') {
+    throw new Error(`?uniforms must be dyes or dyes-winter, not ${uniformsParam}`)
+  }
+  if (uniformsParam === null && params.has('dye')) throw new Error('?dye needs ?uniforms=dyes')
+  const dyeTest =
+    uniformsParam === null
+      ? null
+      : (() => {
+          if (!era.dyes || !era.dress) throw new Error(`?uniforms: the ruleset ${ARMIES_DEMO.ruleset} has no dyes`)
+          const set = dyeOverride(params.get('dye'), era.dyes)
+          return { uniforms: dressAll(era.dress, set, { winter: uniformsParam === 'dyes-winter' }) }
+        })()
+  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides)
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
   units = new UnitsC(
     scene,
@@ -665,8 +689,8 @@ if (armiesParam !== null) {
     [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])],
     decodeUnits(await r.arrayBuffer()),
     drill,
-    layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides),
-    coatOverride(params.get('coat'), era.uniforms),
+    dyeTest ? wearInTurn(placed, ARMIES_DEMO.dyeSides) : placed,
+    coatOverride(params.get('coat'), dyeTest ? dyeTest.uniforms : era.uniforms),
     () => S.t,
     { tinyPx: tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined },
   )

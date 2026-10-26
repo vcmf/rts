@@ -1,7 +1,24 @@
 // The army-colour blocks on the look page (src/look/lab.ts, __look.lab.addBlocks): the coats, and the cover's spots,
 // shared by the readability guard (tools/guard.mjs) and L5b's judging kit (tools/ablation-kit.mjs).
 // docs/art-bible.md §4
-export const ARMY_HEX = { France: '#2C4FA8', Russia: '#2F6B3C', Austria: '#E9E3D3', Britain: '#B3302A' }
+// ARMY_COATS=<name>=<#rrggbb>,… (four, names without dots) in the environment: other coats for a test (the dye
+// palette's, docs/plans/active/dye-palette.md); the art bible's otherwise
+const ART_BIBLE = { France: '#2C4FA8', Russia: '#2F6B3C', Austria: '#E9E3D3', Britain: '#B3302A' }
+/** the blocks' coats from an ARMY_COATS spec, the art bible's without one; a malformed spec throws */
+export function coatsFrom(spec) {
+  if (!spec) return ART_BIBLE
+  const out = {}
+  for (const e of spec.split(',')) {
+    const m = /^([^=.,]+)=(#[0-9a-fA-F]{6})$/.exec(e)
+    if (!m || m[1] in out) {
+      throw new Error(`ARMY_COATS must be four distinct <name>=<#rrggbb>, comma-separated, not ${e}`)
+    }
+    out[m[1]] = m[2].toUpperCase()
+  }
+  if (Object.keys(out).length !== 4) throw new Error(`ARMY_COATS names ${Object.keys(out).length} coats, not 4`)
+  return out
+}
+export const ARMY_HEX = coatsFrom(process.env.ARMY_COATS)
 export const COATS = Object.keys(ARMY_HEX)
 // the cover's spots (docs/plans/active/l5-macro.md): east of the hill, the coats on each class of the ground's cover
 // that a 20 m line fits on, every block wholly on it: on the ploughed field (18 m across) lines along it, 4.5 m apart;
