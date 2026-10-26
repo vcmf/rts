@@ -57,9 +57,10 @@ export interface Man {
 }
 // pose: what the places were last framed from (still: unchanged, so settled men need no new place); type: the
 // unit type's name (cr.types: infantry, cavalry, battery in the Napoleonic ruleset); figure: how its men are drawn
-// (UnitType.figure: foot, mounted, crewed)
+// (UnitType.figure: foot, mounted, crewed); group: which of `step`'s groups it steps in
 export interface Unit {
   i: number
+  group: number
   gen: number
   side: number
   type: string
@@ -87,7 +88,10 @@ export class SoldierLayer {
   private walkOf: Float64Array
   private runOf: Float64Array
   alphaNow = 1
-  // the neighbour grid: per cell the first man, per man the next, and the men's positions as the frame began
+  // `step`'s groups: how many (0 before the first step), and the units in each
+  private grouped = 0
+  private byGroup: Unit[][] = []
+  // the neighbour grid: per cell the first man, per man the next, and the men's positions as the round began
   private cellHead: Int32Array
   private cellNext = new Int32Array(1024)
   private flatX = new Float64Array(1024)
@@ -233,7 +237,7 @@ export class SoldierLayer {
     )
   }
   // matches the men to the sim: new battalions, battalions gone, Face about, losses, slots that moved.
-  // Call it after every tick (and `step` calls it each frame): a Face about is relabelled through the
+  // Call it after every tick (`step` calls it too, once a round): a Face about is relabelled through the
   // shape it turned in, which a later change of shape within the same frame would otherwise replace.
   // `departed`: the tick's formations that left the field (TickResult), with the men they took
   sync(alpha: number, departed?: readonly { id: number; men: number }[]): void {
@@ -262,6 +266,7 @@ export class SoldierLayer {
           this.fallen.push(m)
         }
         this.units.delete(i)
+        this.leaveGroup(u)
       }
     }
     for (let i = 0; i < N; i++) {
@@ -276,6 +281,7 @@ export class SoldierLayer {
       if (!u) {
         u = {
           i,
+          group: 0,
           gen: f.gen[i],
           side: f.side[i],
           type: U.name,
@@ -287,6 +293,7 @@ export class SoldierLayer {
           pose: new Float64Array(8 + 2 * w.cr.maxNB).fill(NaN),
         }
         this.units.set(i, u)
+        this.joinGroup(u)
       }
       this.sign(u.sig, i)
       if (u.faces !== f.faces[i]) {
@@ -371,25 +378,61 @@ export class SoldierLayer {
     }
   }
 
-  // one frame: sync, then every man steers to his place
-  step(dt: number, alpha: number): void {
+  /**
+   * One step: the men of one group of battalions steer to their places for `dt` seconds of game time. A round
+   * (groups 0 to `groups` − 1) starts with a sync and the neighbour grid's rebuild, so the round's groups share one
+   * grid as one ungrouped step does (each man pushed by where the others stood when the round began). Men lost or
+   * added within a round show in the grid at the next. A battalion keeps its group while it lasts: the clock
+   * (src/render/men-clock.ts) gives each group the game time since that group's last step.
+   * @param dt game seconds this group's step covers
+   * @param alpha the tick's interpolation, 0 to 1
+   * @param group the group to step, 0 to `groups` − 1
+   * @param groups how many groups a round has (a new count shares every battalion out again)
+   */
+  step(dt: number, alpha: number, group: number, groups: number): void {
     this.alphaNow = alpha
-    this.sync(alpha)
-    const w = this.w
-    const f = w.f
-    const t = w.terrain
+    if (group === 0) {
+      this.sync(alpha)
+      if (groups !== this.grouped) this.shareOut(groups)
+      this.buildGrid()
+    }
+    this.steer(dt, alpha, this.byGroup[group] ?? [])
+  }
+  /** Shares every battalion out among `groups` groups, about the same men in each: the largest first, each to the
+   * lightest group. */
+  private shareOut(groups: number): void {
+    this.grouped = groups
+    this.byGroup = Array.from({ length: groups }, () => [])
+    const bySize = [...this.units.values()].sort((a, b) => menOf(this.w, b.i) - menOf(this.w, a.i) || a.i - b.i)
+    for (const u of bySize) this.joinGroup(u)
+  }
+  /** Puts a battalion in the group with the fewest men now (none before the first step: `shareOut` does it). */
+  private joinGroup(u: Unit): void {
+    if (this.grouped === 0) return
+    let g = 0
+    let least = Infinity
+    for (let k = 0; k < this.grouped; k++) {
+      const men = this.byGroup[k].reduce((n, v) => n + menOf(this.w, v.i), 0)
+      if (men < least) {
+        least = men
+        g = k
+      }
+    }
+    u.group = g
+    this.byGroup[g].push(u)
+  }
+  /** Takes a battalion that is gone out of its group. */
+  private leaveGroup(u: Unit): void {
+    const list = this.byGroup[u.group]
+    const k = list ? list.indexOf(u) : -1
+    if (k >= 0) list.splice(k, 1)
+  }
+  /** Rebuilds the neighbour grid (cells and linked lists in typed arrays) from where the men stand now. */
+  private buildGrid(): void {
+    const t = this.w.terrain
     const x0 = t.x0
     const z0 = t.z0
-    const xMax = x0 + (t.n - 1) * t.cell
-    const zMax = z0 + (t.n - 1) * t.cell
     const SN = this.SN
-    const p = [0, 0, 0]
-    const TA = this.treeAt
-    const TX = this.treeX
-    const TZ = this.treeZ
-    const TR = this.treeR
-    // neighbour grid: cells and linked lists in typed arrays, rebuilt every frame, with the positions as the
-    // frame began (each man is pushed by where the others stood, whatever order they move in)
     for (const c of this.touched) this.cellHead[c] = -1
     this.touched.length = 0
     this.nFlat = 0
@@ -411,12 +454,28 @@ export class SoldierLayer {
         }
       }
     }
+  }
+  /** Steers the men of `units` to their places for `dt` game seconds, at the tick's interpolation `alpha`. */
+  private steer(dt: number, alpha: number, units: readonly Unit[]): void {
+    const w = this.w
+    const f = w.f
+    const t = w.terrain
+    const x0 = t.x0
+    const z0 = t.z0
+    const xMax = x0 + (t.n - 1) * t.cell
+    const zMax = z0 + (t.n - 1) * t.cell
+    const SN = this.SN
+    const p = [0, 0, 0]
+    const TA = this.treeAt
+    const TX = this.treeX
+    const TZ = this.treeZ
+    const TR = this.treeR
     const tt = w.meta[M_TICK] * DT * 0.35
     const X = this.flatX
     const Z = this.flatZ
     const head = this.cellHead
     const next = this.cellNext
-    for (const u of this.units.values()) {
+    for (const u of units) {
       const i = u.i
       this.frame(i, alpha)
       const busy = !!(f.trans[i] || f.ordHead[i] >= 0)

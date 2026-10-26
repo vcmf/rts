@@ -25,8 +25,11 @@ Annihilation, Supreme Commander).
 - **The sim (with the state hash) and the soldier layer run in one Web Worker**; the main thread renders, takes input
   and reads, and never ticks. Commands are posted and stamped with their tick by the worker.
 - **Soldiers are stepped at 12 fps, poses and positions together** (the owner, per the art bible): the soldier layer
-  steps at 12 Hz of real time (tied to the figures' bake), each step covering more game time at higher speeds, none
-  when paused; its battalions staggered in four groups. The renderer draws the latest step as is; the camera stays
+  steps at 12 Hz of real time (tied to the figures' bake), none when paused; its battalions staggered in groups
+  (eight: plan PR 1). **Revised by PR 1's measurement (2026-10-26)**: a step covers at most 1/8 s of game time (above
+  it halted men near trunks jitter, measured: the steering's gains saturate there), so above 1.5× the steps come faster than
+  12 Hz (64 Hz at 8×) and 8× costs more than 1×; the owner moved the 8× main-thread bar to the worker (plan PR 3),
+  which takes the layer off the main thread at every speed. The drawn frame stays 12 fps once the worker publishes it. The renderer draws the latest step as is; the camera stays
   smooth.
 - **The worker publishes** the soldier frame (per man at a stable index: position, yaw, a state word with alive/fallen,
   clip and phase), a per-tick mirror of the `World`'s arrays (the main thread's read-only `World` view for the staff

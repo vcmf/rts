@@ -40,13 +40,12 @@ import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
 import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS, PAGE_SEED } from '../scenarios/page.ts'
 import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
+import { MenClock } from '../render/men-clock.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 
-// the soldier layer steps once a frame, up to MEN_DT of game time (tested at that step); a longer frame
-// takes more steps, at most MEN_STEPS (then the men fall behind the sim and catch up)
+// the soldier layer steps on its own clock, 12 rounds a real second staggered over groups of battalions
+// (src/render/men-clock.ts), not once a frame
 const SPEEDS = [0, 1, 2, 4, 8]
-const MEN_DT = 0.2
-const MEN_STEPS = 4
 
 async function main(): Promise<void> {
   const asked = new URLSearchParams(location.search).get('scenario') ?? ''
@@ -69,6 +68,7 @@ async function main(): Promise<void> {
   const dropped: Dropped[] = []
   const scene = buildScene(w)
   const layer = new SoldierLayer(w, scene)
+  const menClock = new MenClock()
   const map = new StaffMap(w, scene)
   const t0 = performance.now()
   map.buildBase((a, b) => {
@@ -124,7 +124,8 @@ async function main(): Promise<void> {
     for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
   }
 
-  // the frame: ticks owed at the game speed, then the men (in game time), then the drawing
+  const stepMen = (group: number, d: number) => layer.step(d, acc / DT, group, menClock.groups)
+  // the frame: ticks owed at the game speed, then the men due on their clock, then the drawing
   const advance = (dt: number) => {
     const g = dt * speed
     acc += g
@@ -136,8 +137,9 @@ async function main(): Promise<void> {
       n++
     }
     if (n === 20) acc = 0
-    const steps = Math.min(MEN_STEPS, Math.ceil(g / MEN_DT - 1e-9))
-    for (let s = 0; s < steps; s++) layer.step(Math.min(MEN_DT, g / steps), acc / DT)
+    menClock.advance(dt, speed, stepMen)
+    // the map draws the anchors at this frame's alpha, whether or not a sub-step was due
+    layer.alphaNow = acc / DT
     simMs = simMs * 0.9 + (performance.now() - a) * 0.1
   }
   const draw = () => {

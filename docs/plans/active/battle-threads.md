@@ -63,8 +63,33 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
   this measurement); the steering's goldens (`slotError`, the wood and halt tests) within
   their limits; the owner's eye on the 12 fps step at 1× and 8×.
 - **Stop** (measurable, at 16,000 men; at 32,000 once the group count is set): if the layer's p99 per frame at
-  120 Hz exceeds 2.0 ms, or the goldens fail at the stepped rate
-  and cannot be re-tuned, revert PR 1 and re-plan.
+  120 Hz exceeds 2.0 ms, or the goldens fail at the stepped rate and cannot be re-tuned, revert PR 1 and re-plan. **Met at 8×, re-planned by the owner (2026-10-26)**: PR 1 is kept
+  for its 1× bars, and its 8× bars are PR 3's (the Outcome below); the acceptance above holds at 1× only.
+- **Outcome** (2026-10-26; `src/render/men-clock.ts`): met at 1×, missed at 8×, re-planned by the owner. The layer's
+  cost per 120 Hz frame, main thread, 40 battalions marching through their shapes (Node on the dev Mac, the clock
+  driving `SoldierLayer.step` as the page does; mean / p99 ms):
+
+  | | today (a step a frame) | PR 1 |
+  |---|---|---|
+  | 16,000 men, 1× | 5.11 / 7.05 | 0.48 / 0.95 |
+  | 16,000 men, 2× | | 0.71 / 1.58 |
+  | 16,000 men, 8× | 4.92 / 15.58 | 2.37 / 3.99 |
+  | 32,000 men (40 × 800), 1× | 7.88 / 8.93 | 0.79 / 1.47 |
+  | 32,000 men, 8× | 6.93 / 9.40 | 3.67 / 6.61 |
+
+  - **Eight groups, not four**: at four the 1× p99 was 1.72 ms (16,000) and 2.72 ms (32,000); the neighbour grid's
+    rebuild (0.23 / 0.44 ms) lands in group 0's sub-step.
+  - **A step covers at most `MEN_DT` = 1/8 s of game time**, so above 1.5× the rounds come faster than 12 Hz (64 Hz
+    at 8×), and 8× costs more work per real second than 1×. The plan's "larger dt" does not hold: halted men in the
+    wood (six halt points, 10 s) moved up to 0.34–1.29 m with steps of 1/6 to 2/3 s, against 0.01 m at 1/8 s and
+    under. The steering's gains saturate there (the arrival damping `1 − 8·dt` is clamped at 0 from 1/8 s, the
+    velocity blend `5·dt` at 1 from 1/5 s) and the explicit step overshoots the pushes. Damping and smoothing made
+    exponential fixed 2× but not 4× (0.45 m), so the steering is kept and the step capped.
+  - **The owner's call**: the 8× bar moves to PR 3. The worker takes the layer off the main thread at every speed, and
+    the clock moves into it as it is (the worker has no frames). PR 3 measures that the worker keeps up at 8× (est.
+    at 32,000: the layer about 44 % of a core, plus 160 ticks a second and the hash).
+  - Above 1.5× the sim page draws the men at the round rate, not 12 fps; PR 3's published frame steps them at 12 fps
+    at every speed.
 
 ## PR 2: the soldier layer in structure-of-arrays typed arrays
 
