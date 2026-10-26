@@ -18,7 +18,7 @@ void main() {
   gl_Position = vec4(p.xy, 0.0, p.w);
 }`
 const FRAG = `#version 300 es
-precision mediump float;
+precision highp float; // a texture coordinate to a pixel of a 4096 px scan: mediump (fp16) is 2 px off
 in vec2 vUv;
 uniform sampler2D image;
 out vec4 colour;
@@ -31,7 +31,8 @@ export class ScanGl {
   private program: WebGLProgram
   private texture: WebGLTexture
   private count = 0
-  private vao: WebGLVertexArrayObject | null = null
+  private vao: WebGLVertexArrayObject
+  private buffers: { pos: WebGLBuffer; uv: WebGLBuffer; index: WebGLBuffer }
   private image: ImageBitmap | null = null
   private mesh: ScanMesh | null = null
   /** The largest texture side the GPU takes: a larger scan is shrunk to it when read. */
@@ -57,6 +58,18 @@ export class ScanGl {
     this.program = p
     this.texture = gl.createTexture()
     this.maxSide = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number
+    // one vertex array and its buffers, refilled for each placement (never a new set: they would pile up on the GPU)
+    this.vao = gl.createVertexArray()
+    this.buffers = { pos: gl.createBuffer(), uv: gl.createBuffer(), index: gl.createBuffer() }
+    gl.bindVertexArray(this.vao)
+    for (const name of ['pos', 'uv'] as const) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[name])
+      const at = gl.getAttribLocation(p, name)
+      gl.enableVertexAttribArray(at)
+      gl.vertexAttribPointer(at, 2, gl.FLOAT, false, 0, 0)
+    }
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.buffers.index)
+    gl.bindVertexArray(null)
   }
 
   /** The scan's image, as a texture (uploaded once a bitmap). */
@@ -79,22 +92,13 @@ export class ScanGl {
     if (mesh === this.mesh) return
     this.mesh = mesh
     const gl = this.gl
-    const vao = gl.createVertexArray()
-    gl.bindVertexArray(vao)
-    this.vao = vao
-    const attrib = (name: string, data: Float32Array) => {
-      const b = gl.createBuffer()
-      gl.bindBuffer(gl.ARRAY_BUFFER, b)
-      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
-      const at = gl.getAttribLocation(this.program, name)
-      gl.enableVertexAttribArray(at)
-      gl.vertexAttribPointer(at, 2, gl.FLOAT, false, 0, 0)
-    }
-    attrib('pos', mesh.pos)
-    attrib('uv', mesh.uv)
-    const ib = gl.createBuffer()
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib)
+    gl.bindVertexArray(this.vao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.pos)
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.pos, gl.STATIC_DRAW)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.uv)
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.uv, gl.STATIC_DRAW)
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.index, gl.STATIC_DRAW)
+    gl.bindVertexArray(null)
     this.count = mesh.index.length
   }
 

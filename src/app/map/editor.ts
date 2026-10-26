@@ -807,6 +807,7 @@ export class Editor {
   drop(): void {
     if (!this.drawing) return
     this.mode = { kind: 'idle' }
+    this.lastClick = null // its last click was the drawing's: the next is a click of its own
     this.message = ''
     this.host.changed()
     this.host.redraw()

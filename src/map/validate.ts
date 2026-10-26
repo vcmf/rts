@@ -812,7 +812,8 @@ export function validateExpanded(map: MapFile, cat: Catalogue): Issue[] {
   return out
 }
 
-const isDemKind = (kind: string): boolean => kind === 'relief.dem' || kind.startsWith('relief.dem.')
+/** Whether a kind is a real-relief piece: relief.dem or one under it. */
+export const isDemKind = (kind: string): boolean => kind === 'relief.dem' || kind.startsWith('relief.dem.')
 
 /**
  * The checks that need the map's files (docs/plans/done/m5-relief.md), for a map that `validate` accepts: each dem

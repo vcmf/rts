@@ -14,10 +14,10 @@ import type { Editor } from './editor.ts'
 import {
   fitScan,
   frameAt,
-  inPiece,
   nearPoint,
   scanMesh,
   scanPieces,
+  topAt,
   type ControlPoint,
   type Piece,
   type ScanFit,
@@ -87,9 +87,19 @@ export class Trace {
   private shown: { scan: Source; fit: ScanFit; pieces: Piece[]; img: ImageBitmap } | null = null
   private last: unknown[] = []
   /** The placement, worked out again only when the scan or its image changes (not on every edit of the copy). */
-  private fitFor: { scan: Source; img: ImageBitmap; fit: ScanFit } | null = null
-  /** The GPU's part, or why there is none (no WebGL2). */
-  private gl: ScanGl | string
+  private fitFor: { scan: Source; img: ImageBitmap; extent: MapFile['extent']; fit: ScanFit } | null = null
+  /** The GPU's part, or why there is none (no WebGL2): made when a scan is first shown, not for every map. */
+  private glMade: ScanGl | string | null = null
+  private get gl(): ScanGl | string {
+    if (this.glMade === null) {
+      try {
+        this.glMade = new ScanGl()
+      } catch (err) {
+        this.glMade = (err as Error).message
+      }
+    }
+    return this.glMade
+  }
   /** The scan (by map and id) whose opacity the slider shows: read from the browser only when it changes. */
   private opacityFor = ''
 
@@ -97,11 +107,6 @@ export class Trace {
     this.host = host
     this.editor = editor
     this.ui = ui
-    try {
-      this.gl = new ScanGl()
-    } catch (err) {
-      this.gl = (err as Error).message
-    }
     ui.pick.addEventListener('change', () => {
       keep(this.key('scan'), ui.pick.value)
       this.update(true)
@@ -151,9 +156,10 @@ export class Trace {
     if (scan && cat && doc && image?.state === 'ready') {
       const img = image.img
       const f = this.fitFor
-      const same = f && f.scan === scan && f.img === img
+      // a placement with fewer than two points follows the map's extent too
+      const same = f && f.scan === scan && f.img === img && f.extent === doc.extent
       const fit = same ? f.fit : fitScan(scan.points ?? [], img.width, img.height, doc.extent)
-      this.fitFor = { scan, img, fit }
+      this.fitFor = { scan, img, fit, extent: doc.extent }
       if (typeof this.gl !== 'string') {
         this.gl.setImage(img)
         if (!same) this.gl.setMesh(scanMesh(fit.toFrame, img.width, img.height))
@@ -226,10 +232,10 @@ export class Trace {
           ? 'no control point: over the map, to place by points'
           : n === 1
             ? 'one point: moved onto it'
-            : n === 2
-              ? 'two points: moved, turned, scaled'
-              : s.fit.problem
-                ? `${n} points: ${s.fit.problem}`
+            : s.fit.problem
+              ? `${n} points: ${s.fit.problem}`
+              : n === 2
+                ? 'two points: moved, turned, scaled'
                 : n === 3
                   ? 'three points: an affine fit through them (a fourth tells its error)'
                   : `${n} points, bent through each: ${s.fit.rms === null ? '—' : `${s.fit.rms.toFixed(1)} m`} root mean square where the others put each`
@@ -387,8 +393,8 @@ export class Trace {
       const [px, pz] = s.fit.toFrame(u, v)
       for (const p of s.pieces) {
         const at: Pt = [x - p.shift.x, z - p.shift.z]
-        // shown where its piece is on top there
-        if (!p.own || !inPiece(p, at[0], at[1]) || frameAt(s.pieces, at[0], at[1]) === null) continue
+        // shown through the piece on top there alone (another of the same file may hold the place too, moved)
+        if (!p.own || topAt(s.pieces, at[0], at[1]) !== p) continue
         const a = this.host.project(px - p.shift.x, pz - p.shift.z)
         const b = this.host.project(at[0], at[1])
         if (!a || !b) continue

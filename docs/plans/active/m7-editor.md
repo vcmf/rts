@@ -557,11 +557,12 @@ file, moved as the piece is: the period map follows the terrain it was cut with.
   Austerlitz survey showed one affine map cannot hold a hand-drawn sheet (below). Where the scan shows on the map: each `relief.dem` piece of its frame, highest priority
   first (its area, or the whole extent), moved by its `shift`; a map point's frame point through the piece on top
   there.
-- **On the page** (`src/app/map/trace.ts`): the scan drawn on the overlay canvas, under the editor's outlines, at an
-  opacity set in the panel (a setting of the page, kept per map in the browser, not in the file). The lit view is
-  tilted, so the image is drawn as a mesh of small triangles, each mapped by its own affine transform; pieces are
-  drawn into an offscreen canvas at full opacity in priority order, clipped to their areas, then onto the view at the
-  set opacity. A control point is added by two clicks, one edit: where the landmark shows on the scan, then where it
+- **On the page** (`src/app/map/trace.ts`, `src/app/map/scan-gl.ts`): the scan drawn under the editor's outlines, at
+  an opacity set in the panel (a setting of the page, kept per map and scan in the browser, not in the file). It is
+  drawn on the GPU through the view's own matrix (the lit view is tilted): a mesh of frame points over the image, each
+  piece of its frame drawn with its shift and composited through its area's clip, in painting order (the last on
+  top; another file's piece on top hides it), then onto the view at the set opacity. (Round 2 replaced a 2D-canvas
+  mesh, below.) A control point is added by two clicks, one edit: where the landmark shows on the scan, then where it
   is on the map. The points show as pairs joined by their residual, listed in the panel with their residuals and a
   button to remove each.
 - **A scan from a map service** (`tools/scan-wms.ts`): an image of a WMS layer in WGS 84 around a centre, and its
@@ -609,6 +610,13 @@ file, moved as the piece is: the period map follows the terrain it was cut with.
   others cannot give shows as —; residuals are fitted forward only, and the placement only when the scan changes; a
   late image error for a file no scan names is ignored; the page check writes its test scan inside its cleanup.
   Tests for each (each fails without its fix), the mesh by its nodes.
+
+- **Round 3**: moderate and light only, so the review stops here. Fixed: a piece of a kind under `relief.dem` counts
+  as the validator counts it (`isDemKind`, shared); a two-point placement with a problem says it; the GPU's mesh
+  buffers are refilled, not made anew for each placement; a placement of fewer than two points follows a new extent;
+  a control point shows through the piece on top at its place alone; texture coordinates at high precision; the
+  WebGL context is made when a scan is first shown; Escape after a capture leaves no click to pair with the next. Not
+  taken: drawing every piece in one GPU pass (a map has a few pieces; the CPU's part is 0.1 ms a frame).
 
 ## Results (M7e)
 

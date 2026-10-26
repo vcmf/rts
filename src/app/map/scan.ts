@@ -7,6 +7,7 @@ import type { Catalogue, Feature, MapFile, Pt, Source } from '../../map/schema.t
 import { inRing } from '../../map/geometry.ts'
 import { demShift } from '../../map/dem.ts'
 import { resolve } from '../../map/resolve.ts'
+import { isDemKind } from '../../map/validate.ts'
 
 /** An affine map of the plane: x = a u + b v + c, z = d u + e v + f. */
 export type Affine = [number, number, number, number, number, number]
@@ -316,7 +317,7 @@ export function scanPieces(map: MapFile, cat: Catalogue, scan: Source): Piece[] 
     } catch {
       continue
     }
-    if (r.kind !== 'relief.dem') continue
+    if (!isDemKind(r.kind)) continue
     const own = f.source === scan.frame
     out.push({ p: { id: f.id, area: f.area ?? null, shift: demShift(r.attrs), own }, priority: r.priority })
   }
@@ -332,10 +333,12 @@ export function inPiece(piece: Piece, x: number, z: number): boolean {
 
 /** The frame point a map point shows: through the piece on top there, or null where none of the scan's is on top. */
 export function frameAt(pieces: Piece[], x: number, z: number): Pt | null {
-  for (let k = pieces.length - 1; k >= 0; k--) {
-    const p = pieces[k]
-    if (inPiece(p, x, z)) return p.own ? [x + p.shift.x, z + p.shift.z] : null
-  }
+  const p = topAt(pieces, x, z)
+  return p?.own ? [x + p.shift.x, z + p.shift.z] : null
+}
+/** The piece on top at a map point (the last in painting order that holds it), or null. */
+export function topAt(pieces: Piece[], x: number, z: number): Piece | null {
+  for (let k = pieces.length - 1; k >= 0; k--) if (inPiece(pieces[k], x, z)) return pieces[k]
   return null
 }
 

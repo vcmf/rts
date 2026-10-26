@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import type { Catalogue, MapFile, Pt, Source } from '../src/map/schema.ts'
 import { validate } from '../src/map/validate.ts'
-import { apply, fitScan, frameAt, nearPoint, scanMesh, scanPieces, type Affine } from '../src/app/map/scan.ts'
+import { apply, fitScan, frameAt, nearPoint, scanMesh, scanPieces, topAt, type Affine } from '../src/app/map/scan.ts'
 import { geoBox, geoPoints, transverseMercator } from '../tools/geo.ts'
 import { root } from './fx.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
@@ -220,6 +220,29 @@ describe('the mesh a scan is drawn with', () => {
 })
 
 describe('where a scan shows', () => {
+  it('counts a piece of a kind under relief.dem as the validator does', () => {
+    const scan: Source = { id: 's', kind: 'scan', file: 'scans/s.png', frame: 'dem' }
+    const sub: Catalogue = { ...cat, kinds: { ...cat.kinds, 'relief.dem.ridge': { set: {} } } }
+    const map = base([DEM, scan], [{ id: 'r', kind: 'relief.dem.ridge', source: 'dem', shift: { x: 7, z: 0 } }])
+    expect(validate(map, sub)).toEqual([])
+    expect(scanPieces(map, sub, scan).map(p => p.id)).toEqual(['r'])
+    expect(frameAt(scanPieces(map, sub, scan), 0, 0)).toEqual([7, 0])
+  })
+  it('names the piece on top at a point, of two cut from one file that overlap', () => {
+    const scan: Source = { id: 's', kind: 'scan', file: 'scans/s.png', frame: 'dem' }
+    const map = base(
+      [DEM, scan],
+      [
+        { id: 'a', kind: 'relief.dem', source: 'dem', area: square(0, 0, 100), shift: { x: 0, z: 0 } },
+        { id: 'b', kind: 'relief.dem', source: 'dem', area: square(50, 0, 100), shift: { x: 500, z: 0 }, priority: 5 },
+      ],
+    )
+    const pieces = scanPieces(map, cat, scan)
+    // where both hold the place, the one painted last: a control point there shows through it alone
+    expect(topAt(pieces, 75, 50)?.id).toBe('b')
+    expect(topAt(pieces, 25, 50)?.id).toBe('a')
+    expect(topAt(pieces, -25, 50)).toBeNull()
+  })
   it("is hidden where another file's piece lies on top, and takes no click there", () => {
     const scan: Source = { id: 's', kind: 'scan', file: 'scans/s.png', frame: 'dem' }
     const other: Source = { ...DEM, id: 'dem2', file: 'y.rdem' }
@@ -433,6 +456,35 @@ describe("the editor's capture of points for a scan", () => {
     ed.click(0, 0)
     ed.click(0, -50)
     expect(ed.drawing).toBe(false)
+    gap = 50
+    ed.click(0, -50)
+    expect(ed.feature('road')!.line).toHaveLength(2)
+  })
+  it('takes a quick click after a capture dropped by Escape as a click of its own', () => {
+    const text = formatMap(
+      base(
+        [{ id: 's', kind: 'scan', file: 'scans/s.png' }],
+        [
+          {
+            id: 'road',
+            kind: 'way.road.lane',
+            line: [
+              [-100, 50],
+              [100, 50],
+            ],
+          },
+        ],
+      ),
+    )
+    const ed = make()
+    ed.load('/maps/t.map.json', text)
+    ed.select('road')
+    let now = 0
+    let gap = 1000
+    vi.spyOn(performance, 'now').mockImplementation(() => (now += gap))
+    ed.capture(['a', 'b'], () => withPoint(ed, [1, 1, 1, 1]))
+    ed.click(0, -50)
+    ed.drop()
     gap = 50
     ed.click(0, -50)
     expect(ed.feature('road')!.line).toHaveLength(2)
