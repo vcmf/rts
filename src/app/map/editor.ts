@@ -12,6 +12,7 @@
 // it was sent for. Tested in test/map-editor.test.ts.
 import type { Catalogue, Feature, MapFile, Pt } from '../../map/schema.ts'
 import { validate, type Issue } from '../../map/validate.ts'
+import { barrierProblem } from '../../map/geometry.ts'
 import { sameJson, writeMap, writerFrom, type FeatureWriter } from '../../map/write.ts'
 import {
   handleAt,
@@ -189,8 +190,19 @@ export class Editor {
     const ppm = this.host.ppm()
     return { step: roundStep(ppm), reach: SNAP_PX / ppm, barrier: isBarrier(f, this.doc?.presets) }
   }
-  private replace(doc: MapFile, f: Feature): MapFile {
-    return { ...doc, features: doc.features.map(x => (x.id === f.id ? f : x)) }
+  /** The copy with one feature (the one `old` is, by identity) replaced by `f`. */
+  private replace(doc: MapFile, f: Feature, old = this.feature(f.id)): MapFile {
+    return { ...doc, features: doc.features.map(x => (x === old ? f : x)) }
+  }
+  /**
+   * Whether a feature can be edited: its id must be its own (two features sharing one, a hand edit's slip, cannot be
+   * told apart: the file is fixed first); says why not.
+   */
+  private editable(f: Feature): boolean {
+    if (this.doc!.features.filter(x => x.id === f.id).length === 1) return true
+    this.message = `two features share the id ${f.id}: give one another id in the file first`
+    this.host.changed()
+    return false
   }
   /** Whether a command may run now; says why not when it may not. */
   private ready(): boolean {
@@ -205,9 +217,16 @@ export class Editor {
     let p = this.problems.get(doc)
     if (!p) {
       p = new Map()
-      for (const i of this.cat ? validate(doc, this.cat) : []) {
-        const k = i.id ?? ''
-        p.set(k, [...(p.get(k) ?? []), i])
+      const add = (i: Issue) => p!.set(i.id ?? '', [...(p!.get(i.id ?? '') ?? []), i])
+      if (this.cat) validate(doc, this.cat).forEach(add)
+      // the validator names a barrier's first bad point only: each segment is counted too (the engine's rule on it),
+      // so a barrier broken in one place cannot be broken in another unseen
+      for (const f of this.cat ? doc.features : []) {
+        if (!f.line || !isBarrier(f, doc.presets)) continue
+        for (let k = 0; k + 1 < f.line.length; k++) {
+          const bad = barrierProblem([f.line[k], f.line[k + 1]])
+          if (bad) add({ id: f.id, path: `line[${k + bad[0]}]`, message: bad[1] })
+        }
       }
       this.problems.set(doc, p)
     }
@@ -239,11 +258,12 @@ export class Editor {
       return false
     }
     this.history.push(this.doc!)
-    this.hover = null // its indices may be the old shape's
     this.doc = doc
     this.message = ''
+    this.hoverAt() // the handle now under the pointer: the old one's indices may be the old shape's
     this.host.recompile()
     this.host.changed()
+    this.host.redraw()
     return true
   }
 
@@ -270,7 +290,7 @@ export class Editor {
   /** A press: on one of the selection's handles, or on the selected shape, it is the editor's. Returns whether. */
   down(sx: number, sy: number): boolean {
     const f = this.selected ? this.feature(this.selected) : undefined
-    if (!this.enabled || !this.doc || !f || !movable(f) || this.mode.kind !== 'idle') return false
+    if (!this.enabled || !this.doc || !f || !movable(f) || this.mode.kind !== 'idle' || !this.editable(f)) return false
     const handle = handleAt(f, sx, sy, this.host.project)
     if (!handle) {
       const on = pick([f], new Set([f.id]), sx, sy, this.host.toWorld(sx, sy), this.host.project)
@@ -302,7 +322,7 @@ export class Editor {
       ? moveHandle(m.f0, m.handle, at, place)
       : moveShape(m.f0, at[0] - m.from[0], at[1] - m.from[1], place)
     // the drag shows only shapes the gate lets through: a refused one leaves the last good one
-    const next = this.replace(m.before, f)
+    const next = this.replace(m.before, f, m.f0)
     const why = this.refusal(m.before, next)
     const [doc, message] = why ? [this.doc, `not there: ${why}`] : [next, '']
     // the panel and the view only when something changed (a pointer sends many moves)
@@ -362,21 +382,20 @@ export class Editor {
   /** A double click on the selected line or ring adds a point there. */
   dblclick(sx: number, sy: number): void {
     const f = this.selected ? this.feature(this.selected) : undefined
-    if (!this.enabled || !this.doc || !f || !this.ready()) return
+    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return
     const g = insertPoint(f, sx, sy, this.host.toWorld(sx, sy), this.host.project, this.place(f))
     if (g) this.commit(this.replace(this.doc, g))
   }
   /** Delete: the line's or the ring's point under the pointer; with the pointer off the shape, the feature. */
   remove(): void {
     const f = this.selected ? this.feature(this.selected) : undefined
-    if (!this.enabled || !this.doc || !f || !this.ready()) return
+    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return
     const h = this.hover
     if (h && (h.kind === 'line' || h.kind === 'ring')) {
       const g = removePoint(f, h)
-      if (g && this.commit(this.replace(this.doc, g))) {
-        this.hoverAt()
-      } // the next Delete takes the point now there
-      else if (!g) {
+      // the hover follows the pointer: the next Delete takes the point now there
+      if (g) this.commit(this.replace(this.doc, g))
+      else {
         this.message = 'that point stays: a line keeps 2 points, a ring 3'
         this.host.changed()
       }
@@ -394,10 +413,11 @@ export class Editor {
     this.history.push(this.doc)
     this.hover = null
     this.selected = null
-    this.doc = { ...this.doc, features: this.doc.features.filter(x => x.id !== f.id) }
+    this.doc = { ...this.doc, features: this.doc.features.filter(x => x !== f) }
     this.message = ''
     this.host.recompile()
     this.host.changed()
+    this.host.redraw()
   }
   undo(): void {
     if (!this.doc || !this.ready()) return
@@ -410,11 +430,12 @@ export class Editor {
     if (d) this.restore(d)
   }
   private restore(d: MapFile): void {
-    this.hover = null
     this.doc = d
     if (this.selected && !this.feature(this.selected)) this.selected = null
+    this.hoverAt()
     this.host.recompile()
     this.host.changed()
+    this.host.redraw()
   }
 
   /**
@@ -438,6 +459,7 @@ export class Editor {
       this.base = this.conflict
       this.baseDoc = parseDoc(this.conflict)
       this.conflict = null
+      this.host.changed()
     }
     if (!this.dirty && this.text === this.base) return true
     // what this save is for: its reply counts only if the editor still holds that file and base

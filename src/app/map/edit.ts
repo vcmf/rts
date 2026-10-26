@@ -6,6 +6,7 @@
 import type { Feature, MapFile, Pt } from '../../map/schema.ts'
 import { barrierProblem, inRing, isClosedLine, LATTICE, ringArea2 } from '../../map/geometry.ts'
 import { featureKind } from '../../map/validate.ts'
+import { categoryOf } from '../../map/catalogue.ts'
 import { cm } from '../../map/util.ts'
 
 /** A part of a feature's shape that can be dragged. */
@@ -28,8 +29,10 @@ export const PICK = { handle: 8, point: 8, line: 6 }
 /** Whether a line is closed, as the compiler reads it (a walled yard). */
 const closed = isClosedLine
 /** Whether a feature is a barrier (its kind its own or its preset's), whose points lie on the lattice (§3.6). */
-export const isBarrier = (f: Feature, presets: MapFile['presets'] = {}) =>
-  (featureKind(f, presets as Record<string, Record<string, unknown>>) ?? '').startsWith('barrier.')
+export const isBarrier = (f: Feature, presets: MapFile['presets'] = {}) => {
+  const kind = featureKind(f, presets as Record<string, Record<string, unknown>>)
+  return kind !== undefined && categoryOf(kind) === 'barrier'
+}
 
 /** A feature's handles and where they are on the ground. A closed line's repeated last point is not one. */
 export function handles(f: Feature): { handle: Handle; at: Pt }[] {

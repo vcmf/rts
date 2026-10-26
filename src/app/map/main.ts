@@ -14,6 +14,7 @@ import { standing } from '../../render/lit/houses.ts'
 import { lineLength, pointAt } from '../../map/geometry.ts'
 import { Editor } from './editor.ts'
 import { ovalRing } from './edit.ts'
+import { newestOnly } from './latest.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -228,6 +229,7 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
   panel()
 }
 
+let gateKinds: string | null = null // the catalogue's text the editor's gate holds
 // each compile takes its number before it reads the files, so a slower, older read can never replace a newer one
 async function compile(reason: string, savedAt?: number): Promise<void> {
   const mine = ++seq
@@ -241,11 +243,17 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
     const file = picker.value
     const own = editor.file === file && editor.doc
     ;[mapText, kindsText] = await Promise.all([own ? editor.text : read(file, MAPS), read('/maps/kinds.json', KINDS)])
-    if (!own && mine === seq) editor.load(file, mapText)
-    try {
-      editor.setCatalogue(JSON.parse(kindsText) as Catalogue) // the editor's gate validates with it
-    } catch {
-      editor.setCatalogue(null)
+    if (mine === seq) {
+      if (!own) editor.load(file, mapText)
+      // the catalogue the editor's gate validates with, when it changed (the newest compile's alone)
+      if (kindsText !== gateKinds) {
+        gateKinds = kindsText
+        try {
+          editor.setCatalogue(JSON.parse(kindsText) as Catalogue)
+        } catch {
+          editor.setCatalogue(null)
+        }
+      }
     }
     files = await readFiles(mapText)
   } catch (err) {
@@ -606,10 +614,12 @@ function hover(sx: number, sy: number): void {
 // pan with the mouse, zoom with the wheel about the cursor
 // a drag keeps the ground point it started on under the pointer
 // a press on the selection's handle or shape drags it (the editor), anywhere else pans
-let drag: { at: Pt; sx: number; sy: number; edit: boolean } | null = null
+// one press at a time: a second pointer (another finger) is ignored until the first is up
+let drag: { at: Pt; sx: number; sy: number; edit: boolean; id: number } | null = null
 canvas.addEventListener('pointerdown', e => {
+  if (drag) return
   const edit = overlaySelect.value !== 'sight' && editor.down(e.offsetX, e.offsetY)
-  drag = { at: toWorld(e.offsetX, e.offsetY), sx: e.offsetX, sy: e.offsetY, edit }
+  drag = { at: toWorld(e.offsetX, e.offsetY), sx: e.offsetX, sy: e.offsetY, edit, id: e.pointerId }
   try {
     canvas.setPointerCapture(e.pointerId)
   } catch {
@@ -617,6 +627,7 @@ canvas.addEventListener('pointerdown', e => {
   }
 })
 canvas.addEventListener('pointerup', e => {
+  if (drag && drag.id !== e.pointerId) return
   const click = drag && Math.hypot(e.offsetX - drag.sx, e.offsetY - drag.sy) < 4
   if (drag?.edit) editor.up()
   // a click, not a drag (on the selection too): with the sight overlay, the eye moves there; else it selects
@@ -627,19 +638,19 @@ canvas.addEventListener('pointerup', e => {
   drag = null
 })
 // an interrupted press (touch or pen cancelled, the capture lost): a drag of the editor's is undone, a pan ends
-const interrupted = () => {
-  if (drag?.edit) editor.cancel()
+const interrupted = (e: PointerEvent) => {
+  if (!drag || drag.id !== e.pointerId) return
+  if (drag.edit) editor.cancel()
   drag = null
 }
 canvas.addEventListener('pointercancel', interrupted)
 canvas.addEventListener('pointerleave', () => editor.leave())
-canvas.addEventListener('lostpointercapture', () => {
-  if (drag) interrupted()
-})
+canvas.addEventListener('lostpointercapture', interrupted)
 canvas.addEventListener('dblclick', e => {
   if (overlaySelect.value !== 'sight') editor.dblclick(e.offsetX, e.offsetY)
 })
 canvas.addEventListener('pointermove', e => {
+  if (drag && drag.id !== e.pointerId) return
   // the editor drags, or notes the handle under the pointer; a press elsewhere pans
   if (!drag || drag.edit) editor.move(e.offsetX, e.offsetY)
   else {
@@ -732,6 +743,7 @@ addEventListener('beforeunload', e => {
 
 // a saved map file, catalogue or heightfield (vite.config.ts sends `map-changed` with the file and the time it was
 // seen); any heightfield recompiles, since the map's text alone says which it reads
+const diskRead = newestOnly()
 if (import.meta.hot) {
   import.meta.hot.on('map-changed', (d: { file: string; at: number }) => {
     if (d.file.endsWith('.rdem')) {
@@ -744,9 +756,10 @@ if (import.meta.hot) {
     } else if (d.file === picker.value) {
       // the map file: through the editor, which ignores its own save and keeps unsaved edits (a conflict)
       const file = d.file
-      void read(file, MAPS).then(
+      // the newest read alone counts: an older one may resolve after it
+      void diskRead(read(file, MAPS)).then(
         text => {
-          if (picker.value === file && editor.onDisk(text)) void compile('save', d.at)
+          if (text !== null && picker.value === file && editor.onDisk(text)) void compile('save', d.at)
         },
         (err: Error) => failed(`cannot read the map: ${err.message}`),
       )
@@ -825,6 +838,9 @@ window.MAP = {
   redo: () => editor.redo(),
   get dirty() {
     return editor.dirty
+  },
+  get idle() {
+    return editor.idle
   },
   project: (x: number, z: number) => toScreen(x, z),
   fit: () => {

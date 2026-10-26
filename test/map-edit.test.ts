@@ -152,6 +152,7 @@ describe('M7a: barriers snap to the lattice in 8 directions', () => {
     expect(isBarrier({ id: 'w', preset: 'wall', line: [] }, presets)).toBe(true)
     expect(isBarrier({ id: 'w', preset: 'wall', line: [] })).toBe(false)
     expect(isBarrier(hedge)).toBe(true)
+    expect(isBarrier({ id: 'b', kind: 'barrier', line: [] })).toBe(true) // a bare category, as the validator reads it
   })
   it("moves a closed barrier's first point with its last", () => {
     const yard: Feature = {

@@ -142,6 +142,16 @@ tools on top).
   by point; Cmd or Ctrl S, Z and Y work with a list or a box of the panel focused; the panel follows a cancelled drag;
   the panel and the view are refreshed only when a move changed something; `dirty` is remembered per copy; the
   segment distance is the editor's own again (the sim's is for combat), rounding uses `cm`.
+- **Redesign, round 2**: severe. Two features sharing an id (a hand edit's slip) were edited and deleted together,
+  and a save wrote the loss. Fixed: such a feature is not edited until the file gives one of them another id, and
+  the copy replaces or removes a feature by identity, never by id. With them: the gate also counts each barrier
+  segment the engine's rule finds bad (the validator names a barrier's first bad point only, so a barrier broken in
+  one place could be broken in another unseen); one pointer at a time (a second finger left the editor pressing for
+  good); the newest read of the file on disk alone is applied (`newestOnly`, `src/app/map/latest.ts`); the gate's
+  catalogue is the newest compile's, and changes only when the catalogue's text does; an overwrite that finds
+  nothing to write clears the conflict on screen; the selection redraws at once on an edit, an undo or a redo (not
+  when the compile comes back), and the handle under the pointer is found again after them; `isBarrier` takes the
+  kind's category as the validator does (`categoryOf`). Tests for each; the page check presses a second pointer.
 
 ## Open questions
 

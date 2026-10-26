@@ -7,6 +7,7 @@ import type { Catalogue, MapFile } from '../src/map/schema.ts'
 import { formatMap } from '../src/map/format.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
 import { root } from './fx.ts'
+import { newestOnly } from '../src/app/map/latest.ts'
 
 const text = formatMap({
   format: 1,
@@ -395,5 +396,86 @@ describe('M7a redesign, round 1', () => {
     ed.cancel()
     expect(changed).toBeGreaterThan(before)
     expect(ed.feature('road')!.line![0]).toEqual([-90, 50])
+  })
+})
+
+describe('M7a redesign, round 2', () => {
+  const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'kinds.json'), 'utf8')) as Catalogue
+  const withFeatures = (features: MapFile['features']) =>
+    formatMap({ ...(JSON.parse(text) as MapFile), features } as MapFile)
+  it('refuses a second break in a barrier already broken elsewhere', () => {
+    // broken at its second point (off the lattice); removing its fourth leaves a joint out of the 8 directions
+    const wall = {
+      id: 'wall',
+      kind: 'barrier.wall',
+      line: [
+        [0, -100],
+        [21, -100],
+        [40, -100],
+        [40, -80],
+        [60, -60],
+      ],
+    }
+    const { ed } = make(withFeatures([wall] as MapFile['features']))
+    ed.setCatalogue(cat)
+    ed.select('wall')
+    ed.move(40, 80)
+    ed.remove()
+    expect(ed.feature('wall')!.line!.length).toBe(5)
+    expect(ed.message).toMatch(/^not done: \[wall\]/)
+  })
+  it('edits neither of two features sharing an id, and says so', () => {
+    const a = { id: 'wood', kind: 'veg.wood.broad', circle: [[0, 0], 10] }
+    const b = { id: 'wood', kind: 'veg.wood.broad', circle: [[100, 0], 10] }
+    const { ed } = make(withFeatures([a, b] as MapFile['features']))
+    ed.select('wood')
+    expect(ed.down(0, 0)).toBe(false)
+    ed.leave()
+    ed.remove()
+    expect(ed.doc!.features.length).toBe(2)
+    expect(ed.message).toMatch(/two features share the id wood/)
+  })
+  it('redraws the selection on undo, and keeps the handle under the pointer after a drag for Delete', () => {
+    let redraws = 0
+    const { ed } = make(
+      withFeatures([
+        {
+          id: 'road',
+          kind: 'way.road.lane',
+          line: [
+            [-100, 50],
+            [0, 50],
+            [100, 50],
+          ],
+        },
+      ] as MapFile['features']),
+    )
+    ;(ed as unknown as { host: Host }).host.redraw = () => redraws++
+    ed.select('road')
+    drag(ed, [0, -50], [0, -70]) // the middle point up 20 m
+    ed.remove() // the pointer is still on it
+    expect(ed.feature('road')!.line!.length).toBe(2)
+    const before = redraws
+    ed.undo()
+    expect(redraws).toBeGreaterThan(before)
+  })
+  it('clears the conflict on screen when an overwrite finds nothing to write', async () => {
+    let changed = 0
+    const { ed } = make()
+    ;(ed as unknown as { host: Host }).host.changed = () => changed++
+    ed.conflict = text // a save whose reply was lost: the disk holds what the page holds
+    const n = changed
+    expect(await ed.save(true)).toBe(true)
+    expect(ed.conflict).toBe(null)
+    expect(changed).toBeGreaterThan(n)
+  })
+  it('delivers only the newest of several reads, whatever order they resolve in', async () => {
+    const newest = newestOnly()
+    let first: (v: string) => void = () => {}
+    const a = newest(new Promise<string>(res => (first = res)))
+    const b = newest(Promise.resolve('B'))
+    expect(await b).toBe('B')
+    first('A')
+    expect(await a).toBe(null)
   })
 })

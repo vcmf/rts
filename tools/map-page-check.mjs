@@ -11,7 +11,7 @@
 //      events, compiled from the page's copy, saved through the dev server (the file's diff: that feature's line
 //      alone), undone and saved again (the file byte for byte the original); with the largest area selected, a click
 //      on a line inside it selects the line; Cmd S with a list of the panel focused is the page's save, not the
-//      browser's.
+//      browser's; a second pointer pressed during a press on the selection leaves the editor idle once both are up.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -171,6 +171,24 @@ try {
         return 'KEYS ' + JSON.stringify({ taken: ev.defaultPrevented })
       })()`,
     ],
+    [
+      'eval',
+      `(() => {
+        const f = JSON.parse(MAP.text).features.find(f => f.line && !String(f.kind).startsWith('barrier.'))
+        const p = f.line[0]
+        MAP.select(f.id)
+        MAP.look(p[0], p[1], 2)
+        const c = document.getElementById('map'), b = c.getBoundingClientRect()
+        const [sx, sy] = MAP.project(p[0], p[1])
+        const ev = (type, id, x) => c.dispatchEvent(new PointerEvent(type,
+          { clientX: b.left + x, clientY: b.top + sy, bubbles: true, pointerId: id, isPrimary: id === 1 }))
+        ev('pointerdown', 1, sx)
+        ev('pointerdown', 2, sx + 200)
+        ev('pointerup', 2, sx + 200)
+        ev('pointerup', 1, sx)
+        return 'TWO ' + JSON.stringify({ idle: MAP.idle, dirty: MAP.dirty })
+      })()`,
+    ],
   ]
   shot = spawn(
     'node',
@@ -265,6 +283,8 @@ try {
   )
   await until('KEYS')
   check(seen.KEYS.taken, "Cmd S with the overlay list focused is the page's save, not the browser's")
+  await until('TWO')
+  check(seen.TWO.idle && !seen.TWO.dirty, 'a second pointer during a press leaves the editor idle once both are up')
   await until('RESELECT')
   check(
     seen.RESELECT.selected === seen.RESELECT.line,
