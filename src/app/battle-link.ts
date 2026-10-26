@@ -52,8 +52,8 @@ export interface BattleLink {
   /** What to read and draw this frame: the newest frame published (held until the next call), or the battle itself
    * on the main thread. */
   see(): Seen
-  /** When what `see` gave was published (ms since the shared time origin): a new value, a new frame (on the main
-   * thread, every call). */
+  /** When what `see` gave was published (ms since the shared time origin; on the page's thread, a count of the frames
+   * the battle ticked or stepped its men in): a new value, a new frame. */
   published(): number
   command(c: Command): void
   /** The game speed (0: paused). */
@@ -80,6 +80,8 @@ export class MainLink implements BattleLink {
   private readonly seen: Seen
   readonly data: SimData
   readonly failed = null
+  // the frames the battle changed in (published)
+  private changes = 0
   constructor(data: SimData, cr: Compiled, scenario: Scenario) {
     this.data = data
     this.battle = new Battle(data, scenario, cr)
@@ -90,13 +92,14 @@ export class MainLink implements BattleLink {
     this.seen = { w: this.battle.w, layer: this.battle.layer }
   }
   frame(dt: number): void {
-    this.battle.advance(dt)
+    const r = this.battle.advance(dt)
+    if (r.ticks || r.subSteps) this.changes++
   }
   see(): Seen {
     return this.seen
   }
   published(): number {
-    return performance.timeOrigin + performance.now()
+    return this.changes
   }
   command(c: Command): void {
     this.battle.command(c)
@@ -145,7 +148,7 @@ export class WorkerLink implements BattleLink {
   private onFirst: () => void = () => {}
   private onFail: (e: Error) => void = () => {}
 
-  /** Starts the sim worker on the scenario (`key`: its key in PAGE_SCENARIOS; `bytes`: the map's, `data` loaded from
+  /** Starts the sim worker on the scenario (`key`: its key in BATTLE_SCENARIOS; `bytes`: the map's, `data` loaded from
    * them; `ruleset`: its name in src/rulesets/index.ts, the napoleonic one if none, `cr` compiled from it), then the
    * men worker once the sim has written its first world; `ready` resolves at the first frame. */
   constructor(sim: Worker, men: Worker, bytes: Uint8Array, data: SimData, cr: Compiled, key: string, ruleset?: string) {

@@ -7,7 +7,7 @@
 // 0015: the page names none). No Babylon.
 import lookSimUrl from '../../data/painted-world.simdata?url'
 import { loadSimData, compileRuleset, formationHandle, typeOf, M_TICK, type Command, type World } from '../sim/index.ts'
-import { rulesetOf } from '../app/host.ts'
+import { rulesetOf } from '../rulesets/index.ts'
 import { MAP_VERSIONS } from '../scenarios/maps.ts'
 import { lookArmies } from '../scenarios/look-world.ts'
 import { startLink, type BattleLink } from '../app/battle-link.ts'

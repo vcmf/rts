@@ -771,9 +771,12 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   out by a command (so the session replays), in column, firing at will; it marches to 90 m short of the fight's middle,
   then deploys into line. The renderer takes each man from the sim's men (`src/look/sim-men.ts`) in place of the
   script: his place, his way (his velocity's; at rest his formation's heading), his role (run over 2.2 m/s, march over
-  0.3, else halt; fire while his company's volley is under 0.6 s old) and when it began; the fallen are not drawn. A
-  battalion is re-placed once a 12 fps step when a newer frame has come, stepped as published (no moves between steps:
-  the art bible's). Its battalions are matched to the sim's formations by side and spawn place, its figures to the
+  0.3, else halt; fire while his company's volley is under 0.6 s old) and when it began; the fallen are not drawn (at
+  no size, under the ground; the colours at the battalion's centre). A battalion is re-placed when the men worker's
+  revision of it moved on (it stepped its men, matched them again, or a company fired: `Unit.rev`, published in the
+  frame's battalion table) or its last volley went stale, at most once a 12 fps step of real time (stepped as
+  published: no moves between steps, the art bible's) and at most 10 a frame, the longest waiting first. Its
+  battalions are matched to the sim's formations by side and spawn place (and their generation), its figures to the
   formation's men in their order.
 - **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).

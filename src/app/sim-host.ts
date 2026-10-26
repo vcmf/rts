@@ -14,10 +14,12 @@ import {
 import { BATTLE_SCENARIOS } from '../scenarios/page.ts'
 import { Battle } from './battle.ts'
 import { RingWriter, type RingBuffers } from './tick-ring.ts'
-import { Host, rulesetOf, type Port, type Failed } from './host.ts'
+import { Host, type Port, type Failed } from './host.ts'
+import { rulesetOf } from '../rulesets/index.ts'
 
-/** What the page sends the sim worker: the battle (its scenario's key in PAGE_SCENARIOS, the map's bytes, the tick
- * ring), then commands and requests (`id` answered by a `reply` with the same id). */
+/** What the page sends the sim worker: the battle (its scenario's key in BATTLE_SCENARIOS, the map's bytes, the tick
+ * ring, its ruleset's name: the napoleonic one if none), then commands and requests (`id` answered by a `reply` with
+ * the same id). */
 export type ToSim =
   | { type: 'init'; scenario: string; data: Uint8Array; version: number; ring: RingBuffers; ruleset?: string }
   | { type: 'command'; c: Command }

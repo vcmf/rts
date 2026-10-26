@@ -22,7 +22,7 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
 import '@babylonjs/core/Engines/Extensions/engine.alphaToCoverage.js'
 import { MSAA } from './post.ts'
-import { sourceDue, type MenSource, type SourceMan } from './sim-men.ts'
+import type { MenSource, SourceMan } from './sim-men.ts'
 import type { ThinEngine } from '@babylonjs/core/Engines/thinEngine.js'
 import { D } from './spec.ts'
 import type { Scene } from '@babylonjs/core/scene.js'
@@ -128,16 +128,16 @@ interface Host {
   staleNext: boolean[] // per LOD: its GPU copy of the men's moves is older
   cycle: number // the cycle its settings were written in (each cycle's clips start afresh)
   index: number // its place in hosts (its flag's instance)
-  srcStep: number // the sim's men (?sim): the real-time step it was placed at, and the source's frame count then
-  srcSeq: number
+  srcStep: number // the sim's men (?sim): the real-time step it was placed at (−1: never)
   srcAny: boolean // (and whether it had men to draw, and its centre then: its colours')
   srcX: number
   srcZ: number
 }
 
 const SM_SIZE = 2048 // the figures' shadow map, fitted to the ground in view each frame
-// the sim's men (?sim): a 1/fps step split in this many parts, a battalion placed in its own (index mod) part
-const SOURCE_GROUPS = 8
+// the sim's men (?sim): the most battalions placed in one frame (a placing about 1 ms at 414 men, its uploads to
+// every LOD: 10 keeps a frame's share near the script's; PR 4's attribute uploads cut it)
+const PLACE_MAX = 10
 // m: where a man not drawn is put (under the ground, out of every view)
 const HIDDEN_Y = -1e4
 const SM_REACH = 900 // m: a view ray that meets no ground is cut here (the widest zoom looks far)
@@ -253,8 +253,8 @@ export class Units {
   private readonly man: ManState = { x: 0, z: 0, face: 0, role: 'halt', since: 0, moving: false }
   /** Where the men stand when not the script (?sim: the sim's, src/look/sim-men.ts); null: the script. */
   source: MenSource | null = null
-  // the new frames the source has given (each battalion records the count it was placed at, in its `cycle`)
-  private sourceSeq = 0
+  // the battalion the sim's placing looks at first next frame (round robin: the longest waiting first)
+  private sourceNext = 0
   private readonly sourceMan: SourceMan = { x: 0, z: 0, yaw: 0, role: 'halt', since: 0, shown: false }
   private readonly sourceAt = [0, 0]
   /** the far LOD's switch by default (main.ts checks ?tinypx under it) */
@@ -846,7 +846,6 @@ export class Units {
       lods: { near: false, far: false, tiny: false },
       fading: false,
       srcStep: -1,
-      srcSeq: -1,
       srcAny: false,
       srcX: b.x,
       srcZ: b.z,
@@ -1230,29 +1229,36 @@ export class Units {
     if ((this.hasNearest && this.nearestPx > 0) || (mapOn && this.tightCull)) {
       Frustum.GetPlanesToRef(cam.getTransformationMatrix(), this.camPlanes)
     }
-    // the sim's men (?sim): a new published frame counted, so each battalion is re-placed at its next step (of real
-    // time: performance.now)
-    if (this.source?.frame(T)) this.sourceSeq++
-    const srcPart = Math.floor((performance.now() / 1000) * fps * SOURCE_GROUPS)
+    // the sim's men (?sim): the battalions whose men the men worker changed (their revision: src/look/sim-men.ts
+    // moved), each at most once a 1/fps step of real time (the sim runs on its own: a held page clock does not stop its
+    // men), at most PLACE_MAX a frame, the longest waiting first (the rest the frames after: placing every battalion in
+    // one frame cost 54–108 ms at 40 a side, measured). The men worker's own stagger (its groups) spreads them
+    if (this.source && this.shown) {
+      this.source.frame(T)
+      const srcStep = Math.floor((performance.now() / 1000) * fps)
+      const n = this.hosts.length
+      let placed = 0
+      let k = 0
+      for (; k < n && placed < PLACE_MAX; k++) {
+        const h = this.hosts[(this.sourceNext + k) % n]
+        if (h.srcStep === srcStep || (h.srcStep >= 0 && !this.source.moved(h.index))) continue
+        const tp = trNow()
+        this.place(h, 0, 0, false, 0, false)
+        h.srcStep = srcStep
+        placed++
+        moved = true
+        anyMoved = true
+        if (TRACE.on) {
+          tr(TR.placed)
+          tr(TR.placeMs, performance.now() - tp)
+        }
+      }
+      // the next frame starts after the last looked at: every battalion is looked at in turn
+      this.sourceNext = (this.sourceNext + k) % Math.max(1, n)
+    }
     for (const h of this.hosts) {
       if (!this.shown) continue
       if (this.source) {
-        // stepped once a 1/fps step of real time (the sim runs on its own: a held page clock does not stop its men),
-        // when a frame newer than its last placing has come and its men moved; each battalion in its own of
-        // SOURCE_GROUPS parts of the step (placing every battalion in one frame cost 54–108 ms at 40 a side: measured)
-        const due = sourceDue(h.index, h.srcStep, srcPart, SOURCE_GROUPS)
-        if (due >= 0 && (h.srcStep < 0 || (h.srcSeq !== this.sourceSeq && this.source.moved(h.index)))) {
-          const tp = trNow()
-          this.place(h, 0, 0, false, 0, false)
-          h.srcStep = due
-          h.srcSeq = this.sourceSeq
-          moved = true
-          anyMoved = true
-          if (TRACE.on) {
-            tr(TR.placed)
-            tr(TR.placeMs, performance.now() - tp)
-          }
-        }
         h.moving = false
       } else {
         const t = T - h.b.offset

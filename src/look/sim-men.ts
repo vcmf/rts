@@ -25,17 +25,6 @@ export const RUN_FROM = 2.2
 export const FIRE_FOR = 0.6
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
 
-/** Whether a battalion (its index `k`, placed last for step `placed`, −1: never) is due at real-time part `part` of
- * `groups` a step, and the step its placing counts for (−1: not due). Once a step, at its own part (k mod groups) or a
- * later one; when the frames passed over its part and the rest of the step (a frame longer than a part: at 60 Hz, 1.6
- * parts), at the next step's first frame, counted for the step it missed, so it still steps once a step. */
-export function sourceDue(k: number, placed: number, part: number, groups: number): number {
-  const step = Math.floor(part / groups)
-  if (placed < 0) return step
-  if (placed < step - 1) return step - 1
-  return placed < step && part % groups >= k % groups ? step : -1
-}
-
 /** What the page reads this frame: the world and the soldier layer of the newest published frame. */
 export interface Seen {
   w: World
@@ -46,8 +35,9 @@ export interface Seen {
 export interface MenSource {
   /** The newest men at the page's clock `T`; true when they are new (moved since the last). */
   frame(T: number): boolean
-  /** Whether battalion `k`'s men stand otherwise than when it was last placed (a halted battalion's settled men do
-   * not: it is not placed again). */
+  /** Whether battalion `k` is drawn otherwise than when it was last placed: the men worker's revision of it moved on
+   * (its men stepped, matched again, a volley), its last volley went stale (the fire role ends with time), or it was
+   * matched or lost since. */
   moved(k: number): boolean
   /** Battalion `k` (its index in the renderer's battalions) about to be placed: its centre into `at` (x, z), where
    * its men not drawn are put (none of them at the origin); false when it has no men to draw. */
@@ -70,10 +60,10 @@ export class SimMen implements MenSource {
   private readonly since: Float64Array[]
   private published = NaN
   private T = 0
-  // per battalion: a sum over its men's places, flags and the volleys when it was last placed (moved), NaN: never
-  private readonly placedSum: Float64Array
-  private sum = 0
-  private sumK = -1
+  // per battalion, as last placed: the revision of its unit (−1: none: unmatched or gone), and the tick its last fresh
+  // volley goes stale at (−1: none fresh)
+  private readonly placedRev: Float64Array
+  private readonly fireUntil: Float64Array
   // the battalion begun: its index, unit, its type's slots' companies, and its men's roles
   private k = -1
   private u: Unit | null = null
@@ -86,7 +76,8 @@ export class SimMen implements MenSource {
     this.see = see
     this.publishedAt = published
     this.formation = new Int32Array(bs.length).fill(-1)
-    this.placedSum = new Float64Array(bs.length).fill(NaN)
+    this.placedRev = new Float64Array(bs.length).fill(NaN)
+    this.fireUntil = new Float64Array(bs.length).fill(-1)
     this.gen = new Int32Array(bs.length)
     this.role = bs.map(() => new Uint8Array(men))
     this.since = bs.map(() => new Float64Array(men))
@@ -129,9 +120,9 @@ export class SimMen implements MenSource {
     }
   }
 
-  /** The formation drawn as battalion `k` (−1: not matched yet). */
+  /** The formation drawn as battalion `k` now (−1: not matched yet, or gone: its slot may be another's since). */
   formationOf(k: number): number {
-    return this.formation[k]
+    return this.unitOf(k)?.i ?? -1
   }
 
   /** The frame taken this frame (null before the first). */
@@ -147,41 +138,18 @@ export class SimMen implements MenSource {
     return s.layer.units.get(i) ?? null
   }
 
-  /** A sum of everything battalion `k` is drawn from: its men's places and velocities (weighted by index, so a swap
-   * shows), their flags, its companies' volleys and whether each is still fresh (the fire role ends with time, not
-   * with a change of place), whether it is matched at all. */
-  private sumOf(k: number): number {
-    const u = this.unitOf(k)
-    if (!u) return -1
-    const s = this.seen!
-    const M = s.layer.men
-    let sum = u.i + u.n
-    for (let j = 0; j < u.n; j++) {
-      const m = u.ids[j]
-      sum += (j + 1) * (M.x[m] + 3 * M.z[m] + 5 * M.vx[m] + 7 * M.vz[m] + 11 * M.flags[m])
-    }
-    const w = s.w
-    const C = w.cr.maxC
-    for (let c = 0; c < C; c++) {
-      const shot = w.f.volleyTick[u.i * C + c]
-      const fresh = shot && (w.meta[M_TICK] - shot) * DT < FIRE_FOR ? 1 : 0
-      sum += shot * (c + 7) + fresh * (c + 13) * 1e6
-    }
-    return sum
-  }
-
   moved(k: number): boolean {
-    this.sum = this.sumOf(k)
-    this.sumK = k
-    return this.sum !== this.placedSum[k]
+    const u = this.unitOf(k)
+    if (!u) return this.placedRev[k] !== -1
+    const until = this.fireUntil[k]
+    return u.rev !== this.placedRev[k] || (until >= 0 && this.seen!.w.meta[M_TICK] >= until)
   }
 
   begin(k: number, at: number[]): boolean {
-    // (the sum moved() took just before, for this battalion and this frame)
-    this.placedSum[k] = this.sumK === k ? this.sum : this.sumOf(k)
-    this.sumK = -1
     this.k = k
     const u = (this.u = this.unitOf(k))
+    this.placedRev[k] = u ? u.rev : -1
+    this.fireUntil[k] = -1
     if (!u) {
       // unmatched yet, or gone: where it was laid out
       at[0] = this.bs[k].x
@@ -192,6 +160,14 @@ export class SimMen implements MenSource {
     at[0] = s.w.f.x[u.i]
     at[1] = s.w.f.z[u.i]
     this.slotC = typeOf(s.w, u.i).slotC
+    // its fire roles' end: the last of its fresh volleys plus FIRE_FOR
+    const w = s.w
+    const C = w.cr.maxC
+    const fresh = FIRE_FOR / DT
+    for (let c = 0; c < C; c++) {
+      const shot = w.f.volleyTick[u.i * C + c]
+      if (shot && w.meta[M_TICK] - shot < fresh) this.fireUntil[k] = Math.max(this.fireUntil[k], shot + fresh)
+    }
     return true
   }
 

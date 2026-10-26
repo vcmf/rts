@@ -4,13 +4,13 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { root } from './fx.ts'
-import { loadSimData, compileRuleset, typeOf, DT, M_TICK } from '../src/sim/index.ts'
+import { loadSimData, compileRuleset, typeOf, formationHandle, DT, M_TICK } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
 import { lookArmies } from '../src/scenarios/look-world.ts'
 import { MainLink } from '../src/app/battle-link.ts'
 import { MAN_ALIVE } from '../src/render/men.ts'
-import { SimMen, RUN_FROM, MARCH_FROM, sourceDue, type SourceMan } from '../src/look/sim-men.ts'
+import { SimMen, RUN_FROM, MARCH_FROM, FIRE_FOR, type SourceMan } from '../src/look/sim-men.ts'
 import { marchTo, spawns, ordersDue, SHORT, GIVE_UP, type Orders } from '../src/look/sim-armies.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
 import type { Battalion } from '../src/look/world/armies.ts'
@@ -122,52 +122,57 @@ describe("the sim's men as the renderer's", () => {
   })
 })
 
-describe('the placing', () => {
-  // regression (PR 4b review): due only at its exact part, a battalion whose part frames passed over (16.7 ms frames,
-  // 10.4 ms parts) was not placed that step, the same ones step after step
-  it("is due once a step, at the battalion's part or a later one, else at the next step's first frame", () => {
-    const G = 8
-    expect(sourceDue(3, -1, 0, G)).toBe(0)
-    // step 5 (parts 40..47): battalion 3 from part 43 on, counted for step 5; not again in it
-    expect([42, 43, 47].map(p => sourceDue(3, 4, p, G))).toEqual([-1, 5, 5])
-    expect(sourceDue(3, 5, 46, G)).toBe(-1)
-    // a step it missed whole: placed at the next one's first frame, counted for the one missed
-    expect(sourceDue(7, 4, 48, G)).toBe(5)
-    // 60 Hz frames over steps 5 to 9 (a frame 1.6 parts): every battalion placed once a step, give or take one late
-    const placed = new Int32Array(G).fill(4)
-    const count = new Int32Array(G)
-    for (let f = 0; f < 25; f++) {
-      const p = Math.floor(40 + f * 1.6)
-      for (let k = 0; k < G; k++) {
-        const due = sourceDue(k, placed[k], p, G)
-        if (due >= 0) {
-          placed[k] = due
-          count[k]++
-        }
-      }
-    }
-    expect(Math.min(...count)).toBeGreaterThanOrEqual(4)
-    expect(Math.max(...count)).toBeLessThanOrEqual(5)
-  })
-  // regression (PR 4b review): what moved() summed left out velocities and the volley's going stale, so a company
-  // placed firing kept firing, a man who settled kept marching
-  it('counts a battalion moved when its volley goes stale or a man stops, though no man changed place', () => {
+describe('the revisions the renderer follows', () => {
+  // the redesign after review round 3: the men worker says what changed (Unit.rev) in place of the page guessing
+  it("the layer moves a battalion's revision on as its men step, fall or fire, and not while they stand settled", () => {
     const { link, source } = start()
     source.frame(0)
     const { w, layer } = link.see()
     const i = source.formationOf(0)
     const u = layer.units.get(i)!
-    source.moved(0)
+    // spawned at their places, the men settle at once: standing, nothing to step
+    const r0 = u.rev
+    for (let n = 0; n < 10; n++) link.frame(1 / 30)
+    expect(u.rev).toBe(r0)
+    // marching 20 m: stepped
+    link.command({ type: 'move', id: formationHandle(w, i), points: [[w.f.x[i], w.f.z[i] + 20]], append: false })
+    for (let n = 0; n < 10; n++) link.frame(1 / 30)
+    expect(u.rev).toBeGreaterThan(r0)
+    // halted there long enough to settle: a second more changes nothing
+    for (let n = 0; n < 30 * 60; n++) link.frame(1 / 30)
+    const r1 = u.rev
+    for (let n = 0; n < 30; n++) link.frame(1 / 30)
+    expect(u.rev).toBe(r1)
+    // a volley
+    w.f.volleyTick[i * w.cr.maxC] = w.meta[M_TICK]
+    link.frame(DT)
+    expect(u.rev).toBeGreaterThan(r1)
+  })
+  it('a battalion has moved when its revision moved on, or when its last volley has gone stale since its placing', () => {
+    const { link, source } = start()
+    source.frame(0)
+    const { w, layer } = link.see()
+    const i = source.formationOf(0)
+    const u = layer.units.get(i)!
+    expect(source.moved(0)).toBe(true)
     source.begin(0, at)
     expect(source.moved(0)).toBe(false)
-    layer.men.vx[u.ids[0]] = 0.4
+    u.rev++
     expect(source.moved(0)).toBe(true)
-    source.begin(0, at)
+    // placed with a fresh volley: moved once it has gone stale (FIRE_FOR), though nothing else changed
     w.f.volleyTick[i * w.cr.maxC] = w.meta[M_TICK]
-    expect(source.moved(0)).toBe(true)
     source.begin(0, at)
-    w.meta[M_TICK] += 20
+    expect(source.moved(0)).toBe(false)
+    w.meta[M_TICK] += Math.ceil(FIRE_FOR / DT)
     expect(source.moved(0)).toBe(true)
+  })
+  it('names no formation for a battalion whose formation is gone, though its slot be alive again', () => {
+    const { link, source } = start()
+    source.frame(0)
+    const w = link.see().w
+    const i = source.formationOf(0)
+    w.f.gen[i]++
+    expect(source.formationOf(0)).toBe(-1)
   })
 })
 

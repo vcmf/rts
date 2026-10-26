@@ -36,6 +36,7 @@ import {
   type TickResult,
 } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { RULESETS } from '../src/rulesets/index.ts'
 import { BATTLE_SCENARIOS, PAGE_SEED } from '../src/scenarios/page.ts'
 import { DEFAULT_MAP, MAP_VERSIONS } from '../src/scenarios/maps.ts'
 
@@ -230,7 +231,15 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     const minutes = Number(given ?? scenario.minutes ?? 20)
     if (!Number.isFinite(minutes) || minutes <= 0) throw new Error(`minutes must be a positive number, not ${given}`)
     const ticks = Math.round(minutes * 60 * TICK_HZ)
-    for (const line of reportSession(data, compileRuleset(napoleonic), scenario, session, ticks)) console.log(line)
+    // the ruleset the session was played under (its replay records the compiled ruleset's hash: the look page at ?sim
+    // names its era's by data), the napoleonic one for a scenario played afresh
+    const cr = session
+      ? Object.values(RULESETS)
+          .map(r => compileRuleset(r.ruleset))
+          .find(c => c.hash >>> 0 === session.replay.ruleset >>> 0)
+      : compileRuleset(napoleonic)
+    if (!cr) throw new Error(`the session's ruleset (hash ${session!.replay.ruleset}) is none of src/rulesets/index.ts`)
+    for (const line of reportSession(data, cr, scenario, session, ticks)) console.log(line)
   } catch (e) {
     console.error(e instanceof Error ? e.message : String(e))
     process.exit(1)

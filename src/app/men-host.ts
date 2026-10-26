@@ -9,7 +9,8 @@ import { SoldierLayer } from '../render/soldiers.ts'
 import { MenClock } from '../render/men-clock.ts'
 import { layoutFor, writeFrame, capFor, Slots, type Layout } from './battle-frame.ts'
 import { RingReader, accSince, type RingBuffers, type Clock } from './tick-ring.ts'
-import { Host, rulesetOf, type Port, type Failed } from './host.ts'
+import { Host, type Port, type Failed } from './host.ts'
+import { rulesetOf } from '../rulesets/index.ts'
 
 /** What the page sends the men worker: the map's bytes and the tick ring, then requests. */
 export type ToMen =
