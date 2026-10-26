@@ -57,12 +57,27 @@ import { TICK_HZ, DT } from './time.ts'
 
 const RUN = 800 // how far a router is sent, metres (kept on the map)
 // the runs: the stored direction first, then turned from it by these angles, one every RETRY ticks while the
-// router is halted; after the last it stays where it is (pinned). With claims, a router others' cells halted goes on
-// trying the fan's directions in turn, since they may move off its way
+// router is halted; after the last it stays where it is (pinned). With claims, while an enemy is near it goes on trying
+// the fan's directions in turn, since others may move off its way
 const FAN = [0, PI / 3, -PI / 3, (2 * PI) / 3, (-2 * PI) / 3]
 const RETRY = 100
 // s a run may stand held by other formations' cells before it counts as halted there (the claim grid's prototype)
 const HELD = 2
+// metres, anchor to anchor: an enemy this near may yet move off a held router's way, or reach it (two columns of route
+// tail to tail are about 700 m apart, anchor to anchor)
+const ENEMY_NEAR = 1000
+
+/** Whether an enemy in the fight stands within ENEMY_NEAR of battalion i, anchor to anchor. */
+export function enemyNear(w: World, i: number): boolean {
+  const f = w.f
+  for (let j = 0; j < MAX_FORMATIONS; j++) {
+    if (!f.alive[j] || f.side[j] === f.side[i] || outOfFight(f.mstate[j])) continue
+    const dx = f.x[j] - f.x[i]
+    const dz = f.z[j] - f.z[i]
+    if (dx * dx + dz * dz <= ENEMY_NEAR * ENEMY_NEAR) return true
+  }
+  return false
+}
 
 // what a battalion reads of the others this step (scratch): the contagion shock, its secured flanks, and the
 // nearest enemy in the fight (its distance, and the unit vector from it to the battalion)
@@ -277,7 +292,7 @@ function routStep(w: World, i: number): void {
   }
   if (
     f.routPhase[i] === RP_HALTED &&
-    (f.runs[i] < FAN.length || (w.claims && f.status[i] === ST_BLOCKED)) &&
+    (f.runs[i] < FAN.length || (w.claims && enemyNear(w, i))) &&
     (w.meta[M_TICK] + 1 + i) % RETRY === 0
   ) {
     run(w, i)

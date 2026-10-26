@@ -142,9 +142,9 @@ keeps:
 - **A charge reaches its target's core only;** any other enemy's margin stops it (X-16: the veteran pursued the router
   into the friend behind it). A pursuit stops at the router's margin (riding into it, it stood on the router's cells
   and held it, #198) and rides it down from there, its reach a cell longer: the margin's.
-- **A held router** (`routStep`, `src/sim/morale.ts`): a run held for 2 s by others' cells counts as halted and tries
-  the fan's next direction at its retry, as at impassable ground, and goes on trying them in turn (they may move off
-  its way); one the ground halts stays pinned after the fifth, as before.
+- **A held router** (`routStep`, `src/sim/morale.ts`): a run held by others' cells for `HELD` seconds counts as halted
+  and tries the fan's next direction at its retry, as at impassable ground, and goes on trying them in turn while an
+  enemy is near (`enemyNear`: others may move off its way); with none near it stays pinned after the fifth, as before.
 - **A router the enemy reaches is cut down** (`cutDown`, `src/sim/melee.ts`): every enemy in the fight within the
   ride-down's reach, not in melee with another, strikes it at the melee's rate, and it does not fight back, whether it
   runs, is held or has no way left. No surrender (decision 0069).
