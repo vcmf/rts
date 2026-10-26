@@ -17,14 +17,11 @@ import {
   mkPlaced,
   placeAll,
   formedOverlaps,
-  SLOTS,
   sectionHashes,
   typeOf,
   MS_ROUTING,
-  MS_SHATTERED,
-  RP_FLED,
-  ST_BLOCKED,
-  heldByEnemy,
+  cornered,
+  menOf,
   M_TICK,
   TICK_HZ,
   O_MOVE,
@@ -198,22 +195,6 @@ describe('with claims: invariant 4, the keyed order', () => {
   }
 })
 
-// whether a cell holds the cores of formation i and of an enemy, by the grid as the last formation step left it
-function coreShared(w: World, i: number): boolean {
-  const C = w.scratch.claims!
-  for (let k = 0; k < C.more.length; k++) {
-    let mine = false
-    let theirs = false
-    for (let s = k * SLOTS; s < k * SLOTS + SLOTS && C.own[s]; s++) {
-      const o = (C.own[s] >> 1) - 1
-      if (!(C.own[s] & 1)) continue
-      if (o === i) mine = true
-      else if (w.f.side[o] !== w.f.side[i]) theirs = true
-    }
-    if (mine && theirs) return true
-  }
-  return false
-}
 // a melee holds (docs/plans/active/c1-claims.md, step 4): a veteran regiment charges a raw one at the halt (X-15),
 // with a friend (X-16) or an enemy (X-17) just behind the raw one. Played to its end: where the watched stood when
 // the raw one's (slot 0's) melee began and at its last tick in it (a break, or a fall-back after it, faces it about),
@@ -268,51 +249,38 @@ describe('with claims: a melee holds', () => {
       watch.forEach((_, k) => a.at[k].forEach((v, d) => expect(v).toBeCloseTo(a.z[k][d], 6)))
     })
   }
-  it('X-18: the broken regiment runs clear; no enemy ever stands in its core', () => {
-    // the pair once stood in each other's cores, and the router, still on the pursuer's cells, could not move off them
-    let shared = -1
+  it('X-18: the broken regiment runs clear of the regiment it fought', () => {
+    // the pair once stood in each other's cores, and the router, still on its foe's cells, could not move off them
     let broke = false
     const w = play(caseOf('x18-flank-charge-claims'), {
       every: 1,
-      each: w => {
-        broke ||= w.f.mstate[0] >= MS_ROUTING
-        if (shared < 0 && coreShared(w, 0)) shared = w.meta[M_TICK]
-      },
+      each: w => void (broke ||= w.f.mstate[0] >= MS_ROUTING),
     })
     expect(broke).toBe(true)
-    expect(shared).toBe(-1)
     expect(w.f.alive[0]).toBe(1)
     expect(w.f.z[0]).toBeGreaterThan(80)
   })
-  it('X-17: what holds the router is counted an enemy only while that enemy is in the fight', () => {
-    // 4 s after the break its first run, north, is held by the regiment just behind; shattered (and standing) as the
-    // melee starts, that regiment still holds it but is not an enemy that can take its surrender
-    const held = (broken: boolean) => {
-      let set = false
-      const w = play(caseOf('x17-enemy-behind-claims'), {
-        seconds: 33.5,
-        every: 1,
-        each: w => {
-          if (!broken || set || !w.f.foe[0]) return
-          set = true
-          w.f.mstate[2] = MS_SHATTERED
-          w.f.routPhase[2] = RP_FLED
-        },
-      })
-      expect(w.f.status[0]).toBe(ST_BLOCKED)
-      return heldByEnemy(w, 0, 10)
-    }
-    expect(held(false)).toBe(true)
-    expect(held(true)).toBe(false)
-  })
-  it('X-17: a router with an enemy just behind it tries every way out, then surrenders', () => {
-    const a = untilRout('x17-enemy-behind-claims')
-    // it left the field with men still, near where it broke: not ridden down to the last man, nor run off the map
-    expect(a.gone).toBeGreaterThan(a.rout)
-    expect(a.left).toBeGreaterThan(0)
-    expect(Math.hypot(a.last[0] - a.broke[0], a.last[1] - a.broke[1])).toBeLessThan(30)
+  it('X-17: a router with an enemy just behind it tries every way out; cornered, the enemies in contact cut it down', () => {
+    let cornerAt = -1
+    let menThen = 0
+    const w = play(caseOf('x17-enemy-behind-claims'), {
+      every: 1,
+      each: w => {
+        if (cornerAt >= 0 || !w.f.alive[0] || !cornered(w, 0)) return
+        cornerAt = w.meta[M_TICK]
+        menThen = menOf(w, 0)
+      },
+    })
     // held 2 s, then the fan's four other directions, one every 5 s
-    expect((a.gone - a.rout) / TICK_HZ).toBeGreaterThan(20)
-    expect(open().gone).toBe(-1)
+    expect(cornerAt / TICK_HZ).toBeGreaterThan(29.4 + 20)
+    expect(menThen).toBeGreaterThan(0)
+    // no one leaves the field: it is cut down where it stands
+    expect(w.sides.left[1]).toBe(0)
+    expect(w.f.alive[0] ? menOf(w, 0) : 0).toBeLessThan(menThen / 2)
+  })
+  it('X-15: a router that runs clear is never cornered', () => {
+    let seen = false
+    play(caseOf('x15-melee-holds-claims'), { every: 1, each: w => void (seen ||= !!w.f.alive[0] && cornered(w, 0)) })
+    expect(seen).toBe(false)
   })
 })

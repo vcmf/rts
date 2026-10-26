@@ -177,8 +177,6 @@ export const RP_NONE = 0
 export const RP_RUNNING = 1
 export const RP_HALTED = 2
 export const RP_FLED = 3
-// held by enemies on its last way out (the claim grid's prototype): it surrenders at the tick's end
-export const RP_TRAPPED = 4
 // the charge's phases: none; closing before the test; closing after it; pursuing a broken foe
 export const CH_NONE = 0
 export const CH_CLOSING = 1

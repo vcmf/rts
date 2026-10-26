@@ -3,7 +3,7 @@
 // 8 (fire), 11 (casualties) and 12 (morale; the rout and the wavering fall-back are its standing behaviours);
 // S1d-2 fills 4 (the square against cavalry) and 10 (charges and melee); S1d-3 fills 9 (artillery). The others are
 // named and empty until later parts of S1.
-import { type World, M_TICK, MAX_FORMATIONS, MS_SHATTERED, RP_TRAPPED, typeOf, formationHandle } from './world.ts'
+import { type World, M_TICK, MAX_FORMATIONS, MS_SHATTERED, typeOf, formationHandle } from './world.ts'
 import { placeWorld, type Pose } from './formation.ts'
 import { DT } from './time.ts'
 import { sin, cos } from './num.ts'
@@ -136,14 +136,13 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     endStep(w)
   })
   // 14: formations with no men are reaped, and shattered formations at the map's edge leave the field: reaped,
-  // their men counted to their side (S1e-1). A router there stays: it may still rally. A router enemies hold on its
-  // last way out surrenders: it leaves the field the same way (its men counted as left until saves count the captured)
+  // their men counted to their side (S1e-1). A router there stays: it may still rally
   step('14 reap', () => {
     for (let i = 0; i < MAX_FORMATIONS; i++) {
       if (!w.f.alive[i]) continue
       const men = menOf(w, i)
       if (men === 0) reapFormation(w, i)
-      else if ((w.f.mstate[i] === MS_SHATTERED && atEdge(w, i)) || w.f.routPhase[i] === RP_TRAPPED) {
+      else if (w.f.mstate[i] === MS_SHATTERED && atEdge(w, i)) {
         w.sides.left[w.f.side[i]] += men
         departed.push({ id: formationHandle(w, i), men })
         reapFormation(w, i)
