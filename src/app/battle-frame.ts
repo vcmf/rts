@@ -16,7 +16,15 @@ import {
 import type { Scene } from '../render/scene.ts'
 import { SoldierLayer, type Unit } from '../render/soldiers.ts'
 import { Men } from '../render/men.ts'
-import type { Battle } from './battle.ts'
+
+/** What a frame is written from: a world, the soldier layer on it, and the clock (a `Battle`, or the men worker's
+ * copy of the world with its layer and the sim's clock). */
+export interface FrameSource {
+  w: World
+  layer: SoldierLayer
+  acc: number
+  speed: number
+}
 
 // the header, Float64: the leftover game time (s), the speed, the publish time (ms since the time origin both
 // threads share), the men, the battalions, and the worker's costs (ms, smoothed) and sub-steps late
@@ -106,7 +114,7 @@ export function layoutFor(w: World, cap: number): Layout {
  * the header always, the world's columns when `world` (the slot's copy is older than the world); `stats` fills the
  * header's costs. Returns false, writing nothing, when the men outgrew the slot. */
 export function writeFrame(
-  b: Battle,
+  b: FrameSource,
   buf: ArrayBufferLike,
   L: Layout,
   stats: { tickMs: number; stepMs: number; pubMs: number },
@@ -115,12 +123,7 @@ export function writeFrame(
   const M = b.layer.men
   if (M.n > L.cap) return false
   const u8 = new Uint8Array(buf)
-  if (world) {
-    for (const c of L.cols) {
-      const a = c.table(b.w)[c.key]
-      u8.set(new Uint8Array(a.buffer, a.byteOffset, c.bytes), c.off)
-    }
-  }
+  if (world) copyColumns(b.w, buf, L)
   new Float64Array(buf, L.x, M.n).set(M.x.subarray(0, M.n))
   new Float64Array(buf, L.z, M.n).set(M.z.subarray(0, M.n))
   new Float64Array(buf, L.vx, M.n).set(M.vx.subarray(0, M.n))
@@ -169,7 +172,7 @@ export class FrameView {
   /** `terrain`: the page's (built once from the map; the views only read it). */
   constructor(data: SimData, cr: Compiled, terrain: Terrain, scene: Scene, buf: ArrayBufferLike, L: Layout) {
     const w = makeWorld(data, cr, 0, false, terrain)
-    for (const c of L.cols) c.table(w)[c.key] = new c.ctor(buf, c.off, c.bytes / bytesPer(c.ctor))
+    for (const c of L.cols) c.table(w)[c.key] = columnIn(buf, c)
     this.w = w
     this.layer = new SoldierLayer(w, scene)
     this.head = new Float64Array(buf, L.head, H_LEN)
@@ -231,6 +234,18 @@ export class FrameView {
 }
 
 const bytesPer = (c: TypedCtor): number => (c as unknown as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT
+
+/** Copies every column of `w` into `buf` where `L` lays them. */
+export function copyColumns(w: World, buf: ArrayBufferLike, L: Layout): void {
+  const u8 = new Uint8Array(buf)
+  for (const c of L.cols) {
+    const a = c.table(w)[c.key]
+    u8.set(new Uint8Array(a.buffer, a.byteOffset, c.bytes), c.off)
+  }
+}
+
+/** Column `c` as a view on `buf`. */
+const columnIn = (buf: ArrayBufferLike, c: Layout['cols'][number]) => new c.ctor(buf, c.off, c.bytes / bytesPer(c.ctor))
 
 // the slot protocol's words (docs/proposals/battle-threads.md §5): the newest complete slot (−1: none yet), the slot
 // the reader holds (−1: none)

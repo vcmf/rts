@@ -220,7 +220,46 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
 ## PR 5 and PR 6: only if measured
 
 - **PR 5**, a separate soldier worker fed by the per-tick mirror, if PR 3 shows over 1 % late sub-steps. Acceptance:
-  late sub-steps under 1 %; three threads checked on a 6-core laptop.
+  late sub-steps under 1 %; three threads checked on a 6-core laptop. **Started 2026-10-26**: PR 3's stop fired at
+  32,000 men, 8× (95.9 % of the sub-steps taken; the one worker a full core: ticking 12.5 ms and stepping 9.6 ms an
+  advance).
+  - **Scope**: two workers. The **sim worker** (`src/app/sim-host.ts`): the sim, commands, the log, hash points,
+    replays, and the game clock; it no longer steps the men. The **men worker** (`src/app/men-host.ts`): the soldier
+    layer and its clock on its own copy of the world, and the page's published frames (PR 3's slots, unchanged, so
+    the page reads them as before). The page creates both, sends commands and requests to the sim worker, and
+    reads frames from the men worker.
+  - **The tick ring** (sim → men): after every tick the sim worker writes the world's columns into a ring of 8 shared
+    slots, each stamped with its tick, the tick's departures into a shared log, and the game clock (stamped with its
+    tick: the leftover game time, the speed, the time) into a shared header. The sim worker never waits; it skips the
+    slot the men worker holds. The men worker takes the ticks in order, each copied into its world and followed by the
+    layer's sync (as PR 1–3 sync after every tick); fallen behind the ring, it takes the oldest it still holds, the
+    departures of the ticks passed over from the log (review round 1: jumping to the newest lost them, and the men of a
+    formation that left were drawn fallen), the passed-over ticks' Face abouts and losses shown at once (counted). Copying the
+    world per tick is PR 3's rejected 400 MB/s at 8×, here a cost the split needs: 2.5 MB at about 0.15 ms a copy
+    (PR 3's publishing), est. 2–4 % of a core on each side.
+  - **The men's clock** runs on the men worker's real time at the sim's speed; the anchors' alpha from the sim's
+    header, as the page computes it. The headless checks' `advance(sec)`: the sim worker advances, then the men worker
+    takes the ticks it can (the newest at least) and steps its clock `sec` of game time in 1/30 s frames, so the men
+    stand at their places after it (not the positions PR 3 gave, tick by tick: the men are cosmetic).
+  - **Acceptance** (`tools/bench-sim.ts`, 16,000 and 32,000 men, 1× and 8×): the men's sub-steps taken of those due
+    ≥ 99 %; ticks skipped by the men worker under 1 %; the page's battle time and frame interval no worse than PR 3's
+    (p99); replays unchanged (`app-check`'s in-page and Node replays); the sim worker's tick time stated; the
+    6-core laptop if available (else said).
+  - **Stop**: if the men worker still takes under 99 % at 32,000 men, 8×, or the page's p99 is worse than PR 3's,
+    revert and keep PR 3's one worker with 32,000 men at 8× its stated limit.
+  - **Outcome** (2026-10-26, review round 1's code; `tools/bench-sim.ts` as PR 3's, load 4–7): **met**. Mean / p99 ms:
+
+    | | page's battle time | frame interval | men's sub-steps taken | ticks skipped | one tick (sim) | men stepping a turn |
+    |---|---|---|---|---|---|---|
+    | 16,000 men, 1× | 0.01 / 0.01 | 2.55 / 2.92 | 100.1 % | 0 | 1.89 / 6.34 | 0.44 / 0.79 |
+    | 16,000 men, 8× | 0.01 / 0.02 | 2.77 / 3.27 | 100.0 % | 0 | 1.56 / 6.33 | 1.22 / 2.47 |
+    | 32,000 men, 1× | 0.01 / 0.03 | 5.70 / 6.25 | 100.0 % | 0 | 3.57 / 8.24 | 0.93 / 1.61 |
+    | 32,000 men, 8× | 0.01 / 0.03 | 5.82 / 6.62 | 100.0 % (PR 3: 95.9 %) | 0 | 2.48 / 8.06 | 3.63 / 6.26 |
+
+    - At 32,000 men, 8× the sim worker's turn is 10.4 / 17.4 ms (the ring's copy 0.25 / 0.47 of it) and the men
+      worker's 9.1 / 12.0: each has room, where PR 3's one worker took 27 / 84.
+    - The page's numbers are PR 3's (its frame is the canvas's drawing).
+    - Not measured: the 6-core laptop (not available).
 - **PR 6**, rendering in a worker (OffscreenCanvas), or the layer in WebAssembly with f32x4 SIMD (cosmetic, so
   determinism does not apply), only if main-thread jank is measured to cost frames after PR 3.
 
