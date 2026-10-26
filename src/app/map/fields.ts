@@ -6,7 +6,7 @@ import type { AttrSpec, AttrValue, Catalogue, Feature, MapFile } from '../../map
 import { RESERVED } from '../../map/schema.ts'
 import { allowedIn, categoryOf, kindChain, type Issue } from '../../map/catalogue.ts'
 import { featureKind } from '../../map/validate.ts'
-import { GENERATOR_SPECS, childOf } from '../../map/generators.ts'
+import { GENERATOR_SPECS } from '../../map/generators.ts'
 import { resolve } from '../../map/resolve.ts'
 import { sameJson } from '../../map/write.ts'
 
@@ -19,6 +19,8 @@ export interface AttrRow {
   spec: AttrSpec | undefined
   own: unknown
   inherited: AttrValue | undefined
+  /** What it is in the map's season and the feature's state: another than its own when one of them overrides it. */
+  effective: AttrValue | undefined
 }
 
 const presetsOf = (map: MapFile) => (map.presets ?? {}) as Record<string, Record<string, unknown>>
@@ -32,9 +34,11 @@ export function attrRows(cat: Catalogue, f: Feature, map: MapFile): AttrRow[] {
   const kind = featureKind(f, presetsOf(map))
   const chain = kind ? kindChain(cat, kind) : null
   let inherited: Record<string, AttrValue> = {}
+  let effective: Record<string, AttrValue> = {}
   try {
     const bare = Object.fromEntries(Object.entries(f).filter(([k]) => (RESERVED as readonly string[]).includes(k)))
     inherited = resolve(bare as Feature, map, cat).attrs
+    effective = resolve(f, map, cat).attrs
   } catch {
     // not resolvable as it is: no hints (the validator says why)
   }
@@ -42,12 +46,14 @@ export function attrRows(cat: Catalogue, f: Feature, map: MapFile): AttrRow[] {
   if (chain) {
     const category = categoryOf(kind!)
     for (const [name, spec] of Object.entries(cat.attributes)) {
-      if (allowedIn(cat, spec, category)) rows.push({ name, spec, own: f[name], inherited: inherited[name] })
+      if (allowedIn(cat, spec, category)) {
+        rows.push({ name, spec, own: f[name], inherited: inherited[name], effective: effective[name] })
+      }
     }
   }
   for (const [name, v] of Object.entries(f)) {
     if (!(RESERVED as readonly string[]).includes(name) && !rows.some(r => r.name === name)) {
-      rows.push({ name, spec: cat.attributes[name], own: v, inherited: inherited[name] })
+      rows.push({ name, spec: cat.attributes[name], own: v, inherited: inherited[name], effective: effective[name] })
     }
   }
   return rows
@@ -99,33 +105,30 @@ export function setField<T extends object>(o: T, key: string, value: unknown): T
 }
 
 /**
- * The map with a feature's id changed from `from` to `to`, and every place that names it: the references (`on`,
- * `carries`, `crosses`, `along.id`), shared edges and kept-off lines (`follow`, `clear`), a generator's selectors, and
- * a pinned child's `origin.parent`. When it has children (it generates them, or some are pinned), their ids follow
- * (`<from>-<n>` becomes `<to>-<n>`: a pinned child's own, and wherever one is named). Features that name nothing of it
- * are kept as they are (the same objects).
+ * Whether a feature has children: it generates them (a generator that writes children, ids `<id>-<n>`), or some are
+ * pinned in the file (their `origin.parent`). Their ids carry its own, so the page does not rename it.
+ */
+export function hasChildren(map: MapFile, id: string): boolean {
+  return map.features.some(
+    f =>
+      f.origin?.parent === id ||
+      (f.id === id &&
+        Object.keys(f.gen ?? {}).some(g => Object.hasOwn(GENERATOR_SPECS, g) && !!GENERATOR_SPECS[g].childKinds)),
+  )
+}
+
+/**
+ * The map with a feature's id changed from `from` to `to`, and every place that names it by that id: the references
+ * (`on`, `carries`, `crosses`, `along.id`), shared edges and kept-off lines (`follow`, `clear`), and a generator's
+ * selectors (in its parameters, or in a pinned child's record of them). For a feature without children
+ * (`hasChildren`): no other id carries its own. Features that name nothing of it are kept as they are (the same
+ * objects).
  */
 export function renameFeature(map: MapFile, from: string, to: string): MapFile {
-  // its children: generated ones (an author's feature cannot take `<from>-<n>` while it generates: the validator
-  // reserves the form), and pinned ones by their recorded parent; another feature named like a child is not one
-  const generates = map.features.some(
-    f =>
-      f.id === from &&
-      Object.keys(f.gen ?? {}).some(g => Object.hasOwn(GENERATOR_SPECS, g) && !!GENERATOR_SPECS[g].childKinds),
-  )
-  const pinned = new Set(
-    map.features.filter(f => f.origin?.parent === from && childOf(f.id)?.parent === from).map(f => f.id),
-  )
-  const swap = (v: unknown) => {
-    if (v === from) return to
-    const c = typeof v === 'string' ? childOf(v) : null
-    return c?.parent === from && (generates || pinned.has(v as string)) ? `${to}-${c.n}` : v
-  }
+  const swap = (v: unknown) => (v === from ? to : v)
   const ids = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(e => ids(e))
-    if (typeof v === 'object' && v !== null && swap((v as { id?: unknown }).id) !== (v as { id?: unknown }).id) {
-      return { ...v, id: swap((v as { id: unknown }).id) }
-    }
+    if (typeof v === 'object' && v !== null && (v as { id?: unknown }).id === from) return { ...v, id: to }
     return v
   }
   // a generator's selectors, in its parameters or in a pinned child's record of them
@@ -138,7 +141,7 @@ export function renameFeature(map: MapFile, from: string, to: string): MapFile {
   }
   const features = map.features.map(f => {
     const g: Feature = { ...f }
-    if (g.id === from || pinned.has(g.id)) g.id = swap(g.id) as string
+    if (g.id === from) g.id = to
     for (const r of ['on', 'carries', 'crosses'] as const) if (g[r] !== undefined) g[r] = swap(g[r]) as string
     if (g.along !== undefined) g.along = ids(g.along) as Feature['along']
     if (g.follow !== undefined) g.follow = ids(g.follow)
@@ -149,24 +152,11 @@ export function renameFeature(map: MapFile, from: string, to: string): MapFile {
       ) as Feature['gen']
     }
     if (g.origin && typeof g.origin === 'object') {
-      const params = selectors(g.origin.generator, g.origin.params) as Record<string, unknown>
-      g.origin = { ...g.origin, params, ...(g.origin.parent === from ? { parent: to } : {}) }
+      g.origin = { ...g.origin, params: selectors(g.origin.generator, g.origin.params) as Record<string, unknown> }
     }
     return sameJson(g, f) ? f : g
   })
   return { ...map, features }
-}
-
-/** The ids a renamed map holds more than once that the map before did not (a rename's children onto taken ids). */
-export function newClashes(before: MapFile, after: MapFile): string[] {
-  const twice = (m: MapFile) => {
-    const seen = new Set<string>()
-    const out = new Set<string>()
-    for (const f of m.features) (seen.has(f.id) ? out : seen).add(f.id)
-    return out
-  }
-  const was = twice(before)
-  return [...twice(after)].filter(id => !was.has(id))
 }
 
 /** The validator's problems at a field's path (`features[3].height`, `seed`), and anything under it. */

@@ -187,7 +187,8 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
     return
   }
   if (r.ok) {
-    const fresh = !current || current.map.id !== r.map.id
+    // another map (the list cleared `current`): fitted to the view; the same one renamed keeps the view
+    const fresh = !current
     issues = []
     layers = Object.fromEntries(Object.entries(r.layers).map(([k, b]) => [k, new Uint16Array(b)]))
     height = new Float64Array(r.height)
@@ -381,7 +382,10 @@ const form = new Form(formBox, editor)
 form.onMapId = id => {
   const file = `/maps/${id}.map.json`
   const why = mapIdProblem(id)
-  if (why) return editor.note(`the id stays: ${why}`)
+  if (why) {
+    editor.note(`the id stays: ${why}`)
+    return false
+  }
   // the list first: the editor's recompile reads the map the list shows (its copy, under its new file)
   const was = editor.file!
   const option = [...picker.options].find(o => o.value === was)
@@ -391,12 +395,22 @@ form.onMapId = id => {
   if (!editor.renameMap(file, id)) {
     moved.replaceWith(option ?? mapOption(was))
     picker.value = was
-    return
+    return false
   }
   const q = new URLSearchParams(location.search)
   q.set('map', id)
   history.replaceState(null, '', `?${q}`)
+  return true
 }
+// text typed in the form and not applied yet is applied before anything else acts: a press anywhere outside the form
+// (on the map, a button, the list), in the capture phase so it comes before the press's own handlers
+addEventListener(
+  'pointerdown',
+  e => {
+    if (!formBox.contains(e.target as Node)) form.flush()
+  },
+  true,
+)
 /** The editor's part of the panel: the selection, unsaved edits, the save's state, a conflict with the disk. */
 function editPanel(): void {
   const f = editor.selected ? editor.feature(editor.selected) : undefined
@@ -827,10 +841,14 @@ addEventListener('keydown', e => {
   // not while typing text; Delete and Escape only on the map (not on a focused list, box or button), the shortcuts
   // with Cmd or Ctrl from anywhere else
   const target = e.target as HTMLElement
-  if (target.closest?.('textarea, input:not([type=checkbox]):not([type=radio]):not([type=button])')) return
-  const onMap = target === document.body || target === canvas
   const mod = e.metaKey || e.ctrlKey
   const key = e.key.toLowerCase()
+  const typing = !!target.closest?.('textarea, input:not([type=checkbox]):not([type=radio]):not([type=button])')
+  // in a field of the form: Cmd or Ctrl S applies what it holds and saves; Z and Y are the field's own text undo while
+  // it holds text not applied, else the map's
+  if (typing && !(mod && (key === 's' || ((key === 'z' || key === 'y') && !form.holds(target))))) return
+  if (mod && ['s', 'z', 'y'].includes(key)) form.flush()
+  const onMap = target === document.body || target === canvas
   if (mod && key === 's') {
     e.preventDefault()
     void editor.save()

@@ -325,21 +325,21 @@ edit. No new decision.
 
 - `src/app/map/fields.ts` (pure, tested in `test/map-fields.test.ts`):
   - `attrRows`: the attributes a feature's kind's category takes (`allowedIn`), in the catalogue's order, each with
-    its spec, the feature's own value and the value it inherits (the kind's chain, then its preset), for the hint;
+    its spec, the feature's own value, what it inherits and what the season or state makes it (`resolve`), for the
+    hints;
   - `parseInput`: a field's text as a value by its spec's type: empty removes the field (it inherits); a number's
     text that is no number is kept as text, for the validator to name; objects, ramps, seasons and lists as JSON (text
     that is no JSON: no edit, and the panel says so);
   - `setField`, `setMapField`: the feature or the map with one field set or removed, the others in their order;
-  - `renameFeature`: the copy with a feature's id changed and every place that names it: `on`, `carries`, `crosses`,
-    `along.id`, `follow` and `clear` ids, a generator's selectors (`avoid`, `within`), a pinned child's
-    `origin.parent`;
+  - `renameFeature`: the copy with a feature's id changed and every place that names it by that id: `on`, `carries`,
+    `crosses`, `along.id`, `follow` and `clear` ids, a generator's selectors (`avoid`, `within`) and a pinned child's
+    record of them; `hasChildren`: a feature whose children carry its id (renamed in the file, not the page);
   - `problemsAt`: the validator's problems whose path is a field's (`features[i].height`, `seed`).
-- `Editor`: `setField(key, value)`, `setFeature(json)` (the whole feature as JSON; a changed id renames),
-  `rename(id)`, `setMapField(key, value)`, `renameMap(id)` (only while the map has no file: it moves the new map to
-  `maps/<id>.map.json`), each one edit.
-- The panel: the selection's form in place of its JSON (each input applies on Enter or when it loses focus, the
-  focus kept across the redraw), the problems under their fields, the feature as JSON below; with no selection the
-  map's form.
+- `Editor`: `setField(key, value)`, `rename(id)`, `setMapField(key, value)`, each one edit and saying whether it
+  changed the copy; `renameMap(id)` (only while the map has no file: it moves the new map to `maps/<id>.map.json`).
+- The panel (`src/app/map/form.ts`): the selection's form, its text not applied held explicitly (applied on change
+  and before any command of the editor; refused, kept with why), the problems under their fields, the feature's JSON
+  below to read; with no selection the map's form.
 - The page check: renames a feature with references and sets an attribute through the form; the saved diff is
   those lines alone.
 
@@ -373,6 +373,26 @@ edit. No new decision.
   the selection it had (an undone rename or deletion selects its feature), no guess by place; a pinned child's record
   of its generator's selectors follows a rename; the feature's JSON on one line, and given once a change; problems
   under their input; one check of a new map's id.
+- **Round 3**: severe, the third. A value typed in a field was lost when the next press on the map began a drag before
+  the blur applied it; a JSON box marked typed stopped following the feature and could apply stale text over newer
+  edits; bad JSON in a field was replaced by the old value; a rename cleared what other fields held typed; Cmd S in
+  a field opened the browser's dialog; a new map's rename refitted the view; the hint did not say when a season
+  overrode the field. Stopped at the limit.
+- **Analysis** (the owner asked for it at the limit, as in M7a and M7b): of about 30 findings, about 10 were ordinary;
+  the rest fell in two classes every round found again. (1) The form's state: text typed and not applied was a second
+  state beside the editor's copy, synced by hand (rebuilds, typed flags, a counter of fills, focus restored, applied
+  on blur), and the JSON box was a second editor of the same feature competing with the fields; each fix made the
+  next finding. (2) The rename's scope: following every reference grew to generated and pinned children, their
+  selectors and recorded parameters, and each round found one more place an id lives. The owner chose all three
+  changes (2026-10-26); decision 0066 holds (they apply it). The review count restarts.
+- **Redesign**: (a) the text not applied is explicit (`pending`): a field shows the copy unless it holds some; it is
+  applied on change and before any command of the editor (a press outside the form, Cmd or Ctrl S, Z, Y); refused,
+  it stays with its reason until changed, or Escape drops it; the editor's commands say whether they changed the copy
+  (no counters). (b) The feature's JSON is to read and copy only. (c) A rename follows the feature's own id; a
+  feature with children is not renamed in the page (`hasChildren`), so no child id moves. With them: a new map
+  renamed keeps the view; the hint says what a season or state makes a field; Cmd S in a field applies and saves,
+  Cmd Z there is the field's text undo while it holds text; the page check takes the lines a rename changes from
+  `renameFeature` (any map), presses the map with text typed, and drops a refused id with Escape.
 
 ## Open questions
 

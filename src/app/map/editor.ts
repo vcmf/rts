@@ -57,7 +57,7 @@ import {
   stepOf,
   type Draft,
 } from './draw.ts'
-import { newClashes, renameFeature, setField } from './fields.ts'
+import { hasChildren, renameFeature, setField } from './fields.ts'
 
 /** What the editor needs from the page. */
 export interface Host {
@@ -584,68 +584,50 @@ export class Editor {
     return true
   }
   /**
-   * The fields (M7c): one edit each, judged by the validator at once like any other. A field of the selection set, or
-   * removed (`undefined`: it inherits); its id goes through `rename`.
+   * The fields (M7c): one edit each, judged by the validator at once like any other. Each returns whether it changed
+   * the copy: true, false when it was refused (the message says why), null when there was nothing to change. A field of
+   * the selection set, or removed (`undefined`: it inherits); its id goes through `rename`.
    */
-  setField(key: string, value: unknown): void {
+  setField(key: string, value: unknown): boolean | null {
     const f = this.selected ? this.feature(this.selected) : undefined
-    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return
-    if (key === 'id') return this.rename(typeof value === 'string' ? value : String(value ?? ''))
+    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return false
+    if (key === 'id') return this.rename(typeof value === 'string' ? value : '')
     const g = setField(f, key, value)
-    if (!sameJson(g, f)) this.commit(this.replace(this.doc, g), f.id)
+    if (sameJson(g, f)) return null
+    this.commit(this.replace(this.doc, g), f.id)
+    return true
   }
+  /** The last rename (its old and new id), so the form can tell it from another selection. */
+  renamed: { from: string; to: string } | null = null
   /**
-   * The selection's id changed, and every place that names it (`renameFeature`). Refused only for an id another
-   * feature has (two features of one id cannot be edited); its form is the validator's to judge.
+   * The selection's id changed, and every place that names it (`renameFeature`). Refused for an empty id, one another
+   * feature has (two features of one id cannot be edited), and a feature with children (their ids carry its own:
+   * renamed in the file); what form an id takes is the validator's.
    */
-  rename(id: string): void {
+  rename(id: string): boolean | null {
     const f = this.selected ? this.feature(this.selected) : undefined
-    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f) || id === f.id) return
-    // a feature has an id (the editor finds it by it); what form an id takes is the validator's
-    if (id === '') return this.note('a feature needs an id: it stays ' + f.id)
-    if (this.feature(id)) return this.note(`the id ${id} is taken`)
-    const doc = renameFeature(this.doc, f.id, id)
-    const clash = newClashes(this.doc, doc)
-    if (clash.length) return this.note(`its children would take ids in use (${clash.join(', ')}): it stays ${f.id}`)
-    this.commit(doc, id, id)
-  }
-  /**
-   * The selection replaced by a feature written as JSON (an object with a text id; anything in it the validator
-   * judges). A changed id renames it, with every place that names it.
-   */
-  setFeature(json: string): void {
-    const f = this.selected ? this.feature(this.selected) : undefined
-    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return
-    let g: unknown
-    try {
-      g = JSON.parse(json)
-    } catch {
-      return this.note('the feature is no JSON: nothing changed')
+    if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return false
+    if (id === f.id) return null
+    const refuse = (why: string) => {
+      this.note(why)
+      return false
     }
-    if (
-      typeof g !== 'object' ||
-      g === null ||
-      Array.isArray(g) ||
-      typeof (g as Feature).id !== 'string' ||
-      !(g as Feature).id
-    ) {
-      return this.note('a feature is an object with a text id: nothing changed')
+    if (id === '') return refuse(`a feature needs an id: it stays ${f.id}`)
+    if (this.feature(id)) return refuse(`the id ${id} is taken`)
+    if (hasChildren(this.doc, f.id)) {
+      return refuse(`${f.id} has children whose ids carry its own: rename it in the file`)
     }
-    const next = g as Feature
-    if (sameJson(next, f)) return
-    if (next.id !== f.id && this.feature(next.id)) return this.note(`the id ${next.id} is taken`)
-    const at = this.doc.features.indexOf(f)
-    const renamed = next.id === f.id ? this.doc : renameFeature(this.doc, f.id, next.id)
-    const doc = { ...renamed, features: renamed.features.map((x, k) => (k === at ? next : x)) }
-    const clash = newClashes(this.doc, doc)
-    if (clash.length) return this.note(`ids in use twice (${clash.join(', ')}): nothing changed`)
-    this.commit(doc, next.id, next.id)
+    this.renamed = { from: f.id, to: id }
+    this.commit(renameFeature(this.doc, f.id, id), id, id)
+    return true
   }
   /** A field of the map itself set, or removed; its features are the features' own edits, its id `renameMap`'s. */
-  setMapField(key: string, value: unknown): void {
-    if (!this.enabled || !this.doc || !this.ready() || key === 'features' || key === 'id') return
+  setMapField(key: string, value: unknown): boolean | null {
+    if (!this.enabled || !this.doc || !this.ready() || key === 'features' || key === 'id') return false
     const doc = setField(this.doc, key, value)
-    if (!sameJson(doc, this.doc)) this.commit(doc, null)
+    if (sameJson(doc, this.doc)) return null
+    this.commit(doc, null)
+    return true
   }
   /**
    * A map with no file yet takes another id, and with it the file its first save makes (`maps/<id>.map.json`), as if

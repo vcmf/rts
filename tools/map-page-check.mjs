@@ -233,24 +233,36 @@ try {
           const input = document.querySelector('#form [data-key="' + key + '"]')
           if (!input) throw new Error('no field ' + key)
           input.value = value
+          input.dispatchEvent(new Event('input'))
           input.dispatchEvent(new Event('change'))
         }
         MAP.select(target.id)
         field('id', target.id + 'x')
         MAP.select(other.id)
-        // an id in use refused: the field shows the id the feature still has
+        // an id in use refused: the text stays as typed, with why, and Escape drops it
         field('id', target.id + 'x')
-        const refused = document.querySelector('#form [data-key="id"]').value === other.id
+        const idInput = document.querySelector('#form [data-key="id"]')
+        const refused =
+          idInput.value === target.id + 'x' && /not applied: .*taken/.test(idInput.closest('.row').textContent) && MAP.selected === other.id
+        idInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        const dropped = document.querySelector('#form [data-key="id"]').value === other.id
         // a change applied as the focus moves on (Tab, a click): the next field is the same element after the edit
         const next = document.querySelector('#form [data-key="height"]')
         field('width', String((other.width ?? 100) + 7))
         const kept = next.isConnected && document.querySelector('#form [data-key="height"]') === next
-        // JSON that is refused stays as typed, to be mended
-        const json = document.querySelector('#form textarea')
-        json.value = '{"id": '
-        json.dispatchEvent(new Event('input'))
-        document.querySelector('#form textarea + button').click()
-        const jsonKept = json.value === '{"id": '
+        // the feature's JSON is to read only
+        const jsonRead = document.querySelector('#form textarea').readOnly
+        // text typed and not applied, then a press on the map: applied before the press acts
+        const heightInput = document.querySelector('#form [data-key="height"]')
+        heightInput.value = '33'
+        heightInput.dispatchEvent(new Event('input'))
+        const c = document.getElementById('map'), b = c.getBoundingClientRect()
+        const ptr = { clientX: b.left + 5, clientY: b.top + b.height - 5, bubbles: true, pointerId: 1, isPrimary: true }
+        c.dispatchEvent(new PointerEvent('pointerdown', ptr))
+        c.dispatchEvent(new PointerEvent('pointerup', ptr))
+        const flushed = JSON.parse(MAP.text).features.find(f => f.id === other.id).height === 33
+        MAP.select(other.id)
+        MAP.undo()
         // a field typed in and not applied is left as typed when the form is refreshed from elsewhere (an edit undone)
         const note = document.querySelector('#form [data-key="note"]')
         note.value = 'half typed'
@@ -266,7 +278,7 @@ try {
         MAP.undo(); MAP.undo()
         const back = await MAP.save()
         const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
-        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id, refused, kept, jsonKept, typedKept })
+        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id, refused, dropped, kept, jsonRead, flushed, typedKept })
       })()`,
     ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
@@ -284,6 +296,7 @@ try {
         const mapId = id => {
           const input = document.querySelector('#form [data-key="id"]')
           input.value = id
+          input.dispatchEvent(new Event('input'))
           input.dispatchEvent(new Event('change'))
         }
         mapId('${NEW}b')
@@ -460,10 +473,12 @@ try {
   const fl = seen.FIELDS
   const changed = fl.disk.split('\n').filter((l, k) => l !== was[k])
   const changedIds = changed.map(l => /"id": ?"([^"]+)"/.exec(l)?.[1]).sort()
-  const naming = JSON.parse(original)
-    .features.filter(f => [f.on, f.crosses, f.carries, f.along?.id].includes(fl.renamed))
-    .map(f => f.id)
-  const expected = [`${fl.renamed}x`, fl.other, ...naming].sort()
+  // the features a rename changes: the engine's own answer (the page must apply just that)
+  const { renameFeature } = await import('../src/app/map/fields.ts')
+  const was0 = JSON.parse(original)
+  const renamedMap = renameFeature(was0, fl.renamed, `${fl.renamed}x`)
+  const naming = renamedMap.features.filter((f, k) => f !== was0.features[k]).map(f => f.id)
+  const expected = [...new Set([...naming, fl.other])].sort()
   check(
     fl.ok &&
       fl.issues === 0 &&
@@ -472,9 +487,10 @@ try {
     `through the form, ${fl.renamed} renamed and ${fl.other}'s width set: the lines of ${changedIds.join(', ')} changed`,
   )
   check(fl.back && fl.after === original, 'both undone and saved, the file is byte for byte the original')
-  check(fl.refused, "an id in use typed in the form is refused, and the field shows the feature's id again")
+  check(fl.refused && fl.dropped, 'an id in use typed in the form is refused and stays typed with why; Escape drops it')
   check(fl.kept, 'the field the focus moved to is still the same after the edit the move applied')
-  check(fl.jsonKept, 'JSON the editor refuses stays in its box as typed')
+  check(fl.jsonRead, "the feature's JSON is to read only")
+  check(fl.flushed, 'text typed in a field and not applied is applied before a press on the map acts')
   check(fl.typedKept, 'a field typed in and not applied is left as typed when the form is refreshed')
   await until('NEWMAP')
   const nm = seen.NEWMAP

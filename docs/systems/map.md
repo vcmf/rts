@@ -290,18 +290,24 @@ maps/kinds.json ──► checkCatalogue ─┐
       references are listed in the panel, each set again by clicking its target.
     - The fields (M7c, `src/app/map/fields.ts`, the panel's form in `src/app/map/form.ts`): the selection's id, kind,
       preset, priority, state, source, note, each attribute its kind's category takes (in the catalogue's order, with
-      its unit, range or values and what it inherits from its kind and preset as hints; any other it sets, to be
-      seen and removed), its seasons as JSON, and the whole feature as JSON; with no selection the map's own fields
-      (name, note, seed, season, datum, extent, play, sources, presets; its id only while it has no file, which then
-      moves to the file of that name). A field applies when it changes, as one edit; emptied, it is removed (it
-      inherits); its text is read as its kind of value only (a number's that is no number stays text for the
-      validator to name; JSON that does not parse changes nothing). The validator's problems show under their fields
-      (by path). A rename (the id field, or the JSON's id) follows every place that names the feature (`renameFeature`:
-      references, shared edges, kept-off lines, a generator's selectors, a pinned child's parent); an id in use is
-      refused, and so is an empty one. The form is built again only when its fields change (another kind); otherwise
-      its inputs are given their values in place, so the field the focus moved to stays, and a refused change shows
-      what the field still holds. A feature's problems of no field show above its JSON; an attribute's hint is what
-      `resolve` gives it without its own value (its season and state too).
+      its unit, range or values, what it inherits as `resolve` gives it without its own value, and what the season or
+      state makes it when they override it; any other it sets, to be seen and removed), its seasons as JSON; the
+      whole feature as JSON to read and copy (its shape and references are edited on the map). With no selection the
+      map's own fields (name, note, seed, season, datum, extent, play, sources, presets; its id only while it has no
+      file, which then moves to the file of that name, the view kept).
+      - A field shows the copy unless it holds text typed and not applied yet. That text is applied when the field
+        changes (Enter, the focus leaving it) and before any command of the editor (a press outside the form, Cmd or
+        Ctrl S, Z, Y), as one edit; emptied, the field is removed (it inherits). Refused (text that is no value of its
+        kind, or the editor said no), it stays typed with the reason under it until changed, or Escape drops it. In a
+        field holding text, Cmd or Ctrl Z is the field's own text undo; Cmd or Ctrl S applies it and saves.
+      - Its text is read as its kind of value only (a number's that is no number stays text for the validator to
+        name). The validator's problems show under their fields (by path), those of no field above the JSON.
+      - A rename follows every place that names the feature by its id (`renameFeature`: references, shared edges,
+        kept-off lines, a generator's selectors and a pinned child's record of them). Refused: an empty id, one in
+        use, and a feature with children (`hasChildren`: it generates them, or some are pinned), whose ids carry its
+        own; it is renamed in the file.
+      - The form is built again only when its fields change (another kind); otherwise its inputs are given their
+        values in place, so the field the focus moved to stays. Each history step keeps the selection it had.
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes
