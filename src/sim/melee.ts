@@ -30,11 +30,11 @@ import {
   CH_PURSUIT,
   MS_WAVERING,
   outOfFight,
+  fleeing,
   formationSlot as slotOf,
   formationHandle as handleOf,
   typeOf,
 } from './world.ts'
-import { cornered } from './morale.ts'
 import {
   allocOrder,
   appendOrder,
@@ -61,7 +61,7 @@ const K_BREACH = 13
 const K_IMPACT = 14
 const K_RECOIL = 15
 const K_MELEE = 16
-const K_CORNERED = 17
+const K_CUT = 17
 export const Q_FRONT = 0
 export const Q_FLANK = 1
 export const Q_REAR = 2 // the side a charge comes from, in the target's frame
@@ -216,14 +216,14 @@ export const sideStruck = (w: World, i: number, j: number): number => quarter(w,
 /* ---------------- step 10: charges and melee ---------------- */
 /**
  * Step 10, charges and melee (docs/systems/melee.md): each charge steps, each melee pair strikes, a battalion struck
- * while not in melee takes on its attacker, cornered routers are cut down, and the shocks are owed to their receivers.
- * Skipped when nothing charges, fights or is cornered near an enemy.
+ * while not in melee takes on its attacker, routers that enemies reach are cut down (with claims), and the shocks are
+ * owed to their receivers. Skipped when nothing charges, fights or runs with an enemy near.
  */
 export function meleeStep(w: World): void {
   const f = w.f
   const N = MAX_FORMATIONS
   let any = false
-  for (let i = 0; i < N && !any; i++) if (f.alive[i] && (f.chPhase[i] || f.foe[i] || besieged(w, i))) any = true
+  for (let i = 0; i < N && !any; i++) if (f.alive[i] && (f.chPhase[i] || f.foe[i] || hunted(w, i))) any = true
   if (!any) return
   const tick = w.meta[M_TICK] + 1
   const rev = w.scratch.reverse === true
@@ -248,49 +248,56 @@ export function meleeStep(w: World): void {
     const j = slotOf(w, f.foe[i])
     if (j >= 0 && !f.foe[j] && !outOfFight(f.mstate[j])) engage(w, j, i)
   }
-  for (let j = 0; j < N; j++) if (f.alive[j] && besieged(w, j)) cutDown(w, G, S, j, tick)
+  for (let j = 0; j < N; j++) if (hunted(w, j)) cutDown(w, G, S, j, tick)
   // the shocks, added to each receiver in its attackers' slot order
   for (let i = 0; i < N; i++) if (S.shockTo[i] >= 0) f.shockIn[S.shockTo[i]] += S.shockBy[i]
 }
 
 /**
- * Enemy i cuts router j down: if the gap between them (metres) is within contact and hold, the men of each in contact
- * are found, and j owes losses at the melee's rate for i's men in contact and strength, drawn from `rs`. j does not
- * fight back.
+ * Enemy i cuts router j down: if the gap between them (metres) is within reach, the men of each in contact are found,
+ * and j owes losses at the melee's rate for i's men in contact and strength, drawn from `rs`. j does not fight back.
+ * The reach is contact and hold, and with the claim grid on a cell more: a router's margin keeps an enemy up to a cell
+ * farther off than it would stand.
  */
 function rideDown(w: World, G: FireGeo, S: Melee, i: number, j: number, gap: number, rs: Uint32Array): void {
   const M = w.cr.rs.melee
-  const lim = M.contact + M.hold
+  const lim = M.contact + M.hold + (w.claims ? w.terrain.cell : 0)
   if (gap > lim) return
   const men = inContact(w, G, i, j, lim, S.mi)
   inContact(w, G, j, i, lim, S.mj)
   owe(w, j, S.mj, M.rate * DT * men * strengthOf(w, i), rs)
 }
-// centres farther apart than this (metres) are never within contact and hold: a cornered router with no enemy this
-// near is left alone, and the melee step skipped for it
-const BESIEGE = 300
-// whether cornered router j has an enemy in the fight within BESIEGE of its centre
-function besieged(w: World, j: number): boolean {
+// anchors farther apart than this (metres) are never within reach: a column of route is at most about 340 m from its
+// head (the anchor) to its tail
+const NEAR = 500
+// whether formations i and j stand within NEAR of each other, anchor to anchor
+const near2 = (w: World, i: number, j: number): boolean => {
+  const dx = w.f.x[i] - w.f.x[j]
+  const dz = w.f.z[i] - w.f.z[j]
+  return dx * dx + dz * dz <= NEAR * NEAR
+}
+/** Whether router j (with the claim grid on) has an enemy in the fight within NEAR: the melee step looks at it. */
+function hunted(w: World, j: number): boolean {
   const f = w.f
-  if (!cornered(w, j)) return false
+  if (!w.claims || !f.alive[j] || !fleeing(f.mstate[j])) return false
   for (let i = 0; i < MAX_FORMATIONS; i++) {
-    if (!f.alive[i] || f.side[i] === f.side[j] || outOfFight(f.mstate[i])) continue
-    const dx = f.x[i] - f.x[j]
-    const dz = f.z[i] - f.z[j]
-    if (dx * dx + dz * dz <= BESIEGE * BESIEGE) return true
+    if (f.alive[i] && f.side[i] !== f.side[j] && !outOfFight(f.mstate[i]) && near2(w, i, j)) return true
   }
   return false
 }
 /**
- * Broken battalion j has no way left to run (`cornered`, morale.ts): every enemy in the fight near it, neither charging
- * nor in melee, cuts it down as a pursuit rides a router down. Each attacker's draws are its own, keyed by the pair,
- * and the losses owed only add up, so the order the attackers are visited in changes nothing.
+ * With the claim grid on, every enemy in the fight that reaches router j cuts it down (`rideDown`), as a pursuit does,
+ * whether the router runs, is held or has no way left: an enemy in melee with another does not, nor j's own pursuer
+ * (its pursuit rides it down already). Each attacker's draws are its own, keyed by the pair, and the losses owed only
+ * add up, so the order the attackers are visited in changes nothing.
  */
 function cutDown(w: World, G: FireGeo, S: Melee, j: number, tick: number): void {
   const f = w.f
+  const hj = handleOf(w, j)
   for (let i = 0; i < MAX_FORMATIONS; i++) {
-    if (!f.alive[i] || f.side[i] === f.side[j] || outOfFight(f.mstate[i]) || f.chPhase[i] || f.foe[i]) continue
-    rideDown(w, G, S, i, j, gapOf(w, G, i, j), keyedStream(ks, w.meta[M_SEED], tick, handleOf(w, i), j, K_CORNERED))
+    if (!f.alive[i] || f.side[i] === f.side[j] || outOfFight(f.mstate[i]) || f.foe[i] || !near2(w, i, j)) continue
+    if (f.chPhase[i] === CH_PURSUIT && f.chTarget[i] === hj) continue
+    rideDown(w, G, S, i, j, gapOf(w, G, i, j), keyedStream(ks, w.meta[M_SEED], tick, handleOf(w, i), j, K_CUT))
   }
 }
 
