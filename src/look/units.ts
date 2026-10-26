@@ -331,7 +331,7 @@ export class Units {
   // the look this frame (lookAt), given to the decal's material (setDecalLook)
   private readonly lookNow: ShadowLook = { ...SHADOW_LOOK.far }
   // the look last given to the decal's material (setDecalLook: only when it changes)
-  private readonly lookSet: ShadowLook = { soft: NaN, dark: NaN, foot: NaN, core: NaN, len: NaN }
+  private readonly lookSet: ShadowLook = { soft: NaN, dark: NaN, foot: NaN, core: NaN, len: NaN, gain: NaN }
   private lookT = 1 // the far look's share this frame (lookAt), the strip's too (setDecalLook)
   private lookTSet = NaN
   // the shape's boxes (useDecals): what it alone fills (the far strip's), with the soft bake's reach (the close one's)
@@ -1610,6 +1610,7 @@ export class Units {
         'uFarScale',
         'uDecalLift',
         'uShSoft',
+        'uShGain',
         'uShLen',
         'uShFoot',
         'uStrip',
@@ -1719,17 +1720,24 @@ export class Units {
     for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', map)
   }
   /** The simple shadows' look (decision 0062) given to their material when it changed: the soft bake's share at the
-   *  tip, the length, the gradient from the soles (uShFoot, footUniform) and the strip by the far look's share
-   *  (uStrip, uRows: decalStrip) */
+   *  tip, the gain (uShGain), the length, the gradient from the soles (uShFoot, footUniform) and the strip by the far
+   *  look's share (uStrip, uRows: decalStrip) */
   private setDecalLook(l: ShadowLook): void {
     const m = this.decal
     const b = this.shapeBoxes
     const p = this.lookSet
-    const same = l.soft === p.soft && l.dark === p.dark && l.foot === p.foot && l.core === p.core && l.len === p.len
+    const same =
+      l.soft === p.soft &&
+      l.dark === p.dark &&
+      l.foot === p.foot &&
+      l.core === p.core &&
+      l.len === p.len &&
+      l.gain === p.gain
     if (!m || !b || (same && this.lookT === this.lookTSet)) return
     Object.assign(p, l)
     this.lookTSet = this.lookT
     m.setFloat('uShSoft', l.soft)
+    m.setFloat('uShGain', l.gain)
     m.setFloat('uShLen', l.len)
     m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
     const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP)
