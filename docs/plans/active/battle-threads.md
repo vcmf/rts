@@ -301,6 +301,10 @@ tile) is no sim map. Two PRs, then PR 4.
       worker's 9.1 / 12.0: each has room, where PR 3's one worker took 27 / 84.
     - The page's numbers are PR 3's (its frame is the canvas's drawing).
     - Not measured: the 6-core laptop (not available).
+    - Rerun on the merged code (review round 3's; load 3–12): the same within noise. 32,000 men, 8×: the men's
+      sub-steps 100.0 % (5,127 of 5,127), no tick skipped, the page's battle time 0.01 / 0.03, the frame interval
+      5.83 / 6.83, no long task; 16,000 men, 1×: 99.9 % (one round's rounding). The cost tests (`TICK_BUDGET`,
+      `MARCH_BUDGET`, `LAYER_BUDGET`) pass on the quiet machine.
 - **PR 6**, rendering in a worker (OffscreenCanvas), or the layer in WebAssembly with f32x4 SIMD (cosmetic, so
   determinism does not apply), only if main-thread jank is measured to cost frames after PR 3.
 
