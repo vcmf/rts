@@ -27,6 +27,9 @@ settings (the owner, 2026-10-25).
 | **M6c** | The debug overlays as settings: the flat colours (M6a), outlines and ids (M6a), the hover readout, errors in place, passability per kind of unit, depth, slope, sight from a point | Each overlay checked by `tools/map-page-check.mjs` |
 | **M6d** | The game's staff map from the lit view (the S1b page's `StaffMap` art replaced for maps with layers), the armies as slabs; or in M9 with the zoom | 150 fps at 30× on test machine A |
 
+**M6d waits** (the owner, 2026-10-25): M7, the editor, goes first, on the lit view M6a–c built. M6d comes when test
+machine A is at hand for its 150 fps, or folds into M9 with the zoom; this plan stays active until then.
+
 ## Decisions taken here (decision 0064)
 
 - **Host:** the map page first (the editor's base, M7); the game page in M6d or M9.

@@ -13,7 +13,7 @@ import type { AttrValue, Catalogue, Feature, MapFile, Pt, Ramp } from './schema.
 import { categoryOf, kindChain, kindMeta } from './catalogue.ts'
 import type { Resolved } from './resolve.ts'
 import { resolve } from './resolve.ts'
-import { crossings, inRing, lineLength, pointAt } from './geometry.ts'
+import { crossings, inRing, isClosedLine, lineLength, pointAt } from './geometry.ts'
 import { cos, sin } from '../sim/num.ts'
 import { seedOf } from './seed.ts'
 import type { Clear } from './util.ts'
@@ -818,8 +818,7 @@ export function barrierCells(
 ): void {
   const c = CELL
   const half = (thickness * c) / 2
-  const last = line[line.length - 1]
-  const closed = line.length > 3 && last[0] === line[0][0] && last[1] === line[0][1]
+  const closed = isClosedLine(line)
   const segs = line.length - 1
   const xs = line.map(p => p[0])
   const zs = line.map(p => p[1])

@@ -1,11 +1,11 @@
 ---
 status: current
 last_reviewed: 2026-10-25
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes]
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place]
 ---
 
-# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a–c)
+# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a–c, M7a)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
@@ -28,7 +28,7 @@ maps/kinds.json ──► checkCatalogue ─┐
   is a data change.
 - The draft page shows exactly what the code computes: the page's worker and the CLI run the same functions.
 - Not yet: works' earthworks, compiling to the look's data (M4), areas sharing edges with other areas (only lines
-  are shared), editing on the page.
+  are shared), creating features and editing their fields on the page (M7b, M7c).
 
 ## Constraints
 
@@ -237,7 +237,34 @@ maps/kinds.json ──► checkCatalogue ─┐
     under the cursor, and the cell under the mouse shows the feature in each layer;
   - errors are listed while the last good drawing stays;
   - a saved map or catalogue reaches the page through a small Vite plugin (`map-changed`, `vite.config.ts`) and
-    recompiles.
+    recompiles;
+  - **the editor** (M7a, decision 0066, `src/app/map/editor.ts`, the edits in `src/app/map/edit.ts`): the page reads
+    the map's intent (never the expanded map) into memory, edits it there and compiles each finished edit from that
+    copy. A file whose structure the editor cannot read (`wellFormed`: features objects with a text id, presets
+    objects, shapes as their kind of value) opens read-only, saying why.
+    - A click selects the feature under it (`pick`: a point, else a line, else the smallest area holding the click;
+      a generated child picks the feature it came from); a click on the selection's outline keeps it. The selection
+      is drawn with its handles (a line's or a ring's points, a circle's centre and radius, an ellipse's centre and
+      radii, a reference's `near`).
+    - One state machine (idle, pressing, dragging) owns the copy. A press on the selection's outline or a handle
+      that moves 4 px drags it (a press inside an area pans); commands wait for a drag to end; a file changed on disk
+      during one is a conflict; a second pointer is ignored.
+    - A drag moves a handle or the whole shape, rounded to the coarsest of 1, 0.1 and 0.01 m under a screen pixel. A
+      barrier (by its kind's category, its own or its preset's) keeps its points on the 2 m lattice: a point snaps
+      to the nearest lattice point that keeps its two segments whole (the engine's `barrierProblem`), else to the
+      nearest lattice point; a whole barrier moves by lattice steps.
+    - A double click adds a point; Delete removes the line's or ring's point under the pointer (on the shape's line
+      but no point, nothing; off the shape, the feature). Adding or removing a point before a shared edge's `at`
+      moves it with the ring. Undo and redo keep 200 edits; a change on disk read in clears them.
+    - An edit always applies: what the validator finds in the edited copy shows at once (the selection red, the
+      problem in the panel, the page's list); the compile's list follows. The editor holds no copy of the rules.
+    - The save (Cmd or Ctrl S) goes through the dev server (`POST /__map/save`, `tools/map-save.ts`, JSON from the
+      page's own origin only) with the text the page read, and is refused if the file changed on disk since (the
+      page offers to overwrite it or take the file); a reply counts only for the file and base it was sent for. It
+      rewrites only what changed (`writeMap`, `src/map/write.ts`): an unchanged feature or field keeps its bytes, a
+      changed one is written on one line in place (or in the file's first bytes, when an undo brought it back), a new
+      one appended, a deleted one cut. A change on disk with no unsaved edits is read in; the page's own save is not
+      recompiled. The built page selects but does not edit.
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes
@@ -268,7 +295,21 @@ The kinds' values and the attributes' ranges: `maps/kinds.json`. Its note says w
 
 `tools/map-page-check.mjs` (headless, against the dev server): the page compiles on load; a saved change redraws
 it in under a second (about 0.25 s measured on the dev Mac); a broken file shows its error and keeps the drawing;
-the restored file compiles clean; no console errors.
+the restored file compiles clean; each debug overlay paints cells and the view still draws with it off; the editor
+selects the map's first line, drags its middle point through pointer events, compiles the copy, saves with one line
+of the file changed, and undoes and saves back to the original bytes; with the largest area selected, a click on a line inside it selects
+the line; no console errors.
+
+`test/map-write.test.ts` (M7a): every map in `maps/` written back unedited is byte for byte its file; a moved point
+changes one line; a feature added, deleted (first, middle, last), reordered; a map field changed, added, removed; a
+hand-written multi-line feature kept; strings with escapes and brackets; an edit undone after a save written back in
+the file's first bytes. `test/map-edit.test.ts`: picking (points, lines, the smallest area, a generated child's
+parent), handles, moves and rounding, adding and removing points, every snapped barrier point valid where a valid one
+is near, a closed barrier's first point, points added to and removed from a barrier, the history.
+`test/map-save.test.ts`: the server's save writes over its base, refuses a stale base and any other path, reports a
+write that fails. `test/map-editor.test.ts`: the editor with a fake page and server: a drag and its undo, no step for
+a press that changes nothing, the history cleared by a change on disk, Delete, one save at a time, a save unanswered,
+a file from disk that is no map.
 
 `test/map-gen.test.ts`:
 - seeds: stable, and local (another feature, the file's order, the map's seed);

@@ -1,9 +1,10 @@
 /// <reference types="vite/client" />
-// The draft page (docs/proposals/map-engine.md §7, docs/plans/done/m1-language.md M1b): a map from maps/ compiled
-// in a worker and drawn flat, with pan and zoom, feature outlines and ids, a readout of the cell under the mouse,
-// and the validator's errors. Saving the map file (or maps/kinds.json) recompiles and redraws; the last good
-// drawing stays up while a file is broken. window.MAP exposes the state for headless checks.
-import type { Feature, Pt } from '../../map/schema.ts'
+// The map page (docs/proposals/map-engine.md §7, docs/plans/done/m1-language.md M1b): a map from maps/ compiled
+// in a worker and drawn in the lit view, with pan and zoom, feature outlines and ids, a readout of the cell under the
+// mouse, and the validator's errors. Saving the map file (or maps/kinds.json) recompiles and redraws; the last good
+// drawing stays up while a file is broken. The editor (./editor.ts, M7) edits the map in the page and saves it.
+// window.MAP exposes the state for headless checks.
+import type { Catalogue, Feature, Pt } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName, OverlayReply, OverlayRequest } from './protocol.ts'
 import type { OverlaySpec } from '../../render/lit/overlays.ts'
@@ -11,6 +12,9 @@ import { demFileNames } from '../../map/dem.ts'
 import { LitView, TILT } from '../../render/lit/view.ts'
 import { standing } from '../../render/lit/houses.ts'
 import { lineLength, pointAt } from '../../map/geometry.ts'
+import { Editor } from './editor.ts'
+import { ovalRing } from './edit.ts'
+import { newestOnly } from './latest.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -80,6 +84,12 @@ const showIds = $<HTMLInputElement>('ids')
 const overlaySelect = $<HTMLSelectElement>('overlay')
 const overlayHint = $('overlayHint')
 const mode = $<HTMLSelectElement>('mode')
+const editState = $('editState')
+const selection = $('selection')
+const saveButton = $<HTMLButtonElement>('save')
+const undoButton = $<HTMLButtonElement>('undo')
+const redoButton = $<HTMLButtonElement>('redo')
+const conflictBox = $('conflict')
 // the lit map view under the overlays (docs/plans/active/m6-lit-view.md); ?tilt= degrees off straight down
 // the lit view needs WebGL2 (decision 0046): without it the page still compiles, lists errors and reads cells
 let lit: LitView | null = null
@@ -219,6 +229,7 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
   panel()
 }
 
+let editorKinds: string | null = null // the catalogue's text the editor validates with
 // each compile takes its number before it reads the files, so a slower, older read can never replace a newer one
 async function compile(reason: string, savedAt?: number): Promise<void> {
   const mine = ++seq
@@ -228,7 +239,22 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
   let kindsText: string
   let files: CompileRequest['files']
   try {
-    ;[mapText, kindsText] = await Promise.all([read(picker.value, MAPS), read('/maps/kinds.json', KINDS)])
+    // the editor's copy of the map when it holds one, else the file, read into the editor
+    const file = picker.value
+    const own = editor.file === file && editor.doc
+    ;[mapText, kindsText] = await Promise.all([own ? editor.text : read(file, MAPS), read('/maps/kinds.json', KINDS)])
+    if (mine === seq) {
+      if (!own) editor.load(file, mapText)
+      // the catalogue the editor validates its copy with, when it changed (the newest compile's alone)
+      if (kindsText !== editorKinds) {
+        editorKinds = kindsText
+        try {
+          editor.setCatalogue(JSON.parse(kindsText) as Catalogue)
+        } catch {
+          editor.setCatalogue(null)
+        }
+      }
+    }
     files = await readFiles(mapText)
   } catch (err) {
     if (mine === seq) failed(`cannot read the map: ${(err as Error).message}`)
@@ -307,6 +333,41 @@ function groundPath(pts: Pt[], close: boolean): void {
 const toWorld = (sx: number, sy: number): Pt =>
   lit ? (lit.unproject(sx, sy) ?? [view.cx, view.cz]) : flatWorld(sx, sy)
 
+// the editor (M7): it compiles its copy of the map through the page, and draws its selection over the outlines
+const editor = new Editor({
+  ctx,
+  project: (x, z) => toScreen(x, z),
+  // where the view shows no ground (a ray off the tilted plane), none: the editor neither picks nor moves there
+  toWorld: (sx, sy) => (lit ? lit.unproject(sx, sy) : flatWorld(sx, sy)),
+  ppm: () => view.ppm,
+  shown: () => current?.map.features ?? [],
+  groundPath,
+  recompile: () => void compile('edit'),
+  // what the validator finds in the edited copy, listed and outlined at once; the compile's list replaces it
+  problems: found => {
+    issues = found
+    panel()
+  },
+  redraw,
+  changed: () => editPanel(),
+})
+/** The editor's part of the panel: the selection, unsaved edits, the save's state, a conflict with the disk. */
+function editPanel(): void {
+  const f = editor.selected ? editor.feature(editor.selected) : undefined
+  selection.textContent = f ? JSON.stringify(f).slice(0, 4000) : ''
+  selection.hidden = !f
+  const dirty = editor.dirty
+  editState.textContent = !editor.enabled
+    ? 'editing needs the dev server (npm run dev)'
+    : !editor.doc
+      ? `read-only: ${editor.readOnly}; fix it by hand to edit`
+      : `${dirty ? 'unsaved edits' : 'no unsaved edits'}${editor.message ? ` · ${editor.message}` : ''}`
+  saveButton.disabled = !editor.enabled || !dirty
+  undoButton.disabled = !editor.enabled || !editor.canUndo
+  redoButton.disabled = !editor.enabled || !editor.canRedo
+  conflictBox.hidden = editor.conflict === null
+}
+
 const CATEGORY_INK: Record<string, string> = {
   relief: '#7a5a2a',
   ground: '#4f6b2a',
@@ -330,15 +391,8 @@ function outline(f: Feature, colour?: string, width = 1): void {
   if (f.line) path(f.line, false)
   if (f.area) f.area.forEach(r => path(r, true))
   // a circle or an ellipse as a ring of points on the ground, so it leans with the view
-  const ring = (c: Pt, a: number, b: number, ang: number) =>
-    Array.from({ length: 48 }, (_, k): Pt => {
-      const t = (k / 48) * 2 * Math.PI
-      const u = a * Math.cos(t)
-      const v = b * Math.sin(t)
-      return [c[0] + u * Math.cos(ang) - v * Math.sin(ang), c[1] + u * Math.sin(ang) + v * Math.cos(ang)]
-    })
-  if (f.circle) path(ring(f.circle[0], f.circle[1], f.circle[1], 0), true)
-  if (f.ellipse) path(ring(...f.ellipse), true)
+  if (f.circle) path(ovalRing(f.circle[0], f.circle[1], f.circle[1], 0), true)
+  if (f.ellipse) path(ovalRing(...f.ellipse), true)
   const at = anchor(f)
   const mark = (f.point || f.near) && toScreen(...(f.point ?? f.near!))
   if (mark) {
@@ -496,6 +550,8 @@ function draw(): void {
     const wrong = new Set(issues.map(i => i.id).filter((id): id is string => !!id))
     for (const f of current.map.features) if (wrong.has(f.id)) outline(f, '#c0201a', 3)
   }
+  editor.draw()
+  editor.viewChanged() // after a fit, a resize or a look: the handle under the resting pointer
   // the sight overlay's eye
   if (overlaySelect.value === 'sight' && sightAt) {
     const p = toScreen(sightAt[0], sightAt[1])
@@ -564,21 +620,48 @@ function hover(sx: number, sy: number): void {
 
 // pan with the mouse, zoom with the wheel about the cursor
 // a drag keeps the ground point it started on under the pointer
-let drag: { at: Pt; sx: number; sy: number } | null = null
+// a press on the selection's handle or shape drags it (the editor), anywhere else pans
+// one press at a time: a second pointer (another finger) is ignored until the first is up
+let drag: { at: Pt; sx: number; sy: number; edit: boolean; id: number } | null = null
 canvas.addEventListener('pointerdown', e => {
-  drag = { at: toWorld(e.offsetX, e.offsetY), sx: e.offsetX, sy: e.offsetY }
-  canvas.setPointerCapture(e.pointerId)
+  if (drag) return
+  const edit = overlaySelect.value !== 'sight' && editor.down(e.offsetX, e.offsetY)
+  drag = { at: toWorld(e.offsetX, e.offsetY), sx: e.offsetX, sy: e.offsetY, edit, id: e.pointerId }
+  try {
+    canvas.setPointerCapture(e.pointerId)
+  } catch {
+    // a pointer the browser does not track (a synthetic one): no capture needed
+  }
 })
 canvas.addEventListener('pointerup', e => {
-  // a click, not a drag: with the sight overlay, the eye moves there
-  if (drag && overlaySelect.value === 'sight' && Math.hypot(e.offsetX - drag.sx, e.offsetY - drag.sy) < 4) {
+  if (drag && drag.id !== e.pointerId) return
+  const click = drag && Math.hypot(e.offsetX - drag.sx, e.offsetY - drag.sy) < 4
+  if (drag?.edit) editor.up()
+  // a click, not a drag (on the selection too): with the sight overlay, the eye moves there; else it selects
+  if (click && overlaySelect.value === 'sight') {
     sightAt = toWorld(e.offsetX, e.offsetY)
     requestOverlay()
-  }
+  } else if (click) editor.click(e.offsetX, e.offsetY)
   drag = null
+  editor.move(e.offsetX, e.offsetY) // the handle under the pointer, after a pan or a drag
+})
+// an interrupted press (touch or pen cancelled, the capture lost): a drag of the editor's is undone, a pan ends
+const interrupted = (e: PointerEvent) => {
+  if (!drag || drag.id !== e.pointerId) return
+  if (drag.edit) editor.cancel()
+  drag = null
+}
+canvas.addEventListener('pointercancel', interrupted)
+canvas.addEventListener('pointerleave', () => editor.leave())
+canvas.addEventListener('lostpointercapture', interrupted)
+canvas.addEventListener('dblclick', e => {
+  if (overlaySelect.value !== 'sight') editor.dblclick(e.offsetX, e.offsetY)
 })
 canvas.addEventListener('pointermove', e => {
-  if (drag) {
+  if (drag && drag.id !== e.pointerId) return
+  // the editor drags, or notes the handle under the pointer; a press elsewhere pans
+  if (!drag || drag.edit) editor.move(e.offsetX, e.offsetY)
+  else {
     const now = toWorld(e.offsetX, e.offsetY)
     view.cx += drag.at[0] - now[0]
     view.cz += drag.at[1] - now[1]
@@ -600,11 +683,16 @@ canvas.addEventListener(
     place()
     redraw()
     hover(e.offsetX, e.offsetY)
+    editor.move(e.offsetX, e.offsetY) // the handle under the pointer, after the zoom
   },
   { passive: false },
 )
 addEventListener('resize', draw)
 picker.addEventListener('change', () => {
+  if (editor.dirty && !confirm('The map has unsaved edits. Drop them and open another map?')) {
+    picker.value = editor.file!
+    return
+  }
   current = null
   const q = new URLSearchParams(location.search) // the other settings (?tilt=) stay
   q.set('map', picker.selectedOptions[0].text)
@@ -628,8 +716,43 @@ mode.addEventListener('change', () => {
 })
 showIds.addEventListener('change', draw)
 
+// the editor's keys: save, undo, redo, clear the selection, delete; not while typing in a field
+addEventListener('keydown', e => {
+  // not while typing text; Delete and Escape only on the map (not on a focused list, box or button), the shortcuts
+  // with Cmd or Ctrl from anywhere else
+  const target = e.target as HTMLElement
+  if (target.closest?.('textarea, input:not([type=checkbox]):not([type=radio]):not([type=button])')) return
+  const onMap = target === document.body || target === canvas
+  const mod = e.metaKey || e.ctrlKey
+  const key = e.key.toLowerCase()
+  if (mod && key === 's') {
+    e.preventDefault()
+    void editor.save()
+  } else if (mod && key === 'z') {
+    e.preventDefault()
+    if (e.shiftKey) editor.redo()
+    else editor.undo()
+  } else if (mod && key === 'y') {
+    e.preventDefault()
+    editor.redo()
+  } else if (e.key === 'Escape' && onMap) editor.select(null)
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && onMap) {
+    e.preventDefault()
+    editor.remove()
+  }
+})
+saveButton.addEventListener('click', () => void editor.save())
+undoButton.addEventListener('click', () => editor.undo())
+redoButton.addEventListener('click', () => editor.redo())
+$('overwrite').addEventListener('click', () => void editor.save(true))
+$('takeDisk').addEventListener('click', () => editor.takeDisk())
+addEventListener('beforeunload', e => {
+  if (editor.dirty) e.preventDefault()
+})
+
 // a saved map file, catalogue or heightfield (vite.config.ts sends `map-changed` with the file and the time it was
 // seen); any heightfield recompiles, since the map's text alone says which it reads
+const diskRead = newestOnly()
 if (import.meta.hot) {
   import.meta.hot.on('map-changed', (d: { file: string; at: number }) => {
     if (d.file.endsWith('.rdem')) {
@@ -639,7 +762,18 @@ if (import.meta.hot) {
       fileVersion.set(name, (fileVersion.get(name) ?? 0) + 1)
       clearTimeout(rdemTimer)
       rdemTimer = setTimeout(() => void compile('save', d.at), RDEM_SETTLE)
-    } else if (d.file === picker.value || d.file === '/maps/kinds.json') void compile('save', d.at)
+    } else if (d.file === picker.value) {
+      // the map file: through the editor, which ignores its own save and keeps unsaved edits (a conflict)
+      const file = d.file
+      // the newest read alone counts: an older one may resolve after it
+      void diskRead(read(file, MAPS)).then(
+        text => {
+          if (text !== null && picker.value === file && editor.onDisk(file, text)) void compile('save', d.at)
+        },
+        // said in the editor's panel: the page's compile in flight (an edit's) must still be drawn
+        (err: Error) => editor.note(`cannot read the file on disk: ${err.message}`),
+      )
+    } else if (d.file === '/maps/kinds.json') void compile('save', d.at)
   })
 }
 
@@ -700,6 +834,25 @@ window.MAP = {
     draw()
   },
   compile: () => compile('manual'),
+  // the editor (M7): select a feature, the selection, what a save would write, save, undo, redo, unsaved edits, and
+  // a ground point's screen position (to drive the pointer in checks)
+  select: (id: string | null) => editor.select(id),
+  get selected() {
+    return editor.selected
+  },
+  get text() {
+    return editor.text
+  },
+  save: () => editor.save(),
+  undo: () => editor.undo(),
+  redo: () => editor.redo(),
+  get dirty() {
+    return editor.dirty
+  },
+  get idle() {
+    return editor.idle
+  },
+  project: (x: number, z: number) => toScreen(x, z),
   fit: () => {
     fit()
     draw()

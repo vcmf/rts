@@ -25,6 +25,7 @@ import { boxOf, kindMatches } from './reach.ts'
 import {
   barrierProblem,
   inRing,
+  isClosedLine,
   isPt,
   lineCrossing,
   lineFoldBack,
@@ -589,7 +590,8 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
   return out
 }
 
-const featureKind = (f: Feature, presets: Record<string, Record<string, unknown>>): string | undefined =>
+/** A feature's kind: its own, or its map preset's. */
+export const featureKind = (f: Feature, presets: Record<string, Record<string, unknown>>): string | undefined =>
   typeof f.kind === 'string'
     ? f.kind
     : typeof f.preset === 'string' && Object.hasOwn(presets, f.preset) && typeof presets[f.preset].kind === 'string'
@@ -665,8 +667,7 @@ function checkShape(
     case 'line': {
       const l = pts(v, 2, path)
       if (!l) return
-      const last = l[l.length - 1]
-      const closed = l.length > 3 && last[0] === l[0][0] && last[1] === l[0][1]
+      const closed = isClosedLine(l)
       const open = closed ? l.slice(0, -1) : l
       const b = lineFoldBack(open)
       if (b >= 0) {
