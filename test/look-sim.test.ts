@@ -12,6 +12,7 @@ import { MainLink } from '../src/app/battle-link.ts'
 import { MAN_ALIVE } from '../src/render/men.ts'
 import { SimMen, RUN_FROM, MARCH_FROM, type SourceMan } from '../src/look/sim-men.ts'
 import { marchTo, spawns, ordersDue, SHORT, type Orders } from '../src/look/sim-armies.ts'
+import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
 import type { Battalion } from '../src/look/world/armies.ts'
 
 const data = loadSimData(
@@ -26,11 +27,19 @@ const BS: Battalion[] = [
   { side: 1, uniform: 'b', x: 60, z: 100, heading: Math.PI, offset: 0 },
 ]
 const man = (): SourceMan => ({ x: 0, z: 0, yaw: 0, role: 'halt', since: 0, shown: false })
+// the demo's era by name (src/scenarios/armies-demo.ts)
+const A = { ruleset: ARMIES_DEMO.ruleset, unitType: ARMIES_DEMO.unitType, ...ARMIES_DEMO.sim }
+const at = [0, 0]
+/** Man `i` of battalion `k` from `source`, begun as the renderer begins a battalion. */
+function manAt(source: SimMen, k: number, i: number, out: SourceMan): SourceMan {
+  source.begin(k, at)
+  return source.man(i, out)
+}
 
 /** The battle with the battalions spawned and one tick run, and the men source over it. */
 function start() {
   const link = new MainLink(data, cr, lookArmies)
-  for (const c of spawns(BS, MEN)) link.command(c)
+  for (const c of spawns(BS, MEN, A)) link.command(c)
   link.frame(DT)
   const source = new SimMen(
     BS,
@@ -53,7 +62,7 @@ describe("the sim's men as the renderer's", () => {
       expect(u.n).toBe(MEN)
       const out = man()
       for (const j of [0, 7, MEN - 1]) {
-        source.man(k, j, out)
+        manAt(source, k, j, out)
         const m = u.ids[j]
         expect([out.shown, out.x, out.z]).toEqual([true, layer.men.x[m], layer.men.z[m]])
         // at rest: his formation's heading, halted
@@ -61,7 +70,7 @@ describe("the sim's men as the renderer's", () => {
       }
     }
     // no figure past the battalion's men
-    expect(source.man(0, MEN, man()).shown).toBe(false)
+    expect(manAt(source, 0, MEN, man()).shown).toBe(false)
   })
   it('a moving man faces his way and marches or runs by his speed; a fallen man is not drawn', () => {
     const { link, source } = start()
@@ -73,15 +82,15 @@ describe("the sim's men as the renderer's", () => {
     const out = man()
     M.vx[m] = 1
     M.vz[m] = 0
-    source.man(0, 3, out)
+    manAt(source, 0, 3, out)
     // 1 m/s: between MARCH_FROM and RUN_FROM
     expect([MARCH_FROM < 1, 1 < RUN_FROM]).toEqual([true, true])
     expect([out.role, out.yaw]).toEqual(['march', Math.PI / 2])
     M.vz[m] = RUN_FROM + 0.1
-    source.man(0, 3, out)
+    manAt(source, 0, 3, out)
     expect(out.role).toBe('run')
     M.flags[m] &= ~MAN_ALIVE
-    expect(source.man(0, 3, out).shown).toBe(false)
+    expect(manAt(source, 0, 3, out).shown).toBe(false)
   })
   it("fires while his company's volley is fresh, and his role's start is when it began", () => {
     const { link, source } = start()
@@ -92,12 +101,12 @@ describe("the sim's men as the renderer's", () => {
     const c = typeOf(w, i).slotC[layer.men.s[u.ids[0]]]
     w.f.volleyTick[i * w.cr.maxC + c] = w.meta[M_TICK]
     const out = man()
-    source.man(0, 0, out)
+    manAt(source, 0, 0, out)
     expect([out.role, out.since]).toEqual(['fire', 5])
     source.frame(6)
-    expect(source.man(0, 0, out).since).toBe(5)
+    expect(manAt(source, 0, 0, out).since).toBe(5)
     w.f.volleyTick[i * w.cr.maxC + c] = w.meta[M_TICK] - 20
-    expect(source.man(0, 0, out).role).toBe('halt')
+    expect(manAt(source, 0, 0, out).role).toBe('halt')
   })
   it('says a new frame only when one was published', () => {
     const { link, source } = start()
@@ -119,21 +128,33 @@ describe("the battalions' orders", () => {
     // already past it: stays
     expect(marchTo({ ...BS[0], z: 10 }, [50, 0])).toEqual([40, 10])
   })
+  // regression (PR 4b review): the front rows stand 55 m from the middle, short of SHORT: their march was to where
+  // they stood, never seen under way, so they never deployed
+  it('a battalion there already sends no march and deploys at once', () => {
+    const { link } = start()
+    const w = link.see().w
+    const i = [...w.f.alive.keys()].find(k => w.f.alive[k] && w.f.side[k] === 0)!
+    const st: Orders = { marched: false, moving: false, formed: false }
+    const to = marchTo(BS[0], [BS[0].x, BS[0].z + 55])
+    expect(to).toEqual([BS[0].x, BS[0].z])
+    expect(ordersDue(w, i, BS[0], to, A, st)).toEqual([])
+    expect(ordersDue(w, i, BS[0], to, A, st)).toEqual([{ type: 'form', id: expect.any(Number), shape: A.fight }])
+  })
   it('march once, then deploy into line once it has been seen moving and has halted', () => {
     const { link } = start()
     const w = link.see().w
     const i = [...w.f.alive.keys()].find(k => w.f.alive[k] && w.f.side[k] === 0)!
     const st: Orders = { marched: false, moving: false, formed: false }
     const to = marchTo(BS[0], [50, 0])
-    const first = ordersDue(w, i, to, st)
+    const first = ordersDue(w, i, BS[0], to, A, st)
     expect(first.map(c => c.type)).toEqual(['move'])
     // not seen under way yet: no line, however long it waits
-    expect(ordersDue(w, i, to, st)).toEqual([])
+    expect(ordersDue(w, i, BS[0], to, A, st)).toEqual([])
     for (const c of first) link.command(c)
     let formed = false
     for (let n = 0; n < 3000 && !formed; n++) {
       link.frame(DT)
-      formed = ordersDue(w, i, to, st).some(c => c.type === 'form')
+      formed = ordersDue(w, i, BS[0], to, A, st).some(c => c.type === 'form')
     }
     expect(formed).toBe(true)
     expect(Math.hypot(w.f.x[i] - to[0], w.f.z[i] - to[1])).toBeLessThan(5)

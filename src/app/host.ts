@@ -2,6 +2,16 @@
 // worker's `self`, or Node's worker_threads in the tests), a timer loop, and one rule for errors: an error anywhere
 // stops the worker for good, its loop and its requests alike, and is said to the page.
 
+import { RULESETS } from '../rulesets/index.ts'
+import type { Ruleset } from '../sim/ruleset.ts'
+
+/** The ruleset named (src/rulesets/index.ts), or an error. */
+export function rulesetOf(name: string): Ruleset {
+  const r = Object.hasOwn(RULESETS, name) ? RULESETS[name] : undefined
+  if (!r) throw new Error(`battle worker: no ruleset ${name}`)
+  return r.ruleset
+}
+
 /** A worker's end of the page's messages. */
 export interface Port<In> {
   postMessage(m: unknown): void

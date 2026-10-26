@@ -2,16 +2,24 @@
 // After every tick it writes the world to the tick ring (src/app/tick-ring.ts) for the men worker
 // (src/app/men-host.ts), and the game clock to the ring's header; commands and requests come from the page, the log,
 // the orders dropped and the hash points go back to it.
-import { loadSimData, M_TICK, type Command, type Stamped, type Dropped, type HashPoint } from '../sim/index.ts'
-import { PAGE_SCENARIOS } from '../scenarios/page.ts'
+import {
+  loadSimData,
+  compileRuleset,
+  M_TICK,
+  type Command,
+  type Stamped,
+  type Dropped,
+  type HashPoint,
+} from '../sim/index.ts'
+import { BATTLE_SCENARIOS } from '../scenarios/page.ts'
 import { Battle } from './battle.ts'
 import { RingWriter, type RingBuffers } from './tick-ring.ts'
-import { Host, type Port, type Failed } from './host.ts'
+import { Host, rulesetOf, type Port, type Failed } from './host.ts'
 
 /** What the page sends the sim worker: the battle (its scenario's key in PAGE_SCENARIOS, the map's bytes, the tick
  * ring), then commands and requests (`id` answered by a `reply` with the same id). */
 export type ToSim =
-  | { type: 'init'; scenario: string; data: Uint8Array; version: number; ring: RingBuffers }
+  | { type: 'init'; scenario: string; data: Uint8Array; version: number; ring: RingBuffers; ruleset?: string }
   | { type: 'command'; c: Command }
   | { type: 'speed'; speed: number }
   | { type: 'advance'; id: number; sec: number }
@@ -81,11 +89,11 @@ export function serveSim(port: Port<ToSim>): void {
   }
   const handle = (m: ToSim) => {
     if (m.type === 'init') {
-      const scenario = Object.hasOwn(PAGE_SCENARIOS, m.scenario) ? PAGE_SCENARIOS[m.scenario] : undefined
+      const scenario = Object.hasOwn(BATTLE_SCENARIOS, m.scenario) ? BATTLE_SCENARIOS[m.scenario] : undefined
       if (!scenario) throw new Error(`sim worker: no scenario ${m.scenario}`)
       const data = loadSimData(m.data, m.version)
       // the world before the first tick too, so the men worker starts from the scenario as set up
-      battle = new Battle(data, scenario, undefined, {
+      battle = new Battle(data, scenario, m.ruleset ? compileRuleset(rulesetOf(m.ruleset)) : undefined, {
         men: false,
         onTick: (w, r) => {
           const a = performance.now()

@@ -711,7 +711,11 @@ if (armiesParam !== null) {
   let sim: SimPlay | null = null
   if (simParam) {
     const { playSim } = await import('./sim-armies.ts')
-    sim = await playSim(units.battalions, drill.companies * drill.files * drill.ranks, armiesFocus)
+    sim = await playSim(units.battalions, drill.companies * drill.files * drill.ranks, armiesFocus, {
+      ruleset: ARMIES_DEMO.ruleset,
+      unitType: ARMIES_DEMO.unitType,
+      ...ARMIES_DEMO.sim,
+    })
     units.source = sim.source
     const s = sim
     scene.onBeforeRenderObservable.add(() => s.tick(Math.min(engine.getDeltaTime() / 1000, 0.1)))

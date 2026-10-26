@@ -35,8 +35,11 @@ export interface Seen {
 export interface MenSource {
   /** The newest men at the page's clock `T`; true when they are new (moved since the last). */
   frame(T: number): boolean
-  /** Man `i` of battalion `k` (its index in the renderer's battalions) into `out`. */
-  man(k: number, i: number, out: SourceMan): SourceMan
+  /** Battalion `k` (its index in the renderer's battalions) about to be placed: its centre into `at` (x, z), where
+   * its men not drawn are put (none of them at the origin); false when it has no men to draw. */
+  begin(k: number, at: number[]): boolean
+  /** Man `i` of the battalion begun into `out`. */
+  man(i: number, out: SourceMan): SourceMan
 }
 
 /** The sim's men, as the renderer's battalions and figures. */
@@ -53,6 +56,10 @@ export class SimMen implements MenSource {
   private readonly since: Float64Array[]
   private published = NaN
   private T = 0
+  // the battalion begun: its index, unit, its type's slots' companies, and its men's roles
+  private k = -1
+  private u: Unit | null = null
+  private slotC: Int32Array = new Int32Array(0)
 
   /** `bs`: the battalions drawn, as spawned (their places match their formations); `men`: figures a battalion; `see`
    * the newest frame and `published` when it was (src/app/battle-link.ts). */
@@ -108,6 +115,11 @@ export class SimMen implements MenSource {
     return this.formation[k]
   }
 
+  /** The frame taken this frame (null before the first). */
+  current(): Seen | null {
+    return this.seen
+  }
+
   /** The formation drawn as battalion `k`, and its unit in the layer (null: none yet, or gone). */
   private unitOf(k: number): Unit | null {
     const s = this.seen
@@ -116,17 +128,25 @@ export class SimMen implements MenSource {
     return s.layer.units.get(i) ?? null
   }
 
-  /** Battalion `k`'s place and heading now (its formation's), or null. */
-  battalion(k: number): { x: number; z: number; heading: number } | null {
-    const u = this.unitOf(k)
-    if (!u) return null
-    const f = this.seen!.w.f
-    return { x: f.x[u.i], z: f.z[u.i], heading: f.heading[u.i] }
+  begin(k: number, at: number[]): boolean {
+    this.k = k
+    const u = (this.u = this.unitOf(k))
+    if (!u) {
+      // unmatched yet, or gone: where it was laid out
+      at[0] = this.bs[k].x
+      at[1] = this.bs[k].z
+      return false
+    }
+    const s = this.seen!
+    at[0] = s.w.f.x[u.i]
+    at[1] = s.w.f.z[u.i]
+    this.slotC = typeOf(s.w, u.i).slotC
+    return true
   }
 
-  /** Man `i` of battalion `k` into `out`; shown false when the battalion has no such man standing. */
-  man(k: number, i: number, out: SourceMan): SourceMan {
-    const u = this.unitOf(k)
+  /** Man `i` of the battalion begun into `out`; shown false when it has no such man standing. */
+  man(i: number, out: SourceMan): SourceMan {
+    const u = this.u
     if (!u || i >= u.n) {
       out.shown = false
       return out
@@ -146,12 +166,12 @@ export class SimMen implements MenSource {
     let role: number = speed > RUN_FROM ? 2 : speed > MARCH_FROM ? 1 : 0
     if (role === 0) {
       // firing: his company's volley within FIRE_FOR s (the sim's tick of it, at the frame's tick)
-      const c = typeOf(w, u.i).slotC[M.s[m]]
+      const c = this.slotC[M.s[m]]
       const shot = f.volleyTick[u.i * w.cr.maxC + c]
       if (shot && (w.meta[M_TICK] - shot) * DT < FIRE_FOR) role = 3
     }
-    const roles = this.role[k]
-    const since = this.since[k]
+    const roles = this.role[this.k]
+    const since = this.since[this.k]
     if (roles[i] !== role) {
       roles[i] = role
       since[i] = this.T

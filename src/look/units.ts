@@ -128,6 +128,8 @@ interface Host {
   staleNext: boolean[] // per LOD: its GPU copy of the men's moves is older
   cycle: number // the cycle its settings were written in (each cycle's clips start afresh)
   index: number // its place in hosts (its flag's instance)
+  srcStep: number // the sim's men (?sim): the real-time step it was placed at, and the source's frame count then
+  srcSeq: number
 }
 
 const SM_SIZE = 2048 // the figures' shadow map, fitted to the ground in view each frame
@@ -247,6 +249,7 @@ export class Units {
   // the new frames the source has given (each battalion records the count it was placed at, in its `cycle`)
   private sourceSeq = 0
   private readonly sourceMan: SourceMan = { x: 0, z: 0, yaw: 0, role: 'halt', since: 0, shown: false }
+  private readonly sourceAt = [0, 0]
   /** the far LOD's switch by default (main.ts checks ?tinypx under it) */
   static readonly LOD_PX = 48
   /** the figure height in pixels below which a battalion draws its far LOD (±10%, so it does not flicker) */
@@ -835,6 +838,8 @@ export class Units {
       resplit: true,
       lods: { near: false, far: false, tiny: false },
       fading: false,
+      srcStep: -1,
+      srcSeq: -1,
     })
   }
 
@@ -859,9 +864,12 @@ export class Units {
     let changed = false
     const ls = moving ? Math.max(0, local - back) : local
     const ln = ls + 1 / fps
-    // the men from the sim (?sim: src/look/sim-men.ts), stepped as published: no script, no moves between steps
+    // the men from the sim (?sim: src/look/sim-men.ts), stepped as published: no script, no moves between steps; the
+    // battalion's centre (at) where its men not drawn are put
     const src = this.source
     const sm = this.sourceMan
+    const at = this.sourceAt
+    if (src) src.begin(h.index, at)
     // (a reserve stands in column)
     const p = src || h.b.reserve ? RESERVE : phaseAt(this.drill, ls, this.speed.march, this.speed.run)
     // (the next step's phase; none past the cycle's end, where the script starts afresh)
@@ -876,10 +884,17 @@ export class Units {
       let role: ManState['role']
       let start: number
       if (src) {
-        src.man(h.index, i, sm)
+        src.man(i, sm)
         if (!sm.shown) {
-          // no such man standing (fallen, or the battalion gone): drawn nowhere
-          matrices.fill(0, i * 16, i * 16 + 16)
+          // no such man standing (fallen, or the battalion gone or not yet matched): drawn at no size, at the
+          // battalion's centre (what reads a man's place, the colours or the trodden ground, finds it there, not at
+          // the origin; the trodden ground skips him: a zero scale)
+          const o = i * 16
+          matrices.fill(0, o, o + 16)
+          matrices[o + 12] = at[0]
+          matrices[o + 13] = groundAt(at[0], at[1])
+          matrices[o + 14] = at[1]
+          matrices[o + 15] = 1
           next.fill(0, i * 3, i * 3 + 3)
           continue
         }
@@ -963,6 +978,12 @@ export class Units {
         settings[k + 2] = ph
         changed = true
       }
+    }
+    // (no man drawn: a box at the battalion's centre, not ±Infinity)
+    if (minX === Infinity) {
+      minX = maxX = src ? at[0] : b.x
+      minZ = maxZ = src ? at[1] : b.z
+      minY = maxY = groundAt(minX, minZ)
     }
     h.cx = (minX + maxX) / 2
     h.cz = (minZ + maxZ) / 2
@@ -1195,17 +1216,20 @@ export class Units {
     if ((this.hasNearest && this.nearestPx > 0) || (mapOn && this.tightCull)) {
       Frustum.GetPlanesToRef(cam.getTransformationMatrix(), this.camPlanes)
     }
-    // the sim's men (?sim): a new published frame counted, so each battalion is re-placed at its next step
+    // the sim's men (?sim): a new published frame counted, so each battalion is re-placed at its next step (of real
+    // time: performance.now)
     if (this.source?.frame(T)) this.sourceSeq++
+    const srcStep = Math.floor((performance.now() / 1000) * fps)
     for (const h of this.hosts) {
       if (!this.shown) continue
       if (this.source) {
-        // stepped: once a step at most, when a frame newer than its last placing has come (cycle: that frame's count)
-        if (h.step < 0 || (step !== h.step && h.cycle !== this.sourceSeq)) {
+        // stepped once a 1/fps step of real time (the sim runs on its own: a held page clock does not stop its men),
+        // when a frame newer than its last placing has come
+        if (h.srcStep < 0 || (srcStep !== h.srcStep && h.srcSeq !== this.sourceSeq)) {
           const tp = trNow()
           this.place(h, 0, 0, false, 0, false)
-          h.step = step
-          h.cycle = this.sourceSeq
+          h.srcStep = srcStep
+          h.srcSeq = this.sourceSeq
           moved = true
           anyMoved = true
           if (TRACE.on) {
@@ -1214,35 +1238,36 @@ export class Units {
           }
         }
         h.moving = false
-      }
-      const t = T - h.b.offset
-      const cycle = Math.floor(t / CYCLE)
-      const local = t - cycle * CYCLE
-      const cycleStart = T - local
-      const p = h.b.reserve ? RESERVE.phase : phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
-      // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
-      const moving = p === 'column' || p === 'deploy'
-      if (!this.source && (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step))) {
-        const tp = trNow()
-        this.place(
-          h,
-          local,
-          cycleStart,
-          moving,
-          this.stepFrac / fps,
-          moving && h.moving && h.step === step - 1 && h.cycle === cycle && h.phase === p,
-        )
-        h.step = step
-        h.phase = p
-        h.cycle = cycle
-        moved = true
-        anyMoved = true
-        if (TRACE.on) {
-          tr(TR.placed)
-          tr(TR.placeMs, performance.now() - tp)
+      } else {
+        const t = T - h.b.offset
+        const cycle = Math.floor(t / CYCLE)
+        const local = t - cycle * CYCLE
+        const cycleStart = T - local
+        const p = h.b.reserve ? RESERVE.phase : phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
+        // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
+        const moving = p === 'column' || p === 'deploy'
+        if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) {
+          const tp = trNow()
+          this.place(
+            h,
+            local,
+            cycleStart,
+            moving,
+            this.stepFrac / fps,
+            moving && h.moving && h.step === step - 1 && h.cycle === cycle && h.phase === p,
+          )
+          h.step = step
+          h.phase = p
+          h.cycle = cycle
+          moved = true
+          anyMoved = true
+          if (TRACE.on) {
+            tr(TR.placed)
+            tr(TR.placeMs, performance.now() - tp)
+          }
         }
+        h.moving = moving
       }
-      if (!this.source) h.moving = moving
       const px =
         (FIGURE * pxPerM) / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
       // the nearest LOD: looked at only when the battalion's nearest point (its bounds) is within 90 % of its switch
@@ -1988,6 +2013,8 @@ export class Units {
       if (!this.shown || h.hi.x < b.x0 || h.lo.x > b.x0 + b.size || h.hi.z < b.z0 || h.lo.z > b.z0 + b.size) continue
       const m = h.matrices
       for (let o = 0; o < m.length; o += 16) {
+        // (a man not drawn: no size)
+        if (m[o + 5] === 0) continue
         const x = m[o + 12]
         const z = m[o + 14]
         // (+z in the figure's frame: behind him)

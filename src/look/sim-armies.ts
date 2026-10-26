@@ -1,19 +1,31 @@
 // The look page's armies played by the sim (docs/plans/active/battle-threads.md, PR 4b; the page at ?sim): the
 // battle on the look world's sim map (maps/painted-world.ts) in the battle's workers (src/app/battle-link.ts), or on
 // the page when it cannot share memory with them. The page lays its battalions out as the script does
-// (src/look/world/armies.ts layout) and spawns them by commands, so a session still replays: each advances in column
-// to 90 m short of the fight's middle, deploys into line there, and fires at will. No Babylon.
+// (src/look/world/armies.ts layout) and spawns them by commands, so a session still replays: each advances in its
+// approach shape to SHORT m short of the fight's middle, takes its fighting shape there, and fires at will. The era's
+// names (its ruleset, unit type and shapes) come from the scenario's data (src/scenarios/armies-demo.ts; decision
+// 0015: the page names none). No Babylon.
 import lookSimUrl from '../../data/painted-world.simdata?url'
 import { loadSimData, compileRuleset, formationHandle, typeOf, type Command, type World } from '../sim/index.ts'
-import { napoleonic } from '../rulesets/napoleonic.ts'
+import { RULESETS } from '../rulesets/index.ts'
 import { MAP_VERSIONS } from '../scenarios/maps.ts'
-import { PAGE_SCENARIOS } from '../scenarios/page.ts'
+import { lookArmies } from '../scenarios/look-world.ts'
 import { MainLink, WorkerLink, type BattleLink } from '../app/battle-link.ts'
 import { SimMen } from './sim-men.ts'
 import type { Battalion } from './world/armies.ts'
 
-/** How far short of the fight's middle (m) each battalion halts and deploys. */
+/** How far short of the fight's middle (m) each battalion halts and takes its fighting shape. */
 export const SHORT = 90
+/** A march shorter than this (m) is not sent: the battalion is there already (the front rows, 55 m from the middle). */
+const THERE = 2
+
+/** The armies' era content, by name: the ruleset, the unit type, the shapes it approaches and fights in. */
+export interface SimArmies {
+  ruleset: string
+  unitType: string
+  approach: string
+  fight: string
+}
 
 /** Where battalion `b` marches to: along its heading, `SHORT` m short of the line through `mid` across it. */
 export function marchTo(b: Battalion, mid: readonly [number, number]): [number, number] {
@@ -23,56 +35,81 @@ export function marchTo(b: Battalion, mid: readonly [number, number]): [number, 
   return [b.x + fx * ahead, b.z + fz * ahead]
 }
 
-/** The commands that bring the battalions on: each spawned where it is laid out, in column, firing at will. */
-export const spawns = (bs: readonly Battalion[], men: number): Command[] =>
+/** The commands that bring the battalions on: each spawned where it is laid out, in its approach shape, firing at
+ * will, `men` strong. */
+export const spawns = (bs: readonly Battalion[], men: number, a: SimArmies): Command[] =>
   bs.map(b => ({
     type: 'debug-spawn',
     side: b.side,
     x: b.x,
     z: b.z,
     heading: b.heading,
-    shape: 'column',
+    shape: a.approach,
     men,
     fire: 'at will',
+    unit: a.unitType,
   }))
 
-/** A battalion's orders so far: its march sent, seen under way (the page sees the battle a frame late), its line. */
+/** A battalion's orders so far: its march sent (or none needed), seen under way (the page sees the battle a frame
+ * late) or there already, its fighting shape. */
 export interface Orders {
   marched: boolean
   moving: boolean
   formed: boolean
 }
 
-/** The orders a battalion is due given its formation `i` now: its march once, its line once it has halted there. */
-export function ordersDue(w: World, i: number, to: readonly [number, number], state: Orders): Command[] {
+/** The orders battalion `b` (formation `i` now) is due: its march once (none when it is there already), its fighting
+ * shape once it has marched and halted. */
+export function ordersDue(
+  w: World,
+  i: number,
+  b: Battalion,
+  to: readonly [number, number],
+  a: SimArmies,
+  state: Orders,
+): Command[] {
   const f = w.f
   const id = formationHandle(w, i)
   if (!state.marched) {
     state.marched = true
+    if (Math.hypot(to[0] - b.x, to[1] - b.z) < THERE) {
+      state.moving = true
+      return []
+    }
     return [{ type: 'move', id, points: [[to[0], to[1]]], append: false }]
   }
   if (f.ordHead[i] >= 0) state.moving = true
   const shape = typeOf(w, i).shapes[f.shape[i]].name
-  if (state.moving && !state.formed && f.ordHead[i] < 0 && !f.trans[i] && shape === 'column') {
+  if (state.moving && !state.formed && f.ordHead[i] < 0 && !f.trans[i] && shape === a.approach) {
     state.formed = true
-    return [{ type: 'form', id, shape: 'line' }]
+    return [{ type: 'form', id, shape: a.fight }]
   }
   return []
 }
 
 /** The sim playing the page's armies: its men as the renderer's source, the battle, and the page's tick (each
- * frame: the battle's frame on the page's thread, the orders due). */
+ * frame: the battle's frame on the page's thread, the orders due, read from the frame the renderer took). */
 export interface SimPlay {
   source: SimMen
   link: BattleLink
   tick(dt: number): void
 }
 
-/** The sim playing the battalions `bs` (`men` figures each) on the look world. */
-export async function playSim(bs: readonly Battalion[], men: number, mid: readonly [number, number]): Promise<SimPlay> {
+/** The sim playing the battalions `bs` (`men` figures each: as many men each, at most the unit type's slots) on the
+ * look world, its era `a`. */
+export async function playSim(
+  bs: readonly Battalion[],
+  men: number,
+  mid: readonly [number, number],
+  a: SimArmies,
+): Promise<SimPlay> {
+  const era = Object.hasOwn(RULESETS, a.ruleset) ? RULESETS[a.ruleset] : undefined
+  if (!era) throw new Error(`?sim: no ruleset ${a.ruleset}`)
   const bytes = new Uint8Array(await (await fetch(lookSimUrl)).arrayBuffer())
   const data = loadSimData(bytes, MAP_VERSIONS['painted-world'])
-  const cr = compileRuleset(napoleonic)
+  const cr = compileRuleset(era.ruleset)
+  const type = cr.types.find(t => t.name === a.unitType)
+  if (!type) throw new Error(`?sim: the ruleset ${a.ruleset} has no unit type ${a.unitType}`)
   let link: BattleLink | null = null
   if (crossOriginIsolated) {
     const wl = new WorkerLink(
@@ -82,6 +119,7 @@ export async function playSim(bs: readonly Battalion[], men: number, mid: readon
       data,
       cr,
       'look-armies',
+      a.ruleset,
     )
     try {
       await wl.ready()
@@ -90,8 +128,9 @@ export async function playSim(bs: readonly Battalion[], men: number, mid: readon
       console.warn(`the battle runs on the page: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
-  const battle = link ?? new MainLink(data, cr, PAGE_SCENARIOS['look-armies'])
-  for (const c of spawns(bs, men)) battle.command(c)
+  const battle = link ?? new MainLink(data, cr, lookArmies)
+  // as many men as figures, at most the type's slots (the figures past them are not drawn)
+  for (const c of spawns(bs, Math.min(men, type.slots), a)) battle.command(c)
   const source = new SimMen(
     bs,
     men,
@@ -105,11 +144,13 @@ export async function playSim(bs: readonly Battalion[], men: number, mid: readon
     link: battle,
     tick: (dt: number) => {
       battle.frame(dt)
-      const w = battle.see().w
+      // the frame the renderer holds (one read a frame); before its first, nothing to order
+      const w = source.current()?.w
+      if (!w) return
       for (let k = 0; k < bs.length; k++) {
         const i = source.formationOf(k)
         if (i < 0 || !w.f.alive[i]) continue
-        for (const c of ordersDue(w, i, to[k], states[k])) battle.command(c)
+        for (const c of ordersDue(w, i, bs[k], to[k], a, states[k])) battle.command(c)
       }
     },
   }

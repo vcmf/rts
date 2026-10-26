@@ -9,11 +9,11 @@ import { SoldierLayer } from '../render/soldiers.ts'
 import { MenClock } from '../render/men-clock.ts'
 import { layoutFor, writeFrame, capFor, Slots, type Layout } from './battle-frame.ts'
 import { RingReader, accSince, type RingBuffers, type Clock } from './tick-ring.ts'
-import { Host, type Port, type Failed } from './host.ts'
+import { Host, rulesetOf, type Port, type Failed } from './host.ts'
 
 /** What the page sends the men worker: the map's bytes and the tick ring, then requests. */
 export type ToMen =
-  | { type: 'init'; data: Uint8Array; version: number; ring: RingBuffers }
+  | { type: 'init'; data: Uint8Array; version: number; ring: RingBuffers; ruleset?: string }
   | { type: 'advance'; id: number; sec: number }
   | { type: 'record'; id: number; on: boolean }
 
@@ -139,7 +139,12 @@ export function serveMen(port: Port<ToMen>): void {
   }
   const handle = (m: ToMen) => {
     if (m.type === 'init') {
-      w = makeWorld(loadSimData(m.data, m.version), compileRuleset(napoleonic), PAGE_SEED, false)
+      w = makeWorld(
+        loadSimData(m.data, m.version),
+        compileRuleset(m.ruleset ? rulesetOf(m.ruleset) : napoleonic),
+        PAGE_SEED,
+        false,
+      )
       layer = new SoldierLayer(w, buildScene(w))
       src.w = w
       src.layer = layer

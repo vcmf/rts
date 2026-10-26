@@ -146,8 +146,9 @@ export class WorkerLink implements BattleLink {
   private onFail: (e: Error) => void = () => {}
 
   /** Starts the sim worker on the scenario (`key`: its key in PAGE_SCENARIOS; `bytes`: the map's, `data` loaded from
-   * them), then the men worker once the sim has written its first world; `ready` resolves at the first frame. */
-  constructor(sim: Worker, men: Worker, bytes: Uint8Array, data: SimData, cr: Compiled, key: string) {
+   * them; `ruleset`: its name in src/rulesets/index.ts, the napoleonic one if none, `cr` compiled from it), then the
+   * men worker once the sim has written its first world; `ready` resolves at the first frame. */
+  constructor(sim: Worker, men: Worker, bytes: Uint8Array, data: SimData, cr: Compiled, key: string, ruleset?: string) {
     this.sim = sim
     this.men = men
     this.data = data
@@ -163,7 +164,7 @@ export class WorkerLink implements BattleLink {
     const ring = makeRing(this.shape)
     sim.onmessage = (e: MessageEvent<FromSim>) => {
       const m = e.data
-      if (m.type === 'ready') this.toMen({ type: 'init', data: bytes, version: data.version, ring })
+      if (m.type === 'ready') this.toMen({ type: 'init', data: bytes, version: data.version, ring, ruleset })
       else if (m.type === 'events') {
         this.log.push(...m.log)
         this.dropped.push(...m.dropped)
@@ -185,7 +186,7 @@ export class WorkerLink implements BattleLink {
     // a module that failed to load, or an error a worker did not catch
     sim.onerror = e => this.fail(`sim: ${e.message || 'the worker failed'}`)
     men.onerror = e => this.fail(`men: ${e.message || 'the worker failed'}`)
-    this.toSim({ type: 'init', scenario: key, data: bytes, version: data.version, ring })
+    this.toSim({ type: 'init', scenario: key, data: bytes, version: data.version, ring, ruleset })
   }
   /** A worker stopped: both are ended (the other would run on for nothing), it is said on the console, and the start
    * and every request waiting fail with it. */
