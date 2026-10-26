@@ -1,4 +1,4 @@
-// Geographic helpers for the tools that place real data on a map (docs/plans/active/m7-editor.md M7e): the transverse
+// Geographic helpers for the tools that place real data on a map (docs/plans/done/m7-editor.md M7e): the transverse
 // Mercator the relief importer asks its service for (tools/dem-import.ts: centred on the crop, scale 1, true metres,
 // north up), so a scan georeferenced in WGS 84 lands in the same frame as the heights. Tested in
 // test/map-scan.test.ts against Snyder's worked example.

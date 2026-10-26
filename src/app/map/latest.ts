@@ -1,4 +1,4 @@
-// The newest of several reads in flight (docs/plans/active/m7-editor.md M7a): an older read that resolves after a
+// The newest of several reads in flight (docs/plans/done/m7-editor.md M7a): an older read that resolves after a
 // newer one is dropped, never applied over it. Tested in test/map-editor.test.ts.
 
 /** Wraps reads so only the last one started is delivered, value or failure; an overtaken one resolves to null. */

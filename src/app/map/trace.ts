@@ -1,4 +1,4 @@
-// The tracing overlay on the map page (docs/plans/active/m7-editor.md M7e, decision 0069): a scan of a period map
+// The tracing overlay on the map page (docs/plans/done/m7-editor.md M7e, decision 0069): a scan of a period map
 // drawn under the editor's outlines at an opacity the panel sets, placed by its control points (./scan.ts) in each
 // relief piece cut from its frame's file, moved as the piece is. A control point is two clicks through the editor
 // (one edit): where a landmark shows on the scan, then where it is on the map. Points show as pairs joined by their

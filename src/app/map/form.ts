@@ -1,4 +1,4 @@
-// The map page's form (docs/plans/active/m7-editor.md M7c, M7d): the selected feature's fields (its generator and its
+// The map page's form (docs/plans/done/m7-editor.md M7c, M7d): the selected feature's fields (its generator and its
 // parameters too), or with no selection the map's own, built from the catalogue and set through the editor
 // (./editor.ts) one edit at a time.
 // - A field shows the editor's copy, unless it holds text typed and not applied yet (`pending`). That text is applied

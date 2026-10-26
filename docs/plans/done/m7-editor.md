@@ -1,15 +1,15 @@
 ---
-status: active
-last_reviewed: 2026-10-26
+status: done
+last_reviewed: 2026-10-27
 ---
 
 # Plan: M7, the editor on the lit map
 
 Track M, on `epic/map-engine` (decision 0020). Phase M7 of `docs/proposals/map-engine.md` §10, step 3 of
 `docs/plans/active/one-map-austerlitz.md`. Several PRs into the epic (below); this plan covers them all and details
-each as it starts (M7a merged in #192, M7b in #199, M7c in #202; M7d below). M7c as first planned (fields, generators, pinning,
-sources) is split in two here (M7a and M7b each needed a redesign; a smaller PR reviews better): M7c the fields, M7d
-generators and pinning; tracing becomes M7e. M6d waits (the owner, 2026-10-25: `docs/plans/active/m6-lit-view.md`).
+each as it starts (M7a merged in #192, M7b in #199, M7c in #202, M7d in #207, M7e in #213: M7 is done). M7c as first
+planned (fields, generators, pinning, sources) is split in two here (M7a and M7b each needed a redesign; a smaller PR
+reviews better): M7c the fields, M7d generators and pinning; tracing becomes M7e. M6d waits (the owner, 2026-10-25: `docs/plans/active/m6-lit-view.md`).
 
 ## Problem
 

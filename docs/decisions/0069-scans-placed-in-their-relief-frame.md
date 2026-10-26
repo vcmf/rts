@@ -7,7 +7,7 @@ date: 2026-10-26
 
 ## Context
 
-Battle maps are traced from period maps (the editor's M7e, `docs/plans/active/m7-editor.md`), but they are designed,
+Battle maps are traced from period maps (the editor's M7e, `docs/plans/done/m7-editor.md`), but they are designed,
 not copies (decision 0061): pieces of the real relief are cut from a heightfield and placed closer together
 (`relief.dem`, `shift`, decision 0063). A scan placed once in the map's own frame lines up with one piece at most. The
 period maps for the battles (`docs/research/period-maps.md`) were surveyed with no geodetic basis or little: on

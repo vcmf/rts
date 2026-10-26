@@ -1,4 +1,4 @@
-// A clock for the editor's tests (docs/plans/active/m7-editor.md M7b): the editor pairs two clicks within a moment
+// A clock for the editor's tests (docs/plans/done/m7-editor.md M7b): the editor pairs two clicks within a moment
 // as a double click, so every click here comes a second after the last, and `again` clicks a moment after it.
 import { beforeEach, afterEach, vi } from 'vitest'
 import type { Editor } from '../src/app/map/editor.ts'

@@ -1,4 +1,4 @@
-// Pinning (docs/plans/active/m7-editor.md M7d, docs/proposals/map-engine.md §3.4): a generated feature's expanded form
+// Pinning (docs/plans/done/m7-editor.md M7d, docs/proposals/map-engine.md §3.4): a generated feature's expanded form
 // copied into the map's intent, so it stops being generated and can be tuned by hand. The rules are the language's
 // (docs/systems/map.md): the feature takes its expanded form (no `gen`, with its `origin`), or leaves the map when its
 // generator takes it off (a scatter's region, a group's point), and its children are kept. The expansion is the

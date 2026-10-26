@@ -1,4 +1,4 @@
-// A scan to trace from (docs/plans/active/m7-editor.md M7e, decision 0069): its fit from control points, the pieces it
+// A scan to trace from (docs/plans/done/m7-editor.md M7e, decision 0069): its fit from control points, the pieces it
 // shows in, the frame point under a map point, the validator's checks of a scan source, and the transverse Mercator
 // the scan tool places a georeferenced image with.
 import { describe, it, expect, vi } from 'vitest'

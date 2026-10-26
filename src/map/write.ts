@@ -1,4 +1,4 @@
-// The editor's stable save (docs/plans/active/m7-editor.md, decision 0066): a map written back into the text it was
+// The editor's stable save (docs/plans/done/m7-editor.md, decision 0066): a map written back into the text it was
 // read from, rewriting only what changed. An unchanged feature or field keeps its bytes, whatever its layout; a changed
 // one is written in place in the file's one layout (src/map/format.ts), a new feature appended, a deleted one cut with
 // its separator. Tested in test/map-write.test.ts.

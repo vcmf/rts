@@ -1,4 +1,4 @@
-// A scan from a map service (docs/plans/active/m7-editor.md M7e, decision 0069): an image of a WMS layer over a box
+// A scan from a map service (docs/plans/done/m7-editor.md M7e, decision 0069): an image of a WMS layer over a box
 // around a centre, in WGS 84 (EPSG:4326), and the scan source the map pastes in: its file, and control points that
 // place it in the transverse Mercator centred there, which is the relief importer's frame (tools/dem-import.ts), so it
 // lands on the heights at once. Points are then added or moved by hand on the map page against the relief.

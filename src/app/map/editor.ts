@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-// The map editor on the map page (docs/plans/active/m7-editor.md M7a, decision 0066): the map's intent, read from its
+// The map editor on the map page (docs/plans/done/m7-editor.md M7a, decision 0066): the map's intent, read from its
 // file, edited in the page's memory and compiled live from there, saved through the dev server (tools/map-save.ts)
 // with only what changed rewritten (src/map/write.ts). The built page has no server to save through: it selects but
 // does not edit.

@@ -1,4 +1,4 @@
-// The map editor's save on the dev server (docs/plans/active/m7-editor.md M7a, decision 0066): it writes only a
+// The map editor's save on the dev server (docs/plans/done/m7-editor.md M7a, decision 0066): it writes only a
 // map file that still holds the text the page read.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'

@@ -1,4 +1,4 @@
-// A scan drawn on the GPU (docs/plans/active/m7-editor.md M7e, decision 0069): its image as a texture over a mesh of
+// A scan drawn on the GPU (docs/plans/done/m7-editor.md M7e, decision 0069): its image as a texture over a mesh of
 // frame points (./scan.ts scanMesh), through the view's own matrix, so the tilted view's perspective is exact and the
 // near limit is clipped by the GPU. Per frame only the matrix and a piece's shift change. The page composites what it
 // draws into each piece's area (./trace.ts).
