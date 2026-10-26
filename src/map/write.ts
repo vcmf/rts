@@ -98,10 +98,13 @@ export function sameJson(a: unknown, b: unknown): boolean {
 }
 
 /** Applies patches that do not overlap to the text. */
+/** Applies patches that do not overlap to the text; new line breaks take the text's own (CRLF in a CRLF file). */
 function patched(s: string, patches: Patch[]): string {
+  const crlf = s.includes('\r\n')
   let out = s
   for (const p of [...patches].sort((a, b) => b.start - a.start)) {
-    out = out.slice(0, p.start) + p.text + out.slice(p.end)
+    const text = crlf ? p.text.replace(/\r?\n/g, '\r\n') : p.text
+    out = out.slice(0, p.start) + text + out.slice(p.end)
   }
   return out
 }

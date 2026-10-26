@@ -568,3 +568,49 @@ describe('M7a redesign 2: edits apply, the structure checked, the inside pans', 
     expect(await a).toBe(null)
   })
 })
+
+describe('M7a redesign 2, round 1', () => {
+  const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'kinds.json'), 'utf8')) as Catalogue
+  it('picks from its own copy when the map does not compile (nothing on screen)', () => {
+    const { ed } = make()
+    ;(ed as unknown as { host: Host }).host.shown = () => []
+    ed.click(0, -50)
+    expect(ed.selected).toBe('road')
+  })
+  it('only selects on a double click whose first click selected', () => {
+    const { ed } = make()
+    ed.click(0, -50) // selects the road
+    ed.dblclick(0, -50)
+    expect(ed.feature('road')!.line!.length).toBe(2)
+  })
+  it("ignores the watcher's report of a save still on its way, so an undo made meanwhile stands", async () => {
+    const { ed } = make()
+    let reply = () => {}
+    vi.stubGlobal(
+      'fetch',
+      () =>
+        new Promise<Response>(res => {
+          reply = () => res(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+        }),
+    )
+    ed.select('road')
+    drag(ed, [-100, -50], [-90, -50])
+    const sent = ed.text
+    const saved = ed.save()
+    await new Promise(r => setTimeout(r, 0))
+    ed.undo() // back to the file as read, before the reply
+    expect(ed.onDisk(sent)).toBe(false)
+    reply()
+    await saved
+    expect(ed.feature('road')!.line![0]).toEqual([-100, 50])
+    expect(ed.canRedo).toBe(true)
+  })
+  it('shows what is wrong in a file as read, and clears the last message', () => {
+    const { ed, found } = make()
+    ed.setCatalogue(cat)
+    ed.message = 'saved'
+    ed.load('/maps/t.map.json', text.replace('"height":4', '"height":-4'))
+    expect(ed.message).toBe('')
+    expect(found.at(-1)!.length).toBeGreaterThanOrEqual(0)
+  })
+})

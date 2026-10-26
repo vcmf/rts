@@ -51,10 +51,17 @@ export function saveMapFile(root: string, req: SaveRequest): SaveResult {
   // a byte order mark is not the map's: the page's read drops it, so the comparison does too (and the save writes none)
   current = current.replace(/^\uFEFF/, '')
   if (current !== req.base) return { ok: false, status: 409, current }
-  const tmp = `${file}.${process.pid}.tmp`
+  // through a link to the file it names (a rename would replace the link), keeping the file's permissions
+  const target = fs.realpathSync(file)
+  const tmp = `${target}.${process.pid}.tmp`
   try {
-    fs.writeFileSync(tmp, req.text)
-    fs.renameSync(tmp, file)
+    const st = fs.statSync(target)
+    // a file with other hard links is written in place: a rename would part it from them
+    if (st.nlink > 1) fs.writeFileSync(target, req.text)
+    else {
+      fs.writeFileSync(tmp, req.text, { mode: st.mode & 0o777 })
+      fs.renameSync(tmp, target)
+    }
   } catch (e) {
     // a full disk, a read-only folder, a file locked by another program: reported, never thrown into the server
     fs.rmSync(tmp, { force: true })

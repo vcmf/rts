@@ -158,3 +158,17 @@ describe('M7a: a base that is no map yet (a hand edit in progress)', () => {
     expect(JSON.parse(out)).toEqual(m)
   })
 })
+
+describe('M7a: a file with CRLF line ends', () => {
+  it('keeps them in what it writes, new fields and lists too', () => {
+    const lf = fs.readFileSync(path.join(root, 'maps', 'two-ridges.map.json'), 'utf8')
+    const crlf = lf.replace(/\n/g, '\r\n')
+    const m = JSON.parse(crlf) as MapFile
+    expect(writeMap(crlf, m)).toBe(crlf)
+    m.presets = { p: { kind: 'veg.wood' } }
+    m.features[0] = { ...m.features[0], note: 'moved' }
+    const out = writeMap(crlf, m)
+    expect(out.replace(/\r\n/g, '')).not.toMatch(/\n/)
+    expect(JSON.parse(out)).toEqual(m)
+  })
+})

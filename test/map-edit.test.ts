@@ -16,6 +16,9 @@ import {
   snapBarrier,
   isBarrier,
   wellFormed,
+  followGaps,
+  onShape,
+  ringSegments,
 } from '../src/app/map/edit.ts'
 
 // a view straight down at 1 px a metre, y down the screen
@@ -67,7 +70,7 @@ describe('M7a: picking', () => {
   })
   it('picks the feature a generated child came from', () => {
     const house: Feature = {
-      id: 'hamlet/3',
+      id: 'hamlet-4',
       kind: 'built.house',
       area: [
         [
@@ -316,5 +319,47 @@ describe('M7a: a shared edge kept in step, a structure the editor can read', () 
     expect(wellFormed({ features: [{ id: 'a', area: [[[0, 0]], 'x'] }] })).toMatch(/a: its area/)
     expect(wellFormed({ features: [{ id: 'a', circle: [[0, 0], 'r'] }] })).toMatch(/a: its circle/)
     expect(wellFormed({ features: [{ id: 'a', follow: [null] }] })).toMatch(/a: its shared edge/)
+  })
+})
+
+describe('M7a: an outer ring open where its shared edge runs', () => {
+  const wood: Feature = {
+    id: 'w',
+    kind: 'veg.wood.broad',
+    area: [
+      [
+        [0, 0],
+        [100, 0],
+        [100, 100],
+        [0, 100],
+      ],
+    ],
+    follow: { id: 'brook', at: 2 },
+  }
+  it('takes no press and adds no point on the segment the edge runs along', () => {
+    expect([...followGaps(wood, 0)]).toEqual([2])
+    expect(onShape(wood, 100, -50, project)).toBe(false) // [100,0]→[100,100], the edge's
+    expect(onShape(wood, 50, 0, project)).toBe(true)
+    expect(insertPoint(wood, 100, -50, [100, 50], project, place)).toBe(null)
+    expect(ringSegments(wood.area![0], followGaps(wood, 0)).length).toBe(3)
+  })
+  it('picks a generated child by its parent through the id the generators give it', () => {
+    const house: Feature = {
+      id: 'hamlet-3',
+      kind: 'built.house',
+      area: [
+        [
+          [200, 0],
+          [210, 0],
+          [210, 10],
+        ],
+      ],
+    }
+    expect(pick([house], new Set(['hamlet']), 208, -2, [208, 2], project)).toBe('hamlet')
+  })
+  it("leaves a shared edge's place alone when it is not a number, and reads it as not well formed", () => {
+    const odd = { ...wood, follow: { id: 'brook', at: '2' } } as unknown as Feature
+    expect(insertPoint(odd, 50, -1, [50, 1], project, place)!.follow).toEqual({ id: 'brook', at: '2' })
+    expect(wellFormed({ features: [odd] })).toMatch(/shared edge/)
   })
 })

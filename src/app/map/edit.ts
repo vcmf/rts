@@ -8,6 +8,7 @@ import type { Feature, MapFile, Pt } from '../../map/schema.ts'
 import { barrierProblem, inRing, isClosedLine, isPt, LATTICE, ringArea2 } from '../../map/geometry.ts'
 import { featureKind } from '../../map/validate.ts'
 import { categoryOf } from '../../map/catalogue.ts'
+import { childOf } from '../../map/generators.ts'
 import { cm, listOf } from '../../map/util.ts'
 import type { FollowEdge } from '../../map/follow.ts'
 
@@ -84,20 +85,43 @@ function toSegment(px: number, py: number, a: [number, number], b: [number, numb
   const t = len2 ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / len2)) : 0
   return Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy)
 }
-/** The segments of a polyline on screen (a loop's last back to its first), each with the index of its end point. */
-function* screenSegments(pts: Pt[], loop: boolean, project: Project) {
+/**
+ * The segments of a polyline on screen (a loop's last back to its first), each with the index of its end point; a
+ * loop's segments ending at a point in `gaps` are left out (where a shared edge runs: `followGaps`).
+ */
+function* screenSegments(pts: Pt[], loop: boolean, project: Project, gaps: Set<number> = NO_GAPS) {
   const n = loop ? pts.length : pts.length - 1
   for (let k = 0; k < n; k++) {
+    if (loop && gaps.has((k + 1) % pts.length)) continue
     const a = project(...pts[k])
     const b = project(...pts[(k + 1) % pts.length])
     if (a && b) yield { a, b, end: k + 1 }
   }
 }
 /** The screen distance from a point to a polyline (closed: its last point back to its first). */
-function toPolyline(px: number, py: number, pts: Pt[], loop: boolean, project: Project): number {
+function toPolyline(px: number, py: number, pts: Pt[], loop: boolean, project: Project, gaps?: Set<number>): number {
   let d = Infinity
-  for (const { a, b } of screenSegments(pts, loop, project)) d = Math.min(d, toSegment(px, py, a, b))
+  for (const { a, b } of screenSegments(pts, loop, project, gaps)) d = Math.min(d, toSegment(px, py, a, b))
   return d
+}
+const NO_GAPS = new Set<number>()
+/**
+ * Where an area's outer ring is open for its shared edges (decision 0030): the indices of the points each edge goes
+ * before (`at`, 0 when absent), so the segment into that point is the edge's, not the ring's. None for other rings.
+ */
+export function followGaps(f: Feature, ring: number): Set<number> {
+  const n = f.area?.[0]?.length ?? 0
+  if (ring !== 0 || f.follow === undefined || !n) return NO_GAPS
+  return new Set(
+    listOf<FollowEdge>(f.follow).flatMap(e => {
+      const at = e.at ?? 0
+      return typeof at === 'number' && Number.isInteger(at) ? [((at % n) + n) % n] : []
+    }),
+  )
+}
+/** A ring's segments as lines of two points, leaving out its gaps (`followGaps`): how an open outer ring is drawn. */
+export function ringSegments(ring: Pt[], gaps: Set<number>): Pt[][] {
+  return ring.flatMap((p, k) => (gaps.has((k + 1) % ring.length) ? [] : [[p, ring[(k + 1) % ring.length]]]))
 }
 /**
  * Whether a screen point is on a feature's drawn shape: one of its handles, or within PICK.line of its line, a ring's
@@ -105,12 +129,12 @@ function toPolyline(px: number, py: number, pts: Pt[], loop: boolean, project: P
  */
 export function onShape(f: Feature, sx: number, sy: number, project: Project): boolean {
   if (handleAt(f, sx, sy, project)) return true
-  const rings = [...(f.area ?? [])]
-  if (f.circle) rings.push(ovalRing(f.circle[0], f.circle[1], f.circle[1], 0))
-  if (f.ellipse) rings.push(ovalRing(...f.ellipse))
+  const rings: [Pt[], Set<number>][] = (f.area ?? []).map((r, k) => [r, followGaps(f, k)])
+  if (f.circle) rings.push([ovalRing(f.circle[0], f.circle[1], f.circle[1], 0), NO_GAPS])
+  if (f.ellipse) rings.push([ovalRing(...f.ellipse), NO_GAPS])
   return (
     (!!f.line && toPolyline(sx, sy, f.line, false, project) <= PICK.line) ||
-    rings.some(r => toPolyline(sx, sy, r, true, project) <= PICK.line)
+    rings.some(([r, gaps]) => toPolyline(sx, sy, r, true, project, gaps) <= PICK.line)
   )
 }
 /** A circle's or an ellipse's outline as a ring of points (as the page draws it). */
@@ -138,8 +162,8 @@ export function pick(
 ): string | null {
   const owner = (f: Feature): string | null => {
     if (intent.has(f.id)) return f.id
-    const parent = f.origin?.parent ?? f.id.split('/')[0]
-    return intent.has(parent) ? parent : null
+    const parent = f.origin?.parent ?? childOf(f.id)?.parent
+    return parent !== undefined && intent.has(parent) ? parent : null
   }
   let best: { id: string; d: number } | null = null
   const near = (f: Feature, d: number, limit: number) => {
@@ -331,7 +355,7 @@ export function insertPoint(
 ): Feature | null {
   let best: { ring: number; index: number; d: number } | null = null
   const consider = (pts: Pt[], loop: boolean, ring: number) => {
-    for (const { a, b, end } of screenSegments(pts, loop, project)) {
+    for (const { a, b, end } of screenSegments(pts, loop, project, loop ? followGaps(f, ring) : NO_GAPS)) {
       const d = toSegment(sx, sy, a, b)
       if (d <= PICK.line && (!best || d < best.d)) best = { ring, index: end, d }
     }
@@ -366,6 +390,7 @@ function shiftFollow(f: Feature, index: number, by: 1 | -1): void {
   if (f.follow === undefined) return
   const shift = (e: FollowEdge): FollowEdge => {
     const at = e.at ?? 0
+    if (typeof at !== 'number') return e // not a place (a hand edit's slip): left for the validator to name
     const moves = by > 0 ? index <= at : index < at
     return moves ? { ...e, at: at + by } : e
   }
@@ -434,9 +459,10 @@ export function wellFormed(doc: unknown): string | null {
     if (e !== undefined && !(Array.isArray(e) && isPt(e[0]) && isNum(e[1]) && isNum(e[2]) && isNum(e[3]))) {
       return bad('ellipse')
     }
-    if (g.follow !== undefined && listOf(g.follow).some(x => typeof x !== 'object' || x === null)) {
-      return bad('shared edge')
-    }
+    const edges = g.follow === undefined ? [] : listOf<unknown>(g.follow)
+    const edgeOk = (x: unknown) =>
+      typeof x === 'object' && x !== null && ((x as FollowEdge).at === undefined || isNum((x as FollowEdge).at))
+    if (!edges.every(edgeOk)) return bad('shared edge')
   }
   return null
 }

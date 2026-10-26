@@ -80,3 +80,23 @@ describe('M7a: a file with a byte order mark', () => {
     expect(fs.readFileSync(file, 'utf8')).toBe('new')
   })
 })
+
+describe('M7a: a save through a link, keeping the mode', () => {
+  it('writes the file a symbolic link names, and the hard-linked file in place, with its permissions', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-save-'))
+    fs.mkdirSync(path.join(root, 'maps'))
+    const real = path.join(root, 'real.map.json')
+    fs.writeFileSync(real, 'old')
+    fs.chmodSync(real, 0o640)
+    fs.symlinkSync(real, path.join(root, 'maps', 's.map.json'))
+    expect(saveMapFile(root, { file: '/maps/s.map.json', base: 'old', text: 'new' })).toEqual({ ok: true })
+    expect(fs.lstatSync(path.join(root, 'maps', 's.map.json')).isSymbolicLink()).toBe(true)
+    expect(fs.readFileSync(real, 'utf8')).toBe('new')
+    expect(fs.statSync(real).mode & 0o777).toBe(0o640)
+    const other = path.join(root, 'other.map.json')
+    fs.linkSync(real, path.join(root, 'maps', 'h.map.json'))
+    fs.linkSync(real, other)
+    expect(saveMapFile(root, { file: '/maps/h.map.json', base: 'new', text: 'newer' })).toEqual({ ok: true })
+    expect(fs.readFileSync(other, 'utf8')).toBe('newer')
+  })
+})

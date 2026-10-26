@@ -173,6 +173,16 @@ tools on top).
   only for a press on the selection; no ground under the pointer is no pick and no move (not the view's centre); the
   drag no longer validates or refreshes the panel on every move. Tests for each; the page check zooms away from a
   hovered point and presses Delete.
+- **Second redesign, round 1**: severe. A map that did not compile when opened could not be edited: clicks picked only
+  from the last good compile, and there was none. Fixed: a click picks from the copy's own shapes too. With it: a
+  double click whose first click selected only selects (no point added by accident); the gap where a shared edge
+  runs is no outline (no press, no point added there), and the open ring is drawn as its segments; the watcher's
+  report of a save still on its way is ignored, so an undo made meanwhile stands; reading a file clears the last
+  message and shows what the validator finds in it; a generated child is found by its parent through `childOf`; a
+  shared edge's `at` that is not a number is left alone and the file is read-only; the writer keeps a CRLF file's
+  line ends; the save writes through a symbolic link, in place for a hard-linked file, and keeps the permissions.
+  The page check's save-to-redraw time went over its second (1.2–1.3 s) at a load average of 97 from other
+  sessions, the compile itself at 1.0–1.1 s against 0.75 s before; to run again when the machine is quiet.
 
 ## Open questions
 

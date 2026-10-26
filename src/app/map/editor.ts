@@ -26,6 +26,8 @@ import {
   moveHandle,
   moveShape,
   onShape,
+  followGaps,
+  ringSegments,
   ovalRing,
   pick,
   removePoint,
@@ -66,6 +68,7 @@ const SNAP_PX = 14 // a barrier's point snaps to a valid place within this many 
 const SELECTED = '#d0601a'
 const WRONG = '#c0201a'
 const BUSY = 'finish the drag first'
+const DOUBLE_MS = 600 // longer than a double click's two clicks apart
 
 /** A file's text as a copy the editor can work on, or why it cannot. */
 function parseDoc(text: string): { doc: MapFile | null; why: string } {
@@ -109,6 +112,8 @@ export class Editor {
   /** The pointer's last place on the map, or null when it left: where the handle under it is looked for. */
   private pointer: [number, number] | null = null
   private saving: Promise<boolean> | null = null
+  /** The text of the save on its way to the server, or null. */
+  private inFlight: string | null = null
 
   constructor(host: Host) {
     this.host = host
@@ -138,6 +143,7 @@ export class Editor {
     this.readOnly = why
     this.baseDoc = doc
     if (this.selected && !this.feature(this.selected)) this.selected = null
+    this.check(null) // what the validator finds in the file as read; no message left from the copy before
     this.host.changed()
   }
   /**
@@ -146,6 +152,7 @@ export class Editor {
    * settled. Returns whether the copy changed (to recompile).
    */
   onDisk(text: string): boolean {
+    if (text === this.inFlight) return false // a save of ours, written before its reply came: the reply settles it
     if (text === this.base) {
       if (this.conflict !== null) {
         this.conflict = null
@@ -253,8 +260,15 @@ export class Editor {
     const f = this.selected ? this.feature(this.selected) : undefined
     if (f && onShape(f, sx, sy, this.host.project)) return
     const ids = new Set(this.doc.features.map(x => x.id))
-    this.select(pick(this.host.shown(), ids, sx, sy, this.host.toWorld(sx, sy), this.host.project))
+    // the shapes on screen (the last good compile's) and the copy's own: a map that does not compile yet, or a feature
+    // an edit broke, can still be picked
+    const shapes = [...this.host.shown(), ...this.doc.features]
+    const before = this.selected
+    this.select(pick(shapes, ids, sx, sy, this.host.toWorld(sx, sy), this.host.project))
+    if (this.selected !== before) this.clickSelectedAt = performance.now()
   }
+  /** When a click last changed the selection: a double click that began by selecting adds no point. */
+  private clickSelectedAt = -Infinity
   select(id: string | null): void {
     if (this.mode.kind !== 'idle') return
     const next = id && this.feature(id) ? id : null
@@ -345,6 +359,8 @@ export class Editor {
   }
   /** A double click on the selected line or ring adds a point there. */
   dblclick(sx: number, sy: number): void {
+    // a double click whose first click selected the feature only selects it
+    if (performance.now() - this.clickSelectedAt < DOUBLE_MS) return
     const f = this.selected ? this.feature(this.selected) : undefined
     if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return
     const at = this.host.toWorld(sx, sy)
@@ -425,6 +441,7 @@ export class Editor {
     const sent = { file: this.file, base: this.base, doc: this.doc, text: this.text }
     let status = 0
     let r: { ok: boolean; current?: string; error?: string }
+    this.inFlight = sent.text
     try {
       const res = await fetch('/__map/save', {
         method: 'POST',
@@ -440,6 +457,8 @@ export class Editor {
       }
     } catch (e) {
       r = { ok: false, error: `${(e as Error).message} (is the dev server running?)` }
+    } finally {
+      this.inFlight = null
     }
     if (this.file !== sent.file || this.base !== sent.base) return r.ok // the editor moved on: not ours to apply
     if (r.ok) {
@@ -477,8 +496,12 @@ export class Editor {
       ctx.stroke()
     }
     if (f.line) path(f.line, false)
-    // an outer ring whose rest is a shared edge is drawn open: the edge is the line it follows
-    f.area?.forEach((r, k) => path(r, !(k === 0 && f.follow !== undefined)))
+    // an outer ring is open where a shared edge runs: the edge is the line it follows
+    f.area?.forEach((r, k) => {
+      const gaps = followGaps(f, k)
+      if (!gaps.size) path(r, true)
+      else for (const seg of ringSegments(r, gaps)) path(seg, false)
+    })
     if (f.circle) path(ovalRing(f.circle[0], f.circle[1], f.circle[1], 0), true)
     if (f.ellipse) path(ovalRing(...f.ellipse), true)
     const barrier = isBarrier(f, this.doc?.presets)
