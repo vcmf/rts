@@ -20,7 +20,7 @@
 // Tested in test/map-editor.test.ts.
 import type { Catalogue, Feature, MapFile, Pt, RefName, ShapeName } from '../../map/schema.ts'
 import { kindMetaOf, type KindMeta } from '../../map/catalogue.ts'
-import { featureKind, validate, type Issue } from '../../map/validate.ts'
+import { featureKind, presetsOf, validate, type Issue } from '../../map/validate.ts'
 import { sameJson, writeMap, writerFrom, type FeatureWriter } from '../../map/write.ts'
 import {
   handleAt,
@@ -57,7 +57,7 @@ import {
   stepOf,
   type Draft,
 } from './draw.ts'
-import { presetsOf, setField } from './fields.ts'
+import { setField } from './fields.ts'
 
 /** What the editor needs from the page. */
 export interface Host {

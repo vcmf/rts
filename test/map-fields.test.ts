@@ -1,6 +1,5 @@
 // The map editor's fields (docs/plans/active/m7-editor.md M7c): every attribute of the catalogue set through the form's
-// reading of text and judged by the validator at its field; renames that follow every reference; the editor's field
-// edits.
+// reading of text and judged by the validator at its field; the editor's field edits.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -122,7 +121,9 @@ describe('M7c: every attribute through the form', () => {
     // decimal numbers only: other forms JavaScript reads as numbers stay text, for the validator to name
     expect(parseInput('number', '-1.5e2')).toEqual({ value: -150 })
     expect(parseInput('number', '.5')).toEqual({ value: 0.5 })
-    for (const t of ['0x20', '0b11', 'Infinity', '1_000', '-']) expect(parseInput('number', t)).toEqual({ value: t })
+    for (const t of ['0x20', '0b11', 'Infinity', '1e400', '1_000', '-']) {
+      expect(parseInput('number', t)).toEqual({ value: t })
+    }
     expect('error' in parseInput('json', '{"w": ')).toBe(true)
     // a note's text as typed: its spaces and line breaks kept
     expect(parseInput('raw', '  ford used 1805\nsee the survey\n')).toEqual({

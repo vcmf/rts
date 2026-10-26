@@ -7,7 +7,7 @@
 import type { Ellipse, Feature, MapFile, Pt, RefName, ShapeName } from '../../map/schema.ts'
 import { ID, REFS } from '../../map/schema.ts'
 import type { KindMeta } from '../../map/catalogue.ts'
-import { refTargetProblem } from '../../map/validate.ts'
+import { presetsOf, refTargetProblem } from '../../map/validate.ts'
 import { barrierProblem, isClosedLine, lineLength } from '../../map/geometry.ts'
 import { cm } from '../../map/util.ts'
 import { isPts, onLattice, radiusTo, roundPt, roundTo, snapBarrier, type Place } from './edit.ts'
@@ -248,7 +248,7 @@ export function refAccepts(
   presets: MapFile['presets'] = {},
 ): boolean {
   if (t.id === self || (ref === 'along' && !isLine(t.line))) return false
-  return refTargetProblem(ref, want, t, presets as Record<string, Record<string, unknown>>) === null
+  return refTargetProblem(ref, want, t, presetsOf({ presets })) === null
 }
 
 /** The metres along a line to the point of it nearest `p`. */

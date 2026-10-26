@@ -295,10 +295,12 @@ maps/kinds.json ──► checkCatalogue ─┐
       whole feature as JSON to read and copy (its shape and references are edited on the map). With no selection the
       map's own fields (name, note, seed, season, datum, extent, play, sources, presets; its id shown).
       - A field shows the copy unless it holds text typed and not applied yet. That text is applied when the field
-        changes (Enter, the focus leaving it) and before any command of the editor (a press outside the form, Cmd or
-        Ctrl S), as one edit; emptied, the field is removed (it inherits). Refused (text that is no value of its
-        kind, or the editor said no), it stays typed with the reason under it until changed, or Escape drops it. In a
-        field holding text, Cmd or Ctrl Z is the field's own text undo; Cmd or Ctrl S applies it and saves.
+        changes (Enter, the focus leaving it: a press on another control), before a press on the map (whose drag
+        would start first) and before a save, as one edit; emptied, the field is removed (it inherits). Refused (text
+        that is no value of its kind, or the editor said no), it stays typed with the reason under it until changed,
+        or Escape drops it, and no save is made while a field holds such text. The undo and redo buttons keep the
+        focus in the field, so its text stays typed for the copy they bring back. In a field holding text, Cmd or
+        Ctrl Z is the field's own text undo; Cmd or Ctrl S applies it and saves.
       - Its text is read as its kind of value only (a number's that is no number stays text for the validator to
         name). The validator's problems show under their fields (by path), those of no field above the JSON.
       - Ids are not edited in the page: a feature's is set when it is made, a map's names its file; a rename is

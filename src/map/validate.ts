@@ -603,6 +603,9 @@ export function refTargetProblem(
 }
 
 /** A feature's kind: its own, or its map preset's. */
+/** A map's presets, as the validator reads them (none: an empty set). */
+export const presetsOf = (map: { presets?: unknown }): Record<string, Record<string, unknown>> =>
+  (map.presets ?? {}) as Record<string, Record<string, unknown>>
 export const featureKind = (f: Feature, presets: Record<string, Record<string, unknown>>): string | undefined =>
   typeof f.kind === 'string'
     ? f.kind

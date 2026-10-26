@@ -11,9 +11,9 @@
 import type { Catalogue, Feature, MapFile } from '../../map/schema.ts'
 import { SEASONS } from '../../map/schema.ts'
 import { kindChain, kindStates, type Issue } from '../../map/catalogue.ts'
-import { featureKind } from '../../map/validate.ts'
+import { featureKind, presetsOf } from '../../map/validate.ts'
 import type { Editor } from './editor.ts'
-import { attrInput, attrRows, parseInput, presetsOf, problemsAt, showValue } from './fields.ts'
+import { attrInput, attrRows, parseInput, problemsAt, showValue, type AttrRow } from './fields.ts'
 
 type Input = 'text' | 'raw' | 'number' | 'json' | 'any'
 /** One row of the form: its key, label, input and the hint beside it. */
@@ -45,6 +45,31 @@ interface Shown {
   bad: HTMLElement
 }
 
+/** An attribute's row: its value, and as hints its range, what it inherits, what overrides it, its ramp. */
+function attrRow(r: AttrRow): Row {
+  const s = r.spec
+  const range = s && (s.min !== undefined || s.max !== undefined) ? `${s.min ?? '…'} to ${s.max ?? '…'}` : ''
+  // its own value overridden by the map's season or the feature's state: what it is there
+  const over = r.own !== undefined && r.effective !== undefined && showValue(r.effective) !== showValue(r.own)
+  const hint = [
+    range,
+    r.inherited !== undefined ? `inherits ${showValue(r.inherited)}` : '',
+    over ? `the season or the state makes it ${showValue(r.effective)}` : '',
+    s?.ramp ? `a ramp over ${s.ramp.join(' or ')}` : '',
+    s ? '' : 'not an attribute of this kind',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  return {
+    key: r.name,
+    label: s?.unit ? `${r.name} (${s.unit})` : r.name,
+    value: r.own,
+    as: attrInput(s),
+    options: s?.type === 'enum' ? ['', ...(s.values ?? [])] : undefined,
+    hint,
+  }
+}
+
 /** An element with some of its properties set. */
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -53,6 +78,10 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return Object.assign(document.createElement(tag), props)
 }
 
+/**
+ * The panel's form: the selection's fields, or the map's, each set through the editor, with the text typed in them and
+ * not applied yet held until it is.
+ */
 export class Form {
   private box: HTMLElement
   private editor: Editor
@@ -97,9 +126,13 @@ export class Form {
     else this.fill(view)
   }
 
-  /** Applies the text typed in every field and not tried yet: before any command of the editor. */
+  /** Applies the text typed in every field and not tried yet: before a press on the map, and a save. */
   flush(): void {
     for (const [key, p] of [...this.pending]) if (!p.why) this.apply(key)
+  }
+  /** Whether a field holds text it could not apply (what the field shows is not in the copy). */
+  get refused(): boolean {
+    return [...this.pending.values()].some(p => !!p.why)
   }
   /** Whether an element is one of the form's fields holding text not applied (its own undo is the browser's). */
   holds(target: EventTarget | null): boolean {
@@ -123,15 +156,36 @@ export class Form {
       done = false
     } else {
       done = this.view!.set(key, 'remove' in parsed ? undefined : parsed.value)
-
       if (done === false) this.pending.set(key, { text: p.text, why: this.editor.message || 'refused' })
     }
     // an edit made refreshed the form; a refusal or no change does it here
     if (done !== true) this.update(this.cat, true)
   }
 
+  /** A feature's view: its own fields, its attributes, its seasons; its problems of no field; its JSON. */
   private feature(f: Feature, doc: MapFile, cat: Catalogue | null): View {
-    const i = doc.features.indexOf(f)
+    const rows = [
+      ...this.ownRows(f, doc, cat),
+      ...(cat ? attrRows(cat, f, doc).map(attrRow) : []),
+      { key: 'seasons', label: 'seasons', value: f.seasons, as: 'json', hint: '{ "winter": { … } }' } satisfies Row,
+    ]
+    const base = `features[${doc.features.indexOf(f)}]`
+    // the problems of no row (its shape, its references, a shared edge, a generator): above the feature's JSON
+    const rest = problemsAt(this.editor.issues, base).filter(
+      x => !rows.some(r => problemsAt([x], `${base}.${r.key}`).length),
+    )
+    return {
+      // the fields, not the feature: another feature of the kind keeps the form (and the focus a Tab moved on to)
+      sig: JSON.stringify(['feature', rows.map(r => [r.key, r.label, r.as, r.options, r.lines])]),
+      base,
+      rows,
+      set: (key, value) => this.editor.setField(key, value),
+      rest,
+      json: JSON.stringify(f),
+    }
+  }
+  /** A feature's own fields: its id (shown), kind, preset, priority, state, source and note. */
+  private ownRows(f: Feature, doc: MapFile, cat: Catalogue | null): Row[] {
     const presets = presetsOf(doc)
     const kind = featureKind(f, presets)
     const chain = cat && kind ? kindChain(cat, kind) : null
@@ -163,46 +217,10 @@ export class Form {
       { key: 'source', label: 'source', value: f.source, as: 'text', options: ['', ...sources, 'invented'] },
       { key: 'note', label: 'note', value: f.note, as: 'raw', lines: true },
     )
-    for (const r of cat ? attrRows(cat, f, doc) : []) {
-      const s = r.spec
-      const range = s && (s.min !== undefined || s.max !== undefined) ? `${s.min ?? '…'} to ${s.max ?? '…'}` : ''
-      // its own value overridden by the map's season or the feature's state: what it is there
-      const over = r.own !== undefined && r.effective !== undefined && showValue(r.effective) !== showValue(r.own)
-      const hint = [
-        range,
-        r.inherited !== undefined ? `inherits ${showValue(r.inherited)}` : '',
-        over ? `the season or the state makes it ${showValue(r.effective)}` : '',
-        s?.ramp ? `a ramp over ${s.ramp.join(' or ')}` : '',
-        s ? '' : 'not an attribute of this kind',
-      ]
-        .filter(Boolean)
-        .join(' · ')
-      rows.push({
-        key: r.name,
-        label: s?.unit ? `${r.name} (${s.unit})` : r.name,
-        value: r.own,
-        as: attrInput(s),
-        options: s?.type === 'enum' ? ['', ...(s.values ?? [])] : undefined,
-        hint,
-      })
-    }
-    rows.push({ key: 'seasons', label: 'seasons', value: f.seasons, as: 'json', hint: '{ "winter": { … } }' })
-    const base = `features[${i}]`
-    // the problems of no row (its shape, its references, a shared edge, a generator): above the feature's JSON
-    const rest = problemsAt(this.editor.issues, base).filter(
-      x => !rows.some(r => problemsAt([x], `${base}.${r.key}`).length),
-    )
-    return {
-      // the fields, not the feature: a rename keeps the form (and the focus a Tab moved on to)
-      sig: JSON.stringify(['feature', rows.map(r => [r.key, r.label, r.as, r.options, r.lines])]),
-      base,
-      rows,
-      set: (key, value) => this.editor.setField(key, value),
-      rest,
-      json: JSON.stringify(f),
-    }
+    return rows
   }
 
+  /** The map's view: its own fields (its id shown), its problems of no field. */
   private map(doc: MapFile): View {
     const noFile = this.editor.noFile
     const rows: Row[] = [
@@ -291,7 +309,8 @@ export class Form {
   private fill(view: View): void {
     for (const r of view.rows) this.fillRow(r.key)
     this.rest.replaceChildren(...this.problems(view.rest.map(i => i.message)))
-    if (this.json && view.json !== null) this.json.value = view.json
+    // only when it changed: a part selected in it to copy stays selected
+    if (this.json && view.json !== null && this.json.value !== view.json) this.json.value = view.json
   }
   /** One row's input (its pending text, else the copy's value), hint and problems (a refusal's first). */
   private fillRow(key: string): void {
@@ -314,6 +333,7 @@ export class Form {
     s.bad.replaceChildren(...this.problems(p?.why ? [`not applied: ${p.why}`, ...found] : found))
   }
 
+  /** Problems, or a refusal, as lines under a field. */
   private problems(messages: string[]): HTMLElement[] {
     return messages.map(m => el('span', { className: 'bad', textContent: m }))
   }

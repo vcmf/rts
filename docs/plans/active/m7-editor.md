@@ -421,6 +421,14 @@ edit. No new decision.
   its step was taken (a deletion undone); the undo and redo buttons and keys leave text typed in a field typed (to
   apply to the copy they bring back), only a press elsewhere and a save apply it first; a note is kept as typed, its
   spaces and line breaks too (`raw`).
+- **Second redesign, round 1**: severe. In a browser the undo button took the focus from a field holding text, whose
+  change then applied the text, and the undo reverted that instead of the edit before (the page check's synthetic
+  press moved no focus). Fixed: the undo and redo buttons keep the focus (their press does not take it), and the
+  page check tests that. With it: no save while a field holds text it refused (it is not in the copy), by Cmd or Ctrl
+  S or the button; the text is applied before a press on the map only (a press on another control takes the focus,
+  whose change applies it; the panel's scroll bar no longer applies half-typed text); `1e400` stays text; the JSON
+  box is written only when it changed (a part selected to copy stays); the form's feature view split, with doc
+  comments; `presetsOf` beside `featureKind` in the validator, used by the editor's modules; stale comments.
 
 ## Open questions
 

@@ -282,18 +282,30 @@ try {
         const ok = await MAP.save()
         const disk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
         const issues = MAP.issues.length
-        // the undo button with text typed in a field: the edit before it is undone, the text stays typed
+        // Cmd S with text a field refused: no save (what the field shows is not in the copy)
+        field('seasons', '{"winter": ')
+        q('seasons').focus()
+        q('seasons').dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true, cancelable: true }))
+        const notSaved = /could not apply.*not saved/.test(document.getElementById('editState').textContent)
+        escape('seasons')
+        // the undo button with text typed in a field: the press keeps the focus in the field (no change applies the
+        // text), the edit before it is undone, the text stays typed
+        q('height').focus()
         q('height').value = '55'
         q('height').dispatchEvent(new Event('input'))
         const undo = document.getElementById('undo')
-        undo.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+        const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+        undo.dispatchEvent(press)
         undo.click()
-        const undoKeeps = q('height').value === '55' && JSON.parse(MAP.text).features.find(f => f.id === other.id).width === other.width
+        const undoKeeps =
+          press.defaultPrevented &&
+          q('height').value === '55' &&
+          JSON.parse(MAP.text).features.find(f => f.id === other.id).width === other.width
         escape('height')
         MAP.undo()
         const back = await MAP.save()
         const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
-        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, target: target.id, other: other.id, noteKept, idFixed, refused, dropped, kept, noteBox, jsonRead, flushed, typedKept, ownUndo, undoKeeps })
+        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, target: target.id, other: other.id, noteKept, idFixed, refused, dropped, kept, noteBox, jsonRead, flushed, typedKept, ownUndo, undoKeeps, notSaved })
       })()`,
     ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
@@ -493,7 +505,8 @@ try {
   check(fl.ownUndo, "Cmd Z in a box outside the form is the box's own, never the map's undo")
   check(fl.flushed, 'text typed in a field and not applied is applied before a press on the map acts')
   check(fl.typedKept, 'a field typed in and not applied is left as typed when the form is refreshed')
-  check(fl.undoKeeps, 'the undo button undoes the edit before the text typed in a field, which stays typed')
+  check(fl.undoKeeps, 'the undo button keeps the focus in a field holding text, undoes the edit before, the text stays')
+  check(fl.notSaved, 'Cmd S with text a field refused does not save, and says why')
   await until('NEWMAP')
   const nm = seen.NEWMAP
   const ids = nm.features.map(f => f.id).join(',')

@@ -187,7 +187,7 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
     return
   }
   if (r.ok) {
-    // another map (the list cleared `current`): fitted to the view; the same one renamed keeps the view
+    // another map (the list cleared `current`): fitted to the view; the same one again keeps the view
     const fresh = !current
     issues = []
     layers = Object.fromEntries(Object.entries(r.layers).map(([k, b]) => [k, new Uint16Array(b)]))
@@ -372,24 +372,17 @@ const editor = new Editor({
   redraw,
   changed: () => editPanel(),
 })
-// the selection's fields, or the map's (M7c); a new map's id moves it to the file of that name
+// the selection's fields, or the map's (M7c)
 /** Why an id cannot be a new map's (it names the map's file: the save's rule), or '' when it can. */
 function mapIdProblem(id: string): string {
   if (!ID.test(id)) return 'its id names its file: lower-case letters and digits, in words joined by "-"'
   return [...picker.options].some(o => o.value === `/maps/${id}.map.json`) ? `a map ${id} exists` : ''
 }
 const form = new Form(formBox, editor)
-// text typed in the form and not applied yet is applied before anything else acts: a press anywhere outside the form
-// (on the map, a button, the list), in the capture phase so it comes before the press's own handlers, and a save
-addEventListener(
-  'pointerdown',
-  e => {
-    // not before an undo or a redo: the text stays typed, to be applied to the copy they bring back
-    const target = e.target as Node
-    if (!formBox.contains(target) && target !== undoButton && target !== redoButton) form.flush()
-  },
-  true,
-)
+// Text typed in the form and not applied yet: a press on another control takes the focus from the field, whose change
+// applies it; a press on the map does not wait for that (its drag would start first), so it applies it itself (below).
+// The undo and redo buttons keep the focus where it is, so the text stays typed, for the copy they bring back.
+for (const b of [undoButton, redoButton]) b.addEventListener('mousedown', e => e.preventDefault())
 /** The editor's part of the panel: the selection, unsaved edits, the save's state, a conflict with the disk. */
 function editPanel(): void {
   const f = editor.selected ? editor.feature(editor.selected) : undefined
@@ -719,6 +712,7 @@ function hover(sx: number, sy: number): void {
 let drag: { at: Pt; sx: number; sy: number; edit: boolean; id: number } | null = null
 canvas.addEventListener('pointerdown', e => {
   if (drag) return
+  form.flush() // text typed in a field first, before a drag can start
   const edit = overlaySelect.value !== 'sight' && editor.down(e.offsetX, e.offsetY)
   drag = { at: toWorld(e.offsetX, e.offsetY), sx: e.offsetX, sy: e.offsetY, edit, id: e.pointerId }
   try {
@@ -827,11 +821,10 @@ addEventListener('keydown', e => {
   // it holds text not applied, else the map's. Any other field (the add box, the new map's) keeps the browser's keys
   const inForm = formBox.contains(target)
   if (typing && !(inForm && mod && (key === 's' || ((key === 'z' || key === 'y') && !form.holds(target))))) return
-  if (mod && key === 's') form.flush()
   const onMap = target === document.body || target === canvas
   if (mod && key === 's') {
     e.preventDefault()
-    void editor.save()
+    saveAll()
   } else if (mod && key === 'z') {
     e.preventDefault()
     if (e.shiftKey) editor.redo()
@@ -851,7 +844,16 @@ addEventListener('keydown', e => {
     else editor.remove()
   }
 })
-saveButton.addEventListener('click', () => void editor.save())
+/**
+ * Saves what the fields hold too: their text first; text one refuses is not in the copy, so the page does not save
+ * as if it were.
+ */
+function saveAll(): void {
+  form.flush()
+  if (form.refused) editor.note('a field holds text it could not apply: mend it, or Escape drops it; not saved')
+  else void editor.save()
+}
+saveButton.addEventListener('click', saveAll)
 addKind.addEventListener('change', shapeList)
 addGo.addEventListener('click', () => {
   // the map takes the drawing's keys (Enter, Backspace, Escape)

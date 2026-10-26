@@ -5,7 +5,7 @@
 import type { AttrSpec, AttrValue, Catalogue, Feature, MapFile } from '../../map/schema.ts'
 import { RESERVED } from '../../map/schema.ts'
 import { allowedIn, categoryOf, kindChain, type Issue } from '../../map/catalogue.ts'
-import { featureKind } from '../../map/validate.ts'
+import { featureKind, presetsOf } from '../../map/validate.ts'
 import { resolve } from '../../map/resolve.ts'
 
 /**
@@ -20,9 +20,6 @@ export interface AttrRow {
   /** What it is in the map's season and the feature's state: another than its own when one of them overrides it. */
   effective: AttrValue | undefined
 }
-
-/** A map's presets, as the validator reads them. */
-export const presetsOf = (map: MapFile) => (map.presets ?? {}) as Record<string, Record<string, unknown>>
 
 /**
  * The attributes of a feature's form: each the kind's category takes, in the catalogue's order, then any other the
@@ -86,8 +83,8 @@ export function parseInput(as: 'text' | 'raw' | 'number' | 'json' | 'any', text:
   if (t === '') return { remove: true }
   if (as === 'text') return { value: t }
   if (as === 'number' && !t.startsWith('{')) {
-    // decimal only: `0x20` or `Infinity` are no numbers of a map, and stay text for the validator to name
-    return { value: DECIMAL.test(t) ? Number(t) : t }
+    // decimal and finite only: `0x20`, `Infinity` or `1e400` are no numbers of a map, and stay text for the validator
+    return { value: DECIMAL.test(t) && Number.isFinite(Number(t)) ? Number(t) : t }
   }
   try {
     return { value: JSON.parse(t) as unknown }

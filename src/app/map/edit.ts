@@ -6,7 +6,7 @@
 // Tested in test/map-edit.test.ts.
 import type { Feature, MapFile, Pt } from '../../map/schema.ts'
 import { barrierProblem, inRing, isClosedLine, isPt, LATTICE, ringArea2 } from '../../map/geometry.ts'
-import { featureKind } from '../../map/validate.ts'
+import { featureKind, presetsOf } from '../../map/validate.ts'
 import { categoryOf } from '../../map/catalogue.ts'
 import { childOf } from '../../map/generators.ts'
 import { cm, listOf } from '../../map/util.ts'
@@ -31,7 +31,7 @@ export const PICK = { handle: 8, point: 8, line: 6 }
 
 /** Whether a feature is a barrier (its kind its own or its preset's), whose points lie on the lattice (§3.6). */
 export const isBarrier = (f: Feature, presets: MapFile['presets'] = {}) => {
-  const kind = featureKind(f, presets as Record<string, Record<string, unknown>>)
+  const kind = featureKind(f, presetsOf({ presets }))
   return kind !== undefined && categoryOf(kind) === 'barrier'
 }
 
