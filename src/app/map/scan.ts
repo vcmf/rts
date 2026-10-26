@@ -24,8 +24,8 @@ export interface ScanFit {
   how: 'extent' | 'moved' | 'similarity' | 'affine' | 'spline'
   residuals: number[]
   rms: number | null
-  /** The points lie in a line (three or more): placed by the first two alone. */
-  degenerate: boolean
+  /** Why the points could not be used as they are (in a line, two on one pixel or place), or null. */
+  problem: string | null
 }
 
 /** A point through an affine map. */
@@ -179,9 +179,54 @@ function through(points: ControlPoint[]): Pick<ScanFit, 'toFrame' | 'toImage'> |
   const px = points.map(([u, v]): Pt => [u, v])
   const fr = points.map(([, , x, z]): Pt => [x, z])
   const fwd = spline(px, fr)
+  if (!fwd) return null
+  // the way back: the forward spline inverted, from a first guess (a spline the other way, or the affine fit's)
   const back = spline(fr, px)
-  if (!fwd || !back) return null
-  return { toFrame: (u, v) => fwd([u, v]), toImage: (x, z) => back([x, z]) }
+  const ls = leastSquares(points)
+  const lsBack = ls ? invert(ls) : null
+  return {
+    toFrame: (u, v) => fwd([u, v]),
+    toImage: (x, z) => {
+      const g = back ? back([x, z]) : lsBack ? apply(lsBack, x, z) : null
+      return g ? inverse(fwd, x, z, g) : null
+    },
+  }
+}
+
+/**
+ * The pixel a map of pixels to frame points takes to (x, z), by Newton's method from a guess: exact to a thousandth
+ * of a pixel, so a point clicked on the drawn scan is the pixel drawn there. Null when it does not converge (a fold).
+ */
+function inverse(f: (p: Pt) => Pt, x: number, z: number, guess: Pt): Pt | null {
+  let [u, v] = guess
+  const h = 0.5 // px: the step of the differences
+  for (let k = 0; k < 40; k++) {
+    const [fx, fz] = f([u, v])
+    const ex = fx - x
+    const ez = fz - z
+    // the Jacobian by central differences
+    const [ax, az] = f([u + h, v])
+    const [bx, bz] = f([u - h, v])
+    const [cx, cz] = f([u, v + h])
+    const [dx, dz] = f([u, v - h])
+    const j11 = (ax - bx) / (2 * h)
+    const j21 = (az - bz) / (2 * h)
+    const j12 = (cx - dx) / (2 * h)
+    const j22 = (cz - dz) / (2 * h)
+    const det = j11 * j22 - j12 * j21
+    if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null
+    const du = (j22 * ex - j12 * ez) / det
+    const dv = (j11 * ez - j21 * ex) / det
+    u -= du
+    v -= dv
+    if (Math.hypot(du, dv) < 1e-3) return [u, v]
+  }
+  return null
+}
+
+/** Whether a new control point lands on an existing one: within a pixel of its pixel, or a metre of its place. */
+export function nearPoint(points: ControlPoint[], p: ControlPoint): number {
+  return points.findIndex(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < 1 || Math.hypot(q[2] - p[2], q[3] - p[3]) < 1)
 }
 
 /**
@@ -194,7 +239,7 @@ export function fitScan(points: ControlPoint[], w: number, h: number, extent: { 
   const s = Math.min(extent.w / w, extent.h / h)
   // over the extent, centred: the image's centre on the map's, north up
   let t: Affine = [s, 0, (-w * s) / 2, 0, -s, (h * s) / 2]
-  const exact = (how: ScanFit['how'], a: Affine, degenerate = false): ScanFit => ({
+  const exact = (how: ScanFit['how'], a: Affine, problem: string | null = null): ScanFit => ({
     ...affinePlacement(a),
     how,
     residuals: points.map(([u, v, x, z]) => {
@@ -202,7 +247,7 @@ export function fitScan(points: ControlPoint[], w: number, h: number, extent: { 
       return Math.hypot(px - x, pz - z)
     }),
     rms: null,
-    degenerate,
+    problem,
   })
   if (points.length === 0) return exact('extent', t)
   if (points.length === 1) {
@@ -214,8 +259,15 @@ export function fitScan(points: ControlPoint[], w: number, h: number, extent: { 
   const sim = similarity(points)
   if (points.length === 2) return exact('similarity', sim ?? t)
   const fit = through(points)
-  if (!fit) return exact('similarity', sim ?? t, true)
-  if (points.length === 3) return { ...fit, how: 'affine', residuals: [0, 0, 0], rms: null, degenerate: false }
+  if (!fit) {
+    // two points on one pixel or one place: no spline goes through both; the affine fit of them all still holds
+    const ls = leastSquares(points)
+    if (ls && points.some((p, k) => nearPoint(points.slice(0, k), p) >= 0)) {
+      return exact('affine', ls, 'two points on one pixel or one place: an affine fit of them all; remove one')
+    }
+    return exact('similarity', sim ?? t, 'the points lie in a line: placed by the first two')
+  }
+  if (points.length === 3) return { ...fit, how: 'affine', residuals: [0, 0, 0], rms: null, problem: null }
   // the image's own error at each point: where the other points alone put its pixel
   const residuals = points.map(([u, v, x, z], k) => {
     const rest = through(points.filter((_, i) => i !== k))
@@ -225,7 +277,7 @@ export function fitScan(points: ControlPoint[], w: number, h: number, extent: { 
   })
   const known = residuals.filter(Number.isFinite)
   const rms = known.length ? Math.sqrt(known.reduce((a, r) => a + r * r, 0) / known.length) : null
-  return { ...fit, how: 'spline', residuals, rms, degenerate: false }
+  return { ...fit, how: 'spline', residuals, rms, problem: null }
 }
 
 /** Where a scan shows on the map: an area (none: the whole extent), and the shift from a map point to its frame. */

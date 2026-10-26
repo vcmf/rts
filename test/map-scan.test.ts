@@ -1,12 +1,12 @@
 // A scan to trace from (docs/plans/active/m7-editor.md M7e, decision 0069): its fit from control points, the pieces it
 // shows in, the frame point under a map point, the validator's checks of a scan source, and the transverse Mercator
 // the scan tool places a georeferenced image with.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Catalogue, MapFile, Pt, Source } from '../src/map/schema.ts'
 import { validate } from '../src/map/validate.ts'
-import { apply, fitScan, frameAt, scanPieces, type Affine } from '../src/app/map/scan.ts'
+import { apply, fitScan, frameAt, nearPoint, scanPieces, type Affine } from '../src/app/map/scan.ts'
 import { geoBox, geoPoints, transverseMercator } from '../tools/geo.ts'
 import { root } from './fx.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
@@ -102,9 +102,48 @@ describe('a scan placed by its control points', () => {
     expect(off(190, 150)).toBeLessThan(5)
     expect(off(310, 250)).toBeLessThan(5)
   })
+  it('goes back to the very pixel a frame point shows, through a bent fit too', () => {
+    // a survey's own distortion: the way back is the forward spline inverted, not a second spline the other way
+    const bent = (u: number, v: number): Pt => {
+      const [x, z] = apply(TRUE, u, v)
+      return [x + 150 * Math.sin((Math.PI * u) / 300), z + 90 * Math.cos((Math.PI * v) / 250)]
+    }
+    const pts = [
+      [0, 0],
+      [500, 20],
+      [30, 400],
+      [480, 390],
+      [250, 200],
+      [120, 300],
+      [380, 90],
+    ].map(([u, v]) => [u, v, ...bent(u, v)] as [number, number, number, number])
+    const f = fitScan(pts, 500, 400, EXTENT)
+    for (const [u, v] of [
+      [200, 200],
+      [60, 50],
+      [440, 330],
+      [10, 390],
+    ]) {
+      const [x, z] = f.toFrame(u, v)
+      const back = f.toImage(x, z)!
+      expect(Math.hypot(back[0] - u, back[1] - v)).toBeLessThan(0.01)
+    }
+  })
+  it('keeps an affine fit of all the points, and says why, when two share a pixel or a place', () => {
+    const pts = [pair(0, 0), pair(500, 20), pair(30, 400), pair(480, 390), pair(250, 200)]
+    // the first landmark clicked again, placed 10 m away: no spline goes through both
+    const again: [number, number, number, number] = [pts[0][0], pts[0][1], pts[0][2] + 10, pts[0][3]]
+    expect(nearPoint(pts, again)).toBe(0)
+    expect(nearPoint(pts, pair(100, 100))).toBe(-1)
+    const f = fitScan([...pts, again], 500, 400, EXTENT)
+    expect(f.how).toBe('affine')
+    expect(f.problem).toMatch(/two points on one pixel or one place/)
+    // still placed by all of them, not by the first two alone
+    expect(near(f.toFrame(250, 200), apply(TRUE, 250, 200), 5)).toBe(true)
+  })
   it('places points in a line by the first two', () => {
     const f = fitScan([pair(0, 0), pair(100, 100), pair(200, 200), pair(300, 300)], 500, 400, EXTENT)
-    expect(f.degenerate).toBe(true)
+    expect(f.problem).toMatch(/in a line/)
     expect(f.residuals.slice(0, 2).every(r => r < 1e-6)).toBe(true)
   })
 })
@@ -237,6 +276,10 @@ describe('the transverse Mercator', () => {
     }
     const pts = geoPoints(box, 2000, 2000, 49.118, 16.737)
     expect(pts).toHaveLength(9)
+    // the middle pixel's corner is the box's middle (the page's convention: pixel k spans [k, k + 1])
+    const mid = pts[4]
+    expect(mid.slice(0, 2)).toEqual([1000, 1000])
+    expect(Math.hypot(mid[2], mid[3])).toBeLessThan(0.05)
     // a WGS 84 image in a local transverse Mercator: an affine fit misses by under a metre over 6 km
     // within a metre of one affine map over 6 km: a spline through the grid stays as near it
     const f = fitScan(pts, 2000, 2000, { w: 6000, h: 6000 })
@@ -284,6 +327,30 @@ describe("the editor's capture of points for a scan", () => {
     expect(ed.doc!.sources![0].points).toBeUndefined()
     expect(ed.dirty).toBe(false)
   })
+  it('checks each click before the last on its own, and takes a quick second click as a click', () => {
+    const ed = make()
+    ed.capture(
+      ['a', 'b'],
+      () => withPoint(ed, [1, 1, 1, 1]),
+      ([p]) => (p[0] < 0 ? 'on the scan, please' : null),
+    )
+    ed.click(-10, 0)
+    expect(ed.message).toBe('on the scan, please')
+    expect(ed.captured).toEqual([])
+    ed.click(10, 0)
+    expect(ed.captured).toEqual([[10, -0]])
+    // a moment later and a pixel away: no double click while capturing, the second place is taken
+    vi.spyOn(performance, 'now').mockImplementation(() => 1)
+    ed.click(12, 1)
+    expect(ed.drawing).toBe(false)
+    expect(ed.doc!.sources![0].points).toEqual([[1, 1, 1, 1]])
+  })
+  it('says how to end a capture when a command waits for it', () => {
+    const ed = make()
+    ed.capture(['a', 'b'], () => withPoint(ed, [0, 0, 0, 0]))
+    ed.undo()
+    expect(ed.message).toBe('finish the clicks first, or drop them (Escape)')
+  })
   it('takes the last click back when the edit is refused, and on Backspace; Escape drops it all', () => {
     const ed = make()
     let refuse = true
@@ -301,7 +368,7 @@ describe("the editor's capture of points for a scan", () => {
     // no command while it lasts
     ed.capture(['a', 'b'], () => withPoint(ed, [0, 0, 0, 0]))
     ed.undo()
-    expect(ed.message).toMatch(/finish the drawing first/)
+    expect(ed.message).toMatch(/finish the clicks first/)
     refuse = false
     ed.click(10, 20)
     ed.click(30, 40)

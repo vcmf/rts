@@ -87,7 +87,7 @@ export function geoBox(
 
 /**
  * Control points for an image of a geographic box (an equirectangular WMS image, w × h pixels, north up): a grid of
- * k × k pixel centres, each with its place in the transverse Mercator centred on (lat0, lon0). [u, v, x, z], to cm.
+ * k × k pixel corners, each with its place in the transverse Mercator centred on (lat0, lon0). [u, v, x, z], to cm.
  */
 export function geoPoints(
   box: [number, number, number, number],
@@ -105,8 +105,9 @@ export function geoPoints(
       // pixels a tenth in from the edges, spread evenly
       const u = Math.round(w * (0.1 + (0.8 * i) / (k - 1)))
       const v = Math.round(h * (0.1 + (0.8 * j) / (k - 1)))
-      const lon = west + ((u + 0.5) / w) * (east - west)
-      const lat = north - ((v + 0.5) / h) * (north - south)
+      // a pixel's coordinate as the page draws it: pixel k spans [k, k + 1], so u is the west edge of pixel u
+      const lon = west + (u / w) * (east - west)
+      const lat = north - (v / h) * (north - south)
       const [x, z] = tm(lat, lon)
       out.push([u, v, Math.round(x * 100) / 100, Math.round(z * 100) / 100])
     }

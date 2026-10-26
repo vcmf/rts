@@ -581,6 +581,21 @@ file, moved as the piece is: the period map follows the terrain it was cut with.
   own error, recorded here with a screenshot for the owner. The scan stays out of git.
 - `npm test`, `check:data`, the build, the docs check and the page check pass.
 
+## Review rounds (M7e)
+
+- **Round 1** (`/code-review high`): severe. From four points the way back (map to pixel) was a second spline, not
+  the inverse of the first: a new control point could take a pixel up to 220 px from the one clicked; two points on
+  one pixel or place made the spline singular, and the whole fit fell to the first two points, called "in a line".
+  Fixed: the way back inverts the forward spline by Newton's method (a thousandth of a pixel), the second spline only
+  its first guess; a point on a pixel or place that has one is refused, saying which, and a fit that still meets one
+  keeps the affine fit of all the points and says why. With them: a piece's clip follows the near limit where it
+  passes behind the camera (as the outlines do), not dropped; a capture checks its first click on its own, takes a
+  quick second click as a click (no double click), says how to end it, and gives the map the keyboard; bitmaps no
+  scan of the copy names are closed, and a missing image is read again when the scan is chosen again; the tool's
+  points are at pixel corners, as the page draws pixels (half a pixel, 0.7 m, before); a .webp scan is asked for as
+  WebP. Tests for each (each fails without its fix); the page check refuses a point placed twice and drops a capture
+  by Escape.
+
 ## Results (M7e)
 
 - The Habsburg First Military Survey over Austerlitz, fetched with `tools/scan-wms.ts` from Chartae Antiquae's WMS

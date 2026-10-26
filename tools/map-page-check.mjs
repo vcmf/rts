@@ -485,13 +485,23 @@ try {
         const moved = red(colour(...MAP.scanAt(57, 57))) && !red(colour(...before))
         const state = document.getElementById('scanState').textContent
         const listed = document.querySelectorAll('#scanPoints li').length
+        // a landmark placed again on its pixel: refused, with why
+        document.getElementById('scanAdd').click()
+        click(...MAP.scanAt(50, 50))
+        await sleep(700)
+        click(100, 100)
+        await sleep(700)
+        const twice = /point 1 is there already/.test(document.getElementById('editState').textContent)
+        // Escape, from where the button left the focus, drops the clicks
+        document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+        const dropped = !MAP.drawing
         const ms = MAP.traceMs
         const ok = await MAP.save()
         const disk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
         for (let k = 0; k < 4; k++) MAP.undo()
         const back = await MAP.save()
         const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
-        return 'SCAN ' + JSON.stringify({ shown, points: points.length, placed, moved, state, listed, ms, ok, disk, back, after })
+        return 'SCAN ' + JSON.stringify({ shown, points: points.length, placed, moved, state, listed, twice, dropped, ms, ok, disk, back, after })
       })()`,
     ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
@@ -751,6 +761,8 @@ try {
     `three control points added by clicks, each pixel now on its place (${sc.state})`,
   )
   check(sc.moved, 'the scan is drawn where its points put it')
+  check(sc.twice, 'a point placed again on a pixel that has one is refused, saying which')
+  check(sc.dropped, "after the scan box's button, Escape drops the clicks (the map has the focus)")
   const sd = lineDiff(original, sc.disk)
   const without = t => JSON.stringify({ ...JSON.parse(t), sources: undefined })
   check(

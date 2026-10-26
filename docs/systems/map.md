@@ -337,8 +337,9 @@ maps/kinds.json ──► checkCatalogue ─┐
       (clipped to its area, painted in the pieces' priority and id order), moved by the piece's `shift`; with no frame,
       over the map unmoved. Its placement from its control points `[u, v, x, z]`: none, over the extent; one, moved;
       two, a similarity; three, the affine map through them; four or more, a thin-plate spline through every point,
-      and back (a second spline), each point's residual where the others alone put it, and their root mean square,
-      shown in the panel. The lit view is tilted, so the image is drawn as a 16 × 16 mesh of triangles each mapped by
+      and back by Newton's method on it (a second spline the other way its first guess), each point's residual where
+      the others alone put it, and their root mean square, shown in the panel; two points on one pixel or place keep
+      the affine fit of them all, saying so (the page refuses a point where one is). The lit view is tilted, so the image is drawn as a 16 × 16 mesh of triangles each mapped by
       its own affine transform, into an offscreen canvas at full opacity, then onto the view; it is decoded once into
       a bitmap. A point is added by two clicks (the editor's capture: Escape drops it, Backspace takes a click back),
       one edit of the map's sources: where a landmark shows on the scan, then where it is on the map; each listed

@@ -106,6 +106,8 @@ interface Capture {
   prompts: string[]
   pts: Pt[]
   then: (pts: Pt[]) => MapFile | string
+  /** Checks the clicks before the last, each on its own (null: taken). */
+  check?: (pts: Pt[]) => string | null
 }
 type Mode = { kind: 'idle' } | Press | Drawing | Capture
 /** A step of the history: the copy, and the selection it had (a feature brought back by an undo is selected again). */
@@ -120,6 +122,7 @@ const SELECTED = '#d0601a'
 const WRONG = '#c0201a'
 const BUSY = 'finish the drag first'
 const DRAWING = 'finish the drawing first (Enter), or drop it (Escape)'
+const CAPTURING = 'finish the clicks first, or drop them (Escape)'
 const DRAFT = '#1a70c0'
 const DOUBLE_MS = 600 // longer than a double click's two clicks apart
 
@@ -296,7 +299,6 @@ export class Editor {
   get idle(): boolean {
     return this.mode.kind === 'idle'
   }
-  /** Whether a drawing is in progress (its clicks are the editor's), and what to click next. */
   /** The ground points a capture has taken so far (none when not capturing). */
   get captured(): Pt[] {
     return this.mode.kind === 'capturing' ? this.mode.pts : []
@@ -334,7 +336,7 @@ export class Editor {
   /** Whether a command may run now; says why not when it may not. */
   private ready(): boolean {
     if (this.mode.kind === 'idle') return true
-    this.message = this.drawing ? DRAWING : BUSY
+    this.message = this.mode.kind === 'capturing' ? CAPTURING : this.drawing ? DRAWING : BUSY
     this.host.changed()
     return false
   }
@@ -379,7 +381,9 @@ export class Editor {
   click(sx: number, sy: number): void {
     const now = performance.now()
     const prev = this.lastClick
-    if (prev && now - prev.at < DOUBLE_MS && Math.hypot(sx - prev.sx, sy - prev.sy) < DRAG_PX) {
+    // a capture's clicks are each a click: its two places may be a few pixels apart
+    const capturing = this.mode.kind === 'capturing'
+    if (!capturing && prev && now - prev.at < DOUBLE_MS && Math.hypot(sx - prev.sx, sy - prev.sy) < DRAG_PX) {
       this.lastClick = null
       return this.double(sx, sy, prev)
     }
@@ -753,9 +757,9 @@ export class Editor {
    * Takes ground points by clicks for a command of the page, one a prompt; the last click makes the edit `then` gives
    * (one edit), or says why not and takes that click back. Escape drops it. Returns whether it started; says why not.
    */
-  capture(prompts: string[], then: (pts: Pt[]) => MapFile | string): boolean {
+  capture(prompts: string[], then: (pts: Pt[]) => MapFile | string, check?: (pts: Pt[]) => string | null): boolean {
     if (!this.canEdit(null) || !this.doc) return false
-    this.mode = { kind: 'capturing', prompts, pts: [], then }
+    this.mode = { kind: 'capturing', prompts, pts: [], then, check }
     this.hover = null
     this.message = ''
     this.host.changed()
@@ -769,6 +773,8 @@ export class Editor {
     if (!at) return this.note('no ground there: click on the map')
     const pts = [...m.pts, at]
     if (pts.length < m.prompts.length) {
+      const why = m.check?.(pts)
+      if (why) return this.note(why)
       m.pts = pts
       this.message = ''
       this.host.changed()

@@ -9,15 +9,27 @@
 // - The opacity is a setting of the page, kept per map and scan in the browser, never in the file.
 import type { Catalogue, MapFile, Pt, Source } from '../../map/schema.ts'
 import type { Editor } from './editor.ts'
-import { fitScan, frameAt, inPiece, scanPieces, type Piece, type ScanFit } from './scan.ts'
+import {
+  fitScan,
+  frameAt,
+  inPiece,
+  nearPoint,
+  scanPieces,
+  type ControlPoint,
+  type Piece,
+  type ScanFit,
+} from './scan.ts'
 import { setField } from './fields.ts'
 
 /** What the overlay needs from the page. */
 export interface TraceHost {
   ctx: CanvasRenderingContext2D
   project(x: number, z: number): [number, number] | null
-  groundPath(pts: Pt[], close: boolean): void
+  /** Adds a ring of ground points to a clip's path, closed, along the near limit where it passes behind the camera. */
+  ringPath(path: Path2D, ring: Pt[]): void
   redraw(): void
+  /** Gives the map the keyboard (a capture's Escape and Backspace). */
+  focus(): void
   /** The map's file, which names the browser's settings. */
   file(): string | null
   /** The catalogue the pieces are resolved with (none yet: no scan shows). */
@@ -104,6 +116,13 @@ export class Trace {
     const want = force ? this.ui.pick.value : (setting(this.key('scan')) ?? this.ui.pick.value)
     this.ui.pick.value = ids.includes(want) ? want : ''
     const scan = scans.find(s => s.id === this.ui.pick.value) ?? null
+    // a scan chosen again reads a missing image again (fetched meanwhile); images no scan of the copy names go
+    if (force && scan?.file && this.images.get(scan.file)?.state === 'missing') this.images.delete(scan.file)
+    for (const [file, im] of [...this.images]) {
+      if (scans.some(x => x.file === file)) continue
+      if (im.state === 'ready') im.img.close()
+      this.images.delete(file)
+    }
     const image = scan?.file ? this.image(scan.file) : null
     const key = [doc, cat, scan, image]
     if (!force && key.length === this.last.length && key.every((k, i) => k === this.last[i])) return
@@ -131,6 +150,8 @@ export class Trace {
     img.onload = () => {
       createImageBitmap(img).then(
         bmp => {
+          // gone meanwhile (its scan removed): not kept
+          if (this.images.get(file) !== im) return bmp.close()
           this.images.set(file, { state: 'ready', img: bmp })
           this.update()
         },
@@ -168,8 +189,8 @@ export class Trace {
             ? 'one point: moved onto it'
             : n === 2
               ? 'two points: moved, turned, scaled'
-              : s.fit.degenerate
-                ? `${n} points in a line: placed by the first two`
+              : s.fit.problem
+                ? `${n} points: ${s.fit.problem}`
                 : n === 3
                   ? 'three points: an affine fit through them (a fourth tells its error)'
                   : `${n} points, bent through each: ${s.fit.rms!.toFixed(1)} m root mean square where the others put each`
@@ -193,7 +214,7 @@ export class Trace {
   }
 
   /** The copy with the shown scan's points replaced, or null when the scan is gone from it. */
-  private withPoints(points: [number, number, number, number][]): MapFile | null {
+  private withPoints(points: ControlPoint[]): MapFile | null {
     const doc = this.editor.doc
     const id = this.shown?.scan.id
     const sources = doc?.sources ?? []
@@ -206,21 +227,42 @@ export class Trace {
   /** Two clicks through the editor, one edit: where a landmark shows on the scan, then where it is on the map. */
   private addPoint(): void {
     if (!this.shown) return
-    this.editor.capture(['click where a landmark shows on the scan', 'click where it is on the map'], ([on, at]) => {
+    // the pixel under a click on the drawn scan, or why there is none
+    const pixel = (on: Pt): Pt | string => {
       const s = this.shown
       if (!s) return 'the scan is not shown'
       const from = frameAt(s.pieces, on[0], on[1])
       const uv = from ? s.fit.toImage(from[0], from[1]) : null
       const [w, h] = [s.img.width, s.img.height]
       if (!uv || uv[0] < 0 || uv[1] < 0 || uv[0] > w || uv[1] > h) {
-        return 'the first click is on the scan: where it shows the landmark'
+        return 'click on the scan, where it shows the landmark'
       }
-      const to = frameAt(s.pieces, at[0], at[1])
-      if (!to) return 'the second click is where the scan shows (a relief piece cut from its frame)'
-      const r = (v: number) => Math.round(v * 100) / 100
-      const out = this.withPoints([...(s.scan.points ?? []), [r(uv[0]), r(uv[1]), r(to[0]), r(to[1])]])
-      return out ?? 'the scan is gone from the map'
-    })
+      return uv
+    }
+    const started = this.editor.capture(
+      ['click where a landmark shows on the scan', 'click where it is on the map'],
+      ([on, at]) => {
+        const s = this.shown
+        const uv = pixel(on)
+        if (!s || typeof uv === 'string') return typeof uv === 'string' ? uv : 'the scan is not shown'
+        const to = frameAt(s.pieces, at[0], at[1])
+        if (!to) return 'click where the scan shows (a relief piece cut from its frame)'
+        const r = (v: number) => Math.round(v * 100) / 100
+        const p: ControlPoint = [r(uv[0]), r(uv[1]), r(to[0]), r(to[1])]
+        const points = s.scan.points ?? []
+        // a second point on one pixel or place would pull the placement two ways at once
+        const k = nearPoint(points, p)
+        if (k >= 0) return `point ${k + 1} is there already: remove it first to place it again`
+        const out = this.withPoints([...points, p])
+        return out ?? 'the scan is gone from the map'
+      },
+      // the first click is checked on its own: a click off the scan is taken back at once
+      ([on]) => {
+        const uv = pixel(on)
+        return typeof uv === 'string' ? uv : null
+      },
+    )
+    if (started) this.host.focus()
   }
 
   /** Removes a control point: one edit of the map's sources. */
@@ -278,12 +320,7 @@ export class Trace {
     if (p.area) {
       // the piece's rings as one path: its holes left out (even-odd)
       const path = new Path2D()
-      for (const ring of p.area) {
-        const pts = ring.map(q => this.host.project(q[0], q[1]))
-        if (pts.some(q => !q)) continue
-        pts.forEach((q, k) => (k ? path.lineTo(q![0], q![1]) : path.moveTo(q![0], q![1])))
-        path.closePath()
-      }
+      for (const ring of p.area) this.host.ringPath(path, ring)
       o.clip(path, 'evenodd')
     }
     // the mesh's nodes on screen, then each cell as two triangles

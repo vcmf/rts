@@ -311,13 +311,28 @@ const toScreen = (x: number, z: number): [number, number] | null => (lit ? lit.p
  */
 function groundPath(pts: Pt[], close: boolean): void {
   ctx.beginPath()
+  pathThrough(ctx, pts, close, false)
+}
+/**
+ * A ring of ground points as a closed part of a path (a clip's: a scan's piece, M7e): where it passes behind the
+ * camera it runs along the near limit instead (the region behind is not drawn), so it stays one closed ring.
+ */
+function ringPath(path: Path2D, ring: Pt[]): void {
+  pathThrough(path, ring, true, true)
+  path.closePath()
+}
+/**
+ * Adds ground points to a path through the view (the context's or a Path2D), cut where the line passes behind the
+ * tilted camera: lifted there, or with `bridge` carried on along the near limit.
+ */
+function pathThrough(sink: CanvasPath, pts: Pt[], close: boolean, bridge: boolean): void {
   if (!lit) {
     pts.forEach((p, k) => {
       const [x, y] = flatScreen(p[0], p[1])
-      if (k) ctx.lineTo(x, y)
-      else ctx.moveTo(x, y)
+      if (k) sink.lineTo(x, y)
+      else sink.moveTo(x, y)
     })
-    if (close) ctx.closePath()
+    if (close) sink.closePath()
     return
   }
   const L = lit
@@ -327,8 +342,8 @@ function groundPath(pts: Pt[], close: boolean): void {
   const to = (p: Pt) => {
     const s = L.project(p[0], p[1])
     if (!s) return
-    if (pen) ctx.lineTo(s[0], s[1])
-    else ctx.moveTo(s[0], s[1])
+    if (pen) sink.lineTo(s[0], s[1])
+    else sink.moveTo(s[0], s[1])
     pen = true
   }
   const seq = close ? [...pts, pts[0]] : pts
@@ -342,7 +357,7 @@ function groundPath(pts: Pt[], close: boolean): void {
         // where the segment meets the near limit (the depth is linear along it), a hair on the drawable side
         const t = rq / (rq - rp)
         to(along(q, p, rp > 0 ? t + 1e-6 : t - 1e-6))
-        if (rp <= 0) pen = false
+        if (rp <= 0 && !bridge) pen = false
       }
     }
     if (rp > 0) to(p)
@@ -385,8 +400,9 @@ const trace = new Trace(
   {
     ctx,
     project: (x, z) => toScreen(x, z),
-    groundPath,
+    ringPath,
     redraw,
+    focus: () => canvas.focus(),
     file: () => editor.file,
     catalogue: () => catalogue,
   },

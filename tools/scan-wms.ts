@@ -63,7 +63,7 @@ async function main(): Promise<void> {
   const along = tm(box[2], lon)[1] - tm(box[0], lon)[1]
   const w = Math.min(px, MAX_PX, Math.round((px * across) / Math.max(across, along)))
   const h = Math.min(MAX_PX, Math.round((w * along) / across))
-  const format = /\.png$/.test(file) ? 'image/png' : 'image/jpeg'
+  const format = file.endsWith('.png') ? 'image/png' : file.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
   const url = getMapUrl(service, layer, box, w, h, format)
   const res = await fetch(url)
   const type = res.headers.get('content-type') ?? ''
