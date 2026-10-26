@@ -7,4 +7,6 @@ export const ARMIES_DEMO = {
   unitType: 'infantry',
   figure: 'fr-line-infantry',
   sides: ['fr-line-1808', 'at-line-white'],
+  // played by the sim (?sim, src/look/sim-armies.ts): the shape each battalion approaches in, and the one it fights in
+  sim: { approach: 'column', fight: 'line' },
 } as const

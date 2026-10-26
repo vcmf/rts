@@ -25,3 +25,7 @@ function cross(w: World): void {
   }
 }
 export const lookCross: Scenario = { name: 'look-cross', setup: cross, map: 'painted-world' }
+
+// the look page's armies at ?sim (src/look/sim-armies.ts, PR 4b): none set up here, the page lays its battalions out
+// (around the trees it scatters) and spawns them by commands, so they are in the session's log
+export const lookArmies: Scenario = { name: 'look-armies', setup: () => {}, map: 'painted-world' }

@@ -8,7 +8,7 @@ import { s1dArms } from './s1d-arms.ts'
 import { s1dCharge } from './s1d-charge.ts'
 import { s1dGuns } from './s1d-guns.ts'
 import { s1eBattle } from './s1e-battle.ts'
-import { lookCross } from './look-world.ts'
+import { lookCross, lookArmies } from './look-world.ts'
 
 export const PAGE_SCENARIOS: Record<string, Scenario> = {
   's1c-firefight': s1cFirefight,
@@ -21,6 +21,9 @@ export const PAGE_SCENARIOS: Record<string, Scenario> = {
   ...S1B_SCENARIOS,
 }
 export const DEFAULT_SCENARIO = 's1c-firefight'
+// the battles the battle's workers play (src/app/sim-host.ts looks them up by key): the page's, and the look page's
+// at ?sim, which sets nothing up (the look page spawns its laid-out battalions by commands)
+export const BATTLE_SCENARIOS: Record<string, Scenario> = { ...PAGE_SCENARIOS, 'look-armies': lookArmies }
 // the seed the page plays every scenario at (tools/battle-report.ts runs a scenario with no orders at it too)
 export const PAGE_SEED = 20261009
 // where the page opens on each: centre x, z and pixels per metre

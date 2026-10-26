@@ -37,8 +37,9 @@ export const H_TICK_MS = 5
 export const H_STEP_MS = 6
 export const H_PUB_MS = 7
 const H_LEN = 16
-// a battalion's row: its formation index, its group, where its men's indices start in `ids`, how many
-const U_ROW = 4
+// a battalion's row: its formation index, its group, where its men's indices start in `ids`, how many, and its
+// revision (src/render/soldiers.ts Unit.rev: what changes with what it is drawn from)
+const U_ROW = 5
 
 type Typed = Uint8Array | Int8Array | Uint16Array | Int32Array | Uint32Array | Float64Array
 type TypedCtor = new (buf: ArrayBufferLike, off: number, len: number) => Typed
@@ -140,6 +141,7 @@ export function writeFrame(
     rows[r + 1] = u.group
     rows[r + 2] = o
     rows[r + 3] = u.n
+    rows[r + 4] = u.rev
     ids.set(u.ids.subarray(0, u.n), o)
     o += u.n
   }
@@ -217,6 +219,8 @@ export class FrameView {
           sway: 0,
           sig: new Int32Array(0),
           pose: new Float64Array(0),
+          rev: 0,
+          volleys: new Int32Array(0),
           off,
         }
         this.cache.set(i, u)
@@ -226,6 +230,7 @@ export class FrameView {
         u.off = off
       }
       u.group = this.rows[r + 1]
+      u.rev = this.rows[r + 4]
       layer.units.set(i, u)
     }
     const ahead = ((now - h[H_TIME]) / 1000) * h[H_SPEED]

@@ -139,9 +139,10 @@ export class WorkerLink implements BattleLink {
   private onFirst: () => void = () => {}
   private onFail: (e: Error) => void = () => {}
 
-  /** Starts the sim worker on the scenario (`key`: its key in PAGE_SCENARIOS; `bytes`: the map's, `data` loaded from
-   * them), then the men worker once the sim has written its first world; `ready` resolves at the first frame. */
-  constructor(sim: Worker, men: Worker, bytes: Uint8Array, data: SimData, cr: Compiled, key: string) {
+  /** Starts the sim worker on the scenario (`key`: its key in BATTLE_SCENARIOS; `bytes`: the map's, `data` loaded from
+   * them; `ruleset`: its name in src/rulesets/index.ts, the napoleonic one if none, `cr` compiled from it), then the
+   * men worker once the sim has written its first world; `ready` resolves at the first frame. */
+  constructor(sim: Worker, men: Worker, bytes: Uint8Array, data: SimData, cr: Compiled, key: string, ruleset?: string) {
     this.sim = sim
     this.men = men
     this.data = data
@@ -157,7 +158,7 @@ export class WorkerLink implements BattleLink {
     const ring = makeRing(this.shape)
     sim.onmessage = (e: MessageEvent<FromSim>) => {
       const m = e.data
-      if (m.type === 'ready') this.toMen({ type: 'init', data: bytes, version: data.version, ring })
+      if (m.type === 'ready') this.toMen({ type: 'init', data: bytes, version: data.version, ring, ruleset })
       else if (m.type === 'events') {
         this.log.push(...m.log)
         this.dropped.push(...m.dropped)
@@ -179,7 +180,7 @@ export class WorkerLink implements BattleLink {
     // a module that failed to load, or an error a worker did not catch
     sim.onerror = e => this.fail(`sim: ${e.message || 'the worker failed'}`)
     men.onerror = e => this.fail(`men: ${e.message || 'the worker failed'}`)
-    this.toSim({ type: 'init', scenario: key, data: bytes, version: data.version, ring })
+    this.toSim({ type: 'init', scenario: key, data: bytes, version: data.version, ring, ruleset })
   }
   /** A worker stopped: both are ended (the other would run on for nothing), it is said on the console, and the start
    * and every request waiting fail with it. */
@@ -256,4 +257,32 @@ export class WorkerLink implements BattleLink {
     ])
     return sim && men ? { sim, men } : null
   }
+}
+
+/** What starting a battle takes: the map's bytes and data, the ruleset compiled (and its name, src/rulesets/index.ts),
+ * the scenario (and its key in BATTLE_SCENARIOS, which the sim worker looks up), and the two workers to start, made
+ * by the caller (so the bundler finds their files), or null to play on the page. */
+export interface LinkStart {
+  bytes: Uint8Array
+  data: SimData
+  cr: Compiled
+  scenario: Scenario
+  key: string
+  ruleset?: string
+  workers: (() => [Worker, Worker]) | null
+}
+
+/** The battle in its workers when given them and they start, else on the page (said on the console when they fail). */
+export async function startLink(o: LinkStart): Promise<BattleLink> {
+  if (o.workers) {
+    const [sim, men] = o.workers()
+    const wl = new WorkerLink(sim, men, o.bytes, o.data, o.cr, o.key, o.ruleset)
+    try {
+      await wl.ready()
+      return wl
+    } catch (e) {
+      console.warn(`the battle runs on the page: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  return new MainLink(o.data, o.cr, o.scenario)
 }

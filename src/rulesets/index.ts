@@ -7,3 +7,10 @@ import { UNIFORMS as NAPOLEONIC_UNIFORMS } from './napoleonic-uniforms.ts'
 export const RULESETS: Readonly<Record<string, { ruleset: Ruleset; uniforms: Readonly<Record<string, Uniform>> }>> = {
   napoleonic: { ruleset: napoleonic, uniforms: NAPOLEONIC_UNIFORMS },
 }
+
+/** The ruleset named, or an error naming it. */
+export function rulesetOf(name: string): Ruleset {
+  const r = Object.hasOwn(RULESETS, name) ? RULESETS[name] : undefined
+  if (!r) throw new Error(`no ruleset ${name} (src/rulesets/index.ts)`)
+  return r.ruleset
+}

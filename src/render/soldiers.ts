@@ -60,6 +60,11 @@ export interface Unit {
   sway: number
   sig: Int32Array
   pose: Float64Array
+  // bumped whenever what the battalion is drawn from changes: its men stepped (unless every one was skipped, settled
+  // and still), matched again (losses, slots, Face about), or a company's volley (the renderers re-draw it then:
+  // battle threads PR 4b); volleys: its companies' last volley ticks, as last seen
+  rev: number
+  volleys: Int32Array
 }
 
 const NO_UNITS: readonly Unit[] = []
@@ -286,6 +291,7 @@ export class SoldierLayer {
     for (let i = 0; i < N; i++) {
       if (!f.alive[i]) continue
       let u = this.units.get(i)
+      if (u) this.seeVolleys(u)
       // which slots are filled changes only with the men, the shape (or the one it changes to), the lean
       // and Face about: nothing to match otherwise
       if (u && this.same(u.sig, i)) continue
@@ -307,11 +313,15 @@ export class SoldierLayer {
           sway: 0,
           sig: new Int32Array(C + 5),
           pose: new Float64Array(8 + 2 * w.cr.maxNB).fill(NaN),
+          rev: 0,
+          volleys: new Int32Array(w.cr.maxC),
         }
         this.units.set(i, u)
         this.joinGroup(u)
+        this.seeVolleys(u)
       }
       this.sign(u.sig, i)
+      u.rev++
       if (u.faces !== f.faces[i]) {
         // Face about: each man's slot is now the half-turn of his old one
         const T = U.shapes[f.shape[i]].turn
@@ -417,6 +427,18 @@ export class SoldierLayer {
       out[1] = z / n
     }
     return n
+  }
+  /** Takes a battalion's companies' last volleys: a new one moves its revision on (its company fires). */
+  private seeVolleys(u: Unit): void {
+    const f = this.w.f
+    const C = this.w.cr.maxC
+    for (let c = 0; c < C; c++) {
+      const t = f.volleyTick[u.i * C + c]
+      if (t !== u.volleys[c]) {
+        u.volleys[c] = t
+        u.rev++
+      }
+    }
   }
   /** How many of a battalion's men stand. */
   private standing(u: Unit): number {
@@ -567,10 +589,16 @@ export class SoldierLayer {
       const WALKu = this.walkOf[ty]
       const RUNu = this.runOf[ty]
       const ids = u.ids
+      // (a man not skipped: the battalion's revision moves on)
+      let touched = false
       for (let j = 0, n = u.n; j < n; j++) {
         const m = ids[j]
         const fl = FL[m]
         if (!(fl & MAN_ALIVE) || (still && fl & MAN_SETTLED)) continue
+        // (what he is drawn from as the step found it: a change of it moves the battalion's revision on)
+        const wasX = MX[m]
+        const wasZ = MZ[m]
+        const wasV = MVX[m] !== 0 || MVZ[m] !== 0
         this.place(i, MS[m], true, p, imp)
         let mx = MX[m]
         let mz = MZ[m]
@@ -607,6 +635,7 @@ export class SoldierLayer {
         if (fl & MAN_SETTLED) {
           if (busy || Math.hypot(tx - MHX[m], tz - MHZ[m]) > 0.3) FL[m] = fl & ~MAN_SETTLED
           else {
+            if (wasV) touched = true
             MVX[m] = 0
             MVZ[m] = 0
             continue
@@ -619,6 +648,7 @@ export class SoldierLayer {
           FL[m] |= MAN_SETTLED
           MHX[m] = tx
           MHZ[m] = tz
+          if (wasV) touched = true
           MVX[m] = 0
           MVZ[m] = 0
           continue
@@ -717,9 +747,11 @@ export class SoldierLayer {
         // a trunk's push never takes him off the map
         MX[m] = Math.min(xMax, Math.max(t.x0, mx))
         MZ[m] = Math.min(zMax, Math.max(t.z0, mz))
+        if (MX[m] !== wasX || MZ[m] !== wasZ || wasV !== (vx !== 0 || vz !== 0)) touched = true
         MVX[m] = vx
         MVZ[m] = vz
       }
+      if (touched) u.rev++
     }
   }
   private poseNow: Float64Array

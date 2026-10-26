@@ -33,7 +33,7 @@ import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
 import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS } from '../scenarios/page.ts'
 import { MAN_ALIVE } from '../render/men.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
-import { MainLink, WorkerLink, type BattleLink, type Seen } from './battle-link.ts'
+import { startLink, type Seen } from './battle-link.ts'
 import { pruneSelection, runSpeed } from './page-rules.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
@@ -59,27 +59,21 @@ async function main(): Promise<void> {
   // worker that fails to start (its script blocked, no module workers) leaves the battle on the page, said so
   let thread: 'worker' | 'main' =
     new URLSearchParams(location.search).get('thread') === 'main' || !crossOriginIsolated ? 'main' : 'worker'
-  const start = async (): Promise<BattleLink> => {
-    if (thread === 'worker') {
-      const wl = new WorkerLink(
-        new Worker(new URL('./sim-worker.ts', import.meta.url), { type: 'module' }),
-        new Worker(new URL('./men-worker.ts', import.meta.url), { type: 'module' }),
-        bytes,
-        data,
-        cr,
-        key,
-      )
-      try {
-        await wl.ready()
-        return wl
-      } catch (e) {
-        console.warn(`the battle runs on the page: ${e instanceof Error ? e.message : String(e)}`)
-        thread = 'main'
-      }
-    }
-    return new MainLink(data, cr, scenario)
-  }
-  const link = await start()
+  const link = await startLink({
+    bytes,
+    data,
+    cr,
+    scenario,
+    key,
+    workers:
+      thread === 'worker'
+        ? () => [
+            new Worker(new URL('./sim-worker.ts', import.meta.url), { type: 'module' }),
+            new Worker(new URL('./men-worker.ts', import.meta.url), { type: 'module' }),
+          ]
+        : null,
+  })
+  thread = link.mode
   // what this frame reads: the newest frame published (held until the next), or the battle on this thread
   let seen: Seen = link.see()
   let w: World = seen.w
