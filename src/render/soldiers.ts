@@ -26,7 +26,7 @@ import {
 import type { Scene, Obstacle } from './scene.ts'
 import { cosmeticRng } from './scene.ts'
 import { CLASS_STYLE } from './style.ts'
-import { Men, MAN_ALIVE, MAN_SETTLED, MAN_LEFT } from './men.ts'
+import { Men, MAN_ALIVE, MAN_SETTLED, grown } from './men.ts'
 
 export const AHEAD = 0.6
 export const WALK = 1.35
@@ -68,10 +68,8 @@ export class SoldierLayer {
   w: World
   scene: Scene
   units = new Map<number, Unit>()
-  // every man, standing or fallen (a fallen man's cross is drawn where he lies); `fallen`: how many of them
-  // belonged to battalions that are gone
+  // every man, standing or fallen (a fallen man's cross is drawn where he lies, his battalion here or gone)
   men = new Men()
-  fallen = 0
   // formations that left the field (handle → the men they took), until their units go
   private leaving = new Map<number, number>()
   private ctxA: Places
@@ -271,14 +269,12 @@ export class SoldierLayer {
         for (let k = 0; k < u.n; k++) {
           const m = u.ids[k]
           if (M.flags[m] & MAN_ALIVE) {
-            if (fall <= 0) {
-              M.flags[m] = MAN_LEFT
-              continue
+            if (fall <= 0) M.leave(m)
+            else {
+              M.flags[m] &= ~MAN_ALIVE
+              fall--
             }
-            M.flags[m] &= ~MAN_ALIVE
-            fall--
           }
-          this.fallen++
         }
         this.units.delete(i)
         this.leaveGroup(u)
@@ -316,11 +312,12 @@ export class SoldierLayer {
       if (u.faces !== f.faces[i]) {
         // Face about: each man's slot is now the half-turn of his old one
         const T = U.shapes[f.shape[i]].turn
-        for (let k = u.faces; k < f.faces[i]; k++) {
-          if (!T) continue
-          for (let j = 0; j < u.n; j++) {
-            const m = u.ids[j]
-            if (M.flags[m] & MAN_ALIVE) M.s[m] = T.m[M.s[m]]
+        if (T) {
+          for (let k = u.faces; k < f.faces[i]; k++) {
+            for (let j = 0; j < u.n; j++) {
+              const m = u.ids[j]
+              if (M.flags[m] & MAN_ALIVE) M.s[m] = T.m[M.s[m]]
+            }
           }
         }
         u.faces = f.faces[i]
@@ -328,8 +325,9 @@ export class SoldierLayer {
       if (this.occ.length < slots) {
         this.occ = new Uint8Array(slots)
         this.claimed = new Uint8Array(slots)
-        this.displaced = new Int32Array(slots)
       }
+      // no more are displaced than stand
+      if (this.displaced.length < u.n) this.displaced = new Int32Array(u.n)
       const occ = this.occ.fill(0, 0, slots)
       const claimed = this.claimed.fill(0, 0, slots)
       const displaced = this.displaced
@@ -428,15 +426,11 @@ export class SoldierLayer {
   private nthStanding(u: Unit, r: number): number {
     const F = this.men.flags
     for (let k = 0; k < u.n; k++) if (F[u.ids[k]] & MAN_ALIVE && r-- === 0) return u.ids[k]
-    return -1
+    throw new Error(`battalion ${u.i}: no standing man ${r} (the standing count drifted)`)
   }
   /** Adds man `m` to a battalion's list, growing it if full. */
   private enlist(u: Unit, m: number): void {
-    if (u.n === u.ids.length) {
-      const ids = new Int32Array(Math.max(8, u.n * 2))
-      ids.set(u.ids)
-      u.ids = ids
-    }
+    if (u.n === u.ids.length) u.ids = grown(u.ids, Math.max(8, u.n * 2))
     u.ids[u.n++] = m
   }
 
@@ -608,12 +602,12 @@ export class SoldierLayer {
         }
         // settled: a man at his place while his battalion is halted holds still until his place moves
         if (fl & MAN_SETTLED) {
-          if (!busy && Math.hypot(tx - MHX[m], tz - MHZ[m]) <= 0.3) {
+          if (busy || Math.hypot(tx - MHX[m], tz - MHZ[m]) > 0.3) FL[m] = fl & ~MAN_SETTLED
+          else {
             MVX[m] = 0
             MVZ[m] = 0
             continue
           }
-          FL[m] = fl & ~MAN_SETTLED
         }
         const dx = tx - mx
         const dz = tz - mz
@@ -729,19 +723,11 @@ export class SoldierLayer {
   /** Doubles the grid's per-man arrays. */
   private grow(): void {
     const n = this.cellNext.length * 2
-    const a = new Int32Array(n)
-    const x = new Float64Array(n)
-    const z = new Float64Array(n)
-    a.set(this.cellNext)
-    x.set(this.flatX)
-    z.set(this.flatZ)
-    this.cellNext = a
-    this.flatX = x
-    this.flatZ = z
+    this.cellNext = grown(this.cellNext, n)
+    this.flatX = grown(this.flatX, n)
+    this.flatZ = grown(this.flatZ, n)
     // no more cells hold men than there are men
-    const t = new Int32Array(n)
-    t.set(this.touched)
-    this.touched = t
+    this.touched = grown(this.touched, n)
   }
   // how far men stand from their places (a measurement): max and mean, metres
   slotError(): { max: number; mean: number } {

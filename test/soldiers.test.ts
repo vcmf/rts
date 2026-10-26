@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { Sim, STREAM_X, longIt, ceiling, small, openBattlefield, OPEN_DATA } from './fx.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer, type Unit } from '../src/render/soldiers.ts'
-import { MAN_ALIVE } from '../src/render/men.ts'
+import { MAN_ALIVE, MAN_LEFT } from '../src/render/men.ts'
 import { MenClock, MEN_DT, MEN_GROUPS, MEN_HZ, MEN_ROUNDS } from '../src/render/men-clock.ts'
 import { occupied, advanceTick, MS_SHATTERED, type Meter } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
@@ -20,6 +20,14 @@ function snapshot(layer: SoldierLayer, u: Unit) {
     s: M.s[m],
     alive: (M.flags[m] & MAN_ALIVE) !== 0,
   }))
+}
+
+/** The crosses the map draws: every man fallen, of the battalions here or gone. */
+function crosses(layer: SoldierLayer): number {
+  const M = layer.men
+  let n = 0
+  for (let m = 0; m < M.n; m++) if (!(M.flags[m] & (MAN_ALIVE | MAN_LEFT))) n++
+  return n
 }
 
 // the sim at 20 Hz, real frames at 60 Hz and the soldier layer on its clock (src/render/men-clock.ts), as the page
@@ -170,17 +178,21 @@ describe('the soldier layer follows the sim', () => {
 })
 
 describe('who stands where', () => {
-  it('a battalion that leaves the field takes its men with it: none is left as fallen', () => {
+  it('a battalion that leaves the field takes its men with it: none is left as fallen, and newcomers take their places in the arrays', () => {
     // a column of route with its tail at the battlefield's southern edge, shattered: it leaves at the next tick
     const p = new Play(new Sim(1, napoleonic, openBattlefield(), OPEN_DATA))
     const h = p.sim.spawn(0, -505, 0, 'march', 400)
     p.frames(1)
-    const before = p.layer.fallen
+    const before = crosses(p.layer)
+    const n = p.layer.men.n
     p.sim.w.f.mstate[p.sim.slot(h)] = MS_SHATTERED
     p.frames(0.2)
     expect(p.sim.slot(h)).toBe(-1)
     expect(p.layer.units.size).toBe(0)
-    expect(p.layer.fallen).toBe(before)
+    expect(crosses(p.layer)).toBe(before)
+    p.sim.spawn(0, 0, 0, 'line', 400)
+    p.frames(0.2)
+    expect([p.layer.men.n, crosses(p.layer)]).toEqual([n, before])
   })
   it("after casualties the living equal the sim's men, one per filled slot", () => {
     // it must not break: losses do not move its morale (shattered at 20 of 100, it would run off the field, S1e-1)
@@ -256,7 +268,7 @@ describe('who stands where', () => {
     p.sim.order({ type: 'debug-kill', id: h, men: 20 })
     p.frames(1)
     expect(p.layer.units.size).toBe(0)
-    expect(p.layer.fallen).toBe(20)
+    expect(crosses(p.layer)).toBe(20)
   })
   it('men never step into deep water, even when their battalion halts at the bank', () => {
     const p = new Play()
