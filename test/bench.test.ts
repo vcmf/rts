@@ -20,6 +20,10 @@ import {
   sectionHashes,
   typeOf,
   giveGround,
+  claimFormation,
+  HELD_FRIEND,
+  HELD_FOE,
+  buildClaims,
   MS_ROUTING,
   M_TICK,
   TICK_HZ,
@@ -243,15 +247,41 @@ describe('with claims: the clash', () => {
     const B = U.geo.bins
     const x = f.x[0]
     const z = f.z[0]
+    const out = { m: 0, by: 0 }
     // its four squadrons: the middle two engaged
-    expect(giveGround(w, 0, 2, [0, 1, 1, 0])).toBeCloseTo(2, 9)
+    expect(giveGround(w, 0, 2, [0, 1, 1, 0], 1, out)).toBe(true)
+    expect(out.m).toBeCloseTo(2, 9)
     const lags = Array.from(f.lags.slice(0, NB))
     for (let j = 0; j < 4 * B; j++) expect(lags[j]).toBeCloseTo(j >= B && j < 3 * B ? 2 : 0, 9)
     expect([f.x[0], f.z[0]]).toEqual([x, z])
     // the whole front: the bend comes out as the anchor stepping back (south-facing: back is +z)
     f.lags.fill(0, 0, NB)
-    expect(giveGround(w, 0, 2, [1, 1, 1, 1])).toBeCloseTo(2, 9)
+    expect(giveGround(w, 0, 2, [1, 1, 1, 1], 1, out)).toBe(true)
+    expect(out.m).toBeCloseTo(2, 9)
     expect(Array.from(f.lags.slice(0, NB)).every(l => Math.abs(l) < 1e-9)).toBe(true)
     expect(f.z[0]).toBeCloseTo(z + 2, 9)
+  })
+  it('what holds a battalion giving ground is whose ground it would newly stand on, not a claim it stood on', () => {
+    const eng = [1, 1, 1, 1]
+    const out = { m: 0, by: 0 }
+    // X-16: the friend 6 m behind holds it
+    const w = play(caseOf('x16-pushed-onto-friend-claims'), { seconds: 1 })
+    expect(giveGround(w, 0, 8, eng, -1, out)).toBe(true)
+    expect(out.m).toBeLessThan(8)
+    expect(out.by).toBe(HELD_FRIEND)
+    // the same, the friend moved onto the right half of its rear rank and the veteran (an enemy) behind the left half:
+    // the friend's claim it already stands on holds nothing, the enemy does
+    const v = play(caseOf('x16-pushed-onto-friend-claims'), { seconds: 1 })
+    v.f.x[2] = 77
+    v.f.z[2] = 42
+    claimFormation(v, 2)
+    v.f.x[1] = -82
+    v.f.z[1] = 50
+    claimFormation(v, 1)
+    // the grid as a tick would build it with the two where they now stand
+    buildClaims(v)
+    expect(giveGround(v, 0, 8, eng, -1, out)).toBe(true)
+    expect(out.m).toBeLessThan(8)
+    expect(out.by).toBe(HELD_FOE)
   })
 })

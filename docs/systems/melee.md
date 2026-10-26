@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-11
-code: [src/sim/melee.ts, src/sim/formation.ts, src/sim/commands.ts, src/sim/morale.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-charge.ts, tools/calibrate-charge.ts, test/charge.test.ts]
+code: [src/sim/melee.ts, src/sim/formation.ts, src/sim/claims.ts, src/sim/commands.ts, src/sim/morale.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-charge.ts, tools/calibrate-charge.ts, test/charge.test.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine]
 ---
 
@@ -62,7 +62,8 @@ step 12 morale              the shocks owed (shockIn) are taken with contagion
 - the target is not a live enemy: "no such target".
 
 A formation in melee refuses every player command but the debug ones ("in melee"); a scenario's plan's orders are
-queued for after the melee (a charge is refused). It stands while it fights.
+queued for after the melee (a charge is refused). It stands while it fights, but with the claim grid's prototype
+on (below, **The clash**).
 
 **The charge** (`O_CHARGE`, `formation.ts`): an order alone in the formation's list, run by the move order's
 code (turn limits, the lag model, the footprint gate).
@@ -121,6 +122,13 @@ men of its companies within `contact + hold` of each.
 - **The winner:** a charging type pursues a broken foe at the gallop for `charge.pursue` seconds, costing it
   melee losses it does not return, and is then blown. A target that breaks before contact is pursued the same
   way. Infantry holds where it stands.
+
+**The clash** (only with the claim grid's prototype on, `w.claims`; docs/plans/active/c1-claims.md, step 4):
+after the melee step, two battalions each the other's foe weigh their pushes (the men each strike owes the foe,
+times morale). One losing by more than `EVEN`, its foe in its front, gives ground (`giveGround`): its companies in
+contact bend back, then the whole battalion steps back, held by other formations' claims and the ground; its foe
+follows by at most that (`followUp`). Ground it could not give costs it its nerve against an enemy or the ground,
+its order against friends. While the pair lasts neither dresses its line.
 
 **Shocks** (`shockIn`): the test's and the impact's shocks are owed to the target and taken by its morale step
 with contagion, after relaxing (`morale.ts`).
