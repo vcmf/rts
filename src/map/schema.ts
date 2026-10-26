@@ -79,6 +79,20 @@ export interface Feature {
   [attr: string]: unknown
 }
 
+// where features come from (§3, decision 0063 for a dem's, 0069 for a scan's); a feature's `source` names one
+export interface Source {
+  id: string
+  kind: string
+  ref?: string
+  note?: string
+  file?: string // a dem's heightfield (an .rdem beside the map), a scan's image (under scans/)
+  hash?: string // a dem's: its file pinned
+  credit?: string
+  licence?: string
+  frame?: string // a scan's: the dem source whose file's frame its points are in (none: the map's frame)
+  points?: [number, number, number, number][] // a scan's control points: [u, v] a pixel of the image, [x, z] the frame
+}
+
 export interface MapFile {
   format: 1
   id: string
@@ -89,7 +103,7 @@ export interface MapFile {
   datum?: number // the height of the map's zero above sea level, m (metadata)
   extent: { w: number; h: number } // everything the map describes, backdrop included, m
   play: { w: number; h: number } // the battle's area, centred, m
-  sources?: { id: string; kind: string; ref?: string; note?: string }[]
+  sources?: Source[]
   presets?: Record<string, { kind: string } & Attrs>
   features: Feature[]
 }

@@ -97,7 +97,17 @@ interface Drawing {
   draft: Draft
   old: Feature | null
 }
-type Mode = { kind: 'idle' } | Press | Drawing
+/**
+ * Ground points taken by clicks for a command of the page (a scan's control point, M7e): a prompt for each, and what
+ * makes the edit of them (a new copy, or why not: the click is taken back).
+ */
+interface Capture {
+  kind: 'capturing'
+  prompts: string[]
+  pts: Pt[]
+  then: (pts: Pt[]) => MapFile | string
+}
+type Mode = { kind: 'idle' } | Press | Drawing | Capture
 /** A step of the history: the copy, and the selection it had (a feature brought back by an undo is selected again). */
 interface Snapshot {
   doc: MapFile
@@ -287,11 +297,17 @@ export class Editor {
     return this.mode.kind === 'idle'
   }
   /** Whether a drawing is in progress (its clicks are the editor's), and what to click next. */
+  /** The ground points a capture has taken so far (none when not capturing). */
+  get captured(): Pt[] {
+    return this.mode.kind === 'capturing' ? this.mode.pts : []
+  }
+  /** Whether clicks are a drawing's, or a capture's: either ends by its last click, or is dropped by Escape. */
   get drawing(): boolean {
-    return this.mode.kind === 'drawing'
+    return this.mode.kind === 'drawing' || this.mode.kind === 'capturing'
   }
   get prompt(): string {
-    return this.mode.kind === 'drawing' ? prompt(this.mode.draft) : ''
+    const m = this.mode
+    return m.kind === 'drawing' ? prompt(m.draft) : m.kind === 'capturing' ? m.prompts[m.pts.length] : ''
   }
   /** Whether the copy has no file on disk (a new map, or one deleted under the page): a save creates it. */
   get noFile(): boolean {
@@ -318,7 +334,7 @@ export class Editor {
   /** Whether a command may run now; says why not when it may not. */
   private ready(): boolean {
     if (this.mode.kind === 'idle') return true
-    this.message = this.mode.kind === 'drawing' ? DRAWING : BUSY
+    this.message = this.drawing ? DRAWING : BUSY
     this.host.changed()
     return false
   }
@@ -371,6 +387,7 @@ export class Editor {
     const first: FirstClick = { at: now, sx, sy, step: m.kind === 'drawing' ? m.draft.step : -1, selected: false }
     this.lastClick = first
     if (m.kind === 'drawing') return this.drawClick(sx, sy)
+    if (m.kind === 'capturing') return this.captureClick(sx, sy)
     if (!this.doc || m.kind !== 'idle') return
     const f = this.selected ? this.feature(this.selected) : undefined
     if (f && onShape(f, sx, sy, this.host.project)) return
@@ -428,7 +445,7 @@ export class Editor {
       this.hoverAt()
       return false
     }
-    if (m.kind === 'drawing') {
+    if (m.kind === 'drawing' || m.kind === 'capturing') {
       this.host.redraw() // the draft follows the pointer
       return false
     }
@@ -732,17 +749,56 @@ export class Editor {
   enter(): void {
     if (this.mode.kind === 'drawing') this.step(endStep(this.mode.draft))
   }
+  /**
+   * Takes ground points by clicks for a command of the page, one a prompt; the last click makes the edit `then` gives
+   * (one edit), or says why not and takes that click back. Escape drops it. Returns whether it started; says why not.
+   */
+  capture(prompts: string[], then: (pts: Pt[]) => MapFile | string): boolean {
+    if (!this.canEdit(null) || !this.doc) return false
+    this.mode = { kind: 'capturing', prompts, pts: [], then }
+    this.hover = null
+    this.message = ''
+    this.host.changed()
+    this.host.redraw()
+    return true
+  }
+  /** A click while capturing: its ground point; the last one makes the edit. */
+  private captureClick(sx: number, sy: number): void {
+    const m = this.mode as Capture
+    const at = this.host.toWorld(sx, sy)
+    if (!at) return this.note('no ground there: click on the map')
+    const pts = [...m.pts, at]
+    if (pts.length < m.prompts.length) {
+      m.pts = pts
+      this.message = ''
+      this.host.changed()
+      this.host.redraw()
+      return
+    }
+    const out = m.then(pts)
+    if (typeof out === 'string') return this.note(out)
+    this.mode = { kind: 'idle' }
+    this.commit(out, null)
+    this.settle()
+  }
   /** Backspace while drawing: takes back the last click. */
   takeBack(): void {
+    if (this.mode.kind === 'capturing') {
+      this.mode.pts = this.mode.pts.slice(0, -1)
+      this.message = ''
+      this.host.changed()
+      this.host.redraw()
+      return
+    }
     if (this.mode.kind !== 'drawing') return
     this.mode.draft = back(this.mode.draft)
     this.message = ''
     this.host.changed()
     this.host.redraw()
   }
-  /** Escape while drawing: drops it; the copy is as it was. */
+  /** Escape while drawing or capturing: drops it; the copy is as it was. */
   drop(): void {
-    if (this.mode.kind !== 'drawing') return
+    if (!this.drawing) return
     this.mode = { kind: 'idle' }
     this.message = ''
     this.host.changed()

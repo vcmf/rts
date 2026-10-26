@@ -19,6 +19,7 @@ import { ovalRing } from './edit.ts'
 import { newestOnly } from './latest.ts'
 import { proposeId } from './draw.ts'
 import { Form } from './form.ts'
+import { Trace } from './trace.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -379,6 +380,25 @@ function mapIdProblem(id: string): string {
   if (!ID.test(id)) return 'its id names its file: lower-case letters and digits, in words joined by "-"'
   return [...picker.options].some(o => o.value === `/maps/${id}.map.json`) ? `a map ${id} exists` : ''
 }
+// the scan to trace from (M7e), under the outlines
+const trace = new Trace(
+  {
+    ctx,
+    project: (x, z) => toScreen(x, z),
+    groundPath,
+    redraw,
+    file: () => editor.file,
+    catalogue: () => catalogue,
+  },
+  editor,
+  {
+    pick: $('scanPick') as HTMLSelectElement,
+    opacity: $('scanOpacity') as HTMLInputElement,
+    add: $('scanAdd') as HTMLButtonElement,
+    state: $('scanState'),
+    points: $('scanPoints'),
+  },
+)
 // its problems are the page's: the validator's at once after an edit, then the compile's of that copy (M7d)
 const form = new Form(formBox, editor, () => issues)
 // Text typed in the form and not applied yet: a press on another control takes the focus from the field, whose change
@@ -389,6 +409,7 @@ for (const b of [undoButton, redoButton]) b.addEventListener('mousedown', e => e
 function editPanel(): void {
   const f = editor.selected ? editor.feature(editor.selected) : undefined
   form.update(catalogue)
+  trace.update()
   const dirty = editor.dirty
   editState.textContent = !editor.enabled
     ? 'editing needs the dev server (npm run dev)'
@@ -619,6 +640,7 @@ function draw(): void {
   }
   place()
   frameMs = lit?.render() ?? 0
+  trace.draw(r.width, r.height, dpr)
   // the play area
   const p = current.map.play
   const corners: Pt[] = [
@@ -1012,6 +1034,11 @@ window.MAP = {
     draw()
   },
   compile: () => compile('manual'),
+  // the scan shown (M7e): where a pixel of it lies on the map, and its last draw's time, ms
+  scanAt: (u: number, v: number) => trace.mapPoint(u, v),
+  get traceMs() {
+    return trace.ms
+  },
   // a feature of the last compiled (expanded) map, or null (M7d: a generator's output redrawn)
   expanded: (id: string) => current?.map.features.find(f => f.id === id) ?? null,
   // the editor (M7): select a feature, the selection, what a save would write, save, undo, redo, unsaved edits, and

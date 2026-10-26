@@ -203,11 +203,11 @@ describe('M5: what the validator and the file checks refuse', () => {
     ['a dem source without its credit', m => delete (m.sources![0] as { credit?: string }).credit, /"credit"/],
     ['a hash that is no hash', m => ((m.sources![0] as { hash?: string }).hash = 'abc'), /sha256/],
     ['a file in a folder', m => ((m.sources![0] as { file?: string }).file = '../x.rdem'), /beside the map/],
-    ['a source key it does not know', m => ((m.sources![0] as Record<string, string>).url = 'x'), /must be/],
+    ['a source key it does not know', m => ((m.sources![0] as unknown as Record<string, string>).url = 'x'), /must be/],
     [
       'a file on a source that is not a dem',
       m => m.sources!.push({ id: 'old', kind: 'survey', file: '../x.bin' } as never),
-      /dem sources only/,
+      /dem and scan sources only/,
     ],
     ['a piece that names no dem source', m => (m.features[0].source = 'invented'), /dem sources/],
     ['a map with real relief and no datum', m => delete (m as { datum?: number }).datum, /datum/],

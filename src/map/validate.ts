@@ -41,7 +41,10 @@ import {
 export type { Issue }
 const isRadius = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v) && v > 0 && onCentimetres(v)
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-const SOURCE_KEYS = ['id', 'kind', 'ref', 'note', ...DEM_SOURCE_KEYS] as string[]
+// a source's fields: all text but a scan's points
+const SOURCE_KEYS = ['id', 'kind', 'ref', 'note', ...DEM_SOURCE_KEYS, 'frame'] as string[]
+// a scan's image: in the git-ignored scans/ folder beside the map (decision 0069)
+export const SCAN_FILE = /^scans\/[a-z0-9][a-z0-9._-]*\.(png|jpe?g|webp)$/
 const BARRIER_MARGIN = 8 // m: half the thickest barrier (8 cells of 2 m)
 const TOP = [
   'format',
@@ -109,21 +112,40 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
           !isObj(s) ||
           typeof s.id !== 'string' ||
           typeof s.kind !== 'string' ||
-          Object.keys(s).some(k => !SOURCE_KEYS.includes(k)) ||
+          Object.keys(s).some(k => !SOURCE_KEYS.includes(k) && k !== 'points') ||
           SOURCE_KEYS.slice(2).some(k => s[k] !== undefined && typeof s[k] !== 'string')
         ) {
           bad(
             null,
             `sources[${i}]`,
-            `must be { "id", "kind", ${SOURCE_KEYS.slice(2)
-              .map(k => `"${k}"?`)
-              .join(', ')} }`,
+            `must be { "id", "kind", ${[...SOURCE_KEYS.slice(2), 'points'].map(k => `"${k}"?`).join(', ')} }`,
           )
         } else if (sources.has(s.id)) bad(null, `sources[${i}].id`, `"${s.id}" is used twice`)
         else {
           sources.add(s.id)
-          if (s.kind !== 'dem' && (s.file !== undefined || s.hash !== undefined)) {
-            bad(null, `sources[${i}]`, '"file" and "hash" belong to dem sources only')
+          if (s.kind !== 'dem' && s.hash !== undefined) bad(null, `sources[${i}]`, '"hash" belongs to dem sources only')
+          if (s.kind !== 'dem' && s.kind !== 'scan' && s.file !== undefined) {
+            bad(null, `sources[${i}]`, '"file" belongs to dem and scan sources only')
+          }
+          if (s.kind !== 'scan' && (s.frame !== undefined || s.points !== undefined)) {
+            bad(null, `sources[${i}]`, '"frame" and "points" belong to scan sources only')
+          }
+          if (s.kind === 'scan') {
+            // a scan to trace from (decision 0069): its image, and its control points, each a pixel and its place
+            if (typeof s.file !== 'string' || !SCAN_FILE.test(s.file)) {
+              bad(null, `sources[${i}].file`, 'a scan needs its image: "scans/<name>.png", .jpg or .webp, lowercase')
+            }
+            if (
+              s.points !== undefined &&
+              !(
+                Array.isArray(s.points) &&
+                s.points.every(
+                  p => Array.isArray(p) && p.length === 4 && p.every(v => typeof v === 'number' && Number.isFinite(v)),
+                )
+              )
+            ) {
+              bad(null, `sources[${i}].points`, 'must be a list of [u, v, x, z]: a pixel of the image and its place, m')
+            }
           }
           if (s.kind === 'dem') {
             // real heights (docs/plans/done/m5-relief.md): the file beside the map, pinned, with its credit
@@ -140,6 +162,14 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
         }
       })
     }
+  }
+  // a scan's frame is a dem source's (its file's frame), wherever in the list that source is
+  if (Array.isArray(map.sources)) {
+    map.sources.forEach((s, i) => {
+      if (isObj(s) && s.kind === 'scan' && typeof s.frame === 'string' && !demSources.has(s.frame)) {
+        bad(null, `sources[${i}].frame`, `"${s.frame}" is not one of the map's dem sources`)
+      }
+    })
   }
   const presets: Record<string, Record<string, unknown>> = {}
   if (map.presets !== undefined) {

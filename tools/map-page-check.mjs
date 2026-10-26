@@ -25,10 +25,14 @@
 //      houses than fit shows the expansion's problem under its generator; Pin refused while a field holds text it
 //      could not apply, and with text typed applies it alone; the village pinned and saved (its line
 //      rewritten, its houses appended, nothing else), the page compiling the same houses; all undone and saved back to
-//      the original bytes.
+//      the original bytes;
+//   9. a scan (M7e): a test image added to the map's sources, shown over the map, three control points added by clicks
+//      (each block of the image then on its place), saved (only the sources changed), undone back to the original
+//      bytes.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
+import { write as writePng } from './png.mjs'
 import net from 'node:net'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -54,6 +58,24 @@ const original = fs.readFileSync(mapFile, 'utf8')
 // the new map the check draws (step 6), removed at the end
 const NEW = `check-new-${process.pid}`
 const newFile = path.join(ROOT, 'maps', `${NEW}.map.json`)
+// the test scan (step 9): 200 × 100 px, white, with a red, a blue and a green block; removed at the end
+const SCAN = `check-${process.pid}`
+const scanFile = path.join(ROOT, 'maps', 'scans', `${SCAN}.png`)
+{
+  const w = 200
+  const h = 100
+  const data = Buffer.alloc(w * h * 4, 255)
+  const block = (u0, v0, rgb) => {
+    for (let v = v0; v < v0 + 20; v++) {
+      for (let u = u0; u < u0 + 20; u++) data.set([...rgb, 255], (v * w + u) * 4)
+    }
+  }
+  block(40, 40, [220, 0, 0])
+  block(140, 40, [0, 0, 220])
+  block(90, 70, [0, 160, 0])
+  fs.mkdirSync(path.dirname(scanFile), { recursive: true })
+  fs.writeFileSync(scanFile, writePng({ w, h, data }))
+}
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 let failed = 0
 const check = (ok, what) => {
@@ -74,6 +96,7 @@ const cleanup = () => {
   cleaned = true
   fs.writeFileSync(mapFile, original)
   fs.rmSync(newFile, { force: true })
+  fs.rmSync(scanFile, { force: true })
   shot?.kill('SIGINT')
   try {
     process.kill(-vite.pid, 'SIGTERM')
@@ -408,6 +431,69 @@ try {
         return 'PIN ' + JSON.stringify({ village: village.id, pinnedOk, notPinned, typedFirst, sameHouses, pinOk, pinDisk, back, after })
       })()`,
     ],
+    // a scan to trace from (M7e): added in the map's sources, shown, three control points by clicks, saved, undone
+    [
+      'eval',
+      `(async () => {
+        const sleep = ms => new Promise(r => setTimeout(r, ms))
+        const until = async cond => { for (let t = 0; t < 600 && !cond(); t++) await sleep(25); if (!cond()) throw new Error('timed out') }
+        const compiled = async edit => { const n = MAP.log.length; edit(); await until(() => MAP.log.length > n) }
+        const q = key => document.querySelector('#form [data-key="' + key + '"]')
+        const field = (key, value) => {
+          const input = q(key)
+          if (!input) throw new Error('no field ' + key)
+          input.value = value
+          input.dispatchEvent(new Event('input'))
+          input.dispatchEvent(new Event('change'))
+        }
+        const c = document.getElementById('map'), b = c.getBoundingClientRect()
+        const at = (x, z) => { const s = MAP.project(x, z); return { clientX: b.left + s[0], clientY: b.top + s[1], bubbles: true, pointerId: 1, isPrimary: true } }
+        const click = (x, z) => { for (const t of ['pointerdown', 'pointerup']) c.dispatchEvent(new PointerEvent(t, at(x, z))) }
+        // the overlay's colour at a map point
+        const colour = (x, z) => { const s = MAP.project(x, z); const d = devicePixelRatio; return [...c.getContext('2d').getImageData(Math.round(s[0] * d), Math.round(s[1] * d), 1, 1).data] }
+        const red = px => px[0] > 150 && px[1] < 90 && px[2] < 90
+        MAP.fit() // the whole map in view: an earlier step zoomed in
+        MAP.select(null)
+        const sources = JSON.parse(MAP.text).sources ?? []
+        await compiled(() => field('sources', JSON.stringify([...sources, { id: 'check', kind: 'scan', file: 'scans/${SCAN}.png' }])))
+        document.getElementById('scanbox').open = true
+        const pick = document.getElementById('scanPick')
+        pick.value = 'check'
+        pick.dispatchEvent(new Event('change'))
+        const opacity = document.getElementById('scanOpacity')
+        opacity.value = '1'
+        opacity.dispatchEvent(new Event('input'))
+        await until(() => document.getElementById('scanState').textContent.startsWith('200 × 100'))
+        await sleep(100)
+        MAP.draw()
+        // the red block's centre, as the scan lies over the map with no point yet
+        const before = MAP.scanAt(50, 50)
+        const shown = red(colour(...before))
+        // three points: each block's centre clicked on the scan, then its place on the map
+        const target = [[50, 50, -300, 200], [150, 50, 300, 220], [100, 80, 0, -100]]
+        for (const [u, v, x, z] of target) {
+          document.getElementById('scanAdd').click()
+          click(...MAP.scanAt(u, v))
+          await sleep(700) // apart, so the next click is no double click
+          click(x, z)
+          await sleep(700)
+        }
+        const points = JSON.parse(MAP.text).sources.find(s => s.id === 'check').points ?? []
+        const placed = target.every(([u, v, x, z]) => { const p = MAP.scanAt(u, v); return Math.hypot(p[0] - x, p[1] - z) < 1 })
+        MAP.draw()
+        // inside the red block, clear of its control point's marker (drawn on the point itself)
+        const moved = red(colour(...MAP.scanAt(57, 57))) && !red(colour(...before))
+        const state = document.getElementById('scanState').textContent
+        const listed = document.querySelectorAll('#scanPoints li').length
+        const ms = MAP.traceMs
+        const ok = await MAP.save()
+        const disk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
+        for (let k = 0; k < 4; k++) MAP.undo()
+        const back = await MAP.save()
+        const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
+        return 'SCAN ' + JSON.stringify({ shown, points: points.length, placed, moved, state, listed, ms, ok, disk, back, after })
+      })()`,
+    ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
     [
       'eval',
@@ -493,7 +579,8 @@ try {
       '900',
       JSON.stringify(steps),
     ],
-    { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, SHOT_TIMEOUT_S: '30' } },
+    // a step may wait on several compiles (about 0.75 s each, several times that under other sessions' load)
+    { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, SHOT_TIMEOUT_S: '90' } },
   )
   const seen = {}
   const done = new Promise(res => shot.on('exit', code => res(code)))
@@ -656,6 +743,22 @@ try {
   check(pn.notPinned, 'Pin with text a field refused does not pin, keeps the text, and says why')
   check(pn.typedFirst, 'Pin with text typed and not applied applies it as its own edit and pins nothing yet')
   check(pn.back && pn.after === original, 'all undone and saved, the file is byte for byte the original')
+  await until('SCAN')
+  const sc = seen.SCAN
+  check(sc.shown, 'a scan added to the map shows over it, before any control point')
+  check(
+    sc.points === 3 && sc.placed && sc.listed === 3 && /three points/.test(sc.state),
+    `three control points added by clicks, each pixel now on its place (${sc.state})`,
+  )
+  check(sc.moved, 'the scan is drawn where its points put it')
+  const sd = lineDiff(original, sc.disk)
+  const without = t => JSON.stringify({ ...JSON.parse(t), sources: undefined })
+  check(
+    sc.ok && sd.gone.length === 0 && without(sc.disk) === without(original),
+    `saved: only the sources changed (${sd.added.length} lines added, none of the file's changed)`,
+  )
+  check(sc.back && sc.after === original, 'undone and saved, the file is byte for byte the original')
+  console.log(`  the scan's draw: ${sc.ms.toFixed(1)} ms`)
   await until('NEWMAP')
   const nm = seen.NEWMAP
   const ids = nm.features.map(f => f.id).join(',')

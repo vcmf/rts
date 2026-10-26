@@ -537,7 +537,78 @@ rules: the choice lists every generator, and what does not fit is the validator'
   bytes.
 - A pin measures 10–13 ms on the example maps (Node).
 
+## M7e in detail
+
+A scan of a period map under the map, to trace from (decision 0069). Which scan, and its licence:
+`docs/research/period-maps.md` (one large-scale survey per battle: the Habsburg First Military Survey for Austerlitz).
+The maps are designed, not copies (decision 0061): pieces of the real relief are cut and placed closer together
+(`relief.dem`, `shift`). So a scan is placed once in its relief file's frame, and drawn inside each piece cut from that
+file, moved as the piece is: the period map follows the terrain it was cut with.
+
+- **In the file:** a source of kind `scan` (the compilers ignore it): its image `file` (under `maps/scans/`, which git
+  ignores: scans are committed only where their source says public domain, by a line in `.gitignore`), its `ref`,
+  `credit` and `licence`, the dem source whose `frame` it is placed in (none: the map's own frame), and its control
+  `points`, each `[u, v, x, z]`: a pixel of the image and the place in the frame it shows. The validator checks the
+  form; nothing else reads it.
+- **The fit** (`src/app/map/scan.ts`, pure, float64: the page's, not the sim's): no point, the image over the map's
+  extent; one, moved onto it; two, moved, turned and scaled (a similarity); three, the affine map through them; four
+  or more, a thin-plate spline through every point (and a second one back), each point's residual where the others
+  alone put it: the image's own error there. First planned as a least-squares affine fit for three or more; the
+  Austerlitz survey showed one affine map cannot hold a hand-drawn sheet (below). Where the scan shows on the map: each `relief.dem` piece of its frame, highest priority
+  first (its area, or the whole extent), moved by its `shift`; a map point's frame point through the piece on top
+  there.
+- **On the page** (`src/app/map/trace.ts`): the scan drawn on the overlay canvas, under the editor's outlines, at an
+  opacity set in the panel (a setting of the page, kept per map in the browser, not in the file). The lit view is
+  tilted, so the image is drawn as a mesh of small triangles, each mapped by its own affine transform; pieces are
+  drawn into an offscreen canvas at full opacity in priority order, clipped to their areas, then onto the view at the
+  set opacity. A control point is added by two clicks, one edit: where the landmark shows on the scan, then where it
+  is on the map. The points show as pairs joined by their residual, listed in the panel with their residuals and a
+  button to remove each.
+- **A scan from a map service** (`tools/scan-wms.ts`): an image of a WMS layer in WGS 84 around a centre, and its
+  first control points in a transverse Mercator centred there (the relief importer's frame), so a georeferenced copy
+  is placed at once; points are then added or moved by hand against the relief.
+
+## Acceptance (M7e)
+
+- `test/map-scan.test.ts`: the fit from 0, 1, 2 and many points (exact on an affine image, its residuals on a noisy
+  one), the inverse, the pieces and their shifts, the frame point under a map point; the validator's checks of a scan
+  source; the transverse Mercator against published values.
+- The page check: a test scan written beside a map (a known affine picture of marks), drawn at the set opacity; three
+  points added by clicks, saved in the file (the diff the sources line alone), their residuals shown; undone back to
+  the original bytes.
+- The First Military Survey over Austerlitz's real relief: fetched with `tools/scan-wms.ts`, placed, and checked at
+  landmarks (village churches, from Wikidata: CC0) against where the scan shows them, the residuals within the survey's
+  own error, recorded here with a screenshot for the owner. The scan stays out of git.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
+## Results (M7e)
+
+- The Habsburg First Military Survey over Austerlitz, fetched with `tools/scan-wms.ts` from Chartae Antiquae's WMS
+  (4096 × 4094 px, 1.54 m a pixel; kept out of git), checked at seven dated landmarks from Wikidata (the churches of
+  Prace, Telnice and Újezd, the chapel of St Anthony, Sokolnice castle, Kobylnice's belfry, Peclův mill), each pixel
+  read off the scan:
+  - the service's own georeferencing puts them 320 to 690 m off;
+  - one affine fit through five of them leaves 382 m RMS, and from the others it puts a left-out one 390 to 2,400 m
+    off: a sheet drawn with no geodetic basis is distorted place by place, which one affine map cannot hold. So the
+    fit became a thin-plate spline from four points (decision 0069);
+  - the spline through the seven: each landmark on its place, and the survey's own error between them, each point
+    where the other six put it, 150 to 990 m, 559 m RMS. That is the image's own error at about a kilometre between
+    points; tracing adds points near what is traced. Austerlitz's map carries the seven points; the screenshot for the
+    owner shows the villages on their sites and the Goldbach's wooded valley along the relief's.
+- The overlay's draw on Austerlitz (16 megapixels, 40 views panned and zoomed): 0.6 ms median, 3 ms at the 90th
+  percentile, 8.5 ms at most (the dev server in headless Chrome under a load of 77 from other sessions: an
+  estimate). Drawn from the image element, some draws took seconds decoding it again; a bitmap decoded once fixed it.
+- The page check: a test scan shown, three points by clicks, each block then on its place, saved with only the
+  sources changed, undone to the original bytes. `test/map-scan.test.ts`: the fit, the pieces, the validator, the
+  projection.
+
 ## Open questions
+
+(M7e)
+- A scan's corners far from every point are extrapolated (the spline is affine there): more points near the map's
+  edges, or the service's grid points kept where no landmark is, would hold them.
+- Moving a control point (dragging either end) instead of removing and adding it again.
+- The built page has no scans to show (they are not bundled); tracing is a dev-server task.
 
 (M7d)
 - A pinned feature keeps its `origin`; the page could say when its generator now gives something else (another

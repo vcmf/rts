@@ -28,7 +28,10 @@
   #editState, #editbox .hint { color: var(--ink-2); font-size: 11px; margin: 4px 0; }
   #conflict { color: var(--bad); margin: 4px 0; }
   button { font: inherit; }
-  #addbox, #newbox { margin: 6px 0; }
+  #addbox, #newbox, #scanbox { margin: 6px 0; }
+  #scanbox input[type=range] { width: 100px; vertical-align: middle; }
+  #scanState { color: var(--ink-2); font-size: 11px; }
+  #scanPoints { margin: 2px 0; padding-left: 22px; font-size: 11px; }
   #addbox input, #newbox input { font: inherit; width: 110px; }
   #newbox input[type=number] { width: 70px; }
   #drawPrompt { color: #1a70c0; margin: 4px 0; }
@@ -61,6 +64,12 @@
   <div id="overlayHint" hidden>click the map to look from a point</div>
   <label><input id="outlines" type="checkbox" checked> outlines</label>
   <label><input id="ids" type="checkbox" checked> ids</label>
+  <details id="scanbox"><summary>scan</summary>
+    <select id="scanPick" aria-label="Scan"></select>
+    <label>opacity <input id="scanOpacity" type="range" min="0" max="1" step="0.05" value="0.6"></label>
+    <button id="scanAdd" title="two clicks: where a landmark shows on the scan, then where it is on the map">add a point</button>
+    <div id="scanState"></div>
+    <ol id="scanPoints"></ol></details>
   <div id="editbox">
     <div class="cap">edit</div>
     <div id="editState"></div>
