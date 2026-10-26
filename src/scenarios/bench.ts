@@ -291,13 +291,18 @@ export const BENCH_CASES: BenchCase[] = [
     [0, 0, 1.4],
     [200, 300],
   ),
-  charged('x15-melee-holds', 'X-15: a veteran regiment charges a raw one at the halt; the melee holds until one breaks'),
+  charged(
+    'x15-melee-holds',
+    'X-15: a veteran regiment charges a raw one at the halt; the melee holds until one breaks',
+  ),
   charged('x16-friend-behind', 'X-16: as X-15, with a friendly regiment standing just behind the raw one', [
     { side: 1, x: 0, z: 49, heading: S, shape: LINE, unit: CAV },
   ]),
-  charged('x17-enemy-behind', 'X-17: as X-15, with an enemy regiment just behind the raw one: broken, it has no way out and surrenders', [
-    { side: 0, x: 0, z: 49, heading: N, shape: LINE, unit: CAV },
-  ]),
+  charged(
+    'x17-enemy-behind',
+    'X-17: as X-15, with an enemy regiment just behind the raw one: broken, it has no way out and surrenders',
+    [{ side: 0, x: 0, z: 49, heading: N, shape: LINE, unit: CAV }],
+  ),
   bench(
     'x18-flank-charge',
     'X-18: a veteran regiment charges a steady one at the halt; a second regiment charges it in its east flank',
