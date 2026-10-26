@@ -4,7 +4,9 @@
 // mouse, and the validator's errors. Saving the map file (or maps/kinds.json) recompiles and redraws; the last good
 // drawing stays up while a file is broken. The editor (./editor.ts, M7) edits the map in the page and saves it.
 // window.MAP exposes the state for headless checks.
-import type { Catalogue, Feature, Pt } from '../../map/schema.ts'
+import type { Catalogue, Feature, MapFile, Pt, ShapeName } from '../../map/schema.ts'
+import { ID, REFS, SEASONS } from '../../map/schema.ts'
+import { kindMetaOf } from '../../map/catalogue.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName, OverlayReply, OverlayRequest } from './protocol.ts'
 import type { OverlaySpec } from '../../render/lit/overlays.ts'
@@ -15,6 +17,7 @@ import { lineLength, pointAt } from '../../map/geometry.ts'
 import { Editor } from './editor.ts'
 import { ovalRing } from './edit.ts'
 import { newestOnly } from './latest.ts'
+import { proposeId } from './draw.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -90,6 +93,12 @@ const saveButton = $<HTMLButtonElement>('save')
 const undoButton = $<HTMLButtonElement>('undo')
 const redoButton = $<HTMLButtonElement>('redo')
 const conflictBox = $('conflict')
+const conflictWhy = $('conflictWhy')
+const addKind = $<HTMLSelectElement>('addKind')
+const addShape = $<HTMLSelectElement>('addShape')
+const addId = $<HTMLInputElement>('addId')
+const drawPrompt = $('drawPrompt')
+const refsBox = $('refs')
 // the lit map view under the overlays (docs/plans/active/m6-lit-view.md); ?tilt= degrees off straight down
 // the lit view needs WebGL2 (decision 0046): without it the page still compiles, lists errors and reads cells
 let lit: LitView | null = null
@@ -103,7 +112,9 @@ const tiltParam = Number(new URLSearchParams(location.search).get('tilt'))
 const tilt = Number.isFinite(tiltParam) && new URLSearchParams(location.search).has('tilt') ? tiltParam : TILT
 
 const names = Object.keys(MAPS).sort()
-for (const n of names) picker.append(new Option(n.replace('/maps/', '').replace('.map.json', ''), n))
+/** The picker's entry for a map file, named by its id. */
+const mapOption = (file: string) => new Option(file.replace('/maps/', '').replace('.map.json', ''), file)
+for (const n of names) picker.append(mapOption(n))
 const asked = new URLSearchParams(location.search).get('map')
 picker.value =
   names.find(n => n.endsWith(`/${asked}.map.json`)) ?? names.find(n => n.includes('two-ridges')) ?? names[0]
@@ -230,6 +241,7 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
 }
 
 let editorKinds: string | null = null // the catalogue's text the editor validates with
+let catalogue: Catalogue | null = null // and as read (the add box's kinds)
 // each compile takes its number before it reads the files, so a slower, older read can never replace a newer one
 async function compile(reason: string, savedAt?: number): Promise<void> {
   const mine = ++seq
@@ -249,10 +261,12 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
       if (kindsText !== editorKinds) {
         editorKinds = kindsText
         try {
-          editor.setCatalogue(JSON.parse(kindsText) as Catalogue)
+          catalogue = JSON.parse(kindsText) as Catalogue
         } catch {
-          editor.setCatalogue(null)
+          catalogue = null
         }
+        editor.setCatalogue(catalogue)
+        kindList()
       }
     }
     files = await readFiles(mapText)
@@ -334,6 +348,11 @@ const toWorld = (sx: number, sy: number): Pt =>
   lit ? (lit.unproject(sx, sy) ?? [view.cx, view.cz]) : flatWorld(sx, sy)
 
 // the editor (M7): it compiles its copy of the map through the page, and draws its selection over the outlines
+const addGo = $<HTMLButtonElement>('addGo')
+/** A map with no file on disk (new, or deleted under the page) has nothing to come back to: its entry goes with it. */
+const dropUnsavedNew = () => {
+  if (editor.noFile) [...picker.options].find(o => o.value === editor.file)?.remove()
+}
 const editor = new Editor({
   ctx,
   project: (x, z) => toScreen(x, z),
@@ -366,6 +385,62 @@ function editPanel(): void {
   undoButton.disabled = !editor.enabled || !editor.canUndo
   redoButton.disabled = !editor.enabled || !editor.canRedo
   conflictBox.hidden = editor.conflict === null
+  conflictWhy.textContent = editor.conflictWhy
+  drawPrompt.textContent = editor.prompt
+  addGo.disabled = !editor.enabled || !editor.doc || editor.drawing
+  // a new feature's id: the proposal follows the copy's ids (it is taken once the feature is made)
+  if (!editor.drawing) proposeAddId()
+  refButtons(f)
+}
+/** The add box's kinds, by category, from the catalogue. */
+function kindList(): void {
+  const was = addKind.value
+  addKind.replaceChildren()
+  const groups = new Map<string, HTMLOptGroupElement>()
+  for (const k of Object.keys(catalogue?.kinds ?? {})) {
+    const cat = k.split('.')[0]
+    if (!groups.has(cat)) groups.set(cat, Object.assign(document.createElement('optgroup'), { label: cat }))
+    groups.get(cat)!.append(new Option(k, k))
+  }
+  addKind.append(...groups.values())
+  if (was && catalogue?.kinds[was]) addKind.value = was
+  shapeList()
+}
+/** The shapes the kind picked takes ('none': drawn by its references alone). */
+function shapeList(): void {
+  const shapes = (catalogue && addKind.value && kindMetaOf(catalogue, addKind.value)?.shapes) || []
+  const was = addShape.value
+  addShape.replaceChildren(...shapes.map(sh => new Option(sh === 'none' ? 'by its references' : sh, sh)))
+  if (shapes.includes(was as ShapeName)) addShape.value = was
+  proposeAddId()
+}
+/** Proposes a new feature's id from the kind, unless the box holds one the author typed that is free. */
+function proposeAddId(): void {
+  if (addId.value !== '' && addId.value !== addId.dataset.proposed && !editor.feature(addId.value)) return
+  const id = addKind.value ? proposeId(addKind.value, editor.doc?.features.map(f => f.id) ?? []) : ''
+  addId.value = id
+  addId.dataset.proposed = id
+}
+/**
+ * The selection's references, each with a button to set it again by clicking its target; rebuilt only when what they
+ * show changes (a button replaced under a press would lose its click).
+ */
+let refsShown = ''
+function refButtons(f: Feature | undefined): void {
+  const refs = (f && editor.metaOf(f)?.refs) || {}
+  const shown = JSON.stringify([f?.id, REFS.map(r => (refs[r] ? (f![r] ?? null) : undefined)), editor.drawing])
+  if (shown === refsShown) return
+  refsShown = shown
+  const buttons = REFS.filter(r => refs[r]).map(r => {
+    const b = document.createElement('button')
+    const v = f![r]
+    b.textContent = `${r}: ${v === undefined ? '—' : typeof v === 'string' ? v : JSON.stringify(v)}`
+    b.title = `click to set "${r}" again by clicking its target`
+    b.disabled = !editor.enabled || editor.drawing
+    b.addEventListener('click', () => editor.pickRef(r))
+    return b
+  })
+  refsBox.replaceChildren(...buttons)
 }
 
 const CATEGORY_INK: Record<string, string> = {
@@ -638,7 +713,7 @@ canvas.addEventListener('pointerup', e => {
   const click = drag && Math.hypot(e.offsetX - drag.sx, e.offsetY - drag.sy) < 4
   if (drag?.edit) editor.up()
   // a click, not a drag (on the selection too): with the sight overlay, the eye moves there; else it selects
-  if (click && overlaySelect.value === 'sight') {
+  if (click && overlaySelect.value === 'sight' && !editor.drawing) {
     sightAt = toWorld(e.offsetX, e.offsetY)
     requestOverlay()
   } else if (click) editor.click(e.offsetX, e.offsetY)
@@ -654,15 +729,13 @@ const interrupted = (e: PointerEvent) => {
 canvas.addEventListener('pointercancel', interrupted)
 canvas.addEventListener('pointerleave', () => editor.leave())
 canvas.addEventListener('lostpointercapture', interrupted)
-canvas.addEventListener('dblclick', e => {
-  if (overlaySelect.value !== 'sight') editor.dblclick(e.offsetX, e.offsetY)
-})
 canvas.addEventListener('pointermove', e => {
   if (drag && drag.id !== e.pointerId) return
   // the editor drags, or notes the handle under the pointer; a press elsewhere pans
   if (!drag || drag.edit) editor.move(e.offsetX, e.offsetY)
   else {
     const now = toWorld(e.offsetX, e.offsetY)
+    if (Math.hypot(e.offsetX - drag.sx, e.offsetY - drag.sy) >= 4) editor.forgetClick() // a pan, not a click
     view.cx += drag.at[0] - now[0]
     view.cz += drag.at[1] - now[1]
     place()
@@ -674,6 +747,7 @@ canvas.addEventListener(
   'wheel',
   e => {
     e.preventDefault()
+    editor.forgetClick() // the spot on screen is another place on the map now
     const before = toWorld(e.offsetX, e.offsetY)
     view.ppm = Math.max(0.05, Math.min(40, view.ppm * Math.exp(-e.deltaY * 0.0015)))
     place()
@@ -689,10 +763,16 @@ canvas.addEventListener(
 )
 addEventListener('resize', draw)
 picker.addEventListener('change', () => {
+  if (!editor.idle) {
+    picker.value = editor.file!
+    editor.note('finish the drawing or the drag first')
+    return
+  }
   if (editor.dirty && !confirm('The map has unsaved edits. Drop them and open another map?')) {
     picker.value = editor.file!
     return
   }
+  dropUnsavedNew()
   current = null
   const q = new URLSearchParams(location.search) // the other settings (?tilt=) stay
   q.set('map', picker.selectedOptions[0].text)
@@ -735,13 +815,72 @@ addEventListener('keydown', e => {
   } else if (mod && key === 'y') {
     e.preventDefault()
     editor.redo()
-  } else if (e.key === 'Escape' && onMap) editor.select(null)
-  else if ((e.key === 'Delete' || e.key === 'Backspace') && onMap) {
+  } else if (e.key === 'Escape' && onMap) {
+    if (editor.drawing) editor.drop()
+    else editor.select(null)
+  } else if (e.key === 'Enter' && onMap && editor.drawing) {
     e.preventDefault()
-    editor.remove()
+    editor.enter()
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && onMap) {
+    e.preventDefault()
+    if (editor.drawing) editor.takeBack()
+    else editor.remove()
   }
 })
 saveButton.addEventListener('click', () => void editor.save())
+addKind.addEventListener('change', shapeList)
+addGo.addEventListener('click', () => {
+  // the map takes the drawing's keys (Enter, Backspace, Escape)
+  if (editor.add(addKind.value, addShape.value as ShapeName | 'none', addId.value.trim())) canvas.focus()
+})
+// a new map (M7b): a copy with no file yet, the first save creates maps/<id>.map.json
+const newSeason = $<HTMLSelectElement>('newSeason')
+newSeason.append(...SEASONS.map(x => new Option(x, x)))
+newSeason.value = 'summer'
+const newSeed = $<HTMLInputElement>('newSeed')
+newSeed.value = String(Math.floor(Math.random() * 2 ** 32))
+$('newMake').addEventListener('click', () => {
+  const val = (id: string) => $<HTMLInputElement>(id).value.trim()
+  const id = val('newId')
+  const size = Number(val('newSize'))
+  const play = Number(val('newPlay'))
+  // no seed given: a random one
+  const seed = val('newSeed') === '' ? Math.floor(Math.random() * 2 ** 32) : Number(val('newSeed'))
+  // the id names the file (the save's rule); the rest is the validator's to judge, at once, like any edit
+  const why = !editor.enabled
+    ? 'making maps needs the dev server (npm run dev)'
+    : !editor.idle
+      ? 'finish the drawing or the drag first'
+      : !ID.test(id)
+        ? 'its id names its file: lower-case letters and digits, in words joined by "-"'
+        : [...picker.options].some(o => o.text === id)
+          ? `a map ${id} exists`
+          : ''
+  if (why) return editor.note(`no new map: ${why}`)
+  if (editor.dirty && !confirm('The map has unsaved edits. Drop them and make a new map?')) return
+  dropUnsavedNew()
+  const file = `/maps/${id}.map.json`
+  const doc: MapFile = {
+    format: 1,
+    id,
+    name: val('newName') || id,
+    seed,
+    season: newSeason.value as MapFile['season'],
+    extent: { w: size, h: size },
+    play: { w: play, h: play },
+    features: [],
+  }
+  picker.append(mapOption(file))
+  picker.value = file
+  current = null
+  sightAt = null
+  const q = new URLSearchParams(location.search)
+  q.set('map', id)
+  history.replaceState(null, '', `?${q}`)
+  editor.create(file, doc)
+  newSeed.value = String(Math.floor(Math.random() * 2 ** 32))
+  void compile('new')
+})
 undoButton.addEventListener('click', () => editor.undo())
 redoButton.addEventListener('click', () => editor.redo())
 $('overwrite').addEventListener('click', () => void editor.save(true))
@@ -754,7 +893,14 @@ addEventListener('beforeunload', e => {
 // seen); any heightfield recompiles, since the map's text alone says which it reads
 const diskRead = newestOnly()
 if (import.meta.hot) {
-  import.meta.hot.on('map-changed', (d: { file: string; at: number }) => {
+  import.meta.hot.on('map-changed', (d: { file: string; at: number; type: 'create' | 'update' | 'delete' }) => {
+    // a map file made since the page loaded (by hand, or another page's new map) joins the list; one deleted leaves
+    // it, unless the page shows it (the editor keeps its copy, which a save makes again)
+    if (d.file.endsWith('.map.json') && d.file !== picker.value) {
+      const listed = [...picker.options].find(o => o.value === d.file)
+      if (d.type === 'delete') listed?.remove()
+      else if (!listed) picker.append(mapOption(d.file))
+    }
     if (d.file.endsWith('.rdem')) {
       // a heightfield is large and written in one go: wait until the saves stop before reading it, so a file still
       // being written is not kept as the new version
@@ -763,12 +909,13 @@ if (import.meta.hot) {
       clearTimeout(rdemTimer)
       rdemTimer = setTimeout(() => void compile('save', d.at), RDEM_SETTLE)
     } else if (d.file === picker.value) {
-      // the map file: through the editor, which ignores its own save and keeps unsaved edits (a conflict)
+      // the map file, made, changed or deleted: through the editor, which ignores its own save and keeps unsaved
+      // edits (a conflict); the newest read alone counts, a deletion too (an older read may resolve after it)
       const file = d.file
-      // the newest read alone counts: an older one may resolve after it
-      void diskRead(read(file, MAPS)).then(
-        text => {
-          if (text !== null && picker.value === file && editor.onDisk(file, text)) void compile('save', d.at)
+      const disk = d.type === 'delete' ? Promise.resolve({ text: null }) : read(file, MAPS).then(text => ({ text }))
+      void diskRead<{ text: string | null }>(disk).then(
+        got => {
+          if (got && picker.value === file && editor.onDisk(file, got.text)) void compile('save', d.at)
         },
         // said in the editor's panel: the page's compile in flight (an edit's) must still be drawn
         (err: Error) => editor.note(`cannot read the file on disk: ${err.message}`),
@@ -851,6 +998,21 @@ window.MAP = {
   },
   get idle() {
     return editor.idle
+  },
+  // drawing (M7b): start one, Enter, what to click next, whether one is in progress, whether the map is new
+  add: (kind: string, shape: ShapeName | 'none', id: string) => editor.add(kind, shape, id),
+  enter: () => editor.enter(),
+  get prompt() {
+    return editor.prompt
+  },
+  get drawing() {
+    return editor.drawing
+  },
+  get noFile() {
+    return editor.noFile
+  },
+  get conflict() {
+    return editor.conflict
   },
   project: (x: number, z: number) => toScreen(x, z),
   fit: () => {

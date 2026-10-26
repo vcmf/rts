@@ -52,6 +52,12 @@ export function kindMeta(cat: Catalogue, chain: string[]): KindMeta {
   return m
 }
 
+/** A kind's inherited metadata by its name, or null when the catalogue has no such kind. */
+export function kindMetaOf(cat: Catalogue, kind: string): KindMeta | null {
+  const chain = kindChain(cat, kind)
+  return chain && kindMeta(cat, chain)
+}
+
 // may this attribute be set on a kind of this category?
 export const allowedIn = (cat: Catalogue, spec: AttrSpec, category: string): boolean =>
   spec.layers.some(l => cat.categories[category].layers.includes(l))

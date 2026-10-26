@@ -8,7 +8,7 @@ import path from 'node:path'
 /** What the page sends to save a map. */
 export interface SaveRequest {
   file: string // '/maps/<name>.map.json'
-  base: string // the text the page last read from the file
+  base: string | null // the text the page last read from the file; null for a new map, whose file must not exist yet
   text: string // the text to write
 }
 /** The save's outcome: written; refused because the file changed on disk (its text now); refused; or failed. */
@@ -31,17 +31,62 @@ export function mayWrite(headers: { 'content-type'?: string; origin?: string; ho
 
 const MAP_FILE = /^\/maps\/[a-z0-9]+(-[a-z0-9]+)*\.map\.json$/
 
-/** Writes a map file under `root` if it still holds the text the page read, through a temporary file and a rename. */
+// the errors of a file system without hard links (exFAT, some network and container mounts)
+const NO_LINKS = new Set(['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'ENOSYS'])
+/**
+ * Puts a written file in place as a new file, never over one there (EEXIST): a hard link (whole at once), or where the
+ * file system has none an exclusive copy (a copy that fails part way is removed).
+ */
+export function createFrom(tmp: string, file: string, link = fs.linkSync): void {
+  try {
+    link(tmp, file)
+  } catch (e) {
+    if (!NO_LINKS.has((e as NodeJS.ErrnoException).code ?? '')) throw e
+    try {
+      fs.copyFileSync(tmp, file, fs.constants.COPYFILE_EXCL)
+    } catch (e2) {
+      if ((e2 as NodeJS.ErrnoException).code !== 'EEXIST') fs.rmSync(file, { force: true })
+      throw e2
+    }
+  }
+}
+
+/**
+ * Writes a map file under `root` if it still holds the text the page read, through a temporary file and a rename; with
+ * no base, creates it if it does not exist.
+ */
 export function saveMapFile(root: string, req: SaveRequest): SaveResult {
   if (
     typeof req?.file !== 'string' ||
-    typeof req.base !== 'string' ||
+    (typeof req.base !== 'string' && req.base !== null) ||
     typeof req.text !== 'string' ||
     !MAP_FILE.test(req.file)
   ) {
     return { ok: false, status: 400, error: 'a map file is /maps/<name>.map.json, with its base and its text' }
   }
   const file = path.join(root, req.file)
+  // a new map: its file is created whole (a temporary file linked into place, which fails if a file is there), never
+  // over one already there (another map of that name, made meanwhile)
+  if (req.base === null) {
+    const tmp = `${file}.${process.pid}.tmp`
+    try {
+      fs.writeFileSync(tmp, req.text)
+      createFrom(tmp, file)
+      return { ok: true }
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException
+      if (err.code === 'EEXIST') {
+        try {
+          return { ok: false, status: 409, current: fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '') }
+        } catch (e2) {
+          return { ok: false, status: 500, error: `${req.file} is there but cannot be read: ${(e2 as Error).message}` }
+        }
+      }
+      return { ok: false, status: 500, error: `${req.file} was not written: ${err.message}` }
+    } finally {
+      fs.rmSync(tmp, { force: true })
+    }
+  }
   let current: string
   try {
     current = fs.readFileSync(file, 'utf8')

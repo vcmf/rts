@@ -11,6 +11,7 @@
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   #map { cursor: grab; }
   #map:active { cursor: grabbing; }
+  #map:focus { outline: none; }
   .card { position: fixed; padding: 12px 14px; background: rgba(246, 243, 236, .95); border: 1px solid var(--rule); border-radius: 4px; }
   #panel { top: 16px; left: 16px; width: 300px; }
   #panel .t { font: 700 20px/1 var(--display); margin-bottom: 8px; }
@@ -27,6 +28,12 @@
   #editState, #editbox .hint { color: var(--ink-2); font-size: 11px; margin: 4px 0; }
   #conflict { color: var(--bad); margin: 4px 0; }
   button { font: inherit; }
+  #addbox, #newbox { margin: 6px 0; }
+  #addbox input, #newbox input { font: inherit; width: 110px; }
+  #newbox input[type=number] { width: 70px; }
+  #drawPrompt { color: #1a70c0; margin: 4px 0; }
+  #drawPrompt:empty, #refs:empty { display: none; }
+  #refs { margin: 4px 0; }
   #selection { max-height: 30vh; overflow: auto; margin: 6px 0 0; font-size: 10px; white-space: pre-wrap; word-break: break-all; }
   #readout { bottom: 16px; left: 16px; white-space: pre; min-width: 260px; }
   #readout:empty { display: none; }
@@ -35,7 +42,7 @@
 </head>
 <body>
 <canvas id="lit"></canvas>
-<canvas id="map"></canvas>
+<canvas id="map" tabindex="-1"></canvas>
 <div id="panel" class="card">
   <div class="t">Map</div>
   <select id="picker" aria-label="Map"></select>
@@ -51,9 +58,21 @@
     <button id="save" disabled title="Cmd or Ctrl S">save</button>
     <button id="undo" disabled title="Cmd or Ctrl Z">undo</button>
     <button id="redo" disabled title="Shift Cmd Z, Ctrl Y">redo</button>
-    <div id="conflict" hidden>The file changed on disk since it was read.
+    <div id="conflict" hidden><span id="conflictWhy"></span>
       <button id="overwrite">keep my edits, overwrite it</button> <button id="takeDisk">take the file</button></div>
-    <div class="hint">click selects · drag a handle or the shape · double-click adds a point · Delete removes the point under the pointer, or the feature · Esc clears</div>
+    <div id="addbox">add <select id="addKind" aria-label="Kind"></select> <select id="addShape" aria-label="Shape"></select>
+      <input id="addId" aria-label="Id" spellcheck="false"> <button id="addGo">draw</button></div>
+    <div id="drawPrompt"></div>
+    <div id="refs"></div>
+    <details id="newbox"><summary>new map</summary>
+      <label>id <input id="newId" spellcheck="false" placeholder="my-map"></label>
+      <label>name <input id="newName" placeholder="My Map"></label><br>
+      <label>size <input id="newSize" type="number" value="2400" min="200" step="100"> m</label>
+      <label>play <input id="newPlay" type="number" value="1500" min="100" step="100"> m</label><br>
+      <label>seed <input id="newSeed" type="number" min="0"></label>
+      <label>season <select id="newSeason"></select></label>
+      <button id="newMake">make</button></details>
+    <div class="hint">click selects · drag a handle or the shape · double-click adds a point · Delete removes the point under the pointer, or the feature · Esc clears · drawing: Enter ends a line or an area, Backspace takes a click back, Esc drops it</div>
     <pre id="selection" hidden></pre>
   </div>
   <div id="errbox" hidden><div class="cap">The file has errors; the last good drawing stays.</div><ul id="errors"></ul></div>

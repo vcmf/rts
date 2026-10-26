@@ -511,18 +511,9 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
         bad(id, `${path}.${r}`, 'a feature cannot reference itself')
         continue
       }
-      const tk = featureKind(t, presets)
-      const [wantCat, wantShape] = want.split(':')
-      if (!tk || categoryOf(tk) !== wantCat) {
-        bad(id, `${path}.${r}`, `"${t.id}" is a ${tk ?? 'feature without a kind'}; "${r}" needs a ${wantCat}.* feature`)
-        continue
-      }
-      if (wantShape && t[wantShape] === undefined) {
-        bad(
-          id,
-          `${path}.${r}`,
-          `"${t.id}" has no ${wantShape}; "${r}" needs a ${wantCat}.* feature drawn as a ${wantShape}`,
-        )
+      const wrong = refTargetProblem(r, want, t, presets)
+      if (wrong) {
+        bad(id, `${path}.${r}`, wrong)
         continue
       }
       if (r === 'along' && Array.isArray(t.line) && t.line.every(isPt)) {
@@ -588,6 +579,27 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
   }
   for (const fid of [...byId.keys()].sort()) visit(fid)
   return out
+}
+
+/**
+ * Why a feature cannot be the target of a reference (`want` as the catalogue names it: a category, and a shape after
+ * a colon, 'water:line'), or null when it can. The validator's rule, and the editor's when a click picks a target.
+ */
+export function refTargetProblem(
+  r: string,
+  want: string,
+  t: Feature,
+  presets: Record<string, Record<string, unknown>>,
+): string | null {
+  const tk = featureKind(t, presets)
+  const [wantCat, wantShape] = want.split(':')
+  if (!tk || categoryOf(tk) !== wantCat) {
+    return `"${t.id}" is a ${tk ?? 'feature without a kind'}; "${r}" needs a ${wantCat}.* feature`
+  }
+  if (wantShape && t[wantShape] === undefined) {
+    return `"${t.id}" has no ${wantShape}; "${r}" needs a ${wantCat}.* feature drawn as a ${wantShape}`
+  }
+  return null
 }
 
 /** A feature's kind: its own, or its map preset's. */

@@ -20,14 +20,20 @@ const build = (() => {
   }
 })()
 // the map draft page (app/map.html, docs/plans/done/m1-language.md M1b): a saved map file, the kinds catalogue or a
-// heightfield beside them is sent to the page as `map-changed` (with the time the server saw it), not a full reload
+// heightfield beside them is sent to the page as `map-changed` (with the time the server saw it), not a full reload;
+// a new one too (the editor's first save of a new map, M7b), which the page's list of maps would otherwise reload for
 const mapsHot: Plugin = {
   name: 'maps-hot',
-  handleHotUpdate({ file, server }) {
-    const rel = '/' + path.relative(server.config.root, file).split(path.sep).join('/')
-    if (!/^\/maps\/[^/]+\.(json|rdem)$/.test(rel)) return
-    server.ws.send({ type: 'custom', event: 'map-changed', data: { file: rel, at: Date.now() } })
-    return []
+  hotUpdate: {
+    // after Vite's own (its glob import would reload the page for a new file)
+    order: 'post',
+    handler({ file, server, type }) {
+      if (this.environment.name !== 'client') return
+      const rel = '/' + path.relative(server.config.root, file).split(path.sep).join('/')
+      if (!/^\/maps\/[^/]+\.(json|rdem)$/.test(rel)) return
+      server.ws.send({ type: 'custom', event: 'map-changed', data: { file: rel, at: Date.now(), type } })
+      return []
+    },
   },
 }
 // the map editor's save (docs/plans/active/m7-editor.md, decision 0066): POST /__map/save with the file, the text the

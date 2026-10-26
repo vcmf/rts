@@ -6,6 +6,8 @@ import type { MapFile } from './schema.ts'
 
 /** One of the map's own fields' value in the layout: lists and presets one entry a line, the rest on one line. */
 export function formatValue(key: string, v: unknown): string {
+  // an empty list on one line, as the editor's save writes one (src/map/write.ts)
+  if ((key === 'features' || key === 'sources') && Array.isArray(v) && v.length === 0) return '[]'
   if (key === 'features' || key === 'sources') {
     return `[\n${(v as unknown[]).map(x => '    ' + JSON.stringify(x)).join(',\n')}\n  ]`
   }

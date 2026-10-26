@@ -157,11 +157,12 @@ export function pick(
   sy: number,
   ground: Pt | null, // the click's ground point; null where the view shows no ground (only points and lines pick)
   project: Project,
+  accept: (id: string) => boolean = () => true, // which intent features may be picked (a reference's targets)
 ): string | null {
   const owner = (f: Feature): string | null => {
-    if (intent.has(f.id)) return f.id
     const parent = f.origin?.parent ?? childOf(f.id)?.parent
-    return parent !== undefined && intent.has(parent) ? parent : null
+    const id = intent.has(f.id) ? f.id : parent !== undefined && intent.has(parent) ? parent : null
+    return id !== null && accept(id) ? id : null
   }
   let best: { id: string; d: number } | null = null
   const near = (f: Feature, d: number, limit: number) => {
@@ -207,8 +208,8 @@ export function roundStep(ppm: number): number {
 }
 /** A number rounded to a step, with no binary fraction left over (0.1 × 3 is 0.3). */
 export const roundTo = (v: number, step: number): number => cm(Math.round(v / step) * step) || 0
-const roundPt = (p: Pt, step: number): Pt => [roundTo(p[0], step), roundTo(p[1], step)]
-const onLattice = (p: Pt): Pt => roundPt(p, LATTICE)
+export const roundPt = (p: Pt, step: number): Pt => [roundTo(p[0], step), roundTo(p[1], step)]
+export const onLattice = (p: Pt): Pt => roundPt(p, LATTICE)
 
 // the 8 directions as 4 lines through a point
 const DIRS: Pt[] = [
@@ -253,6 +254,10 @@ export function snapBarrier(to: Pt, neighbours: Pt[], reach: number, fits: (p: P
       .find(fits) ?? null
   )
 }
+
+/** A radius from a centre to a ground point, rounded to the step and never under it (a circle needs one). */
+export const radiusTo = (c: Pt, to: Pt, step: number): number =>
+  Math.max(step, roundTo(Math.hypot(to[0] - c[0], to[1] - c[1]), step))
 
 /** How an edit places points: the rounding step, the reach of a barrier's snap, m, and whether it is a barrier. */
 export interface Place {
@@ -303,13 +308,13 @@ export function moveHandle(f: Feature, h: Handle, to: Pt, place: Place): Feature
       break
     case 'radius': {
       const c = f.circle![0]
-      out.circle = [c, Math.max(place.step, roundTo(Math.hypot(to[0] - c[0], to[1] - c[1]), place.step))]
+      out.circle = [c, radiusTo(c, to, place.step)]
       break
     }
     case 'rx':
     case 'rz': {
       const [c, rx, rz] = f.ellipse!
-      const r = Math.max(place.step, roundTo(Math.hypot(to[0] - c[0], to[1] - c[1]), place.step))
+      const r = radiusTo(c, to, place.step)
       // the first radius turns the ellipse toward the pointer; the second follows a quarter turn behind
       const a = Math.atan2(to[1] - c[1], to[0] - c[0]) - (h.kind === 'rz' ? Math.PI / 2 : 0)
       const angle = roundTo(a, 0.01)
@@ -419,7 +424,8 @@ export function removePoint(f: Feature, h: Handle): Feature | null {
   return null
 }
 
-const isPts = (v: unknown, least: number): v is Pt[] => Array.isArray(v) && v.length >= least && v.every(isPt)
+/** Whether a value is a list of at least `least` points. */
+export const isPts = (v: unknown, least: number): v is Pt[] => Array.isArray(v) && v.length >= least && v.every(isPt)
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 /**

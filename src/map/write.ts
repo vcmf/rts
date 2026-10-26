@@ -122,7 +122,7 @@ function indentAt(s: string, i: number): string | null {
 function featurePatches(s: string, open: Span, features: Feature[], write: (f: Feature) => string): Patch[] {
   const els = elementsOf(s, open.start)
   if (!els.length || !features.length) {
-    return [{ ...open, text: features.length ? formatValue('features', features) : '[]' }]
+    return [{ ...open, text: formatValue('features', features) }]
   }
   const old = els.map(e => JSON.parse(s.slice(e.start, e.end)) as Feature | null)
   // an element that is no feature (a hand edit in progress): nothing to match, the list written afresh
