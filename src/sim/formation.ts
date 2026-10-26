@@ -26,7 +26,7 @@ import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
 import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
 import { cellK, impAt, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
-import { claimedAt, claimsNear, claimHit, clearHit } from './claims.ts'
+import { claimedAt, claimBy, claimsNear, claimHit, FREE, CROWDED } from './claims.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
@@ -76,6 +76,15 @@ const blockedAt = (w: World, i: number, imp: Uint8Array, x: number, z: number): 
   impAt(w.terrain, imp, x, z) || (w.claims && claimsNear(w, i) && claimedAt(w, i, x, z) ? 1 : 0)
 // the quick rejects below read the terrain's distance field alone: with claims, they wait while others stand near
 const claimsMatter = (w: World, i: number): boolean => w.claims && claimsNear(w, i)
+// what blocks formation i at (x, z) in a clash's motion (`pass`: the foe it may stand on): GROUND, a formation's slot,
+// CROWDED or FREE (src/sim/claims.ts)
+const GROUND = -3
+const blockerAt = (w: World, i: number, imp: Uint8Array, x: number, z: number, pass: number): number =>
+  impAt(w.terrain, imp, x, z) ? GROUND : claimsMatter(w, i) ? claimBy(w, i, x, z, pass) : FREE
+/** What held a clash's motion (`why`, per bin, and `Gave.by`): a friend's claim (or a crowded cell), or not. */
+export const HELD_FRIEND = 1
+/** What held a clash's motion: an enemy's claim or impassable ground. */
+export const HELD_FOE = 2
 
 /* ---------------- shapes, places ---------------- */
 // (a formation's shapes are its type's: f.shape and f.tShape index typeOf(w, i).shapes)
@@ -185,10 +194,11 @@ export interface GateBits {
   lag: Float64Array
   lag0: Float64Array
   faceArc: Arc
-  // the clash's (giveGround, followUp): the bins with men, the lags it starts from and goes to
+  // the clash's (giveGround, followUp): the bins with men, the lags it starts from and goes to, what held each bin
   clashFull: Uint8Array
   clash0: Float64Array
   clash1: Float64Array
+  clashWhy: Uint8Array
 }
 function bitsOf(w: World): GateBits {
   let b = w.scratch.gateBits
@@ -213,6 +223,7 @@ function bitsOf(w: World): GateBits {
       faceArc: mkArc(w),
       clashFull: new Uint8Array(NB),
       clash0: new Float64Array(NB),
+      clashWhy: new Uint8Array(NB),
       clash1: new Float64Array(NB),
     }
   }
@@ -846,8 +857,10 @@ function clearOfImpassable(w: World, i: number): boolean {
     !claimsMatter(w, i) && w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2
   )
 }
-// the bins with a man's place on impassable ground, for the pose as it is now, into out (a set of NB bits)
-export function wetBins(w: World, i: number, out: Bits): Bits {
+// the bins with a man's place on impassable ground, for the pose as it is now, into out (a set of NB bits). For a
+// clash's motion (a formed battalion, never changing shape): `pass`, the foe it may stand on (blockerAt), and `why`,
+// what holds each bin (HELD_FRIEND, HELD_FOE), if asked
+export function wetBins(w: World, i: number, out: Bits, pass = -1, why: Uint8Array | null = null): Bits {
   const f = w.f
   const U = typeOf(w, i)
   const C = U.C
@@ -861,6 +874,7 @@ export function wetBins(w: World, i: number, out: Bits): Bits {
   const impd = T.impd[kind]
   const Fl = filledSlots(w, i)
   const a = i * (w.cr.maxC + 1)
+  why?.fill(0)
   if (f.trans[i]) {
     for (let c = 0; c < C; c++) {
       const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, wbPose)
@@ -886,9 +900,16 @@ export function wetBins(w: World, i: number, out: Bits): Bits {
     for (let k = Fl.at[a + c], e = Fl.at[a + c + 1]; k < e; k++) {
       const s = Fl.s[k]
       const j = c * B + L.of[s]
-      if (hasBit(out, j)) continue
+      if (hasBit(out, j) && !why) continue
       placeAtSlot(ctx, s, pt)
-      if (blockedAt(w, i, imp, pt[0], pt[1])) setBit(out, j)
+      if (pass < 0 && !why) {
+        if (blockedAt(w, i, imp, pt[0], pt[1])) setBit(out, j)
+        continue
+      }
+      const o = blockerAt(w, i, imp, pt[0], pt[1], pass)
+      if (o === FREE) continue
+      setBit(out, j)
+      if (why) why[j] |= o === CROWDED || (o >= 0 && f.side[o] === f.side[i]) ? HELD_FRIEND : HELD_FOE
     }
   }
   return out
@@ -934,12 +955,20 @@ function companyClear(ctx: Places, c: number, impd: Float64Array): boolean {
 // whether any man of battalion i stands on impassable ground (tests, tools)
 export const anyWet = (w: World, i: number): boolean => anyBit(wetBins(w, i, bitsOf(w).tmp))
 // apply(u) sets the pose for the fraction u of a step; keeps the largest of 1, ½, … that puts no bin newly
-// on impassable ground (`before`: the bins already there), else 0
-function gate(w: World, i: number, before: Bits, apply: (u: number) => void): number {
+// on impassable ground (`before`: the bins already there), else 0. `pass` and `why` as wetBins takes them, `why`
+// for the whole step
+function gate(
+  w: World,
+  i: number,
+  before: Bits,
+  apply: (u: number) => void,
+  pass = -1,
+  why: Uint8Array | null = null,
+): number {
   const cur = bitsOf(w).now
   for (let k = 0, u = 1; k <= GATE_HALVINGS; k++, u /= 2) {
     apply(u)
-    if (!anyNew(wetBins(w, i, cur), before)) return u
+    if (!anyNew(wetBins(w, i, cur, pass, k === 0 ? why : null), before)) return u
   }
   apply(0)
   return 0
@@ -1007,9 +1036,12 @@ function sampleBins(w: World, i: number, pace: number, V0: number): void {
 function accordion(w: World, i: number): void {
   if (w.f.trans[i]) return
   const b = i * w.cr.maxNB
-  const f = w.f
+  accordionOf(w, i, w.f.lags, b, w.f.binN, b)
+}
+/** The accordion on any lags of formation i (from `lo`), its bins with men marked in `full` (from `fo`). */
+function accordionOf(w: World, i: number, lags: Float64Array, lo: number, full: ArrayLike<number>, fo: number): void {
   for (const [a, j, room] of layoutOf(w, i).pairs) {
-    if (f.binN[b + a] && f.binN[b + j]) f.lags[b + j] = Math.max(f.lags[b + j], f.lags[b + a] - room)
+    if (full[fo + a] && full[fo + j]) lags[lo + j] = Math.max(lags[lo + j], lags[lo + a] - room)
   }
 }
 const ordTmp: number[] = []
@@ -1064,11 +1096,20 @@ function lagStep(w: World, i: number, V0: number, want: number): [number, number
     f.lags[b + j] = Math.max(0, f.lags[b + j] + (V - u) * DT)
   }
   accordion(w, i)
-  let m = Infinity
-  for (const j of ordTmp) m = Math.min(m, f.lags[b + j])
-  for (const j of ordTmp) f.lags[b + j] -= m // the reference stays on the leading file
+  const m = leadOn(f.lags, b, f.binN, b, NB) // the reference stays on the leading file
   updateDisorder(w, i, V, V0)
   return [V, m]
+}
+/**
+ * The lags of the n bins from `lo` less their least over those with men (marked in `full` from `fo`), the others 0:
+ * the reference on the leading file. Returns that least (0 if none has men).
+ */
+function leadOn(lags: Float64Array, lo: number, full: ArrayLike<number>, fo: number, n: number): number {
+  let m = Infinity
+  for (let j = 0; j < n; j++) if (full[fo + j]) m = Math.min(m, lags[lo + j])
+  if (m === Infinity) return 0
+  for (let j = 0; j < n; j++) lags[lo + j] = full[fo + j] ? lags[lo + j] - m : 0
+  return m
 }
 // disorder: grows with a file far behind and with the line's bow, recovers once dressed (faster halted);
 // bins held at impassable ground are left out
@@ -1152,6 +1193,19 @@ export function inClashPair(w: World, i: number): boolean {
 // the lags' and the anchor's along the heading, held by the footprint gate (other formations' claims, the ground)
 // like any other. The caller leaves out a formation changing shape or in a trail shape (it stands).
 
+/**
+ * The order of formation i in a clash pair, its line held as it stands: it recovers as a halted line's does while no
+ * bin lags past Lok, and is not grown by the bend (the clash's pin alone adds to it).
+ */
+function clashOrder(w: World, i: number): void {
+  const f = w.f
+  if (!(f.disorder[i] > 0)) return
+  const D = w.cr.rs.disorder
+  const full = filledBins(w, i)
+  const b = i * w.cr.maxNB
+  for (let j = 0; j < typeOf(w, i).NB; j++) if (full[j] && f.lags[b + j] >= D.Lok) return
+  f.disorder[i] = Math.max(0, f.disorder[i] - 3 * D.kRec * DT)
+}
 /** The bins of formation i with men in them (1 each): a standing formation's binN is not kept, so from its slots. */
 function filledBins(w: World, i: number): Uint8Array {
   const out = bitsOf(w).clashFull
@@ -1182,84 +1236,100 @@ function clashPose(w: World, i: number): ClashPose {
   return { full: filledBins(w, i), lag0, lag1, B: U.geo.bins, Lmax: w.cr.rs.orders[w.cr.presets[w.f.style[i]]].Lmax }
 }
 /**
- * Formation i's lag1 after the accordion (a bin wholly behind another falls back with it, as lagStep's do), then less
- * its least over the filled bins, as lagStep keeps them (the reference stays on the leading file). Returns that least:
- * the metres the anchor moves back to keep the bins where they are.
+ * Formation i's lag1 after the accordion (a bin wholly behind another falls back with it), the reference then on the
+ * leading file, as lagStep keeps them. Returns how far the leading file fell back: the metres the anchor moves back to
+ * keep the bins where they are.
  */
 function settleLags(w: World, i: number, p: ClashPose): number {
-  if (!w.f.trans[i]) {
-    for (const [a, j, room] of layoutOf(w, i).pairs) {
-      if (p.full[a] && p.full[j]) p.lag1[j] = Math.max(p.lag1[j], p.lag1[a] - room)
-    }
-  }
-  return leadOnFirst(p)
+  accordionOf(w, i, p.lag1, 0, p.full, 0)
+  return leadOn(p.lag1, 0, p.full, 0, p.lag1.length)
 }
-// lag1 less its least over the filled bins; returns that least
-function leadOnFirst(p: ClashPose): number {
-  let m = Infinity
-  for (let j = 0; j < p.lag1.length; j++) if (p.full[j]) m = Math.min(m, p.lag1[j])
-  if (!(m > 0) || m === Infinity) return 0
-  for (let j = 0; j < p.lag1.length; j++) p.lag1[j] = p.full[j] ? p.lag1[j] - m : 0
-  return m
+/** What a clash's motion made: the metres, and what held it short of them (HELD_FRIEND, HELD_FOE; 0 if nothing). */
+export interface Gave {
+  m: number
+  by: number
 }
 /**
- * Moves formation i `s` metres along its heading while its lags go from lag0 to lag1, as far as the gate allows.
- * Returns the share made (1, ½, … or 0).
+ * Moves formation i `s` metres along its heading while its lags go from lag0 to lag1, as far as the gate allows, on
+ * no claim but its foe's (`foe`). Returns the share made (1, ½, … or 0), and in `out.by` what held the whole step:
+ * whose claims, or the ground, its bins would newly have stood on.
  */
-function clashMove(w: World, i: number, s: number, p: ClashPose): number {
+function clashMove(w: World, i: number, s: number, p: ClashPose, foe: number, out: Gave): number {
   const f = w.f
   const b = i * w.cr.maxNB
   const x0 = f.x[i]
   const z0 = f.z[i]
   const sx = sin(f.heading[i]) * s
   const sz = cos(f.heading[i]) * s
-  const before = wetBins(w, i, bitsOf(w).before)
-  // whatever blocks it is what blocks the motion, not a claim it already stood on
-  clearHit(w, i)
-  const u = gate(w, i, before, v => {
-    f.x[i] = x0 + sx * v
-    f.z[i] = z0 + sz * v
-    for (let j = 0; j < p.lag0.length; j++) f.lags[b + j] = p.lag0[j] + (p.lag1[j] - p.lag0[j]) * v
-  })
+  const B = bitsOf(w)
+  const before = wetBins(w, i, B.before, foe)
+  const u = gate(
+    w,
+    i,
+    before,
+    v => {
+      f.x[i] = x0 + sx * v
+      f.z[i] = z0 + sz * v
+      for (let j = 0; j < p.lag0.length; j++) f.lags[b + j] = p.lag0[j] + (p.lag1[j] - p.lag0[j]) * v
+    },
+    foe,
+    B.clashWhy,
+  )
+  out.by = 0
+  if (u < 1) for (let j = 0; j < p.lag0.length; j++) if (!hasBit(before, j)) out.by |= B.clashWhy[j]
   // its motion this tick, for the renderer's interpolation and for whoever reads its speed
   f.vx[i] = (f.x[i] - x0) / DT
   f.vz[i] = (f.z[i] - z0) / DT
   for (let j = 0; j < p.lag0.length; j++) f.lagRate[b + j] = (f.lags[b + j] - p.lag0[j]) / DT
   return u
 }
-
-/**
- * Formation i's companies marked in `eng` give d metres of ground: their bins fall back (a bend) as far as the lag
- * limit allows, and the rest the whole formation steps back. Returns the metres they gave, or −1 if none of its bins
- * with men is marked (nothing to give).
- */
-export function giveGround(w: World, i: number, d: number, eng: ArrayLike<number>): number {
-  if (!(d > 0)) return 0
-  const p = clashPose(w, i)
+// the most lag among formation i's bins with men of its companies marked in `eng` (−1: none)
+function engagedTop(p: ClashPose, eng: ArrayLike<number>): number {
   let top = -1
   for (let j = 0; j < p.lag0.length; j++) if (p.full[j] && eng[(j / p.B) | 0]) top = Math.max(top, p.lag0[j])
-  if (top < 0) return -1
-  const bend = Math.min(d, Math.max(0, p.Lmax - top))
-  for (let j = 0; j < p.lag0.length; j++) if (p.full[j] && eng[(j / p.B) | 0]) p.lag1[j] += bend
-  const back = d - bend + settleLags(w, i, p)
-  return clashMove(w, i, -back, p) * d
+  return top
 }
 
 /**
- * Formation i follows a foe that gave d metres: its companies marked in `eng` advance by at most d, the others
- * staying where they stand as far as the lag limit lets them fall behind. Returns the metres they advanced.
+ * Formation i's companies marked in `eng` give d metres of ground to its foe (`foe`, the slot of the one formation
+ * whose claim it may stand on): their bins fall back (a bend) as far as the lag limit allows, and the rest the whole
+ * formation steps back. Into `out`: the metres given and what held it short. False if none of its bins with men is
+ * marked (nothing to give).
  */
-export function followUp(w: World, i: number, d: number, eng: ArrayLike<number>): number {
-  if (!(d > 0)) return 0
+export function giveGround(w: World, i: number, d: number, eng: ArrayLike<number>, foe: number, out: Gave): boolean {
+  out.m = 0
+  out.by = 0
+  if (!(d > 0)) return true
   const p = clashPose(w, i)
+  const top = engagedTop(p, eng)
+  if (top < 0) return false
+  const bend = Math.min(d, Math.max(0, p.Lmax - top))
+  for (let j = 0; j < p.lag0.length; j++) if (p.full[j] && eng[(j / p.B) | 0]) p.lag1[j] += bend
+  const back = d - bend + settleLags(w, i, p)
+  out.m = clashMove(w, i, -back, p, foe, out) * d
+  return true
+}
+
+/**
+ * Formation i follows its foe (`foe`) that gave d metres: its companies marked in `eng` advance by at most d, the
+ * others staying where they stand as far as the lag limit lets them fall behind. Into `out`: the metres they
+ * advanced and what held them short. False if none of its bins with men is marked (nothing to follow with).
+ */
+export function followUp(w: World, i: number, d: number, eng: ArrayLike<number>, foe: number, out: Gave): boolean {
+  out.m = 0
+  out.by = 0
+  if (!(d > 0)) return true
+  const p = clashPose(w, i)
+  if (engagedTop(p, eng) < 0) return false
   let dd = d
   for (let j = 0; j < p.lag0.length; j++) {
     if (p.full[j] && !eng[(j / p.B) | 0]) dd = Math.min(dd, Math.max(0, p.Lmax - p.lag0[j]))
   }
-  if (!(dd > 0)) return 0
+  if (!(dd > 0)) return true
   for (let j = 0; j < p.lag0.length; j++) if (p.full[j] && !eng[(j / p.B) | 0]) p.lag1[j] += dd
   const ahead = dd - settleLags(w, i, p)
-  return clashMove(w, i, ahead, p) * dd
+  out.m = clashMove(w, i, ahead, p, foe, out) * dd
+  return true
 }
 
 /* ---------------- orders (a list in the order pool) ---------------- */
@@ -1752,9 +1822,9 @@ function formationStep(w: World, i: number): void {
   if (n < 0 || shelter || (f.foe[i] && !outOfFight(f.mstate[i]))) {
     f.vx[i] = 0
     f.vz[i] = 0
-    // with claims a melee bends its line (the clash): the line holds as it stands until the melee ends, its order
-    // neither dressed nor grown by the bow (the clash's pin alone adds to it)
-    if (!(w.claims && inClashPair(w, i))) lagSettle(w, i)
+    // with claims a melee bends its line (the clash): the line holds as it stands until the melee ends, not dressed
+    if (w.claims && inClashPair(w, i)) clashOrder(w, i)
+    else lagSettle(w, i)
     return
   }
   const h0 = f.heading[i]

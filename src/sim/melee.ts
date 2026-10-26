@@ -48,8 +48,10 @@ import {
   giveGround,
   followUp,
   inClashPair,
+  HELD_FOE,
+  type Gave,
 } from './formation.ts'
-import { claimFormation, claimHit, blockerOf, clashing } from './claims.ts'
+import { claimFormation } from './claims.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
@@ -88,6 +90,7 @@ export interface Melee {
   G: FireGeo | null
   pressed: Float64Array // how hard each battalion is pressed this step (0..1)
   front: Uint8Array // whether its foe stands in its front, as the step found them
+  moved: Gave // what a clash's motion made (giveGround, followUp)
 }
 const ks = new Uint32Array(4)
 const scratchOf = (w: World): Melee =>
@@ -105,6 +108,7 @@ const scratchOf = (w: World): Melee =>
     G: null,
     pressed: new Float64Array(MAX_FORMATIONS),
     front: new Uint8Array(MAX_FORMATIONS),
+    moved: { m: 0, by: 0 },
   })
 
 /* ---------------- geometry ---------------- */
@@ -463,7 +467,7 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
     const men = inContact(w, G, i, e, lim, S.mi)
     inContact(w, G, e, i, lim, S.mj)
     const lambda = M.rate * DT * men * strengthOf(w, i)
-    if (e === j) {
+    if (e === j && w.claims) {
       // the clash: its push on its foe, and its companies in contact with it
       S.push[i] = lambda * Math.max(0, f.morale[i])
       const C = typeOf(w, i).C
@@ -505,10 +509,8 @@ export function clashStep(w: World, order: readonly number[]): void {
   S.front.fill(0)
   S.gave.fill(0)
   for (const i of order) weigh(w, S, S.G, i)
-  clashing(w, true)
   for (const i of order) if (S.pressed[i] > 0) give(w, S, i)
   for (const i of order) follow(w, S, i)
-  clashing(w, false)
 }
 
 /** Battalion i's foe in a pair that can clash (`inClashPair`) and was one since the step began; else −1. */
@@ -543,15 +545,13 @@ function weigh(w: World, S: Melee, G: FireGeo, i: number): void {
 function give(w: World, S: Melee, i: number): void {
   const f = w.f
   const d = GIVE * S.pressed[i] * DT
-  const g = giveGround(w, i, d, S.eng.subarray(i * MAX_COMPANIES, (i + 1) * MAX_COMPANIES))
-  if (g < 0) return
-  S.gave[i] = g
-  if (g < d) {
-    const k = S.pressed[i] * (1 - g / d)
-    const o = blockerOf(w, i)
-    const friends = claimHit(w, i) && (o < 0 || f.side[o] === f.side[i])
-    if (friends) f.disorder[i] = Math.min(1, f.disorder[i] + PINNED_DISORDER * k * DT)
-    else f.shockIn[i] += PINNED_SHOCK * k * DT
+  const g = S.moved
+  if (!giveGround(w, i, d, S.eng.subarray(i * MAX_COMPANIES, (i + 1) * MAX_COMPANIES), slotOf(w, f.foe[i]), g)) return
+  S.gave[i] = g.m
+  if (g.m < d) {
+    const k = S.pressed[i] * (1 - g.m / d)
+    if (g.by & HELD_FOE) f.shockIn[i] += PINNED_SHOCK * k * DT
+    else f.disorder[i] = Math.min(1, f.disorder[i] + PINNED_DISORDER * k * DT)
   }
   claimFormation(w, i)
 }
@@ -563,7 +563,7 @@ function give(w: World, S: Melee, i: number): void {
 function follow(w: World, S: Melee, i: number): void {
   const j = pairedFoe(w, S, i)
   if (j < 0 || S.pressed[i] > 0 || !(S.gave[j] > 0) || !S.front[i] || !S.front[j]) return
-  followUp(w, i, S.gave[j], S.eng.subarray(i * MAX_COMPANIES, (i + 1) * MAX_COMPANIES))
+  followUp(w, i, S.gave[j], S.eng.subarray(i * MAX_COMPANIES, (i + 1) * MAX_COMPANIES), j, S.moved)
   claimFormation(w, i)
 }
 
