@@ -6,6 +6,8 @@ import { GENERATORS, ID, RESERVED, REFS, SEASONS, SHAPES } from './schema.ts'
 import type { GenSpec } from './generators.ts'
 import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import type { Issue } from './catalogue.ts'
+import { presetsOf } from './catalogue.ts'
+export { presetsOf }
 import { CLEAR_KEYS, FOLLOW_KEYS, KEEPS_OFF } from './follow.ts'
 import { listOf, num } from './util.ts'
 import type { Dem, MapFiles } from './dem.ts'
@@ -602,17 +604,6 @@ export function refTargetProblem(
   return null
 }
 
-/**
- * A map's presets as the validator takes them: those that are objects (another value is reported, and names no kind);
- * none when it has none or they are no object.
- */
-export function presetsOf(map: { presets?: unknown }): Record<string, Record<string, unknown>> {
-  const p = map.presets
-  if (typeof p !== 'object' || p === null || Array.isArray(p)) return {}
-  return Object.fromEntries(
-    Object.entries(p).filter(([, v]) => typeof v === 'object' && v !== null && !Array.isArray(v)),
-  ) as Record<string, Record<string, unknown>>
-}
 /** A feature's kind: its own, or its map preset's. */
 export const featureKind = (f: Feature, presets: Record<string, Record<string, unknown>>): string | undefined =>
   typeof f.kind === 'string'

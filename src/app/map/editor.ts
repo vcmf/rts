@@ -552,14 +552,14 @@ export class Editor {
     if (d) this.restore(d)
   }
   /**
-   * Back or forward to a step: its copy. The selection stays where it is (none stays none), but for a feature the step
-   * brings back that was selected when it was taken (a deletion undone), and one the step takes away (it goes).
+   * Back or forward to a step: its copy. The selection stays where it is (one the step takes away goes); with none, a
+   * feature the step brings back that was selected when it was taken is selected again (a deletion undone).
    */
   private restore(step: Snapshot): void {
     const back = step.selected && !this.feature(step.selected) ? step.selected : null
     this.doc = step.doc
     if (this.selected && !this.feature(this.selected)) this.selected = null
-    if (back && this.feature(back)) this.selected = back
+    if (!this.selected && back && this.feature(back)) this.selected = back
     this.hover = null
     this.check(this.selected)
     this.hoverAt()

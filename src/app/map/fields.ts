@@ -29,15 +29,22 @@ export interface AttrRow {
 export function attrRows(cat: Catalogue, f: Feature, map: MapFile): AttrRow[] {
   const kind = featureKind(f, presetsOf(map))
   const chain = kind ? kindChain(cat, kind) : null
-  let inherited: Record<string, AttrValue> = {}
-  let effective: Record<string, AttrValue> = {}
-  try {
-    const bare = Object.fromEntries(Object.entries(f).filter(([k]) => (RESERVED as readonly string[]).includes(k)))
-    inherited = resolve(bare as Feature, map, cat).attrs
-    effective = resolve(f, map, cat).attrs
-  } catch {
-    // not resolvable as it is: no hints (the validator says why)
+  // inherited: the kind's and the preset's, in the map's season, with none of the feature's own (its seasons and state
+  // are its own too); effective: everything, its state with it. Each apart: a state the kind lacks loses only the
+  // second (the validator says why)
+  const own = new Set(['seasons', 'state'])
+  const bare = Object.fromEntries(
+    Object.entries(f).filter(([k]) => (RESERVED as readonly string[]).includes(k) && !own.has(k)),
+  ) as Feature
+  const tryResolve = (g: Feature) => {
+    try {
+      return resolve(g, map, cat).attrs
+    } catch {
+      return {} as Record<string, AttrValue>
+    }
   }
+  const inherited = tryResolve(bare)
+  const effective = tryResolve(f)
   const rows: AttrRow[] = []
   if (chain) {
     const category = categoryOf(kind!)

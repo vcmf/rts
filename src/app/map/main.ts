@@ -781,7 +781,7 @@ picker.addEventListener('change', () => {
     editor.note('finish the drawing or the drag first')
     return
   }
-  if (editor.dirty && !confirm('The map has unsaved edits. Drop them and open another map?')) {
+  if ((editor.dirty || form.holding) && !confirm(`${unsavedWork()} Drop it and open another map?`)) {
     picker.value = editor.file!
     return
   }
@@ -848,6 +848,11 @@ addEventListener('keydown', e => {
  * Saves what the fields hold too: their text first; text one refuses is not in the copy, so the page does not save
  * as if it were.
  */
+/** What would be lost by leaving the map: its unsaved edits, text typed in a field and not applied. */
+function unsavedWork(): string {
+  const what = [editor.dirty ? 'unsaved edits' : '', form.holding ? 'text typed in a field and not applied' : '']
+  return `The map has ${what.filter(Boolean).join(' and ')}.`
+}
 function saveAll(overwrite = false): void {
   form.flush()
   if (form.refused) editor.note('a field holds text it could not apply: mend it, or Escape drops it; not saved')
@@ -879,7 +884,7 @@ $('newMake').addEventListener('click', () => {
       ? 'finish the drawing or the drag first'
       : mapIdProblem(id)
   if (why) return editor.note(`no new map: ${why}`)
-  if (editor.dirty && !confirm('The map has unsaved edits. Drop them and make a new map?')) return
+  if ((editor.dirty || form.holding) && !confirm(`${unsavedWork()} Drop it and make a new map?`)) return
   dropUnsavedNew()
   const file = `/maps/${id}.map.json`
   const doc: MapFile = {

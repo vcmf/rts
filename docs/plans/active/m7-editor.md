@@ -321,7 +321,8 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
 ## M7c in detail
 
 Decision 0066 holds: a form sets values, the validator judges them at once (no copy of the rules); each change is one
-edit. No new decision.
+edit. Decision 0067 (from the second redesign below): ids are set when a feature or a map is made, and renamed in the
+file.
 
 - `src/app/map/fields.ts` (pure, tested in `test/map-fields.test.ts`):
   - `attrRows`: the attributes a feature's kind's category takes (`allowedIn`), in the catalogue's order, each with
@@ -330,7 +331,7 @@ edit. No new decision.
   - `parseInput`: a field's text as a value by its spec's type: empty removes the field (it inherits); a number's
     text that is no number is kept as text, for the validator to name; objects, ramps, seasons and lists as JSON (text
     that is no JSON: no edit, and the panel says so);
-  - `setField`, `setMapField`: the feature or the map with one field set or removed, the others in their order;
+  - `setField`: a feature or the map with one field set or removed, the others in their order;
   - `problemsAt`: the validator's problems whose path is a field's (`features[i].height`, `seed`).
 - `Editor`: `setField(key, value)`, `setMapField(key, value)`, each one edit and saying whether it changed the copy;
   neither sets an id (renames are the file's, see the second redesign below).
@@ -436,6 +437,23 @@ edit. No new decision.
   the conflict's overwrite saves by the same rule (no save while a field holds refused text); closing the page asks
   while a field holds text not applied; fields that cannot be set are read-only (their text can be copied), not
   disabled; one `InputKind`; the problems of what the form shows are looked for once a refresh.
+- **Second redesign, round 3**: moderate and light only, so the review stops. Fixed: an undo bringing back a feature
+  that was selected leaves a selection made since alone (a field's text typed in it stays); opening or making another
+  map asks while a field holds text not applied, as closing the page does; the inherited hint is the kind's and the
+  preset's in the map's season (the feature's seasons and state are its own), each hint apart (a state the kind lacks
+  loses only the effective one); one notion of a map's presets (`presetsOf` in `src/map/catalogue.ts`: objects with a
+  text kind), read by `resolve` too; a refused field's text stays the field's while it is applied (no flash, the caret
+  kept); a new choice in a list is given in place (no rebuild); the feature's JSON cut at 20 000 characters; decision
+  0067 records the owner's choice on renames.
+
+## Results (M7c)
+
+- Every attribute of the catalogue set through the form's reading of text: good text gives no problem on a kind it
+  means something on, bad text one at its field (`test/map-fields.test.ts`).
+- The page check: a note and another feature's attribute set through the form change those two lines of the file;
+  text typed and not applied is kept through a refresh, applied before a press on the map, left typed by the undo
+  button, refused with why (and no save while refused); a form built again keeps the focus.
+- `npm test`, `check:data`, the build and the docs check pass.
 
 ## Open questions
 

@@ -58,6 +58,21 @@ export function kindMetaOf(cat: Catalogue, kind: string): KindMeta | null {
   return chain && kindMeta(cat, chain)
 }
 
+/**
+ * A map's presets that can name a kind: objects with a text `kind` (any other is the validator's to report, and names
+ * none); none when the map has none, or they are no object. The editor and `resolve` read presets through it.
+ */
+export function presetsOf(map: { presets?: unknown }): Record<string, Record<string, unknown>> {
+  const p = map.presets
+  if (typeof p !== 'object' || p === null || Array.isArray(p)) return {}
+  return Object.fromEntries(
+    Object.entries(p).filter(
+      ([, v]) =>
+        typeof v === 'object' && v !== null && !Array.isArray(v) && typeof (v as { kind?: unknown }).kind === 'string',
+    ),
+  ) as Record<string, Record<string, unknown>>
+}
+
 // may this attribute be set on a kind of this category?
 export const allowedIn = (cat: Catalogue, spec: AttrSpec, category: string): boolean =>
   spec.layers.some(l => cat.categories[category].layers.includes(l))

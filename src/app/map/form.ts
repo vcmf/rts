@@ -70,6 +70,13 @@ function attrRow(r: AttrRow): Row {
   }
 }
 
+const JSON_MAX = 20000 // characters of a feature's JSON shown (a long ring's are many): the file holds them all
+/** A feature as JSON for the panel, cut at JSON_MAX characters. */
+function shortJson(f: Feature): string {
+  const s = JSON.stringify(f)
+  return s.length > JSON_MAX ? `${s.slice(0, JSON_MAX)}… (${s.length} characters; the file holds them all)` : s
+}
+
 /** An element with some of its properties set. */
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -152,18 +159,16 @@ export class Form {
       this.pending.delete(key) // a field the form no longer has: its text goes with it
       return
     }
-    this.pending.delete(key)
+    // the text stays the field's while it is applied (a refresh meanwhile shows it, the caret where it was)
     const parsed = parseInput(row.as, p.text)
     let done: boolean | null
-    if ('error' in parsed) {
-      this.pending.set(key, { text: p.text, why: parsed.error })
-      done = false
-    } else {
-      done = this.view!.set(key, 'remove' in parsed ? undefined : parsed.value)
-      if (done === false) this.pending.set(key, { text: p.text, why: this.editor.message || 'refused' })
-    }
-    // an edit made refreshed the form; a refusal or no change does it here
-    if (done !== true) this.update(this.cat, true)
+    if ('error' in parsed) done = false
+    else done = this.view!.set(key, 'remove' in parsed ? undefined : parsed.value)
+    if (done === false) {
+      const why = 'error' in parsed ? parsed.error : this.editor.message || 'refused'
+      this.pending.set(key, { text: p.text, why })
+    } else this.pending.delete(key)
+    this.update(this.cat, true)
   }
 
   /** A feature's view: its own fields, its attributes, its seasons; its problems of no field; its JSON. */
@@ -179,13 +184,14 @@ export class Form {
     const rest = found.filter(x => !rows.some(r => problemsAt([x], `${base}.${r.key}`).length))
     return {
       // the fields, not the feature: another feature of the kind keeps the form (and the focus a Tab moved on to)
-      sig: JSON.stringify(['feature', rows.map(r => [r.key, r.label, r.as, r.options, r.lines])]),
+      // its fields' kinds, not their choices (a new choice is given in place)
+      sig: JSON.stringify(['feature', rows.map(r => [r.key, r.label, r.as, !!r.options, r.lines])]),
       base,
       rows,
       set: (key, value) => this.editor.setField(key, value),
       rest,
       found,
-      json: JSON.stringify(f),
+      json: shortJson(f),
     }
   }
   /** A feature's own fields: its id (shown), kind, preset, priority, state, source and note. */
@@ -247,7 +253,7 @@ export class Form {
       { key: 'presets', label: 'presets', value: doc.presets, as: 'json', hint: '{ "name": { "kind", … } }' },
     ]
     return {
-      sig: JSON.stringify(['map', rows.map(r => [r.key, r.label, r.as, r.options, r.lines])]),
+      sig: JSON.stringify(['map', rows.map(r => [r.key, r.label, r.as, !!r.options, r.lines])]),
       base: '',
       rows,
       set: (key, value) => this.editor.setMapField(key, value),

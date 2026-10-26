@@ -164,6 +164,13 @@ describe('M7c: every attribute through the form', () => {
     expect(featureKind(f, presetsOf(map))).toBeUndefined()
     expect(attrRows(cat, f, map)).toEqual([])
     expect(presetsOf({ presets: [1] })).toEqual({})
+    expect(presetsOf({ presets: { a: 'abc', b: { kind: 3 }, c: { kind: 'veg.wood' } } })).toEqual({
+      c: { kind: 'veg.wood' },
+    })
+  })
+  it("keeps what an attribute inherits from its kind when the feature's state is one its kind lacks", () => {
+    const f: Feature = { id: 'w', kind: 'veg.wood.broad', circle: [[0, 0], 10], state: 'ruined' }
+    expect(attrRows(cat, f, base).find(r => r.name === 'leaf')!.inherited).toBe('broad')
   })
   it('sets and removes a field in place, a new one last', () => {
     const f: Feature = { id: 'a', kind: 'relief.hill', point: [0, 0], height: 3 }
@@ -249,6 +256,15 @@ describe('M7c: the editor sets fields', () => {
     expect(ed.message).toBe('no feature is selected')
     expect(ed.setMapField('features', [])).toBe(false)
     expect(ed.message).toMatch(/edited one by one/)
+  })
+  it('leaves a selection made since alone when an undo brings back a feature that was selected', () => {
+    const ed = make()
+    ed.select('hill')
+    ed.remove()
+    ed.select('brook')
+    ed.undo()
+    expect(ed.feature('hill')).toBeDefined()
+    expect(ed.selected).toBe('brook')
   })
   it('reselects a deleted feature on undo', () => {
     const ed = make()
