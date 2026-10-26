@@ -41,8 +41,11 @@ export interface Claims {
   // per formation, its pose at its last claim (x, z, heading, then each company's men and each bin's lag): a
   // formation that has not moved since keeps its claim as it is
   pose: Float64Array
-  // per formation, the build in which a claim last blocked it (claimHit)
+  // per formation, the build in which a claim last blocked it (claimHit), and whose claim it was
   hit: Int32Array
+  by: Int32Array
+  // while the clash moves formations: a melee pair is only two battalions each the other's foe (clashing)
+  clash: boolean
 }
 
 /** The entries kept per cell before it is marked as claimed by more. */
@@ -72,6 +75,8 @@ function claimsOf(w: World): Claims {
     nearAt: new Int32Array(MAX_FORMATIONS).fill(-1),
     pose: new Float64Array(MAX_FORMATIONS * (3 + w.cr.maxC + w.cr.maxNB)).fill(NaN),
     hit: new Int32Array(MAX_FORMATIONS).fill(-1),
+    by: new Int32Array(MAX_FORMATIONS).fill(-1),
+    clash: false,
   })
 }
 
@@ -215,8 +220,11 @@ function blocks(w: World, i: number, o: number, core: boolean): boolean {
   const enemy = f.side[i] !== f.side[o]
   // loose bodies (out of the fight) pass through friends, and friends through them
   if (!enemy && (outOfFight(f.mstate[i]) || outOfFight(f.mstate[o]))) return false
-  // a melee pair stands in contact
-  if (enemy && (f.foe[i] === handleOf(w, o) || f.foe[o] === handleOf(w, i))) return false
+  // a melee pair stands in contact: in the clash only the two battalions each the other's foe, so one giving ground
+  // or following stops at every other enemy
+  const hi = f.foe[i] === handleOf(w, o)
+  const ho = f.foe[o] === handleOf(w, i)
+  if (enemy && (w.scratch.claims!.clash ? hi && ho : hi || ho)) return false
   // a charge reaches its enemy's core
   if (enemy && f.chPhase[i] !== 0) return core
   return true
@@ -236,11 +244,14 @@ export function claimedAt(w: World, i: number, x: number, z: number): boolean {
     if (e === 0) break
     if ((e >> 1) - 1 !== i && blocks(w, i, (e >> 1) - 1, (e & 1) === 1)) {
       C.hit[i] = C.built
+      C.by[i] = (e >> 1) - 1
       return true
     }
   }
   if (C.more[k] !== 1) return false
+  // a cell of more owners than it keeps: blocked, by one it does not keep (−1)
   C.hit[i] = C.built
+  C.by[i] = -1
   return true
 }
 
@@ -327,6 +338,18 @@ export const claimHit = (w: World, i: number): boolean => {
   const C = w.scratch.claims
   return !!C && C.hit[i] === C.built
 }
+
+/** Turns the clash's rule for melee pairs on or off (`blocks`). */
+export function clashing(w: World, on: boolean): void {
+  if (w.scratch.claims) w.scratch.claims.clash = on
+}
+/** Forgets that a claim blocked formation i this tick, before a motion that asks again (the clash's). */
+export function clearHit(w: World, i: number): void {
+  const C = w.scratch.claims
+  if (C) C.hit[i] = -1
+}
+/** The formation whose claim last blocked formation i this tick, or −1 for none or a cell of more owners. */
+export const blockerOf = (w: World, i: number): number => (claimHit(w, i) ? w.scratch.claims!.by[i] : -1)
 
 // the keyed draw that orders the formations is drawn again only every this many ticks (2 s), so a formation keeps
 // its place in the order long enough to get through

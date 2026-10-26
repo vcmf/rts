@@ -20,12 +20,13 @@ import {
   fleeing,
   typeOf,
   formationSlot,
+  formationHandle,
 } from './world.ts'
 import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
 import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
 import { cellK, impAt, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
-import { claimedAt, claimsNear, claimHit } from './claims.ts'
+import { claimedAt, claimsNear, claimHit, clearHit } from './claims.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
@@ -184,6 +185,10 @@ export interface GateBits {
   lag: Float64Array
   lag0: Float64Array
   faceArc: Arc
+  // the clash's (giveGround, followUp): the bins with men, the lags it starts from and goes to
+  clashFull: Uint8Array
+  clash0: Float64Array
+  clash1: Float64Array
 }
 function bitsOf(w: World): GateBits {
   let b = w.scratch.gateBits
@@ -206,6 +211,9 @@ function bitsOf(w: World): GateBits {
       lag: new Float64Array(NB),
       lag0: new Float64Array(NB),
       faceArc: mkArc(w),
+      clashFull: new Uint8Array(NB),
+      clash0: new Float64Array(NB),
+      clash1: new Float64Array(NB),
     }
   }
   return b
@@ -1132,6 +1140,128 @@ function stepBack(w: World, i: number, d: number): void {
   setTrail(w, i, xs, zs)
 }
 
+/* ---------------- the clash (the claim grid's prototype) ---------------- */
+/** Whether formation i is in a melee pair that can clash: each the other's foe, both in the fight and formed. */
+export function inClashPair(w: World, i: number): boolean {
+  const f = w.f
+  if (!f.foe[i] || outOfFight(f.mstate[i]) || f.trans[i] || snakes(w, i)) return false
+  const j = formationSlot(w, f.foe[i])
+  return j >= 0 && f.foe[j] === formationHandle(w, i) && !outOfFight(f.mstate[j]) && !f.trans[j] && !snakes(w, j)
+}
+// docs/plans/active/c1-claims.md, step 4; the melee step's clashStep decides who moves and how far. Both motions are
+// the lags' and the anchor's along the heading, held by the footprint gate (other formations' claims, the ground)
+// like any other. The caller leaves out a formation changing shape or in a trail shape (it stands).
+
+/** The bins of formation i with men in them (1 each): a standing formation's binN is not kept, so from its slots. */
+function filledBins(w: World, i: number): Uint8Array {
+  const out = bitsOf(w).clashFull
+  const U = typeOf(w, i)
+  const L = layoutOf(w, i)
+  const Fl = filledSlots(w, i)
+  const a = i * (w.cr.maxC + 1)
+  out.fill(0)
+  for (let k = Fl.at[a], e = Fl.at[a + U.C]; k < e; k++) out[U.slotC[Fl.s[k]] * U.geo.bins + L.of[Fl.s[k]]] = 1
+  return out
+}
+/** What a clash motion of formation i starts from: its filled bins, its lags (lag0, and lag1 to change), its limit. */
+interface ClashPose {
+  full: Uint8Array
+  lag0: Float64Array
+  lag1: Float64Array
+  B: number
+  Lmax: number
+}
+function clashPose(w: World, i: number): ClashPose {
+  const U = typeOf(w, i)
+  const b = i * w.cr.maxNB
+  const T = bitsOf(w)
+  const lag0 = T.clash0.subarray(0, U.NB)
+  const lag1 = T.clash1.subarray(0, U.NB)
+  lag0.set(w.f.lags.subarray(b, b + U.NB))
+  lag1.set(lag0)
+  return { full: filledBins(w, i), lag0, lag1, B: U.geo.bins, Lmax: w.cr.rs.orders[w.cr.presets[w.f.style[i]]].Lmax }
+}
+/**
+ * Formation i's lag1 after the accordion (a bin wholly behind another falls back with it, as lagStep's do), then less
+ * its least over the filled bins, as lagStep keeps them (the reference stays on the leading file). Returns that least:
+ * the metres the anchor moves back to keep the bins where they are.
+ */
+function settleLags(w: World, i: number, p: ClashPose): number {
+  if (!w.f.trans[i]) {
+    for (const [a, j, room] of layoutOf(w, i).pairs) {
+      if (p.full[a] && p.full[j]) p.lag1[j] = Math.max(p.lag1[j], p.lag1[a] - room)
+    }
+  }
+  return leadOnFirst(p)
+}
+// lag1 less its least over the filled bins; returns that least
+function leadOnFirst(p: ClashPose): number {
+  let m = Infinity
+  for (let j = 0; j < p.lag1.length; j++) if (p.full[j]) m = Math.min(m, p.lag1[j])
+  if (!(m > 0) || m === Infinity) return 0
+  for (let j = 0; j < p.lag1.length; j++) p.lag1[j] = p.full[j] ? p.lag1[j] - m : 0
+  return m
+}
+/**
+ * Moves formation i `s` metres along its heading while its lags go from lag0 to lag1, as far as the gate allows.
+ * Returns the share made (1, ½, … or 0).
+ */
+function clashMove(w: World, i: number, s: number, p: ClashPose): number {
+  const f = w.f
+  const b = i * w.cr.maxNB
+  const x0 = f.x[i]
+  const z0 = f.z[i]
+  const sx = sin(f.heading[i]) * s
+  const sz = cos(f.heading[i]) * s
+  const before = wetBins(w, i, bitsOf(w).before)
+  // whatever blocks it is what blocks the motion, not a claim it already stood on
+  clearHit(w, i)
+  const u = gate(w, i, before, v => {
+    f.x[i] = x0 + sx * v
+    f.z[i] = z0 + sz * v
+    for (let j = 0; j < p.lag0.length; j++) f.lags[b + j] = p.lag0[j] + (p.lag1[j] - p.lag0[j]) * v
+  })
+  // its motion this tick, for the renderer's interpolation and for whoever reads its speed
+  f.vx[i] = (f.x[i] - x0) / DT
+  f.vz[i] = (f.z[i] - z0) / DT
+  for (let j = 0; j < p.lag0.length; j++) f.lagRate[b + j] = (f.lags[b + j] - p.lag0[j]) / DT
+  return u
+}
+
+/**
+ * Formation i's companies marked in `eng` give d metres of ground: their bins fall back (a bend) as far as the lag
+ * limit allows, and the rest the whole formation steps back. Returns the metres they gave, or −1 if none of its bins
+ * with men is marked (nothing to give).
+ */
+export function giveGround(w: World, i: number, d: number, eng: ArrayLike<number>): number {
+  if (!(d > 0)) return 0
+  const p = clashPose(w, i)
+  let top = -1
+  for (let j = 0; j < p.lag0.length; j++) if (p.full[j] && eng[(j / p.B) | 0]) top = Math.max(top, p.lag0[j])
+  if (top < 0) return -1
+  const bend = Math.min(d, Math.max(0, p.Lmax - top))
+  for (let j = 0; j < p.lag0.length; j++) if (p.full[j] && eng[(j / p.B) | 0]) p.lag1[j] += bend
+  const back = d - bend + settleLags(w, i, p)
+  return clashMove(w, i, -back, p) * d
+}
+
+/**
+ * Formation i follows a foe that gave d metres: its companies marked in `eng` advance by at most d, the others
+ * staying where they stand as far as the lag limit lets them fall behind. Returns the metres they advanced.
+ */
+export function followUp(w: World, i: number, d: number, eng: ArrayLike<number>): number {
+  if (!(d > 0)) return 0
+  const p = clashPose(w, i)
+  let dd = d
+  for (let j = 0; j < p.lag0.length; j++) {
+    if (p.full[j] && !eng[(j / p.B) | 0]) dd = Math.min(dd, Math.max(0, p.Lmax - p.lag0[j]))
+  }
+  if (!(dd > 0)) return 0
+  for (let j = 0; j < p.lag0.length; j++) if (p.full[j] && !eng[(j / p.B) | 0]) p.lag1[j] += dd
+  const ahead = dd - settleLags(w, i, p)
+  return clashMove(w, i, ahead, p) * dd
+}
+
 /* ---------------- orders (a list in the order pool) ---------------- */
 export function allocOrder(w: World, type: number): number {
   const o = w.ord
@@ -1622,7 +1752,9 @@ function formationStep(w: World, i: number): void {
   if (n < 0 || shelter || (f.foe[i] && !outOfFight(f.mstate[i]))) {
     f.vx[i] = 0
     f.vz[i] = 0
-    lagSettle(w, i)
+    // with claims a melee bends its line (the clash): the line holds as it stands until the melee ends, its order
+    // neither dressed nor grown by the bow (the clash's pin alone adds to it)
+    if (!(w.claims && inClashPair(w, i))) lagSettle(w, i)
     return
   }
   const h0 = f.heading[i]

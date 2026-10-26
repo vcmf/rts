@@ -97,6 +97,9 @@ can:
 | X-12 gunners into a square | a battery broken by debug-morale runs past a friendly square |
 | X-13 a passage of lines | a second line marches through the first |
 | X-14 forty crossing | 40 battalions ordered across each other's paths |
+| X-15 pushed back | a veteran regiment charges a raw one at the halt, open ground behind it (added in C1, step 4) |
+| X-16 pushed onto a friend | the same, a friendly regiment just behind the raw one |
+| X-17 pushed onto an enemy | the same, an enemy regiment just behind the raw one |
 | Q-01 a shift chain | move, then form, face and move appended |
 | Q-02 a charge in a chain | a charge with a move after it |
 | Q-03 the square in a chain | moves queued, a regiment threatens, the square forms |

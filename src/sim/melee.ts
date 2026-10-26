@@ -45,7 +45,11 @@ import {
   changeProgress,
   startChange,
   targetShape,
+  giveGround,
+  followUp,
+  inClashPair,
 } from './formation.ts'
+import { claimFormation, claimHit, blockerOf, clashing } from './claims.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
@@ -68,13 +72,22 @@ const COS45 = Math.SQRT1_2
 export const GAP_UNKNOWN = 1e9
 
 // per-world scratch: the shock each attacker sends this step and to whom, the melee pairs as the step began,
-// and per-company masks of the companies in contact
+// and per-company masks of the companies in contact. For the clash (the claim grid's prototype): per battalion, the
+// push of its strike on its foe this step, its companies in contact with that foe, and the metres it gave; the tick
+// they were found at and the block geometry they were found with
 export interface Melee {
   shockTo: Int32Array
   shockBy: Float64Array
   foe0: Int32Array
   mi: Uint8Array
   mj: Uint8Array
+  push: Float64Array
+  eng: Uint8Array
+  gave: Float64Array
+  pushAt: number
+  G: FireGeo | null
+  pressed: Float64Array // how hard each battalion is pressed this step (0..1)
+  front: Uint8Array // whether its foe stands in its front, as the step found them
 }
 const ks = new Uint32Array(4)
 const scratchOf = (w: World): Melee =>
@@ -85,6 +98,13 @@ const scratchOf = (w: World): Melee =>
     foe0: new Int32Array(MAX_FORMATIONS),
     mi: new Uint8Array(MAX_COMPANIES),
     mj: new Uint8Array(MAX_COMPANIES),
+    push: new Float64Array(MAX_FORMATIONS),
+    eng: new Uint8Array(MAX_FORMATIONS * MAX_COMPANIES),
+    gave: new Float64Array(MAX_FORMATIONS),
+    pushAt: -1,
+    G: null,
+    pressed: new Float64Array(MAX_FORMATIONS),
+    front: new Uint8Array(MAX_FORMATIONS),
   })
 
 /* ---------------- geometry ---------------- */
@@ -231,6 +251,9 @@ export function meleeStep(w: World): void {
     if (f.alive[i] && f.chPhase[i]) chargeStep(w, G, S, i, tick)
   }
   S.foe0.set(f.foe)
+  S.push.fill(0)
+  S.pushAt = tick
+  S.G = G
   for (let n = 0; n < N; n++) {
     const i = rev ? N - 1 - n : n
     if (f.alive[i] && S.foe0[i]) meleePair(w, G, S, i, tick)
@@ -439,12 +462,109 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
   const strike = (e: number) => {
     const men = inContact(w, G, i, e, lim, S.mi)
     inContact(w, G, e, i, lim, S.mj)
-    owe(w, e, S.mj, M.rate * DT * men * strengthOf(w, i), keyedStream(ks, seed, tick, h, e, K_MELEE))
+    const lambda = M.rate * DT * men * strengthOf(w, i)
+    if (e === j) {
+      // the clash: its push on its foe, and its companies in contact with it
+      S.push[i] = lambda * Math.max(0, f.morale[i])
+      const C = typeOf(w, i).C
+      S.eng.fill(0, i * MAX_COMPANIES, (i + 1) * MAX_COMPANIES)
+      S.eng.set(S.mi.subarray(0, C), i * MAX_COMPANIES)
+    }
+    owe(w, e, S.mj, lambda, keyedStream(ks, seed, tick, h, e, K_MELEE))
   }
   strike(j)
   for (let e = 0; e < MAX_FORMATIONS; e++) {
     if (e !== j && f.alive[e] && S.foe0[e] === h && !outOfFight(f.mstate[e])) strike(e)
   }
+}
+
+/* ---------------- step 10, with claims: the clash ---------------- */
+// The claim grid's prototype (docs/plans/active/c1-claims.md, step 4): a melee moves, pair by pair. Two battalions
+// each the other's foe since the step began weigh their pushes, a push being the men a battalion's strike owes its
+// foe this step times its morale (the men in contact on both sides are much the same, and a melee is decided by whose
+// nerve goes first). One losing by more than EVEN of the two, its foe in its front, is pressed by the share past
+// EVEN: its companies in contact give ground (a bend first, then the whole battalion steps back: giveGround), held
+// by every other formation's claims and the ground as any motion is, and its foe follows by at most what it gave, so
+// the two stay in contact and never overlap. Other enemies fighting it (a flank, the rear) act on its morale only. A
+// battalion that cannot give the ground it is pressed for is pinned: by friends behind it loses its order
+// (disorder), by enemies or impassable ground its nerve (a morale shock).
+const EVEN = 0.05 // a battalion losing by less than this share holds its ground
+const GIVE = 1.5 // metres a second given at a full loss
+const PINNED_DISORDER = 0.4 // disorder a second, at a full loss, of a battalion friends hold where it stands
+const PINNED_SHOCK = 0.08 // morale a second, at a full loss, of one enemies or the ground hold there
+
+/**
+ * The clash, after the melee step (`order`: the tick's keyed order of the formations, `claimOrder`): which
+ * battalions are pressed, then the pressed give ground, then their foes follow, each claiming its new cells before
+ * the next moves.
+ */
+export function clashStep(w: World, order: readonly number[]): void {
+  const S = w.scratch.melee
+  if (!S || !S.G || S.pushAt !== w.meta[M_TICK] + 1) return
+  S.pressed.fill(0)
+  S.front.fill(0)
+  S.gave.fill(0)
+  for (const i of order) weigh(w, S, S.G, i)
+  clashing(w, true)
+  for (const i of order) if (S.pressed[i] > 0) give(w, S, i)
+  for (const i of order) follow(w, S, i)
+  clashing(w, false)
+}
+
+/** Battalion i's foe in a pair that can clash (`inClashPair`) and was one since the step began; else −1. */
+function pairedFoe(w: World, S: Melee, i: number): number {
+  const f = w.f
+  if (!f.alive[i] || !inClashPair(w, i) || S.foe0[i] !== f.foe[i]) return -1
+  const j = slotOf(w, f.foe[i])
+  return S.foe0[j] === handleOf(w, i) ? j : -1
+}
+
+/**
+ * Whether battalion i's foe stands in its front (`front`), and how hard i is pressed (`pressed`, 0..1): by the share
+ * past EVEN that its foe's push exceeds its own, its foe in its front and some of its companies in contact.
+ */
+function weigh(w: World, S: Melee, G: FireGeo, i: number): void {
+  const j = pairedFoe(w, S, i)
+  if (j < 0) return
+  S.front[i] = quarter(w, G, j, i) === Q_FRONT ? 1 : 0
+  const on = S.push[j]
+  const by = S.push[i]
+  const r = on + by > 0 ? (on - by) / (on + by) : 0
+  let any = 0
+  for (let c = 0; c < MAX_COMPANIES; c++) any |= S.eng[i * MAX_COMPANIES + c]
+  if (r > EVEN && S.front[i] && any) S.pressed[i] = (r - EVEN) / (1 - EVEN)
+}
+
+/**
+ * Battalion i gives the ground it is pressed for, as far as it can; what it could not give pins it: against friends
+ * (a friend's claim, or a cell crowded past what the grid keeps, where friends are the most likely) its order,
+ * against an enemy or the ground its nerve.
+ */
+function give(w: World, S: Melee, i: number): void {
+  const f = w.f
+  const d = GIVE * S.pressed[i] * DT
+  const g = giveGround(w, i, d, S.eng.subarray(i * MAX_COMPANIES, (i + 1) * MAX_COMPANIES))
+  if (g < 0) return
+  S.gave[i] = g
+  if (g < d) {
+    const k = S.pressed[i] * (1 - g / d)
+    const o = blockerOf(w, i)
+    const friends = claimHit(w, i) && (o < 0 || f.side[o] === f.side[i])
+    if (friends) f.disorder[i] = Math.min(1, f.disorder[i] + PINNED_DISORDER * k * DT)
+    else f.shockIn[i] += PINNED_SHOCK * k * DT
+  }
+  claimFormation(w, i)
+}
+
+/**
+ * Battalion i follows its foe if the foe gave ground: each in the other's front, so both move along one line, its
+ * companies in contact with the foe by at most the ground given.
+ */
+function follow(w: World, S: Melee, i: number): void {
+  const j = pairedFoe(w, S, i)
+  if (j < 0 || S.pressed[i] > 0 || !(S.gave[j] > 0) || !S.front[i] || !S.front[j]) return
+  followUp(w, i, S.gave[j], S.eng.subarray(i * MAX_COMPANIES, (i + 1) * MAX_COMPANIES))
+  claimFormation(w, i)
 }
 
 /* ---------------- step 4: the square against cavalry ---------------- */

@@ -19,6 +19,8 @@ import {
   formedOverlaps,
   sectionHashes,
   typeOf,
+  giveGround,
+  MS_ROUTING,
   M_TICK,
   TICK_HZ,
   O_MOVE,
@@ -85,6 +87,8 @@ const OVERLAP_TODAY = new Set([
   'x11-rally-in-a-friend', // the router runs to the map's edge and rallies there, inside the friend that stands there
   'x13-passage-of-lines',
   'x14-forty-crossing',
+  'x16-pushed-onto-friend', // the veteran pursues the router through the regiment behind it
+  'x17-pushed-onto-enemy', // the same, through a regiment of its own side
 ])
 
 describe('invariant 1: no two formed bodies overlap', () => {
@@ -113,8 +117,8 @@ const stateOf = (w: World) => ({
   }),
 })
 // every step reversed, the formation step too: a charge steers at its target as moved earlier in that step, so two
-// regiments charging each other depend on their slots today (#187)
-const ORDER_TODAY = new Set(['x01-clash'])
+// regiments charging each other, or one pursuing a router, depend on their slots today (#187)
+const ORDER_TODAY = new Set(['x01-clash', 'x15-pushed-back', 'x16-pushed-onto-friend', 'x17-pushed-onto-enemy'])
 describe('invariant 4: the visiting order changes nothing', () => {
   for (const c of BENCH_CASES) {
     if (c.id === 'x14-forty-crossing') continue
@@ -174,19 +178,80 @@ describe('with claims: invariant 1', () => {
   )
 })
 describe('with claims: invariant 4, the keyed order', () => {
-  for (const c of CLAIM_CASES) {
-    if (c.id === 'x14-forty-crossing-claims') continue
-    it(`${c.id}`, () => {
-      const s = Math.min(c.seconds, 120)
-      expect(stateOf(play(c, { seconds: s, reverse: true }))).toEqual(stateOf(play(c, { seconds: s })))
-    })
-  }
-})
-describe('with claims: invariant 4, the keyed order', () => {
   // every step reversed: the claims step formations in a keyed order, whatever the slots, so the two regiments of
   // X-01 (#187 without claims) give the same state too
   for (const c of CLAIM_CASES) {
     if (c.id === 'x14-forty-crossing-claims') continue
     it(`${c.id}`, () => expect(stateOf(play(c, { reverse: true }))).toEqual(stateOf(play(c))))
   }
+})
+
+// the clash (docs/plans/active/c1-claims.md, step 4): a veteran regiment charges a raw one at the halt (X-15), with a
+// friend (X-16) or an enemy (X-17) just behind the raw one. Played until the raw one (slot 0) breaks
+function untilRout(id: string) {
+  const out = { melee: -1, rout: -1, z1: 0, at: { z0: 0, z1: 0, disorder: 0 } }
+  play(caseOf(id), {
+    every: 1,
+    each: w => {
+      if (out.melee < 0 && w.f.foe[0]) {
+        out.melee = w.meta[M_TICK]
+        out.z1 = w.f.z[1]
+      }
+      if (out.rout < 0 && w.f.mstate[0] >= MS_ROUTING) {
+        out.rout = w.meta[M_TICK]
+        out.at = { z0: w.f.z[0], z1: w.f.z[1], disorder: w.f.disorder[0] }
+      }
+    },
+  })
+  return out
+}
+describe('with claims: the clash', () => {
+  // X-15 with claims, played once for the three cases
+  let x15: ReturnType<typeof untilRout> | null = null
+  const open = () => (x15 ??= untilRout('x15-pushed-back-claims'))
+  it('X-15: the raw regiment gives ground and the veteran follows it', () => {
+    const a = open()
+    const b = untilRout('x15-pushed-back')
+    expect(a.melee).toBeGreaterThan(0)
+    expect(a.rout).toBeGreaterThan(a.melee)
+    expect(b.rout).toBeGreaterThan(b.melee)
+    // it stood at z 40 facing south: it gave ground northward, and without claims it stands
+    expect(a.at.z0).toBeGreaterThan(41)
+    expect(b.at.z0).toBeCloseTo(40, 6)
+    expect(a.at.z1).toBeGreaterThan(a.z1 + 1)
+  })
+  it('X-16: held by a friend behind, it gives less ground and loses its order', () => {
+    const a = open()
+    const b = untilRout('x16-pushed-onto-friend-claims')
+    expect(b.rout).toBeGreaterThan(b.melee)
+    expect(b.at.z0).toBeLessThan(a.at.z0)
+    expect(b.at.disorder).toBeGreaterThan(0.1)
+    expect(a.at.disorder).toBeLessThan(0.05)
+  })
+  it('X-17: held by an enemy behind, it breaks sooner', () => {
+    const a = open()
+    const b = untilRout('x17-pushed-onto-enemy-claims')
+    expect(b.melee).toBeGreaterThan(0)
+    expect(b.rout).toBeGreaterThan(b.melee)
+    expect(b.rout - b.melee).toBeLessThan(a.rout - a.melee)
+  })
+  it('a battalion pressed on part of its front bends there; pressed on all of it, it steps back', () => {
+    const w = play(caseOf('x15-pushed-back-claims'), { seconds: 1 })
+    const f = w.f
+    const U = typeOf(w, 0)
+    const NB = U.NB
+    const B = U.geo.bins
+    const x = f.x[0]
+    const z = f.z[0]
+    // its four squadrons: the middle two engaged
+    expect(giveGround(w, 0, 2, [0, 1, 1, 0])).toBeCloseTo(2, 9)
+    const lags = Array.from(f.lags.slice(0, NB))
+    for (let j = 0; j < 4 * B; j++) expect(lags[j]).toBeCloseTo(j >= B && j < 3 * B ? 2 : 0, 9)
+    expect([f.x[0], f.z[0]]).toEqual([x, z])
+    // the whole front: the bend comes out as the anchor stepping back (south-facing: back is +z)
+    f.lags.fill(0, 0, NB)
+    expect(giveGround(w, 0, 2, [1, 1, 1, 1])).toBeCloseTo(2, 9)
+    expect(Array.from(f.lags.slice(0, NB)).every(l => Math.abs(l) < 1e-9)).toBe(true)
+    expect(f.z[0]).toBeCloseTo(z + 2, 9)
+  })
 })

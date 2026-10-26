@@ -17,7 +17,7 @@ import { fnv1a } from './hash.ts'
 import { buildClaims, claimFormation, claimOrder } from './claims.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep } from './morale.ts'
-import { meleeStep, standingStep } from './melee.ts'
+import { meleeStep, standingStep, clashStep } from './melee.ts'
 import { artilleryStep } from './artillery.ts'
 import { planStep, endStep, checkPlan } from './plan.ts'
 
@@ -74,6 +74,8 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     meter.add(name, meter.now() - t0)
   }
   let dropped: Dropped[] = []
+  // with claims, the tick's keyed order of the formations (the formation step's, the clash's)
+  let order: number[] = []
   const departed: TickResult['departed'] = []
   step('1 commands', () => {
     dropped = applyCommands(w, t)
@@ -98,7 +100,8 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     // the claim grid's prototype: in a keyed order, each formation's new cells claimed after it steps (its old ones
     // stay claimed until the next tick's rebuild, so two cannot swap places through each other)
     buildClaims(w)
-    for (const i of claimOrder(w)) {
+    order = claimOrder(w)
+    for (const i of order) {
       formationTick(w, i)
       if (w.f.alive[i]) claimFormation(w, i)
     }
@@ -112,6 +115,8 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
   })
   step('10 charges and melee', () => {
     meleeStep(w)
+    // the claim grid's prototype: a melee's loser gives ground and its foe follows (docs/plans/active/c1-claims.md)
+    if (w.claims) clashStep(w, order)
   })
   // all casualties first, then all morale: a rout reads other battalions (the nearest enemy's position and
   // men, final for the tick; its morale state from a copy taken before any changes), so visiting order does
