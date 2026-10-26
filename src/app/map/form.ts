@@ -1,7 +1,9 @@
 // The map page's form (docs/plans/active/m7-editor.md M7c): the selected feature's fields, or with no selection the
 // map's own, built from the catalogue and set through the editor (./editor.ts) one edit at a time. An input applies
-// when it changes (Enter, or the focus leaving it); the validator's problems are shown under their fields. The form is
-// rebuilt only when what it shows changes, so a field being typed in is never replaced under the typing.
+// when it changes (Enter, or the focus leaving it); the validator's problems are shown under their fields, and those
+// of no field above the feature's JSON. The form is built again only when its fields change (another selection, a new
+// kind); otherwise its inputs are given the values in place, so the field a click or Tab moved to is still there after
+// the edit the move applied, and a refused change shows the value the feature still has.
 import type { Catalogue, Feature, MapFile } from '../../map/schema.ts'
 import { SEASONS } from '../../map/schema.ts'
 import { kindChain, kindStates, type Issue } from '../../map/catalogue.ts'
@@ -20,6 +22,21 @@ interface Row {
   hint?: string
   disabled?: boolean
 }
+/** What the form shows: its rows, the problems of no row, the feature as JSON (none for the map's form). */
+interface View {
+  sig: string // the fields: a change builds the form again
+  base: string // the path its rows' paths start from
+  rows: Row[]
+  set: (key: string, value: unknown) => void
+  rest: Issue[]
+  json: string | null
+}
+/** A row's elements, to be given new values in place. */
+interface Shown {
+  input: HTMLInputElement | HTMLSelectElement
+  hint: HTMLElement
+  bad: HTMLElement
+}
 
 /** An element with some of its properties set. */
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -29,11 +46,15 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return Object.assign(document.createElement(tag), props)
 }
 
-/** The form's state: what it last showed, so it is rebuilt only when that changes. */
 export class Form {
   private box: HTMLElement
   private editor: Editor
-  private shown: unknown[] = []
+  private cat: Catalogue | null = null
+  private last: unknown[] = []
+  private sig = ''
+  private shown = new Map<string, Shown>()
+  private rest = el('div')
+  private json: HTMLTextAreaElement | null = null
   /** Called for a change of the map's id (the page moves the new map to its file). */
   onMapId: (id: string) => void = () => {}
 
@@ -42,22 +63,26 @@ export class Form {
     this.editor = editor
   }
 
-  /** Shows the selection's fields, or the map's; nothing when the editor has no copy. */
-  update(cat: Catalogue | null): void {
+  /**
+   * Shows the selection's fields, or the map's; nothing when the editor has no copy. Unless `force`, only when what
+   * it shows may have changed.
+   */
+  update(cat: Catalogue | null, force = false): void {
+    this.cat = cat
     const ed = this.editor
     const f = ed.selected ? ed.feature(ed.selected) : undefined
     const key = [ed.doc, f, ed.issues, cat, ed.enabled, ed.idle, ed.noFile]
-    if (key.length === this.shown.length && key.every((k, i) => k === this.shown[i])) return
-    this.shown = key
-    const focus = (document.activeElement as HTMLElement | null)?.dataset?.key
-    if (!ed.doc) this.box.replaceChildren()
-    else if (f) this.feature(f, ed.doc, cat)
-    else this.map(ed.doc)
-    // the focus stays on the field it was in (the form was rebuilt after its change)
-    if (focus) (this.box.querySelector(`[data-key="${CSS.escape(focus)}"]`) as HTMLElement | null)?.focus()
+    if (!force && key.length === this.last.length && key.every((k, i) => k === this.last[i])) return
+    this.last = key
+    const view = !ed.doc ? null : f ? this.feature(f, ed.doc, cat) : this.map(ed.doc)
+    if (!view) {
+      this.sig = ''
+      this.box.replaceChildren()
+    } else if (view.sig !== this.sig) this.build(view)
+    else this.fill(view)
   }
 
-  private feature(f: Feature, doc: MapFile, cat: Catalogue | null): void {
+  private feature(f: Feature, doc: MapFile, cat: Catalogue | null): View {
     const i = doc.features.indexOf(f)
     const presets = (doc.presets ?? {}) as Record<string, Record<string, unknown>>
     const kind = featureKind(f, presets)
@@ -104,29 +129,32 @@ export class Form {
       })
     }
     rows.push({ key: 'seasons', label: 'seasons', value: f.seasons, as: 'json', hint: '{ "winter": { … } }' })
-    const set = (key: string, value: unknown) => this.editor.setField(key, value)
-    const table = this.rows(rows, `features[${i}]`, set)
-    // the whole feature as JSON, for what the rows do not show (its shape, references, a generator)
-    const json = el('textarea', { value: JSON.stringify(f, null, 1), spellcheck: false, rows: 6 })
-    json.dataset.key = '#json'
-    const apply = el('button', { textContent: 'apply JSON', title: 'Cmd or Ctrl Enter' })
-    apply.addEventListener('click', () => this.editor.setFeature(json.value))
-    json.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) this.editor.setFeature(json.value)
-    })
-    const whole = this.problems(this.editor.issues.filter(x => x.path === `features[${i}]`))
-    this.box.replaceChildren(...whole, table, json, apply)
+    const base = `features[${i}]`
+    // the problems of no row (its shape, its references, a shared edge, a generator): above the feature's JSON
+    const rest = problemsAt(this.editor.issues, base).filter(
+      x => !rows.some(r => problemsAt([x], `${base}.${r.key}`).length),
+    )
+    return {
+      // the fields, not the feature: a rename keeps the form (and the focus a Tab moved on to)
+      sig: JSON.stringify(['feature', rows.map(r => [r.key, r.label, r.as, r.options])]),
+      base,
+      rows,
+      set: (key, value) => this.editor.setField(key, value),
+      rest,
+      json: JSON.stringify(f, null, 1),
+    }
   }
 
-  private map(doc: MapFile): void {
+  private map(doc: MapFile): View {
+    const noFile = this.editor.noFile
     const rows: Row[] = [
       {
         key: 'id',
         label: 'map id',
         value: doc.id,
         as: 'text',
-        disabled: !this.editor.noFile,
-        hint: this.editor.noFile ? 'names the file its first save makes' : 'names the file',
+        disabled: !noFile,
+        hint: noFile ? 'names the file its first save makes' : 'names the file',
       },
       { key: 'name', label: 'name', value: doc.name, as: 'text' },
       { key: 'note', label: 'note', value: doc.note, as: 'text' },
@@ -138,42 +166,91 @@ export class Form {
       { key: 'sources', label: 'sources', value: doc.sources, as: 'json', hint: '[{ "id", "kind", "ref"?, "note"? }]' },
       { key: 'presets', label: 'presets', value: doc.presets, as: 'json', hint: '{ "name": { "kind", … } }' },
     ]
-    const set = (key: string, value: unknown) => {
-      if (key === 'id') this.onMapId(typeof value === 'string' ? value : '')
-      else this.editor.setMapField(key, value)
+    return {
+      sig: JSON.stringify(['map', rows.map(r => [r.key, r.label, r.as, r.options])]),
+      base: '',
+      rows,
+      set: (key, value) => {
+        if (key === 'id') this.onMapId(typeof value === 'string' ? value : '')
+        else this.editor.setMapField(key, value)
+      },
+      // the map's problems of no row (its features' are theirs)
+      rest: this.editor.issues.filter(
+        x => x.id === null && !rows.some(r => problemsAt([x], r.key).length) && !x.path.startsWith('features'),
+      ),
+      json: null,
     }
-    this.box.replaceChildren(this.rows(rows, '', set))
   }
 
-  /** The rows as a table; each input applies its text on change, through `set` (undefined: the field removed). */
-  private rows(rows: Row[], base: string, set: (key: string, value: unknown) => void): HTMLElement {
+  /** Builds the form for a view whose fields differ from the last one's. */
+  private build(view: View): void {
+    this.sig = view.sig
+    this.shown.clear()
     const table = el('div', { className: 'fields' })
-    const off = !this.editor.enabled || !this.editor.idle
-    for (const r of rows) {
-      const shown = showValue(r.value)
+    for (const r of view.rows) {
       let input: HTMLInputElement | HTMLSelectElement
-      if (r.options) {
-        const select = el('select')
-        const opts = r.options.includes(shown) ? r.options : [...r.options, shown]
-        select.append(...opts.map(o => new Option(o === '' ? '—' : o, o)))
-        select.value = shown
-        input = select
-      } else input = el('input', { value: shown, spellcheck: false })
+      if (r.options) input = el('select')
+      else input = el('input', { spellcheck: false })
       input.dataset.key = r.key
-      input.disabled = off || !!r.disabled
       input.addEventListener('change', () => {
         const parsed = parseInput(r.as, input.value)
-        if ('error' in parsed) return this.editor.note(`${r.key}: ${parsed.error}; nothing changed`)
-        set(r.key, 'remove' in parsed ? undefined : parsed.value)
+        if ('error' in parsed) this.editor.note(`${r.key}: ${parsed.error}; nothing changed`)
+        else view.set(r.key, 'remove' in parsed ? undefined : parsed.value)
+        // the values again, whatever came of it: a refused change shows what the field still holds
+        this.update(this.cat, true)
       })
-      const path = base ? `${base}.${r.key}` : r.key
+      const hint = el('span', { className: 'hint' })
+      const bad = el('span')
       const row = el('label', { className: 'row' })
-      row.append(el('span', { className: 'k', textContent: r.label }), input)
-      if (r.hint) row.append(el('span', { className: 'hint', textContent: r.hint }))
-      row.append(...this.problems(problemsAt(this.editor.issues, path)))
+      row.append(el('span', { className: 'k', textContent: r.label }), input, hint, bad)
       table.append(row)
+      this.shown.set(r.key, { input, hint, bad })
     }
-    return table
+    this.rest = el('div')
+    const parts: HTMLElement[] = [table, this.rest]
+    this.json = null
+    if (view.json !== null) {
+      const json = el('textarea', { spellcheck: false, rows: 6 })
+      json.dataset.key = '#json'
+      const apply = () => {
+        this.editor.setFeature(json.value)
+        this.update(this.cat, true)
+      }
+      const button = el('button', { textContent: 'apply JSON', title: 'Cmd or Ctrl Enter' })
+      button.addEventListener('click', apply)
+      json.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) apply()
+      })
+      this.json = json
+      parts.push(json, button)
+    }
+    this.box.replaceChildren(...parts)
+    this.fill(view)
+  }
+
+  /** Gives the form's inputs, hints and problems the view's values, in place. */
+  private fill(view: View): void {
+    const off = !this.editor.enabled || !this.editor.idle
+    for (const r of view.rows) {
+      const s = this.shown.get(r.key)!
+      const value = showValue(r.value)
+      if (s.input instanceof HTMLSelectElement) {
+        // a value the choice does not offer (a hand edit's slip) is shown all the same, for the validator names it
+        const opts = r.options!.includes(value) ? r.options! : [...r.options!, value]
+        if ([...s.input.options].map(o => o.value).join('\n') !== opts.join('\n')) {
+          s.input.replaceChildren(...opts.map(o => new Option(o === '' ? '—' : o, o)))
+        }
+      }
+      s.input.value = value
+      s.input.disabled = off || !!r.disabled
+      s.hint.textContent = r.hint ?? ''
+      s.bad.replaceChildren(
+        ...this.problems(problemsAt(this.editor.issues, view.base ? `${view.base}.${r.key}` : r.key)),
+      )
+    }
+    this.rest.replaceChildren(...this.problems(view.rest))
+    // the JSON being typed in is left alone (a refused one stays, to be mended)
+    if (this.json && view.json !== null && document.activeElement !== this.json) this.json.value = view.json
   }
 
   private problems(found: Issue[]): HTMLElement[] {

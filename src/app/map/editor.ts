@@ -546,8 +546,12 @@ export class Editor {
     if (d) this.restore(d)
   }
   private restore(d: MapFile): void {
+    // a selection whose id the other copy does not have (a rename undone or redone) follows its feature by its place,
+    // when the copies hold as many features (else it went: an addition undone)
+    const at = this.selected ? this.doc!.features.findIndex(f => f.id === this.selected) : -1
+    const same = d.features.length === this.doc!.features.length
     this.doc = d
-    if (this.selected && !this.feature(this.selected)) this.selected = null
+    if (this.selected && !this.feature(this.selected)) this.selected = same && at >= 0 ? d.features[at].id : null
     this.check(this.selected)
     this.hoverAt()
     this.host.recompile()
@@ -593,6 +597,8 @@ export class Editor {
   rename(id: string): void {
     const f = this.selected ? this.feature(this.selected) : undefined
     if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f) || id === f.id) return
+    // a feature has an id (the editor finds it by it); what form an id takes is the validator's
+    if (id === '') return this.note('a feature needs an id: it stays ' + f.id)
     if (this.feature(id)) return this.note(`the id ${id} is taken`)
     const doc = renameFeature(this.doc, f.id, id)
     this.selected = id
@@ -611,7 +617,13 @@ export class Editor {
     } catch {
       return this.note('the feature is no JSON: nothing changed')
     }
-    if (typeof g !== 'object' || g === null || Array.isArray(g) || typeof (g as Feature).id !== 'string') {
+    if (
+      typeof g !== 'object' ||
+      g === null ||
+      Array.isArray(g) ||
+      typeof (g as Feature).id !== 'string' ||
+      !(g as Feature).id
+    ) {
       return this.note('a feature is an object with a text id: nothing changed')
     }
     const next = g as Feature
@@ -636,6 +648,10 @@ export class Editor {
     if (!this.enabled || !this.doc || !this.ready()) return false
     if (this.exists) {
       this.note('a map with a file keeps its id: it names the file')
+      return false
+    }
+    if (this.saving) {
+      this.note('the map is being saved under its id: rename it once the save is done')
       return false
     }
     const doc = { ...this.doc, id }

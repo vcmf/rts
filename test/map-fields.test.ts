@@ -1,7 +1,7 @@
 // The map editor's fields (docs/plans/active/m7-editor.md M7c): every attribute of the catalogue set through the form's
 // reading of text and judged by the validator at its field; renames that follow every reference; the editor's field
 // edits.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { AttrSpec, Catalogue, Feature, FieldSpec, MapFile, ShapeName } from '../src/map/schema.ts'
@@ -182,6 +182,42 @@ describe('M7c: a rename', () => {
       }
     }
   })
+  it("renames a generating parent's children wherever they are named, and a pinned child's own id", () => {
+    const map = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'generated.map.json'), 'utf8')) as MapFile
+    const groves = map.features.find(f => f.id === 'groves')!
+    const poplars = map.features.find(f => f.id === 'poplars-west')!
+    // a scatter that keeps clear of one of the groves, and a pinned poplar
+    const avoid: Feature = { ...groves, id: 'copse', gen: { scatter: { ...groves.gen!.scatter, avoid: ['groves-2'] } } }
+    const pinned: Feature = {
+      id: 'poplars-west-1',
+      kind: poplars.kind,
+      point: [0, 0],
+      origin: { generator: 'group', params: { count: 3 }, version: 3, parent: 'poplars-west' },
+    }
+    const before = { ...map, features: [...map.features, avoid, pinned] }
+    const n = validate(before, cat).length
+    let after = renameFeature(before, 'groves', 'woods')
+    after = renameFeature(after, 'poplars-west', 'poplars-w')
+    expect(validate(after, cat).length).toBe(n)
+    const scatter = after.features.find(f => f.id === 'copse')!.gen!.scatter as { avoid: string[] }
+    expect(scatter.avoid).toEqual(['woods-2'])
+    expect(after.features.find(f => f.origin?.parent === 'poplars-w')!.id).toBe('poplars-w-1')
+  })
+  it("leaves an author's feature named like a child alone when the feature renamed has no children", () => {
+    const map: MapFile = {
+      ...base,
+      features: [
+        { id: 'hill', kind: 'relief.hill', point: [0, 0] },
+        { id: 'hill-2', kind: 'relief.hill', point: [50, 0] },
+      ],
+    }
+    expect(renameFeature(map, 'hill', 'knoll').features.map(f => f.id)).toEqual(['knoll', 'hill-2'])
+  })
+  it("hints what an attribute would be in the map's season and the feature's state", () => {
+    const map: MapFile = { ...base, season: 'winter' }
+    const f: Feature = { id: 'w', kind: 'ground.field.wheat', area: SHAPE.area as Feature['area'], height: 1 }
+    expect(attrRows(cat, f, map).find(r => r.name === 'height')!.inherited).toBe(0)
+  })
   it('keeps every feature that does not name it as it was (the same object, the same bytes on save)', () => {
     const map = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'two-ridges.map.json'), 'utf8')) as MapFile
     const after = renameFeature(map, 'brook', 'stream')
@@ -255,6 +291,20 @@ describe('M7c: the editor sets fields', () => {
     ed.undo()
     expect(ed.dirty).toBe(false)
   })
+  it('refuses an empty id, and follows a renamed selection through undo and redo', () => {
+    const ed = make()
+    ed.select('brook')
+    ed.setField('id', undefined) // the id field emptied
+    expect(ed.selected).toBe('brook')
+    expect(ed.message).toMatch(/needs an id/)
+    ed.setFeature(JSON.stringify({ ...ed.feature('brook')!, id: '' }))
+    expect(ed.feature('brook')).toBeDefined()
+    ed.setField('id', 'stream')
+    ed.undo()
+    expect(ed.selected).toBe('brook')
+    ed.redo()
+    expect(ed.selected).toBe('stream')
+  })
   it("sets the map's own fields, and moves a new map's id with its file, never a saved one's", () => {
     const ed = make()
     ed.setMapField('seed', 7)
@@ -265,5 +315,17 @@ describe('M7c: the editor sets fields', () => {
     expect(fresh.file).toBe('/maps/u.map.json')
     expect(fresh.doc!.id).toBe('u')
     expect(fresh.noFile).toBe(true)
+  })
+  it('keeps a new map on its id while its first save is on its way', async () => {
+    const fresh = make(true)
+    let reply = () => {}
+    vi.stubGlobal('fetch', () => new Promise<Response>(r => (reply = () => r(new Response('{"ok":true}')))))
+    const saving = fresh.save()
+    await Promise.resolve()
+    expect(fresh.renameMap('/maps/u.map.json', 'u')).toBe(false)
+    expect(fresh.file).toBe('/maps/t.map.json')
+    reply()
+    expect(await saving).toBe(true)
+    vi.unstubAllGlobals()
   })
 })

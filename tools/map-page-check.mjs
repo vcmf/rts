@@ -238,14 +238,20 @@ try {
         MAP.select(target.id)
         field('id', target.id + 'x')
         MAP.select(other.id)
+        // an id in use refused: the field shows the id the feature still has
+        field('id', target.id + 'x')
+        const refused = document.querySelector('#form [data-key="id"]').value === other.id
+        // a change applied as the focus moves on (Tab, a click): the next field is the same element after the edit
+        const next = document.querySelector('#form [data-key="height"]')
         field('width', String((other.width ?? 100) + 7))
+        const kept = next.isConnected && document.querySelector('#form [data-key="height"]') === next
         const ok = await MAP.save()
         const disk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
         const issues = MAP.issues.length
         MAP.undo(); MAP.undo()
         const back = await MAP.save()
         const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
-        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id })
+        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id, refused, kept })
       })()`,
     ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
@@ -258,6 +264,16 @@ try {
         document.getElementById('newbox').open = true
         set('newId', '${NEW}'); set('newName', 'Check'); set('newSize', '1200'); set('newPlay', '1000'); set('newSeed', '7')
         document.getElementById('newMake').click()
+        await until(() => MAP.compiled === '${NEW}')
+        // with no file yet, its id moves it: compiled from the copy under the new name, and back
+        const mapId = id => {
+          const input = document.querySelector('#form [data-key="id"]')
+          input.value = id
+          input.dispatchEvent(new Event('change'))
+        }
+        mapId('${NEW}b')
+        await until(() => MAP.compiled === '${NEW}b' && !document.getElementById('status').textContent.includes('cannot read'))
+        mapId('${NEW}')
         await until(() => MAP.compiled === '${NEW}')
         const c = document.getElementById('map'), b = c.getBoundingClientRect()
         const at = (x, z) => { const s = MAP.project(x, z); return { clientX: b.left + s[0], clientY: b.top + s[1], bubbles: true, pointerId: 1, isPrimary: true } }
@@ -441,6 +457,8 @@ try {
     `through the form, ${fl.renamed} renamed and ${fl.other}'s width set: the lines of ${changedIds.join(', ')} changed`,
   )
   check(fl.back && fl.after === original, 'both undone and saved, the file is byte for byte the original')
+  check(fl.refused, "an id in use typed in the form is refused, and the field shows the feature's id again")
+  check(fl.kept, 'the field the focus moved to is still the same after the edit the move applied')
   await until('NEWMAP')
   const nm = seen.NEWMAP
   const ids = nm.features.map(f => f.id).join(',')

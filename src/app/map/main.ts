@@ -381,11 +381,17 @@ form.onMapId = id => {
       ? `a map ${id} exists`
       : ''
   if (why) return editor.note(`the id stays: ${why}`)
-  const was = editor.file
-  if (!editor.renameMap(file, id)) return
+  // the list first: the editor's recompile reads the map the list shows (its copy, under its new file)
+  const was = editor.file!
   const option = [...picker.options].find(o => o.value === was)
-  if (option) option.replaceWith(mapOption(file))
+  const moved = mapOption(file)
+  option?.replaceWith(moved)
   picker.value = file
+  if (!editor.renameMap(file, id)) {
+    moved.replaceWith(option ?? mapOption(was))
+    picker.value = was
+    return
+  }
   const q = new URLSearchParams(location.search)
   q.set('map', id)
   history.replaceState(null, '', `?${q}`)

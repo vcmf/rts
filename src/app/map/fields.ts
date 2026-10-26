@@ -6,10 +6,14 @@ import type { AttrSpec, AttrValue, Catalogue, Feature, MapFile } from '../../map
 import { RESERVED } from '../../map/schema.ts'
 import { allowedIn, categoryOf, kindChain, type Issue } from '../../map/catalogue.ts'
 import { featureKind } from '../../map/validate.ts'
-import { GENERATOR_SPECS } from '../../map/generators.ts'
+import { GENERATOR_SPECS, childOf } from '../../map/generators.ts'
+import { resolve } from '../../map/resolve.ts'
+import { sameJson } from '../../map/write.ts'
 
-/** One attribute in the form: its spec (none for one the kind's category does not take), its own value, and the one
- * it inherits from its kind and preset. */
+/**
+ * One attribute in the form: its spec (none for one the kind's category does not take), its own value, and the one it
+ * would have without it (its kind's, its preset's, the season's and the state's: `resolve`).
+ */
 export interface AttrRow {
   name: string
   spec: AttrSpec | undefined
@@ -21,15 +25,19 @@ const presetsOf = (map: MapFile) => (map.presets ?? {}) as Record<string, Record
 
 /**
  * The attributes of a feature's form: each the kind's category takes, in the catalogue's order, then any other the
- * feature sets (so it can be seen and removed). Inherited: along the kind's chain, then its preset.
+ * feature sets (so it can be seen and removed). What each inherits is what `resolve` (the one place the order lives)
+ * gives the feature without its own attributes; none where it cannot resolve (an unknown kind, preset or state).
  */
 export function attrRows(cat: Catalogue, f: Feature, map: MapFile): AttrRow[] {
   const kind = featureKind(f, presetsOf(map))
   const chain = kind ? kindChain(cat, kind) : null
-  const inherited: Record<string, AttrValue> = {}
-  for (const name of chain ?? []) Object.assign(inherited, cat.kinds[name].set)
-  const preset = typeof f.preset === 'string' ? presetsOf(map)[f.preset] : undefined
-  if (preset) for (const [k, v] of Object.entries(preset)) if (k !== 'kind') inherited[k] = v as AttrValue
+  let inherited: Record<string, AttrValue> = {}
+  try {
+    const bare = Object.fromEntries(Object.entries(f).filter(([k]) => (RESERVED as readonly string[]).includes(k)))
+    inherited = resolve(bare as Feature, map, cat).attrs
+  } catch {
+    // not resolvable as it is: no hints (the validator says why)
+  }
   const rows: AttrRow[] = []
   if (chain) {
     const category = categoryOf(kind!)
@@ -93,18 +101,32 @@ export function setField<T extends object>(o: T, key: string, value: unknown): T
 /**
  * The map with a feature's id changed from `from` to `to`, and every place that names it: the references (`on`,
  * `carries`, `crosses`, `along.id`), shared edges and kept-off lines (`follow`, `clear`), a generator's selectors, and
- * a pinned child's `origin.parent`. Features that name nothing of it are kept as they are (the same objects).
+ * a pinned child's `origin.parent`. When it has children (it generates them, or some are pinned), their ids follow
+ * (`<from>-<n>` becomes `<to>-<n>`: a pinned child's own, and wherever one is named). Features that name nothing of it
+ * are kept as they are (the same objects).
  */
 export function renameFeature(map: MapFile, from: string, to: string): MapFile {
-  const swap = (v: unknown) => (v === from ? to : v)
+  const parent = map.features.some(
+    f =>
+      f.origin?.parent === from ||
+      (f.id === from &&
+        Object.keys(f.gen ?? {}).some(g => Object.hasOwn(GENERATOR_SPECS, g) && !!GENERATOR_SPECS[g].childKinds)),
+  )
+  const swap = (v: unknown) => {
+    if (v === from) return to
+    const c = parent && typeof v === 'string' ? childOf(v) : null
+    return c?.parent === from ? `${to}-${c.n}` : v
+  }
   const ids = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(e => ids(e))
-    if (typeof v === 'object' && v !== null && (v as { id?: unknown }).id === from) return { ...v, id: to }
+    if (typeof v === 'object' && v !== null && swap((v as { id?: unknown }).id) !== (v as { id?: unknown }).id) {
+      return { ...v, id: swap((v as { id: unknown }).id) }
+    }
     return v
   }
   const features = map.features.map(f => {
     const g: Feature = { ...f }
-    if (g.id === from) g.id = to
+    if (g.id === from || (g.origin?.parent === from && childOf(g.id)?.parent === from)) g.id = swap(g.id) as string
     for (const r of ['on', 'carries', 'crosses'] as const) if (g[r] !== undefined) g[r] = swap(g[r]) as string
     if (g.along !== undefined) g.along = ids(g.along) as Feature['along']
     if (g.follow !== undefined) g.follow = ids(g.follow)
@@ -121,7 +143,7 @@ export function renameFeature(map: MapFile, from: string, to: string): MapFile {
       )
     }
     if (g.origin?.parent === from) g.origin = { ...g.origin, parent: to }
-    return JSON.stringify(g) === JSON.stringify(f) ? f : g
+    return sameJson(g, f) ? f : g
   })
   return { ...map, features }
 }

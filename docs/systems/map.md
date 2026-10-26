@@ -298,7 +298,10 @@ maps/kinds.json ──► checkCatalogue ─┐
       validator to name; JSON that does not parse changes nothing). The validator's problems show under their fields
       (by path). A rename (the id field, or the JSON's id) follows every place that names the feature (`renameFeature`:
       references, shared edges, kept-off lines, a generator's selectors, a pinned child's parent); an id in use is
-      refused. The form is rebuilt only when what it shows changes, the focus kept on its field.
+      refused, and so is an empty one. The form is built again only when its fields change (another kind); otherwise
+      its inputs are given their values in place, so the field the focus moved to stays, and a refused change shows
+      what the field still holds. A feature's problems of no field show above its JSON; an attribute's hint is what
+      `resolve` gives it without its own value (its season and state too).
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes

@@ -351,6 +351,20 @@ edit. No new decision.
   the old id.
 - `npm test`, `check:data`, the build, the docs check and the page check pass.
 
+## Review rounds (M7c)
+
+- **Round 1** (`/code-review high`): severe. A new map renamed was compiled from its old file name (the page's list
+  still named it), which does not exist; a change applied as the focus moved on (a click, Tab) rebuilt the form, so
+  the field moved to was gone; an id emptied renamed the feature and its references to nothing, and the selection with
+  it. Fixed: the list moves first, so the compile reads the copy; the form is built again only when its fields change
+  and is otherwise given its values in place (a rename keeps it too); an empty id is refused. With them: a rename
+  follows a generating parent's children (`<id>-<n>` wherever named, a pinned child's own id); undo and redo of a
+  rename keep the selection on the feature; a refused change shows what the field still holds; a feature's problems
+  of no field (its shape, references, shared edges) show above its JSON; a new map is not renamed while its first
+  save is out; what an attribute inherits is `resolve`'s (its season and state too), not a copy of its order;
+  `renameFeature` compares with `sameJson`. Tests for each; the page check renames a new map and back, types an id in
+  use, and keeps the field the focus moved to.
+
 ## Open questions
 
 (M7b)
