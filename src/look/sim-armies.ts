@@ -6,11 +6,11 @@
 // names (its ruleset, unit type and shapes) come from the scenario's data (src/scenarios/armies-demo.ts; decision
 // 0015: the page names none). No Babylon.
 import lookSimUrl from '../../data/painted-world.simdata?url'
-import { loadSimData, compileRuleset, formationHandle, typeOf, type Command, type World } from '../sim/index.ts'
-import { RULESETS } from '../rulesets/index.ts'
+import { loadSimData, compileRuleset, formationHandle, typeOf, M_TICK, type Command, type World } from '../sim/index.ts'
+import { rulesetOf } from '../app/host.ts'
 import { MAP_VERSIONS } from '../scenarios/maps.ts'
 import { lookArmies } from '../scenarios/look-world.ts'
-import { MainLink, WorkerLink, type BattleLink } from '../app/battle-link.ts'
+import { startLink, type BattleLink } from '../app/battle-link.ts'
 import { SimMen } from './sim-men.ts'
 import type { Battalion } from './world/armies.ts'
 
@@ -56,7 +56,11 @@ export interface Orders {
   marched: boolean
   moving: boolean
   formed: boolean
+  // the tick its march was sent at (a march refused, never seen under way, counts as done after GIVE_UP)
+  sentAt: number
 }
+/** Ticks after which a march never seen under way is taken as refused (its battalion then forms where it stands). */
+export const GIVE_UP = 60
 
 /** The orders battalion `b` (formation `i` now) is due: its march once (none when it is there already), its fighting
  * shape once it has marched and halted. */
@@ -72,13 +76,14 @@ export function ordersDue(
   const id = formationHandle(w, i)
   if (!state.marched) {
     state.marched = true
+    state.sentAt = w.meta[M_TICK]
     if (Math.hypot(to[0] - b.x, to[1] - b.z) < THERE) {
       state.moving = true
       return []
     }
     return [{ type: 'move', id, points: [[to[0], to[1]]], append: false }]
   }
-  if (f.ordHead[i] >= 0) state.moving = true
+  if (f.ordHead[i] >= 0 || w.meta[M_TICK] - state.sentAt > GIVE_UP) state.moving = true
   const shape = typeOf(w, i).shapes[f.shape[i]].name
   if (state.moving && !state.formed && f.ordHead[i] < 0 && !f.trans[i] && shape === a.approach) {
     state.formed = true
@@ -103,32 +108,28 @@ export async function playSim(
   mid: readonly [number, number],
   a: SimArmies,
 ): Promise<SimPlay> {
-  const era = Object.hasOwn(RULESETS, a.ruleset) ? RULESETS[a.ruleset] : undefined
-  if (!era) throw new Error(`?sim: no ruleset ${a.ruleset}`)
   const bytes = new Uint8Array(await (await fetch(lookSimUrl)).arrayBuffer())
   const data = loadSimData(bytes, MAP_VERSIONS['painted-world'])
-  const cr = compileRuleset(era.ruleset)
-  const type = cr.types.find(t => t.name === a.unitType)
-  if (!type) throw new Error(`?sim: the ruleset ${a.ruleset} has no unit type ${a.unitType}`)
-  let link: BattleLink | null = null
-  if (crossOriginIsolated) {
-    const wl = new WorkerLink(
-      new Worker(new URL('../app/sim-worker.ts', import.meta.url), { type: 'module' }),
-      new Worker(new URL('../app/men-worker.ts', import.meta.url), { type: 'module' }),
-      bytes,
-      data,
-      cr,
-      'look-armies',
-      a.ruleset,
-    )
-    try {
-      await wl.ready()
-      link = wl
-    } catch (e) {
-      console.warn(`the battle runs on the page: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
-  const battle = link ?? new MainLink(data, cr, lookArmies)
+  const cr = compileRuleset(rulesetOf(a.ruleset))
+  const t = cr.typeIndex(a.unitType)
+  if (t < 0) throw new Error(`?sim: the ruleset ${a.ruleset} has no unit type ${a.unitType}`)
+  const type = cr.types[t]
+  // in the workers when the page shares memory with them (and not told ?thread=main), as the sim page
+  const own = new URLSearchParams(location.search).get('thread') === 'main' || !crossOriginIsolated
+  const battle = await startLink({
+    bytes,
+    data,
+    cr,
+    scenario: lookArmies,
+    key: 'look-armies',
+    ruleset: a.ruleset,
+    workers: own
+      ? null
+      : () => [
+          new Worker(new URL('../app/sim-worker.ts', import.meta.url), { type: 'module' }),
+          new Worker(new URL('../app/men-worker.ts', import.meta.url), { type: 'module' }),
+        ],
+  })
   // as many men as figures, at most the type's slots (the figures past them are not drawn)
   for (const c of spawns(bs, Math.min(men, type.slots), a)) battle.command(c)
   const source = new SimMen(
@@ -138,7 +139,7 @@ export async function playSim(
     () => battle.published(),
   )
   const to = bs.map(b => marchTo(b, mid))
-  const states: Orders[] = bs.map(() => ({ marched: false, moving: false, formed: false }))
+  const states: Orders[] = bs.map(() => ({ marched: false, moving: false, formed: false, sentAt: 0 }))
   return {
     source,
     link: battle,

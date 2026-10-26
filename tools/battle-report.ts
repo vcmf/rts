@@ -36,7 +36,7 @@ import {
   type TickResult,
 } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { PAGE_SCENARIOS, PAGE_SEED } from '../src/scenarios/page.ts'
+import { BATTLE_SCENARIOS, PAGE_SEED } from '../src/scenarios/page.ts'
 import { DEFAULT_MAP, MAP_VERSIONS } from '../src/scenarios/maps.ts'
 
 export interface Mark {
@@ -215,9 +215,10 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     if (!arg) throw new Error('usage: node tools/battle-report.ts <session.json | scenario name> [minutes]')
     const session: Session | null = fs.existsSync(arg) ? JSON.parse(fs.readFileSync(arg, 'utf8')) : null
     const name = session ? session.replay.scenario : arg
-    const scenario = Object.hasOwn(PAGE_SCENARIOS, name) ? PAGE_SCENARIOS[name] : null
+    // (a session from the look page at ?sim is a battle too: BATTLE_SCENARIOS)
+    const scenario = Object.hasOwn(BATTLE_SCENARIOS, name) ? BATTLE_SCENARIOS[name] : null
     if (!scenario) {
-      throw new Error(`no scenario ${name} (a session file, or one of: ${Object.keys(PAGE_SCENARIOS).join(', ')})`)
+      throw new Error(`no scenario ${name} (a session file, or one of: ${Object.keys(BATTLE_SCENARIOS).join(', ')})`)
     }
     const map = scenario.map ?? DEFAULT_MAP
     const data = loadSimData(

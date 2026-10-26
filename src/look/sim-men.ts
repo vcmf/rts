@@ -25,6 +25,17 @@ export const RUN_FROM = 2.2
 export const FIRE_FOR = 0.6
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
 
+/** Whether a battalion (its index `k`, placed last for step `placed`, −1: never) is due at real-time part `part` of
+ * `groups` a step, and the step its placing counts for (−1: not due). Once a step, at its own part (k mod groups) or a
+ * later one; when the frames passed over its part and the rest of the step (a frame longer than a part: at 60 Hz, 1.6
+ * parts), at the next step's first frame, counted for the step it missed, so it still steps once a step. */
+export function sourceDue(k: number, placed: number, part: number, groups: number): number {
+  const step = Math.floor(part / groups)
+  if (placed < 0) return step
+  if (placed < step - 1) return step - 1
+  return placed < step && part % groups >= k % groups ? step : -1
+}
+
 /** What the page reads this frame: the world and the soldier layer of the newest published frame. */
 export interface Seen {
   w: World
@@ -61,6 +72,8 @@ export class SimMen implements MenSource {
   private T = 0
   // per battalion: a sum over its men's places, flags and the volleys when it was last placed (moved), NaN: never
   private readonly placedSum: Float64Array
+  private sum = 0
+  private sumK = -1
   // the battalion begun: its index, unit, its type's slots' companies, and its men's roles
   private k = -1
   private u: Unit | null = null
@@ -134,8 +147,9 @@ export class SimMen implements MenSource {
     return s.layer.units.get(i) ?? null
   }
 
-  /** A sum of what battalion `k` is drawn from: its men's places (weighted by index, so a swap shows), whether they
-   * stand, its companies' last volleys, whether it is matched at all. */
+  /** A sum of everything battalion `k` is drawn from: its men's places and velocities (weighted by index, so a swap
+   * shows), their flags, its companies' volleys and whether each is still fresh (the fire role ends with time, not
+   * with a change of place), whether it is matched at all. */
   private sumOf(k: number): number {
     const u = this.unitOf(k)
     if (!u) return -1
@@ -144,19 +158,28 @@ export class SimMen implements MenSource {
     let sum = u.i + u.n
     for (let j = 0; j < u.n; j++) {
       const m = u.ids[j]
-      sum += (j + 1) * (M.x[m] + 3 * M.z[m] + (M.flags[m] & MAN_ALIVE))
+      sum += (j + 1) * (M.x[m] + 3 * M.z[m] + 5 * M.vx[m] + 7 * M.vz[m] + 11 * M.flags[m])
     }
-    const C = s.w.cr.maxC
-    for (let c = 0; c < C; c++) sum += s.w.f.volleyTick[u.i * C + c] * (c + 7)
+    const w = s.w
+    const C = w.cr.maxC
+    for (let c = 0; c < C; c++) {
+      const shot = w.f.volleyTick[u.i * C + c]
+      const fresh = shot && (w.meta[M_TICK] - shot) * DT < FIRE_FOR ? 1 : 0
+      sum += shot * (c + 7) + fresh * (c + 13) * 1e6
+    }
     return sum
   }
 
   moved(k: number): boolean {
-    return this.sumOf(k) !== this.placedSum[k]
+    this.sum = this.sumOf(k)
+    this.sumK = k
+    return this.sum !== this.placedSum[k]
   }
 
   begin(k: number, at: number[]): boolean {
-    this.placedSum[k] = this.sumOf(k)
+    // (the sum moved() took just before, for this battalion and this frame)
+    this.placedSum[k] = this.sumK === k ? this.sum : this.sumOf(k)
+    this.sumK = -1
     this.k = k
     const u = (this.u = this.unitOf(k))
     if (!u) {

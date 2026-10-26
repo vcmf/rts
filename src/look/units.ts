@@ -22,7 +22,7 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
 import '@babylonjs/core/Engines/Extensions/engine.alphaToCoverage.js'
 import { MSAA } from './post.ts'
-import type { MenSource, SourceMan } from './sim-men.ts'
+import { sourceDue, type MenSource, type SourceMan } from './sim-men.ts'
 import type { ThinEngine } from '@babylonjs/core/Engines/thinEngine.js'
 import { D } from './spec.ts'
 import type { Scene } from '@babylonjs/core/scene.js'
@@ -130,11 +130,16 @@ interface Host {
   index: number // its place in hosts (its flag's instance)
   srcStep: number // the sim's men (?sim): the real-time step it was placed at, and the source's frame count then
   srcSeq: number
+  srcAny: boolean // (and whether it had men to draw, and its centre then: its colours')
+  srcX: number
+  srcZ: number
 }
 
 const SM_SIZE = 2048 // the figures' shadow map, fitted to the ground in view each frame
 // the sim's men (?sim): a 1/fps step split in this many parts, a battalion placed in its own (index mod) part
 const SOURCE_GROUPS = 8
+// m: where a man not drawn is put (under the ground, out of every view)
+const HIDDEN_Y = -1e4
 const SM_REACH = 900 // m: a view ray that meets no ground is cut here (the widest zoom looks far)
 const SM_BIAS = 0.02 // m along the sun: no receiver is drawn into the map, so it only absorbs float rounding
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1] // the view's corners in clip space
@@ -842,6 +847,9 @@ export class Units {
       fading: false,
       srcStep: -1,
       srcSeq: -1,
+      srcAny: false,
+      srcX: b.x,
+      srcZ: b.z,
     })
   }
 
@@ -871,7 +879,11 @@ export class Units {
     const src = this.source
     const sm = this.sourceMan
     const at = this.sourceAt
-    if (src) src.begin(h.index, at)
+    if (src) {
+      h.srcAny = src.begin(h.index, at)
+      h.srcX = at[0]
+      h.srcZ = at[1]
+    }
     // (a reserve stands in column)
     const p = src || h.b.reserve ? RESERVE : phaseAt(this.drill, ls, this.speed.march, this.speed.run)
     // (the next step's phase; none past the cycle's end, where the script starts afresh)
@@ -888,13 +900,13 @@ export class Units {
       if (src) {
         src.man(i, sm)
         if (!sm.shown) {
-          // no such man standing (fallen, or the battalion gone or not yet matched): drawn at no size, at the
-          // battalion's centre (what reads a man's place, the colours or the trodden ground, finds it there, not at
-          // the origin; the trodden ground skips him: a zero scale)
+          // no such man standing (fallen, or the battalion gone or not yet matched): drawn at no size, far under the
+          // battalion's centre, so nothing that reads a man's place (his simple shadow's decal, the LOD's share) finds
+          // him on the ground; the trodden ground skips him (a zero scale), the colours take the centre (placeFlag)
           const o = i * 16
           matrices.fill(0, o, o + 16)
           matrices[o + 12] = at[0]
-          matrices[o + 13] = groundAt(at[0], at[1])
+          matrices[o + 13] = HIDDEN_Y
           matrices[o + 14] = at[1]
           matrices[o + 15] = 1
           next.fill(0, i * 3, i * 3 + 3)
@@ -1222,23 +1234,17 @@ export class Units {
     // time: performance.now)
     if (this.source?.frame(T)) this.sourceSeq++
     const srcPart = Math.floor((performance.now() / 1000) * fps * SOURCE_GROUPS)
-    const srcStep = Math.floor(srcPart / SOURCE_GROUPS)
     for (const h of this.hosts) {
       if (!this.shown) continue
       if (this.source) {
         // stepped once a 1/fps step of real time (the sim runs on its own: a held page clock does not stop its men),
         // when a frame newer than its last placing has come and its men moved; each battalion in its own of
         // SOURCE_GROUPS parts of the step (placing every battalion in one frame cost 54–108 ms at 40 a side: measured)
-        if (
-          h.srcStep < 0 ||
-          (srcStep !== h.srcStep &&
-            srcPart % SOURCE_GROUPS === h.index % SOURCE_GROUPS &&
-            h.srcSeq !== this.sourceSeq &&
-            this.source.moved(h.index))
-        ) {
+        const due = sourceDue(h.index, h.srcStep, srcPart, SOURCE_GROUPS)
+        if (due >= 0 && (h.srcStep < 0 || (h.srcSeq !== this.sourceSeq && this.source.moved(h.index)))) {
           const tp = trNow()
           this.place(h, 0, 0, false, 0, false)
-          h.srcStep = srcStep
+          h.srcStep = due
           h.srcSeq = this.sourceSeq
           moved = true
           anyMoved = true
@@ -2157,9 +2163,17 @@ export class Units {
     m[o + 9] = 0
     m[o + 10] = c
     m[o + 11] = 0
-    m[o + 12] = h.matrices[mo + 12]
-    m[o + 13] = h.matrices[mo + 13]
-    m[o + 14] = h.matrices[mo + 14]
+    if (this.source) {
+      // the sim's men: the colours at the battalion's centre (its men are in the sim's order, no bearer among them),
+      // under the ground with its men when it has none
+      m[o + 12] = h.srcX
+      m[o + 13] = h.srcAny ? groundAt(h.srcX, h.srcZ) : HIDDEN_Y
+      m[o + 14] = h.srcZ
+    } else {
+      m[o + 12] = h.matrices[mo + 12]
+      m[o + 13] = h.matrices[mo + 13]
+      m[o + 14] = h.matrices[mo + 14]
+    }
     m[o + 15] = 1
     if (this.flagN) for (let k = 0; k < 3; k++) this.flagN[h.index * 3 + k] = h.next[this.bearer * 3 + k]
     this.flagStale = true

@@ -10,8 +10,8 @@ import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
 import { lookArmies } from '../src/scenarios/look-world.ts'
 import { MainLink } from '../src/app/battle-link.ts'
 import { MAN_ALIVE } from '../src/render/men.ts'
-import { SimMen, RUN_FROM, MARCH_FROM, type SourceMan } from '../src/look/sim-men.ts'
-import { marchTo, spawns, ordersDue, SHORT, type Orders } from '../src/look/sim-armies.ts'
+import { SimMen, RUN_FROM, MARCH_FROM, sourceDue, type SourceMan } from '../src/look/sim-men.ts'
+import { marchTo, spawns, ordersDue, SHORT, GIVE_UP, type Orders } from '../src/look/sim-armies.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
 import type { Battalion } from '../src/look/world/armies.ts'
 
@@ -122,6 +122,55 @@ describe("the sim's men as the renderer's", () => {
   })
 })
 
+describe('the placing', () => {
+  // regression (PR 4b review): due only at its exact part, a battalion whose part frames passed over (16.7 ms frames,
+  // 10.4 ms parts) was not placed that step, the same ones step after step
+  it("is due once a step, at the battalion's part or a later one, else at the next step's first frame", () => {
+    const G = 8
+    expect(sourceDue(3, -1, 0, G)).toBe(0)
+    // step 5 (parts 40..47): battalion 3 from part 43 on, counted for step 5; not again in it
+    expect([42, 43, 47].map(p => sourceDue(3, 4, p, G))).toEqual([-1, 5, 5])
+    expect(sourceDue(3, 5, 46, G)).toBe(-1)
+    // a step it missed whole: placed at the next one's first frame, counted for the one missed
+    expect(sourceDue(7, 4, 48, G)).toBe(5)
+    // 60 Hz frames over steps 5 to 9 (a frame 1.6 parts): every battalion placed once a step, give or take one late
+    const placed = new Int32Array(G).fill(4)
+    const count = new Int32Array(G)
+    for (let f = 0; f < 25; f++) {
+      const p = Math.floor(40 + f * 1.6)
+      for (let k = 0; k < G; k++) {
+        const due = sourceDue(k, placed[k], p, G)
+        if (due >= 0) {
+          placed[k] = due
+          count[k]++
+        }
+      }
+    }
+    expect(Math.min(...count)).toBeGreaterThanOrEqual(4)
+    expect(Math.max(...count)).toBeLessThanOrEqual(5)
+  })
+  // regression (PR 4b review): what moved() summed left out velocities and the volley's going stale, so a company
+  // placed firing kept firing, a man who settled kept marching
+  it('counts a battalion moved when its volley goes stale or a man stops, though no man changed place', () => {
+    const { link, source } = start()
+    source.frame(0)
+    const { w, layer } = link.see()
+    const i = source.formationOf(0)
+    const u = layer.units.get(i)!
+    source.moved(0)
+    source.begin(0, at)
+    expect(source.moved(0)).toBe(false)
+    layer.men.vx[u.ids[0]] = 0.4
+    expect(source.moved(0)).toBe(true)
+    source.begin(0, at)
+    w.f.volleyTick[i * w.cr.maxC] = w.meta[M_TICK]
+    expect(source.moved(0)).toBe(true)
+    source.begin(0, at)
+    w.meta[M_TICK] += 20
+    expect(source.moved(0)).toBe(true)
+  })
+})
+
 describe("the battalions' orders", () => {
   it('march each to SHORT m short of the line through the middle, along its heading', () => {
     expect(marchTo(BS[0], [50, 0])).toEqual([40, -SHORT])
@@ -134,17 +183,31 @@ describe("the battalions' orders", () => {
     const { link } = start()
     const w = link.see().w
     const i = [...w.f.alive.keys()].find(k => w.f.alive[k] && w.f.side[k] === 0)!
-    const st: Orders = { marched: false, moving: false, formed: false }
+    const st: Orders = { marched: false, moving: false, formed: false, sentAt: 0 }
     const to = marchTo(BS[0], [BS[0].x, BS[0].z + 55])
     expect(to).toEqual([BS[0].x, BS[0].z])
     expect(ordersDue(w, i, BS[0], to, A, st)).toEqual([])
     expect(ordersDue(w, i, BS[0], to, A, st)).toEqual([{ type: 'form', id: expect.any(Number), shape: A.fight }])
   })
+  // regression (PR 4b review): a march the sim refuses is never seen under way; its battalion stayed in column
+  it('a march never seen under way is taken as refused after GIVE_UP ticks, and the battalion forms where it stands', () => {
+    const { link } = start()
+    const w = link.see().w
+    const i = [...w.f.alive.keys()].find(k => w.f.alive[k] && w.f.side[k] === 0)!
+    const st: Orders = { marched: false, moving: false, formed: false, sentAt: 0 }
+    const to = marchTo(BS[0], [50, 0])
+    // the march sent, and not applied (as refused)
+    expect(ordersDue(w, i, BS[0], to, A, st).map(c => c.type)).toEqual(['move'])
+    for (let n = 0; n < GIVE_UP; n++) link.frame(DT)
+    expect(ordersDue(w, i, BS[0], to, A, st)).toEqual([])
+    link.frame(DT)
+    expect(ordersDue(w, i, BS[0], to, A, st).map(c => c.type)).toEqual(['form'])
+  })
   it('march once, then deploy into line once it has been seen moving and has halted', () => {
     const { link } = start()
     const w = link.see().w
     const i = [...w.f.alive.keys()].find(k => w.f.alive[k] && w.f.side[k] === 0)!
-    const st: Orders = { marched: false, moving: false, formed: false }
+    const st: Orders = { marched: false, moving: false, formed: false, sentAt: 0 }
     const to = marchTo(BS[0], [50, 0])
     const first = ordersDue(w, i, BS[0], to, A, st)
     expect(first.map(c => c.type)).toEqual(['move'])

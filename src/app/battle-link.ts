@@ -267,3 +267,31 @@ export class WorkerLink implements BattleLink {
     return sim && men ? { sim, men } : null
   }
 }
+
+/** What starting a battle takes: the map's bytes and data, the ruleset compiled (and its name, src/rulesets/index.ts),
+ * the scenario (and its key in BATTLE_SCENARIOS, which the sim worker looks up), and the two workers to start, made
+ * by the caller (so the bundler finds their files), or null to play on the page. */
+export interface LinkStart {
+  bytes: Uint8Array
+  data: SimData
+  cr: Compiled
+  scenario: Scenario
+  key: string
+  ruleset?: string
+  workers: (() => [Worker, Worker]) | null
+}
+
+/** The battle in its workers when given them and they start, else on the page (said on the console when they fail). */
+export async function startLink(o: LinkStart): Promise<BattleLink> {
+  if (o.workers) {
+    const [sim, men] = o.workers()
+    const wl = new WorkerLink(sim, men, o.bytes, o.data, o.cr, o.key, o.ruleset)
+    try {
+      await wl.ready()
+      return wl
+    } catch (e) {
+      console.warn(`the battle runs on the page: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  return new MainLink(o.data, o.cr, o.scenario)
+}
