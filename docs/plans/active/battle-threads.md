@@ -260,6 +260,13 @@ tile) is no sim map. Two PRs, then PR 4.
     rate; review round 1 of the redesign: a fixed cap of 10 a frame placed each of 80 every 1.6 steps at 60 Hz). The men worker's own stagger (its
     eight groups, PR 1) spreads the revisions over the step. This is the design's §5 "moved this step" flag, which
     PR 4's uploads need too. The review count restarts.
+  - **After the redesign** (2026-10-26; the same bench, two interleaved rounds, load 3–17): frame p50 / p95 ms, by
+    zoom, script against `?sim`: close 8.93 / 9.78 against 1.58 / 20.55; default 10.34 / 11.18 against 1.97 / 38.28;
+    wide 8.99 / 9.94 against 2.39 / 64.14; the GPU's frame 12.4–13.5 against 13.6–16.4 ms. The sim's frames are cheap
+    on the page between its placings and stall on their uploads (every LOD's matrices of every battalion placed): PR
+    4's to cut. The men worker's revision tracking costs its step nothing measurable (`tools/bench-cost.ts`, 4a's
+    branch against 4b's, three interleaved rounds: 16,000 men 0.51–0.53 against 0.53–0.54 ms at 1×, 2.30–2.38 against
+    2.33–2.38 at 8×). The review stopped after the redesign's round 2 (moderate and light only).
 - **Base**: the look code in this epic is four `main` commits behind (#182, #185, #193, #197: look only, `units.ts`
   among them); `main` is merged into the epic before PR 4b (the plan's rule was after #181; these touch no sim code).
 

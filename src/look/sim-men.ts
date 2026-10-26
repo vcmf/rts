@@ -4,7 +4,8 @@
 // fire while his company's volley is fresh) and when it began. The renderer (src/look/units.ts) asks it in place of
 // the script (src/look/world/armies.ts) at ?sim. No Babylon: the tests read it in Node.
 import { typeOf, DT, M_TICK, type World } from '../sim/index.ts'
-import type { SoldierLayer, Unit } from '../render/soldiers.ts'
+import type { Unit } from '../render/soldiers.ts'
+import type { Seen } from '../app/battle-link.ts'
 import { MAN_ALIVE } from '../render/men.ts'
 import type { Battalion } from './world/armies.ts'
 
@@ -26,10 +27,11 @@ export const FIRE_FOR = 0.6
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
 
 /** The battalions to place this frame of `dt` real seconds: `n` over the frames a step at `fps` steps a second is sure
- * to have (the whole of them: at 30 Hz a step has 2 or 3 frames, so half each), so every one can be placed once a step
- * whatever the frame rate, at least one. */
+ * to have: the whole of them less one (a step's frames jitter round their mean: at 60 Hz a step of 5 often has 4; at
+ * 30 Hz it has 2 or 3, so it counts on 1), so every one can be placed once a step whatever the frame rate. At least
+ * one. */
 export const placeQuota = (n: number, dt: number, fps: number): number =>
-  Math.max(1, Math.ceil(n / Math.max(1, Math.floor(1 / (dt * fps) + 1e-9))))
+  Math.max(1, Math.ceil(n / Math.max(1, Math.floor(1 / (dt * fps) + 1e-9) - 1)))
 
 /** Which of `n` battalions to place this frame: those `due`, looked at in turn from `next` (round robin: one passed
  * over now is looked at first again only after the others), at most `quota`, into `out`; returns where the next
@@ -50,12 +52,6 @@ export function pickPlacings(
   return n ? (next + k) % n : 0
 }
 
-/** What the page reads this frame: the world and the soldier layer of the newest published frame. */
-export interface Seen {
-  w: World
-  layer: SoldierLayer
-}
-
 /** Where the renderer's men stand when not the script's: once a frame `frame`, then each man of each battalion. */
 export interface MenSource {
   /** The renderer's frame at the page's clock `T` (the men's role starts are on it). */
@@ -64,8 +60,8 @@ export interface MenSource {
    * (its men stepped, matched again, a volley), its last volley went stale (the fire role ends with time), or it was
    * matched or lost since. */
   moved(k: number): boolean
-  /** Battalion `k` (its index in the renderer's battalions) about to be placed: its centre into `at` (x, z), where
-   * its men not drawn are put (none of them at the origin); false when it has no men to draw. */
+  /** Battalion `k` (its index in the renderer's battalions) about to be placed: its centre into `at` (x, z: its
+   * colours'); false when it is not matched to a formation (or that is gone). */
   begin(k: number, at: number[]): boolean
   /** Man `i` of the battalion begun into `out`. */
   man(i: number, out: SourceMan): SourceMan
@@ -93,6 +89,9 @@ export class SimMen implements MenSource {
   private k = -1
   private u: Unit | null = null
   private slotC: Int32Array = new Int32Array(0)
+  private readonly p = [0, 0, 0]
+  // frames left to match battalions still unmatched (a spawn refused is never matched: given up then)
+  private matchTries = 600
 
   /** `bs`: the battalions drawn, as spawned (their places match their formations); `men`: figures a battalion; `see`
    * the newest frame (src/app/battle-link.ts). */
@@ -112,7 +111,10 @@ export class SimMen implements MenSource {
   refresh(): void {
     const s = this.see()
     this.seen = s
-    if (this.formation.includes(-1)) this.match(s)
+    if (this.matchTries > 0 && this.formation.includes(-1)) {
+      this.matchTries--
+      this.match(s)
+    }
     this.refreshed = true
   }
 
@@ -189,6 +191,8 @@ export class SimMen implements MenSource {
     at[0] = s.w.f.x[u.i]
     at[1] = s.w.f.z[u.i]
     this.slotC = typeOf(s.w, u.i).slotC
+    // its places now (its men at rest face theirs)
+    s.layer.frame(u.i, s.layer.alphaNow)
     // its fire roles' end: the last of its fresh volleys plus FIRE_FOR
     const w = s.w
     const C = w.cr.maxC
@@ -234,7 +238,8 @@ export class SimMen implements MenSource {
     }
     out.x = M.x[m]
     out.z = M.z[m]
-    out.yaw = speed > MARCH_FROM ? Math.atan2(vx, vz) : f.heading[u.i]
+    // at rest, his place's way (its heading after a Face about, a square's faces): the battalion framed in begin()
+    out.yaw = speed > MARCH_FROM ? Math.atan2(vx, vz) : s.layer.place(u.i, M.s[m], false, this.p)[2]
     out.role = ROLES[role]
     out.since = since[i]
     out.shown = true

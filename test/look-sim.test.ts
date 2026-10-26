@@ -134,6 +134,30 @@ describe('the placing', () => {
       expect({ hz, least: Math.min(...count), most: Math.max(...count) }).toEqual({ hz, least: 10, most: 10 })
     }
   })
+  // review round 2 of the redesign: a step's frames jitter round their mean, and a quota from the mean let a fifth of
+  // the battalions slip a step at 60 Hz
+  it('still places each once a step when the frames jitter (60 Hz, ±3 ms)', () => {
+    const n = 80
+    const placed = new Int32Array(n).fill(-1)
+    const slips: number[] = []
+    const picked: number[] = []
+    let next = 0
+    let r = 5
+    const rnd = () => (r = (r * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
+    let t = 0
+    let last = 0
+    for (let f = 0; f < 600; f++) {
+      const dt = 1 / 60 + (rnd() - 0.5) * 0.006
+      t += dt
+      const step = Math.floor(t * 12)
+      // a battalion not placed in the step before this one slipped it
+      if (step !== last) for (let k = 0; k < n; k++) if (placed[k] < last && last > 1) slips.push(k)
+      last = step
+      next = pickPlacings(n, next, placeQuota(n, dt, 12), k => placed[k] !== step, picked)
+      for (const k of picked) placed[k] = step
+    }
+    expect(slips).toEqual([])
+  })
   it('looks at the battalions in turn: one passed over is looked at again only after the others', () => {
     const out: number[] = []
     expect(pickPlacings(5, 3, 2, () => true, out)).toBe(0)

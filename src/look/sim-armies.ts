@@ -108,7 +108,9 @@ export async function playSim(
   mid: readonly [number, number],
   a: SimArmies,
 ): Promise<SimPlay> {
-  const bytes = new Uint8Array(await (await fetch(lookSimUrl)).arrayBuffer())
+  const r = await fetch(lookSimUrl)
+  if (!r.ok) throw new Error(`?sim: the look world's sim data: ${r.status} ${r.statusText} for ${lookSimUrl}`)
+  const bytes = new Uint8Array(await r.arrayBuffer())
   const data = loadSimData(bytes, MAP_VERSIONS['painted-world'])
   const cr = compileRuleset(rulesetOf(a.ruleset))
   const t = cr.typeIndex(a.unitType)

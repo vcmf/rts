@@ -255,6 +255,9 @@ export class Units {
   private sourceNext = 0
   private readonly picked: number[] = []
   private realLast = 0
+  // the sim's placings waiting for the shadow map (redrawn once a step for them), and the step it last was for them
+  private srcMapDue = false
+  private srcMapStep = -1
   private readonly sourceMan: SourceMan = { x: 0, z: 0, yaw: 0, role: 'halt', since: 0, shown: false }
   private readonly sourceAt = [0, 0]
   /** the far LOD's switch by default (main.ts checks ?tinypx under it) */
@@ -874,7 +877,7 @@ export class Units {
     const ls = moving ? Math.max(0, local - back) : local
     const ln = ls + 1 / fps
     // the men from the sim (?sim: src/look/sim-men.ts), stepped as published: no script, no moves between steps; the
-    // battalion's centre (at) where its men not drawn are put
+    // battalion's centre (at: its colours', and its bounds' when no man is drawn)
     const src = this.source
     const sm = this.sourceMan
     const at = this.sourceAt
@@ -1257,12 +1260,19 @@ export class Units {
         const tp = trNow()
         this.place(h, 0, 0, false, 0, false)
         h.srcStep = srcStep
-        moved = true
+        this.srcMapDue = true
         anyMoved = true
         if (TRACE.on) {
           tr(TR.placed)
           tr(TR.placeMs, performance.now() - tp)
         }
+      }
+      // the shadow map redrawn once a step for what was placed in it (placings spread over the step's frames would
+      // redraw it every frame: the script's moves are once a step too)
+      if (this.srcMapDue && srcStep !== this.srcMapStep) {
+        moved = true
+        this.srcMapStep = srcStep
+        this.srcMapDue = false
       }
     }
     for (const h of this.hosts) {
