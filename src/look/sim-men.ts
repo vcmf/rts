@@ -35,6 +35,9 @@ export interface Seen {
 export interface MenSource {
   /** The newest men at the page's clock `T`; true when they are new (moved since the last). */
   frame(T: number): boolean
+  /** Whether battalion `k`'s men stand otherwise than when it was last placed (a halted battalion's settled men do
+   * not: it is not placed again). */
+  moved(k: number): boolean
   /** Battalion `k` (its index in the renderer's battalions) about to be placed: its centre into `at` (x, z), where
    * its men not drawn are put (none of them at the origin); false when it has no men to draw. */
   begin(k: number, at: number[]): boolean
@@ -56,6 +59,8 @@ export class SimMen implements MenSource {
   private readonly since: Float64Array[]
   private published = NaN
   private T = 0
+  // per battalion: a sum over its men's places, flags and the volleys when it was last placed (moved), NaN: never
+  private readonly placedSum: Float64Array
   // the battalion begun: its index, unit, its type's slots' companies, and its men's roles
   private k = -1
   private u: Unit | null = null
@@ -68,6 +73,7 @@ export class SimMen implements MenSource {
     this.see = see
     this.publishedAt = published
     this.formation = new Int32Array(bs.length).fill(-1)
+    this.placedSum = new Float64Array(bs.length).fill(NaN)
     this.gen = new Int32Array(bs.length)
     this.role = bs.map(() => new Uint8Array(men))
     this.since = bs.map(() => new Float64Array(men))
@@ -128,7 +134,29 @@ export class SimMen implements MenSource {
     return s.layer.units.get(i) ?? null
   }
 
+  /** A sum of what battalion `k` is drawn from: its men's places (weighted by index, so a swap shows), whether they
+   * stand, its companies' last volleys, whether it is matched at all. */
+  private sumOf(k: number): number {
+    const u = this.unitOf(k)
+    if (!u) return -1
+    const s = this.seen!
+    const M = s.layer.men
+    let sum = u.i + u.n
+    for (let j = 0; j < u.n; j++) {
+      const m = u.ids[j]
+      sum += (j + 1) * (M.x[m] + 3 * M.z[m] + (M.flags[m] & MAN_ALIVE))
+    }
+    const C = s.w.cr.maxC
+    for (let c = 0; c < C; c++) sum += s.w.f.volleyTick[u.i * C + c] * (c + 7)
+    return sum
+  }
+
+  moved(k: number): boolean {
+    return this.sumOf(k) !== this.placedSum[k]
+  }
+
   begin(k: number, at: number[]): boolean {
+    this.placedSum[k] = this.sumOf(k)
     this.k = k
     const u = (this.u = this.unitOf(k))
     if (!u) {

@@ -241,6 +241,13 @@ tile) is no sim map. Two PRs, then PR 4.
   `?armies=40` with and without `?sim` (the page's frame, by zoom: the sim's cost on the page should be its reading
   only, PR 3's 0.01–0.03 ms, plus `units.ts`'s per-man work, which PR 4 then cuts); `app-check`-style headless check of
   the page with `?sim` (no console error, the men on the ground).
+  - **Outcome so far** (2026-10-26; Metal, the preview build, `?armies=40&benchat=162.5,-2.5`, the bench traced,
+    load 3–7): `?sim` plays the armies in the workers, the figures standing in the sim's formations. Its cost on the
+    page is the renderer's re-placing: placing every battalion at each 12 fps step in one frame cost **54–108 ms** a
+    placing frame (the script's 9–11: it moves few battalions at a time); placing only the battalions whose men moved,
+    each in its own eighth of the step, **11–16 ms**, the frame p95 still 20–57 ms against the script's 10–11. What
+    is left is the re-upload of every moved battalion's matrices to every LOD: PR 4's (per-instance attributes from
+    the frame, uploaded for the battalions that moved). `?sim` stays opt-in until then.
 - **Base**: the look code in this epic is four `main` commits behind (#182, #185, #193, #197: look only, `units.ts`
   among them); `main` is merged into the epic before PR 4b (the plan's rule was after #181; these touch no sim code).
 

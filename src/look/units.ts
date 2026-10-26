@@ -133,6 +133,8 @@ interface Host {
 }
 
 const SM_SIZE = 2048 // the figures' shadow map, fitted to the ground in view each frame
+// the sim's men (?sim): a 1/fps step split in this many parts, a battalion placed in its own (index mod) part
+const SOURCE_GROUPS = 8
 const SM_REACH = 900 // m: a view ray that meets no ground is cut here (the widest zoom looks far)
 const SM_BIAS = 0.02 // m along the sun: no receiver is drawn into the map, so it only absorbs float rounding
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1] // the view's corners in clip space
@@ -1219,13 +1221,21 @@ export class Units {
     // the sim's men (?sim): a new published frame counted, so each battalion is re-placed at its next step (of real
     // time: performance.now)
     if (this.source?.frame(T)) this.sourceSeq++
-    const srcStep = Math.floor((performance.now() / 1000) * fps)
+    const srcPart = Math.floor((performance.now() / 1000) * fps * SOURCE_GROUPS)
+    const srcStep = Math.floor(srcPart / SOURCE_GROUPS)
     for (const h of this.hosts) {
       if (!this.shown) continue
       if (this.source) {
         // stepped once a 1/fps step of real time (the sim runs on its own: a held page clock does not stop its men),
-        // when a frame newer than its last placing has come
-        if (h.srcStep < 0 || (srcStep !== h.srcStep && h.srcSeq !== this.sourceSeq)) {
+        // when a frame newer than its last placing has come and its men moved; each battalion in its own of
+        // SOURCE_GROUPS parts of the step (placing every battalion in one frame cost 54–108 ms at 40 a side: measured)
+        if (
+          h.srcStep < 0 ||
+          (srcStep !== h.srcStep &&
+            srcPart % SOURCE_GROUPS === h.index % SOURCE_GROUPS &&
+            h.srcSeq !== this.sourceSeq &&
+            this.source.moved(h.index))
+        ) {
           const tp = trNow()
           this.place(h, 0, 0, false, 0, false)
           h.srcStep = srcStep
