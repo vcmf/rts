@@ -1171,6 +1171,8 @@ function heldCells(w: World, i: number, pass: number, seen: Int32Array, ep: numb
 }
 
 /**
+ * For a formed body in a straight shape, not changing shape (the caller's to check: a trail shape's places follow its
+ * trail, which this does not move, and a change's sweep is claimed apart), with claims on.
  * Moves formation i rigidly by (dx, dz) metres, its heading, shape and lags as they stand, if none of its men then
  * stands on a cell it may not stand on (`heldCells`; `pass`: the one formation it may stand on, −1 none) that none of
  * them stood on before, and no more of them stand off the map: the ground it is held on must not grow, so a move away

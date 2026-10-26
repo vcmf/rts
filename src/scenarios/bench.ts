@@ -69,6 +69,24 @@ const LINE = 'line'
 const COL = 'column'
 const CAV = 'cavalry'
 
+// the clash's cases (C1, step 4): a veteran regiment charges a raw one at the halt, from 160 m, the veteran `dx`
+// metres to the east; `extra` stand beside them
+function charged(id: string, title: string, extra: Spawn[] = [], dx = 0): BenchCase {
+  return bench(
+    id,
+    title,
+    [
+      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
+      { side: 0, x: dx, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
+      ...extra,
+    ],
+    [step(1, 1, { type: 'charge', target: 0 })],
+    90,
+    [dx / 2, 20, 3],
+    [30, 40, 50],
+  )
+}
+
 export const BENCH_CASES: BenchCase[] = [
   bench(
     'x01-clash',
@@ -273,44 +291,13 @@ export const BENCH_CASES: BenchCase[] = [
     [0, 0, 1.4],
     [200, 300],
   ),
-  bench(
-    'x15-pushed-back',
-    'X-15: a veteran regiment charges a raw one at the halt; open ground behind the raw one',
-    [
-      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
-      { side: 0, x: 0, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
-    ],
-    [step(1, 1, { type: 'charge', target: 0 })],
-    90,
-    [0, 20, 3],
-    [30, 40, 50],
-  ),
-  bench(
-    'x16-pushed-onto-friend',
-    'X-16: as X-15, with a friendly regiment standing just behind the raw one',
-    [
-      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
-      { side: 0, x: 0, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
-      { side: 1, x: 0, z: 49, heading: S, shape: LINE, unit: CAV },
-    ],
-    [step(1, 1, { type: 'charge', target: 0 })],
-    90,
-    [0, 20, 3],
-    [30, 40, 50],
-  ),
-  bench(
-    'x17-pushed-onto-enemy',
-    'X-17: as X-15, with an enemy regiment standing just behind the raw one',
-    [
-      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
-      { side: 0, x: 0, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
-      { side: 0, x: 0, z: 49, heading: N, shape: LINE, unit: CAV },
-    ],
-    [step(1, 1, { type: 'charge', target: 0 })],
-    90,
-    [0, 20, 3],
-    [30, 40, 50],
-  ),
+  charged('x15-pushed-back', 'X-15: a veteran regiment charges a raw one at the halt; open ground behind the raw one'),
+  charged('x16-pushed-onto-friend', 'X-16: as X-15, with a friendly regiment standing just behind the raw one', [
+    { side: 1, x: 0, z: 49, heading: S, shape: LINE, unit: CAV },
+  ]),
+  charged('x17-pushed-onto-enemy', 'X-17: as X-15, with an enemy regiment standing just behind the raw one', [
+    { side: 0, x: 0, z: 49, heading: N, shape: LINE, unit: CAV },
+  ]),
   bench(
     'x18-pinned-from-the-flank',
     'X-18: a veteran regiment charges a steady one at the halt; a second regiment charges the steady one in its east flank',
@@ -324,18 +311,7 @@ export const BENCH_CASES: BenchCase[] = [
     [60, 20, 3],
     [30, 40, 50],
   ),
-  bench(
-    'x19-offset-lines',
-    'X-19: as X-15, the veteran 20 m to the east, so the two lines meet offset',
-    [
-      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
-      { side: 0, x: 20, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
-    ],
-    [step(1, 1, { type: 'charge', target: 0 })],
-    90,
-    [50, 20, 3],
-    [30, 40, 50],
-  ),
+  charged('x19-offset-lines', 'X-19: as X-15, the veteran 20 m to the east, so the two lines meet offset', [], 20),
   bench(
     'x20-brigade-lines',
     'X-20: two raw regiments abreast, each charged by a veteran regiment',
