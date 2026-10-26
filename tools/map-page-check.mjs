@@ -250,8 +250,16 @@ try {
         const next = document.querySelector('#form [data-key="height"]')
         field('width', String((other.width ?? 100) + 7))
         const kept = next.isConnected && document.querySelector('#form [data-key="height"]') === next
+        // text refused in one field stays through a rename made in another (the same feature)
+        field('seasons', '{"winter": ')
+        field('id', other.id + 'r')
+        const keptThroughRename = document.querySelector('#form [data-key="seasons"]').value === '{"winter": '
+        document.querySelector('#form [data-key="seasons"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        MAP.undo()
+        // a note is a text box, which keeps its line breaks
+        const noteBox = document.querySelector('#form [data-key="note"]').tagName === 'TEXTAREA'
         // the feature's JSON is to read only
-        const jsonRead = document.querySelector('#form textarea').readOnly
+        const jsonRead = document.querySelector('#form textarea.json').readOnly
         // text typed and not applied, then a press on the map: applied before the press acts
         const heightInput = document.querySelector('#form [data-key="height"]')
         heightInput.value = '33'
@@ -285,7 +293,7 @@ try {
         MAP.undo(); MAP.undo()
         const back = await MAP.save()
         const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
-        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id, refused, dropped, kept, jsonRead, flushed, typedKept, ownUndo })
+        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id, refused, dropped, kept, jsonRead, flushed, typedKept, ownUndo, keptThroughRename, noteBox })
       })()`,
     ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
@@ -497,6 +505,8 @@ try {
   check(fl.refused && fl.dropped, 'an id in use typed in the form is refused and stays typed with why; Escape drops it')
   check(fl.kept, 'the field the focus moved to is still the same after the edit the move applied')
   check(fl.jsonRead, "the feature's JSON is to read only")
+  check(fl.keptThroughRename, 'text refused in one field stays through a rename made in another')
+  check(fl.noteBox, 'a note is edited in a text box, its line breaks kept')
   check(fl.ownUndo, "Cmd Z in a box outside the form is the box's own, never the map's undo")
   check(fl.flushed, 'text typed in a field and not applied is applied before a press on the map acts')
   check(fl.typedKept, 'a field typed in and not applied is left as typed when the form is refreshed')

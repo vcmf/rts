@@ -8,7 +8,6 @@ import { allowedIn, categoryOf, kindChain, type Issue } from '../../map/catalogu
 import { featureKind } from '../../map/validate.ts'
 import { GENERATOR_SPECS } from '../../map/generators.ts'
 import { resolve } from '../../map/resolve.ts'
-import { sameJson } from '../../map/write.ts'
 
 /**
  * One attribute in the form: its spec (none for one the kind's category does not take), its own value, and the one it
@@ -54,7 +53,8 @@ export function attrRows(cat: Catalogue, f: Feature, map: MapFile): AttrRow[] {
   }
   for (const [name, v] of Object.entries(f)) {
     if (!(RESERVED as readonly string[]).includes(name) && !rows.some(r => r.name === name)) {
-      rows.push({ name, spec: cat.attributes[name], own: v, inherited: inherited[name], effective: effective[name] })
+      // set but not the kind's: no spec (its form says so), even when the catalogue knows it for other kinds
+      rows.push({ name, spec: undefined, own: v, inherited: inherited[name], effective: effective[name] })
     }
   }
   return rows
@@ -71,6 +71,7 @@ export function showValue(v: unknown, as: 'text' | 'number' | 'json' | 'any' = '
   return JSON.stringify(v)
 }
 
+const DECIMAL = /^-?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/
 /** What a field's text means: a value to set, the field removed (empty: it inherits), or text that is no value. */
 export type Parsed = { value: unknown } | { remove: true } | { error: string }
 
@@ -84,8 +85,8 @@ export function parseInput(as: 'text' | 'number' | 'json' | 'any', text: string)
   if (t === '') return { remove: true }
   if (as === 'text') return { value: t }
   if (as === 'number' && !t.startsWith('{')) {
-    const n = Number(t)
-    return { value: Number.isFinite(n) ? n : t }
+    // decimal only: `0x20` or `Infinity` are no numbers of a map, and stay text for the validator to name
+    return { value: DECIMAL.test(t) ? Number(t) : t }
   }
   try {
     return { value: JSON.parse(t) as unknown }
@@ -132,10 +133,15 @@ export function hasChildren(map: MapFile, id: string): boolean {
  * objects).
  */
 export function renameFeature(map: MapFile, from: string, to: string): MapFile {
-  const swap = (v: unknown) => (v === from ? to : v)
+  let touched = false
+  const swap = (v: unknown) => {
+    if (v !== from) return v
+    touched = true
+    return to
+  }
   const ids = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(e => ids(e))
-    if (typeof v === 'object' && v !== null && (v as { id?: unknown }).id === from) return { ...v, id: to }
+    if (typeof v === 'object' && v !== null && (v as { id?: unknown }).id === from) return { ...v, id: swap(from) }
     return v
   }
   // a generator's selectors, in its parameters or in a pinned child's record of them
@@ -147,8 +153,9 @@ export function renameFeature(map: MapFile, from: string, to: string): MapFile {
     return p
   }
   const features = map.features.map(f => {
+    touched = false
     const g: Feature = { ...f }
-    if (g.id === from) g.id = to
+    if (g.id === from) g.id = swap(g.id) as string
     for (const r of ['on', 'carries', 'crosses'] as const) if (g[r] !== undefined) g[r] = swap(g[r]) as string
     if (g.along !== undefined) g.along = ids(g.along) as Feature['along']
     if (g.follow !== undefined) g.follow = ids(g.follow)
@@ -161,7 +168,7 @@ export function renameFeature(map: MapFile, from: string, to: string): MapFile {
     if (g.origin && typeof g.origin === 'object') {
       g.origin = { ...g.origin, params: selectors(g.origin.generator, g.origin.params) as Record<string, unknown> }
     }
-    return sameJson(g, f) ? f : g
+    return touched ? g : f
   })
   return { ...map, features }
 }

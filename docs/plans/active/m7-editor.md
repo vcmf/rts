@@ -400,6 +400,14 @@ edit. No new decision.
   shown quoted; undo keeps the selection where it is, the step's only when the current one is gone from the copy;
   every refusal says why (no stale message under a field); an enum with no values in a catalogue being edited no
   longer breaks the form; a new map renamed keeps its history (`History.map`); one `presetsOf`.
+- **Redesign, round 2**: severe. Text refused in the map's form stayed when another map was opened or made, and could
+  then be applied to it; a note edited in a one-line field lost its line breaks. Fixed: the form's text belongs to
+  the file and the selection (`whose`), and goes with either; a note is a text box. With them: the form notes a
+  rename it applies itself, so the other fields' text stays through it (the editor's note came after the form's
+  refresh, and is gone); text of a field the form no longer has goes; an attribute of the catalogue the kind does not
+  take shows as not this kind's; a number field takes decimal text only (`0x20` stays text for the validator); a map
+  field is compared alone, a rename keeps a feature unless it named the old id (no whole-map comparisons); the id's
+  path runs its guards once.
 
 ## Open questions
 

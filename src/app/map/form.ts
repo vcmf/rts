@@ -25,6 +25,7 @@ interface Row {
   options?: string[] // a choice among these ('' first: none, it inherits)
   hint?: string
   disabled?: boolean
+  lines?: boolean // several lines (a note): a text box, which keeps its line breaks
 }
 /** Sets a field: whether the copy changed (true), was refused (false: the editor's message says why), or not (null). */
 type Setter = (key: string, value: unknown) => boolean | null
@@ -39,7 +40,7 @@ interface View {
 }
 /** A row's elements, to be given new values in place. */
 interface Shown {
-  input: HTMLInputElement | HTMLSelectElement
+  input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
   hint: HTMLElement
   bad: HTMLElement
 }
@@ -64,8 +65,10 @@ export class Form {
   private json: HTMLTextAreaElement | null = null
   /** Text typed in a field and not applied yet, by the field's key, and why it was refused ('' : not tried yet). */
   private pending = new Map<string, { text: string; why: string }>()
-  /** Whose fields the pending text is ('' for the map's): another selection's drops it. */
+  /** Whose fields the pending text is (the file, and the feature or none for the map's): another's drops it. */
   private whose: string | null = null
+  /** The id a rename being applied gives the selection: the same feature, whose text typed stays. */
+  private renaming: string | null = null
   /** Called for a change of the map's id (the page moves the new map to its file). */
   onMapId: (id: string) => boolean | null = () => false
 
@@ -82,9 +85,9 @@ export class Form {
     this.cat = cat
     const ed = this.editor
     const f = ed.selected ? ed.feature(ed.selected) : undefined
-    // another selection's fields: its text typed and not applied goes (a rename keeps it: the same feature)
-    const whose = f ? f.id : ''
-    if (whose !== this.whose && !(ed.renamed?.from === this.whose && ed.renamed.to === whose)) this.pending.clear()
+    // another map's or another selection's fields: the text typed and not applied goes (a rename of this one keeps it)
+    const whose = `${ed.file}#${f ? f.id : ''}`
+    if (whose !== this.whose && whose !== `${ed.file}#${this.renaming}`) this.pending.clear()
     this.whose = whose
     const key = [ed.doc, f, ed.issues, cat, ed.enabled, ed.idle, ed.noFile]
     if (!force && key.length === this.last.length && key.every((k, i) => k === this.last[i])) return
@@ -112,7 +115,10 @@ export class Form {
   private apply(key: string): void {
     const p = this.pending.get(key)
     const row = this.view?.rows.find(r => r.key === key)
-    if (!p || !row) return
+    if (!p || !row) {
+      this.pending.delete(key) // a field the form no longer has: its text goes with it
+      return
+    }
     this.pending.delete(key)
     const parsed = parseInput(row.as, p.text)
     let done: boolean | null
@@ -120,7 +126,15 @@ export class Form {
       this.pending.set(key, { text: p.text, why: parsed.error })
       done = false
     } else {
-      done = this.view!.set(key, 'remove' in parsed ? undefined : parsed.value)
+      // a new id is the same feature: the form keeps the other fields' text through it
+      if (key === 'id' && this.view!.base && 'value' in parsed && typeof parsed.value === 'string') {
+        this.renaming = parsed.value
+      }
+      try {
+        done = this.view!.set(key, 'remove' in parsed ? undefined : parsed.value)
+      } finally {
+        this.renaming = null
+      }
       if (done === false) this.pending.set(key, { text: p.text, why: this.editor.message || 'refused' })
     }
     // an edit made refreshed the form; a refusal or no change does it here
@@ -151,7 +165,7 @@ export class Form {
       { key: 'priority', label: 'priority', value: f.priority, as: 'number', hint: 'who wins an overlap' },
       { key: 'state', label: 'state', value: f.state, as: 'text', options: ['', ...states] },
       { key: 'source', label: 'source', value: f.source, as: 'text', options: ['', ...sources, 'invented'] },
-      { key: 'note', label: 'note', value: f.note, as: 'text' },
+      { key: 'note', label: 'note', value: f.note, as: 'text', lines: true },
     )
     for (const r of cat ? attrRows(cat, f, doc) : []) {
       const s = r.spec
@@ -184,7 +198,7 @@ export class Form {
     )
     return {
       // the fields, not the feature: a rename keeps the form (and the focus a Tab moved on to)
-      sig: JSON.stringify(['feature', rows.map(r => [r.key, r.label, r.as, r.options])]),
+      sig: JSON.stringify(['feature', rows.map(r => [r.key, r.label, r.as, r.options, r.lines])]),
       base,
       rows,
       set: (key, value) => this.editor.setField(key, value),
@@ -205,7 +219,7 @@ export class Form {
         hint: noFile ? 'names the file its first save makes' : 'names the file',
       },
       { key: 'name', label: 'name', value: doc.name, as: 'text' },
-      { key: 'note', label: 'note', value: doc.note, as: 'text' },
+      { key: 'note', label: 'note', value: doc.note, as: 'text', lines: true },
       { key: 'seed', label: 'seed', value: doc.seed, as: 'number' },
       { key: 'season', label: 'season', value: doc.season, as: 'text', options: ['', ...SEASONS] },
       { key: 'datum', label: 'datum (m)', value: doc.datum, as: 'number', hint: "the map's zero above the sea" },
@@ -215,7 +229,7 @@ export class Form {
       { key: 'presets', label: 'presets', value: doc.presets, as: 'json', hint: '{ "name": { "kind", … } }' },
     ]
     return {
-      sig: JSON.stringify(['map', rows.map(r => [r.key, r.label, r.as, r.options])]),
+      sig: JSON.stringify(['map', rows.map(r => [r.key, r.label, r.as, r.options, r.lines])]),
       base: '',
       rows,
       set: (key, value) =>
@@ -232,9 +246,15 @@ export class Form {
   private build(view: View): void {
     this.sig = view.sig
     this.shown.clear()
+    // text typed in a field this form does not have goes (another kind's attribute)
+    for (const key of [...this.pending.keys()]) if (!view.rows.some(r => r.key === key)) this.pending.delete(key)
     const table = el('div', { className: 'fields' })
     for (const r of view.rows) {
-      const input: HTMLInputElement | HTMLSelectElement = r.options ? el('select') : el('input', { spellcheck: false })
+      const input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement = r.options
+        ? el('select')
+        : r.lines
+          ? el('textarea', { rows: 2, spellcheck: false })
+          : el('input', { spellcheck: false })
       input.dataset.key = r.key
       input.addEventListener('input', () => {
         this.pending.set(r.key, { text: input.value, why: '' })
@@ -259,7 +279,13 @@ export class Form {
     const parts: HTMLElement[] = [table, this.rest]
     this.json = null
     if (view.json !== null) {
-      this.json = el('textarea', { spellcheck: false, rows: 4, readOnly: true, title: 'the feature as JSON, to copy' })
+      this.json = el('textarea', {
+        className: 'json',
+        spellcheck: false,
+        rows: 4,
+        readOnly: true,
+        title: 'the feature as JSON, to copy',
+      })
       parts.push(this.json)
     }
     this.box.replaceChildren(...parts)

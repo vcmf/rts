@@ -193,7 +193,6 @@ export class Editor {
     if (file !== this.file) this.selected = null
     this.mode = { kind: 'idle' }
     this.lastClick = null
-    this.renamed = null
     this.history.clear()
     this.hover = null
     this.found = []
@@ -342,7 +341,6 @@ export class Editor {
   }
   /** Makes an edit: the copy before it goes into the history, the copy is checked, compiled and drawn. */
   private commit(doc: MapFile, edited: string | null, select = this.selected): void {
-    this.renamed = null // a rename says so after its commit
     this.history.push({ doc: this.doc!, selected: this.selected })
     this.doc = doc
     this.selected = select
@@ -555,7 +553,6 @@ export class Editor {
   }
   /** Back or forward to a step: its copy, and the selection it had (an undone rename's feature by its old id). */
   private restore(step: Snapshot): void {
-    this.renamed = null
     this.doc = step.doc
     // the selection stays where it is; gone from this copy (a rename undone, a feature deleted), it is the step's
     if (!this.selected || !this.feature(this.selected)) {
@@ -595,9 +592,9 @@ export class Editor {
    * the selection set, or removed (`undefined`: it inherits); its id goes through `rename`.
    */
   setField(key: string, value: unknown): boolean | null {
+    if (key === 'id') return this.rename(typeof value === 'string' ? value : '')
     const f = this.selected ? this.feature(this.selected) : undefined
     if (!this.canEdit(f) || !f || !this.doc || !this.editable(f)) return false
-    if (key === 'id') return this.rename(typeof value === 'string' ? value : '')
     const g = setField(f, key, value)
     if (sameJson(g, f)) return null
     this.commit(this.replace(this.doc, g), f.id)
@@ -613,8 +610,6 @@ export class Editor {
     else return this.ready()
     return false
   }
-  /** The last edit, when it was a rename (its old and new id), so the form can tell it from another selection. */
-  renamed: { from: string; to: string } | null = null
   /**
    * The selection's id changed, and every place that names it (`renameFeature`). Refused for an empty id, one another
    * feature has (two features of one id cannot be edited), and a feature with children (their ids carry its own:
@@ -634,7 +629,6 @@ export class Editor {
       return refuse(`${f.id} has children whose ids carry its own: rename it in the file`)
     }
     this.commit(renameFeature(this.doc, f.id, id), id, id)
-    this.renamed = { from: f.id, to: id }
     return true
   }
   /** A field of the map itself set, or removed; its features are the features' own edits, its id `renameMap`'s. */
@@ -644,9 +638,9 @@ export class Editor {
       this.note(`the map's ${key} is not set as a field`)
       return false
     }
-    const doc = setField(this.doc, key, value)
-    if (sameJson(doc, this.doc)) return null
-    this.commit(doc, null)
+    // the field alone is compared (not the whole map, its features with it)
+    if (sameJson(value, (this.doc as unknown as Record<string, unknown>)[key])) return null
+    this.commit(setField(this.doc, key, value), null)
     return true
   }
   /**

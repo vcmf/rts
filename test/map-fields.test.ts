@@ -128,6 +128,10 @@ describe('M7c: every attribute through the form', () => {
       },
     })
     expect(parseInput('text', ' summer ')).toEqual({ value: 'summer' })
+    // decimal numbers only: other forms JavaScript reads as numbers stay text, for the validator to name
+    expect(parseInput('number', '-1.5e2')).toEqual({ value: -150 })
+    expect(parseInput('number', '.5')).toEqual({ value: 0.5 })
+    for (const t of ['0x20', '0b11', 'Infinity', '1_000', '-']) expect(parseInput('number', t)).toEqual({ value: t })
     expect('error' in parseInput('json', '{"w": ')).toBe(true)
   })
   it('reads a field of no known kind as JSON when it is, else as text, and shows its text quoted', () => {
@@ -146,6 +150,10 @@ describe('M7c: every attribute through the form', () => {
     expect(rows.find(r => r.name === 'leaf')!.inherited).toBe('broad')
     expect(rows.find(r => r.name === 'density')!.own).toBe(0.4)
     expect(rows.find(r => r.name === 'odd')!.spec).toBeUndefined()
+    // an attribute the catalogue knows for other kinds, set on this one: shown with no spec (not this kind's)
+    const roof = attrRows(cat, { ...f, roof: 'tile' }, map).find(r => r.name === 'roof')!
+    expect(roof.spec).toBeUndefined()
+    expect(roof.own).toBe('tile')
   })
   it('sets and removes a field in place, a new one last', () => {
     const f: Feature = { id: 'a', kind: 'relief.hill', point: [0, 0], height: 3 }
@@ -334,10 +342,9 @@ describe('M7c: the editor sets fields', () => {
     expect(ed.feature('hill')!.height).toBe(4)
     expect(ed.selected).toBe('brook')
     ed.setField('id', 'stream')
-    expect(ed.renamed).toEqual({ from: 'brook', to: 'stream' })
     ed.undo()
-    expect(ed.renamed).toBeNull()
     expect(ed.selected).toBe('brook')
+    expect(ed.setMapField('seed', 1)).toBe(null) // the seed it has: nothing to change
   })
   it('says why whenever it refuses a field', () => {
     const ed = make()
