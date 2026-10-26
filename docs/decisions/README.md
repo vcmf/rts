@@ -62,3 +62,4 @@ recorded here on 2026-10-08.
 | [0054](0054-readable-code.md) | Readable code: small functions, doc comments in new code, a test for every bug fix | accepted |
 | [0060](0060-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
 | [0062](0062-simple-shadows-at-every-zoom.md) | The simple shadow at every zoom, softer, lighter and shorter up close | accepted |
+| [0069](0069-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a cornered router is cut down, never surrenders | accepted |

@@ -35,7 +35,6 @@ import {
   typeOf,
 } from './world.ts'
 import { cornered } from './morale.ts'
-import { standOff } from './claims.ts'
 import {
   allocOrder,
   appendOrder,
@@ -215,11 +214,16 @@ export const gapBetween = (w: World, i: number, j: number): number => gapOf(w, b
 export const sideStruck = (w: World, i: number, j: number): number => quarter(w, blockGeometry(w), i, j)
 
 /* ---------------- step 10: charges and melee ---------------- */
+/**
+ * Step 10, charges and melee (docs/systems/melee.md): each charge steps, each melee pair strikes, a battalion struck
+ * while not in melee takes on its attacker, cornered routers are cut down, and the shocks are owed to their receivers.
+ * Skipped when nothing charges, fights or is cornered near an enemy.
+ */
 export function meleeStep(w: World): void {
   const f = w.f
   const N = MAX_FORMATIONS
   let any = false
-  for (let i = 0; i < N && !any; i++) if (f.alive[i] && (f.chPhase[i] || f.foe[i] || cornered(w, i))) any = true
+  for (let i = 0; i < N && !any; i++) if (f.alive[i] && (f.chPhase[i] || f.foe[i] || besieged(w, i))) any = true
   if (!any) return
   const tick = w.meta[M_TICK] + 1
   const rev = w.scratch.reverse === true
@@ -244,22 +248,38 @@ export function meleeStep(w: World): void {
     const j = slotOf(w, f.foe[i])
     if (j >= 0 && !f.foe[j] && !outOfFight(f.mstate[j])) engage(w, j, i)
   }
-  for (let j = 0; j < N; j++) if (f.alive[j] && cornered(w, j)) cutDown(w, G, S, j, tick)
+  for (let j = 0; j < N; j++) if (f.alive[j] && besieged(w, j)) cutDown(w, G, S, j, tick)
   // the shocks, added to each receiver in its attackers' slot order
   for (let i = 0; i < N; i++) if (S.shockTo[i] >= 0) f.shockIn[S.shockTo[i]] += S.shockBy[i]
 }
 
-// enemy i cuts router j down, `gap` from it: the men in contact strike at the melee's rate and it does not fight back.
-// With claims, i stops at most `standOff` from it (a margin): the men in contact are counted as if it stood as near as
-// it may
+/**
+ * Enemy i cuts router j down: if the gap between them (metres) is within contact and hold, the men of each in contact
+ * are found, and j owes losses at the melee's rate for i's men in contact and strength, drawn from `rs`. j does not
+ * fight back.
+ */
 function rideDown(w: World, G: FireGeo, S: Melee, i: number, j: number, gap: number, rs: Uint32Array): void {
   const M = w.cr.rs.melee
-  const off = Math.min(standOff(w), Math.max(0, gap - M.contact))
-  const lim = M.contact + M.hold + off
+  const lim = M.contact + M.hold
   if (gap > lim) return
   const men = inContact(w, G, i, j, lim, S.mi)
   inContact(w, G, j, i, lim, S.mj)
   owe(w, j, S.mj, M.rate * DT * men * strengthOf(w, i), rs)
+}
+// centres farther apart than this (metres) are never within contact and hold: a cornered router with no enemy this
+// near is left alone, and the melee step skipped for it
+const BESIEGE = 300
+// whether cornered router j has an enemy in the fight within BESIEGE of its centre
+function besieged(w: World, j: number): boolean {
+  const f = w.f
+  if (!cornered(w, j)) return false
+  for (let i = 0; i < MAX_FORMATIONS; i++) {
+    if (!f.alive[i] || f.side[i] === f.side[j] || outOfFight(f.mstate[i])) continue
+    const dx = f.x[i] - f.x[j]
+    const dz = f.z[i] - f.z[j]
+    if (dx * dx + dz * dz <= BESIEGE * BESIEGE) return true
+  }
+  return false
 }
 /**
  * Broken battalion j has no way left to run (`cornered`, morale.ts): every enemy in the fight near it, neither charging

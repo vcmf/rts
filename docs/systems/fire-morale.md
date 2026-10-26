@@ -119,9 +119,13 @@ is later:
     when the shape allows and the way is behind it. That Face about is an *optional* order: if it fails
     (water behind it), the run goes on as it stands.
   - When its orders end, a router whose status says it halted at impassable ground is *halted*.
-    Otherwise it got where it was going, or as near as it could, and has *fled*: it stays.
+    Otherwise it got where it was going, or as near as it could, and has *fled*: it stays. With the claim
+    grid on (docs/plans/active/c1-claims.md), a run held for 2 s by other formations' cells is halted too.
   - Only a halted router tries again: every 5 s, the next direction of a fan about the stored one (the
-    direction itself, then turned 60° each way, then 120°). After the fifth it stays, pinned.
+    direction itself, then turned 60° each way, then 120°). After the fifth it is *cornered* (`cornered`):
+    every enemy in the fight near it, neither charging nor in melee, cuts it down at the melee's rate, and
+    it does not fight back (decision 0069, docs/systems/melee.md). With the claim grid on it goes on trying
+    the fan's directions in turn, since others may move off its way.
 - **The run counter** advances only when the run's order was made, so a full order pool delays a run but
   uses up no direction.
 
@@ -259,4 +263,4 @@ scripted tests.
   is tested since S1c-4: a 400-man line reaches 46 m.)
 - **A router can be pinned.** Where every direction of the fan halts, or where the formation layer cannot
   march out (by the stream at x ≈ 57, z = −30 even an ordinary battalion halts within a metre), it
-  stays. Pathfinding, and routers as a loose crowd rather than a formation, are later.
+  stays, cornered: an enemy that comes near cuts it down. Pathfinding, and routers as a loose crowd rather than a formation, are later.
