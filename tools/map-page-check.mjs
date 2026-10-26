@@ -20,6 +20,12 @@
 //   7. the fields form (M7c), on the map first opened: a note and another feature's attribute set through the form's
 //      inputs, the saved diff their lines alone, undone and saved back to the original bytes; text typed and not
 //      applied kept, applied before a press on the map, left typed by the undo button; JSON refused kept with why.
+//   8. generators (M7d), on the map first opened: a generator removed and chosen again for a clump's feature and a
+//      parameter set through the form, the expansion redrawn, the saved diff that line alone; a village asked for more
+//      houses than fit shows the expansion's problem under its generator; Pin refused while a field holds text it
+//      could not apply, and with text typed applies it alone; the village pinned and saved (its line
+//      rewritten, its houses appended, nothing else), the page compiling the same houses; all undone and saved back to
+//      the original bytes.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -315,6 +321,93 @@ try {
         return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, target: target.id, other: other.id, noteKept, idFixed, refused, dropped, kept, noteBox, jsonRead, flushed, typedKept, ownUndo, undoKeeps, notSaved, focusInForm, notDeleted })
       })()`,
     ],
+    // generators (M7d): a clump's generator chosen again and a parameter set; a village's problem; the village pinned
+    [
+      'eval',
+      `(async () => {
+        const sleep = ms => new Promise(r => setTimeout(r, ms))
+        const until = async cond => { for (let t = 0; t < 600 && !cond(); t++) await sleep(25); if (!cond()) throw new Error('timed out') }
+        // the compile of the copy as it is now: logged once it is drawn (an overtaken one never is)
+        const compiled = async edit => { const n = MAP.log.length; edit(); await until(() => MAP.log.length > n) }
+        const q = key => document.querySelector('#form [data-key="' + key + '"]')
+        const field = (key, value) => {
+          const input = q(key)
+          if (!input) throw new Error('no field ' + key)
+          input.value = value
+          input.dispatchEvent(new Event('input'))
+          input.dispatchEvent(new Event('change'))
+        }
+        const features = () => JSON.parse(MAP.text).features
+        const clumped = features().find(f => f.gen && f.gen.clump)
+        const village = features().find(f => f.gen && f.gen['street-village'])
+        if (!clumped || !village) throw new Error('the map has no clump or no village')
+        MAP.select(clumped.id)
+        const before = JSON.stringify(MAP.expanded(clumped.id).area)
+        await compiled(() => field('gen', ''))
+        const removed = features().find(f => f.id === clumped.id).gen === undefined && !q('gen:coherence')
+        await compiled(() => field('gen', 'clump'))
+        const chosen = JSON.stringify(features().find(f => f.id === clumped.id).gen) === '{"clump":{}}' && !!q('gen:coherence')
+        await compiled(() => field('gen:coherence', String(clumped.gen.clump.coherence ?? 0.5) === '0.9' ? '0.2' : '0.9'))
+        const redrawn = MAP.issues.length === 0 && JSON.stringify(MAP.expanded(clumped.id).area) !== before
+        const paramOk = q('gen:coherence').closest('.row').querySelector('.hint').textContent.includes('0 to 1')
+        const ok = await MAP.save()
+        const disk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
+        MAP.undo(); MAP.undo(); MAP.undo()
+        // the expansion's own problem, under the generator
+        MAP.select(village.id)
+        await compiled(() => field('gen:min', '400'))
+        const genRow = q('gen').closest('.row').querySelector('.bads').textContent
+        const shortShown = /placed \\d+ of \\d+ houses/.test(genRow)
+        await compiled(() => MAP.undo())
+        return 'GENS ' + JSON.stringify({ ok, disk, clumped: clumped.id, village: village.id, removed, chosen, redrawn, paramOk, shortShown, genRow, issues: MAP.issues.length })
+      })()`,
+    ],
+    // pinning (M7d): refused with text a field refused; the village pinned, saved, undone
+    [
+      'eval',
+      `(async () => {
+        const sleep = ms => new Promise(r => setTimeout(r, ms))
+        const until = async cond => { for (let t = 0; t < 600 && !cond(); t++) await sleep(25); if (!cond()) throw new Error('timed out') }
+        // the compile of the copy as it is now: logged once it is drawn (an overtaken one never is)
+        const compiled = async edit => { const n = MAP.log.length; edit(); await until(() => MAP.log.length > n) }
+        const q = key => document.querySelector('#form [data-key="' + key + '"]')
+        const field = (key, value) => {
+          const input = q(key)
+          if (!input) throw new Error('no field ' + key)
+          input.value = value
+          input.dispatchEvent(new Event('input'))
+          input.dispatchEvent(new Event('change'))
+        }
+        const features = () => JSON.parse(MAP.text).features
+        const village = features().find(f => f.gen && f.gen['street-village'])
+        MAP.select(village.id)
+        // text a field refused: no pin (the rows it takes away would lose the text), and why
+        field('seasons', '{"winter": ')
+        const textBefore = MAP.text
+        document.getElementById('pin').click()
+        const notPinned = MAP.text === textBefore && /could not apply.*not pinned/.test(document.getElementById('editState').textContent) && q('seasons').value === '{"winter": '
+        q('seasons').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        // pinned: one edit, saved; the page compiles the same houses
+        // text typed in a parameter and not applied, then Pin: the text is applied (its own edit), nothing pinned yet
+        q('gen:min').value = '1'
+        q('gen:min').dispatchEvent(new Event('input'))
+        await compiled(() => document.getElementById('pin').click())
+        const typedFirst = features().find(f => f.id === village.id).gen?.['street-village']?.min === 1 && /Pin again/.test(document.getElementById('editState').textContent)
+        await compiled(() => MAP.undo())
+        // every house the village makes, in order
+        const housesOf = () => { const out = []; for (let k = 1, h; (h = MAP.expanded(village.id + '-' + k)); k++) out.push(h.area); return JSON.stringify(out) }
+        const houses = housesOf()
+        await compiled(() => document.getElementById('pin').click())
+        const pinnedOk = features().find(f => f.id === village.id).gen === undefined && MAP.selected === village.id
+        const sameHouses = MAP.issues.length === 0 && houses !== '[]' && housesOf() === houses
+        const pinOk = await MAP.save()
+        const pinDisk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
+        MAP.undo()
+        const back = await MAP.save()
+        const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
+        return 'PIN ' + JSON.stringify({ village: village.id, pinnedOk, notPinned, typedFirst, sameHouses, pinOk, pinDisk, back, after })
+      })()`,
+    ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
     [
       'eval',
@@ -518,6 +611,51 @@ try {
   check(fl.typedKept, 'a field typed in and not applied is left as typed when the form is refreshed')
   check(fl.undoKeeps, 'the undo button keeps the focus in a field holding text, undoes the edit before, the text stays')
   check(fl.notSaved, 'Cmd S with text a field refused does not save, and says why')
+  await until('GENS')
+  const gn = seen.GENS
+  const lineDiff = (a, b) => {
+    const A = a.split('\n').map(l => l.replace(/,$/, ''))
+    const B = b.split('\n').map(l => l.replace(/,$/, ''))
+    return { gone: A.filter(l => !B.includes(l)), added: B.filter(l => !A.includes(l)) }
+  }
+  const idOf = l => {
+    try {
+      return JSON.parse(l.trim()).id
+    } catch {
+      return null
+    }
+  }
+  const cd = lineDiff(original, gn.disk)
+  check(
+    gn.ok &&
+      gn.removed &&
+      gn.chosen &&
+      cd.gone.map(idOf).join() === gn.clumped &&
+      cd.added.map(idOf).join() === gn.clumped,
+    `${gn.clumped}'s generator removed, chosen again and a parameter set through the form: its line alone changed`,
+  )
+  check(gn.redrawn, `the expansion redrawn on the change (${gn.clumped}'s outline moved, no problem)`)
+  check(gn.paramOk, "a parameter's row shows its range")
+  check(
+    gn.shortShown,
+    `a village asked for more houses than fit: the expansion's problem under its generator (${gn.genRow})`,
+  )
+  await until('PIN')
+  const pn = seen.PIN
+  const pd = lineDiff(original, pn.pinDisk)
+  const houseLines = pd.added.filter(l => String(idOf(l)).startsWith(pn.village + '-'))
+  check(
+    pn.pinOk &&
+      pn.pinnedOk &&
+      pd.gone.map(idOf).join() === pn.village &&
+      pd.added.length === houseLines.length + 1 &&
+      houseLines.length > 0,
+    `${pn.village} pinned and saved: its line rewritten, ${houseLines.length} houses appended, nothing else`,
+  )
+  check(pn.sameHouses, 'the page compiles the pinned houses where it generated them')
+  check(pn.notPinned, 'Pin with text a field refused does not pin, keeps the text, and says why')
+  check(pn.typedFirst, 'Pin with text typed and not applied applies it as its own edit and pins nothing yet')
+  check(pn.back && pn.after === original, 'all undone and saved, the file is byte for byte the original')
   await until('NEWMAP')
   const nm = seen.NEWMAP
   const ids = nm.features.map(f => f.id).join(',')

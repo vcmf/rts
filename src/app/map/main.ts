@@ -123,7 +123,8 @@ picker.value =
 // the view: world point at the canvas centre, and pixels per metre; kept across reloads of the same map
 let view = { cx: 0, cz: 0, ppm: 0 }
 let current: Compiled | null = null
-let issues: Issue[] = []
+const NO_ISSUES: Issue[] = Object.freeze([]) as unknown as Issue[]
+let issues: Issue[] = NO_ISSUES
 let layers: Partial<Record<LayerName, Uint16Array>> = {}
 let height = new Float64Array(0)
 let depth = new Uint16Array(0)
@@ -189,7 +190,7 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
   if (r.ok) {
     // another map (the list cleared `current`): fitted to the view; the same one again keeps the view
     const fresh = !current
-    issues = []
+    issues = NO_ISSUES // the same list each time: the form, which follows it by identity, is not built again
     layers = Object.fromEntries(Object.entries(r.layers).map(([k, b]) => [k, new Uint16Array(b)]))
     height = new Float64Array(r.height)
     depth = new Uint16Array(r.depth)
@@ -378,7 +379,8 @@ function mapIdProblem(id: string): string {
   if (!ID.test(id)) return 'its id names its file: lower-case letters and digits, in words joined by "-"'
   return [...picker.options].some(o => o.value === `/maps/${id}.map.json`) ? `a map ${id} exists` : ''
 }
-const form = new Form(formBox, editor)
+// its problems are the page's: the validator's at once after an edit, then the compile's of that copy (M7d)
+const form = new Form(formBox, editor, () => issues)
 // Text typed in the form and not applied yet: a press on another control takes the focus from the field, whose change
 // applies it; a press on the map does not wait for that (its drag would start first), so it applies it itself (below).
 // The undo and redo buttons keep the focus where it is, so the text stays typed, for the copy they bring back.
@@ -653,6 +655,7 @@ function draw(): void {
 }
 
 function panel(): void {
+  form.update(catalogue) // the compile's problems under their fields (a generator that cannot place what it was asked)
   const c = current
   status.textContent =
     (litError ? `${litError}: only the panel works. ` : '') +
@@ -1009,6 +1012,8 @@ window.MAP = {
     draw()
   },
   compile: () => compile('manual'),
+  // a feature of the last compiled (expanded) map, or null (M7d: a generator's output redrawn)
+  expanded: (id: string) => current?.map.features.find(f => f.id === id) ?? null,
   // the editor (M7): select a feature, the selection, what a save would write, save, undo, redo, unsaved edits, and
   // a ground point's screen position (to drive the pointer in checks)
   select: (id: string | null) => editor.select(id),

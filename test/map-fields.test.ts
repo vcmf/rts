@@ -1,5 +1,6 @@
-// The map editor's fields (docs/plans/active/m7-editor.md M7c): every attribute of the catalogue set through the form's
-// reading of text and judged by the validator at its field; the editor's field edits.
+// The map editor's fields (docs/plans/active/m7-editor.md M7c, M7d): every attribute of the catalogue and every
+// parameter of every generator set through the form's reading of text and judged by the validator at its field; the
+// editor's field edits and pinning.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -7,8 +8,22 @@ import type { AttrSpec, Catalogue, Feature, FieldSpec, MapFile, ShapeName } from
 import { allowedIn, categoryOf, kindChain, kindMeta } from '../src/map/catalogue.ts'
 import { featureKind, presetsOf, validate } from '../src/map/validate.ts'
 import { formatMap } from '../src/map/format.ts'
-import { attrInput, attrRows, parseInput, problemsAt, setField, showValue } from '../src/app/map/fields.ts'
+import {
+  attrInput,
+  attrRows,
+  genOf,
+  paramRows,
+  parseInput,
+  problemsAt,
+  setField,
+  showValue,
+  withGenerator,
+  withParam,
+} from '../src/app/map/fields.ts'
+import { GENERATOR_SPECS, type ParamSpec } from '../src/map/generators.ts'
+import { EXPAND_VERSION } from '../src/map/expand.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
+import type { Issue } from '../src/map/catalogue.ts'
 import { root } from './fx.ts'
 
 const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'kinds.json'), 'utf8')) as Catalogue
@@ -279,5 +294,216 @@ describe('M7c: the editor sets fields', () => {
     expect(ed.setMapField('seed', 7)).toBe(true)
     expect(ed.doc!.seed).toBe(7)
     expect(ed.setMapField('seed', 7)).toBe(null)
+  })
+})
+
+// a feature each generator runs on, with the parameters it needs (a scatter's mix on one without its count); a road
+// for the village
+const ROAD: Feature = {
+  id: 'road',
+  kind: 'way.road.lane',
+  line: [
+    [-400, 0],
+    [400, 0],
+  ],
+}
+const SQUARE = [
+  [
+    [-300, -300],
+    [300, -300],
+    [300, 300],
+    [-300, 300],
+  ],
+] as Feature['area']
+const HOSTS: Record<string, (param: string) => Feature> = {
+  meander: () => ({ ...ROAD, id: 'brook', kind: 'water.stream', gen: { meander: { amplitude: 30 } } }),
+  clump: () => ({ id: 'copse', kind: 'veg.wood.broad', point: [0, 0], gen: { clump: {} } }),
+  'street-village': () => ({
+    id: 'hamlet',
+    kind: 'built.village',
+    along: { id: 'road', from: 100, to: 300 },
+    gen: { 'street-village': {} },
+  }),
+  scatter: param => ({
+    id: 'woods',
+    kind: 'veg.wood.broad',
+    area: SQUARE,
+    gen: { scatter: param === 'mix' ? {} : { count: 2 } },
+  }),
+  group: () => ({ id: 'poplars', kind: 'veg.tree.poplar', point: [0, 0], gen: { group: {} } }),
+}
+/** A value a parameter takes. */
+function goodParam(spec: ParamSpec): unknown {
+  if (spec.type === 'list') return ['water']
+  if (spec.type === 'entries') return [{ kind: 'veg.wood.broad', count: 2 }]
+  return good(spec)
+}
+/** Text a parameter does not take, as typed in the form. */
+function badParam(spec: ParamSpec): string {
+  if (spec.type === 'list' || spec.type === 'entries') return '5'
+  return spec.max !== undefined ? String(spec.max + 1) : 'many'
+}
+
+describe('M7d: every parameter of every generator through the form', () => {
+  it('sets each from good text with no problem, and from bad text with one at its field', () => {
+    let n = 0
+    for (const [gen, spec] of Object.entries(GENERATOR_SPECS)) {
+      for (const [name, ps] of Object.entries(spec.params)) {
+        const host = HOSTS[gen](name)
+        const map = { ...base, features: [ROAD, host] }
+        const at = (g: Feature) => problemsAt(validate({ ...map, features: [ROAD, g] }, cat), `features[1].gen`)
+        const read = (text: string) => {
+          const p = parseInput(attrInput(ps), text)
+          if (!('value' in p)) throw new Error(`${gen}.${name}: ${text} read as ${JSON.stringify(p)}`)
+          return { ...host, gen: withParam(host, name, p.value)! }
+        }
+        const row = paramRows(host).find(r => r.name === name)
+        expect(row?.spec).toBe(ps)
+        const text = showValue(goodParam(ps), attrInput(ps))
+        expect(at(read(text)), `${gen}.${name} = ${text}`).toEqual([])
+        const wrong = read(badParam(ps))
+        const found = at(wrong)
+        expect(found.length, `${gen}.${name} = ${badParam(ps)}`).toBeGreaterThan(0)
+        expect(found.every(i => i.path.startsWith(`features[1].gen.${gen}.${name}`))).toBe(true)
+        n++
+      }
+    }
+    expect(n).toBe(Object.values(GENERATOR_SPECS).reduce((k, s) => k + Object.keys(s.params).length, 0))
+  })
+  it("puts a generated child's problem, as expansion reports it, under its parent's generator", () => {
+    const child = { id: 'v', path: 'features[5].gen (child v-3: features[40].area)', message: 'outside' }
+    expect(problemsAt([child], 'features[5].gen')).toEqual([child])
+    expect(problemsAt([child], 'features[5].ge')).toEqual([])
+  })
+  it("reads a feature's generator, and lists its parameters in the spec's order, then any other it sets", () => {
+    const f: Feature = { id: 'w', kind: 'veg.wood.broad', point: [0, 0], gen: { clump: { points: 32, wobble: 1 } } }
+    expect(genOf(f)).toEqual({ name: 'clump', params: { points: 32, wobble: 1 } })
+    expect(paramRows(f).map(r => [r.name, r.own, !!r.spec])).toEqual([
+      ['radius', undefined, true],
+      ['coherence', undefined, true],
+      ['raggedness', undefined, true],
+      ['points', 32, true],
+      ['wobble', 1, false],
+    ])
+    // a generator the engine does not have: its parameters all the same, none known
+    expect(paramRows({ ...f, gen: { swirl: { turns: 2 } } })).toEqual([{ name: 'turns', spec: undefined, own: 2 }])
+    // not one generator's form: none
+    for (const gen of [{}, { clump: {}, meander: {} }, { clump: 3 }, [], 'clump']) {
+      expect(genOf({ ...f, gen } as unknown as Feature)).toBeNull()
+      expect(paramRows({ ...f, gen } as unknown as Feature)).toEqual([])
+    }
+    expect(genOf({ id: 'x' })).toBeNull()
+  })
+  it('starts another generator with no parameters, and sets and removes one in place', () => {
+    expect(withGenerator('group')).toEqual({ group: {} })
+    expect(withGenerator(undefined)).toBeUndefined()
+    const f: Feature = { id: 'w', point: [0, 0], gen: { clump: { radius: 40, points: 32 } } }
+    expect(withParam(f, 'radius', 50)).toEqual({ clump: { radius: 50, points: 32 } })
+    expect(withParam(f, 'radius', undefined)).toEqual({ clump: { points: 32 } })
+    expect(withParam({ id: 'x' }, 'radius', 1)).toBeNull()
+  })
+})
+
+describe('M7d: the editor pins', () => {
+  const text = formatMap({
+    ...base,
+    features: [
+      ROAD,
+      { id: 'copse', kind: 'veg.wood.broad', point: [0, 100], gen: { clump: { radius: 40 } } },
+      { id: 'poplars', kind: 'veg.tree.poplar', point: [0, -200], gen: { group: { count: 2 } } },
+      { id: 'hill', kind: 'relief.hill', point: [100, 100], height: 4, width: 40 },
+    ],
+  })
+  function make() {
+    const h: Host = {
+      ctx: {} as CanvasRenderingContext2D,
+      project: (x, z) => [x, -z],
+      toWorld: (sx, sy) => [sx, -sy],
+      ppm: () => 1,
+      shown: () => [],
+      groundPath: () => {},
+      recompile: () => {},
+      problems: () => {},
+      redraw: () => {},
+      changed: () => {},
+    }
+    const ed = new Editor(h)
+    ed.setCatalogue(cat)
+    ed.load('/maps/t.map.json', text)
+    return ed
+  }
+  it("lists another file's problems at once when it is read, never the last file's", () => {
+    const lists: Issue[][] = []
+    const h: Host = {
+      ctx: {} as CanvasRenderingContext2D,
+      project: (x, z) => [x, -z],
+      toWorld: (sx, sy) => [sx, -sy],
+      ppm: () => 1,
+      shown: () => [],
+      groundPath: () => {},
+      recompile: () => {},
+      problems: found => lists.push(found),
+      redraw: () => {},
+      changed: () => {},
+    }
+    const ed = new Editor(h)
+    ed.setCatalogue(cat)
+    const wrong = text.replace('"height":4', '"height":"tall"')
+    expect(wrong).not.toBe(text)
+    ed.load('/maps/a.map.json', wrong)
+    expect(lists.at(-1)!.map(i => i.path)).toEqual(['features[3].height'])
+    ed.load('/maps/b.map.json', text)
+    expect(lists.at(-1)).toEqual([])
+  })
+  it('pins a feature in one edit, keeping it selected, and undoes it', () => {
+    const ed = make()
+    ed.select('copse')
+    expect(ed.pin()).toBe(true)
+    const copse = ed.feature('copse')!
+    expect(copse.gen).toBeUndefined()
+    expect(copse.area).toBeDefined()
+    expect(copse.origin).toMatchObject({ generator: 'clump', params: { radius: 40 } })
+    expect(ed.selected).toBe('copse')
+    ed.undo()
+    expect(ed.dirty).toBe(false)
+    expect(ed.selected).toBe('copse')
+  })
+  it('selects the first child of a feature its generator takes off the map', () => {
+    const ed = make()
+    ed.select('poplars')
+    expect(ed.pin()).toBe(true)
+    expect(ed.feature('poplars')).toBeUndefined()
+    expect(ed.doc!.features.slice(-2).map(f => f.id)).toEqual(['poplars-1', 'poplars-2'])
+    expect(ed.selected).toBe('poplars-1')
+    // its children are features now: one moves on its own
+    expect(ed.feature('poplars-2')!.origin?.parent).toBe('poplars')
+  })
+  it('selects a child the pin added, not one the file had (pinned before)', () => {
+    const ed = make()
+    // a tree pinned from the group before, under its own name; the group generating again
+    const tall: Feature = {
+      id: 'tall',
+      kind: 'veg.tree.poplar',
+      point: [150, -200],
+      origin: { generator: 'group', params: { count: 2 }, version: EXPAND_VERSION, parent: 'poplars' },
+    }
+    ed.load('/maps/t.map.json', formatMap({ ...ed.doc!, features: [...ed.doc!.features, tall] }))
+    ed.select('poplars')
+    expect(ed.pin()).toBe(true)
+    expect(ed.selected).toBe('poplars-1')
+  })
+  it('says why it does not pin', () => {
+    const ed = make()
+    ed.select('hill')
+    expect(ed.pin()).toBe(false)
+    expect(ed.message).toMatch(/hill has no generator/)
+    ed.select('copse')
+    ed.setField('width', -1)
+    ed.select('poplars')
+    expect(ed.pin()).toBe(false)
+    expect(ed.message).toMatch(/^the map has a problem to fix first/)
+    ed.select(null)
+    expect(ed.pin()).toBe(false)
+    expect(ed.message).toBe('no feature is selected')
   })
 })
