@@ -119,6 +119,26 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
   test); the page's picking, box select and drawing unchanged (`app-check`'s screenshots).
 - **Stop**: the step more than 10 % slower at any of those four, and not fixable within the PR: revert, and PR 3
   copies the men out of the objects into its shared frame instead (about 0.1 ms at 32,000 men, est.).
+- **Outcome** (2026-10-26; `src/render/men.ts`): met, the step within 1–4 % of PR 1's. The men's hash matches PR 1's
+  bit for bit (`test/soldiers.test.ts`, "the men's arrays"). The same bench, PR 1 and PR 2 interleaved four times
+  each (step per 120 Hz frame, mean / p99 ms, the runs' medians):
+
+  | | PR 1 (objects) | PR 2 (arrays) |
+  |---|---|---|
+  | 16,000 men, 1× | 0.49 / 0.98 | 0.51 / 1.01 |
+  | 16,000 men, 8× | 2.33 / 4.24 | 2.34 / 4.60 |
+  | 32,000 men, 1× | 0.77 / 1.47 | 0.78 / 1.51 |
+  | 32,000 men, 8× | 3.54 / 6.36 | 3.59 / 6.36 |
+
+  - The first port was 6–8 % slower; reading a battalion's index list and a man's flags once, and his position and
+    velocity into locals, brought it to the above. The CPU profiles' self times then match function by function
+    (`steer` 2.66–2.78 s in both, 8×, 16,000 men, 24 s).
+  - **Allocation**: the layer makes about 20–35 KB of garbage a sub-step at 3,200 men, PR 1's as much (summed from
+    `node --trace-gc` over 20,000 sub-steps): doubles boxed by the calls in `steer`, not the `Man` objects. The
+    collector is under 1 % of the profile, so it stays (in the worker from PR 3 in any case). One source fixed: the
+    grid's list of cells holding men was emptied with `length = 0`, which frees an array's store, and regrew every
+    round. A heap check in vitest was tried and dropped: its own transforms allocate about 22 KB a sub-step.
+  - `sync` allocates only when a battalion appears (its index list, signature and pose).
 
 ## PR 3: the battle worker, the shared buffers, the browser replay harness
 

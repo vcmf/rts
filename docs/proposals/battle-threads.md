@@ -166,7 +166,8 @@ incrementally (hash only what a tick changed), keeping the same digest definitio
 - Whether WebGL2 `bufferSubData` takes a `SharedArrayBuffer`-backed view in Chrome (else a copy, about 0.05 ms for
   320 KB, est.).
 - The hash's best form in the worker (amortised or incremental, §7).
-- Garbage collection from the `Man` objects and per-frame temporaries (plan PR 2).
+- Garbage collection from the `Man` objects and per-frame temporaries (plan PR 2; measured there: the collector's
+  share of the profile is under 1 %, and the objects were not its source).
 
 ## Sources
 
