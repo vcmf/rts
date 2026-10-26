@@ -27,6 +27,7 @@ const men = Number(process.argv[3] ?? 400)
 const frames = Number(process.argv[4] ?? 1440)
 const warm = Number(process.argv[5] ?? 2)
 const speed = Number(process.argv[6] ?? 1)
+if (!(speed > 0) || !Number.isFinite(speed)) throw new Error(`speed ${process.argv[6]}: a positive number (1, 2, 4, 8)`)
 const data = loadSimData(new Uint8Array(fs.readFileSync(new URL('../data/formation-field.simdata', import.meta.url))))
 const shippedCr = compileRuleset(napoleonic)
 const rs = men > shippedCr.types[0].slots ? ceiling : napoleonic
@@ -86,7 +87,7 @@ const frame = (timed: boolean) => {
     }
   }
   const a = now()
-  for (const s of clock.advance(FRAME, speed)) layer.step(s.dt, acc / 0.05, s.group, clock.groups)
+  clock.advance(FRAME, speed, (group, dt) => layer.step(dt, acc / 0.05, group, clock.groups))
   if (timed) tStep.push(now() - a)
 }
 for (let n = 0; n < warm * 120; n++) frame(false)

@@ -13,12 +13,10 @@ export const MEN_DT = 1 / 8
 // the most rounds one frame catches up: the page's longest frame (0.1 s) at 8× is 0.8 s of game time, 6.4 rounds
 export const MEN_ROUNDS = 7
 
-/** One sub-step: the group of battalions to step, and the game seconds it covers. */
-export interface MenStep {
-  group: number
-  dt: number
-}
+/** Takes one sub-step: the group of battalions to step, and the game seconds it covers. */
+export type MenStep = (group: number, dt: number) => void
 
+/** The soldier layer's clock: which group steps when, and for how much game time (see the file's head). */
 export class MenClock {
   readonly groups: number
   private readonly hz: number
@@ -29,6 +27,11 @@ export class MenClock {
   private next = 0
   private readonly last: Float64Array
 
+  /**
+   * @param hz rounds a real second at speeds up to `hz` · `maxDt`
+   * @param groups sub-steps a round, one per group of battalions
+   * @param maxDt the most game seconds one sub-step covers
+   */
   constructor(hz = MEN_HZ, groups = MEN_GROUPS, maxDt = MEN_DT) {
     this.hz = hz
     this.maxDt = maxDt
@@ -37,26 +40,29 @@ export class MenClock {
   }
 
   /**
-   * Advances by a frame of `realDt` seconds at `speed` (0: paused, nothing due) and returns the sub-steps now due.
+   * Advances by a frame of `realDt` seconds at `speed` (0: paused, nothing due) and takes the sub-steps now due, in
+   * order, through `step` (no allocation: it runs every frame).
    * Each sub-step moves the clock's game time on by its share of a round, so the steps cover the frame's game time
    * at any frame rate. A frame owing more than MEN_ROUNDS rounds drops the rest (the men fall behind the sim and
-   * catch up, as they did when the layer stepped per frame).
+   * catch up, as they did when the layer stepped per frame). Returns how many sub-steps it took.
    */
-  advance(realDt: number, speed: number): MenStep[] {
-    if (speed <= 0) return []
+  advance(realDt: number, speed: number, step: MenStep): number {
+    if (speed <= 0) return 0
     const every = 1 / (Math.max(this.hz, speed / this.maxDt) * this.groups)
     this.owed += realDt
-    const due: MenStep[] = []
-    while (this.owed >= every - 1e-9 && due.length < MEN_ROUNDS * this.groups) {
+    let n = 0
+    while (this.owed >= every - 1e-9 && n < MEN_ROUNDS * this.groups) {
+      n++
       this.owed -= every
       this.game += every * speed
       const g = this.next
       this.next = (g + 1) % this.groups
       // at most MEN_DT: only a change of speed within the round makes it more
-      due.push({ group: g, dt: Math.min(this.maxDt, this.game - this.last[g]) })
+      const dt = Math.min(this.maxDt, this.game - this.last[g])
       this.last[g] = this.game
+      step(g, dt)
     }
     if (this.owed >= every) this.owed = 0
-    return due
+    return n
   }
 }

@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { Sim, STREAM_X, longIt, ceiling, small, openBattlefield, OPEN_DATA } from './fx.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer } from '../src/render/soldiers.ts'
-import { MenClock, MEN_DT, MEN_GROUPS, MEN_HZ, MEN_ROUNDS, type MenStep } from '../src/render/men-clock.ts'
+import { MenClock, MEN_DT, MEN_GROUPS, MEN_HZ, MEN_ROUNDS } from '../src/render/men-clock.ts'
 import { occupied, advanceTick, MS_SHATTERED, type Meter } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
@@ -16,28 +16,30 @@ class Play {
   clock = new MenClock()
   acc = 0
   speed: number
+  layerMs = 0 // the soldier layer's time in `frame` (a measurement: reset it to time a window)
   constructor(sim = new Sim(), speed = 1) {
     this.sim = sim
     this.speed = speed
     this.layer = new SoldierLayer(sim.w, buildScene(sim.w))
   }
-  // `sec` of game time exactly, in real frames of 1/60 s (the last one shorter); the layer syncs after every tick,
-  // as the page does
-  frames(sec: number): void {
-    const real = 1 / 60
-    for (let left = sec; left > 1e-9; left -= real * this.speed) {
-      const d = Math.min(real, left / this.speed)
-      this.acc += d * this.speed
-      while (this.acc >= 0.05 - 1e-9) {
-        this.sim.tick()
-        this.layer.sync(0, this.sim.takeDeparted())
-        this.acc -= 0.05
-      }
-      for (const s of this.clock.advance(d, this.speed)) {
-        this.layer.step(s.dt, this.acc / 0.05, s.group, this.clock.groups)
-      }
-      this.layer.alphaNow = this.acc / 0.05
+  /** One real frame of `real` seconds, as src/app/main.ts runs it: the ticks owed (the layer synced after each),
+   * the soldiers' sub-steps due on their clock, and the frame's alpha. */
+  frame(real: number): void {
+    this.acc += real * this.speed
+    for (let n = 0; this.acc >= 0.05 - 1e-9 && n < 20; n++) {
+      this.sim.tick()
+      this.layer.sync(0, this.sim.takeDeparted())
+      this.acc -= 0.05
     }
+    const a = performance.now()
+    this.clock.advance(real, this.speed, this.stepMen)
+    this.layerMs += performance.now() - a
+    this.layer.alphaNow = this.acc / 0.05
+  }
+  private stepMen = (group: number, dt: number) => this.layer.step(dt, this.acc / 0.05, group, this.clock.groups)
+  // `sec` of game time exactly, in real frames of 1/60 s (the last one shorter)
+  frames(sec: number): void {
+    for (let left = sec; left > 1e-9; left -= this.speed / 60) this.frame(Math.min(1 / 60, left / this.speed))
   }
   // worst slot error sampled every 0.5 s while `sec` pass
   worst(sec: number): { max: number; mean: number } {
@@ -306,8 +308,8 @@ describe('at 8× (rounds at 64 Hz, MEN_DT steps)', () => {
 describe('the soldier clock', () => {
   const run = (sec: number, fps: number, speed: number) => {
     const c = new MenClock()
-    const steps: MenStep[] = []
-    for (let n = 0; n < Math.round(sec * fps); n++) steps.push(...c.advance(1 / fps, speed))
+    const steps: { group: number; dt: number }[] = []
+    for (let n = 0; n < Math.round(sec * fps); n++) c.advance(1 / fps, speed, (group, dt) => steps.push({ group, dt }))
     return steps
   }
   // regression (review): one round a frame at most, with each step capped at MEN_DT, lost game time above 1.5× at
@@ -341,9 +343,10 @@ describe('the soldier clock', () => {
   })
   it('a long frame catches up at most MEN_ROUNDS rounds, and drops the rest', () => {
     const c = new MenClock()
-    expect(c.advance(0.1, 8).length).toBe(Math.floor(0.1 * (8 / MEN_DT) * MEN_GROUPS + 1e-6))
-    expect(c.advance(1, 8).length).toBe(MEN_ROUNDS * MEN_GROUPS)
-    expect(c.advance(1 / 120, 8).length).toBeLessThanOrEqual(5)
+    const none = () => {}
+    expect(c.advance(0.1, 8, none)).toBe(Math.floor(0.1 * (8 / MEN_DT) * MEN_GROUPS + 1e-6))
+    expect(c.advance(1, 8, none)).toBe(MEN_ROUNDS * MEN_GROUPS)
+    expect(c.advance(1 / 120, 8, none)).toBeLessThanOrEqual(5)
   })
 })
 
@@ -363,18 +366,34 @@ describe('the soldier groups', () => {
     p.layer.step(0.1, 0, 3, MEN_GROUPS)
     expect(others.every((u, k) => u.men.every((m, j) => m.x === before[k][j][0] && m.z === before[k][j][1]))).toBe(true)
   })
+  // regression (review): sharing every battalion out again when one came or went moved battalions between groups,
+  // and the clock's game time is per group, so a moved one stepped too far or too little
+  it('a battalion keeps its group when another arrives; the new one joins the lightest', () => {
+    const p = new Play(new Sim(1, napoleonic))
+    // sizes such that the largest-first share-out would put the newcomer first and move every other
+    for (let k = 0; k < 6; k++) p.sim.spawn(-120 + k * 40, -100, 0, 'line', 100 + 50 * k)
+    p.frames(1)
+    const was = new Map([...p.layer.units.values()].map(u => [u.i, u.group]))
+    p.sim.spawn(-120, 0, 0, 'line', 400)
+    p.frames(1)
+    const now = [...p.layer.units.values()]
+    expect(now.filter(u => was.has(u.i)).every(u => u.group === was.get(u.i))).toBe(true)
+    const added = now.find(u => !was.has(u.i))!
+    expect([...was.values()]).not.toContain(added.group)
+  })
 })
 
 // timing budgets: skipped on CI, whose shared runners are too noisy for millisecond budgets. The benches use
 // the shipped ruleset: 40 battalions of 400 (decision 0018), in columns so they fit the 360 m field. Firing at
 // the halt meets the 4 ms budget for sim and soldier layer together (S1c-5: 0.7 ms). With all 16,000 men
-// marching it does not (issue #36): that test holds the measured cost with a margin,
-// MARCH_BUDGET, so it cannot grow unnoticed. vitest runs this code about 40% slower than plain Node (the
+// marching, sim and layer together hold MARCH_BUDGET and the layer on its clock LAYER_BUDGET, each the measured
+// cost with a margin, so neither can grow unnoticed. vitest runs this code about 40% slower than plain Node (the
 // page's numbers: tools/bench-cost.ts)
 const FRAME_BUDGET = 4
-// 12: S1e-1's tighter grid (every shape on the field) measures 9.2–9.9 ms on main;
-// the old grid's 10 kept the same margin over about 8
-const MARCH_BUDGET = 12
+// with the layer on its clock (battle threads PR 1) the best window measures 2.3–2.5 ms for both and 1.5–1.7 ms
+// for the layer (it was 9.2–9.9 for both with the layer stepped once a frame)
+const MARCH_BUDGET = 3.5
+const LAYER_BUDGET = 2.5
 describe.skipIf(process.env.CI)('cost', () => {
   const shipped = () => new Sim(1, napoleonic)
   it('40 battalions of 400 firing (20 a side in column, fronts 100 m apart): sim and soldier layer per frame; the fire step per tick reported', () => {
@@ -391,15 +410,7 @@ describe.skipIf(process.env.CI)('cost', () => {
     const windows: number[] = []
     for (let k = 0; k < 3; k++) {
       const t0 = process.hrtime.bigint()
-      for (let n = 0; n < 120; n++) {
-        p.acc += 1 / 60
-        while (p.acc >= 0.05) {
-          p.sim.tick()
-          p.layer.sync(0)
-          p.acc -= 0.05
-        }
-        for (const s of p.clock.advance(1 / 60, 1)) p.layer.step(s.dt, p.acc / 0.05, s.group, p.clock.groups)
-      }
+      for (let n = 0; n < 120; n++) p.frame(1 / 60)
       windows.push(Number(process.hrtime.bigint() - t0) / 1e6 / 120)
     }
     // the tick's steps, metered over 200 ticks
@@ -434,24 +445,21 @@ describe.skipIf(process.env.CI)('cost', () => {
       p.frames(30)
       // three windows of 120 frames, judged on the best: a busy machine slows a window, never speeds one up
       const windows: number[] = []
+      const layer: number[] = []
       for (let k = 0; k < 3; k++) {
         const t0 = process.hrtime.bigint()
-        for (let n = 0; n < 120; n++) {
-          p.acc += 1 / 60
-          while (p.acc >= 0.05) {
-            p.sim.tick()
-            p.layer.sync(0)
-            p.acc -= 0.05
-          }
-          for (const s of p.clock.advance(1 / 60, 1)) p.layer.step(s.dt, p.acc / 0.05, s.group, p.clock.groups)
-        }
+        p.layerMs = 0
+        for (let n = 0; n < 120; n++) p.frame(1 / 60)
         windows.push(Number(process.hrtime.bigint() - t0) / 1e6 / 120)
+        layer.push(p.layerMs / 120)
       }
-      console.log(`40 × ${men}: ${windows.map(x => x.toFixed(2)).join(' / ')} ms per frame (sim + soldiers)`)
-      return Math.min(...windows)
+      const f = (x: number[]) => x.map(v => v.toFixed(2)).join(' / ')
+      console.log(`40 × ${men}: ${f(windows)} ms per frame (sim + soldiers), the soldiers ${f(layer)}`)
+      return { ms: Math.min(...windows), layer: Math.min(...layer) }
     }
-    const ms = run(shipped(), 400)
+    const r = run(shipped(), 400)
     run(new Sim(1, ceiling), 800)
-    expect(ms).toBeLessThan(MARCH_BUDGET)
+    expect(r.ms).toBeLessThan(MARCH_BUDGET)
+    expect(r.layer).toBeLessThan(LAYER_BUDGET)
   })
 })

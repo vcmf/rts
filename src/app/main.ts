@@ -124,6 +124,7 @@ async function main(): Promise<void> {
     for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
   }
 
+  const stepMen = (group: number, d: number) => layer.step(d, acc / DT, group, menClock.groups)
   // the frame: ticks owed at the game speed, then the men due on their clock, then the drawing
   const advance = (dt: number) => {
     const g = dt * speed
@@ -136,7 +137,7 @@ async function main(): Promise<void> {
       n++
     }
     if (n === 20) acc = 0
-    for (const s of menClock.advance(dt, speed)) layer.step(s.dt, acc / DT, s.group, menClock.groups)
+    menClock.advance(dt, speed, stepMen)
     // the map draws the anchors at this frame's alpha, whether or not a sub-step was due
     layer.alphaNow = acc / DT
     simMs = simMs * 0.9 + (performance.now() - a) * 0.1
