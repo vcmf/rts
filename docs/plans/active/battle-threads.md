@@ -283,6 +283,24 @@ tile) is no sim map. Two PRs, then PR 4.
   this PR states the look page's frame with and without the worker, by zoom, rather than owning the whole bar.
 - **Stop**: if the attributes cost more GPU than the matrices did, keep the matrices built on the main thread from the
   shared frame, and say so.
+- **Started 2026-10-26** (the owner: "kick off pr4"), on PR 4b's `?sim`. **Baseline**, traced (`?benchtrace=1`,
+  `?armies=40&benchat=162.5,-2.5`, Metal, the preview build), per frame mean / p95: the thin-instance uploads (`tiMs`)
+  **9.0 / 19.9 ms** at `?sim` against 0.07 / 0.05 for the script; 53 / 73 uploads, 732 / 942 KB; placing the men
+  (`placeMs`) 0.56 / 0.67 ms. The uploads are the whole of the sim's extra cost: each battalion placed sends its men's
+  64 B matrix, 12 B clip and 12 B move to every LOD mesh it is drawn or cast with, each a buffer of its own.
+- **Approach**:
+  1. **Spike** (first, measured, kept only if it works): one GPU buffer per battalion and attribute, shared by its LOD
+     meshes, so a battalion placed is one upload per attribute, not one per mesh (Babylon keeps thin-instance buffers
+     per mesh: a shared `Buffer` behind each mesh's instanced `VertexBuffer`).
+  2. **A 16 B pose** (x, y, z, yaw) per man in place of the 64 B matrix in the figure, depth, proxy and decal shaders
+     (the world matrix built in the vertex shader); no move uploaded at `?sim` (stepped: none between steps).
+  3. Later, not this PR: the men worker writes each man's pose and clip into the frame, the page copies them.
+- **Acceptance** (that bench, interleaved with the script, two rounds): at `?sim`, the uploads' KB a frame under a
+  quarter of the baseline's and their time (`tiMs`) under 1 ms mean; the frame p95 no worse than the script's at
+  every zoom; the GPU frame within 5 % of before; the script's page unchanged (its bench, and `tools/golden.mjs` on
+  the look page's views).
+- **Stop**: the spike's sharing not possible without a per-mesh upload: keep per-mesh buffers with the 16 B pose
+  alone (step 2), and say so.
 
 ## PR 5 and PR 6: only if measured
 
