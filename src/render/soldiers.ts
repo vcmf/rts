@@ -371,25 +371,23 @@ export class SoldierLayer {
     }
   }
 
-  // one frame: sync, then every man steers to his place
-  step(dt: number, alpha: number): void {
+  /**
+   * One step: sync, then the men of one group of battalions (slot `i % groups === group`) steer to their places for
+   * `dt` seconds of game time. The neighbour grid is rebuilt at group 0, so a full round of groups shares one grid,
+   * as one ungrouped step does (each man pushed by where the others stood when the round began).
+   */
+  step(dt: number, alpha: number, group = 0, groups = 1): void {
     this.alphaNow = alpha
     this.sync(alpha)
-    const w = this.w
-    const f = w.f
-    const t = w.terrain
+    if (group === 0) this.buildGrid()
+    this.steer(dt, alpha, group, groups)
+  }
+  // the neighbour grid: cells and linked lists in typed arrays, with the men's positions as it is built
+  private buildGrid(): void {
+    const t = this.w.terrain
     const x0 = t.x0
     const z0 = t.z0
-    const xMax = x0 + (t.n - 1) * t.cell
-    const zMax = z0 + (t.n - 1) * t.cell
     const SN = this.SN
-    const p = [0, 0, 0]
-    const TA = this.treeAt
-    const TX = this.treeX
-    const TZ = this.treeZ
-    const TR = this.treeR
-    // neighbour grid: cells and linked lists in typed arrays, rebuilt every frame, with the positions as the
-    // frame began (each man is pushed by where the others stood, whatever order they move in)
     for (const c of this.touched) this.cellHead[c] = -1
     this.touched.length = 0
     this.nFlat = 0
@@ -411,6 +409,21 @@ export class SoldierLayer {
         }
       }
     }
+  }
+  private steer(dt: number, alpha: number, group: number, groups: number): void {
+    const w = this.w
+    const f = w.f
+    const t = w.terrain
+    const x0 = t.x0
+    const z0 = t.z0
+    const xMax = x0 + (t.n - 1) * t.cell
+    const zMax = z0 + (t.n - 1) * t.cell
+    const SN = this.SN
+    const p = [0, 0, 0]
+    const TA = this.treeAt
+    const TX = this.treeX
+    const TZ = this.treeZ
+    const TR = this.treeR
     const tt = w.meta[M_TICK] * DT * 0.35
     const X = this.flatX
     const Z = this.flatZ
@@ -418,6 +431,7 @@ export class SoldierLayer {
     const next = this.cellNext
     for (const u of this.units.values()) {
       const i = u.i
+      if (i % groups !== group) continue
       this.frame(i, alpha)
       const busy = !!(f.trans[i] || f.ordHead[i] >= 0)
       // sway eases out at the halt, so the ranks come to rest

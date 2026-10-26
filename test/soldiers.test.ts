@@ -4,32 +4,38 @@ import { describe, it, expect } from 'vitest'
 import { Sim, STREAM_X, longIt, ceiling, small, openBattlefield, OPEN_DATA } from './fx.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer } from '../src/render/soldiers.ts'
+import { MenClock, MEN_DT, MEN_GROUPS, MEN_HZ, type MenStep } from '../src/render/men-clock.ts'
 import { occupied, advanceTick, MS_SHATTERED, type Meter } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
-// the sim at 20 Hz, frames at 30 Hz, as the page runs them
-// (`dt`: the soldier layer's step; the page's 8× takes 0.2 s steps, MEN_STEPS in src/app/main.ts)
+// the sim at 20 Hz, real frames at 60 Hz and the soldier layer on its clock (src/render/men-clock.ts), as the page
+// runs them, at `speed`
 class Play {
   sim: Sim
   layer: SoldierLayer
+  clock = new MenClock()
   acc = 0
-  dt: number
-  constructor(sim = new Sim(), dt = 1 / 30) {
+  speed: number
+  constructor(sim = new Sim(), speed = 1) {
     this.sim = sim
-    this.dt = dt
+    this.speed = speed
     this.layer = new SoldierLayer(sim.w, buildScene(sim.w))
   }
-  // `sec` exactly, in frames of `dt` (the last one shorter); the layer syncs after every tick, as the page does
+  // `sec` of game time exactly, in real frames of 1/60 s (the last one shorter); the layer syncs after every tick,
+  // as the page does
   frames(sec: number): void {
-    for (let left = sec; left > 1e-9; left -= this.dt) {
-      const d = Math.min(this.dt, left)
-      this.acc += d
+    const real = 1 / 60
+    for (let left = sec; left > 1e-9; left -= real * this.speed) {
+      const d = Math.min(real, left / this.speed)
+      this.acc += d * this.speed
       while (this.acc >= 0.05 - 1e-9) {
         this.sim.tick()
         this.layer.sync(0, this.sim.takeDeparted())
         this.acc -= 0.05
       }
-      this.layer.step(d, this.acc / 0.05)
+      for (const s of this.clock.advance(d, this.speed)) {
+        this.layer.step(s.dt, this.acc / 0.05, s.group, this.clock.groups)
+      }
     }
   }
   // worst slot error sampled every 0.5 s while `sec` pass
@@ -247,15 +253,15 @@ describe('who stands where', () => {
   })
 })
 
-describe('at 8× (0.2 s soldier steps)', () => {
+describe('at 8× (rounds at 64 Hz, MEN_DT steps)', () => {
   it("the men keep up through a march column's turn and the wood, and never enter deep water", () => {
-    const b = new Play(new Sim(), 0.2)
+    const b = new Play(new Sim(), 8)
     const hb = b.sim.spawn(-20, -40, 0)
     b.sim.order({ type: 'form', id: hb, shape: 'march' })
     b.frames(22)
     b.sim.order({ type: 'move', id: hb, points: [[b.sim.x(hb) + 60, b.sim.z(hb) + 30]], append: false })
     const mt = b.worst(60)
-    const c = new Play(new Sim(), 0.2)
+    const c = new Play(new Sim(), 8)
     const hc = c.sim.spawn(-45, 55 - 30 - 12, 0)
     c.sim.order({
       type: 'move',
@@ -267,7 +273,7 @@ describe('at 8× (0.2 s soldier steps)', () => {
       append: false,
     })
     const wd = c.worst(200)
-    const r = new Play(new Sim(), 0.2)
+    const r = new Play(new Sim(), 8)
     const hr = r.sim.spawn(40, -30, Math.PI / 2)
     r.sim.order({ type: 'move', id: hr, points: [[110, -30]], append: false })
     let wet = 0
@@ -280,6 +286,60 @@ describe('at 8× (0.2 s soldier steps)', () => {
     expect(wd.max).toBeLessThan(6)
     expect(wd.mean).toBeLessThan(1.2)
     expect(wet).toBe(0)
+  })
+  // steps over 1/8 s (one 2/3 s step a round at 8×, or 1/3 s) let halted men in the wood jitter 0.1–1.3 m: the
+  // arrival damping (1 − 8·dt) is gone at 1/8 s. Why MEN_DT caps a step
+  longIt('halted in the wood, no man moves more than 0.05 m in 10 s', () => {
+    const p = new Play(new Sim(), 8)
+    const h = p.sim.spawn(-45, 55 - 30 - 12, 0)
+    p.sim.order({ type: 'move', id: h, points: [[-51, 61]], append: false })
+    p.frames(240)
+    expect(p.sim.busy(h)).toBe(false)
+    const before = p.men(h).map(m => [m.x, m.z])
+    p.frames(10)
+    const moved = Math.max(...p.men(h).map((m, k) => Math.hypot(m.x - before[k][0], m.z - before[k][1])))
+    expect(moved).toBeLessThanOrEqual(0.05)
+  })
+})
+
+describe('the soldier clock', () => {
+  const run = (sec: number, frame: number, speed: number) => {
+    const c = new MenClock()
+    const steps: MenStep[] = []
+    for (let t = 0; t < sec - 1e-9; t += frame) steps.push(...c.advance(frame, speed))
+    return steps
+  }
+  it('at 1× each group steps 12 times a real second, whatever the frame rate, and covers the game time', () => {
+    for (const fps of [60, 120, 144]) {
+      const steps = run(2, 1 / fps, 1)
+      for (let g = 0; g < MEN_GROUPS; g++) {
+        const mine = steps.filter(s => s.group === g)
+        expect({ fps, g, n: Math.abs(mine.length - 2 * MEN_HZ) <= 1 }).toEqual({ fps, g, n: true })
+        // up to the group's last step, at most a round before the end
+        const covered = mine.reduce((a, s) => a + s.dt, 0)
+        expect({ fps, g, covered: covered <= 2 + 1e-9 && covered > 2 - 1 / MEN_HZ - 1e-9 }).toEqual({
+          fps,
+          g,
+          covered: true,
+        })
+      }
+    }
+  })
+  it('the groups take turns, one sub-step at a time', () => {
+    const steps = run(1, 1 / 120, 1)
+    expect(steps.slice(0, 2 * MEN_GROUPS).map(s => s.group)).toEqual([...Array(2 * MEN_GROUPS)].map((_, k) => k % 8))
+  })
+  it('above 4× the rounds come faster, no step longer than MEN_DT; paused, none', () => {
+    const steps = run(1, 1 / 120, 8)
+    expect(Math.max(...steps.map(s => s.dt))).toBeLessThanOrEqual(MEN_DT + 1e-9)
+    expect(steps.reduce((a, s) => a + s.dt, 0) / MEN_GROUPS).toBeCloseTo(8, 0)
+    expect(run(1, 1 / 120, 0)).toEqual([])
+  })
+  it('a long frame owes at most one round', () => {
+    const c = new MenClock()
+    c.advance(1 / 120, 1)
+    expect(c.advance(1, 1).length).toBe(MEN_GROUPS)
+    expect(c.advance(1 / 120, 1).length).toBeLessThanOrEqual(1)
   })
 })
 
@@ -316,7 +376,7 @@ describe.skipIf(process.env.CI)('cost', () => {
           p.layer.sync(0)
           p.acc -= 0.05
         }
-        p.layer.step(1 / 60, p.acc / 0.05)
+        for (const s of p.clock.advance(1 / 60, 1)) p.layer.step(s.dt, p.acc / 0.05, s.group, p.clock.groups)
       }
       windows.push(Number(process.hrtime.bigint() - t0) / 1e6 / 120)
     }
@@ -361,7 +421,7 @@ describe.skipIf(process.env.CI)('cost', () => {
             p.layer.sync(0)
             p.acc -= 0.05
           }
-          p.layer.step(1 / 60, p.acc / 0.05)
+          for (const s of p.clock.advance(1 / 60, 1)) p.layer.step(s.dt, p.acc / 0.05, s.group, p.clock.groups)
         }
         windows.push(Number(process.hrtime.bigint() - t0) / 1e6 / 120)
       }
