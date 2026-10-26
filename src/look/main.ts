@@ -502,6 +502,8 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dar
 // infantry (about 400 a battalion, decision 0018) that march up in column, deploy and fire on a scripted loop, drawn
 // as figures (src/look/units.ts); ?unitshadow=0: without their cast shadows (decision 0047's A/B). Not on the page by
 // default: the goldens and the look checks never see them
+// ?coat=<uniform id>:<#hex>[;…] (with ?armies): a test switch, those uniforms' coats swapped (world/armies.ts
+// coatOverride: the near and far palettes and the far rule follow; the flags keep theirs)
 const armiesParam = params.get('armies')
 const unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
@@ -595,13 +597,14 @@ if (armiesParam !== null) {
   if (mats.webgl1) {
     throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
   }
-  const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt }, { RULESETS }, { ARMIES_DEMO }] = await Promise.all([
-    import('./units.ts'),
-    import('./units-data.ts'),
-    import('./world/armies.ts'),
-    import('../rulesets/index.ts'),
-    import('../scenarios/armies-demo.ts'),
-  ])
+  const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt, coatOverride }, { RULESETS }, { ARMIES_DEMO }] =
+    await Promise.all([
+      import('./units.ts'),
+      import('./units-data.ts'),
+      import('./world/armies.ts'),
+      import('../rulesets/index.ts'),
+      import('../scenarios/armies-demo.ts'),
+    ])
   if (tinyPxParam !== null && +tinyPxParam >= UnitsC.LOD_PX) {
     throw new Error(`?tinypx must be under the far LOD's switch (${UnitsC.LOD_PX} px), not ${tinyPxParam}`)
   }
@@ -663,7 +666,7 @@ if (armiesParam !== null) {
     decodeUnits(await r.arrayBuffer()),
     drill,
     layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides),
-    era.uniforms,
+    coatOverride(params.get('coat'), era.uniforms),
     () => S.t,
     { tinyPx: tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined },
   )

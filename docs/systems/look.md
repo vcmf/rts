@@ -705,7 +705,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the near band (`FAR_FROM`), with the trees' and
   hills' shadow on it halved and a warm rim on what faces up (`FAR`); under 'own' the far figure keeps its own. Unset,
   a coat under luminance 0.18 (Rec. 709 on linear sRGB, a mid grey: `FAR_COAT_BELOW`) takes 'coat'. `?farpal=0|1`
-  forces the rule off or on for every uniform.
+  forces the rule off or on for every uniform. `?coat=<uniform id>:<#rrggbb>[;…]` (a test switch, `coatOverride`)
+  swaps those uniforms' coats: the near palette, the far palette and the far rule follow the new coat, the flag keeps
+  its colours; a malformed entry or an unknown uniform throws.
 - **The tiny LOD** (`docs/plans/active/armies-32k.md`, step 3, experimental; `?tinylod=0`: none, `?tinypx=<px>`: its
   switch): a man whose figure falls under 12 px tall draws the far LOD's parts as boxes instead, each man at his own
   height in the 9.6 to 15 px band (the LOD cross-fade, below; `?lodfade=0`: a battalion under 12 px, ±10 %; `tinyMesh`,
