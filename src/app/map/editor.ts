@@ -20,7 +20,7 @@
 // Tested in test/map-editor.test.ts.
 import type { Catalogue, Feature, MapFile, Pt, RefName, ShapeName } from '../../map/schema.ts'
 import { kindMetaOf, type KindMeta } from '../../map/catalogue.ts'
-import { featureKind, validate, type Issue } from '../../map/validate.ts'
+import { featureKind, presetsOf, validate, type Issue } from '../../map/validate.ts'
 import { sameJson, writeMap, writerFrom, type FeatureWriter } from '../../map/write.ts'
 import {
   handleAt,
@@ -57,6 +57,7 @@ import {
   stepOf,
   type Draft,
 } from './draw.ts'
+import { setField } from './fields.ts'
 
 /** What the editor needs from the page. */
 export interface Host {
@@ -96,6 +97,11 @@ interface Drawing {
   old: Feature | null
 }
 type Mode = { kind: 'idle' } | Press | Drawing
+/** A step of the history: the copy, and the selection it had (a feature brought back by an undo is selected again). */
+interface Snapshot {
+  doc: MapFile
+  selected: string | null
+}
 
 const DRAG_PX = 4 // a press that moves less is a click
 const SNAP_PX = 14 // a barrier's point snaps to a valid place within this many pixels
@@ -138,7 +144,7 @@ export class Editor {
   message = ''
   private host: Host
   private mode: Mode = { kind: 'idle' }
-  private history = new History<MapFile>()
+  private history = new History<Snapshot>()
   private hover: Handle | null = null
   private cat: Catalogue | null = null
   /** The copy as the file holds it (parsed from `base`): unsaved edits are a difference from it. */
@@ -165,6 +171,7 @@ export class Editor {
     // what the copy's selection is drawn as follows the new catalogue (the page's list comes with the compile)
     this.found = cat && this.doc ? validate(this.doc, cat) : []
     this.host.redraw()
+    this.host.changed() // the form's rows, hints and problems follow the catalogue
   }
 
   /**
@@ -333,9 +340,10 @@ export class Editor {
     this.message = mine ? `now wrong: [${mine.id}] ${mine.path ? `${mine.path}: ` : ''}${mine.message}` : ''
   }
   /** Makes an edit: the copy before it goes into the history, the copy is checked, compiled and drawn. */
-  private commit(doc: MapFile, edited: string | null): void {
-    this.history.push(this.doc!)
+  private commit(doc: MapFile, edited: string | null, select = this.selected): void {
+    this.history.push({ doc: this.doc!, selected: this.selected })
     this.doc = doc
+    this.selected = select
     this.check(edited)
     this.hoverAt() // the handle now under the pointer: the old one's indices may be the old shape's
     this.host.recompile()
@@ -531,22 +539,28 @@ export class Editor {
       this.host.changed()
       return
     }
-    this.selected = null
-    this.commit({ ...this.doc, features: this.doc.features.filter(x => x !== f) }, null)
+    this.commit({ ...this.doc, features: this.doc.features.filter(x => x !== f) }, null, null)
   }
   undo(): void {
     if (!this.doc || !this.ready()) return
-    const d = this.history.undo(this.doc)
+    const d = this.history.undo({ doc: this.doc, selected: this.selected })
     if (d) this.restore(d)
   }
   redo(): void {
     if (!this.doc || !this.ready()) return
-    const d = this.history.redo(this.doc)
+    const d = this.history.redo({ doc: this.doc, selected: this.selected })
     if (d) this.restore(d)
   }
-  private restore(d: MapFile): void {
-    this.doc = d
+  /**
+   * Back or forward to a step: its copy. The selection stays where it is (one the step takes away goes); with none, a
+   * feature the step brings back that was selected when it was taken is selected again (a deletion undone).
+   */
+  private restore(step: Snapshot): void {
+    const back = step.selected && !this.feature(step.selected) ? step.selected : null
+    this.doc = step.doc
     if (this.selected && !this.feature(this.selected)) this.selected = null
+    if (!this.selected && back && this.feature(back)) this.selected = back
+    this.hover = null
     this.check(this.selected)
     this.hoverAt()
     this.host.recompile()
@@ -574,9 +588,54 @@ export class Editor {
     this.begin(startDraft(f, drawSteps(meta!, shape)), null)
     return true
   }
+  /** Whether an edit may be made now (of `f`, a feature; null: of the map); says why not (a refusal always does). */
+  private canEdit(f: Feature | null | undefined): boolean {
+    if (!this.enabled) this.note('editing needs the dev server (npm run dev)')
+    else if (!this.doc) this.note(`the file cannot be edited: ${this.readOnly}`)
+    else if (f === undefined) this.note('no feature is selected')
+    else return this.ready()
+    return false
+  }
+  /**
+   * The fields (M7c): one edit each, judged by the validator at once like any other. Each returns whether it changed
+   * the copy: true, false when it was refused (the message says why), null when there was nothing to change. A field of
+   * the selection set, or removed (`undefined`: it inherits). Its id is not one: a feature's id is set when it is made,
+   * and renamed in the file (an id is also what seeds its generator and names its children).
+   */
+  setField(key: string, value: unknown): boolean | null {
+    const f = this.selected ? this.feature(this.selected) : undefined
+    if (!this.canEdit(f) || !f || !this.doc || !this.editable(f)) return false
+    if (key === 'id') {
+      this.note('an id is set when its feature is made: rename it in the file')
+      return false
+    }
+    const g = setField(f, key, value)
+    if (sameJson(g, f)) return null
+    this.commit(this.replace(this.doc, g), f.id)
+    return true
+  }
+  /** A field of the map set, or removed; not its features (each its own edits) nor its id (it names its file). */
+  setMapField(key: string, value: unknown): boolean | null {
+    if (!this.canEdit(null) || !this.doc) return false
+    if (key === 'features' || key === 'id') {
+      this.note(
+        key === 'id' ? "a map's id names its file: it is set when the map is made" : 'features are edited one by one',
+      )
+      return false
+    }
+    // the field alone is compared (not the whole map, its features with it)
+    if (sameJson(value, (this.doc as unknown as Record<string, unknown>)[key])) return null
+    this.commit(setField(this.doc, key, value), null)
+    return true
+  }
+  /** What the validator found in the copy at the last edit. */
+  get issues(): Issue[] {
+    return this.found
+  }
+
   /** A feature's kind's metadata (its kind its own or its preset's), or null when the catalogue has none. */
   metaOf(f: Feature): KindMeta | null {
-    const kind = featureKind(f, (this.doc?.presets ?? {}) as Record<string, Record<string, unknown>>)
+    const kind = this.doc ? featureKind(f, presetsOf(this.doc)) : undefined
     return this.cat && kind ? kindMetaOf(this.cat, kind) : null
   }
   /** Sets one reference of the selection again by clicking its target. Returns whether it started; says why not. */
@@ -643,8 +702,7 @@ export class Editor {
       this.host.redraw()
     } else if (m.old) this.commit(this.replace(doc, f, m.old), f.id)
     else {
-      this.selected = f.id
-      this.commit({ ...doc, features: [...doc.features, f] }, f.id)
+      this.commit({ ...doc, features: [...doc.features, f] }, f.id, f.id)
     }
     this.settle()
   }

@@ -13,7 +13,7 @@
   #map:active { cursor: grabbing; }
   #map:focus { outline: none; }
   .card { position: fixed; padding: 12px 14px; background: rgba(246, 243, 236, .95); border: 1px solid var(--rule); border-radius: 4px; }
-  #panel { top: 16px; left: 16px; width: 300px; }
+  #panel { top: 16px; left: 16px; width: 300px; max-height: calc(100vh - 56px); overflow-y: auto; box-sizing: border-box; }
   #panel .t { font: 700 20px/1 var(--display); margin-bottom: 8px; }
   #status { color: var(--ink-2); font-size: 11px; margin: 6px 0; }
   label { margin-right: 12px; color: var(--ink-2); }
@@ -34,8 +34,17 @@
   #drawPrompt { color: #1a70c0; margin: 4px 0; }
   #drawPrompt:empty, #refs:empty { display: none; }
   #refs { margin: 4px 0; }
-  #selection { max-height: 30vh; overflow: auto; margin: 6px 0 0; font-size: 10px; white-space: pre-wrap; word-break: break-all; }
-  #readout { bottom: 16px; left: 16px; white-space: pre; min-width: 260px; }
+  #form { margin: 6px 0 0; outline: none; }
+  #form input:read-only:not([type=checkbox]), #form textarea:read-only { color: var(--ink-2); background: transparent; }
+  #form .row { display: grid; grid-template-columns: 9em 1fr; gap: 0 6px; margin: 2px 0; color: var(--ink); }
+  #form .row .k { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #form .row input, #form .row select { font: inherit; min-width: 0; }
+  #form .row .hint, #form .row .bads { grid-column: 2; font-size: 10px; }
+  #form .row .hint { color: var(--ink-3); }
+  #form .bad { display: block; color: var(--bad); font-size: 10px; }
+  #form textarea { font: inherit; min-width: 0; }
+  #form textarea.json { width: 100%; box-sizing: border-box; font: 10px/1.3 var(--mono); margin-top: 6px; }
+  #readout { bottom: 16px; right: 16px; white-space: pre; min-width: 260px; }
   #readout:empty { display: none; }
   @media (max-width: 640px) { #panel { left: 8px; right: 8px; width: auto; } }
 </style>
@@ -73,7 +82,7 @@
       <label>season <select id="newSeason"></select></label>
       <button id="newMake">make</button></details>
     <div class="hint">click selects · drag a handle or the shape · double-click adds a point · Delete removes the point under the pointer, or the feature · Esc clears · drawing: Enter ends a line or an area, Backspace takes a click back, Esc drops it</div>
-    <pre id="selection" hidden></pre>
+    <div id="form" tabindex="-1"></div>
   </div>
   <div id="errbox" hidden><div class="cap">The file has errors; the last good drawing stays.</div><ul id="errors"></ul></div>
 </div>

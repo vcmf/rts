@@ -5,7 +5,7 @@
 // tests call it. Assumes a valid map (src/map/validate.ts).
 import type { AttrValue, Catalogue, Feature, MapFile, Season } from './schema.ts'
 import { RESERVED } from './schema.ts'
-import { kindChain, kindMeta, kindSeason, kindStates } from './catalogue.ts'
+import { kindChain, kindMeta, kindSeason, kindStates, presetsOf } from './catalogue.ts'
 
 export interface Resolved {
   id: string
@@ -21,8 +21,8 @@ export function resolve(
   season: Season = map.season,
   state: string | undefined = f.state,
 ): Resolved {
-  const preset = f.preset ? map.presets![f.preset] : undefined
-  const kind = f.kind ?? preset!.kind
+  const preset = f.preset ? presetsOf(map)[f.preset] : undefined
+  const kind = f.kind ?? (preset!.kind as string)
   const chain = kindChain(cat, kind)
   if (!chain) throw new Error(`${f.id}: unknown kind ${kind} (validate the map first)`)
   const own = (o: Record<string, unknown>, skip: readonly string[]): Record<string, AttrValue> =>

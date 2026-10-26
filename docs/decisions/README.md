@@ -91,3 +91,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0064](0064-lit-view-flat-plane-baked-in-the-worker.md) | The lit map view is one flat plane in Babylon, its bakes made in the compile worker | accepted |
 | [0065](0065-map-ink-as-distance-fields-houses-as-boxes.md) | The lit map draws from the cells, its edges smoothed by distance fields; its houses are lit boxes | accepted |
 | [0066](0066-editor-writes-the-intent-file-in-place.md) | The editor edits the intent file in the page and saves only what changed, through the dev server | accepted |
+| [0067](0067-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |

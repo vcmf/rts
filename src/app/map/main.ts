@@ -18,6 +18,7 @@ import { Editor } from './editor.ts'
 import { ovalRing } from './edit.ts'
 import { newestOnly } from './latest.ts'
 import { proposeId } from './draw.ts'
+import { Form } from './form.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -88,7 +89,7 @@ const overlaySelect = $<HTMLSelectElement>('overlay')
 const overlayHint = $('overlayHint')
 const mode = $<HTMLSelectElement>('mode')
 const editState = $('editState')
-const selection = $('selection')
+const formBox = $('form')
 const saveButton = $<HTMLButtonElement>('save')
 const undoButton = $<HTMLButtonElement>('undo')
 const redoButton = $<HTMLButtonElement>('redo')
@@ -186,7 +187,8 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
     return
   }
   if (r.ok) {
-    const fresh = !current || current.map.id !== r.map.id
+    // another map (the list cleared `current`): fitted to the view; the same one again keeps the view
+    const fresh = !current
     issues = []
     layers = Object.fromEntries(Object.entries(r.layers).map(([k, b]) => [k, new Uint16Array(b)]))
     height = new Float64Array(r.height)
@@ -370,11 +372,21 @@ const editor = new Editor({
   redraw,
   changed: () => editPanel(),
 })
+// the selection's fields, or the map's (M7c)
+/** Why an id cannot be a new map's (it names the map's file: the save's rule), or '' when it can. */
+function mapIdProblem(id: string): string {
+  if (!ID.test(id)) return 'its id names its file: lower-case letters and digits, in words joined by "-"'
+  return [...picker.options].some(o => o.value === `/maps/${id}.map.json`) ? `a map ${id} exists` : ''
+}
+const form = new Form(formBox, editor)
+// Text typed in the form and not applied yet: a press on another control takes the focus from the field, whose change
+// applies it; a press on the map does not wait for that (its drag would start first), so it applies it itself (below).
+// The undo and redo buttons keep the focus where it is, so the text stays typed, for the copy they bring back.
+for (const b of [undoButton, redoButton]) b.addEventListener('mousedown', e => e.preventDefault())
 /** The editor's part of the panel: the selection, unsaved edits, the save's state, a conflict with the disk. */
 function editPanel(): void {
   const f = editor.selected ? editor.feature(editor.selected) : undefined
-  selection.textContent = f ? JSON.stringify(f).slice(0, 4000) : ''
-  selection.hidden = !f
+  form.update(catalogue)
   const dirty = editor.dirty
   editState.textContent = !editor.enabled
     ? 'editing needs the dev server (npm run dev)'
@@ -700,6 +712,7 @@ function hover(sx: number, sy: number): void {
 let drag: { at: Pt; sx: number; sy: number; edit: boolean; id: number } | null = null
 canvas.addEventListener('pointerdown', e => {
   if (drag) return
+  form.flush() // text typed in a field first, before a drag can start
   const edit = overlaySelect.value !== 'sight' && editor.down(e.offsetX, e.offsetY)
   drag = { at: toWorld(e.offsetX, e.offsetY), sx: e.offsetX, sy: e.offsetY, edit, id: e.pointerId }
   try {
@@ -768,7 +781,7 @@ picker.addEventListener('change', () => {
     editor.note('finish the drawing or the drag first')
     return
   }
-  if (editor.dirty && !confirm('The map has unsaved edits. Drop them and open another map?')) {
+  if ((editor.dirty || form.holding) && !confirm(`${unsavedWork()} Drop it and open another map?`)) {
     picker.value = editor.file!
     return
   }
@@ -801,13 +814,17 @@ addEventListener('keydown', e => {
   // not while typing text; Delete and Escape only on the map (not on a focused list, box or button), the shortcuts
   // with Cmd or Ctrl from anywhere else
   const target = e.target as HTMLElement
-  if (target.closest?.('textarea, input:not([type=checkbox]):not([type=radio]):not([type=button])')) return
-  const onMap = target === document.body || target === canvas
   const mod = e.metaKey || e.ctrlKey
   const key = e.key.toLowerCase()
+  const typing = !!target.closest?.('textarea, input:not([type=checkbox]):not([type=radio]):not([type=button])')
+  // in a field of the form: Cmd or Ctrl S applies what it holds and saves; Z and Y are the field's own text undo while
+  // it holds text not applied, else the map's. Any other field (the add box, the new map's) keeps the browser's keys
+  const inForm = formBox.contains(target)
+  if (typing && !(inForm && mod && (key === 's' || ((key === 'z' || key === 'y') && !form.holds(target))))) return
+  const onMap = target === document.body || target === canvas
   if (mod && key === 's') {
     e.preventDefault()
-    void editor.save()
+    saveAll()
   } else if (mod && key === 'z') {
     e.preventDefault()
     if (e.shiftKey) editor.redo()
@@ -827,7 +844,21 @@ addEventListener('keydown', e => {
     else editor.remove()
   }
 })
-saveButton.addEventListener('click', () => void editor.save())
+/**
+ * Saves what the fields hold too: their text first; text one refuses is not in the copy, so the page does not save
+ * as if it were.
+ */
+/** What would be lost by leaving the map: its unsaved edits, text typed in a field and not applied. */
+function unsavedWork(): string {
+  const what = [editor.dirty ? 'unsaved edits' : '', form.holding ? 'text typed in a field and not applied' : '']
+  return `The map has ${what.filter(Boolean).join(' and ')}.`
+}
+function saveAll(overwrite = false): void {
+  form.flush()
+  if (form.refused) editor.note('a field holds text it could not apply: mend it, or Escape drops it; not saved')
+  else void editor.save(overwrite)
+}
+saveButton.addEventListener('click', () => saveAll())
 addKind.addEventListener('change', shapeList)
 addGo.addEventListener('click', () => {
   // the map takes the drawing's keys (Enter, Backspace, Escape)
@@ -851,13 +882,9 @@ $('newMake').addEventListener('click', () => {
     ? 'making maps needs the dev server (npm run dev)'
     : !editor.idle
       ? 'finish the drawing or the drag first'
-      : !ID.test(id)
-        ? 'its id names its file: lower-case letters and digits, in words joined by "-"'
-        : [...picker.options].some(o => o.text === id)
-          ? `a map ${id} exists`
-          : ''
+      : mapIdProblem(id)
   if (why) return editor.note(`no new map: ${why}`)
-  if (editor.dirty && !confirm('The map has unsaved edits. Drop them and make a new map?')) return
+  if ((editor.dirty || form.holding) && !confirm(`${unsavedWork()} Drop it and make a new map?`)) return
   dropUnsavedNew()
   const file = `/maps/${id}.map.json`
   const doc: MapFile = {
@@ -883,10 +910,11 @@ $('newMake').addEventListener('click', () => {
 })
 undoButton.addEventListener('click', () => editor.undo())
 redoButton.addEventListener('click', () => editor.redo())
-$('overwrite').addEventListener('click', () => void editor.save(true))
+$('overwrite').addEventListener('click', () => saveAll(true))
 $('takeDisk').addEventListener('click', () => editor.takeDisk())
 addEventListener('beforeunload', e => {
-  if (editor.dirty) e.preventDefault()
+  // unsaved edits, or text typed in a field and not applied
+  if (editor.dirty || form.holding) e.preventDefault()
 })
 
 // a saved map file, catalogue or heightfield (vite.config.ts sends `map-changed` with the file and the time it was

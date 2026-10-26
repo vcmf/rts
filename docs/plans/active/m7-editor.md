@@ -7,7 +7,9 @@ last_reviewed: 2026-10-25
 
 Track M, on `epic/map-engine` (decision 0020). Phase M7 of `docs/proposals/map-engine.md` §10, step 3 of
 `docs/plans/active/one-map-austerlitz.md`. Several PRs into the epic (below); this plan covers them all and details
-each as it starts (M7a merged in #192; M7b below). M6d waits (the owner, 2026-10-25: `docs/plans/active/m6-lit-view.md`).
+each as it starts (M7a merged in #192, M7b in #199; M7c below). M7c as first planned (fields, generators, pinning,
+sources) is split in two here (M7a and M7b each needed a redesign; a smaller PR reviews better): M7c the fields, M7d
+generators and pinning; tracing becomes M7e. M6d waits (the owner, 2026-10-25: `docs/plans/active/m6-lit-view.md`).
 
 ## Problem
 
@@ -23,8 +25,9 @@ tools on top).
 |---|---|---|
 | **M7a** (done, #192) | Select a feature on the map; move it, move, add and remove its points, resize a circle or an ellipse, delete it; barriers snapped to the lattice in 8 directions; the edits compiled live from the page's memory; undo and redo; the stable save through the dev server | Every map in `maps/` written back unedited is byte for byte the same; one point moved changes one line; undo to the start and save gives the original bytes; the page check drags a point through pointer events and saves |
 | **M7b** | Create: a new map (id, name, size, seed, season); pick a kind from the catalogue and draw one of its shapes; ids proposed from the kind; references (`on`, `carries`, `crosses`, `along`, `near`) set by clicking their targets | A map drawn from scratch in the page validates, and its file round-trips with no diff but the edits (the phase's acceptance) |
-| **M7c** | The selected feature's fields as a form from the catalogue: attributes with their units, ranges and enums, ramps, seasons, state, priority, note, source; a generator's parameters with the expansion redrawn live; pinning a generated feature; the map's sources | Every attribute of the catalogue editable and checked as the validator checks it; a pinned child equals its expansion |
-| **M7d** | The tracing overlay: an image (a period map, a survey) placed under the lit view by matching points, its opacity a setting, stored beside the map as a source the compilers ignore | The 1805 map of Austerlitz placed over the real relief to within the image's own error |
+| **M7c** | The selected feature's fields as a form from the catalogue: kind, preset, priority, state, source, note, each attribute the kind's category takes (its unit, range and values shown, its inherited value as a hint), seasons and ramps as JSON; the feature as JSON to read; the map's own fields and sources with no selection. Ids are set when made and renamed in the file (a rename is an edit of identity: references, children, seeds) | Every attribute of the catalogue set through the form and judged as the validator judges it, its problem shown at its field |
+| **M7d** | A generator chosen for the selection and its parameters as a form, the expansion redrawn on each change; pinning a generated feature (its expanded form copied into the file) | A pinned child equals its expansion |
+| **M7e** | The tracing overlay: an image (a period map, a survey) placed under the lit view by matching points, its opacity a setting, stored beside the map as a source the compilers ignore | The 1805 map of Austerlitz placed over the real relief to within the image's own error |
 
 ## Decisions taken here (decision 0066)
 
@@ -315,11 +318,152 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
   shape and references valid.
 - `npm test`, `check:data`, the build and the docs check pass.
 
+## M7c in detail
+
+Decision 0066 holds: a form sets values, the validator judges them at once (no copy of the rules); each change is one
+edit. Decision 0067 (from the second redesign below): ids are set when a feature or a map is made, and renamed in the
+file.
+
+- `src/app/map/fields.ts` (pure, tested in `test/map-fields.test.ts`):
+  - `attrRows`: the attributes a feature's kind's category takes (`allowedIn`), in the catalogue's order, each with
+    its spec, the feature's own value, what it inherits and what the season or state makes it (`resolve`), for the
+    hints;
+  - `parseInput`: a field's text as a value by its spec's type: empty removes the field (it inherits); a number's
+    text that is no number is kept as text, for the validator to name; objects, ramps, seasons and lists as JSON (text
+    that is no JSON: no edit, and the panel says so);
+  - `setField`: a feature or the map with one field set or removed, the others in their order;
+  - `problemsAt`: the validator's problems whose path is a field's (`features[i].height`, `seed`).
+- `Editor`: `setField(key, value)`, `setMapField(key, value)`, each one edit and saying whether it changed the copy;
+  neither sets an id (renames are the file's, see the second redesign below).
+- The panel (`src/app/map/form.ts`): the selection's form, its text not applied held explicitly (applied on change
+  and before any command of the editor; refused, kept with why), the problems under their fields, the feature's JSON
+  below to read; with no selection the map's form.
+- The page check: sets a note and another feature's attribute through the form; the saved diff is those lines
+  alone.
+
+## Acceptance (M7c)
+
+- `test/map-fields.test.ts`: every attribute of the catalogue, on a kind whose category takes it, set from a good
+  text and from a bad one through `parseInput` and `setField`: the good gives no problem, the bad one at its field's
+  path (`problemsAt`).
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
+## Review rounds (M7c)
+
+- **Round 1** (`/code-review high`): severe. A new map renamed was compiled from its old file name (the page's list
+  still named it), which does not exist; a change applied as the focus moved on (a click, Tab) rebuilt the form, so
+  the field moved to was gone; an id emptied renamed the feature and its references to nothing, and the selection with
+  it. Fixed: the list moves first, so the compile reads the copy; the form is built again only when its fields change
+  and is otherwise given its values in place (a rename keeps it too); an empty id is refused. With them: a rename
+  follows a generating parent's children (`<id>-<n>` wherever named, a pinned child's own id); undo and redo of a
+  rename keep the selection on the feature; a refused change shows what the field still holds; a feature's problems
+  of no field (its shape, references, shared edges) show above its JSON; a new map is not renamed while its first
+  save is out; what an attribute inherits is `resolve`'s (its season and state too), not a copy of its order;
+  `renameFeature` compares with `sameJson`. Tests for each; the page check renames a new map and back, types an id in
+  use, and keeps the field the focus moved to.
+- **Round 2**: severe. A rename moved a parent's children onto ids in use (two features of one id, neither editable
+  after); it renamed references to an author's feature only named like a child (`farm-2` beside a parent with pinned
+  children); JSON refused after a click on "apply JSON" was replaced by the feature's. Fixed: only real children
+  follow (a generator's, which the validator keeps author ids off, or pinned ones by their recorded parent); a rename
+  whose ids would clash is refused (`newClashes`); refused JSON stays as typed. With them: a field typed in and not
+  applied is left as typed by a refresh from elsewhere; a new catalogue refreshes the form; each history step keeps
+  the selection it had (an undone rename or deletion selects its feature), no guess by place; a pinned child's record
+  of its generator's selectors follows a rename; the feature's JSON on one line, and given once a change; problems
+  under their input; one check of a new map's id.
+- **Round 3**: severe, the third. A value typed in a field was lost when the next press on the map began a drag before
+  the blur applied it; a JSON box marked typed stopped following the feature and could apply stale text over newer
+  edits; bad JSON in a field was replaced by the old value; a rename cleared what other fields held typed; Cmd S in
+  a field opened the browser's dialog; a new map's rename refitted the view; the hint did not say when a season
+  overrode the field. Stopped at the limit.
+- **Analysis** (the owner asked for it at the limit, as in M7a and M7b): of about 30 findings, about 10 were ordinary;
+  the rest fell in two classes every round found again. (1) The form's state: text typed and not applied was a second
+  state beside the editor's copy, synced by hand (rebuilds, typed flags, a counter of fills, focus restored, applied
+  on blur), and the JSON box was a second editor of the same feature competing with the fields; each fix made the
+  next finding. (2) The rename's scope: following every reference grew to generated and pinned children, their
+  selectors and recorded parameters, and each round found one more place an id lives. The owner chose all three
+  changes (2026-10-26); decision 0066 holds (they apply it). The review count restarts.
+- **Redesign**: (a) the text not applied is explicit (`pending`): a field shows the copy unless it holds some; it is
+  applied on change and before any command of the editor (a press outside the form, Cmd or Ctrl S, Z, Y); refused,
+  it stays with its reason until changed, or Escape drops it; the editor's commands say whether they changed the copy
+  (no counters). (b) The feature's JSON is to read and copy only. (c) A rename follows the feature's own id; a
+  feature with children is not renamed in the page (`hasChildren`), so no child id moves. With them: a new map
+  renamed keeps the view; the hint says what a season or state makes a field; Cmd S in a field applies and saves,
+  Cmd Z there is the field's text undo while it holds text; the page check takes the lines a rename changes from
+  `renameFeature` (any map), presses the map with text typed, and drops a refused id with Escape.
+- **Redesign, round 1**: severe. Cmd or Ctrl Z in any box of the page (a new map's id, the add box) undid the map's
+  last edit instead of the box's text. Fixed: only the form's fields take the map's keys. With it: the note of a
+  rename is forgotten at the next step, an undo or another map (a stale one kept another feature's text); a new map's
+  own id applied again changes nothing; an attribute of no known kind is read as JSON when it is, else as text, and
+  shown quoted; undo keeps the selection where it is, the step's only when the current one is gone from the copy;
+  every refusal says why (no stale message under a field); an enum with no values in a catalogue being edited no
+  longer breaks the form; a new map renamed keeps its history (`History.map`); one `presetsOf`.
+- **Redesign, round 2**: severe. Text refused in the map's form stayed when another map was opened or made, and could
+  then be applied to it; a note edited in a one-line field lost its line breaks. Fixed: the form's text belongs to
+  the file and the selection (`whose`), and goes with either; a note is a text box. With them: the form notes a
+  rename it applies itself, so the other fields' text stays through it (the editor's note came after the form's
+  refresh, and is gone); text of a field the form no longer has goes; an attribute of the catalogue the kind does not
+  take shows as not this kind's; a number field takes decimal text only (`0x20` stays text for the validator); a map
+  field is compared alone, a rename keeps a feature unless it named the old id (no whole-map comparisons); the id's
+  path runs its guards once.
+- **Redesign, round 3**: severe, the third. A rename re-seeded the feature's output: a generator's seed and the base
+  relief's noise are hashed from the id, so renaming a meandering brook redrew its course and renaming the base relief
+  rolled the whole map's ground again, while the saved diff showed only ids. With it: undo selected a feature after
+  Escape; the undo button applied text typed in a field and then undid it; notes were trimmed; a new map's rename
+  dropped the map form's text. Stopped at the limit.
+- **Second analysis** (as before, at the limit): the redesign's rounds found 3, 2 and 1 severe findings, in the same
+  two classes. The rename's scope found its fourth meaning of an id (references, children, recorded selectors, now
+  seeds): a rename is an edit of identity, not of one field. The form's state held (the explicit text not applied);
+  what remained were edges of history and selection. The owner chose to take renames out of the page (2026-10-26):
+  ids are set when a feature or a map is made and renamed in the file; a later PR may bring renames back once the
+  engine says what an id seeds (to warn that renaming redraws). The review count restarts.
+- **Second redesign**: `renameFeature`, `hasChildren`, `Editor.rename`, `renameMap` and the form's rename guard are
+  gone; the id fields are read-only (the map's always: it names its file). With it, round 3's others: undo keeps the
+  selection where it is, none staying none, and selects again only a feature it brings back that was selected when
+  its step was taken (a deletion undone); the undo and redo buttons and keys leave text typed in a field typed (to
+  apply to the copy they bring back), only a press elsewhere and a save apply it first; a note is kept as typed, its
+  spaces and line breaks too (`raw`).
+- **Second redesign, round 1**: severe. In a browser the undo button took the focus from a field holding text, whose
+  change then applied the text, and the undo reverted that instead of the edit before (the page check's synthetic
+  press moved no focus). Fixed: the undo and redo buttons keep the focus (their press does not take it), and the
+  page check tests that. With it: no save while a field holds text it refused (it is not in the copy), by Cmd or Ctrl
+  S or the button; the text is applied before a press on the map only (a press on another control takes the focus,
+  whose change applies it; the panel's scroll bar no longer applies half-typed text); `1e400` stays text; the JSON
+  box is written only when it changed (a part selected to copy stays); the form's feature view split, with doc
+  comments; `presetsOf` beside `featureKind` in the validator, used by the editor's modules; stale comments.
+- **Second redesign, round 2**: severe. A preset that is no object (`{"tall": null}`, typed in the map's form) threw
+  in the form, a drag and a reference's picking; a form built again (a kind changed with the arrow keys) left the
+  focus on the page, whose Backspace then deleted the selected feature. Fixed: `presetsOf` takes only the presets
+  that are objects, as the validator does; a form built again keeps the focus in its field, or in the form. With them:
+  the conflict's overwrite saves by the same rule (no save while a field holds refused text); closing the page asks
+  while a field holds text not applied; fields that cannot be set are read-only (their text can be copied), not
+  disabled; one `InputKind`; the problems of what the form shows are looked for once a refresh.
+- **Second redesign, round 3**: moderate and light only, so the review stops. Fixed: an undo bringing back a feature
+  that was selected leaves a selection made since alone (a field's text typed in it stays); opening or making another
+  map asks while a field holds text not applied, as closing the page does; the inherited hint is the kind's and the
+  preset's in the map's season (the feature's seasons and state are its own), each hint apart (a state the kind lacks
+  loses only the effective one); one notion of a map's presets (`presetsOf` in `src/map/catalogue.ts`: objects with a
+  text kind), read by `resolve` too; a refused field's text stays the field's while it is applied (no flash, the caret
+  kept); a new choice in a list is given in place (no rebuild); the feature's JSON cut at 20 000 characters; decision
+  0067 records the owner's choice on renames.
+
+## Results (M7c)
+
+- Every attribute of the catalogue set through the form's reading of text: good text gives no problem on a kind it
+  means something on, bad text one at its field (`test/map-fields.test.ts`).
+- The page check: a note and another feature's attribute set through the form change those two lines of the file;
+  text typed and not applied is kept through a refresh, applied before a press on the map, left typed by the undo
+  button, refused with why (and no save while refused); a form built again keeps the focus.
+- `npm test`, `check:data`, the build and the docs check pass.
+
 ## Open questions
+
+(M7c)
+- Renames in the page: a later PR, once the engine says what a feature's id seeds and names (its generator's output,
+  the base relief's noise, its children), so the editor can say what a rename redraws.
 
 (M7b)
 - A new map whose id another map took between its making and its first save is a conflict: overwrite that file or
-  take it. Saving the drawing under another id needs the map's own fields (M7c's form).
+  take it. Saving the drawing under another id needs renames in the page (above).
 - While drawing, each pointer move redraws the lit view to move the preview (one frame a displayed frame, as a drag
   does since M7a); to measure on Austerlitz, and to draw the overlay alone if it lags.
 

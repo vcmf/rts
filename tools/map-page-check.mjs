@@ -16,7 +16,10 @@
 //   6. a new map (M7b) made in the panel and drawn by clicks: a base, a meadow (an area), a stream (a line), a ford on
 //      it and a bridge (references by clicking their targets), a road, a hedge (a barrier) and a hill (a circle);
 //      saved, the new file must validate with no problem and read back unchanged, and one more feature saved must
-//      change one line. The new file is removed at the end.
+//      change one line. The new file is removed at the end;
+//   7. the fields form (M7c), on the map first opened: a note and another feature's attribute set through the form's
+//      inputs, the saved diff their lines alone, undone and saved back to the original bytes; text typed and not
+//      applied kept, applied before a press on the map, left typed by the undo button; JSON refused kept with why.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -219,6 +222,99 @@ try {
         return 'ZOOM ' + JSON.stringify({ kept, dirty: MAP.dirty })
       })()`,
     ],
+    // the fields form (M7c): a note on one feature, a ridge's width, through the form; save; undo both, save
+    [
+      'eval',
+      `(async () => {
+        const named = JSON.parse(MAP.text).features.filter(f => f.on || f.crosses || f.carries).map(f => [f.on, f.crosses, f.carries]).flat()
+        const target = JSON.parse(MAP.text).features.find(f => named.includes(f.id) && f.line)
+        const other = JSON.parse(MAP.text).features.find(f => f.kind === 'relief.ridge')
+        const q = key => document.querySelector('#form [data-key="' + key + '"]')
+        const field = (key, value) => {
+          const input = q(key)
+          if (!input) throw new Error('no field ' + key)
+          input.value = value
+          input.dispatchEvent(new Event('input'))
+          input.dispatchEvent(new Event('change'))
+        }
+        const escape = key => q(key).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        MAP.select(target.id)
+        // a note keeps its line breaks; an id is not edited in the page
+        field('note', 'used in 1805\\nsee the survey')
+        const noteKept = JSON.parse(MAP.text).features.find(f => f.id === target.id).note === 'used in 1805\\nsee the survey'
+        const idFixed = q('id').readOnly
+        // a kind changed: the form is built again, and the focus stays in it (on the page, Backspace would delete)
+        q('kind').focus()
+        field('kind', 'relief.ridge')
+        const focusInForm = document.getElementById('form').contains(document.activeElement)
+        document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }))
+        const notDeleted = JSON.parse(MAP.text).features.some(f => f.id === target.id)
+        MAP.undo()
+        MAP.select(other.id)
+        // JSON refused: the text stays as typed, with why, and Escape drops it
+        field('seasons', '{"winter": ')
+        const refused = q('seasons').value === '{"winter": ' && /not applied: .*no JSON/.test(q('seasons').closest('.row').textContent)
+        escape('seasons')
+        const dropped = q('seasons').value === ''
+        // a change applied as the focus moves on (Tab, a click): the next field is the same element after the edit
+        const next = q('height')
+        field('width', String((other.width ?? 100) + 7))
+        const kept = next.isConnected && q('height') === next
+        const noteBox = q('note').tagName === 'TEXTAREA'
+        const jsonRead = document.querySelector('#form textarea.json').readOnly
+        // text typed and not applied, then a press on the map: applied before the press acts
+        q('height').value = '33'
+        q('height').dispatchEvent(new Event('input'))
+        const c = document.getElementById('map'), b = c.getBoundingClientRect()
+        const ptr = { clientX: b.left + 5, clientY: b.top + b.height - 5, bubbles: true, pointerId: 1, isPrimary: true }
+        c.dispatchEvent(new PointerEvent('pointerdown', ptr))
+        c.dispatchEvent(new PointerEvent('pointerup', ptr))
+        const flushed = JSON.parse(MAP.text).features.find(f => f.id === other.id).height === 33
+        MAP.select(other.id)
+        MAP.undo()
+        // a field typed in and not applied is left as typed when the form is refreshed from elsewhere (an edit undone)
+        q('note').value = 'half typed'
+        q('note').dispatchEvent(new Event('input'))
+        field('height', '44')
+        MAP.undo()
+        const typedKept = q('note').value === 'half typed'
+        escape('note')
+        // Cmd Z in a box outside the form (the add box's id) is that box's own text undo, not the map's
+        const textBefore = MAP.text
+        const addId = document.getElementById('addId')
+        addId.focus()
+        addId.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true }))
+        const ownUndo = MAP.text === textBefore
+        addId.blur()
+        const ok = await MAP.save()
+        const disk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
+        const issues = MAP.issues.length
+        // Cmd S with text a field refused: no save (what the field shows is not in the copy)
+        field('seasons', '{"winter": ')
+        q('seasons').focus()
+        q('seasons').dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true, cancelable: true }))
+        const notSaved = /could not apply.*not saved/.test(document.getElementById('editState').textContent)
+        escape('seasons')
+        // the undo button with text typed in a field: the press keeps the focus in the field (no change applies the
+        // text), the edit before it is undone, the text stays typed
+        q('height').focus()
+        q('height').value = '55'
+        q('height').dispatchEvent(new Event('input'))
+        const undo = document.getElementById('undo')
+        const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+        undo.dispatchEvent(press)
+        undo.click()
+        const undoKeeps =
+          press.defaultPrevented &&
+          q('height').value === '55' &&
+          JSON.parse(MAP.text).features.find(f => f.id === other.id).width === other.width
+        escape('height')
+        MAP.undo()
+        const back = await MAP.save()
+        const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
+        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, target: target.id, other: other.id, noteKept, idFixed, refused, dropped, kept, noteBox, jsonRead, flushed, typedKept, ownUndo, undoKeeps, notSaved, focusInForm, notDeleted })
+      })()`,
+    ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
     [
       'eval',
@@ -396,6 +492,32 @@ try {
     seen.RESELECT.selected === seen.RESELECT.line,
     `with ${seen.RESELECT.area} selected, a click on ${seen.RESELECT.line} inside it selects ${seen.RESELECT.selected}`,
   )
+  await until('FIELDS')
+  const fl = seen.FIELDS
+  const changed = fl.disk.split('\n').filter((l, k) => l !== was[k])
+  const changedIds = changed.map(l => /"id": ?"([^"]+)"/.exec(l)?.[1]).sort()
+  check(
+    fl.ok &&
+      fl.issues === 0 &&
+      fl.disk.split('\n').length === was.length &&
+      JSON.stringify(changedIds) === JSON.stringify([fl.target, fl.other].sort()),
+    `through the form, ${fl.target}'s note and ${fl.other}'s width set: the lines of ${changedIds.join(', ')} changed`,
+  )
+  check(fl.back && fl.after === original, 'both undone and saved, the file is byte for byte the original')
+  check(fl.noteKept && fl.noteBox, 'a note is edited in a text box, its line breaks kept')
+  check(fl.idFixed, "a feature's id is read-only in the form (its text can be copied)")
+  check(
+    fl.focusInForm && fl.notDeleted,
+    'the form built again keeps the focus in it, and Backspace there deletes nothing',
+  )
+  check(fl.refused && fl.dropped, 'JSON a field refuses stays typed with why; Escape drops it')
+  check(fl.kept, 'the field the focus moved to is still the same after the edit the move applied')
+  check(fl.jsonRead, "the feature's JSON is to read only")
+  check(fl.ownUndo, "Cmd Z in a box outside the form is the box's own, never the map's undo")
+  check(fl.flushed, 'text typed in a field and not applied is applied before a press on the map acts')
+  check(fl.typedKept, 'a field typed in and not applied is left as typed when the form is refreshed')
+  check(fl.undoKeeps, 'the undo button keeps the focus in a field holding text, undoes the edit before, the text stays')
+  check(fl.notSaved, 'Cmd S with text a field refused does not save, and says why')
   await until('NEWMAP')
   const nm = seen.NEWMAP
   const ids = nm.features.map(f => f.id).join(',')
