@@ -78,11 +78,9 @@ export interface Melee {
   foe0: Int32Array
   mi: Uint8Array
   mj: Uint8Array
-  // a melee's rounds (with claims): each battalion's push on its foe this step and the tick it was found at; each
-  // battalion's last round (ROUND_*) and its tick, for the bench's overlay
+  // a melee's rounds (with claims): each battalion's push on its foe this step; each battalion's last round
+  // (ROUND_*) and its tick, for the bench's overlay
   push: Float64Array
-  pushAt: number
-  G: FireGeo | null
   round: Uint8Array
   roundAt: Int32Array
 }
@@ -96,8 +94,6 @@ const scratchOf = (w: World): Melee =>
     mi: new Uint8Array(MAX_COMPANIES),
     mj: new Uint8Array(MAX_COMPANIES),
     push: new Float64Array(MAX_FORMATIONS),
-    pushAt: -1,
-    G: null,
     round: new Uint8Array(MAX_FORMATIONS),
     roundAt: new Int32Array(MAX_FORMATIONS).fill(-1),
   })
@@ -227,7 +223,7 @@ export const gapBetween = (w: World, i: number, j: number): number => gapOf(w, b
 export const sideStruck = (w: World, i: number, j: number): number => quarter(w, blockGeometry(w), i, j)
 
 /* ---------------- step 10: charges and melee ---------------- */
-export function meleeStep(w: World): void {
+export function meleeStep(w: World, order: readonly number[] = []): void {
   const f = w.f
   const N = MAX_FORMATIONS
   let any = false
@@ -247,8 +243,6 @@ export function meleeStep(w: World): void {
   }
   S.foe0.set(f.foe)
   S.push.fill(0)
-  S.pushAt = tick
-  S.G = G
   for (let n = 0; n < N; n++) {
     const i = rev ? N - 1 - n : n
     if (f.alive[i] && S.foe0[i]) meleePair(w, G, S, i, tick)
@@ -261,6 +255,7 @@ export function meleeStep(w: World): void {
   }
   // the shocks, added to each receiver in its attackers' slot order
   for (let i = 0; i < N; i++) if (S.shockTo[i] >= 0) f.shockIn[S.shockTo[i]] += S.shockBy[i]
+  if (w.claims) rounds(w, G, S, order, tick)
 }
 
 // battalion i leaves its melee with j: the pairing ends both ways (j, left without a foe, takes on another of its
@@ -476,7 +471,8 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
 // granted whole or not at all, and its foe follows by the same displacement. If the foe cannot follow (another enemy
 // fighting it, or its move is refused), the loser's step alone ends their melee. A loser that cannot step back
 // (refused, or a second enemy on its flank or rear) is pinned: a shock to its morale.
-const ROUND = 3 // s
+/** Seconds between a pair's rounds. */
+export const ROUND = 3
 const STEP = 2 // m
 const PRESS = 0.05 // the share of the two pushes a loser falls short by
 const PINNED = 0.15 // morale shock of a loser that cannot step back
@@ -486,22 +482,19 @@ export const ROUND_FOLLOWED = 2
 export const ROUND_PINNED = 3
 export const ROUND_FELL_BACK = 4
 
-// a pair's judgement this tick: its loser (−1 none) and its winner, and the step's direction (unit)
+// a pair's judgement this tick: the losers, each one's winner and the step's direction (a unit vector)
 const judged: number[] = []
 const jWin = new Int32Array(MAX_FORMATIONS)
 const jX = new Float64Array(MAX_FORMATIONS)
 const jZ = new Float64Array(MAX_FORMATIONS)
 
 /**
- * The rounds due this tick, at the end of the melee step (`order`: the tick's keyed order of the formations,
- * `claimOrder`): every pair is judged from this step's pushes, then the losers step back in that order, each moved
- * formation claiming its new cells before the next.
+ * The rounds due at tick `tick`, at the end of the melee step (G: its block geometry; `order`: the tick's keyed order
+ * of the formations, `claimOrder`): every pair due is judged from this step's pushes, then the losers step back in
+ * that order, each moved formation claiming its new cells before the next.
  */
-export function roundStep(w: World, order: readonly number[]): void {
-  const S = w.scratch.melee
+function rounds(w: World, G: FireGeo, S: Melee, order: readonly number[], tick: number): void {
   const f = w.f
-  if (!S || !S.G || S.pushAt !== w.meta[M_TICK] + 1) return
-  const tick = S.pushAt
   const per = Math.round(ROUND * TICK_HZ)
   judged.length = 0
   for (const i of order) {
@@ -516,10 +509,10 @@ export function roundStep(w: World, order: readonly number[]): void {
     if (!(on + by > 0) || (on - by) / (on + by) <= PRESS) continue
     // the direction: along the winner's heading if the loser stands ahead of it, else to the loser's rear if the
     // winner stands ahead of the loser; neither (flank to flank): no round
-    if (aheadOf(w, S.G, j, i)) {
+    if (aheadOf(w, G, j, i)) {
       jX[i] = sin(f.heading[j])
       jZ[i] = cos(f.heading[j])
-    } else if (aheadOf(w, S.G, i, j)) {
+    } else if (aheadOf(w, G, i, j)) {
       jX[i] = -sin(f.heading[i])
       jZ[i] = -cos(f.heading[i])
     } else continue
@@ -530,28 +523,31 @@ export function roundStep(w: World, order: readonly number[]): void {
     const j = jWin[i]
     S.roundAt[i] = tick
     S.roundAt[j] = tick
-    if (flanked(w, S, i, j) || !stepWhole(w, i, jX[i] * STEP, jZ[i] * STEP, j)) {
+    S.round[j] = 0
+    if (attackedBesides(w, G, i, j, true) >= 0 || !stepWhole(w, i, jX[i] * STEP, jZ[i] * STEP, j)) {
       f.shockIn[i] += PINNED
       S.round[i] = ROUND_PINNED
-      S.round[j] = 0
       continue
     }
     claimFormation(w, i)
     S.round[i] = ROUND_STEPPED
-    if (!fought(w, S, j, i) && stepWhole(w, j, jX[i] * STEP, jZ[i] * STEP, i)) {
+    const e = attackedBesides(w, G, j, i, false)
+    if (e < 0 && stepWhole(w, j, jX[i] * STEP, jZ[i] * STEP, i)) {
       claimFormation(w, j)
       S.round[j] = ROUND_FOLLOWED
       continue
     }
-    // its foe cannot follow: the loser has fallen back out of the melee
+    // its foe cannot follow: the loser has fallen back out of the melee, and its foe takes on the enemy fighting it
     S.round[i] = ROUND_FELL_BACK
-    S.round[j] = 0
     leave(w, i, j)
+    if (e >= 0) engage(w, j, e)
   }
 }
 
-// whether battalion b stands ahead of battalion a: its companies' centre (by men) beyond a's front line (a's anchor
-// across its heading), and its companies across a's heading overlapping a's
+/**
+ * Whether battalion b stands ahead of battalion a: its companies' centre (by men) beyond a's front line (a's anchor,
+ * across its heading), and its companies' span across a's heading overlapping a's (G: the step's block geometry).
+ */
 function aheadOf(w: World, G: FireGeo, a: number, b: number): boolean {
   const f = w.f
   const CS = w.cr.maxC
@@ -580,23 +576,19 @@ function aheadOf(w: World, G: FireGeo, a: number, b: number): boolean {
   }
   return men > 0 && ahead > 0 && blo < ahi && alo < bhi
 }
-// whether battalion i fights an enemy besides its foe j (one whose foe it is, in the fight, as the step began)
-function fought(w: World, S: Melee, i: number, j: number): boolean {
+
+/**
+ * The lowest slot of an enemy in the fight, other than j, fighting battalion i now (its foe i); with `flank`, only one
+ * not ahead of i (on its flank or rear). −1 if none.
+ */
+function attackedBesides(w: World, G: FireGeo, i: number, j: number, flank: boolean): number {
   const f = w.f
   const h = handleOf(w, i)
   for (let e = 0; e < MAX_FORMATIONS; e++) {
-    if (e !== j && f.alive[e] && S.foe0[e] === h && !outOfFight(f.mstate[e])) return true
+    if (e === j || !f.alive[e] || f.foe[e] !== h || outOfFight(f.mstate[e])) continue
+    if (!flank || !aheadOf(w, G, i, e)) return e
   }
-  return false
-}
-// whether battalion i fights an enemy besides its foe j that is not ahead of it: on its flank or rear
-function flanked(w: World, S: Melee, i: number, j: number): boolean {
-  const f = w.f
-  const h = handleOf(w, i)
-  for (let e = 0; e < MAX_FORMATIONS; e++) {
-    if (e !== j && f.alive[e] && S.foe0[e] === h && !outOfFight(f.mstate[e]) && !aheadOf(w, S.G!, i, e)) return true
-  }
-  return false
+  return -1
 }
 
 /* ---------------- step 4: the square against cavalry ---------------- */

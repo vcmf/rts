@@ -30,6 +30,7 @@ import {
   ROUND_FOLLOWED,
   ROUND_PINNED,
   ROUND_FELL_BACK,
+  ROUND,
 } from '../sim/index.ts'
 import { toS, type View } from './map.ts'
 
@@ -250,12 +251,12 @@ export class Overlay {
       if (!f.alive[i]) continue
       const what: string[] = [`#${i}`]
       if (STATUS[f.status[i]]) what.push(STATUS[f.status[i]])
-      const R = w.scratch.melee
       if (f.foe[i]) what.push('in melee')
-      // until the pair's next round (3 s)
-      const since = R && R.roundAt[i] >= 0 ? w.meta[M_TICK] - R.roundAt[i] : Infinity
-      if (R && since < 3 * TICK_HZ && ROUND_NAME[R.round[i]]) what.push(ROUND_NAME[R.round[i]])
       else if (f.chPhase[i]) what.push(CHARGE_PHASES[f.chPhase[i]])
+      // its last round, until the pair's next
+      const R = w.scratch.melee
+      const since = R && R.roundAt[i] >= 0 ? w.meta[M_TICK] - R.roundAt[i] : Infinity
+      if (R && since < ROUND * TICK_HZ && ROUND_NAME[R.round[i]]) what.push(ROUND_NAME[R.round[i]])
       if (sheltering(w, i)) what.push('sheltering')
       if (f.mstate[i] !== MS_STEADY) what.push(MORALE_STATES[f.mstate[i]])
       if (f.blownUntil[i] > w.meta[M_TICK]) what.push('blown')

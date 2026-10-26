@@ -1142,49 +1142,53 @@ export function inClashPair(w: World, i: number): boolean {
   return j >= 0 && f.foe[j] === formationHandle(w, i) && !outOfFight(f.mstate[j]) && !f.trans[j] && !snakes(w, j)
 }
 
-// the places of formation i that stand where it may not (impassable ground, the map's edge, a claim that blocks it
-// but that of `pass`, the one formation it may stand on), counted per company, into out
-function heldCount(w: World, i: number, pass: number, out: Int32Array): Int32Array {
+/**
+ * The cells of formation i's places that it may not stand on: impassable ground (beyond the map's edge included, as
+ * `impAt` has it) or a claim that blocks it but that of `pass`, the one formation it may stand on (−1: none). With
+ * `mark`, stamps each such cell `ep` in `seen` and returns true; without, returns whether every such cell is already
+ * stamped `ep` (a place off the map never is).
+ */
+function heldCells(w: World, i: number, pass: number, seen: Int32Array, ep: number, mark: boolean): boolean {
   const T = w.terrain
   const U = typeOf(w, i)
   const imp = T.imp[kindOf(w, i)]
   const Fl = filledSlots(w, i)
   const a = i * (w.cr.maxC + 1)
   const ctx = ctxNow(w, i)
-  out.fill(0)
-  for (let c = 0; c < U.C; c++) {
-    for (let k = Fl.at[a + c], e = Fl.at[a + c + 1]; k < e; k++) {
-      placeAtSlot(ctx, Fl.s[k], pt)
-      const x = pt[0]
-      const z = pt[1]
-      const off = x < T.x0 || z < T.z0 || x > T.x0 + T.n * T.cell || z > T.z0 + T.n * T.cell
-      if (off || impAt(T, imp, x, z) || (w.claims && claimBy(w, i, x, z, pass) !== FREE)) out[c]++
-    }
+  for (let k = Fl.at[a], e = Fl.at[a + U.C]; k < e; k++) {
+    placeAtSlot(ctx, Fl.s[k], pt)
+    const x = pt[0]
+    const z = pt[1]
+    if (!impAt(T, imp, x, z) && claimBy(w, i, x, z, pass) === FREE) continue
+    const gx = Math.round((x - T.x0) / T.cell)
+    const gz = Math.round((z - T.z0) / T.cell)
+    const off = gx < 0 || gz < 0 || gx >= T.n || gz >= T.n
+    if (mark) {
+      if (!off) seen[gz * T.n + gx] = ep
+    } else if (off || seen[gz * T.n + gx] !== ep) return false
   }
-  return out
+  return true
 }
-const held0 = new Int32Array(MAX_COMPANIES)
-const held1 = new Int32Array(MAX_COMPANIES)
 
 /**
- * Moves formation i rigidly by (dx, dz) metres, its heading, shape and lags as they stand, if the move puts no company
- * more of its men where it may not stand than it had there before (`heldCount`; `pass`: the formation it may stand
- * on, −1 none): granted whole, or not at all. A move away from what it already stood in is granted. Sets no velocity.
- * Returns whether it moved.
+ * Moves formation i rigidly by (dx, dz) metres, its heading, shape and lags as they stand, if none of its men then
+ * stands on a cell it may not stand on (`heldCells`; `pass`: the one formation it may stand on, −1 none) that none of
+ * them stood on before: the ground it is held on must not grow, so a move away from what it already stood in is
+ * granted and one deeper into it is not. Granted whole, or not at all; sets no velocity. Returns whether it moved.
  */
 export function stepWhole(w: World, i: number, dx: number, dz: number, pass: number): boolean {
   const f = w.f
-  const C = typeOf(w, i).C
-  heldCount(w, i, pass, held0)
+  const n = w.terrain.n * w.terrain.n
+  const s = w.scratch
+  if (!s.stepCells || s.stepCells.length !== n) s.stepCells = new Int32Array(n)
+  const ep = (s.stepEpoch = ((s.stepEpoch ?? 0) + 1) & 0x3fffffff)
+  heldCells(w, i, pass, s.stepCells, ep, true)
   f.x[i] += dx
   f.z[i] += dz
-  heldCount(w, i, pass, held1)
-  for (let c = 0; c < C; c++) {
-    if (held1[c] > held0[c]) {
-      f.x[i] -= dx
-      f.z[i] -= dz
-      return false
-    }
+  if (!heldCells(w, i, pass, s.stepCells, ep, false)) {
+    f.x[i] -= dx
+    f.z[i] -= dz
+    return false
   }
   f.onRoad[i] = 0
   return true
