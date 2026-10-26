@@ -63,8 +63,8 @@ const place = (barrier: boolean): Place => ({ step: 0.1, reach: 5, barrier })
 function drawKind(map: MapFile, kind: string, shape: ShapeName | 'none', id: string): Feature {
   const meta = kindMeta(cat, kindChain(cat, kind)!)
   const f: Feature = { id, kind }
-  let d: Draft = startDraft(f, drawSteps(meta, shape), isBarrier(f))
-  const p = place(d.barrier)
+  let d: Draft = startDraft(f, drawSteps(meta, shape))
+  const p = place(isBarrier(f))
   const clicks: Record<ShapeName, Pt[]> = {
     point: [[101.23, 52.07]],
     line: [
@@ -136,6 +136,24 @@ describe('M7b: drawing a feature', () => {
     const f = drawKind(base, 'built.village', 'none', 'hamlet')
     expect(f.along).toEqual({ id: 'road', from: 40, to: 120 })
   })
+  it("never sets along past the line's end, whatever the rounding", () => {
+    const road: Feature = {
+      id: 'long',
+      kind: 'way.road.lane',
+      line: [
+        [0, 0],
+        [1006, 0],
+      ],
+    }
+    const meta = kindMeta(cat, kindChain(cat, 'built.village')!)
+    let d = startDraft({ id: 'v', kind: 'built.village' }, drawSteps(meta, 'none'))
+    const coarse: Place = { step: 10, reach: 50, barrier: false }
+    d = setRef(d, road, [500, 0], coarse) as Draft
+    d = setRef(d, road, [1005, 0], coarse) as Draft
+    expect(d.feature.along).toEqual({ id: 'long', from: 500, to: 1000 })
+    const map = { ...base, features: [...base.features, road, d.feature] }
+    expect(validate(map, cat).filter(i => i.id === 'v' && i.path.includes('along'))).toEqual([])
+  })
   it('measures a point along a line from its nearest place', () => {
     const line: Pt[] = [
       [0, 0],
@@ -148,7 +166,7 @@ describe('M7b: drawing a feature', () => {
   })
   it('snaps every new point of a barrier into the 8 directions', () => {
     const f: Feature = { id: 'h', kind: 'barrier.hedge' }
-    let d = startDraft(f, [{ kind: 'shape', shape: 'line' }], true)
+    let d = startDraft(f, [{ kind: 'shape', shape: 'line' }])
     for (const c of [
       [1.3, 0.7],
       [40.2, 3.1],
@@ -162,7 +180,7 @@ describe('M7b: drawing a feature', () => {
     expect(barrierProblem(line)).toBeNull()
   })
   it('adds nothing for a click on the last point (a double click), and needs 2 points to end a line', () => {
-    let d = startDraft({ id: 'r', kind: 'way.path' }, [{ kind: 'shape', shape: 'line' }], false)
+    let d = startDraft({ id: 'r', kind: 'way.path' }, [{ kind: 'shape', shape: 'line' }])
     d = addPoint(d, [5, 5], place(false))
     d = addPoint(d, [5.01, 5.02], place(false))
     expect(d.pts).toHaveLength(1)
@@ -177,7 +195,7 @@ describe('M7b: drawing a feature', () => {
   })
   it('skips an optional reference with Enter, and refuses to skip a needed one', () => {
     const meta = kindMeta(cat, kindChain(cat, 'built.bridge')!)
-    let d = startDraft({ id: 'b', kind: 'built.bridge' }, drawSteps(meta, 'none'), false)
+    let d = startDraft({ id: 'b', kind: 'built.bridge' }, drawSteps(meta, 'none'))
     expect(typeof endStep(d)).toBe('string') // carries is needed
     d = setRef(d, base.features[1], [0, 0], place(false)) as Draft
     d = setRef(d, base.features[0], [0, 0], place(false)) as Draft
@@ -188,7 +206,7 @@ describe('M7b: drawing a feature', () => {
   })
   it('takes clicks back, into the step before', () => {
     const meta = kindMeta(cat, kindChain(cat, 'veg.reeds')!)
-    let d = startDraft({ id: 'r', kind: 'veg.reeds' }, drawSteps(meta, 'circle'), false)
+    let d = startDraft({ id: 'r', kind: 'veg.reeds' }, drawSteps(meta, 'circle'))
     d = addPoint(d, [0, 0], place(false))
     d = addPoint(d, [10, 0], place(false))
     expect(done(d)).toBe(true)
@@ -197,6 +215,23 @@ describe('M7b: drawing a feature', () => {
     expect(d.pts).toEqual([[0, 0]])
     d = back(back(d))
     expect(d.pts).toEqual([])
+  })
+  it('reopens an area closed on its first corner with every corner, one ended by Enter without its last', () => {
+    const steps = [{ kind: 'shape' as const, shape: 'area' as const }]
+    const corners: Pt[] = [
+      [0, 0],
+      [100, 0],
+      [100, 80],
+      [0, 80],
+    ]
+    let d = corners.reduce(
+      (x, c) => addPoint(x, c, place(false)),
+      startDraft({ id: 'a', kind: 'ground.meadow' }, steps),
+    )
+    const closed = back(addPoint(d, [1, 1], place(false)))
+    expect(closed.pts).toEqual(corners)
+    d = back(endStep(d) as Draft)
+    expect(d.pts).toEqual(corners.slice(0, 3))
   })
   it("proposes an id from the kind, numbered when taken, never as a generated child's", () => {
     expect(proposeId('ground.field.wheat', [])).toBe('wheat')
@@ -216,15 +251,15 @@ describe('M7b: drawing a feature', () => {
       [100, 80],
       [1, 2], // within reach of the first
     ]
-    const area = clicks(startDraft({ id: 'a', kind: 'ground.meadow' }, steps('area'), false), ring, place(false))
+    const area = clicks(startDraft({ id: 'a', kind: 'ground.meadow' }, steps('area')), ring, place(false))
     expect(done(area)).toBe(true)
     expect(area.feature.area).toEqual([ring.slice(0, 3)])
     expect(validate({ ...base, features: [...base.features, area.feature] }, cat).filter(i => i.id === 'a')).toEqual([])
-    const line = clicks(startDraft({ id: 'l', kind: 'way.path' }, steps('line'), false), ring, place(false))
+    const line = clicks(startDraft({ id: 'l', kind: 'way.path' }, steps('line')), ring, place(false))
     expect(line.feature.line).toEqual([...ring.slice(0, 3), [0, 0]])
     // a hedge whose last segment back to its start is no 8-direction: a lattice point between makes it whole
     const hedge = clicks(
-      startDraft({ id: 'h', kind: 'barrier.hedge' }, steps('line'), true),
+      startDraft({ id: 'h', kind: 'barrier.hedge' }, steps('line')),
       [
         [0, 0],
         [40, 0],
@@ -348,6 +383,46 @@ describe('M7b: the editor draws', () => {
   })
 })
 
+describe('M7b: the end of a drawing by a double click', () => {
+  const text = formatMap(base)
+  function make() {
+    let ed: Editor | null = null
+    const { h } = host(() => ed!.doc!.features)
+    ed = new Editor(h)
+    ed.setCatalogue(cat)
+    ed.load('/maps/t.map.json', text)
+    return ed
+  }
+  it('leaves the rest of a double click that ended a drawing to nothing', () => {
+    const ed = make()
+    // a village's stretch along the road, its end set by a double click: the village has no shape of its own, so the
+    // double click's second click would pick the road under it
+    ed.add('built.village', 'none', 'village')
+    ed.click(2, -100)
+    ed.click(8, -300)
+    expect(ed.drawing).toBe(false)
+    ed.click(8, -300)
+    ed.dblclick(8, -300)
+    expect(ed.selected).toBe('village')
+    // an area closed near its first corner (off its handle) by a double click: no point added after
+    ed.add('ground.meadow', 'area', 'field')
+    for (const [x, z] of [
+      [200, 200],
+      [300, 200],
+      [300, 300],
+      [210, 202],
+    ]) {
+      ed.click(x, -z)
+    }
+    expect(ed.drawing).toBe(false)
+    ed.click(210, -202)
+    ed.dblclick(210, -202)
+    expect(ed.feature('field')!.area![0]).toHaveLength(3)
+    ed.undo()
+    expect(ed.feature('field')).toBeUndefined()
+  })
+})
+
 describe('M7b: a new map', () => {
   const made: MapFile = { ...base, id: 'fresh', features: [] }
   it('is unsaved until its first save creates the file, which then reads back unchanged', async () => {
@@ -384,6 +459,35 @@ describe('M7b: a new map', () => {
         .filter(l => !lines(saved).includes(l))
         .map(l => l.trim()),
     ).toEqual([expect.stringContaining('"id":"hill"')])
+  })
+  it('says a new map whose id was taken meanwhile is not saved, and offers no overwrite of the other map', async () => {
+    const { h } = host(() => [])
+    const ed = new Editor(h)
+    ed.create('/maps/fresh.map.json', made)
+    vi.stubGlobal(
+      'fetch',
+      async () => new Response(JSON.stringify({ ok: false, status: 409, current: 'another map' }), { status: 409 }),
+    )
+    expect(await ed.save()).toBe(false)
+    expect(ed.conflict).toBeNull()
+    expect(ed.isNew).toBe(true)
+    expect(ed.message).toMatch(/needs another id/)
+  })
+  it('makes a map deleted on disk a new map, which the next save makes again', async () => {
+    const { h } = host(() => [])
+    const ed = new Editor(h)
+    const t = formatMap(made)
+    ed.load('/maps/fresh.map.json', t)
+    ed.deleted('/maps/fresh.map.json')
+    expect(ed.isNew).toBe(true)
+    expect(ed.dirty).toBe(true)
+    let sent: { base: string | null } | null = null
+    vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
+      sent = JSON.parse(init.body) as typeof sent
+      return new Response('{"ok":true}')
+    })
+    expect(await ed.save()).toBe(true)
+    expect(sent!.base).toBeNull()
   })
   it('writes an empty new map that reads back and takes its first feature', () => {
     const t = formatMap(made)

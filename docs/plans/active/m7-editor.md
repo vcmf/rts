@@ -257,8 +257,25 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
   after the draw button, so Enter, Backspace and Escape work at once; a deleted map file leaves the page's list (the
   hot update sends its type); one `kindMetaOf` (`src/map/catalogue.ts`) and `Editor.metaOf` for the four lookups of a
   kind's metadata; the picker's entries made and dropped in one place each; this plan's hooks and test files.
+- **Round 2**: severe. A new map's first save refused because another map of that id was made meanwhile showed as a
+  conflict, whose buttons would overwrite that other map or take it in as this one. Fixed: it says the id is taken
+  and offers neither. With it: a double click that ended a drawing (a village's stretch, an area closed near its
+  first corner) no longer passes its second click to the idle editor (which picked what lay under it, or added a
+  point); `along` is never set past its line's end by the rounding; Backspace after an area closed on its first
+  corner reopens it with every corner; a map file deleted under the page turns its copy into a new map, said in the
+  panel, which a save makes again (it was silent until a save failed); a blank seed is a random one, not 0; picking
+  another kind keeps an id typed in the box; the reference's target rule is the validator's (`refTargetProblem`,
+  exported); a draft no longer carries its own barrier flag (the editor's `place`).
 
 ## Open questions
+
+(M7b)
+- A new map whose id another map took between its making and its first save cannot be saved under another id yet:
+  a map's own fields are M7c's form.
+- While drawing, each pointer move redraws the lit view to move the preview (one frame a displayed frame, as a drag
+  does since M7a); to measure on Austerlitz, and to draw the overlay alone if it lags.
+
+(M7a)
 
 1. Editing a generated child moves its parent's handles, not its own: changing one house of a village needs pinning
    (M7c).

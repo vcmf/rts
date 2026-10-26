@@ -387,12 +387,7 @@ function editPanel(): void {
   drawPrompt.textContent = editor.prompt
   addGo.disabled = !editor.enabled || !editor.doc || editor.drawing
   // a new feature's id: the proposal follows the copy's ids (it is taken once the feature is made)
-  if (
-    !editor.drawing &&
-    (addId.value === '' || addId.dataset.proposed === addId.value || editor.feature(addId.value))
-  ) {
-    proposeAddId()
-  }
+  if (!editor.drawing) proposeAddId()
   refButtons(f)
 }
 /** The add box's kinds, by category, from the catalogue. */
@@ -417,7 +412,9 @@ function shapeList(): void {
   if (shapes.includes(was as ShapeName)) addShape.value = was
   proposeAddId()
 }
+/** Proposes a new feature's id from the kind, unless the box holds one the author typed that is free. */
 function proposeAddId(): void {
+  if (addId.value !== '' && addId.value !== addId.dataset.proposed && !editor.feature(addId.value)) return
   const id = addKind.value ? proposeId(addKind.value, editor.doc?.features.map(f => f.id) ?? []) : ''
   addId.value = id
   addId.dataset.proposed = id
@@ -834,7 +831,8 @@ $('newMake').addEventListener('click', () => {
   const id = val('newId')
   const size = Number(val('newSize'))
   const play = Number(val('newPlay'))
-  const seed = Number(val('newSeed'))
+  // no seed given: a random one
+  const seed = val('newSeed') === '' ? Math.floor(Math.random() * 2 ** 32) : Number(val('newSeed'))
   const why = !ID.test(id)
     ? 'its id is lower-case letters and digits, in words joined by "-"'
     : [...picker.options].some(o => o.text === id)
@@ -883,11 +881,12 @@ const diskRead = newestOnly()
 if (import.meta.hot) {
   import.meta.hot.on('map-changed', (d: { file: string; at: number; type: 'create' | 'update' | 'delete' }) => {
     // a map file made since the page loaded (by hand, or another page's new map) joins the list; one deleted leaves
-    // it, unless the page shows it (its copy can still be saved back)
+    // it, unless the page shows it: then the editor's copy is a new map, which a save makes again
     if (d.file.endsWith('.map.json')) {
       const listed = [...picker.options].find(o => o.value === d.file)
       if (d.type === 'delete') {
-        if (listed && d.file !== picker.value) listed.remove()
+        if (d.file === picker.value) editor.deleted(d.file)
+        else listed?.remove()
         return
       }
       if (!listed) picker.append(mapOption(d.file))

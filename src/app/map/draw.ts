@@ -6,9 +6,10 @@
 // Tested in test/map-draw.test.ts.
 import type { Ellipse, Feature, MapFile, Pt, RefName, ShapeName } from '../../map/schema.ts'
 import { ID, REFS } from '../../map/schema.ts'
-import { categoryOf, type KindMeta } from '../../map/catalogue.ts'
-import { featureKind } from '../../map/validate.ts'
-import { barrierProblem } from '../../map/geometry.ts'
+import type { KindMeta } from '../../map/catalogue.ts'
+import { refTargetProblem } from '../../map/validate.ts'
+import { barrierProblem, isClosedLine, lineLength } from '../../map/geometry.ts'
+import { cm } from '../../map/util.ts'
 import { onLattice, roundPt, roundTo, snapBarrier, type Place } from './edit.ts'
 
 /**
@@ -24,7 +25,7 @@ export interface Draft {
   step: number // the step in progress; steps.length when every step is done
   pts: Pt[] // the shape step's clicks so far
   from: { id: string; s: number } | null // `along`'s first click: the line and the metres along it
-  barrier: boolean // its points lie on the lattice
+  closed: boolean // the shape step ended by a click back on the first point (which Backspace takes back)
 }
 
 /**
@@ -50,20 +51,27 @@ export function drawSteps(meta: KindMeta, shape: ShapeName | 'none'): Step[] {
 }
 
 /** A draft of a feature (its id and kind set, or an existing feature whose references are set again). */
-export const startDraft = (feature: Feature, steps: Step[], barrier: boolean): Draft => ({
+export const startDraft = (feature: Feature, steps: Step[]): Draft => ({
   feature,
   steps,
   step: 0,
   pts: [],
   from: null,
-  barrier,
+  closed: false,
 })
 
 /** The step in progress, or null when every step is done. */
 export const stepOf = (d: Draft): Step | null => d.steps[d.step] ?? null
 export const done = (d: Draft): boolean => d.step >= d.steps.length
 
-const advance = (d: Draft, feature: Feature): Draft => ({ ...d, feature, step: d.step + 1, pts: [], from: null })
+const advance = (d: Draft, feature: Feature, closed = false): Draft => ({
+  ...d,
+  feature,
+  step: d.step + 1,
+  pts: [],
+  from: null,
+  closed,
+})
 const dist = (a: Pt, b: Pt) => Math.hypot(b[0] - a[0], b[1] - a[1])
 const same = (a: Pt, b: Pt) => a[0] === b[0] && a[1] === b[1]
 const VERB: Record<RefName, string> = {
@@ -113,7 +121,7 @@ export function prompt(d: Draft): string {
  * lattice point (the validator then says what is wrong).
  */
 function nextPoint(d: Draft, to: Pt, place: Place): Pt {
-  if (!d.barrier) return roundPt(to, place.step)
+  if (!place.barrier) return roundPt(to, place.step)
   const prev = d.pts[d.pts.length - 1]
   if (!prev) return onLattice(to)
   const fits = (c: Pt) => barrierProblem([prev, c]) === null
@@ -128,7 +136,7 @@ function nextPoint(d: Draft, to: Pt, place: Place): Pt {
 function closeLine(d: Draft, place: Place): Pt[] | null {
   const first = d.pts[0]
   const last = d.pts[d.pts.length - 1]
-  if (!d.barrier || barrierProblem([last, first]) === null) return [...d.pts, [...first]]
+  if (!place.barrier || barrierProblem([last, first]) === null) return [...d.pts, [...first]]
   const fits = (c: Pt) => barrierProblem([last, c, first]) === null
   const mid: Pt = [(last[0] + first[0]) / 2, (last[1] + first[1]) / 2]
   const c = snapBarrier(mid, [last, first], Math.max(place.reach, dist(last, first)), fits)
@@ -149,7 +157,7 @@ export function addPoint(d: Draft, to: Pt, place: Place): Draft {
       // a click back on the first point closes the shape (an area ends; a line ends closed, its last point its first)
       if (d.pts.length >= 3 && dist(to, d.pts[0]) <= place.reach) {
         const closed = s.shape === 'area' ? d.pts : closeLine(d, place)
-        if (closed) return advance(d, { ...d.feature, [s.shape]: s.shape === 'area' ? [closed] : closed })
+        if (closed) return advance(d, { ...d.feature, [s.shape]: s.shape === 'area' ? [closed] : closed }, true)
       }
       const p = nextPoint(d, to, place)
       const last = d.pts[d.pts.length - 1]
@@ -189,8 +197,9 @@ export function endStep(d: Draft): Draft | string {
 }
 
 /**
- * Backspace: takes back the last click; at the start of a step, the step before it is taken back to its last click
- * (a finished line keeps its other points). Returns the draft unchanged when there is nothing to take back.
+ * Backspace: takes back the last click; at the start of a step, the click that ended the step before (an area or a
+ * line closed on its first point reopens with every point; one ended by Enter loses its last). Returns the draft
+ * unchanged when there is nothing to take back.
  */
 export function back(d: Draft): Draft {
   if (d.pts.length) return { ...d, pts: d.pts.slice(0, -1) }
@@ -202,8 +211,11 @@ export function back(d: Draft): Draft {
   if (s.kind === 'ref') delete feature[s.ref]
   else {
     const f = d.feature
-    if (s.shape === 'line') pts = f.line!.slice(0, -1)
-    if (s.shape === 'area') pts = f.area![0].slice(0, -1)
+    // a closed line's repeated first point goes with the closing click (a barrier's point put in to close it stays)
+    if (s.shape === 'line') {
+      pts = d.closed ? f.line!.slice(0, isClosedLine(f.line!) ? -1 : f.line!.length) : f.line!.slice(0, -1)
+    }
+    if (s.shape === 'area') pts = d.closed ? f.area![0] : f.area![0].slice(0, -1)
     if (s.shape === 'circle') pts = [f.circle![0]]
     if (s.shape === 'ellipse') {
       const [c, rx, , a] = f.ellipse!
@@ -211,18 +223,15 @@ export function back(d: Draft): Draft {
     }
     delete feature[s.shape]
   }
-  return { ...d, feature, step: d.step - 1, pts, from: null }
+  return { ...d, feature, step: d.step - 1, pts, from: null, closed: false }
 }
 
 /**
- * Whether a feature may be a reference's target: of the category the catalogue names, drawn as its shape if it names
- * one ('water:line'), and not the feature itself.
+ * Whether a feature may be a reference's target: by the validator's rule (`refTargetProblem`: of the category the
+ * catalogue names, drawn as its shape if it names one), and not the feature itself.
  */
 export function refAccepts(want: string, self: string, t: Feature, presets: MapFile['presets'] = {}): boolean {
-  if (t.id === self) return false
-  const [cat, shape] = want.split(':')
-  const kind = featureKind(t, presets as Record<string, Record<string, unknown>>)
-  return kind !== undefined && categoryOf(kind) === cat && (!shape || t[shape] !== undefined)
+  return t.id !== self && refTargetProblem('', want, t, presets as Record<string, Record<string, unknown>>) === null
 }
 
 /** The metres along a line to the point of it nearest `p`. */
@@ -257,7 +266,9 @@ export function setRef(d: Draft, target: Feature | null, at: Pt, place: Place): 
   if (s.want === 'point') return advance(d, { ...d.feature, [s.ref]: roundPt(at, place.step) })
   if (!target) return `nothing to pick there: ${prompt(d)}`
   if (s.ref !== 'along') return advance(d, { ...d.feature, [s.ref]: target.id })
-  const sAt = roundTo(alongAt(target.line!, at), place.step)
+  // rounded, but never past the line's end (the validator's limit)
+  const end = cm(Math.floor(lineLength(target.line!) / place.step) * place.step)
+  const sAt = Math.min(roundTo(alongAt(target.line!, at), place.step), end)
   if (!d.from) return { ...d, from: { id: target.id, s: sAt } }
   if (target.id !== d.from.id) return `the stretch ends on the line it starts on: ${prompt(d)}`
   if (sAt === d.from.s) return `the stretch needs a length: ${prompt(d)}`

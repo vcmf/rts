@@ -310,7 +310,7 @@ export class Editor {
    */
   click(sx: number, sy: number): void {
     if (this.mode.kind === 'drawing') return this.drawClick(sx, sy)
-    if (!this.doc || this.mode.kind !== 'idle') return
+    if (!this.doc || this.mode.kind !== 'idle' || performance.now() - this.drawEndedAt < DOUBLE_MS) return
     const f = this.selected ? this.feature(this.selected) : undefined
     if (f && onShape(f, sx, sy, this.host.project)) return
     const ids = new Set(this.doc.features.map(x => x.id))
@@ -428,8 +428,9 @@ export class Editor {
   dblclick(sx: number, sy: number): void {
     // drawing: a double click ends a line or an area (its clicks added the point already)
     if (this.mode.kind === 'drawing') return this.enter()
-    // a double click whose first click selected the feature only selects it
-    if (performance.now() - this.clickSelectedAt < DOUBLE_MS) return
+    // a double click whose first click selected the feature only selects it, or whose first click ended a drawing
+    const now = performance.now()
+    if (now - this.clickSelectedAt < DOUBLE_MS || now - this.drawEndedAt < DOUBLE_MS) return
     const f = this.selected ? this.feature(this.selected) : undefined
     if (!this.enabled || !this.doc || !f || !this.ready() || !this.editable(f)) return
     const at = this.host.toWorld(sx, sy)
@@ -508,8 +509,7 @@ export class Editor {
       return false
     }
     const f: Feature = { id, kind }
-    const draft = startDraft(f, drawSteps(meta!, shape), isBarrier(f, this.doc.presets))
-    this.begin(draft, null)
+    this.begin(startDraft(f, drawSteps(meta!, shape)), null)
     return true
   }
   /** A feature's kind's metadata (its kind its own or its preset's), or null when the catalogue has none. */
@@ -528,7 +528,7 @@ export class Editor {
       return false
     }
     // set again, it is not skipped: taking an optional reference away is the fields' (M7c)
-    this.begin(startDraft(f, [{ kind: 'ref', ref, want, optional: false }], isBarrier(f, this.doc.presets)), f)
+    this.begin(startDraft(f, [{ kind: 'ref', ref, want, optional: false }]), f)
     return true
   }
   private begin(draft: Draft, old: Feature | null): void {
@@ -539,20 +539,16 @@ export class Editor {
     this.host.changed()
     this.host.redraw()
   }
-  /** How a drawing places its points: rounded as a drag rounds them, a barrier's snapped. */
-  private drawPlace(d: Draft): Place {
-    const ppm = this.host.ppm()
-    return { step: roundStep(ppm), reach: SNAP_PX / ppm, barrier: d.barrier }
-  }
   /** A click while drawing: the shape's next point, or a reference's target (a feature it accepts, or a point). */
   private drawClick(sx: number, sy: number): void {
     const m = this.mode as Drawing
     const at = this.host.toWorld(sx, sy)
     if (!at) return this.note('no ground there: click on the map')
     const s = stepOf(m.draft)
-    const place = this.drawPlace(m.draft)
+    const place = this.place(m.draft.feature)
     if (s?.kind !== 'ref' || s.want === 'point') {
-      return this.step(s?.kind === 'shape' ? addPoint(m.draft, at, place) : setRef(m.draft, null, at, place))
+      this.step(s?.kind === 'shape' ? addPoint(m.draft, at, place) : setRef(m.draft, null, at, place))
+      return this.endedByClick()
     }
     const doc = this.doc!
     const self = m.draft.feature.id
@@ -564,6 +560,12 @@ export class Editor {
     const ids = new Set(doc.features.map(x => x.id))
     const id = pick(shapes, ids, sx, sy, at, this.host.project, accepts)
     this.step(setRef(m.draft, id ? this.feature(id)! : null, at, place))
+    this.endedByClick()
+  }
+  /** When a click last ended a drawing: the rest of a double click (its second click, the dblclick) does nothing. */
+  private drawEndedAt = -Infinity
+  private endedByClick(): void {
+    if (this.mode.kind === 'idle') this.drawEndedAt = performance.now()
   }
   /** The drawing after a click or a key: on to its next step (the last makes the feature), or why it stays. */
   private step(next: Draft | string): void {
@@ -667,12 +669,28 @@ export class Editor {
       // a change on disk seen while the save was out, other than the save itself, still stands
       if (this.conflict === sent.text) this.conflict = null
       if (this.conflict === null) this.message = 'saved'
+    } else if (status === 409 && sent.base === null) {
+      // a new map whose id another map took meanwhile: nothing to overwrite or take, it is another map
+      this.message = `not saved: a map ${this.file} was made meanwhile; this one needs another id`
     } else if (status === 409 && typeof r.current === 'string') {
       this.conflict = r.current
       this.message = 'the file changed on disk: keep your edits and overwrite it, or take the file'
     } else this.message = `not saved: ${r.error ?? status}`
     this.host.changed()
     return r.ok
+  }
+  /**
+   * The file was deleted on disk: the copy becomes a new map, whose next save makes the file again (never silently:
+   * the panel says so, and the copy shows as unsaved).
+   */
+  deleted(file: string): void {
+    if (file !== this.file || !this.doc) return
+    this.base = null
+    this.baseDoc = null
+    this.writer = writerFrom(null)
+    this.conflict = null
+    this.message = 'the file was deleted on disk: a save makes it again'
+    this.host.changed()
   }
   /** Settles a conflict by taking the file on disk: the edits and their history are dropped. */
   takeDisk(): void {
@@ -693,7 +711,7 @@ export class Editor {
     if (this.mode.kind !== 'drawing') return
     const d = this.mode.draft
     const p = this.pointer && this.host.toWorld(this.pointer[0], this.pointer[1])
-    this.drawFeature(preview(d, p, this.drawPlace(d)), DRAFT, null)
+    this.drawFeature(preview(d, p, this.place(d.feature)), DRAFT, null)
     const { ctx } = this.host
     ctx.save()
     ctx.fillStyle = DRAFT

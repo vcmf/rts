@@ -267,7 +267,8 @@ maps/kinds.json ──► checkCatalogue ─┐
       recompiled. The built page selects but does not edit.
     - A new map (M7b, the panel's "new map": id, name, size, play area, seed, season) is a copy with no file yet
       (`Editor.create`); its first save creates `maps/<id>.map.json` (the route takes no base as "create", never
-      over a file already there). A new map file reaches the page as `map-changed` like any other (the plugin's
+      over a file already there; a map of that id made meanwhile is said, never overwritten). A map file deleted under
+      the page turns its copy into a new map, which a save makes again. A new map file reaches the page as `map-changed` like any other (the plugin's
       hot update runs after Vite's, whose glob of maps would reload the page) and joins the list.
     - Adding a feature (M7b, `src/app/map/draw.ts`): a kind from the catalogue, one of its shapes and an id proposed
       from the kind's last name (`wood2` when `wood` is taken: never a generated child's form); then clicks draw it
