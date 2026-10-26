@@ -8,6 +8,7 @@ import type { Catalogue, Feature, MapFile } from '../../map/schema.ts'
 import { validate } from '../../map/validate.ts'
 import { expand } from '../../map/expand.ts'
 import { childOf } from '../../map/generators.ts'
+import { sameJson } from '../../map/write.ts'
 
 /** An issue as one line: its feature, its path, its message. */
 const say = (i: { id: string | null; path: string; message: string }) =>
@@ -16,8 +17,9 @@ const say = (i: { id: string | null; path: string; message: string }) =>
 /**
  * The map with the feature `id` pinned: replaced by its expanded form, or removed when its generator takes it off the
  * map, and its children appended after the last feature in their order (`<id>-1`, `<id>-2`, …), so a stable save
- * rewrites its line and appends. Or why it cannot be: it has no generator, or the map does not validate or expand
- * (the first problem).
+ * rewrites its line and appends. Or why it cannot be: it has no generator, the map does not validate or expand (the
+ * first problem), or pinned it would not expand to the same map (a feature naming a generator that made nothing, which
+ * pinned leaves nothing to name).
  */
 export function pinned(map: MapFile, cat: Catalogue, id: string): MapFile | string {
   const f = map.features.find(x => x.id === id)
@@ -32,5 +34,12 @@ export function pinned(map: MapFile, cat: Catalogue, id: string): MapFile | stri
   const n = (c: Feature) => childOf(c.id)?.n ?? 0
   const children = ex.map.features.filter(x => x.origin?.parent === id).sort((a, b) => n(a) - n(b))
   const features = map.features.flatMap(x => (x === f ? (self ? [self] : []) : [x]))
-  return { ...map, features: [...features, ...children] }
+  const out = { ...map, features: [...features, ...children] }
+  // pinning must change nothing the map makes: checked, never assumed
+  const after = validate(out, cat)
+  const again = after.length ? null : expand(out, cat)
+  const why = after[0] ?? again?.issues[0]
+  if (why) return `pinned, the map would not expand as it does: ${say(why)}`
+  if (!sameJson(again!.map, ex.map)) return 'pinned, the map would not expand as it does'
+  return out
 }

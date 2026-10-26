@@ -13,6 +13,7 @@
 //   in place, so the field the focus moved to stays.
 import type { Catalogue, Feature, MapFile } from '../../map/schema.ts'
 import { GENERATORS, SEASONS } from '../../map/schema.ts'
+import { GENERATOR_SPECS } from '../../map/generators.ts'
 import { kindChain, kindStates, type Issue } from '../../map/catalogue.ts'
 import { featureKind, presetsOf } from '../../map/validate.ts'
 import type { Editor } from './editor.ts'
@@ -42,9 +43,9 @@ interface Row {
   disabled?: boolean
   lines?: boolean // several lines (a note): a text box, which keeps its line breaks
   path?: string // its problems' path, from the view's base (default: its key)
-  // the field it sets and that field's new value, from the value read (null: refused, the editor says why); default:
-  // the field named by its key, to the value
-  to?: (value: unknown) => [string, unknown] | null
+  // the field it sets and that field's new value, from the value read, or why it cannot be set; default: the field
+  // named by its key, to the value
+  to?: (value: unknown) => [string, unknown] | string
 }
 /** Sets a field: whether the copy changed (true), was refused (false: the editor's message says why), or not (null). */
 type Setter = (key: string, value: unknown) => boolean | null
@@ -139,10 +140,11 @@ function genRows(f: Feature, current: () => Feature | undefined): Row[] {
 /** A generator's parameter's row. */
 function paramRow(r: ParamRow, gen: string, current: () => Feature | undefined): Row {
   const s = r.spec
+  const selects = Object.hasOwn(GENERATOR_SPECS, gen) && !!GENERATOR_SPECS[gen].selects?.includes(r.name)
   const hint = [
     rangeOf(s),
     s?.required ? 'required' : '',
-    s?.type === 'list' ? 'ids, categories or kinds' : '',
+    selects ? 'ids, categories or kinds' : '',
     s ? '' : `not a parameter of ${gen}`,
   ]
     .filter(Boolean)
@@ -158,7 +160,7 @@ function paramRow(r: ParamRow, gen: string, current: () => Feature | undefined):
     to: v => {
       const now = current()
       const g = now ? withParam(now, r.name, v) : null
-      return g === null ? null : ['gen', g]
+      return g === null ? 'it has no generator now' : ['gen', g]
     },
   }
 }
@@ -262,8 +264,13 @@ export class Form {
     if ('error' in parsed) done = false
     else {
       const value = 'remove' in parsed ? undefined : parsed.value
-      const to = row.to ? row.to(value) : [key, value]
-      done = to === null ? false : this.view!.set(to[0] as string, to[1])
+      const to = row.to ? row.to(value) : ([key, value] as [string, unknown])
+      if (typeof to === 'string') {
+        this.pending.set(key, { text: p.text, why: to })
+        this.update(this.cat, true)
+        return
+      }
+      done = this.view!.set(to[0], to[1])
     }
     if (done === false) {
       const why = 'error' in parsed ? parsed.error : this.editor.message || 'refused'
@@ -419,7 +426,10 @@ export class Form {
       })
       this.pinButton.addEventListener('click', () => {
         this.flush()
-        this.editor.pin()
+        // as a save: what a field shows and could not apply would be lost with the rows the pin takes away
+        if (this.refused) {
+          this.editor.note('a field holds text it could not apply: mend it, or Escape drops it; not pinned')
+        } else this.editor.pin()
       })
       parts.push(this.pinButton)
     }

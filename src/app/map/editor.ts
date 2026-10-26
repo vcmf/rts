@@ -171,6 +171,7 @@ export class Editor {
     this.cat = cat
     // what the copy's selection is drawn as follows the new catalogue (the page's list comes with the compile)
     this.found = cat && this.doc ? validate(this.doc, cat) : []
+    this.host.problems(this.found)
     this.host.redraw()
     this.host.changed() // the form's rows, hints and problems follow the catalogue
   }
@@ -206,8 +207,10 @@ export class Editor {
     this.readOnly = why
     this.baseDoc = base === null ? null : doc
     if (this.selected && !this.feature(this.selected)) this.selected = null
-    // what the validator finds in the file as read (the page's list comes with the compile); no message left over
+    // what the validator finds in the file as read, listed at once (the page's list then comes with the compile), so
+    // no other text's problems are shown on this one meanwhile; no message left over
     this.found = this.cat && doc ? validate(doc, this.cat) : []
+    this.host.problems(this.found)
     this.message = ''
     this.host.changed()
   }

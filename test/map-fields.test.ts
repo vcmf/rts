@@ -22,6 +22,7 @@ import {
 } from '../src/app/map/fields.ts'
 import { GENERATOR_SPECS, type ParamSpec } from '../src/map/generators.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
+import type { Issue } from '../src/map/catalogue.ts'
 import { root } from './fx.ts'
 
 const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'kinds.json'), 'utf8')) as Catalogue
@@ -368,6 +369,11 @@ describe('M7d: every parameter of every generator through the form', () => {
     }
     expect(n).toBe(Object.values(GENERATOR_SPECS).reduce((k, s) => k + Object.keys(s.params).length, 0))
   })
+  it("puts a generated child's problem, as expansion reports it, under its parent's generator", () => {
+    const child = { id: 'v', path: 'features[5].gen (child v-3: features[40].area)', message: 'outside' }
+    expect(problemsAt([child], 'features[5].gen')).toEqual([child])
+    expect(problemsAt([child], 'features[5].ge')).toEqual([])
+  })
   it("reads a feature's generator, and lists its parameters in the spec's order, then any other it sets", () => {
     const f: Feature = { id: 'w', kind: 'veg.wood.broad', point: [0, 0], gen: { clump: { points: 32, wobble: 1 } } }
     expect(genOf(f)).toEqual({ name: 'clump', params: { points: 32, wobble: 1 } })
@@ -425,6 +431,29 @@ describe('M7d: the editor pins', () => {
     ed.load('/maps/t.map.json', text)
     return ed
   }
+  it("lists another file's problems at once when it is read, never the last file's", () => {
+    const lists: Issue[][] = []
+    const h: Host = {
+      ctx: {} as CanvasRenderingContext2D,
+      project: (x, z) => [x, -z],
+      toWorld: (sx, sy) => [sx, -sy],
+      ppm: () => 1,
+      shown: () => [],
+      groundPath: () => {},
+      recompile: () => {},
+      problems: found => lists.push(found),
+      redraw: () => {},
+      changed: () => {},
+    }
+    const ed = new Editor(h)
+    ed.setCatalogue(cat)
+    const wrong = text.replace('"height":4', '"height":"tall"')
+    expect(wrong).not.toBe(text)
+    ed.load('/maps/a.map.json', wrong)
+    expect(lists.at(-1)!.map(i => i.path)).toEqual(['features[3].height'])
+    ed.load('/maps/b.map.json', text)
+    expect(lists.at(-1)).toEqual([])
+  })
   it('pins a feature in one edit, keeping it selected, and undoes it', () => {
     const ed = make()
     ed.select('copse')

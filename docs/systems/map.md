@@ -323,8 +323,10 @@ maps/kinds.json ──► checkCatalogue ─┐
       replaces the feature by its expanded form (no `gen`, with its `origin`) or removes it when its generator takes
       it off the map (a scatter's region, a group's point), and appends its children after the last feature, so the
       stable save rewrites its line and appends theirs. A copy that does not validate or expand is refused with its
-      first problem. The pinned map expands to the same map as the original. Selected after: the feature, or its
-      first child.
+      first problem, and so is a pin whose result would not validate or expand to the same map (checked, not
+      assumed: a scatter that placed nothing and is named by another's `avoid` leaves nothing to name), and a pin
+      while a field holds text it could not apply. Selected after: the feature, or its first child. A file read in,
+      or a new catalogue, lists its own problems at once (the form never shows another text's).
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes

@@ -124,9 +124,18 @@ export function setField<T extends object>(o: T, key: string, value: unknown): T
   return out as T
 }
 
-/** The validator's problems at a field's path (`features[3].height`, `seed`), and anything under it. */
+/**
+ * The validator's problems at a field's path (`features[3].height`, `seed`), and anything under it; a generator's
+ * includes its children's, which expansion reports as `features[3].gen (child id: path)`.
+ */
 export function problemsAt(issues: Issue[], path: string): Issue[] {
-  return issues.filter(i => i.path === path || i.path.startsWith(path + '.') || i.path.startsWith(path + '['))
+  return issues.filter(
+    i =>
+      i.path === path ||
+      i.path.startsWith(path + '.') ||
+      i.path.startsWith(path + '[') ||
+      i.path.startsWith(path + ' ('),
+  )
 }
 
 /** A feature's generator and its parameters, or null: none, or a `gen` not of the one form `{ name: { params } }`. */

@@ -493,6 +493,20 @@ rules: the choice lists every generator, and what does not fit is the validator'
   good text and from bad text, judged by the validator at its path.
 - `npm test`, `check:data`, the build, the docs check and the page check pass.
 
+## Review rounds (M7d)
+
+- **Round 1** (`/code-review high`): severe. A pin could leave a copy that no longer expands: a scatter that placed
+  nothing (`min: 0`) and is named by another's `avoid` leaves no child to stand for it; the form, now showing the page's
+  problems, kept the last file's until the next compile replied (another map picked, a file read in from disk). Fixed:
+  `pinned` checks its result validates and expands to the same map, else refuses; the editor lists a file's problems at
+  once when it reads it (and when the catalogue changes). With them: Pin is refused, like a save, while a field holds
+  text it could not apply; a generated child's problem (`features[i].gen (child …)`) goes under the generator; a
+  parameter that cannot be set says why (no stale message); the hint "ids, categories or kinds" comes from the spec's
+  `selects`. Not taken: reusing the worker's expansion for a pin (it may be of an older copy; a pin measures 10–13
+  ms), one shared reader of `gen` (the validator's must judge any input, the form's only reads), one form update per
+  edit (the second is cut short by its key check). Tests for each (each fails without its fix); the page check pins
+  with refused text.
+
 ## Open questions
 
 (M7d)

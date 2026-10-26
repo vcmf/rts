@@ -85,6 +85,48 @@ describe('pinning', () => {
     })
   }
 
+  it('refuses a pin that would change what the map makes: a feature naming a generator that made nothing', () => {
+    const square = (h: number) => [
+      [
+        [-h, -h],
+        [h, -h],
+        [h, h],
+        [-h, h],
+      ],
+    ]
+    const map: MapFile = {
+      format: 1,
+      id: 't',
+      name: 'T',
+      seed: 1,
+      season: 'summer',
+      extent: { w: 1000, h: 1000 },
+      play: { w: 800, h: 800 },
+      features: [
+        // a region too small for its one wood, allowed to place none: it runs and makes nothing
+        {
+          id: 'region',
+          kind: 'veg.wood.broad',
+          area: square(20) as MapFile['features'][0]['area'],
+          gen: { scatter: { count: 1, radiusMin: 300, radiusMax: 300, min: 0 } },
+        },
+        {
+          id: 'woods',
+          kind: 'veg.wood.broad',
+          area: square(400) as MapFile['features'][0]['area'],
+          gen: { scatter: { count: 1, min: 0, avoid: ['region'] } },
+        },
+      ],
+    }
+    expect(validate(map, cat)).toEqual([])
+    const ex = expand(map, cat)
+    expect(ex.issues).toEqual([])
+    expect(ex.map.features.some(f => f.origin?.parent === 'region')).toBe(false)
+    // pinned, the region leaves the map with no child to stand for it, and "woods" would name nothing
+    expect(pinned(map, cat, 'region')).toMatch(/^pinned, the map would not expand as it does: \[woods\]/)
+    expect(typeof pinned(map, cat, 'woods')).toBe('object')
+  })
+
   it('refuses a feature with no generator, and a map that does not validate or expand', () => {
     const map = JSON.parse(read('generated.map.json')) as MapFile
     const plain = map.features.find(f => !f.gen)!
