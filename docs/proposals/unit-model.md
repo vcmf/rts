@@ -492,8 +492,9 @@ built on a visual bench of the hard cases. The rules a player sees, which it kee
   and gunners who fled their guns, sheltering in a square or a line. The friend takes disorder. A loose body turns
   formed again only on free ground, and never passes through an enemy.
 - **Enemies stand at contact and fire;** a charge or an assault that reaches any enemy strikes it, and the melee
-  follows. In a clash the shapes bend where they meet, and ground changes hands only through the fight: the loser gives way
-  where it is beaten and the winner follows.
+  follows. In a clash ground changes hands only through the fight, in steps: a battalion losing a round of melee
+  steps back as a whole and its foe follows; one that cannot step back (something behind it, or an enemy on its
+  flank) loses nerve instead.
 - **Nothing is pushed.** A formation that meets a friend waits or goes round; until pathfinding (U8) it halts with
   the status "blocked by a friend".
 - **A router stopped by an enemy** is halted, as one stopped by impassable ground is today, so it tries the next
