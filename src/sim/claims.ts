@@ -15,6 +15,9 @@ const K_ORDER = 0x434c // the keyed draw that orders the formations in a tick
 // a change of shape claims the ground it will sweep until it ends, sampled at this many poses ahead
 const SWEEP = 6
 
+/** The width of the margin round a formation's cells, metres: 0 with the claim grid off. */
+export const marginWidth = (w: World): number => (w.claims ? MARGIN * w.terrain.cell : 0)
+
 /** Claims per cell: SLOTS entries per terrain cell (owner slot + 1, times 2, plus 1 for its core), and a mark for
  * a cell claimed by more formations than that. */
 export interface Claims {
@@ -217,10 +220,39 @@ function blocks(w: World, i: number, o: number, core: boolean): boolean {
   if (!enemy && (outOfFight(f.mstate[i]) || outOfFight(f.mstate[o]))) return false
   // a melee pair stands in contact, and a charge reaches its target's core: the margin between them gives way, never
   // the core, so a pair cannot pass into each other and stay tangled when one breaks. A pursuit stops at the router's
-  // margin (it rides it down from behind, never into it), and a charge or pursuit stops at any other's margin
+  // margin (it rides it down from behind, its reach grown by the margin: `marginWidth`), and a charge or pursuit at
+  // any other enemy's
   if (enemy && (f.foe[i] === handleOf(w, o) || f.foe[o] === handleOf(w, i))) return core
   if (enemy && f.chPhase[i] !== 0 && f.chTarget[i] === handleOf(w, o)) return core || outOfFight(f.mstate[o])
   return true
+}
+
+/**
+ * Whether an enemy's claim that blocks formation i lies one cell from its own along (dx, dz), a unit direction: what
+ * holds a router on its way out is an enemy, not a friend, a crowded cell or the ground (src/sim/morale.ts).
+ */
+export function enemyClaimAhead(w: World, i: number, dx: number, dz: number): boolean {
+  const C = w.scratch.claims
+  if (!C) return false
+  const f = w.f
+  const n = w.terrain.n
+  const ox = Math.round(dx)
+  const oz = Math.round(dz)
+  const L = i * w.cr.maxSlots * (SWEEP + 1)
+  for (let m = 0; m < C.count[i]; m++) {
+    const c = C.list[L + m]
+    const gx = (c % n) + ox
+    const gz = Math.floor(c / n) + oz
+    if (gx < 0 || gz < 0 || gx >= n || gz >= n) continue
+    const k = gz * n + gx
+    for (let s = k * SLOTS; s < k * SLOTS + SLOTS; s++) {
+      const e = C.own[s]
+      if (e === 0) break
+      const o = (e >> 1) - 1
+      if (o !== i && f.side[o] !== f.side[i] && blocks(w, i, o, (e & 1) === 1)) return true
+    }
+  }
+  return false
 }
 
 /** Whether the cell at (x, z) is claimed by a formation that blocks formation i there. */

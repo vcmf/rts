@@ -34,6 +34,7 @@ import {
   formationHandle as handleOf,
   typeOf,
 } from './world.ts'
+import { marginWidth } from './claims.ts'
 import {
   allocOrder,
   appendOrder,
@@ -353,10 +354,11 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
       endCharge(w, i, tick, true)
       return
     }
-    // riding down the router: it does not fight back
-    if (gap <= M.contact + M.hold) {
-      const men = inContact(w, G, i, j, M.contact + M.hold, S.mi)
-      inContact(w, G, j, i, M.contact + M.hold, S.mj)
+    // riding down the router: it does not fight back (with claims, from beyond the router's margin, where it stops)
+    const reach = M.contact + M.hold + marginWidth(w)
+    if (gap <= reach) {
+      const men = inContact(w, G, i, j, reach, S.mi)
+      inContact(w, G, j, i, reach, S.mj)
       owe(w, j, S.mj, M.rate * DT * men * strengthOf(w, i), keyedStream(ks, seed, tick, h, j, K_MELEE))
     }
     return

@@ -17,8 +17,7 @@ import {
   mkPlaced,
   placeAll,
   formedOverlaps,
-  contacts,
-  TOUCH,
+  SLOTS,
   sectionHashes,
   typeOf,
   MS_ROUTING,
@@ -195,12 +194,37 @@ describe('with claims: invariant 4, the keyed order', () => {
   }
 })
 
+// whether a cell holds the cores of formation i and of an enemy, by the grid as the last formation step left it
+function coreShared(w: World, i: number): boolean {
+  const C = w.scratch.claims!
+  for (let k = 0; k < C.more.length; k++) {
+    let mine = false
+    let theirs = false
+    for (let s = k * SLOTS; s < k * SLOTS + SLOTS && C.own[s]; s++) {
+      const o = (C.own[s] >> 1) - 1
+      if (!(C.own[s] & 1)) continue
+      if (o === i) mine = true
+      else if (w.f.side[o] !== w.f.side[i]) theirs = true
+    }
+    if (mine && theirs) return true
+  }
+  return false
+}
 // a melee holds (docs/plans/active/c1-claims.md, step 4): a veteran regiment charges a raw one at the halt (X-15),
 // with a friend (X-16) or an enemy (X-17) just behind the raw one. Played to its end: where the watched stood when
 // the raw one's (slot 0's) melee began and at its last tick in it (a break, or a fall-back after it, faces it about),
-// when it broke, and when it left the field
+// when it broke and where, when it left the field, where it last stood, and the men its side had seen leave by then
 function untilRout(id: string, watch = [0, 1]) {
-  const out = { melee: -1, rout: -1, z: [] as number[], at: [] as number[], gone: -1 }
+  const out = {
+    melee: -1,
+    rout: -1,
+    z: [] as number[],
+    at: [] as number[],
+    gone: -1,
+    broke: [0, 0],
+    last: [0, 0],
+    left: 0,
+  }
   play(caseOf(id), {
     every: 1,
     each: w => {
@@ -208,14 +232,24 @@ function untilRout(id: string, watch = [0, 1]) {
         out.melee = w.meta[M_TICK]
         out.z = watch.map(i => w.f.z[i])
       }
-      if (out.rout < 0 && w.f.mstate[0] >= MS_ROUTING) out.rout = w.meta[M_TICK]
+      if (out.rout < 0 && w.f.mstate[0] >= MS_ROUTING) {
+        out.rout = w.meta[M_TICK]
+        out.broke = [w.f.x[0], w.f.z[0]]
+      }
       if (w.f.foe[0] && w.f.mstate[0] < MS_ROUTING) out.at = watch.map(i => w.f.z[i])
-      if (out.gone < 0 && !w.f.alive[0]) out.gone = w.meta[M_TICK]
+      if (w.f.alive[0]) out.last = [w.f.x[0], w.f.z[0]]
+      else if (out.gone < 0) {
+        out.gone = w.meta[M_TICK]
+        out.left = w.sides.left[w.f.side[1] ^ 1]
+      }
     },
   })
   return out
 }
 describe('with claims: a melee holds', () => {
+  // X-15, played once for the cases that read it
+  let x15: ReturnType<typeof untilRout> | null = null
+  const open = () => (x15 ??= untilRout('x15-melee-holds-claims'))
   for (const [id, watch] of [
     ['x15-melee-holds-claims', [0, 1]],
     ['x16-friend-behind-claims', [0, 1]],
@@ -224,36 +258,36 @@ describe('with claims: a melee holds', () => {
     ['x20-brigade-lines-claims', [0, 1, 2, 3]],
   ] as const) {
     it(`${id}: nobody gives ground; the raw regiment stands where the melee found it until it ends`, () => {
-      const a = untilRout(id, [...watch])
+      const a = id === 'x15-melee-holds-claims' ? open() : untilRout(id, [...watch])
       expect(a.melee).toBeGreaterThan(0)
       expect(a.rout).toBeGreaterThan(a.melee)
       watch.forEach((_, k) => expect(a.at[k]).toBeCloseTo(a.z[k], 6))
     })
   }
-  it('X-18: the broken regiment runs clear of its pursuer, never into it', () => {
-    // the pair once stood in each other's margins and cores, and the router, still on the pursuer's cells, could not
-    // move off them
-    let P: ReturnType<typeof mkPlaced> | null = null
-    let touched = -1
+  it('X-18: the broken regiment runs clear; no enemy ever stands in its core', () => {
+    // the pair once stood in each other's cores, and the router, still on the pursuer's cells, could not move off them
+    let shared = -1
     let broke = false
     const w = play(caseOf('x18-flank-charge-claims'), {
-      every: 10,
+      every: 1,
       each: w => {
         broke ||= w.f.mstate[0] >= MS_ROUTING
-        if (!broke || touched >= 0 || !w.f.alive[0]) return
-        P ??= mkPlaced(w)
-        if (contacts(w, placeAll(w, P), TOUCH).some(c => c.i + c.j === 1)) touched = w.meta[M_TICK]
+        if (shared < 0 && coreShared(w, 0)) shared = w.meta[M_TICK]
       },
     })
     expect(broke).toBe(true)
-    expect(touched).toBe(-1)
-    expect(w.f.alive[0] ? w.f.z[0] : Infinity).toBeGreaterThan(80)
+    expect(shared).toBe(-1)
+    expect(w.f.alive[0]).toBe(1)
+    expect(w.f.z[0]).toBeGreaterThan(80)
   })
   it('X-17: a router with an enemy just behind it tries every way out, then surrenders', () => {
     const a = untilRout('x17-enemy-behind-claims')
+    // it left the field with men still, near where it broke: not ridden down to the last man, nor run off the map
     expect(a.gone).toBeGreaterThan(a.rout)
+    expect(a.left).toBeGreaterThan(0)
+    expect(Math.hypot(a.last[0] - a.broke[0], a.last[1] - a.broke[1])).toBeLessThan(30)
     // held 2 s, then the fan's four other directions, one every 5 s
     expect((a.gone - a.rout) / TICK_HZ).toBeGreaterThan(20)
-    expect(untilRout('x15-melee-holds-claims').gone).toBe(-1)
+    expect(open().gone).toBe(-1)
   })
 })
