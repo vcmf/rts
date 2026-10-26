@@ -239,21 +239,21 @@ describe('battalionLods', () => {
 describe("a split battalion's lists (aMan)", () => {
   const MEN = 23
   const all = {
-    m: Float32Array.from({ length: MEN * 16 }, (_, k) => 1000 * Math.floor(k / 16) + (k % 16)),
+    p: Float32Array.from({ length: MEN * 4 }, (_, k) => 1000 * Math.floor(k / 4) + (k % 4)),
     s: Float32Array.from({ length: MEN * 3 }, (_, k) => 100 * Math.floor(k / 3) + (k % 3)),
     n: Float32Array.from({ length: MEN * 3 }, (_, k) => -100 * Math.floor(k / 3) - (k % 3)),
   }
   const lists = (): ManLists => ({
-    m: new Float32Array(MEN * 16),
+    p: new Float32Array(MEN * 4),
     s: new Float32Array(MEN * 3),
     n: new Float32Array(MEN * 3),
     i: new Float32Array(MEN),
   })
-  /** each entry of a list is the man its index names: his matrix, clip and move */
+  /** each entry of a list is the man its index names: his pose, clip and move */
   const holdsItsMen = (l: ManLists, count: number) => {
     for (let k = 0; k < count; k++) {
       const i = l.i[k]
-      expect([...l.m.subarray(k * 16, k * 16 + 16)]).toEqual([...all.m.subarray(i * 16, i * 16 + 16)])
+      expect([...l.p.subarray(k * 4, k * 4 + 4)]).toEqual([...all.p.subarray(i * 4, i * 4 + 4)])
       expect([...l.s.subarray(k * 3, k * 3 + 3)]).toEqual([...all.s.subarray(i * 3, i * 3 + 3)])
       expect([...l.n.subarray(k * 3, k * 3 + 3)]).toEqual([...all.n.subarray(i * 3, i * 3 + 3)])
     }
@@ -276,7 +276,7 @@ describe("a split battalion's lists (aMan)", () => {
     const rest = lists()
     expect(nextLodBuffers(true, own, rest)).toBe(rest)
     expect(nextLodBuffers(false, own, rest)).toBe(own)
-    // the own buffers' indices are the identity: each matrix is its man's
+    // the own buffers' indices are the identity: each pose is its man's
     holdsItsMen(own, MEN)
   })
 })

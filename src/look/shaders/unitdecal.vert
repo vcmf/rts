@@ -20,6 +20,9 @@ precision highp float;attribute vec3 position;
 // fragment's gradient where it lies on the shape)
 uniform mat4 viewProjection;uniform vec3 uCamPos;
 attribute vec3 aVAT;attribute vec3 aNext;
+// his pose (units.vert's): x, y, z, his turn about y, as world0
+mat4 poseWorld(vec4 p){float c=cos(p.w),s=sin(p.w),k=p.y<-5e4?0.0:1.0;
+  return mat4(c*k,0.0,-s*k,0.0,0.0,k,0.0,0.0,s*k,0.0,c*k,0.0,p.xyz,1.0);}
 uniform vec4 uRoleStart,uShapeCell,uStrip,uRows;uniform vec2 uShDir,uShapeTexel,uShapeAt;uniform float uStepFrac,uDecalLift,uShLen;
 uniform mat4 uLMVP;
 uniform sampler2D uMeadow;
@@ -34,7 +37,7 @@ uniform vec2 uFarK,uFarScale;
 #endif
 varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 void main(){
-  #include<instancesVertex>
+  mat4 finalWorld=poseWorld(world0);
   vec3 p=finalWorld[3].xyz+aNext*uStepFrac;
   float j=position.z*DECAL_ALONG;
   vec2 q=vec2(position.x,j<0.5?uRows.x:j<1.5?uRows.y:j<2.5?uRows.z:uRows.w);

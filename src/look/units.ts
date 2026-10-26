@@ -95,20 +95,24 @@ interface Host {
   lod: Mesh[]
   near: boolean
   tiny: boolean
-  matrices: Float32Array
+  // each man's pose (x, y, z, his turn about y; 4 a man): what he is drawn at, read as world0 (the thin instances'
+  // first matrix column: the shaders build his matrix from it, world1..3 unread; a new attribute would pass WebGL's 16)
+  pose: Float32Array
+  // a matrix a man, never filled nor sent again: Babylon's count of the meshes' thin instances (world0 is the pose's)
+  count: Float32Array
   settings: Float32Array
   man: Float32Array // each man's index (aMan: the LOD cross-fade's hash), in the battalion's order
   jitter: Float32Array
   // the nearest LOD (a figure with three LODs, its men tall on screen: setSplit, share): each man drawn at the nearest
   // LOD or the next by his own size on screen. split: the battalion's men are shared out; sel: a man at the nearest
-  // (1); nearM/nearS/nearN its men's matrices, clips and moves, restM/restS/restN the others' (the next LOD's buffers
-  // while split); resplit: the lists are older than the matrices
+  // (1); nearP/nearS/nearN its men's poses, clips and moves, restP/restS/restN the others' (the next LOD's buffers
+  // while split); resplit: the lists are older than the poses
   split: boolean
   sel: Uint8Array
-  nearM: Float32Array
+  nearP: Float32Array
   nearS: Float32Array
   nearN: Float32Array
-  restM: Float32Array
+  restP: Float32Array
   restS: Float32Array
   restN: Float32Array
   nearI: Float32Array // (and their indices, aMan)
@@ -122,9 +126,9 @@ interface Host {
   cz: number
   lo: Vector3
   hi: Vector3
-  step: number // the 1/fps step its matrices were written for (a moving battalion moves once a step)
+  step: number // the 1/fps step its poses were written for (a moving battalion moves once a step)
   phase: Phase | null // the script's phase its men were last written in (a halted one is written once a phase)
-  stale: boolean[] // per LOD: its GPU copy of the matrices is older than the matrices
+  stale: boolean[] // per LOD: its GPU copy of the poses is older than the poses
   staleSet: boolean[] // per LOD: its GPU copy of the men's clip settings is older
   staleNext: boolean[] // per LOD: its GPU copy of the men's moves is older
   cycle: number // the cycle its settings were written in (each cycle's clips start afresh)
@@ -136,16 +140,16 @@ interface Host {
   srcZ: number
 }
 
-/** A battalion's own lists on the GPU: its men's matrices, clips, moves and indices, each one buffer. */
+/** A battalion's own lists on the GPU: its men's poses, clips, moves and indices, each one buffer. */
 interface Shared {
-  m: Buffer
+  p: Buffer
   s: Buffer
   n: Buffer
   i: Buffer
 }
 /** Mesh `m` draws its instances from `sh`'s buffers (in place of the ones its thin instances made it). */
 function bindShared(m: Mesh, sh: Shared): void {
-  for (let c = 0; c < 4; c++) m.setVerticesBuffer(sh.m.createVertexBuffer(`world${c}`, c * 4, 4))
+  m.setVerticesBuffer(sh.p.createVertexBuffer('world0', 0, 4))
   m.setVerticesBuffer(sh.s.createVertexBuffer('aVAT', 0, 3))
   m.setVerticesBuffer(sh.n.createVertexBuffer('aNext', 0, 3))
   m.setVerticesBuffer(sh.i.createVertexBuffer('aMan', 0, 1))
@@ -815,14 +819,16 @@ export class Units {
       jitter[i * 4 + 2] = (rnd() - 0.5) * 0.14
       jitter[i * 4 + 3] = rnd() * 2 - 1
     }
-    const matrices = new Float32Array(men * 16)
+    const pose = new Float32Array(men * 4)
+    const count = new Float32Array(men * 16)
     const settings = new Float32Array(men * 3)
     const next = new Float32Array(men * 3)
     const man = Float32Array.from({ length: men }, (_, i) => i)
     // (the nearest LOD's buffers its own, made at the first split; the next LOD's swapped to the rest's while split)
     lod.forEach((m, li) => {
       if (this.hasNearest && li === 0) return
-      m.thinInstanceSetBuffer('matrix', matrices, 16, false)
+      m.thinInstanceSetBuffer('matrix', count, 16, true)
+      m.thinInstanceSetBuffer('world0', pose, 4, false)
       m.thinInstanceSetBuffer('aVAT', settings, 3, false)
       m.thinInstanceSetBuffer('aNext', next, 3, false)
       m.thinInstanceSetBuffer('aMan', man, 1, true)
@@ -832,7 +838,7 @@ export class Units {
     // placing, not one a mesh (battle threads PR 4: the uploads were the sim's whole extra cost)
     const engine = this.scene.getEngine()
     const shared: Shared = {
-      m: new Buffer(engine, matrices, true, 16, false, true),
+      p: new Buffer(engine, pose, true, 4, false, true),
       s: new Buffer(engine, settings, true, 3, false, true),
       n: new Buffer(engine, next, true, 3, false, true),
       i: new Buffer(engine, man, false, 1, false, true),
@@ -847,7 +853,8 @@ export class Units {
       lod,
       near: false,
       tiny: false,
-      matrices,
+      pose,
+      count,
       settings,
       man,
       jitter,
@@ -866,10 +873,10 @@ export class Units {
       index: this.hosts.length,
       split: false,
       sel: new Uint8Array(0),
-      nearM: none(),
+      nearP: none(),
       nearS: none(),
       nearN: none(),
-      restM: none(),
+      restP: none(),
       restS: none(),
       restN: none(),
       nearI: none(),
@@ -885,14 +892,14 @@ export class Units {
     })
   }
 
-  // every man's matrix and clip at the battalion's local time: his place and facing from the script, set on the ground;
+  // every man's pose and clip at the battalion's local time: his place and facing from the script, set on the ground;
   // his clip's range, and its phase so its step 0 falls when his role began (the clock's steps less his start's). A
   // moving battalion (moving: its phase moves its men, re-placed at every step) is placed as it stands at the step's
   // own time (back: s from it to the clock) and each man's move to his next step's place is written (next: the places
   // between two steps, aNext); a halted one where it stands, not moving. reuse: placed at the step before in the same
   // phase, so each man's ground height here is the one his move was written with (one groundAt a man a step, not two)
   private place(h: Host, local: number, cycleStart: number, moving: boolean, back: number, reuse: boolean): void {
-    const { b, matrices, settings, jitter, next } = h
+    const { b, pose, settings, jitter, next } = h
     const c = Math.cos(b.heading)
     const s = Math.sin(b.heading)
     const fps = this.data.fps
@@ -938,12 +945,11 @@ export class Units {
           // (HIDDEN): what reads a man's place from his translation alone (his simple shadow's decal takes its x and z
           // and the ground's height) finds him nowhere near; the trodden ground skips him (a zero scale), the colours
           // take the battalion's centre (placeFlag)
-          const o = i * 16
-          matrices.fill(0, o, o + 16)
-          matrices[o + 12] = HIDDEN
-          matrices[o + 13] = -HIDDEN
-          matrices[o + 14] = HIDDEN
-          matrices[o + 15] = 1
+          const o = i * 4
+          pose[o] = HIDDEN
+          pose[o + 1] = -HIDDEN
+          pose[o + 2] = HIDDEN
+          pose[o + 3] = 0
           next.fill(0, i * 3, i * 3 + 3)
           continue
         }
@@ -970,26 +976,12 @@ export class Units {
         role = man.role
         start = cycleStart + man.since
       }
-      const y = reuse ? matrices[i * 16 + 13] + next[i * 3 + 1] : groundAt(x, z)
-      const ca = Math.cos(a)
-      const sa = Math.sin(a)
-      const o = i * 16
-      matrices[o] = ca
-      matrices[o + 1] = 0
-      matrices[o + 2] = -sa
-      matrices[o + 3] = 0
-      matrices[o + 4] = 0
-      matrices[o + 5] = 1
-      matrices[o + 6] = 0
-      matrices[o + 7] = 0
-      matrices[o + 8] = sa
-      matrices[o + 9] = 0
-      matrices[o + 10] = ca
-      matrices[o + 11] = 0
-      matrices[o + 12] = x
-      matrices[o + 13] = y
-      matrices[o + 14] = z
-      matrices[o + 15] = 1
+      const y = reuse ? pose[i * 4 + 1] + next[i * 3 + 1] : groundAt(x, z)
+      const o = i * 4
+      pose[o] = x
+      pose[o + 1] = y
+      pose[o + 2] = z
+      pose[o + 3] = a
       if (x < minX) minX = x
       if (x > maxX) maxX = x
       if (y < minY) minY = y
@@ -1055,7 +1047,8 @@ export class Units {
     k.b.z += this.softPad
     h.lod[this.decalLod].getBoundingInfo().reConstruct(k.a, k.b)
     h.stale.fill(true)
-    h.staleNext.fill(true)
+    // (the sim's men have no moves between steps: theirs stay the zeros sent first)
+    if (!src) h.staleNext.fill(true)
     h.resplit = true
     this.placeFlag(h)
     if (changed) h.staleSet.fill(true)
@@ -1076,16 +1069,17 @@ export class Units {
     if (on && h.sel.length !== men) {
       // (the mesh and the lists made at the battalion's first split: no memory for one never split)
       h.sel = new Uint8Array(men)
-      h.nearM = new Float32Array(men * 16)
+      h.nearP = new Float32Array(men * 4)
       h.nearS = new Float32Array(men * 3)
       h.nearN = new Float32Array(men * 3)
-      h.restM = new Float32Array(men * 16)
+      h.restP = new Float32Array(men * 4)
       h.restS = new Float32Array(men * 3)
       h.restN = new Float32Array(men * 3)
       h.nearI = new Float32Array(men)
       h.restI = new Float32Array(men)
       const m = this.hostMesh(0, h.b, h.index)
-      m.thinInstanceSetBuffer('matrix', h.nearM, 16, false)
+      m.thinInstanceSetBuffer('matrix', h.count, 16, true)
+      m.thinInstanceSetBuffer('world0', h.nearP, 4, false)
       m.thinInstanceSetBuffer('aVAT', h.nearS, 3, false)
       m.thinInstanceSetBuffer('aNext', h.nearN, 3, false)
       m.thinInstanceSetBuffer('aMan', h.nearI, 1, false)
@@ -1095,9 +1089,11 @@ export class Units {
       if (h.fading) this.fadingMeshes.add(m) // (made while its battalion fades: faded with the rest)
     }
     const l = h.lod[this.nextLod]
-    const own = { m: h.matrices, s: h.settings, n: h.next, i: h.man }
-    const buf = nextLodBuffers(on, own, { m: h.restM, s: h.restS, n: h.restN, i: h.restI })
-    l.thinInstanceSetBuffer('matrix', buf.m, 16, false)
+    const own = { p: h.pose, s: h.settings, n: h.next, i: h.man }
+    const buf = nextLodBuffers(on, own, { p: h.restP, s: h.restS, n: h.restN, i: h.restI })
+    // (all its men drawn again when not split: share() sets the counts while split)
+    if (!on) l.thinInstanceCount = men
+    l.thinInstanceSetBuffer('world0', buf.p, 4, false)
     l.thinInstanceSetBuffer('aVAT', buf.s, 3, false)
     l.thinInstanceSetBuffer('aNext', buf.n, 3, false)
     l.thinInstanceSetBuffer('aMan', buf.i, 1, !on)
@@ -1115,7 +1111,7 @@ export class Units {
   // and tall on screen (nearestPx, ±10 %: a man at the switch does not flicker), else at the next; the two lists
   // written again when a man changes LOD or the men were placed. Whether a man changed LOD
   private share(h: Host, cam: Vector3, pxPerM: number): boolean {
-    const m = h.matrices
+    const p = h.pose
     const s = h.settings
     const n = h.next
     const sel = h.sel
@@ -1124,10 +1120,10 @@ export class Units {
     const k = FIGURE * pxPerM
     let changed = false
     for (let i = 0; i < sel.length; i++) {
-      const o = i * 16
-      const x = m[o + 12]
-      const y = m[o + 13] + FIGURE / 2
-      const z = m[o + 14]
+      const o = i * 4
+      const x = p[o]
+      const y = p[o + 1] + FIGURE / 2
+      const z = p[o + 2]
       let want = k / Math.max(1, Math.hypot(cam.x - x, cam.y - y, cam.z - z)) >= (sel[i] ? off : on) ? 1 : 0
       if (want) {
         for (const p of this.camPlanes) {
@@ -1146,9 +1142,9 @@ export class Units {
     h.resplit = false
     const [a, b] = splitLists(
       sel,
-      { m, s, n },
-      { m: h.nearM, s: h.nearS, n: h.nearN, i: h.nearI },
-      { m: h.restM, s: h.restS, n: h.restN, i: h.restI },
+      { p, s, n },
+      { p: h.nearP, s: h.nearS, n: h.nearN, i: h.nearI },
+      { p: h.restP, s: h.restS, n: h.restN, i: h.restI },
     )
     h.lod[0].thinInstanceCount = a
     h.lod[this.nextLod].thinInstanceCount = b
@@ -1407,7 +1403,7 @@ export class Units {
         }
         if (this.sharesLists(h, k)) {
           // its lists are the battalion's shared buffers: one upload for every mesh that reads them
-          if (h.stale[k]) this.uploadShared(h, h.shared.m, h.matrices, h.stale)
+          if (h.stale[k]) this.uploadShared(h, h.shared.p, h.pose, h.stale)
           if (h.staleSet[k]) this.uploadShared(h, h.shared.s, h.settings, h.staleSet)
           if (h.staleNext[k] && (k === this.decalLod || this.smooth)) {
             this.uploadShared(h, h.shared.n, h.next, h.staleNext)
@@ -1415,7 +1411,7 @@ export class Units {
           continue
         }
         if (h.stale[k]) {
-          this.upload(h.lod[k], 'matrix', h.matrices.length)
+          this.upload(h.lod[k], 'world0', h.pose.length)
           h.stale[k] = false
         }
         if (h.staleSet[k]) {
@@ -2110,15 +2106,15 @@ export class Units {
     }
     for (const h of this.hosts) {
       if (!this.shown || h.hi.x < b.x0 || h.lo.x > b.x0 + b.size || h.hi.z < b.z0 || h.lo.z > b.z0 + b.size) continue
-      const m = h.matrices
-      for (let o = 0; o < m.length; o += 16) {
+      const p = h.pose
+      for (let o = 0; o < p.length; o += 4) {
         // (a man not drawn: no size)
-        if (m[o + 5] === 0) continue
-        const x = m[o + 12]
-        const z = m[o + 14]
+        if (p[o + 1] === -HIDDEN) continue
+        const x = p[o]
+        const z = p[o + 2]
         // (+z in the figure's frame: behind him)
-        const bx = m[o + 8]
-        const bz = m[o + 10]
+        const bx = Math.sin(p[o + 3])
+        const bz = Math.cos(p[o + 3])
         splat(x, z, 1)
         for (const [d, w] of TR_TRAIL) splat(x + bx * d, z + bz * d, w)
       }
@@ -2230,7 +2226,7 @@ export class Units {
   private placeFlag(h: Host): void {
     if (!this.flagM) return
     const o = h.index * 16
-    const mo = this.bearer * 16
+    const mo = this.bearer * 4
     const c = Math.cos(FLAG_WIND)
     const s = Math.sin(FLAG_WIND)
     const m = this.flagM
@@ -2253,9 +2249,9 @@ export class Units {
       m[o + 13] = h.srcAny ? groundAt(h.srcX, h.srcZ) : -HIDDEN
       m[o + 14] = h.srcZ
     } else {
-      m[o + 12] = h.matrices[mo + 12]
-      m[o + 13] = h.matrices[mo + 13]
-      m[o + 14] = h.matrices[mo + 14]
+      m[o + 12] = h.pose[mo]
+      m[o + 13] = h.pose[mo + 1]
+      m[o + 14] = h.pose[mo + 2]
     }
     m[o + 15] = 1
     if (this.flagN) for (let k = 0; k < 3; k++) this.flagN[h.index * 3 + k] = h.next[this.bearer * 3 + k]
