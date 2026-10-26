@@ -25,7 +25,7 @@ import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
 import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
 import { cellK, impAt, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
-import { claimedAt, claimsNear, claimHit } from './claims.ts'
+import { claimedAt, claimsNear, claimHit, noteHolder } from './claims.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
@@ -979,8 +979,10 @@ function sampleBins(w: World, i: number, pace: number, V0: number): void {
     const T = w.terrain
     const cell = cellK(T, px, pz)
     const gg = groundGAt(T, cell, kind, dx, dz)
-    if (gg <= 0 || blockedAt(w, i, imp, px + dx * look, pz + dz * look)) blkTmp[j]++
-    else {
+    if (gg <= 0 || blockedAt(w, i, imp, px + dx * look, pz + dz * look)) {
+      blkTmp[j]++
+      if (w.claims && gg > 0) noteHolder(w, i, px + dx * look, pz + dz * look)
+    } else {
       gTmp[j] += 1 / gg
       nTmp[j]++
     }

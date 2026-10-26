@@ -52,22 +52,20 @@ import {
   fillRetire,
   cutChange,
 } from './formation.ts'
-import { formedFits, freeSpot, enemyClaimAhead } from './claims.ts'
+import { formedFits, freeSpot, heldByEnemy } from './claims.ts'
 import { sin, cos, PI } from './num.ts'
 import { TICK_HZ, DT } from './time.ts'
 
 const RUN = 800 // how far a router is sent, metres (kept on the map)
-const unit = (x: number, z: number): [number, number] => {
-  const d = Math.sqrt(x * x + z * z) || 1
-  return [x / d, z / d]
-}
 // the runs: the stored direction first, then turned from it by these angles, one every RETRY ticks while the
 // router is halted; after the last it stays where it is (pinned), unless enemies hold it there (RP_TRAPPED)
 const FAN = [0, PI / 3, -PI / 3, (2 * PI) / 3, (-2 * PI) / 3]
 const RETRY = 100
-// s a run may stand held by other formations' cells before it counts as halted there, if an enemy's claim lies on its
-// way (the claim grid's prototype)
+// s a run may stand held by other formations' cells before it counts as halted there (the claim grid's prototype)
 const HELD = 2
+// ticks within which an enemy's hold on a man's next step counts as holding the router (a held formation tests its way
+// only every BLOCK_RETRY ticks, formation.ts)
+const HELD_RECENT = 10
 
 // what a battalion reads of the others this step (scratch): the contagion shock, its secured flanks, and the
 // nearest enemy in the fight (its distance, and the unit vector from it to the battalion)
@@ -266,21 +264,17 @@ function rout(w: World, i: number, now: number, men: number): void {
   if (f.trans[i]) cutChange(w, i) // it breaks its ranks: no change finished under fire (#39)
   run(w, i)
 }
-// a router: a run ends when its orders do, or when enemies' cells hold it for HELD seconds. Halted at impassable
-// ground or by enemies, it tries the fan's next direction every RETRY ticks; held by enemies on the last, it is
-// trapped; otherwise it got where it was going (or as near as it could) and has fled
+/**
+ * A router's step: a run ends when its orders do, or when other formations' cells hold it for HELD seconds. Halted at
+ * impassable ground or by others, it tries the fan's next direction every RETRY ticks; held on the last by an enemy in
+ * the fight, it is trapped and surrenders (tick.ts); otherwise it got where it was going (or as near as it could) and
+ * has fled.
+ */
 function routStep(w: World, i: number): void {
   const f = w.f
-  const n = f.ordHead[i]
-  if (
-    f.routPhase[i] === RP_RUNNING &&
-    f.status[i] === ST_BLOCKED &&
-    f.blockedFor[i] > HELD &&
-    n >= 0 &&
-    enemyClaimAhead(w, i, ...unit(w.ord.x[n] - f.x[i], w.ord.z[n] - f.z[i]))
-  ) {
+  if (f.routPhase[i] === RP_RUNNING && f.status[i] === ST_BLOCKED && f.blockedFor[i] > HELD) {
     clearOrders(w, i)
-    f.routPhase[i] = f.runs[i] >= FAN.length ? RP_TRAPPED : RP_HALTED
+    f.routPhase[i] = f.runs[i] >= FAN.length && heldByEnemy(w, i, HELD_RECENT) ? RP_TRAPPED : RP_HALTED
   }
   if (f.routPhase[i] === RP_RUNNING && f.ordHead[i] < 0) {
     f.routPhase[i] = f.status[i] === ST_HALTED ? RP_HALTED : RP_FLED

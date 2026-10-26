@@ -21,6 +21,10 @@ import {
   sectionHashes,
   typeOf,
   MS_ROUTING,
+  MS_SHATTERED,
+  RP_FLED,
+  ST_BLOCKED,
+  heldByEnemy,
   M_TICK,
   TICK_HZ,
   O_MOVE,
@@ -218,8 +222,8 @@ function untilRout(id: string, watch = [0, 1]) {
   const out = {
     melee: -1,
     rout: -1,
-    z: [] as number[],
-    at: [] as number[],
+    z: [] as number[][],
+    at: [] as number[][],
     gone: -1,
     broke: [0, 0],
     last: [0, 0],
@@ -230,13 +234,13 @@ function untilRout(id: string, watch = [0, 1]) {
     each: w => {
       if (out.melee < 0 && w.f.foe[0]) {
         out.melee = w.meta[M_TICK]
-        out.z = watch.map(i => w.f.z[i])
+        out.z = watch.map(i => [w.f.x[i], w.f.z[i]])
       }
       if (out.rout < 0 && w.f.mstate[0] >= MS_ROUTING) {
         out.rout = w.meta[M_TICK]
         out.broke = [w.f.x[0], w.f.z[0]]
       }
-      if (w.f.foe[0] && w.f.mstate[0] < MS_ROUTING) out.at = watch.map(i => w.f.z[i])
+      if (w.f.foe[0] && w.f.mstate[0] < MS_ROUTING) out.at = watch.map(i => [w.f.x[i], w.f.z[i]])
       if (w.f.alive[0]) out.last = [w.f.x[0], w.f.z[0]]
       else if (out.gone < 0) {
         out.gone = w.meta[M_TICK]
@@ -261,7 +265,7 @@ describe('with claims: a melee holds', () => {
       const a = id === 'x15-melee-holds-claims' ? open() : untilRout(id, [...watch])
       expect(a.melee).toBeGreaterThan(0)
       expect(a.rout).toBeGreaterThan(a.melee)
-      watch.forEach((_, k) => expect(a.at[k]).toBeCloseTo(a.z[k], 6))
+      watch.forEach((_, k) => a.at[k].forEach((v, d) => expect(v).toBeCloseTo(a.z[k][d], 6)))
     })
   }
   it('X-18: the broken regiment runs clear; no enemy ever stands in its core', () => {
@@ -279,6 +283,27 @@ describe('with claims: a melee holds', () => {
     expect(shared).toBe(-1)
     expect(w.f.alive[0]).toBe(1)
     expect(w.f.z[0]).toBeGreaterThan(80)
+  })
+  it('X-17: what holds the router is counted an enemy only while that enemy is in the fight', () => {
+    // 4 s after the break its first run, north, is held by the regiment just behind; shattered (and standing) as the
+    // melee starts, that regiment still holds it but is not an enemy that can take its surrender
+    const held = (broken: boolean) => {
+      let set = false
+      const w = play(caseOf('x17-enemy-behind-claims'), {
+        seconds: 33.5,
+        every: 1,
+        each: w => {
+          if (!broken || set || !w.f.foe[0]) return
+          set = true
+          w.f.mstate[2] = MS_SHATTERED
+          w.f.routPhase[2] = RP_FLED
+        },
+      })
+      expect(w.f.status[0]).toBe(ST_BLOCKED)
+      return heldByEnemy(w, 0, 10)
+    }
+    expect(held(false)).toBe(true)
+    expect(held(true)).toBe(false)
   })
   it('X-17: a router with an enemy just behind it tries every way out, then surrenders', () => {
     const a = untilRout('x17-enemy-behind-claims')

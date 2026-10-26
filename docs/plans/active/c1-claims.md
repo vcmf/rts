@@ -140,12 +140,14 @@ keeps:
   the core does not. They used to pass freely into each other, and when one broke the router stood on its foe's
   cells and could not move off them (X-18: shattered, held for good).
 - **A charge reaches its target's core only;** any other enemy's margin stops it (X-16: the veteran pursued the router
-  into the friend behind it). A pursuit stops at the router's margin and rides it down from there: its reach grows by
-  the margin's width (`marginWidth`), a cell, 2 m on the bench and 7.16 m on the battle maps.
-- **A router held by enemies** (`routStep`, `src/sim/morale.ts`): a run held for 2 s, with an enemy's claim one cell
-  along its way (`enemyClaimAhead`: not a friend, a crowded cell or the ground), counts as halted and tries the fan's
-  next direction at its retry, as at impassable ground. Held so on the last, it surrenders: it leaves the field at the
-  tick's end, its men counted as left until saves count the captured (C2).
+  into the friend behind it). A pursuit stops at the router's margin and rides it down from there: the men in contact
+  are counted as if it stood as near as it may, up to `standOff` (a margin and a cell, so it scales with the cell).
+- **A held router** (`routStep`, `src/sim/morale.ts`): a run held for 2 s by others' cells counts as halted and tries
+  the fan's next direction at its retry, as at impassable ground, whoever holds it. Held on the last by an enemy in the
+  fight, it surrenders: it leaves the field at the tick's end, its men counted as left until saves count the captured
+  (C2). Who held it is recorded when it happens: the lag model's look-ahead, finding a man's next step blocked, notes
+  an enemy in the fight claiming that place (`noteHolder`); a friend, a crowded cell, the ground or a broken enemy is
+  not one.
 - **The tuning** (`HELD`) is in the code while it is a prototype: ruleset data is hashed into saves.
 
 Six cases, a veteran regiment (quality 0.95) charging a raw one (0.75) at the halt unless said:
