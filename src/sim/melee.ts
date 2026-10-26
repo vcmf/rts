@@ -45,11 +45,8 @@ import {
   changeProgress,
   startChange,
   targetShape,
-  giveGround,
-  followUp,
   inClashPair,
-  HELD_FOE,
-  type Gave,
+  stepWhole,
 } from './formation.ts'
 import { claimFormation } from './claims.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
@@ -74,23 +71,20 @@ const COS45 = Math.SQRT1_2
 export const GAP_UNKNOWN = 1e9
 
 // per-world scratch: the shock each attacker sends this step and to whom, the melee pairs as the step began,
-// and per-company masks of the companies in contact. For the clash (the claim grid's prototype): per battalion, the
-// push of its strike on its foe this step, its companies in contact with that foe, and the metres it gave; the tick
-// they were found at and the block geometry they were found with
+// and per-company masks of the companies in contact
 export interface Melee {
   shockTo: Int32Array
   shockBy: Float64Array
   foe0: Int32Array
   mi: Uint8Array
   mj: Uint8Array
+  // a melee's rounds (with claims): each battalion's push on its foe this step and the tick it was found at; each
+  // battalion's last round (ROUND_*) and its tick, for the bench's overlay
   push: Float64Array
-  eng: Uint8Array
-  gave: Float64Array
   pushAt: number
   G: FireGeo | null
-  pressed: Float64Array // how hard each battalion is pressed this step (0..1)
-  front: Uint8Array // whether its foe stands in its front, as the step found them
-  moved: Gave // what a clash's motion made (giveGround, followUp)
+  round: Uint8Array
+  roundAt: Int32Array
 }
 const ks = new Uint32Array(4)
 const scratchOf = (w: World): Melee =>
@@ -102,13 +96,10 @@ const scratchOf = (w: World): Melee =>
     mi: new Uint8Array(MAX_COMPANIES),
     mj: new Uint8Array(MAX_COMPANIES),
     push: new Float64Array(MAX_FORMATIONS),
-    eng: new Uint8Array(MAX_FORMATIONS * MAX_COMPANIES),
-    gave: new Float64Array(MAX_FORMATIONS),
     pushAt: -1,
     G: null,
-    pressed: new Float64Array(MAX_FORMATIONS),
-    front: new Uint8Array(MAX_FORMATIONS),
-    moved: { m: 0, by: 0 },
+    round: new Uint8Array(MAX_FORMATIONS),
+    roundAt: new Int32Array(MAX_FORMATIONS).fill(-1),
   })
 
 /* ---------------- geometry ---------------- */
@@ -467,13 +458,8 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
     const men = inContact(w, G, i, e, lim, S.mi)
     inContact(w, G, e, i, lim, S.mj)
     const lambda = M.rate * DT * men * strengthOf(w, i)
-    if (e === j && w.claims) {
-      // the clash: its push on its foe, and its companies in contact with it
-      S.push[i] = lambda * Math.max(0, f.morale[i])
-      const C = typeOf(w, i).C
-      S.eng.fill(0, i * MAX_COMPANIES, (i + 1) * MAX_COMPANIES)
-      S.eng.set(S.mi.subarray(0, C), i * MAX_COMPANIES)
-    }
+    // a round's push: the losses it owes its foe, as expected, times its nerve
+    if (e === j && w.claims) S.push[i] = lambda * Math.max(0, f.morale[i])
     owe(w, e, S.mj, lambda, keyedStream(ks, seed, tick, h, e, K_MELEE))
   }
   strike(j)
@@ -482,89 +468,135 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
   }
 }
 
-/* ---------------- step 10, with claims: the clash ---------------- */
-// The claim grid's prototype (docs/plans/active/c1-claims.md, step 4): a melee moves, pair by pair. Two battalions
-// each the other's foe since the step began weigh their pushes, a push being the men a battalion's strike owes its
-// foe this step times its morale (the men in contact on both sides are much the same, and a melee is decided by whose
-// nerve goes first). One losing by more than EVEN of the two, its foe in its front, is pressed by the share past
-// EVEN: its companies in contact give ground (a bend first, then the whole battalion steps back: giveGround), held
-// by every other formation's claims and the ground as any motion is, and its foe follows by at most what it gave, so
-// the two stay in contact and never overlap. Other enemies fighting it (a flank, the rear) act on its morale only. A
-// battalion that cannot give the ground it is pressed for is pinned: by friends behind it loses its order
-// (disorder), by enemies or impassable ground its nerve (a morale shock).
-const EVEN = 0.05 // a battalion losing by less than this share holds its ground
-const GIVE = 1.5 // metres a second given at a full loss
-const PINNED_DISORDER = 0.4 // disorder a second, at a full loss, of a battalion friends hold where it stands
-const PINNED_SHOCK = 0.08 // morale a second, at a full loss, of one enemies or the ground hold there
+/* ---------------- step 10, with claims: a melee's rounds ---------------- */
+// The claim grid's prototype (docs/proposals/collision-and-orders.md, § Contact; docs/plans/active/c1-claims.md,
+// step 4): a pair in melee (each the other's foe, both formed, one ahead of the other) is judged every ROUND seconds,
+// staggered by the pair's lower handle, from its pushes this tick, a push being the losses a strike owes its foe
+// times the striker's morale. One losing by more than PRESS of the two steps back STEP metres as one rigid move,
+// granted whole or not at all, and its foe follows by the same displacement. If the foe cannot follow (another enemy
+// fighting it, or its move is refused), the loser's step alone ends their melee. A loser that cannot step back
+// (refused, or a second enemy on its flank or rear) is pinned: a shock to its morale.
+const ROUND = 3 // s
+const STEP = 2 // m
+const PRESS = 0.05 // the share of the two pushes a loser falls short by
+const PINNED = 0.15 // morale shock of a loser that cannot step back
+/** A battalion's last round (Melee.round): it stepped back, followed, was pinned, or fell back out of the melee. */
+export const ROUND_STEPPED = 1
+export const ROUND_FOLLOWED = 2
+export const ROUND_PINNED = 3
+export const ROUND_FELL_BACK = 4
+
+// a pair's judgement this tick: its loser (−1 none) and its winner, and the step's direction (unit)
+const judged: number[] = []
+const jWin = new Int32Array(MAX_FORMATIONS)
+const jX = new Float64Array(MAX_FORMATIONS)
+const jZ = new Float64Array(MAX_FORMATIONS)
 
 /**
- * The clash, after the melee step (`order`: the tick's keyed order of the formations, `claimOrder`): which
- * battalions are pressed, then the pressed give ground, then their foes follow, each claiming its new cells before
- * the next moves.
+ * The rounds due this tick, at the end of the melee step (`order`: the tick's keyed order of the formations,
+ * `claimOrder`): every pair is judged from this step's pushes, then the losers step back in that order, each moved
+ * formation claiming its new cells before the next.
  */
-export function clashStep(w: World, order: readonly number[]): void {
+export function roundStep(w: World, order: readonly number[]): void {
   const S = w.scratch.melee
+  const f = w.f
   if (!S || !S.G || S.pushAt !== w.meta[M_TICK] + 1) return
-  S.pressed.fill(0)
-  S.front.fill(0)
-  S.gave.fill(0)
-  for (const i of order) weigh(w, S, S.G, i)
-  for (const i of order) if (S.pressed[i] > 0) give(w, S, i)
-  for (const i of order) follow(w, S, i)
-}
-
-/** Battalion i's foe in a pair that can clash (`inClashPair`) and was one since the step began; else −1. */
-function pairedFoe(w: World, S: Melee, i: number): number {
-  const f = w.f
-  if (!f.alive[i] || !inClashPair(w, i) || S.foe0[i] !== f.foe[i]) return -1
-  const j = slotOf(w, f.foe[i])
-  return S.foe0[j] === handleOf(w, i) ? j : -1
-}
-
-/**
- * Whether battalion i's foe stands in its front (`front`), and how hard i is pressed (`pressed`, 0..1): by the share
- * past EVEN that its foe's push exceeds its own, its foe in its front and some of its companies in contact.
- */
-function weigh(w: World, S: Melee, G: FireGeo, i: number): void {
-  const j = pairedFoe(w, S, i)
-  if (j < 0) return
-  S.front[i] = quarter(w, G, j, i) === Q_FRONT ? 1 : 0
-  const on = S.push[j]
-  const by = S.push[i]
-  const r = on + by > 0 ? (on - by) / (on + by) : 0
-  let any = 0
-  for (let c = 0; c < MAX_COMPANIES; c++) any |= S.eng[i * MAX_COMPANIES + c]
-  if (r > EVEN && S.front[i] && any) S.pressed[i] = (r - EVEN) / (1 - EVEN)
-}
-
-/**
- * Battalion i gives the ground it is pressed for, as far as it can; what it could not give pins it: against friends
- * (a friend's claim, or a cell crowded past what the grid keeps, where friends are the most likely) its order,
- * against an enemy or the ground its nerve.
- */
-function give(w: World, S: Melee, i: number): void {
-  const f = w.f
-  const d = GIVE * S.pressed[i] * DT
-  const g = S.moved
-  if (!giveGround(w, i, d, S.eng.subarray(i * MAX_COMPANIES, (i + 1) * MAX_COMPANIES), slotOf(w, f.foe[i]), g)) return
-  S.gave[i] = g.m
-  if (g.m < d) {
-    const k = S.pressed[i] * (1 - g.m / d)
-    if (g.by & HELD_FOE) f.shockIn[i] += PINNED_SHOCK * k * DT
-    else f.disorder[i] = Math.min(1, f.disorder[i] + PINNED_DISORDER * k * DT)
+  const tick = S.pushAt
+  const per = Math.round(ROUND * TICK_HZ)
+  judged.length = 0
+  for (const i of order) {
+    if (!f.alive[i] || !inClashPair(w, i) || S.foe0[i] !== f.foe[i]) continue
+    const j = slotOf(w, f.foe[i])
+    if (S.foe0[j] !== handleOf(w, i)) continue
+    const lo = Math.min(handleOf(w, i), handleOf(w, j))
+    if ((tick + lo) % per !== 0) continue
+    // i loses: its push short of its foe's by more than PRESS of the two
+    const on = S.push[j]
+    const by = S.push[i]
+    if (!(on + by > 0) || (on - by) / (on + by) <= PRESS) continue
+    // the direction: along the winner's heading if the loser stands ahead of it, else to the loser's rear if the
+    // winner stands ahead of the loser; neither (flank to flank): no round
+    if (aheadOf(w, S.G, j, i)) {
+      jX[i] = sin(f.heading[j])
+      jZ[i] = cos(f.heading[j])
+    } else if (aheadOf(w, S.G, i, j)) {
+      jX[i] = -sin(f.heading[i])
+      jZ[i] = -cos(f.heading[i])
+    } else continue
+    jWin[i] = j
+    judged.push(i)
   }
-  claimFormation(w, i)
+  for (const i of judged) {
+    const j = jWin[i]
+    S.roundAt[i] = tick
+    S.roundAt[j] = tick
+    if (flanked(w, S, i, j) || !stepWhole(w, i, jX[i] * STEP, jZ[i] * STEP, j)) {
+      f.shockIn[i] += PINNED
+      S.round[i] = ROUND_PINNED
+      S.round[j] = 0
+      continue
+    }
+    claimFormation(w, i)
+    S.round[i] = ROUND_STEPPED
+    if (!fought(w, S, j, i) && stepWhole(w, j, jX[i] * STEP, jZ[i] * STEP, i)) {
+      claimFormation(w, j)
+      S.round[j] = ROUND_FOLLOWED
+      continue
+    }
+    // its foe cannot follow: the loser has fallen back out of the melee
+    S.round[i] = ROUND_FELL_BACK
+    S.round[j] = 0
+    leave(w, i, j)
+  }
 }
 
-/**
- * Battalion i follows its foe if the foe gave ground: each in the other's front, so both move along one line, its
- * companies in contact with the foe by at most the ground given.
- */
-function follow(w: World, S: Melee, i: number): void {
-  const j = pairedFoe(w, S, i)
-  if (j < 0 || S.pressed[i] > 0 || !(S.gave[j] > 0) || !S.front[i] || !S.front[j]) return
-  followUp(w, i, S.gave[j], S.eng.subarray(i * MAX_COMPANIES, (i + 1) * MAX_COMPANIES), j, S.moved)
-  claimFormation(w, i)
+// whether battalion b stands ahead of battalion a: its companies' centre (by men) beyond a's front line (a's anchor
+// across its heading), and its companies across a's heading overlapping a's
+function aheadOf(w: World, G: FireGeo, a: number, b: number): boolean {
+  const f = w.f
+  const CS = w.cr.maxC
+  const fx = sin(f.heading[a])
+  const fz = cos(f.heading[a])
+  const across = (k: number) => (G.cx[k] - f.x[a]) * fz - (G.cz[k] - f.z[a]) * fx
+  let alo = Infinity
+  let ahi = -Infinity
+  for (let c = 0; c < typeOf(w, a).C; c++) {
+    const k = a * CS + c
+    if (f.men[k] <= 0) continue
+    alo = Math.min(alo, across(k) - G.bx[a])
+    ahi = Math.max(ahi, across(k) + G.bx[a])
+  }
+  let blo = Infinity
+  let bhi = -Infinity
+  let ahead = 0
+  let men = 0
+  for (let c = 0; c < typeOf(w, b).C; c++) {
+    const k = b * CS + c
+    if (f.men[k] <= 0) continue
+    blo = Math.min(blo, across(k) - G.bx[b])
+    bhi = Math.max(bhi, across(k) + G.bx[b])
+    ahead += ((G.cx[k] - f.x[a]) * fx + (G.cz[k] - f.z[a]) * fz) * f.men[k]
+    men += f.men[k]
+  }
+  return men > 0 && ahead > 0 && blo < ahi && alo < bhi
+}
+// whether battalion i fights an enemy besides its foe j (one whose foe it is, in the fight, as the step began)
+function fought(w: World, S: Melee, i: number, j: number): boolean {
+  const f = w.f
+  const h = handleOf(w, i)
+  for (let e = 0; e < MAX_FORMATIONS; e++) {
+    if (e !== j && f.alive[e] && S.foe0[e] === h && !outOfFight(f.mstate[e])) return true
+  }
+  return false
+}
+// whether battalion i fights an enemy besides its foe j that is not ahead of it: on its flank or rear
+function flanked(w: World, S: Melee, i: number, j: number): boolean {
+  const f = w.f
+  const h = handleOf(w, i)
+  for (let e = 0; e < MAX_FORMATIONS; e++) {
+    if (e !== j && f.alive[e] && S.foe0[e] === h && !outOfFight(f.mstate[e]) && !aheadOf(w, S.G!, i, e)) return true
+  }
+  return false
 }
 
 /* ---------------- step 4: the square against cavalry ---------------- */

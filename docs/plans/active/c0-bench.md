@@ -100,6 +100,9 @@ can:
 | X-15 pushed back | a veteran regiment charges a raw one at the halt, open ground behind it (added in C1, step 4) |
 | X-16 pushed onto a friend | the same, a friendly regiment just behind the raw one |
 | X-17 pushed onto an enemy | the same, an enemy regiment just behind the raw one |
+| X-18 pinned from the flank | a veteran charges a steady regiment; a second regiment charges its flank (C1, step 4) |
+| X-19 offset lines | as X-15, the veteran 20 m to one side |
+| X-20 brigade lines | two raw regiments abreast, each charged by a veteran |
 | Q-01 a shift chain | move, then form, face and move appended |
 | Q-02 a charge in a chain | a charge with a move after it |
 | Q-03 the square in a chain | moves queued, a regiment threatens, the square forms |
