@@ -667,8 +667,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   whatever the strip; the decal's bounds padded by the soft bake's reach; up close softer, lighter at the tip, shorter, dark and solid at the feet; far 0049's look
   (one value end to end), turned from one to the other by a smoothstep of the camera's
   distance to its focus over `SHADOW_LOOK_BAND` (45 to 85 m; with `?ushadowclose=map` the far look everywhere).
-  `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]` and
-  `?ushband=<r0>,<r1>` tune it live; `Units.lookNow` is
+  `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]`,
+  `?ushband=<r0>,<r1>` and `?ushgain` (`<close>[,<far>]`: the darkening's strength, its luminance raised to that
+  power, the hue kept; 1 by default, `shadowShade`; `docs/plans/active/shadow-darker.md`) tune it live; `Units.lookNow` is
   this frame's. The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so

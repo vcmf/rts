@@ -74,6 +74,7 @@ designs written before building (frozen once built, their lasting content moves 
   [`plans/active/close-zoom.md`](plans/active/close-zoom.md) (a closer zoom to show the soldiers, the full figure nearest, #133),
   [`plans/active/close-figures.md`](plans/active/close-figures.md) (the close-zoom figures: drawn inside out, a face on the back of the head, #164; shadows off the feet, #165),
   [`plans/active/simple-soldier-shadows.md`](plans/active/simple-soldier-shadows.md) (the shadow map only up close, a simple shadow per soldier beyond, #131),
+  [`plans/active/shadow-darker.md`](plans/active/shadow-darker.md) (the soldiers' simple shadows darker: a strength gain, `?ushgain`; after #175, decision 0062),
   [`plans/active/cavalry-pistol.md`](plans/active/cavalry-pistol.md) (the cavalryman's pistol),
   [`plans/active/test-gaps.md`](plans/active/test-gaps.md) (the test gaps: the coverage audit, this week's regressions, the test PRs by area),
   [`plans/active/figure-pipeline.md`](plans/active/figure-pipeline.md) (the figure pipeline in the repository),
