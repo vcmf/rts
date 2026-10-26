@@ -141,12 +141,12 @@ keeps:
   cells and could not move off them (X-18: shattered, held for good).
 - **A charge reaches its target's core only;** any other enemy's margin stops it (X-16: the veteran pursued the router
   into the friend behind it). A pursuit stops at the router's margin (riding into it, it stood on the router's cells
-  and held it, #198) and rides it down from there: the men in contact are counted as if it stood as near as it may, up
-  to `standOff` (a margin and a cell).
+  and held it, #198) and rides it down from there: on 2 m cells a margin keeps it within contact and hold head on.
 - **A held router** (`routStep`, `src/sim/morale.ts`): a run held for 2 s by others' cells counts as halted and tries
   the fan's next direction at its retry, as at impassable ground. After the last it is cornered (`cornered`), and every
   enemy in the fight near it, neither charging nor in melee, cuts it down as a pursuit would (`cutDown`,
-  `src/sim/melee.ts`); it does not fight back. No surrender (the owner, 2026-10-26).
+  `src/sim/melee.ts`); it does not fight back. It goes on trying the fan's directions and runs once one clears. No
+  surrender (decision 0069).
 - **The tuning** (`HELD`) is in the code while it is a prototype: ruleset data is hashed into saves.
 
 Six cases, a veteran regiment (quality 0.95) charging a raw one (0.75) at the halt unless said:

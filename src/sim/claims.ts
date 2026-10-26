@@ -15,13 +15,6 @@ const K_ORDER = 0x434c // the keyed draw that orders the formations in a tick
 // a change of shape claims the ground it will sweep until it ends, sampled at this many poses ahead
 const SWEEP = 6
 
-/**
- * How far a margin may keep an enemy's men from a router's, metres: a margin cell and the cell each man stands
- * anywhere in, so the pursuit that stops at the router's margin, and the enemies round a cornered router, still reach
- * it (melee.ts). 0 with the claim grid off.
- */
-export const standOff = (w: World): number => (w.claims ? (MARGIN + 1) * w.terrain.cell : 0)
-
 /** Claims per cell: SLOTS entries per terrain cell (owner slot + 1, times 2, plus 1 for its core), and a mark for
  * a cell claimed by more formations than that. */
 export interface Claims {
@@ -224,7 +217,8 @@ function blocks(w: World, i: number, o: number, core: boolean): boolean {
   if (!enemy && (outOfFight(f.mstate[i]) || outOfFight(f.mstate[o]))) return false
   // a melee pair stands in contact, and a charge reaches its target's core: the margin between them gives way, never
   // the core, so a pair cannot pass into each other and stay tangled when one breaks. A pursuit stops at the router's
-  // margin (it rides it down from there, `standOff`), and a charge or pursuit at any other enemy's
+  // margin (it rides it down from there: on 2 m cells a margin keeps it within contact and hold), and a charge or
+  // pursuit stops at any other enemy's
   if (enemy && (f.foe[i] === handleOf(w, o) || f.foe[o] === handleOf(w, i))) return core
   if (enemy && f.chPhase[i] !== 0 && f.chTarget[i] === handleOf(w, o)) return core || outOfFight(f.mstate[o])
   return true

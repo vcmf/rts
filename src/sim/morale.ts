@@ -58,7 +58,8 @@ import { TICK_HZ, DT } from './time.ts'
 
 const RUN = 800 // how far a router is sent, metres (kept on the map)
 // the runs: the stored direction first, then turned from it by these angles, one every RETRY ticks while the
-// router is halted; after the last it stays where it is (`cornered`)
+// router is halted; after the last it is `cornered`. With claims, others may move off its way: it goes on trying the
+// fan's directions in turn, and is cornered between tries
 const FAN = [0, PI / 3, -PI / 3, (2 * PI) / 3, (-2 * PI) / 3]
 const RETRY = 100
 // s a run may stand held by other formations' cells before it counts as halted there (the claim grid's prototype)
@@ -282,21 +283,24 @@ function routStep(w: World, i: number): void {
   if (f.routPhase[i] === RP_RUNNING && f.ordHead[i] < 0) {
     f.routPhase[i] = f.status[i] === ST_HALTED ? RP_HALTED : RP_FLED
   }
-  if (f.routPhase[i] === RP_HALTED && f.runs[i] < FAN.length && (w.meta[M_TICK] + 1 + i) % RETRY === 0) run(w, i)
+  if (f.routPhase[i] === RP_HALTED && (f.runs[i] < FAN.length || w.claims) && (w.meta[M_TICK] + 1 + i) % RETRY === 0) {
+    run(w, i)
+  }
 }
 // the next run: the stored direction turned by the fan's angle, at the rout pace, with a Face about first
 // where the shape allows and the way is behind it. The run's order is made first; if the pool has none,
 // nothing changes (the same direction is tried at the next retry)
 function run(w: World, i: number): void {
   const f = w.f
-  const a = FAN[f.runs[i]]
+  const a = FAN[f.runs[i] % FAN.length]
   const ca = cos(a)
   const sa = sin(a)
   const dx = f.routX[i] * ca + f.routZ[i] * sa
   const dz = -f.routX[i] * sa + f.routZ[i] * ca
   const n = allocOrder(w, O_MOVE)
   if (n < 0) return
-  f.runs[i]++
+  // past the fan's last, the count stays at FAN.length or more (cornered) and wraps before its byte does
+  f.runs[i] = f.runs[i] + 1 < 2 * FAN.length ? f.runs[i] + 1 : FAN.length
   f.routPhase[i] = RP_RUNNING
   f.status[i] = 0
   f.blockedFor[i] = 0

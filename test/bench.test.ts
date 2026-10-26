@@ -198,18 +198,9 @@ describe('with claims: invariant 4, the keyed order', () => {
 // a melee holds (docs/plans/active/c1-claims.md, step 4): a veteran regiment charges a raw one at the halt (X-15),
 // with a friend (X-16) or an enemy (X-17) just behind the raw one. Played to its end: where the watched stood when
 // the raw one's (slot 0's) melee began and at its last tick in it (a break, or a fall-back after it, faces it about),
-// when it broke and where, when it left the field, where it last stood, and the men its side had seen leave by then
+// and when it broke
 function untilRout(id: string, watch = [0, 1]) {
-  const out = {
-    melee: -1,
-    rout: -1,
-    z: [] as number[][],
-    at: [] as number[][],
-    gone: -1,
-    broke: [0, 0],
-    last: [0, 0],
-    left: 0,
-  }
+  const out = { melee: -1, rout: -1, z: [] as number[][], at: [] as number[][] }
   play(caseOf(id), {
     every: 1,
     each: w => {
@@ -217,16 +208,8 @@ function untilRout(id: string, watch = [0, 1]) {
         out.melee = w.meta[M_TICK]
         out.z = watch.map(i => [w.f.x[i], w.f.z[i]])
       }
-      if (out.rout < 0 && w.f.mstate[0] >= MS_ROUTING) {
-        out.rout = w.meta[M_TICK]
-        out.broke = [w.f.x[0], w.f.z[0]]
-      }
+      if (out.rout < 0 && w.f.mstate[0] >= MS_ROUTING) out.rout = w.meta[M_TICK]
       if (w.f.foe[0] && w.f.mstate[0] < MS_ROUTING) out.at = watch.map(i => [w.f.x[i], w.f.z[i]])
-      if (w.f.alive[0]) out.last = [w.f.x[0], w.f.z[0]]
-      else if (out.gone < 0) {
-        out.gone = w.meta[M_TICK]
-        out.left = w.sides.left[w.f.side[1] ^ 1]
-      }
     },
   })
   return out
@@ -277,6 +260,24 @@ describe('with claims: a melee holds', () => {
     // no one leaves the field: it is cut down where it stands
     expect(w.sides.left[1]).toBe(0)
     expect(w.f.alive[0] ? menOf(w, 0) : 0).toBeLessThan(menThen / 2)
+  })
+  it('X-17: a cornered router runs once its way clears', () => {
+    // the regiment just behind it is gone (its men struck off, reaped that tick) once the router is cornered
+    let at = -1
+    let far = 0
+    play(caseOf('x17-enemy-behind-claims'), {
+      seconds: 120,
+      every: 1,
+      each: w => {
+        if (!w.f.alive[0]) return
+        if (at >= 0) far = Math.max(far, w.f.z[0])
+        if (at >= 0 || !cornered(w, 0)) return
+        at = w.meta[M_TICK]
+        w.f.men.fill(0, 2 * w.cr.maxC, 3 * w.cr.maxC)
+      },
+    })
+    expect(at).toBeGreaterThan(0)
+    expect(far).toBeGreaterThan(80)
   })
   it('X-15: a router that runs clear is never cornered', () => {
     let seen = false
