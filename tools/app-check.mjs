@@ -3,7 +3,8 @@
 // exported replay back in Node: it must reproduce every hash the page took. The runs: the drill scenario
 // (orders, every panel button, screenshots), the 40-battalion bench (cost), the firefight to a rout, the
 // brigade to a break that spreads, the arms (the unit types changing shape), and the charge (a line caught
-// forming square breaks; a square holds), and the guns (a battery fires roundshot on a column).
+// forming square breaks; a square holds), the guns (a battery fires roundshot on a column), and the look page's world
+// as a sim map (a side marching across it).
 // Run `npm run build` first.
 // Usage: node tools/app-check.mjs [outDir]
 import { spawn } from 'node:child_process'
@@ -149,6 +150,23 @@ const charge = [
   REPLAY,
 ]
 
+// the look page's world as a sim map (maps/painted-world.ts, battle threads PR 4a): the south side marches at the
+// north across the open ground east of the river
+const look = [
+  ['wait', 1500],
+  READY,
+  [
+    'eval',
+    'APP.select([...Array(128).keys()].filter(i => APP.w.f.alive[i] && APP.w.f.side[i] === 0)); APP.march(70, 0, false); APP.select([]); await APP.advance(40); `LOOK ${[...APP.w.f.alive].filter(a => a).length} on the look map, the south at z ${Math.round(Math.max(...[...Array(128).keys()].filter(i => APP.w.f.alive[i] && APP.w.f.side[i] === 0).map(i => APP.w.f.z[i])))}`',
+  ],
+  ['shot', 'look-0-cross'],
+  // the south marched (from z −150) and all eight stand
+  [
+    'eval',
+    'const s = [...Array(128).keys()].filter(i => APP.w.f.alive[i] && APP.w.f.side[i] === 0); if (s.length !== 4 || [...APP.w.f.alive].filter(a => a).length !== 8 || Math.max(...s.map(i => APP.w.f.z[i])) <= -130) throw new Error("the look map\'s battle did not march"); "marched"',
+  ],
+  REPLAY,
+]
 // the guns (S1d-3): the battery on the hill fires on the column across the stream for a minute and a half
 const guns = [
   ['wait', 1500],
@@ -366,7 +384,8 @@ try {
     (await run('s1d-arms', arms)) &&
     (await run('s1d-charge', charge)) &&
     (await run('s1d-guns', guns)) &&
-    (await run('s1e-battle', battle))
+    (await run('s1e-battle', battle)) &&
+    (await run('look-cross', look))
 } finally {
   stop()
 }

@@ -203,6 +203,47 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
   - Replays identical worker and page: `app-check`'s in-page replay of the worker's session and its Node replays.
   - The fallback's cost is the "on the page" column.
 
+## PRs 4a and 4b: the sim drives the look page's armies (PR 4's dependency)
+
+The owner (2026-10-26): "lets do the sim hookup" in this epic. Today the look page's armies are a script
+(`src/look/world/armies.ts`: column, halt, deploy, fire, on a 110 s loop), which `src/look/units.ts` calls for every
+man at every 12 fps step; and the look world (`src/look/world/author.ts`, `data/painted-world.lookdata`: an 800 m
+tile) is no sim map. Two PRs, then PR 4.
+
+- **PR 4a, the look world as a sim map**: `maps/painted-world.ts`, built by `tools/build-sim-data.ts` into
+  `data/painted-world.simdata` from the look data file (not the authoring formulas again: the two cannot disagree):
+  its heights (the heightfield, sampled at the sim's 2 m cell), its cover classes mapped to the ruleset's (meadow,
+  pasture, green and the village's ground to `open`, wheat to `crops`, wood to `woods`, road and track to `road`), the
+  river's depth from the water data (`water` where it is wet), and the play area's ±235 m inside the map's ±400 m.
+  Buildings: the ruleset has no class for them (adding one is Track S's ruleset), so they map to `denseWood` until it
+  does, said in the map's head and the Open questions; the armies' ground keeps clear of them as the script's does.
+  Acceptance: `check:data` rebuilds it byte for byte; a test that the sim's classes and water match the look's cover
+  and river at sample points (and the heights within 1 cm of the look's heightfield); a sim battle on it runs (a
+  scenario of a few battalions marching across, its replay reproduced).
+  - **Outcome** (2026-10-26): met. `data/painted-world.simdata` (0xd9a8cbc4, 2.1 MB; `check:data` rebuilds it byte
+    for byte, the other maps unchanged); `test/painted-world.test.ts`: every sim height node is the look's ground
+    there exactly; every 2 m cell wet in the look's water data is the sim's water, as deep (the track's ford too: the
+    look has no bridge), every other cell dry; every other node's class the look's cover (the most common of its four
+    cells), a building's or the slope's; the cost grid blocked wherever the water is too deep to wade and in the
+    buildings (the river crossable only where it is wadeable: the ford and nine shallow reaches, 756–897 mm); and
+    `look-cross` runs and replays to every hash point; `app-check` plays it on the sim page in the workers. The look
+    tile has no woods (its trees are the scatter's: not obstacles to the sim's men); the buildings are `denseWood` to
+    the men and blocked to the paths. Review round 1 (severe): the ford had become a bridge, the river and the
+    buildings were passable to the paths, Math's last bits, the classes 1 m off.
+- **PR 4b, the look page plays the sim**: at `?sim=<scenario>` the look page runs the battle in the workers (PR 5),
+  and its armies are the sim's formations and the men worker's men: `units.ts` takes each man's place, facing and
+  role from a source, the script's (`manAt`, the default, unchanged) or the frame's (position; facing from his
+  velocity, his battalion's heading at rest; role from his speed and his company's volley: run, march, halt, fire;
+  the fallen hidden until a fallen pose exists). A scenario `look-armies` places decision 0050's armies (the script's
+  `layout()`: 40 battalions a side at `?armies=40`) as sim formations that march, deploy and fire at will. The
+  script stays the page's default until the owner's eye accepts the sim's.
+  Acceptance: the owner's eye on `?sim=look-armies` (stepped at 12 fps, no figure off his man); the look bench at
+  `?armies=40` with and without `?sim` (the page's frame, by zoom: the sim's cost on the page should be its reading
+  only, PR 3's 0.01–0.03 ms, plus `units.ts`'s per-man work, which PR 4 then cuts); `app-check`-style headless check of
+  the page with `?sim` (no console error, the men on the ground).
+- **Base**: the look code in this epic is four `main` commits behind (#182, #185, #193, #197: look only, `units.ts`
+  among them); `main` is merged into the epic before PR 4b (the plan's rule was after #181; these touch no sim code).
+
 ## PR 4: the 3D renderer reads the soldier frame
 
 - **Scope** (needs the sim driving the 3D armies): `src/look/units.ts` reads the shared soldier frame
@@ -260,6 +301,10 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
       worker's 9.1 / 12.0: each has room, where PR 3's one worker took 27 / 84.
     - The page's numbers are PR 3's (its frame is the canvas's drawing).
     - Not measured: the 6-core laptop (not available).
+    - Rerun on the merged code (review round 3's; load 3–12): the same within noise. 32,000 men, 8×: the men's
+      sub-steps 100.0 % (5,127 of 5,127), no tick skipped, the page's battle time 0.01 / 0.03, the frame interval
+      5.83 / 6.83, no long task; 16,000 men, 1×: 99.9 % (one round's rounding). The cost tests (`TICK_BUDGET`,
+      `MARCH_BUDGET`, `LAYER_BUDGET`) pass on the quiet machine.
 - **PR 6**, rendering in a worker (OffscreenCanvas), or the layer in WebAssembly with f32x4 SIMD (cosmetic, so
   determinism does not apply), only if main-thread jank is measured to cost frames after PR 3.
 
@@ -270,4 +315,8 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
 - Whether Chrome's WebGL2 `bufferSubData` accepts `SharedArrayBuffer`-backed views (else a copy, about 0.05 ms).
 - Whether macOS puts the worker on efficiency cores under load.
 - The hash in the worker: amortised over 20 ticks or incremental.
-- Who makes the sim drive the look page's armies (PR 4's dependency): this epic, Track S, or Track E.
+- Who makes the sim drive the look page's armies (PR 4's dependency): this epic (the owner, 2026-10-26: PRs 4a, 4b).
+- A terrain class for buildings (impassable to all): the ruleset's, Track S's; the look map uses `denseWood` until then.
+- The look map's river: its crossings (the ford, 0.77–0.80 m, and the shallow reaches) are deeper than guns wade
+  (0.7 m), so no battery crosses it; and the cost grid's half-passable rule needed a per-map spread round deep water
+  (`DEEP_REACH`): a rule in `tools/build-sim-data.ts` for hard blocks (any sample blocked) would serve every map.
