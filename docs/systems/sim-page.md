@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-26
-code: [app/index.html, src/app/main.ts, src/app/battle.ts, src/app/battle-frame.ts, src/app/battle-host.ts, src/app/battle-link.ts, src/app/battle-worker.ts, src/app/page-rules.ts, src/render/men.ts, src/render/men-clock.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, test/battle-thread.test.ts, test/page-rules.test.ts, tools/app-check.mjs, tools/bench-sim.ts, tools/preview.ts, tools/battle-report.ts]
+code: [app/index.html, src/app/main.ts, src/app/battle.ts, src/app/battle-frame.ts, src/app/battle-link.ts, src/app/host.ts, src/app/sim-host.ts, src/app/sim-worker.ts, src/app/men-host.ts, src/app/men-worker.ts, src/app/tick-ring.ts, src/app/page-rules.ts, src/render/men.ts, src/render/men-clock.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, test/battle-thread.test.ts, test/page-rules.test.ts, tools/app-check.mjs, tools/bench-sim.ts, tools/preview.ts, tools/battle-report.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
 ---
 
@@ -13,13 +13,14 @@ detachments). The mouse selects battalions and orders them; every order is a com
 exports as a replay that plays back in Node to the same hashes.
 
 ```
- page (display rate)                              battle worker (src/app/battle-host.ts)
+ page (display rate)                              sim worker (src/app/sim-host.ts)
  input ──► command ── postMessage ──────────────► issue ──► sim tick (20 Hz × speed) ──► formation state
-                                                                        │ after each tick
-                                                  soldier layer (who stands where, steering, its clock)
-                                                                        │ ≤ 120 a second
+   ▲                                                                    │ after each tick: the tick ring (8 slots)
+   │                                              men worker (src/app/men-host.ts)
+   │                                              its world ◄─┘, soldier layer (who stands where, steering, clock)
+   │                                                                    │ ≤ 120 a second
  World + SoldierLayer views ◄── a slot held ◄──── published frame: the world's columns, the men (3 slots, shared)
-   │                       ◄── postMessage ────── the log, orders dropped, hash points
+   │                       ◄── postMessage ────── (sim worker) the log, orders dropped, hash points
  staff map (base image, contours, symbols) + units ──► two canvases
 ```
 
@@ -44,17 +45,24 @@ exports as a replay that plays back in Node to the same hashes.
 
 ## Design
 
-**Threads** (`src/app/battle-link.ts`, battle threads PR 3). The battle (`src/app/battle.ts`: the sim, the soldier
-layer and its clock, the log) runs in the battle worker when the page is cross-origin isolated (COOP and COEP on
-Vite's servers, `vite.config.ts`), else on the page, which `?thread=main` forces. The worker runs it on its own
-clock (a timer loop) and publishes a frame at most 120 times a second when something changed
-(`src/app/battle-frame.ts`): every column of the world's state, the men (position, velocity, slot, flags), each
-battalion's men, and the clock (the leftover game time, the speed, the publish time). Three slots in shared memory:
-the worker fills the one neither newest nor held, the page holds the newest for its frame; neither waits. The page
+**Threads** (`src/app/battle-link.ts`, battle threads PRs 3 and 5). When the page is cross-origin isolated (COOP and
+COEP on Vite's servers, `vite.config.ts`) the battle runs in two workers, else on the page (`src/app/battle.ts`: the
+sim, the soldier layer and its clock, the log), which `?thread=main` forces. The **sim worker**
+(`src/app/sim-host.ts`) runs the sim on its own clock (a timer loop, `src/app/host.ts`): commands, the log, hash
+points, replays. After every tick it writes the world's columns and the tick's departures into the **tick ring**
+(`src/app/tick-ring.ts`, 8 shared slots stamped with their tick; the writer skips the slot the reader holds, the
+reader checks the stamp around its hold) and the game clock into the ring's header. The **men worker**
+(`src/app/men-host.ts`) takes the ticks in order into its own world, the layer synced after each (more than the ring
+behind, it jumps to the newest), steps the men on their clock at the sim's speed, and publishes a frame at most 120
+times a second when something changed (`src/app/battle-frame.ts`): every column of the world's state, the men
+(position, velocity, slot, flags), each battalion's men, and the clock (the leftover game time, the speed, the
+publish time). Three slots in shared memory: the worker fills the one neither newest nor held, the page holds the
+newest for its frame; neither waits. The page
 reads a slot in place: a `World` whose columns are views on it and a `SoldierLayer` on that world that is never
 stepped, so the map, the HUD, picking and box select read them as they read the battle itself. Commands and
-requests go by message; the log, the orders dropped and the hash points come back by message. The men outgrowing a
-frame's room get new slots, sent again. A worker that fails to start leaves the battle on the page (said on the
+requests go to the sim worker by message (the headless checks' advance to the sim, then to the men, which step `sec`
+of game time to their places); the log, the orders dropped and the hash points come back by message. The men outgrowing a
+frame's room get new slots, sent again. Workers that fail to start leave the battle on the page (said on the
 console); one that fails later stops for good, its requests rejected, and the readout says the battle stopped. The
 battle is held (speed 0) while the page is hidden and while a mark's prompt is open, as when it ran in the page's
 frames (`src/app/page-rules.ts`); the selection is pruned of formations whose slot was reused since they were chosen.
@@ -205,9 +213,12 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
   It fails on any console error or hash mismatch.
 - `test/battle-thread.test.ts`: a published frame read in place is the battle (every column, man and battalion, the
   hash, the map's places); a frame with no room for the men is refused; the slot protocol over thousands of
-  interleavings; the battle in a Node worker thread (the same host code, `test/fx-battle-worker.ts`): on its own
-  clock with commands arriving whenever, its stamped log replayed on the test's thread reproduces every hash point;
-  outgrown, it sends new slots; it runs while the page only reads.
+  interleavings; the tick ring: tick 0 to a reader that has taken none, the ticks in order with their departures, a
+  reader more than the ring behind jumping to the newest, and the writer reusing the slot found between the reader's
+  look and hold (and the same race without the reader's check fails); the battle in two Node worker threads (the
+  same host code, `test/fx-battle-workers.ts`): on its own clock with commands arriving whenever, its stamped log
+  replayed on the test's thread reproduces every hash point; outgrown, the men worker sends new slots; workers that
+  fail reject; it runs while the page only reads.
 - `test/battle-report.test.ts` (the playtest's report, `tools/battle-report.ts`): a session with an order and a
   mark, played back with every formation's place at the mark and the end table; a session that does not reproduce,
   and marks out of order, past the end or without a text note, refused; the first tick played is reported; a

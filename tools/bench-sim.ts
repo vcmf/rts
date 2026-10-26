@@ -2,9 +2,9 @@
 // on the machine's GPU with no vsync and no frame-rate limit (frame times are the page's own, as tools/bench-look.mjs
 // measures), on the production build. Records `sec` seconds through the page's APP.record and prints, mean, p99 and
 // max: the frame interval, the page's battle time per frame (stepping the battle on the page, or reading the held
-// slot), the drawing, the long tasks; with the worker, its ticks, sub-steps (taken of those due) and publishing per
-// advance, and its loop's gaps. Run `npm run build` first; hold the machine's bench lock while it runs (other work
-// skews it).
+// slot), the drawing, the long tasks; with the workers (PR 5), the sim's ticks, and the men's ticks taken and
+// skipped, sub-steps (taken of those due) and publishing, per turn of their loops. Run `npm run build` first; hold the
+// machine's bench lock while it runs (other work skews it).
 //   node tools/bench-sim.ts [--scenario s1b-bench|s1b-bench-80] [--thread worker|main] [--speed 1] [--sec 10]
 //     [--json out.json]
 // Exits 1 when the page fails or records nothing.
@@ -13,7 +13,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { MEN_HZ, MEN_GROUPS, MEN_DT } from '../src/render/men-clock.ts'
-import type { Recording } from '../src/app/battle-host.ts'
+import type { Recording } from '../src/app/battle-link.ts'
 import { startPreview } from './preview.ts'
 
 /** What the page's APP.record returns (src/app/main.ts). */
@@ -98,18 +98,23 @@ console.log(
   `  long tasks ${longTasks.length}${longTasks.length ? `, longest ${Math.max(...longTasks).toFixed(0)} ms` : ''}`,
 )
 if (worker) {
-  const ticked = worker.tickMs.filter((_, k) => worker.ticks[k] > 0)
-  const perTick = worker.tickMs.filter((_, k) => worker.ticks[k] === 1)
-  const stepped = worker.stepMs.filter((_, k) => worker.subSteps[k] > 0)
-  const subs = worker.subSteps.reduce((a, b) => a + b, 0)
-  const gaps = worker.loopMs.filter(ms => ms > 1000 / 96).length
-  // the sub-steps due in the time recorded (src/render/men-clock.ts), against those taken: a busy worker drops what
-  // an advance owes past MEN_ROUNDS rounds
-  const due = (worker.loopMs.reduce((a, b) => a + b, 0) / 1000) * Math.max(MEN_HZ, speed / MEN_DT) * MEN_GROUPS
+  const { sim, men } = worker
+  const sum = (a: number[]) => a.reduce((x, y) => x + y, 0)
+  const perTick = sim.tickMs.filter((_, k) => sim.ticks[k] === 1)
+  const subs = sum(men.subSteps)
+  const stepped = men.stepMs.filter((_, k) => men.subSteps[k] > 0)
+  // the sub-steps due in the time recorded (src/render/men-clock.ts), against those taken: a busy men worker drops
+  // what a turn owes past MEN_ROUNDS rounds
+  const due = (sum(men.loopMs) / 1000) * Math.max(MEN_HZ, speed / MEN_DT) * MEN_GROUPS
+  const taken = sum(men.taken)
+  const skipped = sum(men.skipped)
   console.log(
-    `  worker: advances ${worker.loopMs.length}, loop ${f(worker.loopMs)}, ${gaps} (${((100 * gaps) / worker.loopMs.length).toFixed(1)} %) longer than a sub-step at 1× (10.4 ms)`,
+    `  sim worker: turns ${sim.loopMs.length}, loop ${f(sim.loopMs)}, ticks ${sum(sim.ticks)}, one tick ${f(perTick)}`,
   )
   console.log(
-    `  worker: ticks ${worker.ticks.reduce((a, b) => a + b, 0)}, ticking ${f(ticked)} per advance (one tick ${f(perTick)}), sub-steps ${subs} of ${due.toFixed(0)} due (${((100 * subs) / due).toFixed(1)} %), stepping ${f(stepped)} per advance, publishing ${f(worker.pubMs)}`,
+    `  men worker: turns ${men.loopMs.length}, loop ${f(men.loopMs)}, ticks taken ${taken} (skipped ${skipped}, ${((100 * skipped) / Math.max(1, taken + skipped)).toFixed(1)} %), syncing ${f(men.syncMs)} a turn`,
+  )
+  console.log(
+    `  men worker: sub-steps ${subs} of ${due.toFixed(0)} due (${((100 * subs) / due).toFixed(1)} %), stepping ${f(stepped)} a turn, publishing ${f(men.pubMs)}`,
   )
 }

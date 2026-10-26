@@ -16,7 +16,15 @@ import {
 import type { Scene } from '../render/scene.ts'
 import { SoldierLayer, type Unit } from '../render/soldiers.ts'
 import { Men } from '../render/men.ts'
-import type { Battle } from './battle.ts'
+
+/** What a frame is written from: a world, the soldier layer on it, and the clock (a `Battle`, or the men worker's
+ * copy of the world with its layer and the sim's clock). */
+export interface FrameSource {
+  w: World
+  layer: SoldierLayer
+  acc: number
+  speed: number
+}
 
 // the header, Float64: the leftover game time (s), the speed, the publish time (ms since the time origin both
 // threads share), the men, the battalions, and the worker's costs (ms, smoothed) and sub-steps late
@@ -106,7 +114,7 @@ export function layoutFor(w: World, cap: number): Layout {
  * the header always, the world's columns when `world` (the slot's copy is older than the world); `stats` fills the
  * header's costs. Returns false, writing nothing, when the men outgrew the slot. */
 export function writeFrame(
-  b: Battle,
+  b: FrameSource,
   buf: ArrayBufferLike,
   L: Layout,
   stats: { tickMs: number; stepMs: number; pubMs: number },

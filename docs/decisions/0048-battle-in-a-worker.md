@@ -40,7 +40,10 @@ Annihilation, Supreme Commander).
   400 MB/s at 8×): the world's columns, the men and the clock together, at most 120 times a second, in three shared
   slots; the page reads a slot in place through a `World` and a `SoldierLayer` over it. Events (the log, orders
   dropped, hash points) go by message, which loses none, not a ring. Without cross-origin isolation the battle runs on
-  the main thread as before (the measured cost of plan PRs 1–2), not by transferred buffers.
+  the main thread as before (the measured cost of plan PRs 1–2), not by transferred buffers. **Revised by PR 5 (2026-10-26)**: two workers, as the
+  design's "later, only if measured": at 32,000 men, 8× one worker was a full core and took 95.9 % of the men's
+  sub-steps. The sim worker ticks and writes each tick's world to a ring of shared slots; the men worker takes the
+  ticks in order into its own world, steps the men and publishes the page's frames.
 - **The sim's code is unchanged** (decisions 0005, 0006, 0013 hold); no WebAssembly or native code for the sim now.
 
 ## Consequences

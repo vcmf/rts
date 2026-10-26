@@ -57,7 +57,8 @@ async function main(): Promise<void> {
   const start = async (): Promise<BattleLink> => {
     if (thread === 'worker') {
       const wl = new WorkerLink(
-        new Worker(new URL('./battle-worker.ts', import.meta.url), { type: 'module' }),
+        new Worker(new URL('./sim-worker.ts', import.meta.url), { type: 'module' }),
+        new Worker(new URL('./men-worker.ts', import.meta.url), { type: 'module' }),
         bytes,
         data,
         cr,
