@@ -1409,8 +1409,9 @@ export class Units {
           // its lists are the battalion's shared buffers: one upload for every mesh that reads them
           if (h.stale[k]) this.uploadShared(h, h.shared.m, h.matrices, h.stale)
           if (h.staleSet[k]) this.uploadShared(h, h.shared.s, h.settings, h.staleSet)
-          if (h.staleNext[k] && (k === this.decalLod || this.smooth))
-            {this.uploadShared(h, h.shared.n, h.next, h.staleNext)}
+          if (h.staleNext[k] && (k === this.decalLod || this.smooth)) {
+            this.uploadShared(h, h.shared.n, h.next, h.staleNext)
+          }
           continue
         }
         if (h.stale[k]) {
