@@ -177,6 +177,33 @@ describe('the light atlas', () => {
   })
 })
 
+// each placed model's data and its footprint: every vertex of its base (under 1 m) inside FOOT, which the yards, the
+// ground's samples and the light map's blob are measured from (a footprint smaller than the model leaves a wall
+// standing off its paving or over a slope's gap)
+describe("the models' footprints", () => {
+  it("holds each placed model's base", () => {
+    const t = fs.readFileSync(new URL('../prototypes/buildings.data.js', import.meta.url), 'utf8')
+    const data = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)) as Record<string, { pos: number[] }>
+    for (const model of new Set(BUILDINGS.map(b => b.model))) {
+      const d = data[model]
+      expect(d, model).toBeDefined()
+      const f = FOOT[model]
+      let n = 0
+      for (let i = 0; i < d!.pos.length; i += 3) {
+        const [x, y, z] = [d!.pos[i]!, d!.pos[i + 1]!, d!.pos[i + 2]!]
+        if (y >= 1) continue
+        n++
+        if (f.r !== undefined) expect(Math.hypot(x, z), model).toBeLessThanOrEqual(f.r)
+        else {
+          expect(Math.abs(x), model).toBeLessThanOrEqual(f.hx!)
+          expect(Math.abs(z), model).toBeLessThanOrEqual(f.hz!)
+        }
+      }
+      expect(n, model).toBeGreaterThan(0)
+    }
+  })
+})
+
 // the least Chebyshev distance in texels of an n² tile between two islands' touched texels (most if none nearer):
 // tools/building-to-js.py's light_gap
 function lightGap(d: { pos: number[]; uv2: number[]; idx: number[] }, n: number, most: number): number {

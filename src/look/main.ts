@@ -54,7 +54,7 @@ import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
-import { SHADOW_LOOK, applyLookParams, shadowModes } from './shadow-look.ts'
+import { SHADOW_LOOK, applyLookParams, shadowModes, simpleShadowsDraw, stencilFor } from './shadow-look.ts'
 
 declare global {
   interface Window {
@@ -87,20 +87,11 @@ setHeightfield(look.hf, look.far, D.spec.tile / 2)
   checkGround(D.spec, lo, hi, farLo)
 }
 const canvas = document.getElementById('c') as HTMLCanvasElement
-// ?stencil=scene (the default): a stencil on the scene's target alone, for the soldiers' simple shadows
-// (src/look/units.ts, MSAA.stencil in src/look/post.ts); all: the engine's own (the canvas and its targets too: the
-// A/B); 0: none
-const stencilParam = new URLSearchParams(location.search).get('stencil') ?? 'scene'
-if (!['scene', 'all', '0'].includes(stencilParam)) {
-  throw new Error(`?stencil must be scene, all or 0, not ${stencilParam}`)
-}
-// (only with the simple shadows, which are the stencil's only use: without them the scene's depth stays DEPTH32_FLOAT)
-{
-  const q = new URLSearchParams(location.search)
-  MSAA.stencil =
-    stencilParam === 'scene' && q.get('armies') !== null && q.get('unitshadow') !== '0' && q.get('ushadowfar') !== 'map'
-}
-const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: stencilParam === 'all' }, false)
+// the stencil: on the scene's target alone while the soldiers' simple shadows draw (?stencil=scene, the default), the
+// engine's own (?stencil=all) or none (?stencil=0): stencilFor (src/look/shadow-look.ts)
+const stencilAt = stencilFor(new URLSearchParams(location.search))
+MSAA.stencil = stencilAt === 'scene'
+const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: stencilAt === 'engine' }, false)
 engine.setHardwareScalingLevel(1)
 // the scene's own lines (the finishing chain's: under the upscale, its first target's; called only from the frames,
 // after the chain is made below)
@@ -542,6 +533,8 @@ if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixe
 if (shadowLod !== null && shadowLod !== 'far') throw new Error(`?shadowlod must be far, not ${shadowLod}`)
 // batch C: ?farscale=0, the far figures at their own size
 const farScale = bit('farscale')
+// ?lodfade=0: the LODs' hard switch, a battalion wholly at one LOD (decision 0066: else each man at his own, faded)
+const lodFade = bit('lodfade')
 // ?trample=0: no trodden ground; ?flags=0: no colours
 const trample = bit('trample')
 const flags = bit('flags')
@@ -561,7 +554,9 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
 // share at the tip), ?ushdark=<0..1> (the full shadow's share at the tip), ?ushlen=<0.3..1.5> (their length), each
 // <close>[,<far>] (far: decision 0049's unless given); ?ushfoot=<dark>,<core m>[,<far dark>,<far core m>], the contact
 // at the soles (its darkness, a share of the full shadow, and the core it holds over before turning to the tip's);
-// ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one
+// ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one; ?ushgain=<1..3>[,<far>],
+// the darkening's strength, foot and tip alike (1: as decision 0062 shipped it; by default 2,1.5, the owner's:
+// docs/plans/done/shadow-darker.md)
 // (src/look/shadow-look.ts parses them, a bad value an error at load)
 const shadowMode = shadowModes(params)
 const shadowLook = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
@@ -687,7 +682,7 @@ if (armiesParam !== null) {
   if (decalLift !== null) units.decalLift = +decalLift
   // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
   // after the bounce map (the season, the shadows' switch, the grain) and when the occlusion's switch changes
-  if (units.simpleFar && unitShadowParam !== '0') {
+  if (simpleShadowsDraw(params)) {
     const shade = (units.shade = bakes.unitShade())
     let ao = S.ao
     scene.onBeforeRenderObservable.add(() => {
@@ -701,6 +696,7 @@ if (armiesParam !== null) {
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
   units.setFarScale(farScale ?? true)
+  units.setLodFade(lodFade ?? true)
   units.setTrample(trample ?? true)
   units.setFlags(flags ?? true)
   units.setFarRule(farPal) // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)

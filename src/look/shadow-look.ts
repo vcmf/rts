@@ -8,20 +8,24 @@ import { sstep } from './noise.ts'
  *  of the soft bake at the tip (0: the shape's own blur, 1: the soft one; at the soles the shape's own); dark: the
  *  share of the ground's full shadow at the tip; foot: the share at the soles and over the contact's core (core, m
  *  from the soles), from where it turns to soft and dark toward the tip; len: its length along the sun from the soles
- *  (1: the shape's) */
+ *  (1: the shape's); gain: the strength of its darkening at every point along it, foot and tip alike (1: the ground's
+ *  own shade, as decision 0062 shipped it; above, the darkening's luminance raised to that power, its hue kept:
+ *  shadowShade) */
 export interface ShadowLook {
   soft: number
   dark: number
   foot: number
   core: number
   len: number
+  gain: number
 }
 /** Up close (the owner, 2026-10-24: smaller, lighter, fuzzier, then darker and solid at the feet, lighter and softer
  *  away from them; softness 0.75 chosen from the review's sheet 7) and far (decision 0049's: one value end to
- *  end) */
+ *  end). The gain: the owner, 2026-10-26, "a bit too weak, can we make it darker": 2 up close, 1.5 far, chosen from
+ *  the sheets of docs/plans/done/shadow-darker.md (no measurable cost on Metal) */
 export const SHADOW_LOOK: { readonly close: ShadowLook; readonly far: ShadowLook } = {
-  close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7 },
-  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1 },
+  close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7, gain: 2 },
+  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1, gain: 1.5 },
 }
 /** The band of the camera's distance to its focus (m) over which the close look turns into the far one */
 export const SHADOW_LOOK_BAND: readonly [number, number] = [45, 85]
@@ -39,6 +43,7 @@ export function lookBetween(close: ShadowLook, far: ShadowLook, t: number, out: 
   out.foot = mix(close.foot, far.foot)
   out.core = mix(close.core, far.core)
   out.len = mix(close.len, far.len)
+  out.gain = mix(close.gain, far.gain)
   return out
 }
 
@@ -92,10 +97,46 @@ export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: numbe
 /** The decal's rule at a fragment (src/look/shaders/unitdecal.frag, mirrored here for its tests): of the shape's value
  *  s at g along the gradient (0 at the core, 1 at the tip), the share of the samples it covers and the darkness every
  *  covered sample takes (the look's darkest, the same for every shadow: so where shadows overlap and the stencil lets
- *  the first through, the darkest share wins whatever their order) */
+ *  the first through, the darkest share wins whatever their order). The gain is not part of it: one value a frame for
+ *  every shadow, it makes that darkness stronger alike for all (shadowShade), so the rule holds at any gain */
 export function decalFragment(s: number, g: number, foot: number, dark: number): { cover: number; dark: number } {
   const dm = Math.max(foot, dark, 1e-4)
   return { cover: Math.min(1, (s * (foot + (dark - foot) * g)) / dm), dark: dm }
+}
+
+/** The luminance weights the gain measures the darkening by (Rec. 709, as the shader's) */
+export const SHADE_LUMA: readonly [number, number, number] = [0.2126, 0.7152, 0.0722]
+
+/** The full darkening a covered sample takes (unitdecal.frag, mirrored here for its tests): toward the ground's shade k
+ *  (the ratio of its painted cast shadow to its light) by f (the zoom's cross-fade share, the shadows on, the look's
+ *  darkest), clamped at 0, as before; then its luminance L raised to the gain, the three channels scaled alike
+ *  (d · L^(gain-1)). So a stronger shadow never goes negative, darkens nothing where the ground is already in full
+ *  shadow (k 1: d 1) and keeps the ground's shadow hue where no channel was clamped at 0; at gain 1 exactly the
+ *  darkening as it was. Only this full darkness is raised to the gain: a shadow's lighter parts take it on a share of
+ *  the pixel (decalPixel). The gain is at least 1 (applyLookParams), so no channel is ever brightened */
+export function shadowShade(k: readonly number[], f: number, gain: number): [number, number, number] {
+  const d = k.map(c => Math.max(1 + (c - 1) * f, 0))
+  const m = Math.max(d[0] * SHADE_LUMA[0] + d[1] * SHADE_LUMA[1] + d[2] * SHADE_LUMA[2], 1e-3) ** (gain - 1)
+  return [d[0] * m, d[1] * m, d[2] * m]
+}
+
+/** The scene's four samples' thresholds for alpha to coverage (the masks of smaller shares inside those of larger) */
+export const COVER_THRESHOLDS: readonly number[] = [0.125, 0.375, 0.625, 0.875]
+
+/** A pixel's darkening by one shadow of coverage a (unitdecal.frag, mirrored here for its tests): with COVERAGE (the
+ *  scene's samples) the covered samples take the full gained darkening and the rest none, resolved as their mean;
+ *  without (?msaa=1|2) the full gained darkening mixed toward none by a. The same wherever a falls on a whole number
+ *  of samples */
+export function decalPixel(
+  k: readonly number[],
+  f: number,
+  gain: number,
+  a: number,
+  coverage: boolean,
+): [number, number, number] {
+  const d = shadowShade(k, f, gain)
+  const share = coverage ? COVER_THRESHOLDS.filter(t => a > t).length / COVER_THRESHOLDS.length : a
+  return [1 + (d[0] - 1) * share, 1 + (d[1] - 1) * share, 1 + (d[2] - 1) * share]
 }
 
 /** The figures' shadow modes from the page's switches: simpleFar (?ushadowfar=map: the map at every zoom, false),
@@ -106,6 +147,25 @@ export function shadowModes(q: URLSearchParams): { simpleFar: boolean; simpleClo
     if (v !== null && v !== 'map' && v !== 'simple') throw new Error(`?${k} must be map or simple, not ${v}`)
   }
   return { simpleFar: q.get('ushadowfar') !== 'map', simpleClose: q.get('ushadowclose') !== 'map' }
+}
+
+/** Whether the soldiers' simple shadows draw anywhere: armies on the page (?armies), their shadows on (not
+ *  ?unitshadow=0), and the simple ones beyond close zoom (not ?ushadowfar=map: shadowModes). The page refuses
+ *  ?armies=0 and any count outside 1 to 40 (src/look/main.ts), so a present ?armies means armies */
+export function simpleShadowsDraw(q: URLSearchParams): boolean {
+  return q.get('armies') !== null && q.get('unitshadow') !== '0' && shadowModes(q).simpleFar
+}
+
+/** Where the page puts a stencil buffer (#134), from its switches. The soldiers' simple shadows are its only use (each
+ *  sample darkened once where shadows overlap): ?stencil=scene, the default, gives one to the scene's target alone
+ *  (MSAA.stencil, src/look/post.ts) and only while they draw (simpleShadowsDraw), so without them the scene's depth
+ *  stays DEPTH32_FLOAT, not DEPTH24_STENCIL8; ?stencil=all, the engine's own (the canvas and every target: the A/B);
+ *  ?stencil=0, none */
+export function stencilFor(q: URLSearchParams): 'none' | 'scene' | 'engine' {
+  const v = q.get('stencil') ?? 'scene'
+  if (!['scene', 'all', '0'].includes(v)) throw new Error(`?stencil must be scene, all or 0, not ${v}`)
+  if (v === 'all') return 'engine'
+  return v === 'scene' && simpleShadowsDraw(q) ? 'scene' : 'none'
 }
 
 const NUMBER = /^\d+(\.\d+)?$/
@@ -135,9 +195,10 @@ export function parseNumbers(
   return n
 }
 
-/** The looks the page's switches set (main.ts): ?ushsoft, ?ushdark (0 to 1), ?ushlen (0.3 to 1.5), each
- *  <close>[,<far>]; ?ushfoot=<dark 0..1.5>,<core 0..3 m>[,<far dark>,<far core>]; ?ushband=<r0>,<r1> (m, r0 < r1).
- *  Written into close and far; the band returned, or null */
+/** The looks the page's switches set (main.ts): ?ushsoft, ?ushdark (0 to 1), ?ushlen (0.3 to 1.5), ?ushgain (1 to
+ *  3, the darkening's strength: 1 as decision 0062 shipped it, never lighter), each <close>[,<far>];
+ *  ?ushfoot=<dark 0..1.5>,<core 0..3 m>[,<far dark>,<far core>]; ?ushband=<r0>,<r1> (m, r0 < r1). Written into
+ *  close and far; the band returned, or null */
 export function applyLookParams(
   q: URLSearchParams,
   close: ShadowLook,
@@ -147,6 +208,7 @@ export function applyLookParams(
     ['ushsoft', 'soft', 0, 1],
     ['ushdark', 'dark', 0, 1],
     ['ushlen', 'len', 0.3, 1.5],
+    ['ushgain', 'gain', 1, 3],
   ] as const
   for (const [k, f, lo, hi] of pairs) {
     const n = parseNumbers(q, k, [1, 2], [lo, hi])

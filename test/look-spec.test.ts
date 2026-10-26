@@ -7,9 +7,14 @@ import {
   SPEC,
   TUNED_R,
   ZoomHold,
+  bakeMB,
   checkGround,
+  clearBelow,
   clearRadius,
   derive,
+  footprintOf,
+  holdView,
+  nearReachOf,
   shadowMapSize,
   type Spec,
 } from '../src/look/spec.ts'
@@ -230,6 +235,62 @@ describe('world spec', () => {
       /macro: a bake draw/,
     ],
     [
+      'road cells not dividing the tile',
+      s => {
+        s.road.cell = 7
+      },
+      /road: the tile/,
+    ],
+    [
+      'bank texels not dividing the tile',
+      s => {
+        s.bank.texel = 0.3
+      },
+      /bank: the tile/,
+    ],
+    [
+      'bank normals over the min-spec texture size',
+      s => {
+        s.bank.texel = 0.08
+      },
+      /bake: bank normals/,
+    ],
+    [
+      'a bank fade not positive',
+      s => {
+        s.bank.fade = 0
+      },
+      /bank: the fades/,
+    ],
+    [
+      'water texels not dividing the tile',
+      s => {
+        s.water.texel = 0.3
+      },
+      /water: the tile/,
+    ],
+    [
+      'water data over the min-spec texture size',
+      s => {
+        s.water.texel = 0.08
+      },
+      /bake: water data/,
+    ],
+    [
+      'a water depth range without the shore',
+      s => {
+        s.water.depth = [0.5, 2]
+      },
+      /water: the depth range/,
+    ],
+    [
+      'a detail size not positive',
+      s => {
+        s.detail.px = 0
+      },
+      /detail: sizes/,
+    ],
+    [
       'a Kuwahara radius past its loop',
       s => {
         s.macro.kuwahara = 3
@@ -272,8 +333,6 @@ describe('world spec', () => {
     expect(r * Math.cos(c.betaMax) + c.focusY - 18).toBeGreaterThanOrEqual(c.clearance)
     expect(r * Math.cos(c.betaMax) + c.focusY - 18 - c.clearance).toBeLessThan(1e-3 * Math.cos(c.betaMax) + 1e-9)
     expect(clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, () => 400)).toBe(c.rMax)
-    // (src/look/post.ts holds it only below this radius: today's zooms, 45 m out, never read the ground)
-    expect((SPEC.ground.hi + c.clearance - c.focusY) / Math.cos(c.betaMax)).toBeLessThan(TUNED_R)
   })
   it('finds the held radius on a steep slope rising under the eye (0.5 m a metre), the least radius that clears', () => {
     const c = SPEC.camera
@@ -340,6 +399,81 @@ describe('world spec', () => {
     expect(() => checkGround(SPEC, -3, 20.3, 2.2)).toThrow(/outside the spec/)
     expect(() => checkGround(SPEC, 0.4, 30, 2.2)).toThrow(/outside the spec/)
     expect(() => checkGround(SPEC, 0.4, 20.3, -1)).toThrow(/outside the spec/)
+  })
+})
+
+describe("the camera's reach (footprintOf, nearReachOf)", () => {
+  it('is what derive checks, the frame below the focus within the margin, the whole frame farther', () => {
+    const near = nearReachOf(SPEC)
+    expect(footprintOf(SPEC)).toBe(derive(SPEC).footprint)
+    expect(near).toBeGreaterThan(0)
+    expect(near).toBeLessThanOrEqual(SPEC.margin)
+    expect(near).toBeLessThan(footprintOf(SPEC))
+  })
+  it('reaches farther on a wider frame and at a longer zoom', () => {
+    const fp = footprintOf(SPEC)
+    expect(footprintOf(with_(s => (s.camera.aspectMax = 2.4)))).toBeGreaterThan(fp)
+    expect(footprintOf(with_(s => (s.camera.rMax = 300)))).toBeGreaterThan(fp)
+    expect(nearReachOf(with_(s => (s.camera.rMax = 300)))).toBeGreaterThan(nearReachOf(SPEC))
+  })
+  it("is Infinity when a frame corner nears the horizon, the frame's bottom still finite", () => {
+    const low = with_(s => (s.camera.betaMax = 1.4))
+    expect(footprintOf(low)).toBe(Infinity)
+    expect(Number.isFinite(nearReachOf(low))).toBe(true)
+  })
+  it('is Infinity below the focus when the eye could not clear the highest tile ground within rMax', () => {
+    const high = with_(s => (s.ground.hi = 300))
+    expect(nearReachOf(high)).toBe(Infinity)
+    expect(footprintOf(high)).toBe(footprintOf(SPEC)) // (the whole frame reaches farthest on the lowest ground)
+  })
+})
+
+describe("a bake's memory (bakeMB)", () => {
+  it('counts RGBA8 unless given, in MiB', () => {
+    expect(bakeMB(1024, 1024)).toBe(4)
+    expect(bakeMB(1024, 1024, 16)).toBe(16)
+    expect(bakeMB(8192, 1, 16)).toBe(0.125)
+    expect(bakeMB(0, 4096)).toBe(0)
+  })
+})
+
+describe("the camera's hold a frame (holdView, clearBelow in src/look/spec.ts, run by src/look/post.ts)", () => {
+  const c = SPEC.camera
+  const view = (radius: number, x = 0, z = 0) => ({ alpha: -2, beta: c.betaMax, radius, target: { x, y: c.focusY, z } })
+  it('keeps the focus within the play area', () => {
+    const z = new ZoomHold()
+    const v = view(100, 400, -300)
+    holdView(SPEC, z, v, () => 0, clearBelow(SPEC))
+    expect([v.target.x, v.target.z]).toEqual([SPEC.play, -SPEC.play])
+  })
+  it('never reads the ground from clearBelow out (the eye clears the highest ground there)', () => {
+    expect(clearBelow(SPEC)).toBeLessThan(TUNED_R) // (today's zooms, 45 m out, never read it)
+    const reads: number[] = []
+    const ground = (x: number) => {
+      reads.push(x)
+      return SPEC.ground.hi
+    }
+    holdView(SPEC, new ZoomHold(), view(clearBelow(SPEC)), ground, clearBelow(SPEC))
+    expect(reads).toEqual([])
+    holdView(SPEC, new ZoomHold(), view(clearBelow(SPEC) - 1), ground, clearBelow(SPEC))
+    expect(reads.length).toBeGreaterThan(0)
+  })
+  it("holds the zoom out over a hill and brings the player's zoom back past it (#145)", () => {
+    const z = new ZoomHold()
+    const hill = (x: number) => (x > 50 && x < 150 ? 18 : 0)
+    const v = view(c.rMin, -100)
+    // (the eye about 5 m short of the focus in x: over the hill from a focus about 55 m on)
+    const frames = (x: number) => {
+      v.target.x = x
+      holdView(SPEC, z, v, hill, clearBelow(SPEC))
+      return v.radius
+    }
+    expect(frames(-100)).toBe(c.rMin)
+    const held = frames(100)
+    expect(held).toBeGreaterThan(c.rMin)
+    expect(v.radius * Math.cos(c.betaMax) + c.focusY - 18).toBeGreaterThanOrEqual(c.clearance)
+    expect(frames(220)).toBe(c.rMin) // (panned past it: the player's zoom, not the held one)
+    expect(z.wanted).toBe(c.rMin)
   })
 })
 

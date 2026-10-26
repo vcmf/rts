@@ -18,6 +18,8 @@ import BUILDING_VS from './shaders/building.vert?raw'
 import BUILDING_FS from './shaders/building.frag?raw'
 import WINDMILL_DETAIL from '../../data/buildings/windmill-detail.png?url'
 import HOUSE_DETAIL from '../../data/buildings/house-detail.png?url'
+import FARMHOUSE_DETAIL from '../../data/buildings/farmhouse-detail.png?url'
+import MANOR_DETAIL from '../../data/buildings/manor-detail.png?url'
 
 interface BuildingModel {
   pos: number[]
@@ -35,22 +37,23 @@ declare global {
   }
 }
 
-// each model's palette, by role (wall, roof, timber, opening, accent: building.frag), and its detail texture. Muted
-// against the armies (readable first: the guard): the windmill's warm ochre stone and red cap, the cottages' pale
-// limestone and blue-grey slate, timber a dark brown, the openings near black, the chimney pots terracotta, the
-// windmill's sail blades a pale canvas (its accent: tools/building-to-js.py, sails)
-const PALETTE: Record<
-  Building['model'],
-  { wall: string; roof: string; timber: string; opening: string; accent: string; detail: string }
-> = {
-  windmill: {
-    wall: '#bd8247',
-    roof: '#9a4a32',
-    timber: '#5e4330',
-    opening: '#1f1a17',
-    accent: '#bfae8c',
-    detail: WINDMILL_DETAIL,
-  },
+// each model's palette, by role (wall, roof, timber, opening, accent: building.frag), the shutters' colour (the
+// detail's B inlay, on walls and timber: tools/building-to-js.py) and its detail texture. Muted against the armies
+// (readable first: the guard): the windmill's warm ochre stone and red cap, the cottages' pale limestone and blue-grey
+// slate, timber a dark brown, the openings near black, the chimney pots terracotta (the cottage's accent), the
+// farmhouse's red tiles and grey-green shutters and door, the manor's honey stone and brown-grey stone slates. A model
+// with no face or inlay of a role takes its timber's colour there
+interface Paint {
+  wall: string
+  roof: string
+  timber: string
+  opening: string
+  accent?: string
+  shutter?: string
+  detail: string
+}
+const PALETTE: Record<Building['model'], Paint> = {
+  windmill: { wall: '#bd8247', roof: '#9a4a32', timber: '#5e4330', opening: '#1f1a17', detail: WINDMILL_DETAIL },
   house: {
     wall: '#cbbfa6',
     roof: '#5d636b',
@@ -59,6 +62,15 @@ const PALETTE: Record<
     accent: '#a5643f',
     detail: HOUSE_DETAIL,
   },
+  farmhouse: {
+    wall: '#c9bb9c',
+    roof: '#8f5340',
+    timber: '#5e4632',
+    opening: '#1c1c1e',
+    shutter: '#5f6e5c',
+    detail: FARMHOUSE_DETAIL,
+  },
+  manor: { wall: '#c8b591', roof: '#5f5a53', timber: '#64472f', opening: '#1c1c1e', detail: MANOR_DETAIL },
 }
 const DETAIL_AMT = 0.35 // how much of the texture's value shows (the paint's grain is on top)
 
@@ -88,7 +100,7 @@ export function buildBuildings(
     const p = PALETTE[model]
     const mat = mats.make('building_' + model, BUILDING_VS, BUILDING_FS, {
       attributes: ['position', 'normal', 'uv', 'aRole', 'aUV2', 'aTile'],
-      uniforms: ['uWall', 'uRoof', 'uTimber', 'uOpening', 'uAccent', 'uDetailAmt'],
+      uniforms: ['uWall', 'uRoof', 'uTimber', 'uOpening', 'uAccent', 'uShutter', 'uDetailAmt'],
       samplers: ['uDetail', 'uBldLight', 'uBldBounce'],
       defines: [
         ...(baked
@@ -107,7 +119,8 @@ export function buildBuildings(
       ['uRoof', p.roof],
       ['uTimber', p.timber],
       ['uOpening', p.opening],
-      ['uAccent', p.accent],
+      ['uAccent', p.accent ?? p.timber],
+      ['uShutter', p.shutter ?? p.timber],
     ] as const) {
       mat.setColor3(u, Color3.FromHexString(hex))
     }
