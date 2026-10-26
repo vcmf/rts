@@ -8,7 +8,7 @@ import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { MenClock } from '../render/men-clock.ts'
 import { layoutFor, writeFrame, capFor, Slots, type Layout } from './battle-frame.ts'
-import { RingReader, C_ACC, C_SPEED, C_TIME, C_TICK_MS, type RingBuffers } from './tick-ring.ts'
+import { RingReader, type RingBuffers } from './tick-ring.ts'
 import { Host, type Port, type Failed } from './host.ts'
 
 /** What the page sends the men worker: the map's bytes and the tick ring, then requests. */
@@ -57,20 +57,19 @@ export function serveMen(port: Port<ToMen>): void {
   let rec: MenRecording | null = null
   const ema = { tickMs: 0, stepMs: 0, pubMs: 0 }
   let last = performance.now()
-  // the frame's clock: the sim's leftover game time now (its last, plus the time since at its speed), and its speed
+  // the last tick taken: none at first (−1), so the world before the first tick (tick 0) is taken too
+  let lastTick = -1
+  // the frame's clock: the game time since the men's world's tick (the sim's clock read against it), and the speed;
+  // a change of speed (a pause) is published, so the page stops its anchors' alpha too
   const src = { w: null as unknown as World, layer: null as unknown as SoldierLayer, acc: 0, speed: 0 }
   const now = () => {
-    const k = ring.clock
-    src.speed = k[C_SPEED]
-    src.acc = Math.min(
-      DT,
-      k[C_ACC] + Math.max(0, (performance.timeOrigin + performance.now() - k[C_TIME]) / 1000) * k[C_SPEED],
-    )
+    const speed = ring.clockNow().speed
+    if (speed !== src.speed) changed = true
+    src.speed = speed
+    src.acc = ring.accSince(lastTick, performance.timeOrigin + performance.now())
   }
   const stepMen = (group: number, dt: number) => layer.step(dt, src.acc / DT, group, clock.groups)
 
-  // the last tick taken: none at first (−1), so the world before the first tick (tick 0) is taken too
-  let lastTick = -1
   // the ticks waiting, in order, each synced (at most `max`); returns how many were taken and skipped
   const take = (max: number) => {
     let taken = 0
@@ -100,7 +99,7 @@ export function serveMen(port: Port<ToMen>): void {
     const fresh = !slots || layer.men.n > L.cap
     if (fresh) makeSlots(capFor(layer.men.n))
     const s = slots!.free()
-    ema.tickMs = ring.clock[C_TICK_MS]
+    ema.tickMs = ring.clockNow().tickMs
     writeFrame(src, bufs[s], L, ema, slotVer[s] !== worldVer)
     slotVer[s] = worldVer
     slots!.publish(s)

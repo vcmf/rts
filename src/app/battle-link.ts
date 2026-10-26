@@ -181,8 +181,11 @@ export class WorkerLink implements BattleLink {
     men.onerror = e => this.fail(`men: ${e.message || 'the worker failed'}`)
     this.toSim({ type: 'init', scenario: key, data: bytes, version: data.version, ring })
   }
-  /** A worker stopped: said on the console, the start and every request waiting fail with it. */
+  /** A worker stopped: both are ended (the other would run on for nothing), it is said on the console, and the start
+   * and every request waiting fail with it. */
   private fail(message: string): void {
+    this.sim.terminate()
+    this.men.terminate()
     this.failed ??= message
     console.error(`battle worker: ${message}`)
     const e = new Error(`battle worker: ${message}`)
@@ -231,6 +234,8 @@ export class WorkerLink implements BattleLink {
     this.toSim({ type: 'speed', speed })
   }
   async advance(sec: number): Promise<void> {
+    // held first, so the men do not step while the sim advances (they read its speed)
+    this.setSpeed(0)
     await this.ask(id => this.toSim({ type: 'advance', id, sec }))
     await this.ask(id => this.toMen({ type: 'advance', id, sec }))
   }

@@ -2,7 +2,7 @@
 // After every tick it writes the world to the tick ring (src/app/tick-ring.ts) for the men worker
 // (src/app/men-host.ts), and the game clock to the ring's header; commands and requests come from the page, the log,
 // the orders dropped and the hash points go back to it.
-import { loadSimData, type Command, type Stamped, type Dropped, type HashPoint } from '../sim/index.ts'
+import { loadSimData, M_TICK, type Command, type Stamped, type Dropped, type HashPoint } from '../sim/index.ts'
 import { PAGE_SCENARIOS } from '../scenarios/page.ts'
 import { Battle } from './battle.ts'
 import { RingWriter, type RingBuffers } from './tick-ring.ts'
@@ -26,10 +26,11 @@ export type FromSim =
   | { type: 'reply'; id: number; value: unknown }
   | Failed
 
-/** Per turn of the loop while recording: its real ms, the ticks' ms, the ticks. */
+/** Per turn of the loop while recording: its real ms, the ticks' ms (the sim's own) and the ring's, the ticks. */
 export interface SimRecording {
   loopMs: number[]
   tickMs: number[]
+  ringMs: number[]
   ticks: number[]
 }
 
@@ -40,6 +41,8 @@ export function serveSim(port: Port<ToSim>): void {
   let sent = { log: 0, dropped: 0, hashes: 0 }
   let rec: SimRecording | null = null
   let tickMs = 0
+  // the time the turn's ticks spent writing the ring (left out of the tick's cost: the sim's own is what is measured)
+  let ringMs = 0
   let last = performance.now()
 
   // what happened since the last message, in order: the stamped log, orders dropped, hash points
@@ -54,18 +57,21 @@ export function serveSim(port: Port<ToSim>): void {
     })
     sent = { log: b.log.length, dropped: b.dropped.length, hashes: b.hashes.length }
   }
-  const clock = () => ring!.setClock(battle!.acc, battle!.speed, tickMs)
+  const clock = () => ring!.setClock(battle!.w.meta[M_TICK], battle!.acc, battle!.speed, tickMs)
   // one turn: the ticks owed since the last (none at speed 0: paused, or held after the checks' advance), the clock
   const step = () => {
     const now = performance.now()
     const dt = Math.min(0.1, (now - last) / 1000)
     last = now
+    ringMs = 0
     const r = battle!.advance(dt)
-    if (r.ticks) tickMs = tickMs * 0.9 + (r.tickMs / r.ticks) * 0.1
+    const simMs = r.tickMs - ringMs
+    if (r.ticks) tickMs = tickMs * 0.9 + (simMs / r.ticks) * 0.1
     clock()
     if (rec) {
       rec.loopMs.push(dt * 1000)
-      rec.tickMs.push(r.tickMs)
+      rec.tickMs.push(simMs)
+      rec.ringMs.push(ringMs)
       rec.ticks.push(r.ticks)
     }
     flush()
@@ -77,7 +83,14 @@ export function serveSim(port: Port<ToSim>): void {
       const data = loadSimData(m.data, m.version)
       // the world before the first tick too, so the men worker starts from the scenario as set up
       let writer: RingWriter | null = null
-      battle = new Battle(data, scenario, undefined, { men: false, onTick: (w, r) => writer!.write(w, r.departed) })
+      battle = new Battle(data, scenario, undefined, {
+        men: false,
+        onTick: (w, r) => {
+          const a = performance.now()
+          writer!.write(w, r.departed)
+          ringMs += performance.now() - a
+        },
+      })
       writer = ring = new RingWriter(battle.w, m.ring)
       ring.write(battle.w, [])
       clock()
@@ -105,7 +118,7 @@ export function serveSim(port: Port<ToSim>): void {
     else if (m.type === 'hash') host.send({ type: 'reply', id: m.id, value: b.hash() })
     else if (m.type === 'record') {
       const done = rec
-      rec = m.on ? { loopMs: [], tickMs: [], ticks: [] } : null
+      rec = m.on ? { loopMs: [], tickMs: [], ringMs: [], ticks: [] } : null
       host.send({ type: 'reply', id: m.id, value: done })
     }
   }

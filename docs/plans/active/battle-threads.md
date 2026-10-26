@@ -228,12 +228,13 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
     layer and its clock on its own copy of the world, and the page's published frames (PR 3's slots, unchanged, so
     the page reads them as before). The page creates both, sends commands and requests to the sim worker, and
     reads frames from the men worker.
-  - **The tick ring** (sim → men): after every tick the sim worker writes the world's columns and the tick's
-    departures into a ring of 8 shared slots, each stamped with its tick, and the game clock (the leftover game time,
-    the speed, the time) into a shared header. The sim worker never waits; it skips the slot the men worker holds.
-    The men worker takes the ticks in order, each copied into its world and followed by the layer's sync (as PR 1–3
-    sync after every tick); fallen more than the ring behind, it jumps to the newest (the intermediate ticks' Face
-    abouts and losses then show at once: counted, est. none at 8× once the worker has a core of its own). Copying the
+  - **The tick ring** (sim → men): after every tick the sim worker writes the world's columns into a ring of 8 shared
+    slots, each stamped with its tick, the tick's departures into a shared log, and the game clock (stamped with its
+    tick: the leftover game time, the speed, the time) into a shared header. The sim worker never waits; it skips the
+    slot the men worker holds. The men worker takes the ticks in order, each copied into its world and followed by the
+    layer's sync (as PR 1–3 sync after every tick); fallen behind the ring, it takes the oldest it still holds, the
+    departures of the ticks passed over from the log (review round 1: jumping to the newest lost them, and the men of a
+    formation that left were drawn fallen), the passed-over ticks' Face abouts and losses shown at once (counted). Copying the
     world per tick is PR 3's rejected 400 MB/s at 8×, here a cost the split needs: 2.5 MB at about 0.15 ms a copy
     (PR 3's publishing), est. 2–4 % of a core on each side.
   - **The men's clock** runs on the men worker's real time at the sim's speed; the anchors' alpha from the sim's

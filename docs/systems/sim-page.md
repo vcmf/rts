@@ -49,11 +49,13 @@ exports as a replay that plays back in Node to the same hashes.
 COEP on Vite's servers, `vite.config.ts`) the battle runs in two workers, else on the page (`src/app/battle.ts`: the
 sim, the soldier layer and its clock, the log), which `?thread=main` forces. The **sim worker**
 (`src/app/sim-host.ts`) runs the sim on its own clock (a timer loop, `src/app/host.ts`): commands, the log, hash
-points, replays. After every tick it writes the world's columns and the tick's departures into the **tick ring**
-(`src/app/tick-ring.ts`, 8 shared slots stamped with their tick; the writer skips the slot the reader holds, the
-reader checks the stamp around its hold) and the game clock into the ring's header. The **men worker**
-(`src/app/men-host.ts`) takes the ticks in order into its own world, the layer synced after each (more than the ring
-behind, it jumps to the newest), steps the men on their clock at the sim's speed, and publishes a frame at most 120
+points, replays. After every tick it writes the world's columns into the **tick ring** (`src/app/tick-ring.ts`, 8
+shared slots stamped with their tick; the writer skips the slot the reader holds, the reader checks the stamp around
+its hold), the tick's departures into a shared log, and the game clock, stamped with its tick, into the ring's header
+(a sequence count around each write). The **men worker** (`src/app/men-host.ts`) takes the ticks in order into its
+own world, the layer synced after each with the departures since its last (behind the ring, it takes the oldest it
+still holds, the departures whole from the log), steps the men on their clock at the sim's speed (the alpha the game
+time since its own world's tick), and publishes a frame at most 120
 times a second when something changed (`src/app/battle-frame.ts`): every column of the world's state, the men
 (position, velocity, slot, flags), each battalion's men, and the clock (the leftover game time, the speed, the
 publish time). Three slots in shared memory: the worker fills the one neither newest nor held, the page holds the
@@ -214,7 +216,8 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
 - `test/battle-thread.test.ts`: a published frame read in place is the battle (every column, man and battalion, the
   hash, the map's places); a frame with no room for the men is refused; the slot protocol over thousands of
   interleavings; the tick ring: tick 0 to a reader that has taken none, the ticks in order with their departures, a
-  reader more than the ring behind jumping to the newest, and the writer reusing the slot found between the reader's
+  reader behind the ring taking the oldest tick it holds with every departure since its last, the clock read against
+  the reader's own tick, and the writer reusing the slot found between the reader's
   look and hold (and the same race without the reader's check fails); the battle in two Node worker threads (the
   same host code, `test/fx-battle-workers.ts`): on its own clock with commands arriving whenever, its stamped log
   replayed on the test's thread reproduces every hash point; outgrown, the men worker sends new slots; workers that

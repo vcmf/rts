@@ -109,7 +109,7 @@ if (worker) {
   const taken = sum(men.taken)
   const skipped = sum(men.skipped)
   console.log(
-    `  sim worker: turns ${sim.loopMs.length}, loop ${f(sim.loopMs)}, ticks ${sum(sim.ticks)}, one tick ${f(perTick)}`,
+    `  sim worker: turns ${sim.loopMs.length}, loop ${f(sim.loopMs)}, ticks ${sum(sim.ticks)}, one tick ${f(perTick)} (the ring's copy apart: ${f(sim.ringMs.filter((_, k) => sim.ticks[k] > 0))} a turn)`,
   )
   console.log(
     `  men worker: turns ${men.loopMs.length}, loop ${f(men.loopMs)}, ticks taken ${taken} (skipped ${skipped}, ${((100 * skipped) / Math.max(1, taken + skipped)).toFixed(1)} %), syncing ${f(men.syncMs)} a turn`,

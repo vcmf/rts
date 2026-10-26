@@ -174,15 +174,29 @@ describe('the tick ring', () => {
     expect(seen).toEqual([1, 2, 3, 4, 5])
     expect(reader.take(copy, copy.meta[M_TICK])).toBeNull()
   })
-  it('a reader more than the ring behind jumps to the newest, and says how many it skipped', () => {
+  // regression (PR 5 review): a reader behind jumped to the newest tick, and the departures of the ticks it passed
+  // over were lost, so a formation that left the field was drawn as fallen
+  it('a reader behind the ring takes the oldest tick it still holds, and every departure since its last', () => {
     const { b, writer, copy, reader } = setup()
-    for (let k = 0; k < RING + 3; k++) {
+    for (let k = 1; k <= RING + 3; k++) {
       b.advance(DT)
-      writer.write(b.w, [])
+      writer.write(b.w, k === 2 ? [{ id: 77, men: 12 }] : [])
     }
+    // ticks 4 to 11 in the ring; 1 to 3 gone, the departure of tick 2 with them but for the log
     const t = reader.take(copy, 0)!
-    expect([t.tick, t.skipped]).toEqual([RING + 3, RING + 2])
-    expect(hashWorld(copy)).toBe(hashWorld(b.w))
+    expect([t.tick, t.skipped, t.departed]).toEqual([4, 3, [{ id: 77, men: 12 }]])
+    expect(reader.take(copy, 4)!.departed).toEqual([])
+  })
+  // regression (PR 5 review): the men's alpha was the sim's leftover game time whatever tick the men's world was at, so
+  // a men worker a tick behind (or ahead of the clock's last write) drew its anchors a tick off
+  it("reads the game time since the men's own tick: a tick behind is a whole tick, ahead of the clock none", () => {
+    const { writer, reader } = setup()
+    writer.setClock(5, 0.02, 0, 1.5)
+    const now = performance.timeOrigin + performance.now()
+    expect(reader.accSince(5, now)).toBeCloseTo(0.02, 12)
+    expect(reader.accSince(4, now)).toBe(DT)
+    expect(reader.accSince(6, now)).toBe(0)
+    expect(reader.clockNow()).toMatchObject({ tick: 5, acc: 0.02, speed: 0, tickMs: 1.5 })
   })
   // the race the reader's check exists for: the writer reuses the slot between the reader finding it and holding it
   it('the writer never fills the slot the reader is taking: a tick taken is always whole', () => {
@@ -209,6 +223,8 @@ describe('the tick ring', () => {
       expect(copy.meta[M_TICK]).toBe(t.tick)
     }
     expect(raced).toBeGreaterThan(1000)
+    // drained, the copy is the newest
+    for (let t = reader.take(copy, last); t; t = reader.take(copy, last)) last = t.tick
     expect(hashWorld(copy)).toBe(hashWorld(b.w))
   })
 })
@@ -218,6 +234,7 @@ function nodeWorker(which: 'sim' | 'men'): { w: Worker; asBrowser: globalThis.Wo
   const w = new Worker(new URL('./fx-battle-workers.ts', import.meta.url), { workerData: which })
   const asBrowser = {
     postMessage: (m: unknown) => w.postMessage(m),
+    terminate: () => void w.terminate(),
     set onmessage(fn: (e: { data: unknown }) => void) {
       w.on('message', d => fn({ data: d }))
     },
