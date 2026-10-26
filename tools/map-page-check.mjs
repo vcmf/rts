@@ -242,7 +242,14 @@ try {
         // a note keeps its line breaks; an id is not edited in the page
         field('note', 'used in 1805\\nsee the survey')
         const noteKept = JSON.parse(MAP.text).features.find(f => f.id === target.id).note === 'used in 1805\\nsee the survey'
-        const idFixed = q('id').disabled
+        const idFixed = q('id').readOnly
+        // a kind changed: the form is built again, and the focus stays in it (on the page, Backspace would delete)
+        q('kind').focus()
+        field('kind', 'relief.ridge')
+        const focusInForm = document.getElementById('form').contains(document.activeElement)
+        document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }))
+        const notDeleted = JSON.parse(MAP.text).features.some(f => f.id === target.id)
+        MAP.undo()
         MAP.select(other.id)
         // JSON refused: the text stays as typed, with why, and Escape drops it
         field('seasons', '{"winter": ')
@@ -305,7 +312,7 @@ try {
         MAP.undo()
         const back = await MAP.save()
         const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
-        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, target: target.id, other: other.id, noteKept, idFixed, refused, dropped, kept, noteBox, jsonRead, flushed, typedKept, ownUndo, undoKeeps, notSaved })
+        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, target: target.id, other: other.id, noteKept, idFixed, refused, dropped, kept, noteBox, jsonRead, flushed, typedKept, ownUndo, undoKeeps, notSaved, focusInForm, notDeleted })
       })()`,
     ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
@@ -498,7 +505,11 @@ try {
   )
   check(fl.back && fl.after === original, 'both undone and saved, the file is byte for byte the original')
   check(fl.noteKept && fl.noteBox, 'a note is edited in a text box, its line breaks kept')
-  check(fl.idFixed, "a feature's id is not edited in the form")
+  check(fl.idFixed, "a feature's id is read-only in the form (its text can be copied)")
+  check(
+    fl.focusInForm && fl.notDeleted,
+    'the form built again keeps the focus in it, and Backspace there deletes nothing',
+  )
   check(fl.refused && fl.dropped, 'JSON a field refuses stays typed with why; Escape drops it')
   check(fl.kept, 'the field the focus moved to is still the same after the edit the move applied')
   check(fl.jsonRead, "the feature's JSON is to read only")

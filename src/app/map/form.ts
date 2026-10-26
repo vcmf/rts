@@ -13,15 +13,14 @@ import { SEASONS } from '../../map/schema.ts'
 import { kindChain, kindStates, type Issue } from '../../map/catalogue.ts'
 import { featureKind, presetsOf } from '../../map/validate.ts'
 import type { Editor } from './editor.ts'
-import { attrInput, attrRows, parseInput, problemsAt, showValue, type AttrRow } from './fields.ts'
+import { attrInput, attrRows, parseInput, problemsAt, showValue, type AttrRow, type InputKind } from './fields.ts'
 
-type Input = 'text' | 'raw' | 'number' | 'json' | 'any'
 /** One row of the form: its key, label, input and the hint beside it. */
 interface Row {
   key: string
   label: string
   value: unknown
-  as: Input
+  as: InputKind
   options?: string[] // a choice among these ('' first: none, it inherits)
   hint?: string
   disabled?: boolean
@@ -36,6 +35,7 @@ interface View {
   rows: Row[]
   set: Setter
   rest: Issue[]
+  found: Issue[] // the validator's problems of what it shows (looked for once, then by field)
   json: string | null
 }
 /** A row's elements, to be given new values in place. */
@@ -130,6 +130,10 @@ export class Form {
   flush(): void {
     for (const [key, p] of [...this.pending]) if (!p.why) this.apply(key)
   }
+  /** Whether a field holds text not applied (typed, or refused): work the page would lose if it closed. */
+  get holding(): boolean {
+    return this.pending.size > 0
+  }
   /** Whether a field holds text it could not apply (what the field shows is not in the copy). */
   get refused(): boolean {
     return [...this.pending.values()].some(p => !!p.why)
@@ -171,9 +175,8 @@ export class Form {
     ]
     const base = `features[${doc.features.indexOf(f)}]`
     // the problems of no row (its shape, its references, a shared edge, a generator): above the feature's JSON
-    const rest = problemsAt(this.editor.issues, base).filter(
-      x => !rows.some(r => problemsAt([x], `${base}.${r.key}`).length),
-    )
+    const found = problemsAt(this.editor.issues, base)
+    const rest = found.filter(x => !rows.some(r => problemsAt([x], `${base}.${r.key}`).length))
     return {
       // the fields, not the feature: another feature of the kind keeps the form (and the focus a Tab moved on to)
       sig: JSON.stringify(['feature', rows.map(r => [r.key, r.label, r.as, r.options, r.lines])]),
@@ -181,6 +184,7 @@ export class Form {
       rows,
       set: (key, value) => this.editor.setField(key, value),
       rest,
+      found,
       json: JSON.stringify(f),
     }
   }
@@ -247,6 +251,7 @@ export class Form {
       base: '',
       rows,
       set: (key, value) => this.editor.setMapField(key, value),
+      found: this.editor.issues.filter(x => !x.path.startsWith('features')),
       // the map's problems of no row (its features' are theirs)
       rest: this.editor.issues.filter(
         x => x.id === null && !rows.some(r => problemsAt([x], r.key).length) && !x.path.startsWith('features'),
@@ -301,7 +306,13 @@ export class Form {
       })
       parts.push(this.json)
     }
+    // the focus in a field replaced goes to its new field, or to the form (never to the page, whose keys are the map's)
+    const focus = this.box.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.key : null
     this.box.replaceChildren(...parts)
+    if (focus !== null) {
+      const again = focus ? this.shown.get(focus)?.input : undefined
+      ;(again ?? this.box).focus()
+    }
     this.fill(view)
   }
 
@@ -327,9 +338,12 @@ export class Form {
       }
     }
     if (s.input.value !== value) s.input.value = value
-    s.input.disabled = !this.editor.enabled || !this.editor.idle || !!r.disabled
+    // a field that cannot be set now is read-only (its text can still be selected and copied); a choice is disabled
+    const off = !this.editor.enabled || !this.editor.idle || !!r.disabled
+    if (s.input instanceof HTMLSelectElement) s.input.disabled = off
+    else s.input.readOnly = off
     s.hint.textContent = r.hint ?? ''
-    const found = problemsAt(this.editor.issues, view.base ? `${view.base}.${r.key}` : r.key).map(i => i.message)
+    const found = problemsAt(view.found, view.base ? `${view.base}.${r.key}` : r.key).map(i => i.message)
     s.bad.replaceChildren(...this.problems(p?.why ? [`not applied: ${p.why}`, ...found] : found))
   }
 

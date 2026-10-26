@@ -429,6 +429,13 @@ edit. No new decision.
   whose change applies it; the panel's scroll bar no longer applies half-typed text); `1e400` stays text; the JSON
   box is written only when it changed (a part selected to copy stays); the form's feature view split, with doc
   comments; `presetsOf` beside `featureKind` in the validator, used by the editor's modules; stale comments.
+- **Second redesign, round 2**: severe. A preset that is no object (`{"tall": null}`, typed in the map's form) threw
+  in the form, a drag and a reference's picking; a form built again (a kind changed with the arrow keys) left the
+  focus on the page, whose Backspace then deleted the selected feature. Fixed: `presetsOf` takes only the presets
+  that are objects, as the validator does; a form built again keeps the focus in its field, or in the form. With them:
+  the conflict's overwrite saves by the same rule (no save while a field holds refused text); closing the page asks
+  while a field holds text not applied; fields that cannot be set are read-only (their text can be copied), not
+  disabled; one `InputKind`; the problems of what the form shows are looked for once a refresh.
 
 ## Open questions
 

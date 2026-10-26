@@ -298,7 +298,8 @@ maps/kinds.json ──► checkCatalogue ─┐
         changes (Enter, the focus leaving it: a press on another control), before a press on the map (whose drag
         would start first) and before a save, as one edit; emptied, the field is removed (it inherits). Refused (text
         that is no value of its kind, or the editor said no), it stays typed with the reason under it until changed,
-        or Escape drops it, and no save is made while a field holds such text. The undo and redo buttons keep the
+        or Escape drops it, and no save is made while a field holds such text (nor an overwrite); closing the page
+        asks while a field holds text not applied. The undo and redo buttons keep the
         focus in the field, so its text stays typed for the copy they bring back. In a field holding text, Cmd or
         Ctrl Z is the field's own text undo; Cmd or Ctrl S applies it and saves.
       - Its text is read as its kind of value only (a number's that is no number stays text for the validator to

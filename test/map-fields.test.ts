@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { AttrSpec, Catalogue, Feature, FieldSpec, MapFile, ShapeName } from '../src/map/schema.ts'
 import { allowedIn, categoryOf, kindChain, kindMeta } from '../src/map/catalogue.ts'
-import { validate } from '../src/map/validate.ts'
+import { featureKind, presetsOf, validate } from '../src/map/validate.ts'
 import { formatMap } from '../src/map/format.ts'
 import { attrInput, attrRows, parseInput, problemsAt, setField, showValue } from '../src/app/map/fields.ts'
 import { Editor, type Host } from '../src/app/map/editor.ts'
@@ -156,6 +156,14 @@ describe('M7c: every attribute through the form', () => {
     const map: MapFile = { ...base, season: 'winter' }
     const f: Feature = { id: 'w', kind: 'ground.field.wheat', area: SHAPE.area as Feature['area'], height: 1 }
     expect(attrRows(cat, f, map).find(r => r.name === 'height')!.inherited).toBe(0)
+  })
+  it('takes a preset that is no object as none, so a feature naming it has no kind and nothing throws', () => {
+    const map = { ...base, presets: { tall: null, wood: { kind: 'veg.wood' } } } as unknown as MapFile
+    expect(Object.keys(presetsOf(map))).toEqual(['wood'])
+    const f: Feature = { id: 'w', preset: 'tall', circle: [[0, 0], 10] }
+    expect(featureKind(f, presetsOf(map))).toBeUndefined()
+    expect(attrRows(cat, f, map)).toEqual([])
+    expect(presetsOf({ presets: [1] })).toEqual({})
   })
   it('sets and removes a field in place, a new one last', () => {
     const f: Feature = { id: 'a', kind: 'relief.hill', point: [0, 0], height: 3 }

@@ -60,7 +60,7 @@ export function attrRows(cat: Catalogue, f: Feature, map: MapFile): AttrRow[] {
  * A value as the form shows it: text as it is (quoted in a field read as JSON, so it reads back as text), numbers
  * plainly, anything else as JSON; none as empty.
  */
-export function showValue(v: unknown, as: 'text' | 'raw' | 'number' | 'json' | 'any' = 'text'): string {
+export function showValue(v: unknown, as: InputKind = 'text'): string {
   if (v === undefined) return ''
   if (typeof v === 'string') return as === 'json' || as === 'any' ? JSON.stringify(v) : v
   if (typeof v === 'number' || typeof v === 'boolean') return String(v)
@@ -68,6 +68,11 @@ export function showValue(v: unknown, as: 'text' | 'raw' | 'number' | 'json' | '
 }
 
 const DECIMAL = /^-?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/
+/**
+ * How a field's text is read: words (`text`, trimmed), words as typed (`raw`: a note), a decimal number, JSON, or for a
+ * field of no known kind JSON when it is and else words (`any`).
+ */
+export type InputKind = 'text' | 'raw' | 'number' | 'json' | 'any'
 /** What a field's text means: a value to set, the field removed (empty: it inherits), or text that is no value. */
 export type Parsed = { value: unknown } | { remove: true } | { error: string }
 
@@ -76,7 +81,7 @@ export type Parsed = { value: unknown } | { remove: true } | { error: string }
  * note), `number` for a number (text that is no number stays text, for the validator to name), `json` for the rest
  * (objects, lists, ramps, seasons). A number field that may be a ramp takes JSON when its text is an object.
  */
-export function parseInput(as: 'text' | 'raw' | 'number' | 'json' | 'any', text: string): Parsed {
+export function parseInput(as: InputKind, text: string): Parsed {
   // several lines of words (a note) are kept as typed, its spaces and line breaks too
   if (as === 'raw') return text === '' ? { remove: true } : { value: text }
   const t = text.trim()
@@ -95,7 +100,7 @@ export function parseInput(as: 'text' | 'raw' | 'number' | 'json' | 'any', text:
   }
 }
 /** How an attribute's text is read: by its spec's type (none: JSON when it is, else text). */
-export function attrInput(spec: AttrSpec | undefined): 'text' | 'number' | 'json' | 'any' {
+export function attrInput(spec: AttrSpec | undefined): InputKind {
   if (!spec) return 'any'
   if (spec.type === 'number' || spec.type === 'int') return 'number'
   if (spec.type === 'enum' || spec.type === 'string') return 'text'

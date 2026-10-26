@@ -848,12 +848,12 @@ addEventListener('keydown', e => {
  * Saves what the fields hold too: their text first; text one refuses is not in the copy, so the page does not save
  * as if it were.
  */
-function saveAll(): void {
+function saveAll(overwrite = false): void {
   form.flush()
   if (form.refused) editor.note('a field holds text it could not apply: mend it, or Escape drops it; not saved')
-  else void editor.save()
+  else void editor.save(overwrite)
 }
-saveButton.addEventListener('click', saveAll)
+saveButton.addEventListener('click', () => saveAll())
 addKind.addEventListener('change', shapeList)
 addGo.addEventListener('click', () => {
   // the map takes the drawing's keys (Enter, Backspace, Escape)
@@ -905,10 +905,11 @@ $('newMake').addEventListener('click', () => {
 })
 undoButton.addEventListener('click', () => editor.undo())
 redoButton.addEventListener('click', () => editor.redo())
-$('overwrite').addEventListener('click', () => void editor.save(true))
+$('overwrite').addEventListener('click', () => saveAll(true))
 $('takeDisk').addEventListener('click', () => editor.takeDisk())
 addEventListener('beforeunload', e => {
-  if (editor.dirty) e.preventDefault()
+  // unsaved edits, or text typed in a field and not applied
+  if (editor.dirty || form.holding) e.preventDefault()
 })
 
 // a saved map file, catalogue or heightfield (vite.config.ts sends `map-changed` with the file and the time it was

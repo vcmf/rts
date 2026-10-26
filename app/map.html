@@ -34,7 +34,8 @@
   #drawPrompt { color: #1a70c0; margin: 4px 0; }
   #drawPrompt:empty, #refs:empty { display: none; }
   #refs { margin: 4px 0; }
-  #form { margin: 6px 0 0; }
+  #form { margin: 6px 0 0; outline: none; }
+  #form input:read-only:not([type=checkbox]), #form textarea:read-only { color: var(--ink-2); background: transparent; }
   #form .row { display: grid; grid-template-columns: 9em 1fr; gap: 0 6px; margin: 2px 0; color: var(--ink); }
   #form .row .k { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #form .row input, #form .row select { font: inherit; min-width: 0; }
@@ -81,7 +82,7 @@
       <label>season <select id="newSeason"></select></label>
       <button id="newMake">make</button></details>
     <div class="hint">click selects · drag a handle or the shape · double-click adds a point · Delete removes the point under the pointer, or the feature · Esc clears · drawing: Enter ends a line or an area, Backspace takes a click back, Esc drops it</div>
-    <div id="form"></div>
+    <div id="form" tabindex="-1"></div>
   </div>
   <div id="errbox" hidden><div class="cap">The file has errors; the last good drawing stays.</div><ul id="errors"></ul></div>
 </div>
