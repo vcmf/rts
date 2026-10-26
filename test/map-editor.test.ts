@@ -81,7 +81,7 @@ describe('M7a: the editor', () => {
     drag(ed, [-100, -50], [-90, -50])
     ed.load('/maps/t.map.json', ed.text) // as saved
     const byHand = text.replace('"height":4', '"height":5')
-    expect(ed.onDisk(byHand)).toBe(true)
+    expect(ed.onDisk('/maps/t.map.json', byHand)).toBe(true)
     expect(ed.canUndo).toBe(false)
     expect(ed.base).toBe(byHand)
   })
@@ -177,9 +177,9 @@ describe('M7a: the editor under interruptions', () => {
     const { ed } = make()
     ed.select('road')
     drag(ed, [-100, -50], [-90, -50])
-    ed.onDisk(text.replace('"height":4', '"height":5'))
+    ed.onDisk('/maps/t.map.json', text.replace('"height":4', '"height":5'))
     expect(ed.conflict).not.toBe(null)
-    ed.onDisk(text)
+    ed.onDisk('/maps/t.map.json', text)
     expect(ed.conflict).toBe(null)
   })
   it('adds no point on a double click over an existing one', () => {
@@ -254,7 +254,7 @@ describe('M7a redesign: one state machine, the validator as the gate', () => {
     const { ed } = make()
     ed.select('road')
     expect(ed.down(-100, -50)).toBe(true)
-    expect(ed.onDisk(text.replace('"height":4', '"height":5'))).toBe(false)
+    expect(ed.onDisk('/maps/t.map.json', text.replace('"height":4', '"height":5'))).toBe(false)
     expect(ed.conflict).not.toBe(null)
     ed.move(-90, -50)
     ed.up()
@@ -385,7 +385,7 @@ describe('M7a redesign, round 1', () => {
     ed.select('road')
     expect(ed.down(-100, -50)).toBe(true)
     const byHand = text.replace('"height":4', '"height":5')
-    ed.onDisk(byHand)
+    ed.onDisk('/maps/t.map.json', byHand)
     ed.up()
     expect(ed.conflict).toBe(null)
     expect(ed.base).toBe(byHand)
@@ -544,8 +544,8 @@ describe('M7a redesign 2: edits apply, the structure checked, the inside pans', 
     const ours = ed.text
     const saved = ed.save()
     await new Promise(r => setTimeout(r, 0))
-    ed.onDisk(ours) // the watcher sees the save itself
-    ed.onDisk('{"format":1,"features":[]}') // and then another tool's write
+    ed.onDisk('/maps/t.map.json', ours) // the watcher sees the save itself
+    ed.onDisk('/maps/t.map.json', '{"format":1,"features":[]}') // and then another tool's write
     reply()
     expect(await saved).toBe(true)
     expect(ed.conflict).toBe('{"format":1,"features":[]}')
@@ -599,18 +599,63 @@ describe('M7a redesign 2, round 1', () => {
     const saved = ed.save()
     await new Promise(r => setTimeout(r, 0))
     ed.undo() // back to the file as read, before the reply
-    expect(ed.onDisk(sent)).toBe(false)
+    expect(ed.onDisk('/maps/t.map.json', sent)).toBe(false)
     reply()
     await saved
     expect(ed.feature('road')!.line![0]).toEqual([-100, 50])
     expect(ed.canRedo).toBe(true)
   })
-  it('shows what is wrong in a file as read, and clears the last message', () => {
-    const { ed, found } = make()
+  it('reads what is wrong in a file as read, and clears the last message', () => {
+    const { ed } = make()
     ed.setCatalogue(cat)
     ed.message = 'saved'
-    ed.load('/maps/t.map.json', text.replace('"height":4', '"height":-4'))
+    ed.load('/maps/t.map.json', text.replace('"height":4', '"height":"tall"'))
     expect(ed.message).toBe('')
-    expect(found.at(-1)!.length).toBeGreaterThanOrEqual(0)
+    const found = (ed as unknown as { found: { id: string }[] }).found
+    expect(found.some(i => i.id === 'hill')).toBe(true)
+  })
+})
+
+describe('M7a redesign 2, round 2', () => {
+  const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'kinds.json'), 'utf8')) as Catalogue
+  it('ignores a change on disk of another map than the one it holds', () => {
+    const { ed } = make()
+    expect(ed.onDisk('/maps/other.map.json', '{"format":1,"features":[]}')).toBe(false)
+    expect(ed.base).toBe(text)
+  })
+  it('reads the file in when an undo makes the copy clean during a conflict', () => {
+    const { ed } = make()
+    ed.select('road')
+    drag(ed, [-100, -50], [-90, -50])
+    const byHand = text.replace('"height":4', '"height":5')
+    ed.onDisk('/maps/t.map.json', byHand)
+    expect(ed.conflict).toBe(byHand)
+    ed.undo()
+    expect(ed.conflict).toBe(null)
+    expect(ed.base).toBe(byHand)
+  })
+  it('draws the selection by the newest catalogue: wrong as soon as it is read', () => {
+    const { ed } = make(text.replace('"height":4', '"height":"tall"'))
+    ed.setCatalogue(cat)
+    const found = (ed as unknown as { found: { id: string }[] }).found
+    expect(found.some(i => i.id === 'hill')).toBe(true)
+  })
+  it('finds the handle under a resting pointer again when the view moves', () => {
+    const { ed } = make()
+    let shift = 0
+    ;(ed as unknown as { host: Host }).host.project = (x, z) => [x, -z + shift]
+    ed.select('road')
+    ed.move(100, -50) // on the road's last point
+    shift = 200 // the view moved under the pointer
+    ed.viewChanged()
+    ed.remove() // the pointer is off the shape now: the feature, not that point
+    expect(ed.feature('road')).toBe(undefined)
+  })
+  it('says why a point stays, naming each shape’s fewest points', () => {
+    const { ed } = make()
+    ed.select('road')
+    ed.move(100, -50)
+    ed.remove()
+    expect(ed.message).toMatch(/a line 2, a closed line or a ring 3/)
   })
 })

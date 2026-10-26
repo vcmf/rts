@@ -29,8 +29,6 @@ export type Project = (x: number, z: number) => [number, number] | null
 /** The tolerances of picking, in screen pixels. */
 export const PICK = { handle: 8, point: 8, line: 6 }
 
-/** Whether a line is closed, as the compiler reads it (a walled yard). */
-const closed = isClosedLine
 /** Whether a feature is a barrier (its kind its own or its preset's), whose points lie on the lattice (§3.6). */
 export const isBarrier = (f: Feature, presets: MapFile['presets'] = {}) => {
   const kind = featureKind(f, presets as Record<string, Record<string, unknown>>)
@@ -43,7 +41,7 @@ export function handles(f: Feature): { handle: Handle; at: Pt }[] {
   if (f.point) out.push({ handle: { kind: 'point' }, at: f.point })
   if (f.near) out.push({ handle: { kind: 'near' }, at: f.near })
   if (f.line) {
-    const n = closed(f.line) ? f.line.length - 1 : f.line.length
+    const n = isClosedLine(f.line) ? f.line.length - 1 : f.line.length
     for (let k = 0; k < n; k++) out.push({ handle: { kind: 'line', index: k }, at: f.line[k] })
   }
   f.area?.forEach((ring, r) => ring.forEach((at, k) => out.push({ handle: { kind: 'ring', ring: r, index: k }, at })))
@@ -276,7 +274,7 @@ export function moveHandle(f: Feature, h: Handle, to: Pt, place: Place): Feature
       break
     case 'line': {
       const line = f.line!.map(p => [...p] as Pt)
-      const loop = closed(line)
+      const loop = isClosedLine(line)
       const n = loop ? line.length - 1 : line.length
       // a closed line's first point is also its last: its neighbours wrap
       const neighbours = [
@@ -404,7 +402,7 @@ function shiftFollow(f: Feature, index: number, by: 1 | -1): void {
 export function removePoint(f: Feature, h: Handle): Feature | null {
   if (h.kind === 'line') {
     const line = f.line!
-    const loop = closed(line)
+    const loop = isClosedLine(line)
     if (line.length - (loop ? 1 : 0) <= (loop ? 3 : 2)) return null
     const kept = line.filter((_, k) => k !== h.index)
     // a closed line losing its first point closes on its new first

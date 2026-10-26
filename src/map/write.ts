@@ -97,7 +97,6 @@ export function sameJson(a: unknown, b: unknown): boolean {
   )
 }
 
-/** Applies patches that do not overlap to the text. */
 /** Applies patches that do not overlap to the text; new line breaks take the text's own (CRLF in a CRLF file). */
 function patched(s: string, patches: Patch[]): string {
   const crlf = s.includes('\r\n')

@@ -122,6 +122,9 @@ export class Editor {
   /** The catalogue the validator reads the copy with (the page's newest compile's). */
   setCatalogue(cat: Catalogue | null): void {
     this.cat = cat
+    // what the copy's selection is drawn as follows the new catalogue (the page's list comes with the compile)
+    this.found = cat && this.doc ? validate(this.doc, cat) : []
+    this.host.redraw()
   }
 
   /**
@@ -143,7 +146,9 @@ export class Editor {
     this.readOnly = why
     this.baseDoc = doc
     if (this.selected && !this.feature(this.selected)) this.selected = null
-    this.check(null) // what the validator finds in the file as read; no message left from the copy before
+    // what the validator finds in the file as read (the page's list comes with the compile); no message left over
+    this.found = this.cat && doc ? validate(doc, this.cat) : []
+    this.message = ''
     this.host.changed()
   }
   /**
@@ -151,7 +156,8 @@ export class Editor {
    * settles a conflict); with no unsaved edits and no press it is read in; else it is a conflict, shown until it is
    * settled. Returns whether the copy changed (to recompile).
    */
-  onDisk(text: string): boolean {
+  onDisk(file: string, text: string): boolean {
+    if (file !== this.file) return false // a read of another map than the one the editor holds
     if (text === this.inFlight) return false // a save of ours, written before its reply came: the reply settles it
     if (text === this.base) {
       if (this.conflict !== null) {
@@ -315,6 +321,15 @@ export class Editor {
     }
     return true
   }
+  /** A message for the panel from the page (a read of the file that failed). */
+  note(message: string): void {
+    this.message = message
+    this.host.changed()
+  }
+  /** The view moved (a fit, a resize, a new tilt): the handle under the resting pointer is looked for again. */
+  viewChanged(): void {
+    if (this.mode.kind === 'idle') this.hoverAt()
+  }
   /** The pointer left the map: no handle is under it. */
   leave(): void {
     this.pointer = null
@@ -377,7 +392,9 @@ export class Editor {
       const g = removePoint(f, h)
       if (g) this.commit(this.replace(this.doc, g), f.id)
       else {
-        this.message = 'that point stays: a line keeps 2 points, a ring 3'
+        this.message =
+          'that point stays: a shape keeps its fewest points (a line 2, a closed line or a ring 3, ' +
+          'the rest of a ring with a shared edge 1)'
         this.host.changed()
       }
       return
@@ -411,6 +428,7 @@ export class Editor {
     this.host.recompile()
     this.host.changed()
     this.host.redraw()
+    this.settle() // back to the file as read: a conflict that came meanwhile is the file read in
   }
 
   /**

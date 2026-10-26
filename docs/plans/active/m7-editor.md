@@ -183,11 +183,29 @@ tools on top).
   line ends; the save writes through a symbolic link, in place for a hard-linked file, and keeps the permissions.
   The page check's save-to-redraw time went over its second (1.2–1.3 s) at a load average of 97 from other
   sessions, the compile itself at 1.0–1.1 s against 0.75 s before; to run again when the machine is quiet.
+- **Second redesign, round 2**: moderate and light only, so the review stops (the writer's patches and the save
+  route came through with nothing). Fixed: a failed read of the file on disk is said in the editor's panel, no longer
+  dropping the compile of an edit in flight; a change on disk is applied only to the map the editor holds; an undo
+  that makes the copy clean during a conflict reads the file in; the selection is drawn red by the newest catalogue,
+  from the file's first reading; the handle under a resting pointer is found again when the view moves; the message
+  for a point that stays names each shape's fewest points; leftover names of the dropped gate.
+
+## Results (M7a)
+
+- Every map in `maps/` written back unedited is byte for byte its file; a moved point changes one line; an edit
+  undone after a save comes back in the file's first bytes (`test/map-write.test.ts`).
+- The page check: a drag of a point compiles from the page's copy in 0.73–0.93 s (two-ridges, 2.4 km, the dev Mac
+  under other sessions' load); the save writes one changed line; undo and save give the original bytes; a save to a
+  redraw in 0.86 s.
+- The validator on the edited copy: 0.17–0.32 ms on today's maps (Node).
+- `npm test` (822 tests), `check:data`, the build and the docs check pass.
 
 ## Open questions
 
 1. Editing a generated child moves its parent's handles, not its own: changing one house of a village needs pinning
    (M7c).
 2. A map file that is not valid JSON cannot be edited in the page until it is fixed by hand.
-3. Each finished edit runs the whole compile (validate, apply, the bakes): 0.74 s on two-ridges (2.4 km); about 3 s
+3. The writer parses and compares the whole features list on each edit; measured cheap on today's maps, to be
+   measured on Austerlitz with the compile below.
+4. Each finished edit runs the whole compile (validate, apply, the bakes): 0.74 s on two-ridges (2.4 km); about 3 s
    on a 6 km map by the M6 measures. An incremental path (only the edited feature's cells) if M8's editing needs it.

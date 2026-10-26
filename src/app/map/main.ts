@@ -229,7 +229,7 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
   panel()
 }
 
-let gateKinds: string | null = null // the catalogue's text the editor's gate holds
+let editorKinds: string | null = null // the catalogue's text the editor validates with
 // each compile takes its number before it reads the files, so a slower, older read can never replace a newer one
 async function compile(reason: string, savedAt?: number): Promise<void> {
   const mine = ++seq
@@ -245,9 +245,9 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
     ;[mapText, kindsText] = await Promise.all([own ? editor.text : read(file, MAPS), read('/maps/kinds.json', KINDS)])
     if (mine === seq) {
       if (!own) editor.load(file, mapText)
-      // the catalogue the editor's gate validates with, when it changed (the newest compile's alone)
-      if (kindsText !== gateKinds) {
-        gateKinds = kindsText
+      // the catalogue the editor validates its copy with, when it changed (the newest compile's alone)
+      if (kindsText !== editorKinds) {
+        editorKinds = kindsText
         try {
           editor.setCatalogue(JSON.parse(kindsText) as Catalogue)
         } catch {
@@ -551,6 +551,7 @@ function draw(): void {
     for (const f of current.map.features) if (wrong.has(f.id)) outline(f, '#c0201a', 3)
   }
   editor.draw()
+  editor.viewChanged() // after a fit, a resize or a look: the handle under the resting pointer
   // the sight overlay's eye
   if (overlaySelect.value === 'sight' && sightAt) {
     const p = toScreen(sightAt[0], sightAt[1])
@@ -767,9 +768,10 @@ if (import.meta.hot) {
       // the newest read alone counts: an older one may resolve after it
       void diskRead(read(file, MAPS)).then(
         text => {
-          if (text !== null && picker.value === file && editor.onDisk(text)) void compile('save', d.at)
+          if (text !== null && picker.value === file && editor.onDisk(file, text)) void compile('save', d.at)
         },
-        (err: Error) => failed(`cannot read the map: ${err.message}`),
+        // said in the editor's panel: the page's compile in flight (an edit's) must still be drawn
+        (err: Error) => editor.note(`cannot read the file on disk: ${err.message}`),
       )
     } else if (d.file === '/maps/kinds.json') void compile('save', d.at)
   })
