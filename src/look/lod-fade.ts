@@ -165,8 +165,8 @@ export function boxPxRange(
   return out
 }
 
-/** A list of men as the figures' instance buffers hold them: poses (4 a man: x, y, z, his turn), clip settings (3), moves to the next
- *  step (3) and each man's index in his battalion (1: aMan, the cross-fade's hash) */
+/** A list of men as the figures' instance buffers hold them: poses (4 a man: x, y, z, his turn), clip settings (3),
+ *  moves to the next step (3) and each man's index in his battalion (1: aMan, the cross-fade's hash) */
 export interface ManLists {
   p: Float32Array
   s: Float32Array
