@@ -63,7 +63,7 @@ step 12 morale              the shocks owed (shockIn) are taken with contagion
 
 A formation in melee refuses every player command but the debug ones ("in melee"); a scenario's plan's orders are
 queued for after the melee (a charge is refused). It stands while it fights, but with the claim grid's prototype
-on (below, **The clash**).
+on (below, **A melee's rounds**).
 
 **The charge** (`O_CHARGE`, `formation.ts`): an order alone in the formation's list, run by the move order's
 code (turn limits, the lag model, the footprint gate).
@@ -123,12 +123,11 @@ men of its companies within `contact + hold` of each.
   melee losses it does not return, and is then blown. A target that breaks before contact is pursued the same
   way. Infantry holds where it stands.
 
-**The clash** (only with the claim grid's prototype on, `w.claims`; docs/plans/active/c1-claims.md, step 4):
-after the melee step, two battalions each the other's foe weigh their pushes (the men each strike owes the foe,
-times morale). One losing by more than `EVEN`, its foe in its front, gives ground (`giveGround`): its companies in
-contact bend back, then the whole battalion steps back, held by other formations' claims and the ground; its foe
-follows by at most that (`followUp`). Ground it could not give costs it its nerve against an enemy or the ground,
-its order against friends. While the pair lasts neither dresses its line.
+**A melee's rounds** (only with the claim grid's prototype on, `w.claims`; docs/plans/active/c1-claims.md, step 4):
+at the end of the melee step, a pair (each the other's foe, both formed, one ahead of the other) is judged every 3 s
+from its pushes (the losses each strike owes the foe, times morale). The loser steps back 2 m as one rigid move,
+granted whole or not at all (`stepWhole`), and its foe follows by the same displacement; if its foe cannot follow,
+their melee ends. A loser that cannot step back, or has a second enemy on its flank or rear, takes a morale shock.
 
 **Shocks** (`shockIn`): the test's and the impact's shocks are owed to the target and taken by its morale step
 with contagion, after relaxing (`morale.ts`).

@@ -17,7 +17,7 @@ import { fnv1a } from './hash.ts'
 import { buildClaims, claimFormation, claimOrder } from './claims.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep } from './morale.ts'
-import { meleeStep, standingStep, clashStep } from './melee.ts'
+import { meleeStep, standingStep, roundStep } from './melee.ts'
 import { artilleryStep } from './artillery.ts'
 import { planStep, endStep, checkPlan } from './plan.ts'
 
@@ -116,7 +116,7 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
   step('10 charges and melee', () => {
     meleeStep(w)
     // the claim grid's prototype: a melee's loser gives ground and its foe follows (docs/plans/active/c1-claims.md)
-    if (w.claims) clashStep(w, order)
+    if (w.claims) roundStep(w, order)
   })
   // all casualties first, then all morale: a rout reads other battalions (the nearest enemy's position and
   // men, final for the tick; its morale state from a copy taken before any changes), so visiting order does
