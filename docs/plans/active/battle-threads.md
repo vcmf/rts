@@ -248,6 +248,17 @@ tile) is no sim map. Two PRs, then PR 4.
     each in its own eighth of the step, **11–16 ms**, the frame p95 still 20–57 ms against the script's 10–11. What
     is left is the re-upload of every moved battalion's matrices to every LOD: PR 4's (per-instance attributes from
     the frame, uploaded for the battalions that moved). `?sim` stays opt-in until then.
+  - **Redesign after review round 3** (2026-10-26, the owner: "Redesign now"): three rounds' findings came from the
+    renderer guessing what changed: a real-time schedule of which battalion to re-place when (skipped parts at 60 Hz,
+    a catch-up that fired every frame, every battalion due in the first frame and in long ones) and a page-side sum of
+    each battalion's men (blind to volleys going stale and to velocities, open to collisions, an O(men) scan a frame).
+    The men worker knows exactly what it changed: it now publishes **a revision per battalion** in the frame's
+    battalion table, bumped when it steps that battalion's men (not when every man was skipped as settled and still),
+    when a sync changes them, and when one of its companies fires. The renderer re-places a battalion whose revision
+    changed, or whose last volley has gone stale since it was placed, at most once a 12 fps step of real time, and at
+    most `PLACE_MAX` battalions a frame (the rest the frames after, oldest first). The men worker's own stagger (its
+    eight groups, PR 1) spreads the revisions over the step. This is the design's §5 "moved this step" flag, which
+    PR 4's uploads need too. The review count restarts.
 - **Base**: the look code in this epic is four `main` commits behind (#182, #185, #193, #197: look only, `units.ts`
   among them); `main` is merged into the epic before PR 4b (the plan's rule was after #181; these touch no sim code).
 
