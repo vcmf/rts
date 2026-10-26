@@ -50,6 +50,10 @@ step 12 morale              the shocks owed (shockIn) are taken with contagion
   What it reads of another was fixed before the step: positions after movement, men, morale states, shapes,
   and the melee pairs as the step began. Orders come from the shared pool in visiting order, as routs' do
   (`docs/systems/fire-morale.md`).
+- **The exception, with claims:** a melee's rounds, at the end of the step, are judged on that fixed state, then move
+  formations and change pairs (a loser falls back, a winner takes on another enemy) one pair at a time in the tick's
+  keyed order (`claimOrder`), each claiming its new cells before the next. That order does not depend on the slots, so
+  the reversed visiting order still gives the same state.
 
 ## Design
 
@@ -124,10 +128,11 @@ men of its companies within `contact + hold` of each.
   way. Infantry holds where it stands.
 
 **A melee's rounds** (only with the claim grid's prototype on, `w.claims`; docs/plans/active/c1-claims.md, step 4):
-at the end of the melee step, a pair (each the other's foe, both formed, one ahead of the other) is judged every 3 s
-from its pushes (the losses each strike owes the foe, times morale). The loser steps back 2 m as one rigid move,
-granted whole or not at all (`stepWhole`), and its foe follows by the same displacement; if its foe cannot follow,
-their melee ends. A loser that cannot step back, or has a second enemy on its flank or rear, takes a morale shock.
+at the end of the melee step, a pair (each the other's foe, both formed, one ahead of the other) is judged every
+`ROUND` seconds from its pushes (the losses each strike owes the foe, times morale). The loser steps back `STEP`
+metres as one rigid move, granted whole or not at all (`stepWhole`), and its foe follows by the same displacement;
+if its foe cannot follow, their melee ends. A loser that cannot step back, or has a second enemy on its flank or rear,
+takes a morale shock (`PINNED`). The tuning is in `src/sim/melee.ts`.
 
 **Shocks** (`shockIn`): the test's and the impact's shocks are owed to the target and taken by its morale step
 with contagion, after relaxing (`morale.ts`).

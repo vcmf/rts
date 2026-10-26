@@ -223,7 +223,13 @@ export const gapBetween = (w: World, i: number, j: number): number => gapOf(w, b
 export const sideStruck = (w: World, i: number, j: number): number => quarter(w, blockGeometry(w), i, j)
 
 /* ---------------- step 10: charges and melee ---------------- */
-export function meleeStep(w: World, order: readonly number[] = []): void {
+/**
+ * Step 10, charges and melee: each charge's test, impact or recoil; each melee's strikes; the battalions struck while
+ * not in melee engaged; the shocks owed. With claims (`w.claims`), then a melee's rounds (`rounds`), the formations
+ * moved in `order`, the tick's keyed order of the formations (`claimOrder`, the formation step's); without, `order` is
+ * not read.
+ */
+export function meleeStep(w: World, order: readonly number[]): void {
   const f = w.f
   const N = MAX_FORMATIONS
   let any = false
@@ -464,8 +470,8 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
 }
 
 /* ---------------- step 10, with claims: a melee's rounds ---------------- */
-// The claim grid's prototype (docs/proposals/collision-and-orders.md, § Contact; docs/plans/active/c1-claims.md,
-// step 4): a pair in melee (each the other's foe, both formed, one ahead of the other) is judged every ROUND seconds,
+// The claim grid's prototype (docs/plans/active/c1-claims.md, step 4; the collision proposal's § Contact, on its own
+// branch): a pair in melee (each the other's foe, both formed, one ahead of the other) is judged every ROUND seconds,
 // staggered by the pair's lower handle, from its pushes this tick, a push being the losses a strike owes its foe
 // times the striker's morale. One losing by more than PRESS of the two steps back STEP metres as one rigid move,
 // granted whole or not at all, and its foe follows by the same displacement. If the foe cannot follow (another enemy
@@ -487,6 +493,7 @@ const judged: number[] = []
 const jWin = new Int32Array(MAX_FORMATIONS)
 const jX = new Float64Array(MAX_FORMATIONS)
 const jZ = new Float64Array(MAX_FORMATIONS)
+const jPin = new Uint8Array(MAX_FORMATIONS)
 
 /**
  * The rounds due at tick `tick`, at the end of the melee step (G: its block geometry; `order`: the tick's keyed order
@@ -497,16 +504,17 @@ function rounds(w: World, G: FireGeo, S: Melee, order: readonly number[], tick: 
   const f = w.f
   const per = Math.round(ROUND * TICK_HZ)
   judged.length = 0
+  // judged on the step's geometry before anything moves (G holds the positions the step began with)
   for (const i of order) {
-    if (!f.alive[i] || !inClashPair(w, i) || S.foe0[i] !== f.foe[i]) continue
+    // the cheap tests first: a pair since the step began, due this tick
+    if (!f.alive[i] || !f.foe[i] || S.foe0[i] !== f.foe[i]) continue
     const j = slotOf(w, f.foe[i])
-    if (S.foe0[j] !== handleOf(w, i)) continue
-    const lo = Math.min(handleOf(w, i), handleOf(w, j))
-    if ((tick + lo) % per !== 0) continue
+    if (j < 0 || S.foe0[j] !== handleOf(w, i)) continue
+    if ((tick + Math.min(handleOf(w, i), handleOf(w, j))) % per !== 0) continue
     // i loses: its push short of its foe's by more than PRESS of the two
     const on = S.push[j]
     const by = S.push[i]
-    if (!(on + by > 0) || (on - by) / (on + by) <= PRESS) continue
+    if (!(on + by > 0) || (on - by) / (on + by) <= PRESS || !inClashPair(w, i)) continue
     // the direction: along the winner's heading if the loser stands ahead of it, else to the loser's rear if the
     // winner stands ahead of the loser; neither (flank to flank): no round
     if (aheadOf(w, G, j, i)) {
@@ -517,14 +525,16 @@ function rounds(w: World, G: FireGeo, S: Melee, order: readonly number[], tick: 
       jZ[i] = -cos(f.heading[i])
     } else continue
     jWin[i] = j
+    jPin[i] = attackedBesides(w, G, i, j, true) >= 0 ? 1 : 0
     judged.push(i)
   }
+  if (!judged.length) return
   for (const i of judged) {
     const j = jWin[i]
     S.roundAt[i] = tick
     S.roundAt[j] = tick
     S.round[j] = 0
-    if (attackedBesides(w, G, i, j, true) >= 0 || !stepWhole(w, i, jX[i] * STEP, jZ[i] * STEP, j)) {
+    if (jPin[i] || !stepWhole(w, i, jX[i] * STEP, jZ[i] * STEP, j)) {
       f.shockIn[i] += PINNED
       S.round[i] = ROUND_PINNED
       continue
@@ -537,11 +547,16 @@ function rounds(w: World, G: FireGeo, S: Melee, order: readonly number[], tick: 
       S.round[j] = ROUND_FOLLOWED
       continue
     }
-    // its foe cannot follow: the loser has fallen back out of the melee, and its foe takes on the enemy fighting it
+    // its foe cannot follow: the loser has fallen back out of their melee; each takes on another enemy fighting it,
+    // if one is, at once
     S.round[i] = ROUND_FELL_BACK
     leave(w, i, j)
     if (e >= 0) engage(w, j, e)
+    const e2 = attackedBesides(w, G, i, j, false)
+    if (e2 >= 0) engage(w, i, e2)
   }
+  // formations moved: the step's geometry no longer holds this tick's positions
+  w.scratch.fireGeoTick = -1
 }
 
 /**

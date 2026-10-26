@@ -131,19 +131,19 @@ the same state in all of them, X-01 too (#187 does not arise with the keyed orde
 - every bench case with claims now has no overlap (19 of 19), and the reversed visiting order gives the same state
   in all of them. X-14: 2.85 ms a tick (1.84 ms without claims).
 
-**Step 4, a melee's rounds** (2026-10-26), `roundStep` in `src/sim/melee.ts`, at the end of the melee step. Its
+**Step 4, a melee's rounds** (2026-10-26), `rounds` in `src/sim/melee.ts`, at the end of the melee step. Its
 first design, a continuous give way (the companies in contact bent back as lags, then the whole stepped back, its foe
 following), failed five reviews: the bend fought the lag model, who held it needed the gate to report every
 blocker, and flank attackers needed rules of their own. Every game and rule set surveyed gives ground in steps
-(`docs/research/melee-outcomes.md`, on `docs/collision-orders`), so the second design does, and its geometry is
-settled here before the proposal is written (§ Contact there):
-- **A round** of a pair is due every `ROUND` (3 s), on the ticks where the tick plus the pair's lower handle is a
+(the research note on melee outcomes, beside the collision proposal on its branch), so the second design does, and
+its geometry is settled here before the proposal is written (§ Contact there):
+- **A round** of a pair is due every `ROUND` seconds, on the ticks where the tick plus the pair's lower handle is a
   whole number of rounds: no clock per melee, and pairs are not judged together.
 - **Only a pair is judged** (`inClashPair`): each the other's foe since the step began, both in the fight, neither
   changing shape nor in a trail shape, one ahead of the other (`aheadOf`: its companies' centre beyond the other's
   front line, and their frontages overlapping). A push is the losses a strike owes the foe this step, as expected,
   times the striker's morale (0 below 0). One short by more than `PRESS` of the two loses.
-- **The step:** the loser moves `STEP` (2 m) along the winner's heading if it stands ahead of the winner, else to its
+- **The step:** the loser moves `STEP` metres along the winner's heading if it stands ahead of the winner, else to its
   own rear, as one rigid move (`stepWhole`, `src/sim/formation.ts`): granted whole or not at all, refused if any of
   its men would stand on a cell it may not stand on (impassable, off the map, another's claim but its foe's) that
   none of them stood on before. So a move away from what it already stood in is granted, and one deeper into it is
@@ -155,7 +155,9 @@ settled here before the proposal is written (§ Contact there):
 - **Order:** every pair due is judged from the step's pushes before any moves; the moves are made in the claims'
   keyed order, each claiming its new cells before the next, so the reversed visiting order gives the same state.
 - **Seen:** the overlay's Statuses layer shows the last round ("stepped back", "followed", "pinned", "fell back")
-  for 3 s, from the melee step's scratch.
+  until the pair's next, from the melee step's scratch.
+- **Its tuning** (`ROUND`, `STEP`, `PRESS`, `PINNED`) is in `src/sim/melee.ts` while it is a prototype: ruleset data
+  is hashed into saves and replays, and the prototype moves none of them. It goes into the ruleset's `melee` with C2.
 
 Six cases, a veteran regiment (quality 0.95) charging a raw one (0.75) at the halt unless said:
 
