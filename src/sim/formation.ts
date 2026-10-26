@@ -1145,16 +1145,17 @@ export function inClashPair(w: World, i: number): boolean {
 /**
  * The cells of formation i's places that it may not stand on: impassable ground (beyond the map's edge included, as
  * `impAt` has it) or a claim that blocks it but that of `pass`, the one formation it may stand on (−1: none). With
- * `mark`, stamps each such cell `ep` in `seen` and returns true; without, returns whether every such cell is already
- * stamped `ep` (a place off the map never is).
+ * `mark`, stamps each such cell `ep` in `seen`; without, returns −1 at the first such cell not stamped `ep`. Either
+ * way returns how many of its places stand off the map (they have no cell).
  */
-function heldCells(w: World, i: number, pass: number, seen: Int32Array, ep: number, mark: boolean): boolean {
+function heldCells(w: World, i: number, pass: number, seen: Int32Array, ep: number, mark: boolean): number {
   const T = w.terrain
   const U = typeOf(w, i)
   const imp = T.imp[kindOf(w, i)]
   const Fl = filledSlots(w, i)
   const a = i * (w.cr.maxC + 1)
   const ctx = ctxNow(w, i)
+  let off = 0
   for (let k = Fl.at[a], e = Fl.at[a + U.C]; k < e; k++) {
     placeAtSlot(ctx, Fl.s[k], pt)
     const x = pt[0]
@@ -1162,19 +1163,19 @@ function heldCells(w: World, i: number, pass: number, seen: Int32Array, ep: numb
     if (!impAt(T, imp, x, z) && claimBy(w, i, x, z, pass) === FREE) continue
     const gx = Math.round((x - T.x0) / T.cell)
     const gz = Math.round((z - T.z0) / T.cell)
-    const off = gx < 0 || gz < 0 || gx >= T.n || gz >= T.n
-    if (mark) {
-      if (!off) seen[gz * T.n + gx] = ep
-    } else if (off || seen[gz * T.n + gx] !== ep) return false
+    if (gx < 0 || gz < 0 || gx >= T.n || gz >= T.n) off++
+    else if (mark) seen[gz * T.n + gx] = ep
+    else if (seen[gz * T.n + gx] !== ep) return -1
   }
-  return true
+  return off
 }
 
 /**
  * Moves formation i rigidly by (dx, dz) metres, its heading, shape and lags as they stand, if none of its men then
  * stands on a cell it may not stand on (`heldCells`; `pass`: the one formation it may stand on, −1 none) that none of
- * them stood on before: the ground it is held on must not grow, so a move away from what it already stood in is
- * granted and one deeper into it is not. Granted whole, or not at all; sets no velocity. Returns whether it moved.
+ * them stood on before, and no more of them stand off the map: the ground it is held on must not grow, so a move away
+ * from what it already stood in is granted and one deeper into it is not. Granted whole, or not at all; sets no
+ * velocity. Returns whether it moved.
  */
 export function stepWhole(w: World, i: number, dx: number, dz: number, pass: number): boolean {
   const f = w.f
@@ -1182,10 +1183,11 @@ export function stepWhole(w: World, i: number, dx: number, dz: number, pass: num
   const s = w.scratch
   if (!s.stepCells || s.stepCells.length !== n) s.stepCells = new Int32Array(n)
   const ep = (s.stepEpoch = ((s.stepEpoch ?? 0) + 1) & 0x3fffffff)
-  heldCells(w, i, pass, s.stepCells, ep, true)
+  const off = heldCells(w, i, pass, s.stepCells, ep, true)
   f.x[i] += dx
   f.z[i] += dz
-  if (!heldCells(w, i, pass, s.stepCells, ep, false)) {
+  const after = heldCells(w, i, pass, s.stepCells, ep, false)
+  if (after < 0 || after > off) {
     f.x[i] -= dx
     f.z[i] -= dz
     return false

@@ -209,9 +209,11 @@ export function buildClaims(w: World): void {
   }
 }
 
-// whether formation o's claim (its core or its halo) blocks formation i. `pass`: −1 for the rule of every motion, in
-// which a melee pair stands in contact (either the other's foe); else the one enemy i may stand on, for the clash's
-// motions, which stop at every other
+/**
+ * Whether formation o's claim (its core, or else its margin) blocks formation i. `pass`: −1 for the rule of every
+ * motion, in which a melee pair stands in contact (either the other's foe); else the one enemy i may stand on, for a
+ * melee's step and follow (src/sim/melee.ts, `rounds`), which stop at every other.
+ */
 function blocks(w: World, i: number, o: number, core: boolean, pass: number): boolean {
   const f = w.f
   if (f.side[i] === f.side[o]) {
