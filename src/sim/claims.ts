@@ -15,8 +15,11 @@ const K_ORDER = 0x434c // the keyed draw that orders the formations in a tick
 // a change of shape claims the ground it will sweep until it ends, sampled at this many poses ahead
 const SWEEP = 6
 
-/** The width of the margin round a formation's cells, metres: 0 with the claim grid off. */
-export const marginWidth = (w: World): number => (w.claims ? MARGIN * w.terrain.cell : 0)
+/**
+ * The most a margin keeps two formations' men apart head on, metres: their cells are a margin and a cell apart, and
+ * a man stands anywhere in his. 0 with the claim grid off.
+ */
+export const standOff = (w: World): number => (w.claims ? (MARGIN + 1) * w.terrain.cell : 0)
 
 /** Claims per cell: SLOTS entries per terrain cell (owner slot + 1, times 2, plus 1 for its core), and a mark for
  * a cell claimed by more formations than that. */
@@ -46,6 +49,8 @@ export interface Claims {
   pose: Float64Array
   // per formation, the build in which a claim last blocked it (claimHit)
   hit: Int32Array
+  // per formation, the build in which an enemy in the fight last held one of its men's next steps (noteHolder)
+  heldBy: Int32Array
 }
 
 /** The entries kept per cell before it is marked as claimed by more. */
@@ -75,6 +80,7 @@ function claimsOf(w: World): Claims {
     nearAt: new Int32Array(MAX_FORMATIONS).fill(-1),
     pose: new Float64Array(MAX_FORMATIONS * (3 + w.cr.maxC + w.cr.maxNB)).fill(NaN),
     hit: new Int32Array(MAX_FORMATIONS).fill(-1),
+    heldBy: new Int32Array(MAX_FORMATIONS).fill(-1),
   })
 }
 
@@ -212,7 +218,7 @@ export function buildClaims(w: World): void {
   }
 }
 
-// whether formation o's claim (its core or its halo) blocks formation i
+/** Whether formation o's claim (its core, or else its margin) blocks formation i. */
 function blocks(w: World, i: number, o: number, core: boolean): boolean {
   const f = w.f
   const enemy = f.side[i] !== f.side[o]
@@ -220,39 +226,41 @@ function blocks(w: World, i: number, o: number, core: boolean): boolean {
   if (!enemy && (outOfFight(f.mstate[i]) || outOfFight(f.mstate[o]))) return false
   // a melee pair stands in contact, and a charge reaches its target's core: the margin between them gives way, never
   // the core, so a pair cannot pass into each other and stay tangled when one breaks. A pursuit stops at the router's
-  // margin (it rides it down from behind, its reach grown by the margin: `marginWidth`), and a charge or pursuit at
-  // any other enemy's
+  // margin (it rides it down from there: `standOff`), and a charge or pursuit at any other enemy's
   if (enemy && (f.foe[i] === handleOf(w, o) || f.foe[o] === handleOf(w, i))) return core
   if (enemy && f.chPhase[i] !== 0 && f.chTarget[i] === handleOf(w, o)) return core || outOfFight(f.mstate[o])
   return true
 }
 
 /**
- * Whether an enemy's claim that blocks formation i lies one cell from its own along (dx, dz), a unit direction: what
- * holds a router on its way out is an enemy, not a friend, a crowded cell or the ground (src/sim/morale.ts).
+ * Notes that formation i's man stepping to (x, z) is held there by an enemy in the fight (the lag model's look-ahead
+ * found the place blocked): what holds a router on its way out is then an enemy, not a friend, a crowded cell or the
+ * ground (`heldByEnemy`).
  */
-export function enemyClaimAhead(w: World, i: number, dx: number, dz: number): boolean {
+export function noteHolder(w: World, i: number, x: number, z: number): void {
   const C = w.scratch.claims
-  if (!C) return false
+  if (!C || C.heldBy[i] === C.built) return
+  const T = w.terrain
+  const gx = Math.round((x - T.x0) / T.cell)
+  const gz = Math.round((z - T.z0) / T.cell)
+  if (gx < 0 || gz < 0 || gx >= T.n || gz >= T.n) return
   const f = w.f
-  const n = w.terrain.n
-  const ox = Math.round(dx)
-  const oz = Math.round(dz)
-  const L = i * w.cr.maxSlots * (SWEEP + 1)
-  for (let m = 0; m < C.count[i]; m++) {
-    const c = C.list[L + m]
-    const gx = (c % n) + ox
-    const gz = Math.floor(c / n) + oz
-    if (gx < 0 || gz < 0 || gx >= n || gz >= n) continue
-    const k = gz * n + gx
-    for (let s = k * SLOTS; s < k * SLOTS + SLOTS; s++) {
-      const e = C.own[s]
-      if (e === 0) break
-      const o = (e >> 1) - 1
-      if (o !== i && f.side[o] !== f.side[i] && blocks(w, i, o, (e & 1) === 1)) return true
+  const k = gz * T.n + gx
+  for (let s = k * SLOTS; s < k * SLOTS + SLOTS; s++) {
+    const e = C.own[s]
+    if (e === 0) break
+    const o = (e >> 1) - 1
+    if (o !== i && f.side[o] !== f.side[i] && !outOfFight(f.mstate[o]) && blocks(w, i, o, (e & 1) === 1)) {
+      C.heldBy[i] = C.built
+      return
     }
   }
-  return false
+}
+
+/** Whether an enemy in the fight held one of formation i's men within the last `ticks` ticks (`noteHolder`). */
+export function heldByEnemy(w: World, i: number, ticks: number): boolean {
+  const C = w.scratch.claims
+  return !!C && C.heldBy[i] >= 0 && C.built - C.heldBy[i] <= ticks
 }
 
 /** Whether the cell at (x, z) is claimed by a formation that blocks formation i there. */
