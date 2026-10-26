@@ -379,36 +379,14 @@ function mapIdProblem(id: string): string {
   return [...picker.options].some(o => o.value === `/maps/${id}.map.json`) ? `a map ${id} exists` : ''
 }
 const form = new Form(formBox, editor)
-form.onMapId = id => {
-  if (id === editor.doc?.id) return null // its own id again: nothing to change
-  const file = `/maps/${id}.map.json`
-  const why = mapIdProblem(id)
-  if (why) {
-    editor.note(`the id stays: ${why}`)
-    return false
-  }
-  // the list first: the editor's recompile reads the map the list shows (its copy, under its new file)
-  const was = editor.file!
-  const option = [...picker.options].find(o => o.value === was)
-  const moved = mapOption(file)
-  option?.replaceWith(moved)
-  picker.value = file
-  if (!editor.renameMap(file, id)) {
-    moved.replaceWith(option ?? mapOption(was))
-    picker.value = was
-    return false
-  }
-  const q = new URLSearchParams(location.search)
-  q.set('map', id)
-  history.replaceState(null, '', `?${q}`)
-  return true
-}
 // text typed in the form and not applied yet is applied before anything else acts: a press anywhere outside the form
-// (on the map, a button, the list), in the capture phase so it comes before the press's own handlers
+// (on the map, a button, the list), in the capture phase so it comes before the press's own handlers, and a save
 addEventListener(
   'pointerdown',
   e => {
-    if (!formBox.contains(e.target as Node)) form.flush()
+    // not before an undo or a redo: the text stays typed, to be applied to the copy they bring back
+    const target = e.target as Node
+    if (!formBox.contains(target) && target !== undoButton && target !== redoButton) form.flush()
   },
   true,
 )
@@ -849,7 +827,7 @@ addEventListener('keydown', e => {
   // it holds text not applied, else the map's. Any other field (the add box, the new map's) keeps the browser's keys
   const inForm = formBox.contains(target)
   if (typing && !(inForm && mod && (key === 's' || ((key === 'z' || key === 'y') && !form.holds(target))))) return
-  if (mod && ['s', 'z', 'y'].includes(key)) form.flush()
+  if (mod && key === 's') form.flush()
   const onMap = target === document.body || target === canvas
   if (mod && key === 's') {
     e.preventDefault()

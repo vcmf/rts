@@ -6,7 +6,6 @@ import type { AttrSpec, AttrValue, Catalogue, Feature, MapFile } from '../../map
 import { RESERVED } from '../../map/schema.ts'
 import { allowedIn, categoryOf, kindChain, type Issue } from '../../map/catalogue.ts'
 import { featureKind } from '../../map/validate.ts'
-import { GENERATOR_SPECS } from '../../map/generators.ts'
 import { resolve } from '../../map/resolve.ts'
 
 /**
@@ -64,7 +63,7 @@ export function attrRows(cat: Catalogue, f: Feature, map: MapFile): AttrRow[] {
  * A value as the form shows it: text as it is (quoted in a field read as JSON, so it reads back as text), numbers
  * plainly, anything else as JSON; none as empty.
  */
-export function showValue(v: unknown, as: 'text' | 'number' | 'json' | 'any' = 'text'): string {
+export function showValue(v: unknown, as: 'text' | 'raw' | 'number' | 'json' | 'any' = 'text'): string {
   if (v === undefined) return ''
   if (typeof v === 'string') return as === 'json' || as === 'any' ? JSON.stringify(v) : v
   if (typeof v === 'number' || typeof v === 'boolean') return String(v)
@@ -80,7 +79,9 @@ export type Parsed = { value: unknown } | { remove: true } | { error: string }
  * note), `number` for a number (text that is no number stays text, for the validator to name), `json` for the rest
  * (objects, lists, ramps, seasons). A number field that may be a ramp takes JSON when its text is an object.
  */
-export function parseInput(as: 'text' | 'number' | 'json' | 'any', text: string): Parsed {
+export function parseInput(as: 'text' | 'raw' | 'number' | 'json' | 'any', text: string): Parsed {
+  // several lines of words (a note) are kept as typed, its spaces and line breaks too
+  if (as === 'raw') return text === '' ? { remove: true } : { value: text }
   const t = text.trim()
   if (t === '') return { remove: true }
   if (as === 'text') return { value: t }
@@ -110,67 +111,6 @@ export function setField<T extends object>(o: T, key: string, value: unknown): T
   if (value === undefined) delete out[key]
   else out[key] = value
   return out as T
-}
-
-/**
- * Whether a feature has children: it generates them (a generator that writes children, ids `<id>-<n>`), or some are
- * pinned in the file (their `origin.parent`). Their ids carry its own, so the page does not rename it.
- */
-export function hasChildren(map: MapFile, id: string): boolean {
-  return map.features.some(
-    f =>
-      f.origin?.parent === id ||
-      (f.id === id &&
-        Object.keys(f.gen ?? {}).some(g => Object.hasOwn(GENERATOR_SPECS, g) && !!GENERATOR_SPECS[g].childKinds)),
-  )
-}
-
-/**
- * The map with a feature's id changed from `from` to `to`, and every place that names it by that id: the references
- * (`on`, `carries`, `crosses`, `along.id`), shared edges and kept-off lines (`follow`, `clear`), and a generator's
- * selectors (in its parameters, or in a pinned child's record of them). For a feature without children
- * (`hasChildren`): no other id carries its own. Features that name nothing of it are kept as they are (the same
- * objects).
- */
-export function renameFeature(map: MapFile, from: string, to: string): MapFile {
-  let touched = false
-  const swap = (v: unknown) => {
-    if (v !== from) return v
-    touched = true
-    return to
-  }
-  const ids = (v: unknown): unknown => {
-    if (Array.isArray(v)) return v.map(e => ids(e))
-    if (typeof v === 'object' && v !== null && (v as { id?: unknown }).id === from) return { ...v, id: swap(from) }
-    return v
-  }
-  // a generator's selectors, in its parameters or in a pinned child's record of them
-  const selectors = (name: string, params: unknown): unknown => {
-    const selects = Object.hasOwn(GENERATOR_SPECS, name) ? (GENERATOR_SPECS[name].selects ?? []) : []
-    if (typeof params !== 'object' || params === null) return params
-    const p = { ...params } as Record<string, unknown>
-    for (const k of selects) if (Array.isArray(p[k])) p[k] = (p[k] as unknown[]).map(swap)
-    return p
-  }
-  const features = map.features.map(f => {
-    touched = false
-    const g: Feature = { ...f }
-    if (g.id === from) g.id = swap(g.id) as string
-    for (const r of ['on', 'carries', 'crosses'] as const) if (g[r] !== undefined) g[r] = swap(g[r]) as string
-    if (g.along !== undefined) g.along = ids(g.along) as Feature['along']
-    if (g.follow !== undefined) g.follow = ids(g.follow)
-    if (g.clear !== undefined) g.clear = ids(g.clear)
-    if (g.gen && typeof g.gen === 'object') {
-      g.gen = Object.fromEntries(
-        Object.entries(g.gen).map(([name, params]) => [name, selectors(name, params)]),
-      ) as Feature['gen']
-    }
-    if (g.origin && typeof g.origin === 'object') {
-      g.origin = { ...g.origin, params: selectors(g.origin.generator, g.origin.params) as Record<string, unknown> }
-    }
-    return touched ? g : f
-  })
-  return { ...map, features }
 }
 
 /** The validator's problems at a field's path (`features[3].height`, `seed`), and anything under it. */

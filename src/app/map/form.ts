@@ -15,7 +15,7 @@ import { featureKind } from '../../map/validate.ts'
 import type { Editor } from './editor.ts'
 import { attrInput, attrRows, parseInput, presetsOf, problemsAt, showValue } from './fields.ts'
 
-type Input = 'text' | 'number' | 'json' | 'any'
+type Input = 'text' | 'raw' | 'number' | 'json' | 'any'
 /** One row of the form: its key, label, input and the hint beside it. */
 interface Row {
   key: string
@@ -67,10 +67,6 @@ export class Form {
   private pending = new Map<string, { text: string; why: string }>()
   /** Whose fields the pending text is (the file, and the feature or none for the map's): another's drops it. */
   private whose: string | null = null
-  /** The id a rename being applied gives the selection: the same feature, whose text typed stays. */
-  private renaming: string | null = null
-  /** Called for a change of the map's id (the page moves the new map to its file). */
-  onMapId: (id: string) => boolean | null = () => false
 
   constructor(box: HTMLElement, editor: Editor) {
     this.box = box
@@ -85,9 +81,9 @@ export class Form {
     this.cat = cat
     const ed = this.editor
     const f = ed.selected ? ed.feature(ed.selected) : undefined
-    // another map's or another selection's fields: the text typed and not applied goes (a rename of this one keeps it)
+    // another map's or another selection's fields: the text typed and not applied goes
     const whose = `${ed.file}#${f ? f.id : ''}`
-    if (whose !== this.whose && whose !== `${ed.file}#${this.renaming}`) this.pending.clear()
+    if (whose !== this.whose) this.pending.clear()
     this.whose = whose
     const key = [ed.doc, f, ed.issues, cat, ed.enabled, ed.idle, ed.noFile]
     if (!force && key.length === this.last.length && key.every((k, i) => k === this.last[i])) return
@@ -126,15 +122,8 @@ export class Form {
       this.pending.set(key, { text: p.text, why: parsed.error })
       done = false
     } else {
-      // a new id is the same feature: the form keeps the other fields' text through it
-      if (key === 'id' && this.view!.base && 'value' in parsed && typeof parsed.value === 'string') {
-        this.renaming = parsed.value
-      }
-      try {
-        done = this.view!.set(key, 'remove' in parsed ? undefined : parsed.value)
-      } finally {
-        this.renaming = null
-      }
+      done = this.view!.set(key, 'remove' in parsed ? undefined : parsed.value)
+
       if (done === false) this.pending.set(key, { text: p.text, why: this.editor.message || 'refused' })
     }
     // an edit made refreshed the form; a refusal or no change does it here
@@ -149,7 +138,14 @@ export class Form {
     const states = cat && chain ? Object.keys(kindStates(cat, chain)) : []
     const sources = (Array.isArray(doc.sources) ? doc.sources : []).map(s => s?.id).filter(x => typeof x === 'string')
     const rows: Row[] = [
-      { key: 'id', label: 'id', value: f.id, as: 'text', hint: 'a rename follows every reference' },
+      {
+        key: 'id',
+        label: 'id',
+        value: f.id,
+        as: 'text',
+        disabled: true,
+        hint: 'set when it is made; renamed in the file (it seeds its generator and names its children)',
+      },
       {
         key: 'kind',
         label: 'kind',
@@ -165,7 +161,7 @@ export class Form {
       { key: 'priority', label: 'priority', value: f.priority, as: 'number', hint: 'who wins an overlap' },
       { key: 'state', label: 'state', value: f.state, as: 'text', options: ['', ...states] },
       { key: 'source', label: 'source', value: f.source, as: 'text', options: ['', ...sources, 'invented'] },
-      { key: 'note', label: 'note', value: f.note, as: 'text', lines: true },
+      { key: 'note', label: 'note', value: f.note, as: 'raw', lines: true },
     )
     for (const r of cat ? attrRows(cat, f, doc) : []) {
       const s = r.spec
@@ -215,11 +211,11 @@ export class Form {
         label: 'map id',
         value: doc.id,
         as: 'text',
-        disabled: !noFile,
+        disabled: true,
         hint: noFile ? 'names the file its first save makes' : 'names the file',
       },
       { key: 'name', label: 'name', value: doc.name, as: 'text' },
-      { key: 'note', label: 'note', value: doc.note, as: 'text', lines: true },
+      { key: 'note', label: 'note', value: doc.note, as: 'raw', lines: true },
       { key: 'seed', label: 'seed', value: doc.seed, as: 'number' },
       { key: 'season', label: 'season', value: doc.season, as: 'text', options: ['', ...SEASONS] },
       { key: 'datum', label: 'datum (m)', value: doc.datum, as: 'number', hint: "the map's zero above the sea" },
@@ -232,8 +228,7 @@ export class Form {
       sig: JSON.stringify(['map', rows.map(r => [r.key, r.label, r.as, r.options, r.lines])]),
       base: '',
       rows,
-      set: (key, value) =>
-        key === 'id' ? this.onMapId(typeof value === 'string' ? value : '') : this.editor.setMapField(key, value),
+      set: (key, value) => this.editor.setMapField(key, value),
       // the map's problems of no row (its features' are theirs)
       rest: this.editor.issues.filter(
         x => x.id === null && !rows.some(r => problemsAt([x], r.key).length) && !x.path.startsWith('features'),

@@ -17,9 +17,9 @@
 //      it and a bridge (references by clicking their targets), a road, a hedge (a barrier) and a hill (a circle);
 //      saved, the new file must validate with no problem and read back unchanged, and one more feature saved must
 //      change one line. The new file is removed at the end;
-//   7. the fields form (M7c), on the map first opened: a feature with references renamed and another's attribute set
-//      through the form's inputs; the saved diff is the renamed feature, those naming it and the other's line; undone
-//      and saved, the file is its original bytes.
+//   7. the fields form (M7c), on the map first opened: a note and another feature's attribute set through the form's
+//      inputs, the saved diff their lines alone, undone and saved back to the original bytes; text typed and not
+//      applied kept, applied before a press on the map, left typed by the undo button; JSON refused kept with why.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -222,48 +222,42 @@ try {
         return 'ZOOM ' + JSON.stringify({ kept, dirty: MAP.dirty })
       })()`,
     ],
-    // the fields form (M7c): rename the stream that others name, set a ridge's width, save; undo both, save
+    // the fields form (M7c): a note on one feature, a ridge's width, through the form; save; undo both, save
     [
       'eval',
       `(async () => {
         const named = JSON.parse(MAP.text).features.filter(f => f.on || f.crosses || f.carries).map(f => [f.on, f.crosses, f.carries]).flat()
         const target = JSON.parse(MAP.text).features.find(f => named.includes(f.id) && f.line)
         const other = JSON.parse(MAP.text).features.find(f => f.kind === 'relief.ridge')
+        const q = key => document.querySelector('#form [data-key="' + key + '"]')
         const field = (key, value) => {
-          const input = document.querySelector('#form [data-key="' + key + '"]')
+          const input = q(key)
           if (!input) throw new Error('no field ' + key)
           input.value = value
           input.dispatchEvent(new Event('input'))
           input.dispatchEvent(new Event('change'))
         }
+        const escape = key => q(key).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
         MAP.select(target.id)
-        field('id', target.id + 'x')
+        // a note keeps its line breaks; an id is not edited in the page
+        field('note', 'used in 1805\\nsee the survey')
+        const noteKept = JSON.parse(MAP.text).features.find(f => f.id === target.id).note === 'used in 1805\\nsee the survey'
+        const idFixed = q('id').disabled
         MAP.select(other.id)
-        // an id in use refused: the text stays as typed, with why, and Escape drops it
-        field('id', target.id + 'x')
-        const idInput = document.querySelector('#form [data-key="id"]')
-        const refused =
-          idInput.value === target.id + 'x' && /not applied: .*taken/.test(idInput.closest('.row').textContent) && MAP.selected === other.id
-        idInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-        const dropped = document.querySelector('#form [data-key="id"]').value === other.id
-        // a change applied as the focus moves on (Tab, a click): the next field is the same element after the edit
-        const next = document.querySelector('#form [data-key="height"]')
-        field('width', String((other.width ?? 100) + 7))
-        const kept = next.isConnected && document.querySelector('#form [data-key="height"]') === next
-        // text refused in one field stays through a rename made in another (the same feature)
+        // JSON refused: the text stays as typed, with why, and Escape drops it
         field('seasons', '{"winter": ')
-        field('id', other.id + 'r')
-        const keptThroughRename = document.querySelector('#form [data-key="seasons"]').value === '{"winter": '
-        document.querySelector('#form [data-key="seasons"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-        MAP.undo()
-        // a note is a text box, which keeps its line breaks
-        const noteBox = document.querySelector('#form [data-key="note"]').tagName === 'TEXTAREA'
-        // the feature's JSON is to read only
+        const refused = q('seasons').value === '{"winter": ' && /not applied: .*no JSON/.test(q('seasons').closest('.row').textContent)
+        escape('seasons')
+        const dropped = q('seasons').value === ''
+        // a change applied as the focus moves on (Tab, a click): the next field is the same element after the edit
+        const next = q('height')
+        field('width', String((other.width ?? 100) + 7))
+        const kept = next.isConnected && q('height') === next
+        const noteBox = q('note').tagName === 'TEXTAREA'
         const jsonRead = document.querySelector('#form textarea.json').readOnly
         // text typed and not applied, then a press on the map: applied before the press acts
-        const heightInput = document.querySelector('#form [data-key="height"]')
-        heightInput.value = '33'
-        heightInput.dispatchEvent(new Event('input'))
+        q('height').value = '33'
+        q('height').dispatchEvent(new Event('input'))
         const c = document.getElementById('map'), b = c.getBoundingClientRect()
         const ptr = { clientX: b.left + 5, clientY: b.top + b.height - 5, bubbles: true, pointerId: 1, isPrimary: true }
         c.dispatchEvent(new PointerEvent('pointerdown', ptr))
@@ -272,14 +266,12 @@ try {
         MAP.select(other.id)
         MAP.undo()
         // a field typed in and not applied is left as typed when the form is refreshed from elsewhere (an edit undone)
-        const note = document.querySelector('#form [data-key="note"]')
-        note.value = 'half typed'
-        note.dispatchEvent(new Event('input'))
+        q('note').value = 'half typed'
+        q('note').dispatchEvent(new Event('input'))
         field('height', '44')
         MAP.undo()
-        const typedKept = document.querySelector('#form [data-key="note"]').value === 'half typed'
-        note.dispatchEvent(new Event('change')) // applied after all, then undone below
-        MAP.undo()
+        const typedKept = q('note').value === 'half typed'
+        escape('note')
         // Cmd Z in a box outside the form (the add box's id) is that box's own text undo, not the map's
         const textBefore = MAP.text
         const addId = document.getElementById('addId')
@@ -290,10 +282,18 @@ try {
         const ok = await MAP.save()
         const disk = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
         const issues = MAP.issues.length
-        MAP.undo(); MAP.undo()
+        // the undo button with text typed in a field: the edit before it is undone, the text stays typed
+        q('height').value = '55'
+        q('height').dispatchEvent(new Event('input'))
+        const undo = document.getElementById('undo')
+        undo.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+        undo.click()
+        const undoKeeps = q('height').value === '55' && JSON.parse(MAP.text).features.find(f => f.id === other.id).width === other.width
+        escape('height')
+        MAP.undo()
         const back = await MAP.save()
         const after = await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text()
-        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, renamed: target.id, other: other.id, refused, dropped, kept, jsonRead, flushed, typedKept, ownUndo, keptThroughRename, noteBox })
+        return 'FIELDS ' + JSON.stringify({ ok, back, disk, after, issues, target: target.id, other: other.id, noteKept, idFixed, refused, dropped, kept, noteBox, jsonRead, flushed, typedKept, ownUndo, undoKeeps })
       })()`,
     ],
     // a new map drawn from scratch (M7b): the panel's form, then each feature by clicks on the map
@@ -306,17 +306,6 @@ try {
         document.getElementById('newbox').open = true
         set('newId', '${NEW}'); set('newName', 'Check'); set('newSize', '1200'); set('newPlay', '1000'); set('newSeed', '7')
         document.getElementById('newMake').click()
-        await until(() => MAP.compiled === '${NEW}')
-        // with no file yet, its id moves it: compiled from the copy under the new name, and back
-        const mapId = id => {
-          const input = document.querySelector('#form [data-key="id"]')
-          input.value = id
-          input.dispatchEvent(new Event('input'))
-          input.dispatchEvent(new Event('change'))
-        }
-        mapId('${NEW}b')
-        await until(() => MAP.compiled === '${NEW}b' && !document.getElementById('status').textContent.includes('cannot read'))
-        mapId('${NEW}')
         await until(() => MAP.compiled === '${NEW}')
         const c = document.getElementById('map'), b = c.getBoundingClientRect()
         const at = (x, z) => { const s = MAP.project(x, z); return { clientX: b.left + s[0], clientY: b.top + s[1], bubbles: true, pointerId: 1, isPrimary: true } }
@@ -488,28 +477,23 @@ try {
   const fl = seen.FIELDS
   const changed = fl.disk.split('\n').filter((l, k) => l !== was[k])
   const changedIds = changed.map(l => /"id": ?"([^"]+)"/.exec(l)?.[1]).sort()
-  // the features a rename changes: the engine's own answer (the page must apply just that)
-  const { renameFeature } = await import('../src/app/map/fields.ts')
-  const was0 = JSON.parse(original)
-  const renamedMap = renameFeature(was0, fl.renamed, `${fl.renamed}x`)
-  const naming = renamedMap.features.filter((f, k) => f !== was0.features[k]).map(f => f.id)
-  const expected = [...new Set([...naming, fl.other])].sort()
   check(
     fl.ok &&
       fl.issues === 0 &&
       fl.disk.split('\n').length === was.length &&
-      JSON.stringify(changedIds) === JSON.stringify(expected),
-    `through the form, ${fl.renamed} renamed and ${fl.other}'s width set: the lines of ${changedIds.join(', ')} changed`,
+      JSON.stringify(changedIds) === JSON.stringify([fl.target, fl.other].sort()),
+    `through the form, ${fl.target}'s note and ${fl.other}'s width set: the lines of ${changedIds.join(', ')} changed`,
   )
   check(fl.back && fl.after === original, 'both undone and saved, the file is byte for byte the original')
-  check(fl.refused && fl.dropped, 'an id in use typed in the form is refused and stays typed with why; Escape drops it')
+  check(fl.noteKept && fl.noteBox, 'a note is edited in a text box, its line breaks kept')
+  check(fl.idFixed, "a feature's id is not edited in the form")
+  check(fl.refused && fl.dropped, 'JSON a field refuses stays typed with why; Escape drops it')
   check(fl.kept, 'the field the focus moved to is still the same after the edit the move applied')
   check(fl.jsonRead, "the feature's JSON is to read only")
-  check(fl.keptThroughRename, 'text refused in one field stays through a rename made in another')
-  check(fl.noteBox, 'a note is edited in a text box, its line breaks kept')
   check(fl.ownUndo, "Cmd Z in a box outside the form is the box's own, never the map's undo")
   check(fl.flushed, 'text typed in a field and not applied is applied before a press on the map acts')
   check(fl.typedKept, 'a field typed in and not applied is left as typed when the form is refreshed')
+  check(fl.undoKeeps, 'the undo button undoes the edit before the text typed in a field, which stays typed')
   await until('NEWMAP')
   const nm = seen.NEWMAP
   const ids = nm.features.map(f => f.id).join(',')

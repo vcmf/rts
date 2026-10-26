@@ -57,7 +57,7 @@ import {
   stepOf,
   type Draft,
 } from './draw.ts'
-import { hasChildren, presetsOf, renameFeature, setField } from './fields.ts'
+import { presetsOf, setField } from './fields.ts'
 
 /** What the editor needs from the page. */
 export interface Host {
@@ -97,7 +97,7 @@ interface Drawing {
   old: Feature | null
 }
 type Mode = { kind: 'idle' } | Press | Drawing
-/** A step of the history: the copy, and the selection it had (an undone rename selects its feature by its old id). */
+/** A step of the history: the copy, and the selection it had (a feature brought back by an undo is selected again). */
 interface Snapshot {
   doc: MapFile
   selected: string | null
@@ -551,13 +551,15 @@ export class Editor {
     const d = this.history.redo({ doc: this.doc, selected: this.selected })
     if (d) this.restore(d)
   }
-  /** Back or forward to a step: its copy, and the selection it had (an undone rename's feature by its old id). */
+  /**
+   * Back or forward to a step: its copy. The selection stays where it is (none stays none), but for a feature the step
+   * brings back that was selected when it was taken (a deletion undone), and one the step takes away (it goes).
+   */
   private restore(step: Snapshot): void {
+    const back = step.selected && !this.feature(step.selected) ? step.selected : null
     this.doc = step.doc
-    // the selection stays where it is; gone from this copy (a rename undone, a feature deleted), it is the step's
-    if (!this.selected || !this.feature(this.selected)) {
-      this.selected = step.selected && this.feature(step.selected) ? step.selected : null
-    }
+    if (this.selected && !this.feature(this.selected)) this.selected = null
+    if (back && this.feature(back)) this.selected = back
     this.hover = null
     this.check(this.selected)
     this.hoverAt()
@@ -586,23 +588,7 @@ export class Editor {
     this.begin(startDraft(f, drawSteps(meta!, shape)), null)
     return true
   }
-  /**
-   * The fields (M7c): one edit each, judged by the validator at once like any other. Each returns whether it changed
-   * the copy: true, false when it was refused (the message says why), null when there was nothing to change. A field of
-   * the selection set, or removed (`undefined`: it inherits); its id goes through `rename`.
-   */
-  setField(key: string, value: unknown): boolean | null {
-    if (key === 'id') return this.rename(typeof value === 'string' ? value : '')
-    const f = this.selected ? this.feature(this.selected) : undefined
-    if (!this.canEdit(f) || !f || !this.doc || !this.editable(f)) return false
-    const g = setField(f, key, value)
-    if (sameJson(g, f)) return null
-    this.commit(this.replace(this.doc, g), f.id)
-    return true
-  }
-  /**
-   * Whether an edit may be made now (of `f`, a feature; null: of the map); says why not (a refusal always does).
-   */
+  /** Whether an edit may be made now (of `f`, a feature; null: of the map); says why not (a refusal always does). */
   private canEdit(f: Feature | null | undefined): boolean {
     if (!this.enabled) this.note('editing needs the dev server (npm run dev)')
     else if (!this.doc) this.note(`the file cannot be edited: ${this.readOnly}`)
@@ -611,61 +597,35 @@ export class Editor {
     return false
   }
   /**
-   * The selection's id changed, and every place that names it (`renameFeature`). Refused for an empty id, one another
-   * feature has (two features of one id cannot be edited), and a feature with children (their ids carry its own:
-   * renamed in the file); what form an id takes is the validator's.
+   * The fields (M7c): one edit each, judged by the validator at once like any other. Each returns whether it changed
+   * the copy: true, false when it was refused (the message says why), null when there was nothing to change. A field of
+   * the selection set, or removed (`undefined`: it inherits). Its id is not one: a feature's id is set when it is made,
+   * and renamed in the file (an id is also what seeds its generator and names its children).
    */
-  rename(id: string): boolean | null {
+  setField(key: string, value: unknown): boolean | null {
     const f = this.selected ? this.feature(this.selected) : undefined
     if (!this.canEdit(f) || !f || !this.doc || !this.editable(f)) return false
-    if (id === f.id) return null
-    const refuse = (why: string) => {
-      this.note(why)
+    if (key === 'id') {
+      this.note('an id is set when its feature is made: rename it in the file')
       return false
     }
-    if (id === '') return refuse(`a feature needs an id: it stays ${f.id}`)
-    if (this.feature(id)) return refuse(`the id ${id} is taken`)
-    if (hasChildren(this.doc, f.id)) {
-      return refuse(`${f.id} has children whose ids carry its own: rename it in the file`)
-    }
-    this.commit(renameFeature(this.doc, f.id, id), id, id)
+    const g = setField(f, key, value)
+    if (sameJson(g, f)) return null
+    this.commit(this.replace(this.doc, g), f.id)
     return true
   }
-  /** A field of the map itself set, or removed; its features are the features' own edits, its id `renameMap`'s. */
+  /** A field of the map set, or removed; not its features (each its own edits) nor its id (it names its file). */
   setMapField(key: string, value: unknown): boolean | null {
     if (!this.canEdit(null) || !this.doc) return false
     if (key === 'features' || key === 'id') {
-      this.note(`the map's ${key} is not set as a field`)
+      this.note(
+        key === 'id' ? "a map's id names its file: it is set when the map is made" : 'features are edited one by one',
+      )
       return false
     }
     // the field alone is compared (not the whole map, its features with it)
     if (sameJson(value, (this.doc as unknown as Record<string, unknown>)[key])) return null
     this.commit(setField(this.doc, key, value), null)
-    return true
-  }
-  /**
-   * A map with no file yet takes another id, and with it the file its first save makes (`maps/<id>.map.json`), as if
-   * made under it: its history goes. A map with a file keeps its id (it names the file). Returns whether it did.
-   */
-  renameMap(file: string, id: string): boolean {
-    if (!this.canEdit(null)) return false
-    if (this.exists) {
-      this.note('a map with a file keeps its id: it names the file')
-      return false
-    }
-    if (this.saving) {
-      this.note('the map is being saved under its id: rename it once the save is done')
-      return false
-    }
-    // the copy and every step of its history take the id (an undo never brings back the old one under the new file)
-    const withId = (d: MapFile) => ({ ...d, id })
-    this.history.map(s => ({ ...s, doc: withId(s.doc) }))
-    this.file = file
-    this.doc = withId(this.doc!)
-    this.check(null)
-    this.host.recompile()
-    this.host.changed()
-    this.host.redraw()
     return true
   }
   /** What the validator found in the copy at the last edit. */

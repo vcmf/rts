@@ -25,7 +25,7 @@ tools on top).
 |---|---|---|
 | **M7a** (done, #192) | Select a feature on the map; move it, move, add and remove its points, resize a circle or an ellipse, delete it; barriers snapped to the lattice in 8 directions; the edits compiled live from the page's memory; undo and redo; the stable save through the dev server | Every map in `maps/` written back unedited is byte for byte the same; one point moved changes one line; undo to the start and save gives the original bytes; the page check drags a point through pointer events and saves |
 | **M7b** | Create: a new map (id, name, size, seed, season); pick a kind from the catalogue and draw one of its shapes; ids proposed from the kind; references (`on`, `carries`, `crosses`, `along`, `near`) set by clicking their targets | A map drawn from scratch in the page validates, and its file round-trips with no diff but the edits (the phase's acceptance) |
-| **M7c** | The selected feature's fields as a form from the catalogue: its id (a rename follows every reference to it), kind, preset, priority, state, source, note, each attribute the kind's category takes (its unit, range and values shown, its inherited value as a hint), seasons and ramps as JSON; the whole feature as JSON; the map's own fields and sources with no selection, its id while it has no file | Every attribute of the catalogue set through the form and judged as the validator judges it, its problem shown at its field; a rename leaves a valid map valid |
+| **M7c** | The selected feature's fields as a form from the catalogue: kind, preset, priority, state, source, note, each attribute the kind's category takes (its unit, range and values shown, its inherited value as a hint), seasons and ramps as JSON; the feature as JSON to read; the map's own fields and sources with no selection. Ids are set when made and renamed in the file (a rename is an edit of identity: references, children, seeds) | Every attribute of the catalogue set through the form and judged as the validator judges it, its problem shown at its field |
 | **M7d** | A generator chosen for the selection and its parameters as a form, the expansion redrawn on each change; pinning a generated feature (its expanded form copied into the file) | A pinned child equals its expansion |
 | **M7e** | The tracing overlay: an image (a period map, a survey) placed under the lit view by matching points, its opacity a setting, stored beside the map as a source the compilers ignore | The 1805 map of Austerlitz placed over the real relief to within the image's own error |
 
@@ -331,24 +331,20 @@ edit. No new decision.
     text that is no number is kept as text, for the validator to name; objects, ramps, seasons and lists as JSON (text
     that is no JSON: no edit, and the panel says so);
   - `setField`, `setMapField`: the feature or the map with one field set or removed, the others in their order;
-  - `renameFeature`: the copy with a feature's id changed and every place that names it by that id: `on`, `carries`,
-    `crosses`, `along.id`, `follow` and `clear` ids, a generator's selectors (`avoid`, `within`) and a pinned child's
-    record of them; `hasChildren`: a feature whose children carry its id (renamed in the file, not the page);
   - `problemsAt`: the validator's problems whose path is a field's (`features[i].height`, `seed`).
-- `Editor`: `setField(key, value)`, `rename(id)`, `setMapField(key, value)`, each one edit and saying whether it
-  changed the copy; `renameMap(id)` (only while the map has no file: it moves the new map to `maps/<id>.map.json`).
+- `Editor`: `setField(key, value)`, `setMapField(key, value)`, each one edit and saying whether it changed the copy;
+  neither sets an id (renames are the file's, see the second redesign below).
 - The panel (`src/app/map/form.ts`): the selection's form, its text not applied held explicitly (applied on change
   and before any command of the editor; refused, kept with why), the problems under their fields, the feature's JSON
   below to read; with no selection the map's form.
-- The page check: renames a feature with references and sets an attribute through the form; the saved diff is
-  those lines alone.
+- The page check: sets a note and another feature's attribute through the form; the saved diff is those lines
+  alone.
 
 ## Acceptance (M7c)
 
 - `test/map-fields.test.ts`: every attribute of the catalogue, on a kind whose category takes it, set from a good
   text and from a bad one through `parseInput` and `setField`: the good gives no problem, the bad one at its field's
-  path (`problemsAt`); a rename of each map's features in `maps/` leaves its problems as they were, and no reference to
-  the old id.
+  path (`problemsAt`).
 - `npm test`, `check:data`, the build, the docs check and the page check pass.
 
 ## Review rounds (M7c)
@@ -408,12 +404,33 @@ edit. No new decision.
   take shows as not this kind's; a number field takes decimal text only (`0x20` stays text for the validator); a map
   field is compared alone, a rename keeps a feature unless it named the old id (no whole-map comparisons); the id's
   path runs its guards once.
+- **Redesign, round 3**: severe, the third. A rename re-seeded the feature's output: a generator's seed and the base
+  relief's noise are hashed from the id, so renaming a meandering brook redrew its course and renaming the base relief
+  rolled the whole map's ground again, while the saved diff showed only ids. With it: undo selected a feature after
+  Escape; the undo button applied text typed in a field and then undid it; notes were trimmed; a new map's rename
+  dropped the map form's text. Stopped at the limit.
+- **Second analysis** (as before, at the limit): the redesign's rounds found 3, 2 and 1 severe findings, in the same
+  two classes. The rename's scope found its fourth meaning of an id (references, children, recorded selectors, now
+  seeds): a rename is an edit of identity, not of one field. The form's state held (the explicit text not applied);
+  what remained were edges of history and selection. The owner chose to take renames out of the page (2026-10-26):
+  ids are set when a feature or a map is made and renamed in the file; a later PR may bring renames back once the
+  engine says what an id seeds (to warn that renaming redraws). The review count restarts.
+- **Second redesign**: `renameFeature`, `hasChildren`, `Editor.rename`, `renameMap` and the form's rename guard are
+  gone; the id fields are read-only (the map's always: it names its file). With it, round 3's others: undo keeps the
+  selection where it is, none staying none, and selects again only a feature it brings back that was selected when
+  its step was taken (a deletion undone); the undo and redo buttons and keys leave text typed in a field typed (to
+  apply to the copy they bring back), only a press elsewhere and a save apply it first; a note is kept as typed, its
+  spaces and line breaks too (`raw`).
 
 ## Open questions
 
+(M7c)
+- Renames in the page: a later PR, once the engine says what a feature's id seeds and names (its generator's output,
+  the base relief's noise, its children), so the editor can say what a rename redraws.
+
 (M7b)
 - A new map whose id another map took between its making and its first save is a conflict: overwrite that file or
-  take it. Saving the drawing under another id needs the map's own fields (M7c's form).
+  take it. Saving the drawing under another id needs renames in the page (above).
 - While drawing, each pointer move redraws the lit view to move the preview (one frame a displayed frame, as a drag
   does since M7a); to measure on Austerlitz, and to draw the overlay alone if it lags.
 

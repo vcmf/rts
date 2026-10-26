@@ -293,23 +293,21 @@ maps/kinds.json ──► checkCatalogue ─┐
       its unit, range or values, what it inherits as `resolve` gives it without its own value, and what the season or
       state makes it when they override it; any other it sets, to be seen and removed), its seasons as JSON; the
       whole feature as JSON to read and copy (its shape and references are edited on the map). With no selection the
-      map's own fields (name, note, seed, season, datum, extent, play, sources, presets; its id only while it has no
-      file, which then moves to the file of that name, the view kept).
+      map's own fields (name, note, seed, season, datum, extent, play, sources, presets; its id shown).
       - A field shows the copy unless it holds text typed and not applied yet. That text is applied when the field
         changes (Enter, the focus leaving it) and before any command of the editor (a press outside the form, Cmd or
-        Ctrl S, Z, Y), as one edit; emptied, the field is removed (it inherits). Refused (text that is no value of its
+        Ctrl S), as one edit; emptied, the field is removed (it inherits). Refused (text that is no value of its
         kind, or the editor said no), it stays typed with the reason under it until changed, or Escape drops it. In a
         field holding text, Cmd or Ctrl Z is the field's own text undo; Cmd or Ctrl S applies it and saves.
       - Its text is read as its kind of value only (a number's that is no number stays text for the validator to
         name). The validator's problems show under their fields (by path), those of no field above the JSON.
-      - A rename follows every place that names the feature by its id (`renameFeature`: references, shared edges,
-        kept-off lines, a generator's selectors and a pinned child's record of them). Refused: an empty id, one in
-        use, and a feature with children (`hasChildren`: it generates them, or some are pinned), whose ids carry its
-        own; it is renamed in the file.
+      - Ids are not edited in the page: a feature's is set when it is made, a map's names its file; a rename is
+        done in the file (an id also seeds its generator and the base relief's noise, and names its children).
       - The form is built again only when its fields change (another kind); otherwise its inputs are given their
-        values in place, so the field the focus moved to stays. Undo and redo keep the selection where it is; one gone
-        from the other copy (a rename undone, a feature deleted) is the step's own. A new map renamed keeps its
-        history, each step under the new id. A field of no known kind is read as JSON when it is, else as text.
+        values in place, so the field the focus moved to stays. Undo and redo keep the selection where it is (none
+        stays none); a feature they bring back that was selected when its step was taken is selected again (a
+        deletion undone). They leave text typed in a field typed. A field of no known kind is read as JSON when it is,
+        else as text; a note is kept as typed.
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes
@@ -345,8 +343,9 @@ selects the map's first line, drags its middle point through pointer events, com
 of the file changed, and undoes and saves back to the original bytes; with the largest area selected, a click on a line inside it selects
 the line; a new map made in the panel and drawn by clicks (a base, an area, a stream and a ford on it, a road and a
 bridge, a hedge, a circle) is saved into a new file that validates and reads back unchanged, and one more feature
-saved adds one line (the file is removed after); through the form a feature others name is renamed and another's
-attribute set, the saved diff their lines alone, undone back to the original bytes; no console errors.
+saved adds one line (the file is removed after); through the form a note and another feature's attribute set, the
+saved diff their lines alone, undone back to the original bytes, text typed and not applied kept or applied as it
+should be; no console errors.
 
 `test/map-write.test.ts` (M7a): every map in `maps/` written back unedited is byte for byte its file; a moved point
 changes one line; a feature added, deleted (first, middle, last), reordered; a map field changed, added, removed; a
@@ -363,8 +362,8 @@ Enter, Backspace, Escape; the editor's drawing (one edit, one undo, no command a
 id refused, a reference set again); a new map saved with no base, read back and written unedited byte for byte.
 `test/map-save.test.ts` also creates a new file and refuses to create over one. `test/map-fields.test.ts` (M7c):
 every attribute of the catalogue set through the form's reading of text, good with no problem on a kind it means
-something on, bad with one at its field; a rename of every referenced feature of every map in `maps/` leaves the map
-as valid and no reference to the old id; the editor's field, rename, JSON and map edits.
+something on, bad with one at its field; reading text by kind (decimal numbers, untrimmed notes, JSON or text for an
+unknown field); the editor's field and map edits, its refusals, undo's selection.
 
 `test/map-gen.test.ts`:
 - seeds: stable, and local (another feature, the file's order, the map's seed);
