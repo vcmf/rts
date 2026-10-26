@@ -51,9 +51,12 @@ export interface Recording {
 export function serveBattle(port: Port): void {
   let battle: Battle | null = null
   let L: Layout
-  let slots: Slots
+  let slots: Slots | null = null
   let bufs: SharedArrayBuffer[] = []
-  let seq = 0
+  // the world's version (a tick or a command changes it), and the version each slot's copy of the world is at: the
+  // men move at every sub-step, the world only 20 times a game second, and it is the frame's bulk (2.5 MB)
+  let worldVer = 0
+  let slotVer = [-1, -1, -1]
   let lastPub = -Infinity
   let changed = true
   let sent = { log: 0, dropped: 0, hashes: 0 }
@@ -61,19 +64,24 @@ export function serveBattle(port: Port): void {
   const ema = { tickMs: 0, stepMs: 0, pubMs: 0 }
   const send = (m: ToPage) => port.postMessage(m)
 
+  // new slots for `cap` men; the page gets them once a frame is published in them (`publish`), so it never holds a
+  // control block with nothing in it
   const makeSlots = (cap: number) => {
     L = layoutFor(battle!.w, cap)
     slots = Slots.make(true)
     bufs = [0, 1, 2].map(() => new SharedArrayBuffer(L.bytes))
-    send({ type: 'slots', ctl: slots.ctl.buffer as SharedArrayBuffer, bufs, cap })
+    slotVer = [-1, -1, -1]
   }
   const publish = () => {
     const b = battle!
     const a = performance.now()
-    if (b.layer.men.n > L.cap) makeSlots(capFor(b.layer.men.n))
-    const s = slots.free()
-    writeFrame(b, bufs[s], L, { ...ema, seq: ++seq })
-    slots.publish(s)
+    const fresh = !slots || b.layer.men.n > L.cap
+    if (fresh) makeSlots(capFor(b.layer.men.n))
+    const s = slots!.free()
+    writeFrame(b, bufs[s], L, ema, slotVer[s] !== worldVer)
+    slotVer[s] = worldVer
+    slots!.publish(s)
+    if (fresh) send({ type: 'slots', ctl: slots!.ctl.buffer as SharedArrayBuffer, bufs, cap: L.cap })
     const ms = performance.now() - a
     ema.pubMs = ema.pubMs * 0.9 + ms * 0.1
     if (rec) rec.pubMs.push(ms)
@@ -110,6 +118,7 @@ export function serveBattle(port: Port): void {
     last = now
     // at speed 0 (paused, or held by the headless checks' advance) nothing is owed
     const r = battle!.advance(dt)
+    if (r.ticks) worldVer++
     if (r.ticks || r.subSteps) {
       changed = true
       ema.tickMs = ema.tickMs * 0.9 + r.tickMs * 0.1
@@ -133,7 +142,6 @@ export function serveBattle(port: Port): void {
         const scenario = PAGE_SCENARIOS[m.scenario]
         if (!scenario) throw new Error(`battle worker: no scenario ${m.scenario}`)
         battle = new Battle(loadSimData(m.data, m.version), scenario)
-        makeSlots(capFor(battle.layer.men.n))
         publish()
         flush()
         last = performance.now()
@@ -144,6 +152,7 @@ export function serveBattle(port: Port): void {
       if (!b) throw new Error(`battle worker: ${m.type} before init`)
       if (m.type === 'command') {
         b.command(m.c)
+        worldVer++
         flush()
       } else if (m.type === 'speed') {
         b.speed = m.speed
@@ -152,6 +161,7 @@ export function serveBattle(port: Port): void {
         // then held, as the page held itself before: until the page sets a speed again
         b.advanceBy(m.sec)
         b.speed = 0
+        worldVer++
         publish()
         flush()
         send({ type: 'reply', id: m.id, value: null })

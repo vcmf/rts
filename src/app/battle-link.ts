@@ -2,10 +2,10 @@
 // the battle worker (src/app/battle-host.ts; the page reads its frames in shared memory) or, when the page cannot
 // share memory with a worker (no cross-origin isolation, or ?thread=main), on the page's own thread as before.
 import {
-  compileRuleset,
-  loadSimData,
   makeWorld,
   type Command,
+  type SimData,
+  type Compiled,
   type Stamped,
   type Dropped,
   type HashPoint,
@@ -13,7 +13,6 @@ import {
   type World,
   type Scenario,
 } from '../sim/index.ts'
-import { napoleonic } from '../rulesets/napoleonic.ts'
 import { PAGE_SEED } from '../scenarios/page.ts'
 import { buildScene, type Scene } from '../render/scene.ts'
 import type { SoldierLayer } from '../render/soldiers.ts'
@@ -31,6 +30,10 @@ export interface Seen {
 export interface BattleLink {
   readonly mode: 'worker' | 'main'
   readonly scene: Scene
+  // the map's data, loaded once
+  readonly data: SimData
+  // why the battle stopped (the worker failed), or null
+  readonly failed: string | null
   // the stamped log, the orders dropped and the hash points so far (the worker's, as far as they have arrived)
   readonly log: Stamped[]
   readonly dropped: Dropped[]
@@ -62,8 +65,11 @@ export class MainLink implements BattleLink {
   readonly dropped: Dropped[]
   readonly hashes: HashPoint[]
   private readonly seen: Seen
-  constructor(data: Uint8Array, version: number, scenario: Scenario) {
-    this.battle = new Battle(loadSimData(data, version), scenario)
+  readonly data: SimData
+  readonly failed = null
+  constructor(data: SimData, cr: Compiled, scenario: Scenario) {
+    this.data = data
+    this.battle = new Battle(data, scenario, cr)
     this.scene = this.battle.scene
     this.log = this.battle.log
     this.dropped = this.battle.dropped
@@ -107,31 +113,48 @@ export class WorkerLink implements BattleLink {
   readonly log: Stamped[] = []
   readonly dropped: Dropped[] = []
   readonly hashes: HashPoint[] = []
+  readonly data: SimData
+  /** Why the worker stopped (null while it runs): the page shows it; every request since fails with it. */
+  failed: string | null = null
   private readonly worker: Worker
-  private readonly data: ReturnType<typeof loadSimData>
-  private readonly cr = compileRuleset(napoleonic)
+  private readonly cr: Compiled
   private readonly shape: World
   private slots: Slots | null = null
   private views: FrameView[] = []
   private seen: Seen | null = null
   private ids = 0
-  private readonly waiting = new Map<number, (v: unknown) => void>()
+  private readonly waiting = new Map<number, { ok: (v: unknown) => void; fail: (e: Error) => void }>()
   private readonly first: Promise<void>
   private onFirst: () => void = () => {}
+  private onFail: (e: Error) => void = () => {}
 
-  /** Starts the worker on the scenario; `ready` resolves at the first published frame. */
-  constructor(worker: Worker, data: Uint8Array, version: number, scenario: Scenario) {
+  /** Starts the worker on the scenario (`bytes`: the map's, `data` loaded from them); `ready` resolves at the first
+   * published frame. */
+  constructor(worker: Worker, bytes: Uint8Array, data: SimData, cr: Compiled, scenario: Scenario) {
     this.worker = worker
-    this.data = loadSimData(data, version)
-    // the page's own world, for the scene (the trunks, the map's symbols: the cosmetic RNG, as the worker's) and the
-    // slots' layout
-    this.shape = makeWorld(this.data, this.cr, PAGE_SEED, false)
+    this.data = data
+    this.cr = cr
+    // the page's own world, for the scene (the trunks, the map's symbols: the cosmetic RNG, as the worker's), the
+    // views' terrain and the slots' layout
+    this.shape = makeWorld(data, cr, PAGE_SEED, false)
     this.scene = buildScene(this.shape)
-    this.first = new Promise(r => (this.onFirst = r))
+    this.first = new Promise((ok, fail) => {
+      this.onFirst = ok
+      this.onFail = fail
+    })
     worker.onmessage = (e: MessageEvent<ToPage>) => this.receive(e.data)
-    // an error the host does not catch (in its loop) ends the battle: said on the page's console, as the page's own
-    worker.onerror = e => console.error(`battle worker: ${e.message}`)
-    this.post({ type: 'init', scenario: scenario.name, data, version })
+    // the module failed to load, or an error the host did not catch
+    worker.onerror = e => this.fail(e.message || 'the worker failed')
+    this.post({ type: 'init', scenario: scenario.name, data: bytes, version: data.version })
+  }
+  /** The worker stopped: said on the console, the start and every request waiting fail with it. */
+  private fail(message: string): void {
+    this.failed ??= message
+    console.error(`battle worker: ${message}`)
+    const e = new Error(`battle worker: ${message}`)
+    this.onFail(e)
+    for (const w of this.waiting.values()) w.fail(e)
+    this.waiting.clear()
   }
   /** Resolves once the worker has published its first frame. */
   ready(): Promise<void> {
@@ -141,16 +164,17 @@ export class WorkerLink implements BattleLink {
     this.worker.postMessage(m)
   }
   private ask<T>(m: (id: number) => ToHost): Promise<T> {
+    if (this.failed) return Promise.reject(new Error(`battle worker: ${this.failed}`))
     const id = ++this.ids
-    return new Promise(r => {
-      this.waiting.set(id, r as (v: unknown) => void)
+    return new Promise((ok, fail) => {
+      this.waiting.set(id, { ok: ok as (v: unknown) => void, fail })
       this.post(m(id))
     })
   }
   private receive(m: ToPage): void {
     if (m.type === 'slots') {
       const L = layoutFor(this.shape, m.cap)
-      this.views = m.bufs.map(b => new FrameView(this.data, this.cr, this.scene, b, L))
+      this.views = m.bufs.map(b => new FrameView(this.data, this.cr, this.shape.terrain, this.scene, b, L))
       this.slots = new Slots(new Int32Array(m.ctl))
       this.seen = null
       this.onFirst()
@@ -161,12 +185,14 @@ export class WorkerLink implements BattleLink {
     } else if (m.type === 'reply') {
       const r = this.waiting.get(m.id)
       this.waiting.delete(m.id)
-      r?.(m.value)
-    } else console.error(`battle worker: ${m.message}`)
+      r?.ok(m.value)
+    } else this.fail(m.message)
   }
   frame(): void {}
   see(): Seen {
+    // the host announces slots only once a frame is published in them, so there is always one to hold
     const s = this.slots!.hold()
+    if (s < 0) throw new Error('battle worker: slots with no frame published')
     const v = this.views[s]
     v.read(performance.timeOrigin + performance.now())
     this.seen = v

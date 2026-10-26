@@ -21,6 +21,7 @@ import {
   type Dropped,
   type Scenario,
   type SimData,
+  type Compiled,
 } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { PAGE_SEED } from '../scenarios/page.ts'
@@ -55,10 +56,11 @@ export class Battle {
   private readonly scenario: Scenario
   private readonly stepMen = (group: number, dt: number) => this.layer.step(dt, this.acc / DT, group, this.clock.groups)
 
-  constructor(data: SimData, scenario: Scenario) {
+  /** `cr`: the shipped ruleset compiled (the page compiles it once). */
+  constructor(data: SimData, scenario: Scenario, cr: Compiled = compileRuleset(napoleonic)) {
     this.data = data
     this.scenario = scenario
-    this.w = makeWorld(data, compileRuleset(napoleonic), PAGE_SEED, false)
+    this.w = makeWorld(data, cr, PAGE_SEED, false)
     attachScenario(this.w, scenario)
     scenario.setup(this.w)
     this.scene = buildScene(this.w)

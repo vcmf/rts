@@ -46,6 +46,7 @@ async function main(): Promise<void> {
     throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
   }
   const bytes = new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer())
+  const data = loadSimData(bytes, MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)
   // the battle worker shares memory with the page only when the page is cross-origin isolated (COOP and COEP)
   const thread =
@@ -55,12 +56,13 @@ async function main(): Promise<void> {
     const wl = new WorkerLink(
       new Worker(new URL('./battle-worker.ts', import.meta.url), { type: 'module' }),
       bytes,
-      MAP_VERSIONS[mapName],
+      data,
+      cr,
       scenario,
     )
     await wl.ready()
     link = wl
-  } else link = new MainLink(bytes, MAP_VERSIONS[mapName], scenario)
+  } else link = new MainLink(data, cr, scenario)
   // what this frame reads: the newest frame published (held until the next), or the battle on this thread
   let seen: Seen = link.see()
   let w: World = seen.w
@@ -94,6 +96,13 @@ async function main(): Promise<void> {
   // APP.record's frames, while it records
   let rec: { intervalMs: number[]; battleMs: number[]; drawMs: number[] } | null = null
   const selected = new Set<number>()
+  // the generation each selected formation had when chosen: the page sees the battle a frame at a time, not each
+  // tick, so a formation can be gone and its slot reused by another between two frames
+  const selGen = new Map<number, number>()
+  const choose = (i: number) => {
+    selected.add(i)
+    selGen.set(i, w.f.gen[i])
+  }
   const resize = () => {
     view.W = innerWidth
     view.H = innerHeight
@@ -129,10 +138,12 @@ async function main(): Promise<void> {
     seen = link.see()
     w = seen.w
     map.w = w
-    for (const i of selected) if (!w.f.alive[i]) selected.delete(i)
+    for (const i of selected) if (!w.f.alive[i] || w.f.gen[i] !== selGen.get(i)) selected.delete(i)
   }
   // the speed the battle runs at: the panel's, or 0 while paused (P, or the headless checks' advance)
-  const runAt = () => link.setSpeed(paused ? 0 : speed)
+  const runAt = () => link.setSpeed(paused || document.hidden ? 0 : speed)
+  // a hidden page holds the battle, as it did when the battle ran in the page's animation frames (which stop then)
+  document.addEventListener('visibilitychange', runAt)
   const draw = () => {
     if (mapDirty) {
       map.drawMap(mg, view)
@@ -215,7 +226,12 @@ async function main(): Promise<void> {
         showSlots = !showSlots
         el.classList.toggle('on', showSlots)
       }
-      if (el.dataset.view === 'replay') saveSession()
+      if (el.dataset.view === 'replay') {
+        saveSession().catch((e: unknown) => {
+          note = `session not saved: ${e instanceof Error ? e.message : String(e)}`
+          noteT = performance.now()
+        })
+      }
     }
   })
   // the session (the replay, its hashes and the moments marked) as a downloaded file, for tools/battle-report.ts
@@ -365,7 +381,7 @@ async function main(): Promise<void> {
         for (let j = 0; j < u.n; j++) {
           const m = u.ids[j]
           if (M.flags[m] & MAN_ALIVE && M.x[m] > x0 && M.x[m] < x1 && M.z[m] > z0 && M.z[m] < z1) {
-            selected.add(u.i)
+            choose(u.i)
             break
           }
         }
@@ -383,10 +399,10 @@ async function main(): Promise<void> {
     if (hit >= 0) {
       if (d.shift) {
         if (selected.has(hit)) selected.delete(hit)
-        else selected.add(hit)
+        else choose(hit)
       } else {
         selected.clear()
-        selected.add(hit)
+        choose(hit)
       }
       return
     }
@@ -497,6 +513,7 @@ async function main(): Promise<void> {
       `in the fight: ${[0, 1].map(s => `${s === scenario.player ? 'yours' : 'side ' + s} ${Math.round(100 * shares[s])}%`).join(' · ')}`,
     )
     if (d && w.meta[M_TICK] - d.tick < 3 * TICK_HZ) lines.push(`order not carried out: ${d.reason}`) // shown for 3 s
+    if (link.failed) head.unshift(`THE BATTLE STOPPED: ${link.failed}`)
     statsEl.textContent =
       head.join('\n') +
       '\n' +
@@ -531,7 +548,7 @@ async function main(): Promise<void> {
     dropped,
     select: (ids: number[]) => {
       selected.clear()
-      for (const i of ids) if (mine(i)) selected.add(i)
+      for (const i of ids) if (mine(i)) choose(i)
     },
     mine,
     result: () => ({ tick: w.meta[M_END], winner: END_RESULTS[w.meta[M_WINNER]] }),
@@ -578,7 +595,7 @@ async function main(): Promise<void> {
     // took (in the worker, normally); null when every one is reproduced, else the first mismatch
     replayHere: async () => {
       const { replay: r, hashes } = await replay()
-      return play(r, loadSimData(bytes, MAP_VERSIONS[mapName]), cr, scenario, hashes)
+      return play(r, data, cr, scenario, hashes)
     },
     session,
     mark,

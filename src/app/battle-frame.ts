@@ -3,7 +3,16 @@
 // typed array of its state: src/sim/columns.ts), the men as the page reads them (src/render/men.ts), the battalions'
 // men, and a header (the clock for the anchors' alpha, the worker's costs). The page's `World` and `SoldierLayer` read
 // a slot in place: `map.ts`, the HUD, `formationHandle`, picking and box select work on them unchanged.
-import { makeWorld, columns, MAX_FORMATIONS, DT, type World, type Compiled, type SimData } from '../sim/index.ts'
+import {
+  makeWorld,
+  columns,
+  MAX_FORMATIONS,
+  DT,
+  type World,
+  type Compiled,
+  type SimData,
+  type Terrain,
+} from '../sim/index.ts'
 import type { Scene } from '../render/scene.ts'
 import { SoldierLayer, type Unit } from '../render/soldiers.ts'
 import { Men } from '../render/men.ts'
@@ -19,7 +28,6 @@ export const H_UNITS = 4
 export const H_TICK_MS = 5
 export const H_STEP_MS = 6
 export const H_PUB_MS = 7
-export const H_SEQ = 8
 const H_LEN = 16
 // a battalion's row: its formation index, its group, where its men's indices start in `ids`, how many
 const U_ROW = 4
@@ -94,20 +102,24 @@ export function layoutFor(w: World, cap: number): Layout {
   return { cap, bytes: o, cols, head, units, ids, x, z, vx, vz, s, flags }
 }
 
-/** Copies the battle's state into slot `buf` (laid out by `L`, with room for its men); `stats` fills the header's
- * costs. Returns false, writing nothing, when the men outgrew the slot. */
+/** Copies the battle's state into slot `buf` (laid out by `L`, with room for its men): the men, the battalions and
+ * the header always, the world's columns when `world` (the slot's copy is older than the world); `stats` fills the
+ * header's costs. Returns false, writing nothing, when the men outgrew the slot. */
 export function writeFrame(
   b: Battle,
   buf: ArrayBufferLike,
   L: Layout,
-  stats: { tickMs: number; stepMs: number; pubMs: number; seq: number },
+  stats: { tickMs: number; stepMs: number; pubMs: number },
+  world = true,
 ): boolean {
   const M = b.layer.men
   if (M.n > L.cap) return false
   const u8 = new Uint8Array(buf)
-  for (const c of L.cols) {
-    const a = c.table(b.w)[c.key]
-    u8.set(new Uint8Array(a.buffer, a.byteOffset, c.bytes), c.off)
+  if (world) {
+    for (const c of L.cols) {
+      const a = c.table(b.w)[c.key]
+      u8.set(new Uint8Array(a.buffer, a.byteOffset, c.bytes), c.off)
+    }
   }
   new Float64Array(buf, L.x, M.n).set(M.x.subarray(0, M.n))
   new Float64Array(buf, L.z, M.n).set(M.z.subarray(0, M.n))
@@ -137,7 +149,6 @@ export function writeFrame(
   h[H_TICK_MS] = stats.tickMs
   h[H_STEP_MS] = stats.stepMs
   h[H_PUB_MS] = stats.pubMs
-  h[H_SEQ] = stats.seq
   return true
 }
 
@@ -155,8 +166,9 @@ export class FrameView {
   // the battalions read before, reused (formation index → unit)
   private readonly cache = new Map<number, Unit & { off: number }>()
 
-  constructor(data: SimData, cr: Compiled, scene: Scene, buf: ArrayBufferLike, L: Layout) {
-    const w = makeWorld(data, cr, 0, false)
+  /** `terrain`: the page's (built once from the map; the views only read it). */
+  constructor(data: SimData, cr: Compiled, terrain: Terrain, scene: Scene, buf: ArrayBufferLike, L: Layout) {
+    const w = makeWorld(data, cr, 0, false, terrain)
     for (const c of L.cols) c.table(w)[c.key] = new c.ctor(buf, c.off, c.bytes / bytesPer(c.ctor))
     this.w = w
     this.layer = new SoldierLayer(w, scene)
@@ -252,10 +264,12 @@ export class Slots {
   }
   /** The reader: holds the newest complete slot and returns it (−1: none published yet). The writer may publish
    * between the load and the hold, and then may already be filling that slot: so hold, and check it is still the
-   * newest, again until it is. */
-  hold(): number {
+   * newest, again until it is. `between` (tests) runs between the load and the hold. */
+  hold(between?: () => void): number {
     for (;;) {
       const s = Atomics.load(this.ctl, LATEST)
+      // tests: what the writer does between the load and the hold
+      between?.()
       Atomics.store(this.ctl, HELD, s)
       if (Atomics.load(this.ctl, LATEST) === s) return s
     }
