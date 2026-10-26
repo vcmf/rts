@@ -238,27 +238,33 @@ maps/kinds.json ──► checkCatalogue ─┐
   - errors are listed while the last good drawing stays;
   - a saved map or catalogue reaches the page through a small Vite plugin (`map-changed`, `vite.config.ts`) and
     recompiles;
-  - **the editor** (M7a, decision 0066, `src/app/map/editor.ts`): the page reads the map's intent (never the expanded
-    map) into memory, edits it there and compiles each finished edit from that copy. A click selects the feature
-    under it (`pick`, `src/app/map/edit.ts`: a point, else a line, else the smallest area holding the click; a
-    generated child picks the feature it came from), drawn with its handles (a line's or a ring's points, a circle's
-    centre and radius, an ellipse's centre and radii, a reference's `near`). A drag moves a handle or the whole
-    shape, rounded to the coarsest of 1, 0.1 and 0.01 m under a screen pixel; a barrier's points stay on the 2 m
-    lattice, snapped where both their segments run in the 8 directions (`snapBarrier`), and a barrier moves by whole
-    lattice steps (a barrier known by its kind or its preset's). An edit always applies; what the validator finds in the edited copy shows at once (the selection
-    red, the problem in the panel, the page's list), and undo is one key (decision 0066). A barrier's point snaps to
-    the nearest lattice point that keeps its two segments whole, else the nearest lattice point. One state machine
-    (idle, pressing, dragging) owns the copy: only the selection's outline and handles start a drag (4 px), a press
-    inside an area pans, commands wait for a drag to end, and a file changed on disk during one is a conflict. A file
-    whose structure the editor cannot read (`wellFormed`) opens read-only. Adding or removing a point before a shared
-    edge's `at` moves it with the ring. A double click adds a point, Delete removes the line's or ring's point under the pointer (on the
-    shape's line but no point, nothing; off the shape, the feature), undo and redo keep 200 edits (a change on disk read in clears them). The save (Cmd or Ctrl S) goes through the dev server (`POST /__map/save`,
-    `tools/map-save.ts`, JSON from the page's own origin only) with the text the page read, and is refused if the file
-    changed on disk since (the page
-    then offers to overwrite it or take the file). It rewrites only what changed (`writeMap`, `src/map/write.ts`):
-    an unchanged feature or field keeps its bytes, a changed one is written on one line in place (or in the file's
-    first bytes, when an undo brought it back), a new one appended, a deleted one cut. A change on disk with no
-    unsaved edits is read in, the page's own save is not recompiled. The built page selects but does not edit.
+  - **the editor** (M7a, decision 0066, `src/app/map/editor.ts`, the edits in `src/app/map/edit.ts`): the page reads
+    the map's intent (never the expanded map) into memory, edits it there and compiles each finished edit from that
+    copy. A file whose structure the editor cannot read (`wellFormed`: features objects with a text id, presets
+    objects, shapes as their kind of value) opens read-only, saying why.
+    - A click selects the feature under it (`pick`: a point, else a line, else the smallest area holding the click;
+      a generated child picks the feature it came from); a click on the selection's outline keeps it. The selection
+      is drawn with its handles (a line's or a ring's points, a circle's centre and radius, an ellipse's centre and
+      radii, a reference's `near`).
+    - One state machine (idle, pressing, dragging) owns the copy. A press on the selection's outline or a handle
+      that moves 4 px drags it (a press inside an area pans); commands wait for a drag to end; a file changed on disk
+      during one is a conflict; a second pointer is ignored.
+    - A drag moves a handle or the whole shape, rounded to the coarsest of 1, 0.1 and 0.01 m under a screen pixel. A
+      barrier (by its kind's category, its own or its preset's) keeps its points on the 2 m lattice: a point snaps
+      to the nearest lattice point that keeps its two segments whole (the engine's `barrierProblem`), else to the
+      nearest lattice point; a whole barrier moves by lattice steps.
+    - A double click adds a point; Delete removes the line's or ring's point under the pointer (on the shape's line
+      but no point, nothing; off the shape, the feature). Adding or removing a point before a shared edge's `at`
+      moves it with the ring. Undo and redo keep 200 edits; a change on disk read in clears them.
+    - An edit always applies: what the validator finds in the edited copy shows at once (the selection red, the
+      problem in the panel, the page's list); the compile's list follows. The editor holds no copy of the rules.
+    - The save (Cmd or Ctrl S) goes through the dev server (`POST /__map/save`, `tools/map-save.ts`, JSON from the
+      page's own origin only) with the text the page read, and is refused if the file changed on disk since (the
+      page offers to overwrite it or take the file); a reply counts only for the file and base it was sent for. It
+      rewrites only what changed (`writeMap`, `src/map/write.ts`): an unchanged feature or field keeps its bytes, a
+      changed one is written on one line in place (or in the file's first bytes, when an undo brought it back), a new
+      one appended, a deleted one cut. A change on disk with no unsaved edits is read in; the page's own save is not
+      recompiled. The built page selects but does not edit.
 - **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
   become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes
