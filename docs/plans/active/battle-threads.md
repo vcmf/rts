@@ -93,11 +93,32 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
 
 ## PR 2: the soldier layer in structure-of-arrays typed arrays
 
-- **Scope**: `Man` objects and the per-unit `Map`s replaced by typed arrays at stable per-man indices (no compaction;
-  the fallen kept with a state bit), no per-frame allocations.
-- **Acceptance**: the step's mean 1.5–3× cheaper (est.: 4.2–5.4 → ≤ 3 ms full step), its p99 likewise; no GC pause from
-  the layer in a 60 s trace at 1× and 8×; the goldens unchanged.
-- **Stop**: under 1.3× and no measurable GC gain: keep it only if PR 3's shared frame needs its layout, else revert.
+- **Why, after PR 1** (2026-10-26): PR 3 hands the men from the worker to the main thread through shared memory, and
+  a `SharedArrayBuffer` holds numbers, not objects. Today every man is a `Man` object in a per-unit array, and the
+  page reads them as objects (`main.ts`'s picking and box select, `map.ts`'s drawing, `slotError`). PR 2 puts them in
+  flat arrays and moves those readers onto them, on the main thread, where the goldens can prove nothing changed;
+  PR 3 then moves the arrays to shared memory without touching a reader.
+- **Speed is a side effect, not the goal**. The profile at 32,000 men, 8× (`node --cpu-prof tools/bench-cost.ts march
+  800 1440 2 8`, self time of the whole run, sim included): `steer` 31.9 %, the formation geometry of a man's place
+  (`sampleBins`, `placeAtSlot`, `trailPoint`) 27.8 %, the terrain lookups 9.6 %, `buildGrid` 3.7 %, the garbage
+  collector 0.8 %. The neighbour search inside `steer` already reads typed arrays (the grid's `flatX`/`flatZ`), and
+  the places come from the sim's geometry, which PR 2 does not touch: est. 1.0–1.3× on the step, not the 1.5–3×
+  first planned (that was set before PR 1, against a full step a frame).
+- **Baseline** (PR 1's head, the same bench; step per 120 Hz frame, mean / p99 ms): 16,000 men 0.49 / 0.99 at 1×,
+  2.32 / 4.15 at 8×; 32,000 men 0.78 / 1.48 at 1×, 3.59 / 6.47 at 8×.
+- **Scope**: `Man` replaced by a structure of arrays at stable per-man indices (x, z, vx, vz, the drift phases, the
+  hold point: `Float64Array`, so the steering's arithmetic and the goldens stay bit for bit; the slot `Int32Array`;
+  alive and settled in a flags `Uint8Array`). Each battalion owns blocks of indices, the first of its type's `slots`
+  at its creation and another when men join a full one (no compaction: a man who falls keeps his index, flagged; a
+  battalion gone keeps its blocks for the crosses, which replaces the `fallen` array). The readers (`main.ts`, `map.ts`, `slotError`, the tests, the bench)
+  read the arrays by a battalion's block. `sync` without its per-change allocations (the `filter`s, the closure, the
+  scratch slot arrays).
+- **Acceptance**: the goldens and the steering tests unchanged, with the men's positions identical to PR 1's in a
+  fixed scenario (a test compares a hash of every man's x and z after 30 s of marching against PR 1's value); the
+  step no slower, mean and p99 stated at 16,000 and 32,000 men, 1× and 8×; the layer allocating nothing in a round (a
+  test); the page's picking, box select and drawing unchanged (`app-check`'s screenshots).
+- **Stop**: the step more than 10 % slower at any of those four, and not fixable within the PR: revert, and PR 3
+  copies the men out of the objects into its shared frame instead (about 0.1 ms at 32,000 men, est.).
 
 ## PR 3: the battle worker, the shared buffers, the browser replay harness
 
