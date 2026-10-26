@@ -256,7 +256,8 @@ tile) is no sim map. Two PRs, then PR 4.
     battalion table, bumped when it steps that battalion's men (not when every man was skipped as settled and still),
     when a sync changes them, and when one of its companies fires. The renderer re-places a battalion whose revision
     changed, or whose last volley has gone stale since it was placed, at most once a 12 fps step of real time, and at
-    most `PLACE_MAX` battalions a frame (the rest the frames after, oldest first). The men worker's own stagger (its
+    the frame's share of them spread over the frames a step has (`placeQuota`: every one once a step at any frame
+    rate; review round 1 of the redesign: a fixed cap of 10 a frame placed each of 80 every 1.6 steps at 60 Hz). The men worker's own stagger (its
     eight groups, PR 1) spreads the revisions over the step. This is the design's §5 "moved this step" flag, which
     PR 4's uploads need too. The review count restarts.
 - **Base**: the look code in this epic is four `main` commits behind (#182, #185, #193, #197: look only, `units.ts`

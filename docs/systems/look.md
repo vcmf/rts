@@ -775,7 +775,8 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   no size, under the ground; the colours at the battalion's centre). A battalion is re-placed when the men worker's
   revision of it moved on (it stepped its men, matched them again, or a company fired: `Unit.rev`, published in the
   frame's battalion table) or its last volley went stale, at most once a 12 fps step of real time (stepped as
-  published: no moves between steps, the art bible's) and at most 10 a frame, the longest waiting first. Its
+  published: no moves between steps, the art bible's), the frame's share of them spread over the frames a step has
+  (every one once a step at any frame rate), looked at in turn. Its
   battalions are matched to the sim's formations by side and spawn place (and their generation), its figures to the
   formation's men in their order.
 - **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at

@@ -132,12 +132,7 @@ export async function playSim(
   })
   // as many men as figures, at most the type's slots (the figures past them are not drawn)
   for (const c of spawns(bs, Math.min(men, type.slots), a)) battle.command(c)
-  const source = new SimMen(
-    bs,
-    men,
-    () => battle.see(),
-    () => battle.published(),
-  )
+  const source = new SimMen(bs, men, () => battle.see())
   const to = bs.map(b => marchTo(b, mid))
   const states: Orders[] = bs.map(() => ({ marched: false, moving: false, formed: false, sentAt: 0 }))
   return {
@@ -145,9 +140,9 @@ export async function playSim(
     link: battle,
     tick: (dt: number) => {
       battle.frame(dt)
-      // the frame the renderer holds (one read a frame); before its first, nothing to order
-      const w = source.current()?.w
-      if (!w) return
+      // the newest frame, taken here each frame (the renderer reads the same: one read a frame), shown or not
+      source.refresh()
+      const w = source.current()!.w
       for (let k = 0; k < bs.length; k++) {
         const i = source.formationOf(k)
         if (i < 0 || !w.f.alive[i]) continue

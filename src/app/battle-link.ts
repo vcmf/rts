@@ -18,7 +18,7 @@ import { PAGE_SEED } from '../scenarios/page.ts'
 import { buildScene, type Scene } from '../render/scene.ts'
 import type { SoldierLayer } from '../render/soldiers.ts'
 import { Battle } from './battle.ts'
-import { FrameView, layoutFor, Slots, H_TICK_MS, H_STEP_MS, H_PUB_MS, H_TIME } from './battle-frame.ts'
+import { FrameView, layoutFor, Slots, H_TICK_MS, H_STEP_MS, H_PUB_MS } from './battle-frame.ts'
 import type { ToSim, FromSim, SimRecording } from './sim-host.ts'
 import type { ToMen, FromMen, MenRecording } from './men-host.ts'
 import { makeRing } from './tick-ring.ts'
@@ -52,9 +52,6 @@ export interface BattleLink {
   /** What to read and draw this frame: the newest frame published (held until the next call), or the battle itself
    * on the main thread. */
   see(): Seen
-  /** When what `see` gave was published (ms since the shared time origin; on the page's thread, a count of the frames
-   * the battle ticked or stepped its men in): a new value, a new frame. */
-  published(): number
   command(c: Command): void
   /** The game speed (0: paused). */
   setSpeed(speed: number): void
@@ -80,8 +77,6 @@ export class MainLink implements BattleLink {
   private readonly seen: Seen
   readonly data: SimData
   readonly failed = null
-  // the frames the battle changed in (published)
-  private changes = 0
   constructor(data: SimData, cr: Compiled, scenario: Scenario) {
     this.data = data
     this.battle = new Battle(data, scenario, cr)
@@ -92,14 +87,10 @@ export class MainLink implements BattleLink {
     this.seen = { w: this.battle.w, layer: this.battle.layer }
   }
   frame(dt: number): void {
-    const r = this.battle.advance(dt)
-    if (r.ticks || r.subSteps) this.changes++
+    this.battle.advance(dt)
   }
   see(): Seen {
     return this.seen
-  }
-  published(): number {
-    return this.changes
   }
   command(c: Command): void {
     this.battle.command(c)
@@ -236,9 +227,6 @@ export class WorkerLink implements BattleLink {
     v.read(performance.timeOrigin + performance.now())
     this.seen = v
     return v
-  }
-  published(): number {
-    return (this.seen as FrameView | null)?.head[H_TIME] ?? NaN
   }
   command(c: Command): void {
     this.toSim({ type: 'command', c })

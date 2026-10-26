@@ -718,7 +718,8 @@ if (armiesParam !== null) {
     })
     units.source = sim.source
     const s = sim
-    scene.onBeforeRenderObservable.add(() => s.tick(Math.min(engine.getDeltaTime() / 1000, 0.1)))
+    // (first: the renderer's frame reads what the tick took)
+    scene.onBeforeRenderObservable.add(() => s.tick(Math.min(engine.getDeltaTime() / 1000, 0.1)), undefined, true)
   }
   Object.assign(window, {
     __units: units,

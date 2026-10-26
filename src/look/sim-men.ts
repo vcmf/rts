@@ -25,6 +25,31 @@ export const RUN_FROM = 2.2
 export const FIRE_FOR = 0.6
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
 
+/** The battalions to place this frame of `dt` real seconds: `n` over the frames a step at `fps` steps a second is sure
+ * to have (the whole of them: at 30 Hz a step has 2 or 3 frames, so half each), so every one can be placed once a step
+ * whatever the frame rate, at least one. */
+export const placeQuota = (n: number, dt: number, fps: number): number =>
+  Math.max(1, Math.ceil(n / Math.max(1, Math.floor(1 / (dt * fps) + 1e-9))))
+
+/** Which of `n` battalions to place this frame: those `due`, looked at in turn from `next` (round robin: one passed
+ * over now is looked at first again only after the others), at most `quota`, into `out`; returns where the next
+ * frame starts. */
+export function pickPlacings(
+  n: number,
+  next: number,
+  quota: number,
+  due: (k: number) => boolean,
+  out: number[],
+): number {
+  out.length = 0
+  let k = 0
+  for (; k < n && out.length < quota; k++) {
+    const b = (next + k) % n
+    if (due(b)) out.push(b)
+  }
+  return n ? (next + k) % n : 0
+}
+
 /** What the page reads this frame: the world and the soldier layer of the newest published frame. */
 export interface Seen {
   w: World
@@ -33,8 +58,8 @@ export interface Seen {
 
 /** Where the renderer's men stand when not the script's: once a frame `frame`, then each man of each battalion. */
 export interface MenSource {
-  /** The newest men at the page's clock `T`; true when they are new (moved since the last). */
-  frame(T: number): boolean
+  /** The renderer's frame at the page's clock `T` (the men's role starts are on it). */
+  frame(T: number): void
   /** Whether battalion `k` is drawn otherwise than when it was last placed: the men worker's revision of it moved on
    * (its men stepped, matched again, a volley), its last volley went stale (the fire role ends with time), or it was
    * matched or lost since. */
@@ -50,7 +75,6 @@ export interface MenSource {
 export class SimMen implements MenSource {
   private readonly bs: readonly Battalion[]
   private readonly see: () => Seen
-  private readonly publishedAt: () => number
   private seen: Seen | null = null
   // each drawn battalion's formation (−1: not yet matched), found by where it was spawned
   private readonly formation: Int32Array
@@ -58,7 +82,8 @@ export class SimMen implements MenSource {
   // per battalion, per man: his role (an index into ROLES) and since when (the page's clock)
   private readonly role: Uint8Array[]
   private readonly since: Float64Array[]
-  private published = NaN
+  // refresh() ran since the renderer's last frame (the page's tick runs first: the renderer reads what it took)
+  private refreshed = false
   private T = 0
   // per battalion, as last placed: the revision of its unit (−1: none: unmatched or gone), and the tick its last fresh
   // volley goes stale at (−1: none fresh)
@@ -70,11 +95,10 @@ export class SimMen implements MenSource {
   private slotC: Int32Array = new Int32Array(0)
 
   /** `bs`: the battalions drawn, as spawned (their places match their formations); `men`: figures a battalion; `see`
-   * the newest frame and `published` when it was (src/app/battle-link.ts). */
-  constructor(bs: readonly Battalion[], men: number, see: () => Seen, published: () => number) {
+   * the newest frame (src/app/battle-link.ts). */
+  constructor(bs: readonly Battalion[], men: number, see: () => Seen) {
     this.bs = bs
     this.see = see
-    this.publishedAt = published
     this.formation = new Int32Array(bs.length).fill(-1)
     this.placedRev = new Float64Array(bs.length).fill(NaN)
     this.fireUntil = new Float64Array(bs.length).fill(-1)
@@ -83,15 +107,20 @@ export class SimMen implements MenSource {
     this.since = bs.map(() => new Float64Array(men))
   }
 
-  frame(T: number): boolean {
-    this.T = T
+  /** Takes the newest frame (held until the next take) and matches what is not matched yet: the page's tick calls it
+   * each frame, shown or not, so the orders read the battle as it is. */
+  refresh(): void {
     const s = this.see()
     this.seen = s
-    const published = this.publishedAt()
-    if (published === this.published) return false
-    this.published = published
-    this.match(s)
-    return true
+    if (this.formation.includes(-1)) this.match(s)
+    this.refreshed = true
+  }
+
+  frame(T: number): void {
+    this.T = T
+    // (the frame the page's tick took this frame, or a new one when the renderer runs first or alone)
+    if (!this.refreshed) this.refresh()
+    this.refreshed = false
   }
 
   /** Matches each drawn battalion not yet matched to the formation of its side nearest its spawn place (each once). */

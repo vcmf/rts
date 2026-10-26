@@ -595,7 +595,10 @@ export class SoldierLayer {
         const m = ids[j]
         const fl = FL[m]
         if (!(fl & MAN_ALIVE) || (still && fl & MAN_SETTLED)) continue
-        touched = true
+        // (what he is drawn from as the step found it: a change of it moves the battalion's revision on)
+        const wasX = MX[m]
+        const wasZ = MZ[m]
+        const wasV = MVX[m] !== 0 || MVZ[m] !== 0
         this.place(i, MS[m], true, p, imp)
         let mx = MX[m]
         let mz = MZ[m]
@@ -632,6 +635,7 @@ export class SoldierLayer {
         if (fl & MAN_SETTLED) {
           if (busy || Math.hypot(tx - MHX[m], tz - MHZ[m]) > 0.3) FL[m] = fl & ~MAN_SETTLED
           else {
+            if (wasV) touched = true
             MVX[m] = 0
             MVZ[m] = 0
             continue
@@ -644,6 +648,7 @@ export class SoldierLayer {
           FL[m] |= MAN_SETTLED
           MHX[m] = tx
           MHZ[m] = tz
+          if (wasV) touched = true
           MVX[m] = 0
           MVZ[m] = 0
           continue
@@ -742,6 +747,7 @@ export class SoldierLayer {
         // a trunk's push never takes him off the map
         MX[m] = Math.min(xMax, Math.max(t.x0, mx))
         MZ[m] = Math.min(zMax, Math.max(t.z0, mz))
+        if (MX[m] !== wasX || MZ[m] !== wasZ || wasV !== (vx !== 0 || vz !== 0)) touched = true
         MVX[m] = vx
         MVZ[m] = vz
       }

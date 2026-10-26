@@ -10,7 +10,15 @@ import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
 import { lookArmies } from '../src/scenarios/look-world.ts'
 import { MainLink } from '../src/app/battle-link.ts'
 import { MAN_ALIVE } from '../src/render/men.ts'
-import { SimMen, RUN_FROM, MARCH_FROM, FIRE_FOR, type SourceMan } from '../src/look/sim-men.ts'
+import {
+  SimMen,
+  RUN_FROM,
+  MARCH_FROM,
+  FIRE_FOR,
+  placeQuota,
+  pickPlacings,
+  type SourceMan,
+} from '../src/look/sim-men.ts'
 import { marchTo, spawns, ordersDue, SHORT, GIVE_UP, type Orders } from '../src/look/sim-armies.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
 import type { Battalion } from '../src/look/world/armies.ts'
@@ -41,19 +49,14 @@ function start() {
   const link = new MainLink(data, cr, lookArmies)
   for (const c of spawns(BS, MEN, A)) link.command(c)
   link.frame(DT)
-  const source = new SimMen(
-    BS,
-    MEN,
-    () => link.see(),
-    () => link.published(),
-  )
+  const source = new SimMen(BS, MEN, () => link.see())
   return { link, source }
 }
 
 describe("the sim's men as the renderer's", () => {
   it('match each battalion to its formation, and each figure to a man where the sim has him', () => {
     const { link, source } = start()
-    expect(source.frame(0)).toBe(true)
+    source.frame(0)
     const { w, layer } = link.see()
     for (let k = 0; k < BS.length; k++) {
       const i = source.formationOf(k)
@@ -108,17 +111,35 @@ describe("the sim's men as the renderer's", () => {
     w.f.volleyTick[i * w.cr.maxC + c] = w.meta[M_TICK] - 20
     expect(manAt(source, 0, 0, out).role).toBe('halt')
   })
-  it('says a new frame only when one was published', () => {
-    const { link, source } = start()
-    expect(source.frame(0)).toBe(true)
-    // on the page's thread every frame is new; a source reading a fixed publish time sees none
-    const fixed = new SimMen(
-      BS,
-      MEN,
-      () => link.see(),
-      () => 7,
-    )
-    expect([fixed.frame(0), fixed.frame(1)]).toEqual([true, false])
+})
+
+describe('the placing', () => {
+  // regression (PR 4b review): a fixed cap of placings a frame placed each of 80 battalions every 1.6 steps at 60 Hz
+  it('places every moved battalion once a step at any frame rate, in turn', () => {
+    for (const hz of [30, 60, 120, 144]) {
+      const n = 80
+      const placed = new Int32Array(n).fill(-1)
+      const count = new Int32Array(n)
+      const picked: number[] = []
+      let next = 0
+      // 10 steps of 1/12 s, every battalion moving all along
+      for (let f = 0; f < (10 * hz) / 12; f++) {
+        const step = Math.floor((f / hz) * 12)
+        next = pickPlacings(n, next, placeQuota(n, 1 / hz, 12), k => placed[k] !== step, picked)
+        for (const k of picked) {
+          placed[k] = step
+          count[k]++
+        }
+      }
+      expect({ hz, least: Math.min(...count), most: Math.max(...count) }).toEqual({ hz, least: 10, most: 10 })
+    }
+  })
+  it('looks at the battalions in turn: one passed over is looked at again only after the others', () => {
+    const out: number[] = []
+    expect(pickPlacings(5, 3, 2, () => true, out)).toBe(0)
+    expect(out).toEqual([3, 4])
+    expect(pickPlacings(5, 0, 9, k => k !== 1, out)).toBe(0)
+    expect(out).toEqual([0, 2, 3, 4])
   })
 })
 
