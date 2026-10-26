@@ -134,7 +134,8 @@ describe('M7c: every attribute through the form', () => {
     expect(attrInput(undefined)).toBe('any')
     expect(parseInput('any', 'gravel')).toEqual({ value: 'gravel' })
     expect(parseInput('any', '{"a": 1}')).toEqual({ value: { a: 1 } })
-    expect(parseInput('any', showValue('12', 'any'))).toEqual({ value: '12' }) // text that looks like a number stays text
+    // text that looks like a number stays text
+    expect(parseInput('any', showValue('12', 'any'))).toEqual({ value: '12' })
     expect(showValue('mud', 'json')).toBe('"mud"')
   })
   it("shows what an attribute inherits from its kind and its preset, and the feature's own others", () => {
