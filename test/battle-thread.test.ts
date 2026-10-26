@@ -22,7 +22,7 @@ import { PAGE_SCENARIOS } from '../src/scenarios/page.ts'
 import { Battle } from '../src/app/battle.ts'
 import { FrameView, layoutFor, writeFrame, capFor, Slots } from '../src/app/battle-frame.ts'
 import { WorkerLink } from '../src/app/battle-link.ts'
-import { makeRing, RingWriter, RingReader, RING } from '../src/app/tick-ring.ts'
+import { makeRing, RingWriter, RingReader, RING, accSince } from '../src/app/tick-ring.ts'
 
 const data = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)
 const cr = compileRuleset(napoleonic)
@@ -193,9 +193,9 @@ describe('the tick ring', () => {
     const { writer, reader } = setup()
     writer.setClock(5, 0.02, 0, 1.5)
     const now = performance.timeOrigin + performance.now()
-    expect(reader.accSince(5, now)).toBeCloseTo(0.02, 12)
-    expect(reader.accSince(4, now)).toBe(DT)
-    expect(reader.accSince(6, now)).toBe(0)
+    expect(accSince(reader.clockNow(), 5, now)).toBeCloseTo(0.02, 12)
+    expect(accSince(reader.clockNow(), 4, now)).toBe(DT)
+    expect(accSince(reader.clockNow(), 6, now)).toBe(0)
     expect(reader.clockNow()).toMatchObject({ tick: 5, acc: 0.02, speed: 0, tickMs: 1.5 })
   })
   // the race the reader's check exists for: the writer reuses the slot between the reader finding it and holding it

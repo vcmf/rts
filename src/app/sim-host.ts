@@ -105,10 +105,17 @@ export function serveSim(port: Port<ToSim>): void {
       b.command(m.c)
       flush()
     } else if (m.type === 'speed') {
+      // the game time owed at the old speed first (the men have been running at it since the clock's last), then the
+      // new one: a pause holds them where they are, not a part of a tick back
+      step()
       b.speed = m.speed
       clock()
     } else if (m.type === 'advance') {
-      // then held, as the page held itself before: until the page sets a speed again
+      // held first (the men read the speed, and stand while it advances), then held after, as the page held itself
+      // before: until the page sets a speed again
+      step()
+      b.speed = 0
+      clock()
       b.advanceBy(m.sec)
       b.speed = 0
       clock()

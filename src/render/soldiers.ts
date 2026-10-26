@@ -280,6 +280,9 @@ export class SoldierLayer {
         this.leaveGroup(u)
       }
     }
+    // a departure no battalion here matched (one the layer never had: spawned and gone between two syncs, as a men
+    // worker behind its ring sees) is done with: kept, a later formation with the same handle would be taken to leave
+    this.leaving.clear()
     for (let i = 0; i < N; i++) {
       if (!f.alive[i]) continue
       let u = this.units.get(i)

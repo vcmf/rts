@@ -8,12 +8,13 @@ import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { MenClock } from '../render/men-clock.ts'
 import { layoutFor, writeFrame, capFor, Slots, type Layout } from './battle-frame.ts'
-import { RingReader, type RingBuffers } from './tick-ring.ts'
+import { RingReader, accSince, type RingBuffers, type Clock } from './tick-ring.ts'
 import { Host, type Port, type Failed } from './host.ts'
 
 /** What the page sends the men worker: the map's bytes and the tick ring, then requests. */
 export type ToMen =
   | { type: 'init'; data: Uint8Array; version: number; ring: RingBuffers }
+  | { type: 'hold'; id: number } // the checks' advance: take no ticks and step nothing until its `advance`
   | { type: 'advance'; id: number; sec: number }
   | { type: 'record'; id: number; on: boolean }
 
@@ -62,11 +63,13 @@ export function serveMen(port: Port<ToMen>): void {
   // the frame's clock: the game time since the men's world's tick (the sim's clock read against it), and the speed;
   // a change of speed (a pause) is published, so the page stops its anchors' alpha too
   const src = { w: null as unknown as World, layer: null as unknown as SoldierLayer, acc: 0, speed: 0 }
+  // the clock, read once a turn (one snapshot for the speed, the alpha and the frame's tick cost)
+  let k: Clock
   const now = () => {
-    const speed = ring.clockNow().speed
-    if (speed !== src.speed) changed = true
-    src.speed = speed
-    src.acc = ring.accSince(lastTick, performance.timeOrigin + performance.now())
+    k = ring.clockNow()
+    if (k.speed !== src.speed) changed = true
+    src.speed = k.speed
+    src.acc = accSince(k, lastTick, performance.timeOrigin + performance.now())
   }
   const stepMen = (group: number, dt: number) => layer.step(dt, src.acc / DT, group, clock.groups)
 
@@ -99,7 +102,7 @@ export function serveMen(port: Port<ToMen>): void {
     const fresh = !slots || layer.men.n > L.cap
     if (fresh) makeSlots(capFor(layer.men.n))
     const s = slots!.free()
-    ema.tickMs = ring.clockNow().tickMs
+    ema.tickMs = k.tickMs
     writeFrame(src, bufs[s], L, ema, slotVer[s] !== worldVer)
     slotVer[s] = worldVer
     slots!.publish(s)
@@ -111,7 +114,10 @@ export function serveMen(port: Port<ToMen>): void {
     changed = false
   }
   // one turn: the ticks waiting, then the men's sub-steps due at the sim's speed, then the frame when due
+  // held for the checks' advance (`hold`), so which ticks it syncs does not hang on the threads' timing
+  let held = false
   const step = () => {
+    if (held) return
     const t0 = performance.now()
     const dt = Math.min(0.1, (t0 - last) / 1000)
     last = t0
@@ -151,7 +157,10 @@ export function serveMen(port: Port<ToMen>): void {
       return
     }
     if (!slots) throw new Error(`men worker: ${m.type} before init`)
-    if (m.type === 'advance') {
+    if (m.type === 'hold') {
+      held = true
+      host.send({ type: 'reply', id: m.id, value: null })
+    } else if (m.type === 'advance') {
       // after the sim's advance (the page asks it first): the ticks it can take, the newest at least, then its clock
       // `sec` of game time at 1× in 1/30 s frames, so the men stand where the battle now has them
       while (take(TAKE).taken);
@@ -160,6 +169,8 @@ export function serveMen(port: Port<ToMen>): void {
       layer.alphaNow = src.acc / DT
       changed = true
       publish()
+      held = false
+      last = performance.now()
       host.send({ type: 'reply', id: m.id, value: null })
     } else if (m.type === 'record') {
       const done = rec

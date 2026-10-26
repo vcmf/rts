@@ -247,6 +247,19 @@ plan yet makes the sim drive them (Open questions). PRs 1–3 stand on the sim p
     6-core laptop if available (else said).
   - **Stop**: if the men worker still takes under 99 % at 32,000 men, 8×, or the page's p99 is worse than PR 3's,
     revert and keep PR 3's one worker with 32,000 men at 8× its stated limit.
+  - **Outcome** (2026-10-26, review round 1's code; `tools/bench-sim.ts` as PR 3's, load 4–7): **met**. Mean / p99 ms:
+
+    | | page's battle time | frame interval | men's sub-steps taken | ticks skipped | one tick (sim) | men stepping a turn |
+    |---|---|---|---|---|---|---|
+    | 16,000 men, 1× | 0.01 / 0.01 | 2.55 / 2.92 | 100.1 % | 0 | 1.89 / 6.34 | 0.44 / 0.79 |
+    | 16,000 men, 8× | 0.01 / 0.02 | 2.77 / 3.27 | 100.0 % | 0 | 1.56 / 6.33 | 1.22 / 2.47 |
+    | 32,000 men, 1× | 0.01 / 0.03 | 5.70 / 6.25 | 100.0 % | 0 | 3.57 / 8.24 | 0.93 / 1.61 |
+    | 32,000 men, 8× | 0.01 / 0.03 | 5.82 / 6.62 | 100.0 % (PR 3: 95.9 %) | 0 | 2.48 / 8.06 | 3.63 / 6.26 |
+
+    - At 32,000 men, 8× the sim worker's turn is 10.4 / 17.4 ms (the ring's copy 0.25 / 0.47 of it) and the men
+      worker's 9.1 / 12.0: each has room, where PR 3's one worker took 27 / 84.
+    - The page's numbers are PR 3's (its frame is the canvas's drawing).
+    - Not measured: the 6-core laptop (not available).
 - **PR 6**, rendering in a worker (OffscreenCanvas), or the layer in WebAssembly with f32x4 SIMD (cosmetic, so
   determinism does not apply), only if main-thread jank is measured to cost frames after PR 3.
 

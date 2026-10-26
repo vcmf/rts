@@ -5,7 +5,7 @@
 // own world for the soldier layer's sync; fallen behind the ring, it takes the oldest it has not seen. Neither waits:
 // the writer skips the slot the reader holds, and the reader checks the stamp around its hold.
 import { M_TICK, DT, type World } from '../sim/index.ts'
-import { layoutFor, copyColumns, readColumns, type Layout } from './battle-frame.ts'
+import { layoutFor, copyColumns, readColumns, Slots, type Layout } from './battle-frame.ts'
 
 export const RING = 8
 // departures kept for a reader behind: far more than the formations there can be
@@ -13,23 +13,25 @@ const LOG = 1024
 // the stamp of a slot being written, and of one never written
 const WRITING = -2
 const EMPTY = -1
-// the control words: the slot the reader holds (−1: none), the clock's sequence (odd while it is written), a stamp
-// per slot
+// the control words: the slot the reader holds (−1: none), then a stamp per slot
 const HELD = 0
-const CLOCK_SEQ = 1
-const STAMP = 2
-// the clock: the tick it was taken at, the sim's leftover game time then (s), its speed, when (ms since the time
-// origin the threads share), and the sim's tick time (ms, smoothed, the ring's copy left out)
+const STAMP = 1
+// the clock, in three slots of these five (the frames' protocol, `Slots`: the reader holds a whole one, the writer
+// fills another; a sequence count around plain Float64 writes would not keep a reader on another core from mixing
+// two): the tick it was taken at, the sim's leftover game time then (s), its speed, when (ms since the time origin
+// the threads share), and the sim's tick time (ms, smoothed, the ring's copy left out)
 const C_TICK = 0
 const C_ACC = 1
 const C_SPEED = 2
 const C_TIME = 3
 const C_TICK_MS = 4
+const C_LEN = 5
 
 /** The shared memory of a ring, made by the page and sent to both workers. */
 export interface RingBuffers {
   ctl: SharedArrayBuffer
   clock: SharedArrayBuffer
+  clockCtl: SharedArrayBuffer
   // the departures: how many were ever written, then (tick, handle, men) for the last LOG of them
   log: SharedArrayBuffer
   slots: SharedArrayBuffer[]
@@ -43,7 +45,8 @@ export function makeRing(w: World): RingBuffers {
   c.fill(EMPTY, STAMP)
   return {
     ctl,
-    clock: new SharedArrayBuffer(8 * 8),
+    clock: new SharedArrayBuffer(3 * C_LEN * 8),
+    clockCtl: Slots.make(true).ctl.buffer as SharedArrayBuffer,
     log: new SharedArrayBuffer((1 + 3 * LOG) * 4),
     slots: Array.from({ length: RING }, () => new SharedArrayBuffer(layoutFor(w, 0).bytes)),
   }
@@ -53,12 +56,14 @@ export function makeRing(w: World): RingBuffers {
 class RingEnd {
   protected readonly ctl: Int32Array
   protected readonly clock: Float64Array
+  protected readonly clockSlots: Slots
   protected readonly log: Int32Array
   protected readonly L: Layout
   protected readonly slots: SharedArrayBuffer[]
   constructor(w: World, b: RingBuffers) {
     this.ctl = new Int32Array(b.ctl)
     this.clock = new Float64Array(b.clock)
+    this.clockSlots = new Slots(new Int32Array(b.clockCtl))
     this.log = new Int32Array(b.log)
     this.L = layoutFor(w, 0)
     this.slots = b.slots
@@ -109,15 +114,15 @@ export class RingWriter extends RingEnd {
 
   /** The game clock now, at tick `tick`: the leftover game time, the speed, the tick's cost. */
   setClock(tick: number, acc: number, speed: number, tickMs: number): void {
-    const c = this.ctl
+    const s = this.clockSlots.free()
     const k = this.clock
-    Atomics.add(c, CLOCK_SEQ, 1)
-    k[C_TICK] = tick
-    k[C_ACC] = acc
-    k[C_SPEED] = speed
-    k[C_TIME] = performance.timeOrigin + performance.now()
-    k[C_TICK_MS] = tickMs
-    Atomics.add(c, CLOCK_SEQ, 1)
+    const o = s * C_LEN
+    k[o + C_TICK] = tick
+    k[o + C_ACC] = acc
+    k[o + C_SPEED] = speed
+    k[o + C_TIME] = performance.timeOrigin + performance.now()
+    k[o + C_TICK_MS] = tickMs
+    this.clockSlots.publish(s)
   }
 }
 
@@ -191,28 +196,25 @@ export class RingReader extends RingEnd {
     return out
   }
 
-  /** The clock, read whole (again while the sim writes it). */
+  /** The clock as last set (all zero before), read whole: one snapshot for a turn's every use. */
   clockNow(): Clock {
-    const c = this.ctl
-    const k = this.clock
+    const s = this.clockSlots.hold()
     const o = this.now
-    for (;;) {
-      const a = Atomics.load(c, CLOCK_SEQ)
-      if (a & 1) continue
-      o.tick = k[C_TICK]
-      o.acc = k[C_ACC]
-      o.speed = k[C_SPEED]
-      o.time = k[C_TIME]
-      o.tickMs = k[C_TICK_MS]
-      if (Atomics.load(c, CLOCK_SEQ) === a) return o
-    }
+    if (s < 0) return o
+    const k = this.clock
+    const at = s * C_LEN
+    o.tick = k[at + C_TICK]
+    o.acc = k[at + C_ACC]
+    o.speed = k[at + C_SPEED]
+    o.time = k[at + C_TIME]
+    o.tickMs = k[at + C_TICK_MS]
+    return o
   }
+}
 
-  /** The game time since tick `tick` (the men's world's) at `now` (ms since the shared time origin), at most a tick:
-   * the sim's leftover game time at its own tick, the ticks between, and the time since at its speed. */
-  accSince(tick: number, now: number): number {
-    const k = this.clockNow()
-    const acc = (k.tick - tick) * DT + k.acc + (Math.max(0, now - k.time) / 1000) * k.speed
-    return Math.min(DT, Math.max(0, acc))
-  }
+/** The game time since tick `tick` (the men's world's) at `now` (ms since the shared time origin) by clock `k`, at
+ * most a tick: the sim's leftover game time at its own tick, the ticks between, and the time since at its speed. */
+export function accSince(k: Clock, tick: number, now: number): number {
+  const acc = (k.tick - tick) * DT + k.acc + (Math.max(0, now - k.time) / 1000) * k.speed
+  return Math.min(DT, Math.max(0, acc))
 }

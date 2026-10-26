@@ -52,8 +52,8 @@ export interface BattleOptions {
 /** The sim and the soldier layer, as the page plays a scenario. */
 export class Battle {
   readonly w: World
-  readonly scene: Scene
-  readonly layer: SoldierLayer
+  private readonly sceneOf: Scene | null
+  private readonly layerOf: SoldierLayer | null
   readonly clock = new MenClock()
   readonly log: Stamped[] = []
   readonly hashes: HashPoint[] = []
@@ -82,8 +82,20 @@ export class Battle {
     this.w = makeWorld(data, cr, PAGE_SEED, false)
     attachScenario(this.w, scenario)
     scenario.setup(this.w)
-    this.scene = buildScene(this.w)
-    this.layer = new SoldierLayer(this.w, this.scene)
+    // the scene and the layer only for a battle that steps its own men (the sim worker's has none to build)
+    this.sceneOf = men ? buildScene(this.w) : null
+    this.layerOf = this.sceneOf && new SoldierLayer(this.w, this.sceneOf)
+  }
+
+  /** The scene (the trunks, the map's symbols) of a battle that steps its own men. */
+  get scene(): Scene {
+    if (!this.sceneOf) throw new Error('battle: no scene without its men')
+    return this.sceneOf
+  }
+  /** The soldier layer of a battle that steps its own men. */
+  get layer(): SoldierLayer {
+    if (!this.layerOf) throw new Error('battle: no soldier layer without its men')
+    return this.layerOf
   }
 
   /** A command from the player: stamped for the next tick and logged (refused ones too, as `issue` keeps them). */
@@ -107,7 +119,7 @@ export class Battle {
     if (ticks === MAX_TICKS) this.acc = 0
     const b = performance.now()
     const subSteps = this.men ? this.clock.advance(realDt, this.speed, this.stepMen) : 0
-    this.layer.alphaNow = this.acc / DT
+    if (this.men) this.layer.alphaNow = this.acc / DT
     return { ticks, subSteps, tickMs: b - a, stepMs: performance.now() - b }
   }
 

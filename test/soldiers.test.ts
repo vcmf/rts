@@ -261,6 +261,18 @@ describe('who stands where', () => {
       expect({ shape, men, worst: worst < 1e-6 }).toEqual({ shape, men, worst: true })
     }
   })
+  // regression (PR 5 review): a departure no battalion matched stayed in the layer, so a later battalion with that
+  // handle, killed, was taken to have left the field and drew no crosses
+  it('a departure no battalion matched is forgotten: a battalion with that handle killed later leaves its dead', () => {
+    const p = new Play()
+    const h = p.sim.spawn(-20, -40, 0, 'line', 20)
+    p.frames(2)
+    // as a men worker behind its ring may get: a departure for a handle it does not see go
+    p.layer.sync(0, [{ id: h, men: 20 }])
+    p.sim.order({ type: 'debug-kill', id: h, men: 20 })
+    p.frames(1)
+    expect(crosses(p.layer)).toBe(20)
+  })
   it('a battalion that is gone leaves its men on the ground', () => {
     const p = new Play()
     const h = p.sim.spawn(-20, -40, 0, 'line', 20)
