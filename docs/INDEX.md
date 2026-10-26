@@ -97,6 +97,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 
 - [`research/map-size-battle-density.md`](research/map-size-battle-density.md): how much ground armies occupied, 1700–1815 and antiquity: frontages, battle densities, approach distances, vision; for sizing the maps.
 - [`research/map-size-rts-map-sizes.md`](research/map-size-rts-map-sizes.md): battle map size against soldier count in large-scale RTS and wargames (Total War, Scourge of War, Grand Tactician, HistWar, Graviteam and others).
+- [`research/period-maps.md`](research/period-maps.md): period map scans to trace battle maps from (Habsburg surveys, Meilenblätter, Schroetter, Ferraris, Schubert, Reymann) and datasets for a Europe theatre layer: coverage, georeferencing, licences for tracing and for committing.
 - [`research/map-view-style.md`](research/map-view-style.md): a light map view with a 3D feel: shaded relief, cast shadows and sky occlusion baked on the GPU, woods, roofs and lines, raised army blocks; what games document; costs measured and estimated.
 - [`research/colour-and-light-review.md`](research/colour-and-light-review.md): the owner's colour and light references, and the coats' colour lost to the warm light, measured.
 - [`research/grass-and-fields.md`](research/grass-and-fields.md): grass and fields at an RTS camera: Tiny Glade, Total War, the techniques (ground pattern, blades, cards, shells) and their pitfalls.
