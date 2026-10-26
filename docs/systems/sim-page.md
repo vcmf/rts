@@ -64,6 +64,14 @@ left the field (with its men, from what the tick returned) from one destroyed, e
 session it plays the scenario with no orders for `[minutes]` (a positive number; the scenario's limit by default),
 and stops a minute after the battle's end.
 
+**The men** (`src/render/men.ts`): a structure of arrays, one index per man for the layer's life (position,
+velocity, drift phases, hold point, slot, and flags: standing, settled, left the field). A battalion lists its men's
+indices in the order they joined; nothing is compacted, so a fallen man keeps his index and his cross is drawn from
+it, gone battalions' men included, while a man who left the field frees his for a newcomer. Readers (picking, box
+select, the map, `app-check`) take the arrays from `layer.men` each time they read them, through a battalion's list:
+a full store grows into new arrays, which the battle worker will have to share again
+(`docs/plans/active/battle-threads.md`, PRs 2 and 3).
+
 **Who stands where** (`SoldierLayer.sync`). The sim keeps men per company (decisions 0007, 0018); the layer
 places them. A battalion is matched again only when its signature changes: men per company, shape,
 the shape it changes to, the lean bit and the `faces` counter.

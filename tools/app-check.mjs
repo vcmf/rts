@@ -151,9 +151,10 @@ const guns = [
 ]
 
 // the battle (S1e-1) on the 1.2 km battlefield: every formation deploys on the map; side 0's left-hand column forms
-// column of route and marches over the western ford; every man stands on the map throughout
+// column of route and marches over the western ford; every man stands on the map throughout (the layer's men:
+// src/render/men.ts, flag 1 MAN_ALIVE)
 const ONMAP =
-  '[...APP.layer.units.values()].every(u => u.men.every(m => !m.alive || (Math.abs(m.x) <= 600 && Math.abs(m.z) <= 600)))'
+  '(M => [...APP.layer.units.values()].every(u => [...u.ids.subarray(0, u.n)].every(m => !(M.flags[m] & 1) || (Math.abs(M.x[m]) <= 600 && Math.abs(M.z[m]) <= 600))))(APP.layer.men)'
 const battle = [
   ['wait', 1500],
   READY,

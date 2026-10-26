@@ -26,6 +26,7 @@ import {
 import type { Scene, Obstacle } from './scene.ts'
 import { cosmeticRng } from './scene.ts'
 import { CLASS_STYLE } from './style.ts'
+import { Men, MAN_ALIVE, MAN_SETTLED, grown } from './men.ts'
 
 export const AHEAD = 0.6
 export const WALK = 1.35
@@ -42,22 +43,10 @@ const wave = (a: number): number => {
   return WAVE[q] + (WAVE[q + 1] - WAVE[q]) * (u - k)
 }
 
-export interface Man {
-  s: number
-  x: number
-  z: number
-  vx: number
-  vz: number
-  alive: boolean
-  dx: number
-  dz: number
-  settled: boolean
-  hx: number
-  hz: number
-}
 // pose: what the places were last framed from (still: unchanged, so settled men need no new place); type: the
 // unit type's name (cr.types: infantry, cavalry, battery in the Napoleonic ruleset); figure: how its men are drawn
-// (UnitType.figure: foot, mounted, crewed); group: which of `step`'s groups it steps in
+// (UnitType.figure: foot, mounted, crewed); group: which of `step`'s groups it steps in; ids: its men's indices in
+// the layer's `men`, the first n of them, in the order they joined
 export interface Unit {
   i: number
   group: number
@@ -65,18 +54,22 @@ export interface Unit {
   side: number
   type: string
   figure: string
-  men: Man[]
+  ids: Int32Array
+  n: number
   faces: number
   sway: number
   sig: Int32Array
   pose: Float64Array
 }
 
+const NO_UNITS: readonly Unit[] = []
+
 export class SoldierLayer {
   w: World
   scene: Scene
   units = new Map<number, Unit>()
-  fallen: Man[] = [] // men of battalions that are gone
+  // every man, standing or fallen (a fallen man's cross is drawn where he lies, his battalion here or gone)
+  men = new Men()
   // formations that left the field (handle → the men they took), until their units go
   private leaving = new Map<number, number>()
   private ctxA: Places
@@ -97,8 +90,17 @@ export class SoldierLayer {
   private flatX = new Float64Array(1024)
   private flatZ = new Float64Array(1024)
   private nFlat = 0
-  private touched: number[] = []
+  // the cells holding men, the first nTouched (a typed array: an array's `length = 0` frees its store, and it
+  // grew again every round)
+  private touched = new Int32Array(1024)
+  private nTouched = 0
   private SN: number
+  // `sync`'s scratch: per slot, filled and claimed; the men who must find a new slot; a place
+  private occ = new Uint8Array(0)
+  private claimed = new Uint8Array(0)
+  private displaced = new Int32Array(0)
+  private p = [0, 0, 0]
+  private anch = [0, 0, 0]
   // per obstacle cell, the trunks in it and the 8 around it (the cells scene.ts eachObstacle visits), flattened:
   // cell k's are [treeAt[k], treeAt[k + 1]) of treeX, treeZ, treeR; most cells have none. The grid has a ring
   // of cells outside the scene's, so a man just off its edge still sees the trunks inside
@@ -160,29 +162,34 @@ export class SoldierLayer {
 
   // the anchor this frame: interpolated between ticks (alpha), extrapolated `ahead` seconds
   anchor(i: number, alpha: number, ahead: number): [number, number, number] {
+    const out: [number, number, number] = [0, 0, 0]
+    this.anchorTo(i, alpha, ahead, out)
+    return out
+  }
+  /** `anchor` into `out` (x, z, heading), allocating nothing. */
+  private anchorTo(i: number, alpha: number, ahead: number, out: number[]): void {
     const f = this.w.f
     let dh = f.heading[i] - f.ph[i]
     dh = Math.atan2(Math.sin(dh), Math.cos(dh))
-    return [
-      f.px[i] + (f.x[i] - f.px[i]) * alpha + f.vx[i] * ahead,
-      f.pz[i] + (f.z[i] - f.pz[i]) * alpha + f.vz[i] * ahead,
-      f.ph[i] + dh * alpha + f.omega[i] * ahead,
-    ]
+    out[0] = f.px[i] + (f.x[i] - f.px[i]) * alpha + f.vx[i] * ahead
+    out[1] = f.pz[i] + (f.z[i] - f.pz[i]) * alpha + f.vz[i] * ahead
+    out[2] = f.ph[i] + dh * alpha + f.omega[i] * ahead
   }
   // places for formation i at this frame: ahead (where the men aim) and now; `place` reads the last framed
   frame(i: number, alpha: number): void {
     const t = (this.w.meta[M_TICK] - 1 + alpha) * DT
     const A = this.framed
-    const [hx, hz, h] = this.anchor(i, alpha, AHEAD)
-    const [x0, z0, h0] = this.anchor(i, alpha, 0)
-    A[0] = hx
-    A[1] = hz
-    A[2] = h
-    A[3] = x0
-    A[4] = z0
-    A[5] = h0
-    placesCtx(this.ctxA, i, hx, hz, h, t + AHEAD, AHEAD - (1 - alpha) * DT)
-    placesCtx(this.ctx0, i, x0, z0, h0, t, -(1 - alpha) * DT)
+    const a = this.anch
+    this.anchorTo(i, alpha, AHEAD, a)
+    A[0] = a[0]
+    A[1] = a[1]
+    A[2] = a[2]
+    this.anchorTo(i, alpha, 0, a)
+    A[3] = a[0]
+    A[4] = a[1]
+    A[5] = a[2]
+    placesCtx(this.ctxA, i, A[0], A[1], A[2], t + AHEAD, AHEAD - (1 - alpha) * DT)
+    placesCtx(this.ctx0, i, A[3], A[4], A[5], t, -(1 - alpha) * DT)
   }
   private framed = new Float64Array(6) // the anchors the last frame() used: ahead, then now
   private kindOf(i: number): number {
@@ -244,26 +251,30 @@ export class SoldierLayer {
     const w = this.w
     const f = w.f
     const N = f.alive.length
-    const p = [0, 0, 0]
+    const M = this.men
+    const p = this.p
     if (departed) for (const d of departed) this.leaving.set(d.id, d.men)
     // a formation gone: its men fell, unless it left the field (S1e-1), when the men it took go with it and any
     // more the layer still had standing (killed in that same tick) fall
-    for (const [i, u] of this.units) {
+    for (const u of this.units.values()) {
+      const i = u.i
       if (!f.alive[i] || f.gen[i] !== u.gen) {
         const h = makeHandle(KIND_FORMATION, i, u.gen)
         const took = this.leaving.get(h)
         let fall = Infinity
         if (took !== undefined) {
           this.leaving.delete(h)
-          fall = u.men.filter(m => m.alive).length - took
+          fall = this.standing(u) - took
         }
-        for (const m of u.men) {
-          if (m.alive) {
-            if (fall <= 0) continue
-            m.alive = false
-            fall--
+        for (let k = 0; k < u.n; k++) {
+          const m = u.ids[k]
+          if (M.flags[m] & MAN_ALIVE) {
+            if (fall <= 0) M.leave(m)
+            else {
+              M.flags[m] &= ~MAN_ALIVE
+              fall--
+            }
           }
-          this.fallen.push(m)
         }
         this.units.delete(i)
         this.leaveGroup(u)
@@ -278,6 +289,7 @@ export class SoldierLayer {
       this.frame(i, alpha)
       const U = typeOf(w, i)
       const C = U.C
+      const slots = U.slots
       if (!u) {
         u = {
           i,
@@ -286,7 +298,8 @@ export class SoldierLayer {
           side: f.side[i],
           type: U.name,
           figure: U.def.figure,
-          men: [],
+          ids: new Int32Array(slots),
+          n: 0,
           faces: f.faces[i],
           sway: 0,
           sig: new Int32Array(C + 5),
@@ -299,49 +312,60 @@ export class SoldierLayer {
       if (u.faces !== f.faces[i]) {
         // Face about: each man's slot is now the half-turn of his old one
         const T = U.shapes[f.shape[i]].turn
-        for (let k = u.faces; k < f.faces[i]; k++) if (T) for (const m of u.men) if (m.alive) m.s = T.m[m.s]
+        if (T) {
+          for (let k = u.faces; k < f.faces[i]; k++) {
+            for (let j = 0; j < u.n; j++) {
+              const m = u.ids[j]
+              if (M.flags[m] & MAN_ALIVE) M.s[m] = T.m[M.s[m]]
+            }
+          }
+        }
         u.faces = f.faces[i]
       }
-      const slots = U.slots
-      const occ = new Uint8Array(slots)
-      const claimed = new Uint8Array(slots)
+      if (this.occ.length < slots) {
+        this.occ = new Uint8Array(slots)
+        this.claimed = new Uint8Array(slots)
+      }
+      // no more are displaced than stand
+      if (this.displaced.length < u.n) this.displaced = new Int32Array(u.n)
+      const occ = this.occ.fill(0, 0, slots)
+      const claimed = this.claimed.fill(0, 0, slots)
+      const displaced = this.displaced
+      let nd = 0
       const F = filledSlots(w, i)
       const a = i * (w.cr.maxC + 1)
       for (let k = F.at[a], e = F.at[a + C]; k < e; k++) occ[F.s[k]] = 1
-      const displaced: Man[] = []
       let alive = 0
-      for (const m of u.men) {
-        if (m.alive) {
+      for (let j = 0; j < u.n; j++) {
+        const m = u.ids[j]
+        if (M.flags[m] & MAN_ALIVE) {
           alive++
-          if (occ[m.s] && !claimed[m.s]) claimed[m.s] = 1
-          else displaced.push(m)
+          const s = M.s[m]
+          if (occ[s] && !claimed[s]) claimed[s] = 1
+          else displaced[nd++] = m
         }
       }
       const men = menOf(w, i)
       // losses: the displaced fall first, then men drawn at random
       while (alive > men) {
-        const fromDisplaced = displaced.length > 0 // a displaced man holds no claim; one drawn at random frees his slot
-        const m = fromDisplaced
-          ? displaced.pop()!
-          : (() => {
-              const live = u!.men.filter(x => x.alive)
-              return live[Math.floor(this.rnd() * live.length)]
-            })()
-        m.alive = false
-        m.vx = 0
-        m.vz = 0
+        const fromDisplaced = nd > 0 // a displaced man holds no claim; one drawn at random frees his slot
+        const m = fromDisplaced ? displaced[--nd] : this.nthStanding(u, Math.floor(this.rnd() * alive))
+        M.flags[m] &= ~MAN_ALIVE
+        M.vx[m] = 0
+        M.vz[m] = 0
         alive--
-        if (!fromDisplaced) claimed[m.s] = 0
+        if (!fromDisplaced) claimed[M.s[m]] = 0
       }
       // the displaced walk to the nearest free filled slot
-      for (const m of displaced) {
-        if (!m.alive) continue
+      for (let k = 0; k < nd; k++) {
+        const m = displaced[k]
+        if (!(M.flags[m] & MAN_ALIVE)) continue
         let best = -1
         let bd = Infinity
         for (let s = 0; s < slots; s++) {
           if (occ[s] && !claimed[s]) {
             this.place(i, s, false, p)
-            const d = (p[0] - m.x) * (p[0] - m.x) + (p[1] - m.z) * (p[1] - m.z)
+            const d = (p[0] - M.x[m]) * (p[0] - M.x[m]) + (p[1] - M.z[m]) * (p[1] - M.z[m])
             if (d < bd) {
               bd = d
               best = s
@@ -349,33 +373,65 @@ export class SoldierLayer {
           }
         }
         if (best >= 0) {
-          m.s = best
+          M.s[m] = best
           claimed[best] = 1
-          m.settled = false
+          M.flags[m] &= ~MAN_SETTLED
         }
       }
       // new men (a battalion appearing): at their places
       for (let s = 0; s < slots && alive < men; s++) {
         if (occ[s] && !claimed[s]) {
           this.place(i, s, false, p)
-          u.men.push({
-            s,
-            x: p[0],
-            z: p[1],
-            vx: 0,
-            vz: 0,
-            alive: true,
-            dx: this.rnd() * 6.28,
-            dz: this.rnd() * 6.28,
-            settled: false,
-            hx: 0,
-            hz: 0,
-          })
+          this.enlist(u, M.add(s, p[0], p[1], this.rnd() * 6.28, this.rnd() * 6.28))
           claimed[s] = 1
           alive++
         }
       }
     }
+  }
+  /**
+   * Where company `c`'s front rank stands: the middle of its standing men, into `out` (x, z). Returns how many
+   * stand in it (0: none, and `out` untouched).
+   */
+  frontRank(u: Unit, c: number, out: number[]): number {
+    const g0 = typeOf(this.w, u.i).geo
+    const RF = g0.ranks * g0.files
+    const M = this.men
+    let x = 0
+    let z = 0
+    let n = 0
+    for (let j = 0; j < u.n; j++) {
+      const m = u.ids[j]
+      const s = M.s[m]
+      if (M.flags[m] & MAN_ALIVE && Math.floor(s / RF) === c && Math.floor((s % RF) / g0.files) === 0) {
+        x += M.x[m]
+        z += M.z[m]
+        n++
+      }
+    }
+    if (n) {
+      out[0] = x / n
+      out[1] = z / n
+    }
+    return n
+  }
+  /** How many of a battalion's men stand. */
+  private standing(u: Unit): number {
+    const F = this.men.flags
+    let n = 0
+    for (let k = 0; k < u.n; k++) if (F[u.ids[k]] & MAN_ALIVE) n++
+    return n
+  }
+  /** The index of a battalion's `r`-th standing man, in the order they joined. */
+  private nthStanding(u: Unit, r: number): number {
+    const F = this.men.flags
+    for (let k = 0; k < u.n; k++) if (F[u.ids[k]] & MAN_ALIVE && r-- === 0) return u.ids[k]
+    throw new Error(`battalion ${u.i}: no standing man ${r} (the standing count drifted)`)
+  }
+  /** Adds man `m` to a battalion's list, growing it if full. */
+  private enlist(u: Unit, m: number): void {
+    if (u.n === u.ids.length) u.ids = grown(u.ids, Math.max(8, u.n * 2))
+    u.ids[u.n++] = m
   }
 
   /**
@@ -396,7 +452,7 @@ export class SoldierLayer {
       if (groups !== this.grouped) this.shareOut(groups)
       this.buildGrid()
     }
-    this.steer(dt, alpha, this.byGroup[group] ?? [])
+    this.steer(dt, alpha, this.byGroup[group] ?? NO_UNITS)
   }
   /** Shares every battalion out among `groups` groups, about the same men in each: the largest first, each to the
    * lightest group. */
@@ -433,21 +489,25 @@ export class SoldierLayer {
     const x0 = t.x0
     const z0 = t.z0
     const SN = this.SN
-    for (const c of this.touched) this.cellHead[c] = -1
-    this.touched.length = 0
+    for (let k = 0; k < this.nTouched; k++) this.cellHead[this.touched[k]] = -1
+    this.nTouched = 0
     this.nFlat = 0
+    const M = this.men
     for (const u of this.units.values()) {
-      for (const m of u.men) {
-        if (m.alive) {
-          const ci = Math.floor((m.x - x0) / SC)
-          const cj = Math.floor((m.z - z0) / SC)
+      for (let j = 0; j < u.n; j++) {
+        const m = u.ids[j]
+        if (M.flags[m] & MAN_ALIVE) {
+          const mx = M.x[m]
+          const mz = M.z[m]
+          const ci = Math.floor((mx - x0) / SC)
+          const cj = Math.floor((mz - z0) / SC)
           const cell = ci >= 0 && cj >= 0 && ci < SN && cj < SN ? ci * SN + cj : -1
           const k = this.nFlat++
           if (k >= this.cellNext.length) this.grow()
-          this.flatX[k] = m.x
-          this.flatZ[k] = m.z
+          this.flatX[k] = mx
+          this.flatZ[k] = mz
           if (cell >= 0) {
-            if (this.cellHead[cell] < 0) this.touched.push(cell)
+            if (this.cellHead[cell] < 0) this.touched[this.nTouched++] = cell
             this.cellNext[k] = this.cellHead[cell]
             this.cellHead[cell] = k
           } else this.cellNext[k] = -1
@@ -465,7 +525,7 @@ export class SoldierLayer {
     const xMax = x0 + (t.n - 1) * t.cell
     const zMax = z0 + (t.n - 1) * t.cell
     const SN = this.SN
-    const p = [0, 0, 0]
+    const p = this.p
     const TA = this.treeAt
     const TX = this.treeX
     const TZ = this.treeZ
@@ -475,6 +535,17 @@ export class SoldierLayer {
     const Z = this.flatZ
     const head = this.cellHead
     const next = this.cellNext
+    const M = this.men
+    const MX = M.x
+    const MZ = M.z
+    const MVX = M.vx
+    const MVZ = M.vz
+    const FL = M.flags
+    const MS = M.s
+    const MDX = M.dx
+    const MDZ = M.dz
+    const MHX = M.hx
+    const MHZ = M.hz
     for (const u of units) {
       const i = u.i
       this.frame(i, alpha)
@@ -486,16 +557,21 @@ export class SoldierLayer {
       const np = this.poseOf(i, pose)
       let still = !busy
       for (let k = 0; still && k < np; k++) still = pose[k] === u.pose[k]
-      u.pose.set(pose.subarray(0, np))
+      for (let k = 0; k < np; k++) u.pose[k] = pose[k]
       const kind = this.kindOf(i)
       const imp = t.imp[kind]
       const ty = f.type[i]
       const WALKu = this.walkOf[ty]
       const RUNu = this.runOf[ty]
-      for (const m of u.men) {
-        if (!m.alive || (still && m.settled)) continue
-        this.place(i, m.s, true, p, imp)
-        const here = cellK(t, m.x, m.z)
+      const ids = u.ids
+      for (let j = 0, n = u.n; j < n; j++) {
+        const m = ids[j]
+        const fl = FL[m]
+        if (!(fl & MAN_ALIVE) || (still && fl & MAN_SETTLED)) continue
+        this.place(i, MS[m], true, p, imp)
+        let mx = MX[m]
+        let mz = MZ[m]
+        const here = cellK(t, mx, mz)
         const inTrees = this.treesByClass[t.cls[here]] === 1
         // personal drift: the ranks loosen among trees, break up when the battalion routs or shatters, and are
         // still loose while it rallies
@@ -503,8 +579,8 @@ export class SoldierLayer {
         let tx = p[0]
         let tz = p[1]
         if (amp > 1e-4) {
-          tx += amp * wave(tt + m.dx)
-          tz += amp * wave(tt * 0.8 + m.dz)
+          tx += amp * wave(tt + MDX[m])
+          tz += amp * wave(tt * 0.8 + MDZ[m])
         }
         // a place inside a trunk moves to its edge: a stable place to stand, not a tug of war
         let tc = this.treeCell(tx, tz)
@@ -525,21 +601,23 @@ export class SoldierLayer {
           }
         }
         // settled: a man at his place while his battalion is halted holds still until his place moves
-        if (m.settled && (busy || Math.hypot(tx - m.hx, tz - m.hz) > 0.3)) m.settled = false
-        if (m.settled) {
-          m.vx = 0
-          m.vz = 0
-          continue
+        if (fl & MAN_SETTLED) {
+          if (busy || Math.hypot(tx - MHX[m], tz - MHZ[m]) > 0.3) FL[m] = fl & ~MAN_SETTLED
+          else {
+            MVX[m] = 0
+            MVZ[m] = 0
+            continue
+          }
         }
-        const dx = tx - m.x
-        const dz = tz - m.z
+        const dx = tx - mx
+        const dz = tz - mz
         const dist = Math.sqrt(dx * dx + dz * dz)
         if (!busy && u.sway < 0.05 && dist < 0.25) {
-          m.settled = true
-          m.hx = tx
-          m.hz = tz
-          m.vx = 0
-          m.vz = 0
+          FL[m] |= MAN_SETTLED
+          MHX[m] = tx
+          MHZ[m] = tz
+          MVX[m] = 0
+          MVZ[m] = 0
           continue
         }
         // never frozen mid-step
@@ -552,8 +630,6 @@ export class SoldierLayer {
         let wx = dist > 1e-6 ? (dx / dist) * want : 0
         let wz = dist > 1e-6 ? (dz / dist) * want : 0
         // his cell and the neighbouring cells on the sides of it he is nearer to
-        const mx = m.x
-        const mz = m.z
         const u0 = (mx - x0) / SC
         const v0 = (mz - z0) / SC
         const ci = Math.floor(u0)
@@ -578,12 +654,14 @@ export class SoldierLayer {
           }
         }
         // while walking, steer round the trunks just ahead
-        const walking = Math.min(1, Math.sqrt(m.vx * m.vx + m.vz * m.vz) / 0.5)
-        tc = this.treeCell(m.x, m.z)
+        let vx = MVX[m]
+        let vz = MVZ[m]
+        const walking = Math.min(1, Math.sqrt(vx * vx + vz * vz) / 0.5)
+        tc = this.treeCell(mx, mz)
         if (walking > 0 && tc >= 0) {
           for (let k = TA[tc], e = TA[tc + 1]; k < e; k++) {
-            const ex = m.x - TX[k]
-            const ez = m.z - TZ[k]
+            const ex = mx - TX[k]
+            const ez = mz - TZ[k]
             const d = Math.sqrt(ex * ex + ez * ez)
             const R = TR[k] + 0.35
             if (d < R + 0.8 && d > 1e-6) {
@@ -594,63 +672,62 @@ export class SoldierLayer {
           }
         }
         const kk = Math.min(1, dt * 5)
-        m.vx += (wx - m.vx) * kk
-        m.vz += (wz - m.vz) * kk
+        vx += (wx - vx) * kk
+        vz += (wz - vz) * kk
         // arrived: come to rest
         if (dist < 0.08) {
           const damp = Math.max(0, 1 - dt * 8)
-          m.vx *= damp
-          m.vz *= damp
+          vx *= damp
+          vz *= damp
         }
-        const sp2 = m.vx * m.vx + m.vz * m.vz
+        const sp2 = vx * vx + vz * vz
         const cap = RUNu * gs
         if (sp2 > cap * cap) {
           const r = cap / Math.sqrt(sp2)
-          m.vx *= r
-          m.vz *= r
+          vx *= r
+          vz *= r
         }
-        const nx = m.x + m.vx * dt
-        const nz = m.z + m.vz * dt
+        const nx = mx + vx * dt
+        const nz = mz + vz * dt
         // never onto impassable ground, nor off the map
         if (impAt(t, imp, nx, nz) && !imp[here]) {
-          m.vx = 0
-          m.vz = 0
+          vx = 0
+          vz = 0
         } else {
-          m.x = nx
-          m.z = nz
+          mx = nx
+          mz = nz
         }
-        tc = this.treeCell(m.x, m.z)
+        tc = this.treeCell(mx, mz)
         if (tc >= 0) {
           for (let k = TA[tc], e = TA[tc + 1]; k < e; k++) {
             // never inside a trunk
-            const ex = m.x - TX[k]
-            const ez = m.z - TZ[k]
+            const ex = mx - TX[k]
+            const ez = mz - TZ[k]
             const d = Math.sqrt(ex * ex + ez * ez)
             const R = TR[k] + 0.3
             if (d < R && d > 1e-6) {
-              m.x = TX[k] + (ex / d) * R
-              m.z = TZ[k] + (ez / d) * R
+              mx = TX[k] + (ex / d) * R
+              mz = TZ[k] + (ez / d) * R
             }
           }
         }
         // a trunk's push never takes him off the map
-        m.x = Math.min(xMax, Math.max(t.x0, m.x))
-        m.z = Math.min(zMax, Math.max(t.z0, m.z))
+        MX[m] = Math.min(xMax, Math.max(t.x0, mx))
+        MZ[m] = Math.min(zMax, Math.max(t.z0, mz))
+        MVX[m] = vx
+        MVZ[m] = vz
       }
     }
   }
   private poseNow: Float64Array
+  /** Doubles the grid's per-man arrays. */
   private grow(): void {
     const n = this.cellNext.length * 2
-    const a = new Int32Array(n)
-    const x = new Float64Array(n)
-    const z = new Float64Array(n)
-    a.set(this.cellNext)
-    x.set(this.flatX)
-    z.set(this.flatZ)
-    this.cellNext = a
-    this.flatX = x
-    this.flatZ = z
+    this.cellNext = grown(this.cellNext, n)
+    this.flatX = grown(this.flatX, n)
+    this.flatZ = grown(this.flatZ, n)
+    // no more cells hold men than there are men
+    this.touched = grown(this.touched, n)
   }
   // how far men stand from their places (a measurement): max and mean, metres
   slotError(): { max: number; mean: number } {
@@ -660,10 +737,11 @@ export class SoldierLayer {
     const p = [0, 0, 0]
     for (const u of this.units.values()) {
       this.frame(u.i, this.alphaNow)
-      for (const m of u.men) {
-        if (m.alive) {
-          this.place(u.i, m.s, false, p)
-          const d = Math.hypot(m.x - p[0], m.z - p[1])
+      for (let j = 0; j < u.n; j++) {
+        const m = u.ids[j]
+        if (this.men.flags[m] & MAN_ALIVE) {
+          this.place(u.i, this.men.s[m], false, p)
+          const d = Math.hypot(this.men.x[m] - p[0], this.men.z[m] - p[1])
           max = Math.max(max, d)
           sum += d
           n++

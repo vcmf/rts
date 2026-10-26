@@ -3,10 +3,32 @@
 import { describe, it, expect } from 'vitest'
 import { Sim, STREAM_X, longIt, ceiling, small, openBattlefield, OPEN_DATA } from './fx.ts'
 import { buildScene } from '../src/render/scene.ts'
-import { SoldierLayer } from '../src/render/soldiers.ts'
+import { SoldierLayer, type Unit } from '../src/render/soldiers.ts'
+import { MAN_ALIVE, MAN_LEFT } from '../src/render/men.ts'
 import { MenClock, MEN_DT, MEN_GROUPS, MEN_HZ, MEN_ROUNDS } from '../src/render/men-clock.ts'
 import { occupied, advanceTick, MS_SHATTERED, type Meter } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
+
+/** A battalion's men as they stand now, copied out of the layer's arrays (a test's view, allocating); `id`: the
+ * man's index there, to read him again later. */
+function snapshot(layer: SoldierLayer, u: Unit) {
+  const M = layer.men
+  return Array.from(u.ids.subarray(0, u.n), m => ({
+    id: m,
+    x: M.x[m],
+    z: M.z[m],
+    s: M.s[m],
+    alive: (M.flags[m] & MAN_ALIVE) !== 0,
+  }))
+}
+
+/** The crosses the map draws: every man fallen, of the battalions here or gone. */
+function crosses(layer: SoldierLayer): number {
+  const M = layer.men
+  let n = 0
+  for (let m = 0; m < M.n; m++) if (!(M.flags[m] & (MAN_ALIVE | MAN_LEFT))) n++
+  return n
+}
 
 // the sim at 20 Hz, real frames at 60 Hz and the soldier layer on its clock (src/render/men-clock.ts), as the page
 // runs them, at `speed`
@@ -56,7 +78,7 @@ class Play {
     return { max, mean }
   }
   men(h: number) {
-    return this.layer.units.get(this.sim.slot(h))!.men
+    return snapshot(this.layer, this.layer.units.get(this.sim.slot(h))!)
   }
 }
 
@@ -156,17 +178,21 @@ describe('the soldier layer follows the sim', () => {
 })
 
 describe('who stands where', () => {
-  it('a battalion that leaves the field takes its men with it: none is left as fallen', () => {
+  it('a battalion that leaves the field takes its men with it: none is left as fallen, and newcomers take their places in the arrays', () => {
     // a column of route with its tail at the battlefield's southern edge, shattered: it leaves at the next tick
     const p = new Play(new Sim(1, napoleonic, openBattlefield(), OPEN_DATA))
     const h = p.sim.spawn(0, -505, 0, 'march', 400)
     p.frames(1)
-    const before = p.layer.fallen.length
+    const before = crosses(p.layer)
+    const n = p.layer.men.n
     p.sim.w.f.mstate[p.sim.slot(h)] = MS_SHATTERED
     p.frames(0.2)
     expect(p.sim.slot(h)).toBe(-1)
     expect(p.layer.units.size).toBe(0)
-    expect(p.layer.fallen.length).toBe(before)
+    expect(crosses(p.layer)).toBe(before)
+    p.sim.spawn(0, 0, 0, 'line', 400)
+    p.frames(0.2)
+    expect([p.layer.men.n, crosses(p.layer)]).toEqual([n, before])
   })
   it("after casualties the living equal the sim's men, one per filled slot", () => {
     // it must not break: losses do not move its morale (shattered at 20 of 100, it would run off the field, S1e-1)
@@ -228,7 +254,7 @@ describe('who stands where', () => {
       let worst = 0
       for (const [m, b] of before) {
         if (b) {
-          const q = p.layer.place(i, m.s, false, pt)
+          const q = p.layer.place(i, p.layer.men.s[m.id], false, pt)
           worst = Math.max(worst, Math.hypot(q[0] - b[0], q[1] - b[1]))
         }
       }
@@ -242,7 +268,7 @@ describe('who stands where', () => {
     p.sim.order({ type: 'debug-kill', id: h, men: 20 })
     p.frames(1)
     expect(p.layer.units.size).toBe(0)
-    expect(p.layer.fallen.length).toBe(20)
+    expect(crosses(p.layer)).toBe(20)
   })
   it('men never step into deep water, even when their battalion halts at the bank', () => {
     const p = new Play()
@@ -354,6 +380,44 @@ describe('the soldier clock', () => {
   })
 })
 
+describe("the men's arrays", () => {
+  // battle threads PR 2 moved the men from objects into arrays (src/render/men.ts) without changing a step: every
+  // man's position, velocity, slot and state, hashed bit for bit, as PR 1's objects left them (45b0b42e). A
+  // deliberate change to the steering or the slot matching changes it: check the goldens above, then update it
+  it('the men stand where they stood as objects: a march into the wood, a square, a firefight, a Face about, at 1× and 8×', () => {
+    const p = new Play(new Sim(1, napoleonic))
+    const E = Math.PI / 2
+    const a = p.sim.spawn(-60, -100, E, 'line', 400, 0)
+    p.sim.spawn(0, -100, -E, 'line', 300, 1)
+    const c = p.sim.spawn(-45, 55 - 30 - 12, 0, 'column', 400, 0)
+    const d = p.sim.spawn(-120, 60, 0, 'line', 250, 1)
+    p.sim.order({ type: 'move', id: c, points: [[-45, 55 + 30 + 14]], append: false })
+    p.sim.order({ type: 'form', id: d, shape: 'square' })
+    for (let k = 0; k < 600; k++) p.frame(1 / 60)
+    p.sim.order({ type: 'face', id: d })
+    p.sim.order({ type: 'move', id: a, points: [[-30, -100]], append: false })
+    p.speed = 8
+    for (let k = 0; k < 180; k++) p.frame(1 / 60)
+    let h = 2166136261
+    const f64 = new Float64Array(1)
+    const u32 = new Uint32Array(f64.buffer)
+    const mix = (v: number) => {
+      f64[0] = v
+      for (const word of u32) h = Math.imul(h ^ word, 16777619) >>> 0
+    }
+    const M = p.layer.men
+    let dead = 0
+    for (const u of [...p.layer.units.values()].sort((x, y) => x.i - y.i)) {
+      for (const m of u.ids.subarray(0, u.n)) {
+        const alive = M.flags[m] & MAN_ALIVE ? 1 : 0
+        for (const v of [M.x[m], M.z[m], M.vx[m], M.vz[m], M.s[m], alive]) mix(v)
+        dead += 1 - alive
+      }
+    }
+    expect({ hash: h.toString(16), men: M.n, dead }).toEqual({ hash: '45b0b42e', men: 1350, dead: 9 })
+  })
+})
+
 describe('the soldier groups', () => {
   it('share the battalions out by their men, each group stepping only its own', () => {
     const p = new Play(new Sim(1, napoleonic))
@@ -361,14 +425,16 @@ describe('the soldier groups', () => {
     sizes.forEach((men, k) => p.sim.spawn(-120 + (k % 5) * 40, -100 + Math.floor(k / 5) * 60, 0, 'line', men))
     p.frames(1)
     const load = new Array(MEN_GROUPS).fill(0)
-    for (const u of p.layer.units.values()) load[u.group] += u.men.length
+    for (const u of p.layer.units.values()) load[u.group] += u.n
     expect(Math.max(...load)).toBe(400)
     expect(Math.min(...load)).toBeGreaterThanOrEqual(200)
     // a step of group g moves no man of another group
     const others = [...p.layer.units.values()].filter(u => u.group !== 3)
-    const before = others.map(u => u.men.map(m => [m.x, m.z]))
+    const before = others.map(u => snapshot(p.layer, u).map(m => [m.x, m.z]))
     p.layer.step(0.1, 0, 3, MEN_GROUPS)
-    expect(others.every((u, k) => u.men.every((m, j) => m.x === before[k][j][0] && m.z === before[k][j][1]))).toBe(true)
+    expect(
+      others.every((u, k) => snapshot(p.layer, u).every((m, j) => m.x === before[k][j][0] && m.z === before[k][j][1])),
+    ).toBe(true)
   })
   // regression (review): sharing every battalion out again when one came or went moved battalions between groups,
   // and the clock's game time is per group, so a moved one stepped too far or too little

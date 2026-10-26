@@ -40,6 +40,7 @@ import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
 import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS, PAGE_SEED } from '../scenarios/page.ts'
 import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
+import { MAN_ALIVE } from '../render/men.ts'
 import { MenClock } from '../render/men-clock.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 
@@ -265,10 +266,12 @@ async function main(): Promise<void> {
     const r2 = Math.max(1.5, 6 / view.k) ** 2
     let best = -1
     let bd = Infinity
+    const M = layer.men
     for (const u of layer.units.values()) {
-      for (const m of u.men) {
-        if (m.alive) {
-          const d = (m.x - x) ** 2 + (m.z - z) ** 2
+      for (let j = 0; j < u.n; j++) {
+        const m = u.ids[j]
+        if (M.flags[m] & MAN_ALIVE) {
+          const d = (M.x[m] - x) ** 2 + (M.z[m] - z) ** 2
           if (d < r2 && d < bd) {
             bd = d
             best = u.i
@@ -361,8 +364,16 @@ async function main(): Promise<void> {
       const [x0, z1] = toW(view, Math.min(d.x, e.clientX), Math.min(d.y, e.clientY))
       const [x1, z0] = toW(view, Math.max(d.x, e.clientX), Math.max(d.y, e.clientY))
       if (!d.shift) selected.clear()
+      const M = layer.men
       for (const u of layer.units.values()) {
-        if (mine(u.i) && u.men.some(m => m.alive && m.x > x0 && m.x < x1 && m.z > z0 && m.z < z1)) selected.add(u.i)
+        if (!mine(u.i)) continue
+        for (let j = 0; j < u.n; j++) {
+          const m = u.ids[j]
+          if (M.flags[m] & MAN_ALIVE && M.x[m] > x0 && M.x[m] < x1 && M.z[m] > z0 && M.z[m] < z1) {
+            selected.add(u.i)
+            break
+          }
+        }
       }
       return
     }
