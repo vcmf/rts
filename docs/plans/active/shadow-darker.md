@@ -14,7 +14,7 @@ at every zoom, no figure shadow map. Only the strength changes.
 
 In:
 
-- **One strength gain** on the decal's darkening, `?ushgain=<close>[,<far>]` (0.5 to 3; 1 is the shadow as #175
+- **One strength gain** on the decal's darkening, `?ushgain=<close>[,<far>]` (1 to 3; 1 is the shadow as #175
   shipped it), part of the look (`ShadowLook.gain` in `src/look/shadow-look.ts`), so it turns from the close value to
   the far one over the look's band (45 to 85 m) like the other settings.
 - A comparison sheet for the owner (gains 1, 1.25, 1.5, 1.75 and 2 at the close, default and wide zooms, a tree's
@@ -30,17 +30,20 @@ Out: the shadow's shape, size, softness, length and foot gradient (decision 0062
 - Today the decal darkens a covered sample toward the ground's shade `k` (the ratio of its painted cast shadow to its
   light, `src/look/shaders/unitshade.frag`) by `f` (the zoom's cross-fade share, the shadows on, the look's darkest
   value): `d = max(mix(1, k, f), 0)`. So far the darkest it gets is about the ground's own cast shadow.
-- **The gain** raises the darkening's luminance to its power, the three channels scaled alike:
+- **The gain** (decision 0067) raises the full darkening's luminance to its power, the three channels scaled alike:
   `d · L(d)^(gain - 1)` (`L`: Rec. 709 luminance; `src/look/shaders/unitdecal.frag`, mirrored by `shadowShade` in
-  `src/look/shadow-look.ts`). It can go past the ground's own shadow without the problems of extrapolating the `mix`
-  past `k`: never below 0 (no black, no clamped channel), the hue of the ground's shadow kept (the channels' ratios do
-  not change), nothing darkened where the ground already lies in full shadow (`k` 1, `d` 1), and exactly today's
-  shadow at 1. It applies to the whole darkening, so the foot and the tip both get stronger and the gradient keeps its
-  shape (in luminance, each point's ratio to the lit ground raised to the same power).
+  `src/look/shadow-look.ts`). Only that full darkness (the one every covered sample takes) is raised; a shadow's
+  lighter parts take it on fewer samples (alpha to coverage) or by their share `a` (without, `?msaa=1|2`: the gained
+  darkening mixed toward none by `a`, so both paths give a pixel the same result; `decalPixel`). It can go past the
+  ground's own shadow without the problems of extrapolating the `mix` past `k`: never below 0 (no black), the hue of
+  the ground's shadow kept wherever `max(…, 0)` clamps no channel (the channels' ratios do not change), nothing
+  darkened where the ground already lies in full shadow (`k` 1, `d` 1), and exactly today's shadow at 1. The foot
+  and the tip both get darker (the foot's full darkness raised, the tip's lighter coverage spreading it), so the
+  gradient keeps its order. The switch takes 1 to 3: below 1 the power would brighten a channel.
 - **Overlaps**: the gain is one uniform for every shadow (`uShGain`), applied to the darkness, not to the coverage; so
   decision 0062's rule holds at any gain (every shadow darkens a covered sample alike, the stencil lets the first
-  through, the darkest share wins whatever the draw order). `decalFragment` takes the gain and its tests check the
-  rule with it.
+  through, the darkest share wins whatever the draw order). The tests resolve each sample's colour through the gain
+  and check the rule on it.
 - Cost: a dot, a `pow` and a multiply a fragment, no reads; measured on Metal below (no measurable cost).
 
 ## Measurements (2026-10-26, before the default changes)
@@ -80,9 +83,35 @@ and 10.00 / 9.85 ms. Every difference lies within the run-to-run spread (main's 
 1.25 ms of GPU p50); no arm is consistently slower. At 250 m both gained arms draw the same (the far gain 1.5), so
 their 0.6 ms gap there, one round at 11.17 ms, is the spread.
 
+### The moods and seasons (2026-10-26, the default 2 / 1.5 against `?ushgain=1,1`)
+
+The same camera and measure, the soldiers' shadows' share of the unshadowed ground's luminance: median / darkest
+10 % / darkest 2 % (the contact). Winter shot at 1280 × 720 (at 1600 × 900 its frame passes DevTools' 4 MiB message
+limit). Sheets: `moods-close.jpg`, `moods-default.jpg`, `moods-wide.jpg` beside the others.
+
+| mood, zoom | `?ushgain=1,1` | 2 / 1.5 |
+|---|---|---|
+| epic summer, 20 m | 0.58 / 0.37 / 0.29 | 0.41 / 0.18 / 0.12 |
+| epic summer, 63 m | 0.55 / 0.38 / 0.27 | 0.41 / 0.21 / 0.10 |
+| epic summer, 125 m | 0.43 / 0.29 / 0.28 | 0.30 / 0.17 / 0.15 |
+| epic winter (snow), 20 m | 0.69 / 0.37 / 0.30 | 0.57 / 0.19 / 0.14 |
+| epic winter (snow), 63 m | 0.60 / 0.42 / 0.31 | 0.45 / 0.25 / 0.13 |
+| epic winter (snow), 125 m | 0.47 / 0.33 / 0.31 | 0.34 / 0.20 / 0.18 |
+| golden, 20 m | 0.67 / 0.50 / 0.43 | 0.50 / 0.30 / 0.22 |
+| golden, 63 m | 0.65 / 0.50 / 0.40 | 0.51 / 0.33 / 0.22 |
+| golden, 125 m | 0.55 / 0.43 / 0.40 | 0.44 / 0.30 / 0.27 |
+| temperate, 20 m | 0.64 / 0.46 / 0.38 | 0.47 / 0.25 / 0.19 |
+| temperate, 63 m | 0.62 / 0.47 / 0.36 | 0.48 / 0.29 / 0.18 |
+| temperate, 125 m | 0.52 / 0.40 / 0.37 | 0.40 / 0.26 / 0.23 |
+
+The contact's darkest 2 % stays at 0.10 or more everywhere (the darkest half per cent 0.07 to 0.08 at 20 m, under
+the men themselves); on snow it is lighter than on summer grass (0.13 to 0.18), a blue-grey, not black. No floor is
+needed. (The page has three moods, golden, temperate and epic, the default with the dark water; no dusk.)
+
 ## Acceptance
 
-- `?ushgain` absent or 1: the frame as #175 shipped it (the shader's gain step is exact at 1).
+- `?ushgain=1,1` (both values: one alone sets only the close one): the frame as #175 shipped it (the shader's gain
+  step is exact at 1).
 - Darker at every gain above 1, at every zoom, the hue kept, no black, the foot still darker than the tip.
 - Overlapping shadows no darker than the darker one alone (the rule's tests in `test/shadow-look.test.ts`).
 - The owner picks the gain from the sheet (done: 2 up close, 1.5 far); then the default, the Metal bench (done: no
