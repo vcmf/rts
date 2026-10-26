@@ -162,6 +162,12 @@ function listsOf(engine: AbstractEngine, l: ManLists, fixedIndices: boolean): Li
     i: new Buffer(engine, l.i, !fixedIndices, 1, false, true),
   }
 }
+/** Mesh `m` counted in the scene's triangles at each draw (the bench's, getActiveIndices): Babylon counts an instanced
+ *  draw by its thin instances, none here. */
+function countDraws(m: Mesh): void {
+  const c = m.getScene().totalActiveIndicesPerfCounter
+  m.onBeforeDrawObservable.add(() => c.addCount(m.getTotalIndices() * m.forcedInstanceCount, false))
+}
 /** Mesh `m` draws its men from the lists `b`. */
 function bindLists(m: Mesh, b: Lists): void {
   m.setVerticesBuffer(b.p.createVertexBuffer('world0', 0, 4))
@@ -860,6 +866,7 @@ export class Units {
       if (this.hasNearest && li === 0) return
       bindLists(m, shared)
       m.forcedInstanceCount = men
+      countDraws(m)
       m.doNotSyncBoundingInfo = true // (its bounds are place()'s)
     })
     const all = () => lod.map(() => true)
@@ -1099,6 +1106,7 @@ export class Units {
       h.restB = listsOf(engine, { p: h.restP, s: h.restS, n: h.restN, i: h.restI }, false)
       const m = this.hostMesh(0, h.b, h.index)
       bindLists(m, h.nearB)
+      countDraws(m)
       // (none drawn until share() counts them, this frame)
       m.forcedInstanceCount = 0
       m.doNotSyncBoundingInfo = true
