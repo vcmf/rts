@@ -23,6 +23,8 @@ import {
   ROUND_PINNED,
   ROUND_STEPPED,
   ROUND_FOLLOWED,
+  ROUND_FELL_BACK,
+  stepWhole,
   formationHandle,
   M_TICK,
   TICK_HZ,
@@ -222,6 +224,12 @@ function untilRout(id: string, watch = [0, 1]) {
   })
   return out
 }
+// plays the world on until battalion i's next round; the melee step's record of it
+function untilRound(w: World, i: number) {
+  const start = w.meta[M_TICK]
+  while (!(w.scratch.melee && w.scratch.melee.roundAt[i] > start)) advanceTick(w)
+  return w.scratch.melee
+}
 describe("with claims: a melee's rounds", () => {
   // X-15 with claims, played once for the cases that compare with it
   let x15: ReturnType<typeof untilRout> | null = null
@@ -282,9 +290,42 @@ describe("with claims: a melee's rounds", () => {
     f.x[2] = 80
     f.z[2] = 42
     f.foe[2] = formationHandle(w, 0)
-    while (w.meta[M_TICK] < 524) advanceTick(w)
-    expect(w.scratch.melee!.roundAt[0]).toBe(524)
-    expect(w.scratch.melee!.round[0]).toBe(ROUND_PINNED)
+    const R = untilRound(w, 0)
+    expect(R.round[0]).toBe(ROUND_PINNED)
     expect(f.z[0]).toBeCloseTo(40, 6)
+  })
+  it('a step its foe cannot follow keeps the melee; the loser has fallen back alone', () => {
+    // X-15 as the melee starts; the veteran (the winner) fought on its east flank by a third regiment
+    const w = play(caseOf('x16-pushed-onto-friend-claims'), { seconds: 26 })
+    const f = w.f
+    f.side[2] = f.side[0]
+    f.heading[2] = -Math.PI / 2
+    f.x[2] = 82
+    f.z[2] = 34
+    f.foe[2] = formationHandle(w, 1)
+    const z0 = f.z[0]
+    const z1 = f.z[1]
+    const R = untilRound(w, 0)
+    expect(R.round[0]).toBe(ROUND_FELL_BACK)
+    expect(f.z[0]).toBeCloseTo(z0 + 2, 6)
+    expect(f.z[1]).toBeCloseTo(z1, 6)
+    expect(f.foe[0]).toBe(formationHandle(w, 1))
+  })
+  it('a refused step leaves the formation exactly where it stood', () => {
+    // X-17: the enemy just behind refuses the raw one's step, whatever its direction off the axes
+    const w = play(caseOf('x17-pushed-onto-enemy-claims'), { seconds: 26 })
+    const f = w.f
+    // northward into it, 200 directions and lengths that are not round numbers (an undo by subtraction drifts by an
+    // ulp in about one in a hundred)
+    f.x[0] += 0.37295000000836644
+    f.z[0] += 0.0137219903
+    const x = f.x[0]
+    const z = f.z[0]
+    for (let k = 0; k < 200; k++) {
+      const a = 0.7 * Math.sin(k * 1.618)
+      const d = 8.5 + 0.731 * Math.cos(k * 2.414)
+      expect(stepWhole(w, 0, Math.sin(a) * d, Math.cos(a) * d, -1)).toBe(false)
+      expect([f.x[0], f.z[0]]).toEqual([x, z])
+    }
   })
 })

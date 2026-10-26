@@ -116,13 +116,19 @@ function sep(G: FireGeo, i: number, k: number, j: number, m: number): number {
     const q = n < 2 ? k : m
     const nx = n % 2 ? -G.sa[q] : G.ca[q]
     const nz = n % 2 ? G.ca[q] : G.sa[q]
-    const ri = ai * Math.abs(G.ca[k] * nx + G.sa[k] * nz) + bi * Math.abs(-G.sa[k] * nx + G.ca[k] * nz)
-    const rj = aj * Math.abs(G.ca[m] * nx + G.sa[m] * nz) + bj * Math.abs(-G.sa[m] * nx + G.ca[m] * nz)
+    const ri = halfOn(G, k, ai, bi, nx, nz)
+    const rj = halfOn(G, m, aj, bj, nx, nz)
     const d = Math.abs(dx * nx + dz * nz) - ri - rj
     if (d > s) s = d
   }
   return s
 }
+/**
+ * The half extent on the unit axis (nx, nz) of block k (G.ca, G.sa: its across axis), `a` its half frontage and `b`
+ * its half depth, in metres.
+ */
+const halfOn = (G: FireGeo, k: number, a: number, b: number, nx: number, nz: number): number =>
+  a * Math.abs(G.ca[k] * nx + G.sa[k] * nz) + b * Math.abs(-G.sa[k] * nx + G.ca[k] * nz)
 // the gap between battalions i and j: the least separation of any company of one from any of the other (with men)
 function gapOf(w: World, G: FireGeo, i: number, j: number): number {
   const f = w.f
@@ -537,11 +543,13 @@ function judge(w: World, G: FireGeo, S: Melee, i: number, tick: number): boolean
     jZ[i] = -cos(f.heading[i])
   } else return false
   jWin[i] = j
-  jPin[i] = attackedBesides(w, G, i, j, true) >= 0 ? 1 : 0
+  jPin[i] = flankedBy(w, G, i, j) ? 1 : 0
   return true
 }
-// a pair's phase in its round of `per` ticks, from its lower handle: an integer hash, so pairs in nearby slots fall on
-// different ticks
+/**
+ * A pair's phase in its round of `per` ticks, from its lower handle `h`: an integer hash, so pairs in nearby slots
+ * fall on different ticks.
+ */
 const phaseOf = (h: number, per: number): number => (Math.imul(h, 0x9e3779b1) >>> 0) % per
 
 /**
@@ -565,7 +573,7 @@ function play(w: World, S: Melee, i: number, tick: number): void {
     mark(w, S, j, ROUND_FOLLOWED, tick)
   } else mark(w, S, i, ROUND_FELL_BACK, tick)
 }
-// battalion i's last round, for the overlay
+/** Records battalion i's last round `r` (ROUND_*, 0 none) at tick `tick`, for the overlay. */
 function mark(w: World, S: Melee, i: number, r: number, tick: number): void {
   S.round[i] = r
   S.roundAt[i] = tick
@@ -588,8 +596,11 @@ function aheadOf(w: World, G: FireGeo, a: number, b: number): boolean {
   return span[3] > 0 && span[2] > 0 && span[0] < ahi && alo < span[1]
 }
 const span = [0, 0, 0, 0]
-// battalion b's companies across battalion a's heading (fx, fz) from a's anchor, into out: the least and most of
-// their blocks' extents, the sum of their centres ahead of a's front line weighted by men, and the men
+/**
+ * Battalion b's companies seen from battalion a, whose heading is (fx, fz), into `out` (overwritten): [0] and [1] the
+ * least and most of their blocks' extents across a's heading from a's anchor, in metres; [2] their centres' distances
+ * ahead of a's front line, summed weighted by men; [3] their men.
+ */
 function spanAcross(w: World, G: FireGeo, a: number, b: number, fx: number, fz: number, out: number[]): void {
   const f = w.f
   const CS = w.cr.maxC
@@ -604,9 +615,7 @@ function spanAcross(w: World, G: FireGeo, a: number, b: number, fx: number, fz: 
     const dx = G.cx[k] - f.x[a]
     const dz = G.cz[k] - f.z[a]
     const mid = dx * fz - dz * fx
-    // the block's half extent across a's heading: its frontage along its own across axis (ca, sa), its depth along
-    // (−sa, ca)
-    const r = G.bx[b] * Math.abs(G.ca[k] * fz - G.sa[k] * fx) + hd * Math.abs(-G.sa[k] * fz - G.ca[k] * fx)
+    const r = halfOn(G, k, G.bx[b], hd, fz, -fx)
     out[0] = Math.min(out[0], mid - r)
     out[1] = Math.max(out[1], mid + r)
     out[2] += (dx * fx + dz * fz) * f.men[k]
@@ -614,21 +623,27 @@ function spanAcross(w: World, G: FireGeo, a: number, b: number, fx: number, fz: 
   }
 }
 
-/**
- * The lowest slot of an enemy in the fight, other than j, fighting battalion i now (its foe i); with `flank`, only one
- * not ahead of i (on its flank or rear; G needed). −1 if none.
- */
-function attackedBesides(w: World, G: FireGeo | null, i: number, j: number, flank: boolean): number {
+/** Whether an enemy in the fight other than j is fighting battalion i now (its foe i). */
+function attackedBy(w: World, i: number, j: number): boolean {
   const f = w.f
   const h = handleOf(w, i)
   for (let e = 0; e < MAX_FORMATIONS; e++) {
-    if (e === j || !f.alive[e] || f.foe[e] !== h || outOfFight(f.mstate[e])) continue
-    if (!flank || !aheadOf(w, G!, i, e)) return e
+    if (e !== j && f.alive[e] && f.foe[e] === h && !outOfFight(f.mstate[e])) return true
   }
-  return -1
+  return false
 }
-// whether an enemy in the fight other than j is fighting battalion i now
-const attackedBy = (w: World, i: number, j: number): boolean => attackedBesides(w, null, i, j, false) >= 0
+/**
+ * Whether an enemy in the fight other than j is fighting battalion i now from its flank or rear: not ahead of it
+ * (`aheadOf`, on G, the step's block geometry).
+ */
+function flankedBy(w: World, G: FireGeo, i: number, j: number): boolean {
+  const f = w.f
+  const h = handleOf(w, i)
+  for (let e = 0; e < MAX_FORMATIONS; e++) {
+    if (e !== j && f.alive[e] && f.foe[e] === h && !outOfFight(f.mstate[e]) && !aheadOf(w, G, i, e)) return true
+  }
+  return false
+}
 
 /* ---------------- step 4: the square against cavalry ---------------- */
 // an enemy in the fight of a type that charges (from `chargers`, n of them), within refuge.alert of battalion i,

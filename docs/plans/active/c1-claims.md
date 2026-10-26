@@ -139,8 +139,8 @@ blocker, and flank attackers needed rules of their own. Every game and rule set 
 its geometry is settled here before the proposal is written (§ Contact there):
 - **A round** of a pair is due every `ROUND` seconds, at a phase hashed from the pair's lower handle: no clock per
   melee, and pairs are spread over the round.
-- **Only a pair is judged** (`inClashPair`): each the other's foe since the step began, both in the fight, neither
-  changing shape nor in a trail shape, one ahead of the other (`aheadOf`: its companies' centre beyond the other's
+- **Only a pair is judged** (`judge`): each the other's foe since the strikes began (after the charges' impacts), and
+  (`inClashPair`) both in the fight, neither changing shape nor in a trail shape, one ahead of the other (`aheadOf`: its companies' centre beyond the other's
   front line, and their spans across its heading overlapping, each block projected as it lies). A push is the losses
   a strike owes the foe this step, as expected, times the striker's morale (0 below 0). One short by more than
   `PRESS` of the two loses.
@@ -157,6 +157,9 @@ its geometry is settled here before the proposal is written (§ Contact there):
   keyed order, each claiming its new cells before the next, so the reversed visiting order gives the same state.
 - **Seen:** the overlay's Statuses layer shows the last round ("stepped back", "followed", "pinned", "fell back")
   until the pair's next, from the melee step's scratch.
+- **Known limit:** the first round of a pair can come anywhere from a tick to `ROUND` seconds after contact, by its
+  phase: X-15 to X-18 and X-20 meet theirs 0.3 s after the impact, so X-17's raw regiment is pinned and breaks then.
+  A melee's start kept in the world (C2, when the goldens move) would give every pair a full round first.
 - **Its tuning** (`ROUND`, `STEP`, `PRESS`, `PINNED`) is in `src/sim/melee.ts` while it is a prototype: ruleset data
   is hashed into saves and replays, and the prototype moves none of them. It goes into the ruleset's `melee` with C2.
 
