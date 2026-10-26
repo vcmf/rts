@@ -150,7 +150,6 @@ const charge = [
   REPLAY,
 ]
 
-// the guns (S1d-3): the battery on the hill fires on the column across the stream for a minute and a half
 // the look page's world as a sim map (maps/painted-world.ts, battle threads PR 4a): the south side marches at the
 // north across the open ground east of the river
 const look = [
@@ -163,6 +162,7 @@ const look = [
   ['shot', 'look-0-cross'],
   REPLAY,
 ]
+// the guns (S1d-3): the battery on the hill fires on the column across the stream for a minute and a half
 const guns = [
   ['wait', 1500],
   READY,

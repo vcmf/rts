@@ -170,8 +170,8 @@ named unless steady. Fire at will and Hold fire are panel orders. The page loads
 in `src/scenarios/maps.ts`; `s1e-battle` (6 battalions, a regiment and a battery a side, firing at will; you command side 0) is on the
 1.2 km battlefield, where you command side 0 against side 1's plan. `look-cross` is on the look page's world as a sim
 map (`maps/painted-world.ts`, built from `data/painted-world.lookdata`: the heights, the cover mapped to the ruleset's
-classes, the river's water; the buildings `denseWood`, the ruleset having no class for them; no woods, the look tile
-having none), four battalions a side east of the river (battle threads PR 4a). The readout shows each side's share of its men
+classes, the river's water, its ford included; the buildings `denseWood`, the ruleset having no class for them, and blocked
+to the paths with water too deep to wade; no woods, the look tile having none), four battalions a side east of the river (battle threads PR 4a). The readout shows each side's share of its men
 in the fight and, once decided, the result.
 
 **Hooks** (`window.APP`): `thread`, select, march, charge, form, order, `speed(s)`, `advance(seconds)` (pauses the

@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { root } from './fx.ts'
+import { root, longIt } from './fx.ts'
 import { loadSimData, compileRuleset, formationHandle, play } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
@@ -13,6 +13,8 @@ import { D } from '../src/look/spec.ts'
 import { decodeLook, unpackSpans } from '../src/look/world/data.ts'
 import { setHeightfield, heightAt } from '../src/look/heightfield.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from '../src/look/world/water-data.ts'
+import { BUILDINGS } from '../src/look/world/buildings.ts'
+import { WET, lookWorld, inBuilding } from '../maps/painted-world.ts'
 
 const sim = loadSimData(
   new Uint8Array(fs.readFileSync(path.join(root, 'data', 'painted-world.simdata'))),
@@ -36,28 +38,62 @@ describe('the look world as a sim map', () => {
     }
     expect([n > 3000, worst]).toEqual([true, 0])
   })
-  it("is water where the look's water is wet, as deep (a bridge where a road crosses), and dry elsewhere", () => {
+  it("is water where the look's water is wet (the ford too), as deep, and dry elsewhere", () => {
     const water = unpackSpans(look.water, WATER_FILL)
     const W = look.water
     const F = sim.fine
     const wet = sim.classes.indexOf('water')
-    const bridge = sim.classes.indexOf('bridge')
     let wetCells = 0
     for (let j = 0; j < F.nz; j++) {
       for (let i = 0; i < F.nx; i++) {
         const [r, g, b, a] = sampleRGBA(water, W.n, W.cell, W.x0, W.z0, F.x0 + i * F.cell, F.z0 + j * F.cell)
         const d = decodeWater(r, g, b, a).depth
-        const c = F.cls[j * F.nx + i]
-        const isWet = d > 0.05
+        const isWet = d > WET
         if (isWet) wetCells++
-        expect(c === wet || c === bridge).toBe(isWet)
-        expect(F.depth[j * F.nx + i]).toBe(isWet && c === wet ? Math.round(d * 1000) : 0)
+        expect(F.cls[j * F.nx + i] === wet).toBe(isWet)
+        // stored as float32, then in mm
+        expect(F.depth[j * F.nx + i]).toBe(isWet ? Math.round(Math.fround(d) * 1000) : 0)
       }
     }
     // the river runs the tile's length: about 2,000 cells of 2 m
     expect(wetCells).toBeGreaterThan(1500)
+    expect(sim.classes.indexOf('bridge') < 0 || !F.cls.includes(sim.classes.indexOf('bridge'))).toBe(true)
   })
-  it('a battle on it runs, and its replay reproduces every hash point', () => {
+  it("has every other node's class from the look's cover, the buildings', or the slope's", () => {
+    const { coverClass } = lookWorld()
+    const F = sim.fine
+    for (let j = 0; j < F.nz; j += 3) {
+      for (let i = 0; i < F.nx; i += 3) {
+        const x = F.x0 + i * F.cell
+        const z = F.z0 + j * F.cell
+        const got = sim.classes[F.cls[j * F.nx + i]]
+        if (got === 'water') continue
+        const cover = coverClass(x, z)
+        const want = inBuilding(x, z) ? 'denseWood' : cover === 'open' ? ['open', 'rough'] : cover
+        if (Array.isArray(want)) expect(want).toContain(got)
+        else expect(got).toBe(want)
+      }
+    }
+  })
+  it('blocks the paths in water too deep to wade and in the buildings', () => {
+    const c = sim.cost
+    const F = sim.fine
+    // (the cost grid's whole cells: none past its last, 794.8 m of the 800)
+    const cellAt = (x: number, z: number) => {
+      const i = Math.floor((x - c.x0) / c.cell)
+      const j = Math.floor((z - c.z0) / c.cell)
+      return i < c.nx && j < c.nz ? c.g[j * c.nx + i] : 0
+    }
+    for (let j = 0; j < F.nz; j++) {
+      for (let i = 0; i < F.nx; i++) {
+        if (F.depth[j * F.nx + i] > napoleonic.water.limit * 1000) {
+          expect(cellAt(F.x0 + i * F.cell, F.z0 + j * F.cell)).toBe(0)
+        }
+      }
+    }
+    for (const b of BUILDINGS) expect(cellAt(b.x, b.z)).toBe(0)
+  })
+  longIt('a battle on it runs, and its replay reproduces every hash point', () => {
     const cr = compileRuleset(napoleonic)
     const b = new Battle(sim, lookCross, cr)
     // the spawns apply at the first tick

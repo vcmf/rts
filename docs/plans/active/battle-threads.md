@@ -220,12 +220,16 @@ tile) is no sim map. Two PRs, then PR 4.
   Acceptance: `check:data` rebuilds it byte for byte; a test that the sim's classes and water match the look's cover
   and river at sample points (and the heights within 1 cm of the look's heightfield); a sim battle on it runs (a
   scenario of a few battalions marching across, its replay reproduced).
-  - **Outcome** (2026-10-26): met. `data/painted-world.simdata` (0x55e25528, 2.1 MB; `check:data` rebuilds it byte
+  - **Outcome** (2026-10-26): met. `data/painted-world.simdata` (0x92a9c78d, 2.1 MB; `check:data` rebuilds it byte
     for byte, the other maps unchanged); `test/painted-world.test.ts`: every sim height node is the look's ground
-    there exactly, every 2 m cell wet in the look's water data is the sim's water (as deep, in mm) or a bridge and
-    every other cell dry, and `look-cross` runs (the south marching 54 m in its first minute) and replays to every hash
-    point; `app-check` plays it on the sim page in the workers. The look tile has no woods (its trees are lone and
-    hedgerow trees, the scatter's: not obstacles to the sim's men); the buildings are `denseWood`.
+    there exactly; every 2 m cell wet in the look's water data is the sim's water, as deep (the track's ford too: the
+    look has no bridge), every other cell dry; every other node's class the look's cover (the most common of its four
+    cells), a building's or the slope's; the cost grid blocked wherever the water is too deep to wade and in the
+    buildings (the river crossable only where it is wadeable: the ford and nine shallow reaches, 756–897 mm); and
+    `look-cross` runs and replays to every hash point; `app-check` plays it on the sim page in the workers. The look
+    tile has no woods (its trees are the scatter's: not obstacles to the sim's men); the buildings are `denseWood` to
+    the men and blocked to the paths. Review round 1 (severe): the ford had become a bridge, the river and the
+    buildings were passable to the paths, Math's last bits, the classes 1 m off.
 - **PR 4b, the look page plays the sim**: at `?sim=<scenario>` the look page runs the battle in the workers (PR 5),
   and its armies are the sim's formations and the men worker's men: `units.ts` takes each man's place, facing and
   role from a source, the script's (`manAt`, the default, unchanged) or the frame's (position; facing from his
