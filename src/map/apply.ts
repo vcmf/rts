@@ -103,22 +103,26 @@ function profile(kind: AttrValue | undefined, t: number): number {
 }
 
 // the nearest point of a polyline: distance, which side (left of the direction of travel: +1), how far past a
-// free end along its tangent (0 inside), and the distance along the line to the nearest point
+// free end along its tangent (0 inside), and the distance along the line to the nearest point. With `maxD`, the search
+// stops once no segment within it can remain: the answer is the same for a point within `maxD` of the line, and some
+// distance beyond it (Infinity when none was looked at) for a point farther, which the caller discards (a long line's
+// box holds far more ground than its reach, and a far point's search would cross the whole grid)
 interface Near {
   d: number
   side: number
   over: number
   along: number
 }
-export function nearLine(line: Pt[], px: number, pz: number): Near {
-  return line.length > INDEX_FROM ? nearIndexed(lineIndex(line), line, px, pz) : nearScan(line, px, pz)
+export function nearLine(line: Pt[], px: number, pz: number, maxD = Infinity): Near {
+  return line.length > INDEX_FROM ? nearIndexed(lineIndex(line), line, px, pz, maxD) : nearScan(line, px, pz, maxD)
 }
 
 // the full scan: scalars only, a segment whose box lies farther than the best so far skipped; ties keep the
 // earlier segment
-export function nearScan(line: Pt[], px: number, pz: number): Near {
+export function nearScan(line: Pt[], px: number, pz: number, maxD = Infinity): Near {
   let bd = Infinity
   let bd2 = Infinity
+  const max2 = maxD * maxD
   let side = 1
   let over = 0
   let along = 0
@@ -136,7 +140,8 @@ export function nearScan(line: Pt[], px: number, pz: number): Near {
       px < (ax < bx ? ax : bx) ? (ax < bx ? ax : bx) - px : px > (ax > bx ? ax : bx) ? px - (ax > bx ? ax : bx) : 0
     const oz =
       pz < (az < bz ? az : bz) ? (az < bz ? az : bz) - pz : pz > (az > bz ? az : bz) ? pz - (az > bz ? az : bz) : 0
-    if (ox * ox + oz * oz > bd2) {
+    const o2 = ox * ox + oz * oz
+    if (o2 > (bd2 < max2 ? bd2 : max2)) {
       acc += L
       continue
     }
@@ -195,7 +200,7 @@ function lineIndex(line: Pt[]): LineIndex {
   indexes.set(line, ix)
   return ix
 }
-function nearIndexed(ix: LineIndex, line: Pt[], px: number, pz: number): Near {
+function nearIndexed(ix: LineIndex, line: Pt[], px: number, pz: number, maxD: number): Near {
   let bd = Infinity
   let bk = -1
   let side = 1
@@ -234,7 +239,8 @@ function nearIndexed(ix: LineIndex, line: Pt[], px: number, pz: number): Near {
   const outside = Math.max(0, ix.x0 - px, px - (ix.x0 + ix.nx * BUCKET), ix.z0 - pz, pz - (ix.z0 + ix.nz * BUCKET))
   const R = Math.max(ix.nx, ix.nz)
   for (let r = 0; r <= R; r++) {
-    if (bk >= 0 && bd < Math.max(outside, (r - 1) * BUCKET)) break
+    const bound = Math.max(outside, (r - 1) * BUCKET)
+    if ((bk >= 0 && bd < bound) || bound > maxD) break
     // the ring's buckets only: its top and bottom rows, then its sides between them
     const at = (i: number, j: number) => {
       if (i >= 0 && j >= 0 && i < ix.nx && j < ix.nz) for (const k of ix.buckets[j * ix.nx + i]) visit(k)
@@ -414,7 +420,8 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       const steep = a.steep
       const len = lineLength(f.line!)
       nodes(lineBox(f.line!), w2 * 1.4, (k, x, z) => {
-        const q = nearLine(f.line!, x, z)
+        // beyond 1.4 half-widths (the wider side) the profile is 0
+        const q = nearLine(f.line!, x, z, w2 * 1.4)
         const sideHalf =
           w2 * (steep === 'left' ? (q.side > 0 ? 0.6 : 1.4) : steep === 'right' ? (q.side < 0 ? 0.6 : 1.4) : 1)
         const taper = q.over > 0 ? 0 : smooth(Math.min(q.along, len - q.along) / w2)
@@ -426,7 +433,8 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       const high = a.steep === 'right' ? -1 : 1
       const back = Math.max(num(a.edge, 150), 2 * w2) // a back slope never steeper than the face
       nodes(lineBox(f.line!), w2 + back, (k, x, z) => {
-        const q = nearLine(f.line!, x, z)
+        // beyond the back slope the step has returned to the ground on either side
+        const q = nearLine(f.line!, x, z, w2 + back)
         const s = q.side * high * q.d
         const rise = s <= w2 ? smooth((s + w2) / (2 * w2)) : smooth(1 - (s - w2) / back)
         // past the ends the step fades over the back slope's length, not as a wall
@@ -479,7 +487,10 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
     const edge = categoryOf(kind) === 'way' ? 1 : num(a.edge, 5)
     const field = f.line ? null : areaField(f)
     const weight = (x: number, z: number): number => {
-      if (f.line) return editWeight(nearLine(f.line, x, z).d, num(a.width, EDIT_WIDTH) / 2, edge)
+      if (f.line) {
+        const w2 = num(a.width, EDIT_WIDTH) / 2
+        return editWeight(nearLine(f.line, x, z, w2 + edge).d, w2, edge)
+      }
       const e = field!.edge(x, z)
       return e >= 0 ? 1 : edge > 0 ? smooth(1 + e / edge) : 0
     }
@@ -518,7 +529,10 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
     const edgeAt = (x: number, z: number) => {
       let e = field.edge(x, z)
       // never below 0 (past a line's end)
-      for (const l of kept?.lines ?? []) e = Math.min(e, Math.max(0, nearLine(l.line, x, z).d - l.near))
+      // a line counts only nearer than the ring's edge: cut off there (a far cell's search crosses no whole grid)
+      for (const l of kept?.lines ?? []) {
+        e = Math.min(e, Math.max(0, nearLine(l.line, x, z, Math.max(0, e) + l.near).d - l.near))
+      }
       return e
     }
     cells(field.box, 0, (i, j, x, z) => {
@@ -549,7 +563,7 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
     }
     const marks = (w2: number, edge: number) =>
       cells(lineBox(line), w2 + edge + c, (i, j, x, z) => {
-        if (editWeight(nearLine(line, x, z).d, w2, edge) >= 0.5) put(j * nx + i)
+        if (editWeight(nearLine(line, x, z, w2 + edge).d, w2, edge) >= 0.5) put(j * nx + i)
       })
     if (categoryOf(r.kind) === 'barrier') {
       barrierCells(
@@ -606,7 +620,7 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
   ) => {
     const half = Math.max(halfWidth, c / 2 + 0.01)
     cells(lineBox(line), half + c, (i, j, x, z) => {
-      const q = nearLine(line, x, z)
+      const q = nearLine(line, x, z, half)
       if (q.d < half && q.over === 0) {
         layer[j * nx + i] = k1
         onCell?.(j * nx + i, q.along)
@@ -639,7 +653,7 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       L.streams.push({ id: f.id, step: LEVEL_STEP, levels })
       // the channel: the depth (a ramp along the line gives pools), shallower toward the banks
       nodes(lineBox(line), hw + c, (k, x, z) => {
-        const q = nearLine(line, x, z)
+        const q = nearLine(line, x, z, hw)
         if (q.over > 0 || q.d > hw) return
         const t = q.d / hw
         const bed = levelAt(q.along) - ramp(a.depth, { along: q.along }, 0.8) * (1 - 0.5 * t * t)
@@ -658,7 +672,7 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       const [fx, fz] = pointAt(st.line, at)
       const reach = half + st.hw + c
       nodes([fx - reach, fz - reach, fx + reach, fz + reach], 0, (k, x, z) => {
-        const q = nearLine(st.line, x, z)
+        const q = nearLine(st.line, x, z, st.hw)
         if (q.over > 0 || q.d > st.hw || Math.abs(q.along - at) > half) return
         const t = q.d / st.hw
         const bed = st.levelAt(q.along) - fd * (1 - 0.5 * t * t)
@@ -763,7 +777,7 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
           const [bx, bz] = pointAt(road.line!, at + span)
           const deck = Math.max(heightOf(L, ax, az), heightOf(L, bx, bz))
           const on = (x: number, z: number) =>
-            nearLine(road.line!, x, z).d < rw + 1 &&
+            nearLine(road.line!, x, z, rw + 1).d < rw + 1 &&
             Math.sqrt((x - hit[0]) * (x - hit[0]) + (z - hit[1]) * (z - hit[1])) < span
           cells([hit[0], hit[1], hit[0], hit[1]], span + rw + c, (i, j, x, z) => {
             if (on(x, z)) L.built[j * nx + i] = k1

@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-26
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, src/app/map/pin.ts, test/map-fields.test.ts, test/map-pin.test.ts, src/app/map/scan.ts, src/app/map/scan-gl.ts, src/app/map/trace.ts, test/map-scan.test.ts, tools/geo.ts, tools/scan-wms.ts, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, src/app/map/pin.ts, test/map-fields.test.ts, test/map-pin.test.ts, src/app/map/scan.ts, src/app/map/scan-gl.ts, src/app/map/trace.ts, test/map-scan.test.ts, tools/geo.ts, tools/scan-wms.ts, tools/streams.ts, test/map-streams.test.ts, tools/water.ts, test/map-water.test.ts, maps/austerlitz-water.json, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
 decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place, 0067-ids-are-named-when-made, 0069-scans-placed-in-their-relief-frame, 0070-a-field-as-a-scale-model]
 ---
 
@@ -167,7 +167,10 @@ maps/kinds.json ──► checkCatalogue ─┐
   (decision 0061), or as a scale model (`scale` k, 1 to 4, decision 0070): a map point (x, z) reads the file at
   (k x + shift.x, k z + shift.z) and its height above the datum is the file's divided by k, so slopes and sight angles
   are the file's (`demPlace`, `toFile`, `toMap`: the one placement apply, the file checks and the scan read).
-  Austerlitz is one piece at 2× (12 km of the field in 6 km). A piece sets the height in its area (the other landforms add) and blends into the ground under it
+  Austerlitz is one piece at 2× (12 km of the field in 6 km); its water is written by `tools/water.ts` from
+  committed inputs (`maps/austerlitz-water.json`): streams that follow the relief's valleys (`tools/streams.ts`: sinks
+  filled, flats resolved, flow down the steepest of eight neighbours, the ground draining through each node summed, the
+  channels traced from their heads) and the survey's ponds, moved onto them (M8b). A piece sets the height in its area (the other landforms add) and blends into the ground under it
   over its `edge`; later landforms add on top and the edits apply after, so the 1805 cleanup is `relief.level`,
   `.lower` and `.cut` over the real ground. Heights are above sea level in the file and taken back to the map's
   frame by its `datum`, which a map with real relief must set.
@@ -197,6 +200,10 @@ maps/kinds.json ──► checkCatalogue ─┐
     drawn in the draft, and the mark the ruleset's crossing rule will read; other edits leave none);
   - a line takes the cells whose centre lies strictly within its half-width, and at least the cells beside it, so
     widths round the same way for every line (on even metres a 6 m stream and a 5 m road take 4 m);
+  - a line's nearest point (`nearLine`: a scan, or for a long line a bucket grid searched in rings) takes a cutoff:
+    a caller that discards what lies beyond its reach (a channel, a painted line, a cut, a ridge's or a scarp's
+    profile) passes it, so the nodes of a long line's box far from it cost one ring, not the whole grid (M8b: the
+    Goldbach's apply from 172 s to 1.5 s, the whole map's 3.7 s); within the cutoff the answer is the full one;
   - painting order is priority, then id: the higher priority wins a cell and, at equal priority, the later id;
   - barriers by `barrierCells`, the one implementation of the cell rule (proposal §3.6), exact in integers;
   - water (step 3): a stream's level is the lower of its two banks (3 m beyond each edge, on the ground as the
@@ -428,7 +435,7 @@ points.
 - clump: simple, within its bounds, a circle at coherence 1;
 - the base noise: within ± its height, flat without one;
 - the fast paths equal to the plain ones (the line index against the scan on 4000 points, the grid noise against
-  `fbm`);
+  `fbm`), and the search cut off at a distance equal to the full one within it (M8b);
 - the validator's generator checks; expansion's origin and pinning; the bridge that crosses twice.
 
 `test/map-gen.test.ts` (M3b): street-village's houses (both sides, within the stretch, facing the road, clear of
