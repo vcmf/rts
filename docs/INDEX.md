@@ -56,6 +56,7 @@ designs written before building (frozen once built, their lasting content moves 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
   [`plans/active/battle-threads.md`](plans/active/battle-threads.md) (the battle's threads: a worker, soldiers stepped at 12 fps),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
+  [`plans/active/smoke-puffs.md`](plans/active/smoke-puffs.md) (musket smoke as opaque painted puffs, the smoke track's first step),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
   [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c),
   [`plans/active/s1c2-morale-machine.md`](plans/active/s1c2-morale-machine.md) (S1c-2),
