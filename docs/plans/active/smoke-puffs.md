@@ -86,6 +86,21 @@ smoke in the sim's sight, the staff map's own clouds (no staff map on the look p
   at 40 m per variant, in `output/armies-review/26-smoke-puffs/`; a live preview with the variants' URLs.
 - `npm test`, `npm run check:data`, `node tools/check-docs.mjs` and the build pass.
 
+## Results (2026-10-28, this machine: M1 Pro, ANGLE Metal, 1920 × 1080)
+
+- **Cost** (`?armies=20&firehold=1&bench=smoke&benchr=20,40,63,125,250`, the built page, three rounds each started at a
+  1-min load ≤ 3, each camera's arms A B B A; GPU frame p50, the smoke arm's less the other's, averaged over the three
+  yaws): 20 m +0.30 ms, 40 m +0.26, 63 m +0.52, 125 m +0.63, 250 m +0.34; the rounds agree within 0.02 ms. Under the
+  1.5 ms bar at every radius. The two meshes add 0.97 M triangles (1,512 puffs × 320 × 2) whether or not puffs live.
+- **Memory** (by construction): the ring 1,512 puffs × 64 B, in each of the two meshes' buffers and on the CPU (97 KB
+  each); the mask 512² bytes, on the GPU and the CPU (256 KB each); the icosphere 2 KB. About 0.7 MB.
+- **Readability**: in the stills no smoke covers a man at 20 to 125 m, the line facing the camera included (the rule
+  trims the puffs' rear); the guard's figures (`--figures`) match the epic's build within 2 px a row. The smoke's
+  lit band reaches the white coats' brightest (luma p99 229 against 232 in the 40 m stills) at a lower saturation
+  (median 0.18 against the line's 0.25).
+- **Main's look**: `?smoke=0` matches the epic's build on all eight goldens.
+- **Stills and GIFs**: `output/armies-review/26-smoke-puffs/` (not in git).
+
 ## Risks
 
 - **Discard edges alias** (MSAA does not smooth a discarded edge): the scallop is geometry for that reason; the brush
