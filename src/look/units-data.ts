@@ -640,11 +640,12 @@ export interface ShadowShape {
   blocks: number
 }
 
-/** A man's step in his n-step clip from the shader's mod (m, in [0, n], a GPU's mod can return n itself): rounded to
- *  a whole step and wrapped into [0, n - 1] (unitdecal.vert mirrors it) */
-export function stepIndex(m: number, n: number): number {
-  const i = Math.floor(m + 0.5)
-  return Math.min(Math.max(i >= n ? i - n : i, 0), n - 1)
+/** A man's step in his n-step clip (first step start) as units.vert poses him, from the shader's mod m (in [0, n]:
+ *  a GPU's mod can return n itself): ⌊start + m⌋ − start (units.vert's int(), in float32), the exact n wrapped to 0,
+ *  clamped into [0, n − 1] (unitdecal.vert mirrors it). His shadow's step is so his figure's on every GPU */
+export function stepIndex(start: number, m: number, n: number): number {
+  const i = Math.trunc(Math.fround(start + m)) - start
+  return Math.min(Math.max(i === n ? 0 : i, 0), n - 1)
 }
 /** The bin a man at step i of an n-step clip draws when it is baked in k bins (bin j holding the steps from ⌊jn/k⌋ to
  *  ⌊(j+1)n/k⌋ − 1): ⌈(i+1)k/n⌉ − 1, computed in integers as ⌊((i+1)k − 1)/n⌋ (exact on any GPU; unitdecal.vert's
@@ -672,13 +673,6 @@ export function stepBlend(i: number, n: number, k: number): { j0: number; j1: nu
 export class AtlasTooLarge extends Error {
   override name = 'AtlasTooLarge'
 }
-/** What the page does when the per-step atlas cannot fit this GPU's texture size (decision 0074's default needs 2560
- *  texels a side; WebGL2 guarantees 2048): fall back to the clip-averaged shape (today's look), with a warning, unless
- *  the page asked for the per-step shape by ?ushstep (explicit): then an error at load, as every bad switch is */
-export function stepAtlasFallback(explicit: boolean): 'fallback' | 'error' {
-  return explicit ? 'error' : 'fallback'
-}
-
 /** The step atlas's layout: `rows` rows of `facings` cells (cellW × cellH texels) in blocks side by side, as few
  *  blocks as keep each side within max texels, the one nearest square among them. Throws when none fits */
 export function stepAtlasLayout(
@@ -746,9 +740,13 @@ export function shadowShape(
   const C = [-A[1], A[0]]
   const kx = sun[0] / sun[1]
   const kz = sun[2] / sun[1]
-  const stepsOf = (r: string) => {
+  // a role's clip (an error when the figure has none)
+  const clipOf = (r: string): UnitRange => {
     const rg = d.ranges[r]
     if (!rg) throw new Error(`shadowShape: the figure has no clips for the role ${r}`)
+    return rg
+  }
+  const stepsOf = (rg: UnitRange) => {
     const n = rg.end - rg.start
     const k = Math.min(n, maxSteps)
     return Array.from({ length: k }, (_, i) => rg.start + Math.floor((i * n) / k))
@@ -756,9 +754,8 @@ export function shadowShape(
   // a role's bins, each its steps (today: one bin, up to maxSteps of the clip's steps evenly; ?ushstep: k = min(n,
   // steps) bins, each up to binSamples of its own)
   const bins = roles.map(r => {
-    if (steps <= 0) return [stepsOf(r)]
-    stepsOf(r) // (its check: the role has clips)
-    const rg = d.ranges[r]
+    const rg = clipOf(r)
+    if (steps <= 0) return [stepsOf(rg)]
     const n = rg.end - rg.start
     const k = Math.min(n, steps)
     return Array.from({ length: k }, (_, j) => binSteps(rg.start, n, k, j, binSamples))

@@ -59,6 +59,7 @@ import {
   applyContactParams,
   applyStepParams,
   applyFootSharpParams,
+  applyNearBandParams,
   applyLookParams,
   shadeDesat,
   shadowModes,
@@ -587,6 +588,9 @@ const ushStep = applyStepParams(params)
 // ?ushfootk=<boost>[,<reach m>]: the per-step shape's feet darker and crisper, never past the ground's shade (absent:
 // 3,0.6; 1: none)
 const ushFootK = applyFootSharpParams(params)
+// ?ushnearband=<r0>,<r1>: the zoom band (m from the focus) where the per-step shape gives way to the averaged one
+// (absent: 60,100; ?ushcontactband is the oval's own, with ?ushcontact=1)
+const ushNearBand = applyNearBandParams(params)
 const ushDesat = shadeDesat(params)
 const uShadowSwitch = params.get('ushadowswitch')
 const smoothMove = bit('smoothmove')
@@ -721,6 +725,7 @@ if (armiesParam !== null) {
   units.contact = ushContact
   units.stepShadow = ushStep
   units.stepExplicit = params.has('ushstep')
+  units.stepBand = ushNearBand
   units.footSharp = ushFootK
   if (ushBand) units.lookBand = ushBand
   if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]

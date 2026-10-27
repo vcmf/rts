@@ -43,8 +43,10 @@ import {
   SHADOW_LOOK_BAND,
   contactReachOf,
   contactUniform,
+  NEAR_BAND,
   nearOn,
   nearWeight,
+  ovalWeight,
   decalDefinesChanged,
   decalStep,
   decalStrip,
@@ -81,7 +83,6 @@ import {
   shadowProxy,
   shadowShape,
   AtlasTooLarge,
-  stepAtlasFallback,
   tinyMesh,
   type UnitData,
 } from './units-data.ts'
@@ -353,12 +354,17 @@ export class Units {
    *  the shape averaged over each clip at every zoom. Read once, when the shadows' material is made */
   stepShadow: StepShadow | null = { ...STEP_SHADOW }
   /** a ?ushstep given on the page: a per-step atlas this GPU cannot hold is then an error at load, not a fallback to
-   *  the averaged shape (stepAtlasFallback) */
+   *  the averaged shape (useDecals) */
   stepExplicit = false
   /** the per-step shape's foot sharpening ([boost, reach m]: footSharpen, ?ushfootk; FOOT_SHARP), [1, 0]: none */
   footSharp: [number, number] = [FOOT_SHARP[0], FOOT_SHARP[1]]
   private contactReach = 0 // m: how far the contact reaches from a man's root (the strip holds it: decalStrip)
-  private contactW = 0 // the contact's weight this frame (contactWeight, by the camera's distance)
+  private contactW = 0 // the contact oval's weight this frame (ovalWeight, by the camera's distance)
+  private nearW = 0 // the near material's weight this frame (nearWeight: the oval's or the per-step band's)
+  /** the per-step shape's band (m from the camera's focus: NEAR_BAND, ?ushnearband) */
+  stepBand: [number, number] = [NEAR_BAND[0], NEAR_BAND[1]]
+  /** the per-step atlas did not fit this GPU's texture size: the averaged shape at every zoom (useDecals) */
+  stepFallback = false
   private contactWSet = NaN // and the one last given to the material (setDecalLook)
   private readonly contactV = new Vector4()
   // the look this frame (lookAt), given to the decal's material (setDecalLook)
@@ -1620,7 +1626,7 @@ export class Units {
     const d = this.data
     let ss = this.stepShadow
     // today's shape (averaged over each clip) for the far material; with ?ushstep a second, per step, for the near one
-    // (within the contact's band: docs/plans/active/step-shadows.md)
+    // (within the per-step band, stepBand: decision 0074). shapeMs: the bakes alone (shadowShape), as main timed it
     let bakeMs = 0
     const bake = (steps: number, facings: number) => {
       const tb = performance.now()
@@ -1631,6 +1637,7 @@ export class Units {
         steps,
         maxSize: Math.min(4096, this.scene.getEngine().getCaps().maxTextureSize),
       })
+      bakeMs += performance.now() - tb
       const tex = new RawTexture(
         shape.data,
         shape.width,
@@ -1642,7 +1649,6 @@ export class Units {
         Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
         Constants.TEXTURETYPE_UNSIGNED_BYTE,
       )
-      bakeMs += performance.now() - tb
       tex.name = steps > 0 ? 'figureShadowShapeSteps' : 'figureShadowShape'
       tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
       return { shape, tex }
@@ -1654,9 +1660,13 @@ export class Units {
     } catch (e) {
       // (a per-step atlas over this GPU's texture size: the averaged shape at every zoom, today's look, unless the
       // page asked for it by ?ushstep)
-      if (!(e instanceof AtlasTooLarge) || stepAtlasFallback(this.stepExplicit) === 'error') throw e
+      if (!(e instanceof AtlasTooLarge) || this.stepExplicit) {
+        farBake.tex.dispose()
+        throw e
+      }
       console.warn(`units: ${e.message}: the soldiers' shadows fall back to the clip-averaged shape`)
       ss = this.stepShadow = null
+      this.stepFallback = true
     }
     this.shapeMs = bakeMs
     // the ground's height under each vertex: the meadow map's (bound to every painted material, src/look/meadow.ts), or
@@ -1811,7 +1821,7 @@ export class Units {
     // nothing; decalStep)
     const mat = (side: DecalSide) => (side === 'near' ? near : far)
     const step = decalStep(
-      nearOn(this.contact, this.stepShadow !== null, this.contactW) ? 'near' : 'far',
+      nearOn(this.contact, this.stepShadow !== null, this.nearW) ? 'near' : 'far',
       this.decal === near ? 'near' : 'far',
       this.decalPoll,
       side => mat(side).isReady(mesh, true),
@@ -1852,11 +1862,12 @@ export class Units {
     m.setFloat('uVATStep', 0)
     this.contactReach = c.dark > 0 ? contactReachOf(ov, c.pad, c.soft) : 0
   }
-  /** The contact's weight by the camera's distance (contactWeight over its band), kept for setDecalLook: 0 without a
-   *  contact */
+  /** The contact oval's weight by the camera's distance (ovalWeight), kept for setDecalLook, and the near
+   *  material's (nearWeight), for useDecalFor */
   private contactAt(): void {
-    const c = this.contact
-    this.contactW = nearWeight(c, this.stepShadow !== null, this.camera.radius)
+    const r = this.camera.radius
+    this.contactW = ovalWeight(this.contact, r)
+    this.nearW = nearWeight(this.contact, this.stepShadow !== null, r, this.stepBand)
   }
 
   /** the figures' cast shadows on or off: off, the receivers compile without them (the bench's baseline arm). On, the

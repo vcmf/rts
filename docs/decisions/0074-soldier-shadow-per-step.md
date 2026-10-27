@@ -27,8 +27,8 @@ for the feet. The plan and its measurements: `docs/plans/active/step-shadows.md`
   a bin a step), 8 facings, each bin the average of its own steps (`shadowShape`'s `steps`, `stepBin`). The decal's
   vertex shader picks the man's bin from his step, the rule `units.vert` poses him by, so his shadow steps with his
   legs at 12 fps; the bin is held, not blended (`?ushstep=…,blend` is the alternative).
-- **Only in the near material.** It is read within the contact's old band, whole to 60 m and drawn to 100 m from the
-  camera's focus (`nearWeight`, `nearOn`). Past 100 m the far material draws 0062's averaged shape, as before. Two
+- **Only in the near material.** It is read within its band, whole to 60 m and drawn to 100 m from the camera's
+  focus (`NEAR_BAND`, `?ushnearband`; `nearWeight`, `nearOn`). Past 100 m the far material draws 0062's averaged shape, as before. Two
   atlases, RG8 with mips: the averaged one (1792 × 640, 2.9 MB) and the per-step one (1792 × 2560, 11.7 MB).
 - **The feet darker and crisper, never past k.** In the per-step material the shape's share of the samples is
   tripled at the soles and behind them, back to 1 by 0.6 m along the shadow (`footSharpen`, `FOOT_SHARP`). The share is
@@ -43,7 +43,8 @@ for the feet. The plan and its measurements: `docs/plans/active/step-shadows.md`
 - No oval carpet under dense formations.
 - The per-step atlas needs 2560 texels a side; WebGL2 promises 2048. A GPU that cannot hold it draws the averaged
   shape at every zoom (0062's look, with a warning); an explicit `?ushstep` is then an error at load.
-- 14.6 MB of shape atlases instead of 2.9 MB; the two bakes take 243 to 272 ms at load against main's 155 to 160 (the plan).
+- 14.6 MB of shape atlases instead of 2.9 MB; the two bakes take 249 to 253 ms at load against main's
+  155 (the plan; #235 would bake the per-step one only when the near zoom is first reached).
 - Frame cost: within the noise of main at 20, 40, 63, 125 and 250 m (the Metal bench, four usable tries; at 20 m
   11.56–11.60 ms of GPU against 11.50–11.58; the plan's table, with the load of each run).
 - At 100 m the near material gives way to the far one in one frame. The change is a scatter of foot pixels (the plan,

@@ -51,8 +51,8 @@ uniform float uVATStep;
 #ifdef SH_STEPS
 // the shape baked per animation step (?ushstep, docs/plans/active/step-shadows.md): a role's clip in uStepBins.<role>
 // bins, its first cell row uStepRow.<role>; the rows in blocks of uStepRPB side by side, each FACINGS cells wide
-// (shadowShape, stepAtlasLayout in src/look/units-data.ts). His step his clip's (units.vert's rule), in whole steps
-// and wrapped into the clip (a GPU's mod can return n itself: stepIndex); the bin he is in in integers,
+// (shadowShape, stepAtlasLayout in src/look/units-data.ts). His step as units.vert poses him (its int() of his clip's
+// first step plus the mod), the exact n a GPU's mod can return wrapped to 0 (stepIndex); the bin he is in in integers,
 // ((i+1)k-1)/n (stepBin), or with SH_STEP_BLEND the two either side of him, mixed by vS (stepBlend); every bin
 // clamped into the clip's, so no rounding reads another clip's cell
 uniform vec4 uStepBins,uStepRow;uniform float uStepRPB;
@@ -103,8 +103,8 @@ void main(){
   float kb=row<0.5?uStepBins.x:row<1.5?uStepBins.y:row<2.5?uStepBins.z:uStepBins.w;
   float r0=row<0.5?uStepRow.x:row<1.5?uStepRow.y:row<2.5?uStepRow.z:uStepRow.w;
   int ni=max(int(aVAT.y+0.5),1),ki=max(int(kb+0.5),1);
-  int ii=int(floor(mod(uVATStep+aVAT.z,aVAT.y)+0.5));
-  ii=clamp(ii>=ni?ii-ni:ii,0,ni-1);
+  int ii=int(aVAT.x+mod(uVATStep+aVAT.z,aVAT.y))-int(aVAT.x+0.5);
+  ii=clamp(ii==ni?0:ii,0,ni-1);
   #ifdef SH_STEP_BLEND
   float sp=(float(ii)+0.5)*float(ki)/float(ni)-0.5,sf=floor(sp);vS=clamp(sp-sf,0.0,1.0);
   int si=int(sf);

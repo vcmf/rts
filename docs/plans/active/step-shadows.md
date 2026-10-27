@@ -37,8 +37,9 @@ fade at the 100 m edge (the owner's call: Open questions).
 - **Bins, not points.** A clip of n steps baked in k = min(n, S) bins; bin j holds the steps from ⌊jn/k⌋ to
   ⌊(j+1)n/k⌋ − 1, its shape their average (at most a few samples a bin): with k = n each step is its own pose; with
   fewer bins the shape is the pose over that short span (march: 16 steps in 8 bins of 1/6 s). A man at step i draws
-  bin ⌊((i+1)k − 1)/n⌋ = ⌈(i+1)k/n⌉ − 1, computed in integers in the shader, his step i from the shader's `mod`
-  rounded and wrapped into the clip (a GPU's `mod` can return n: review round 1), every bin clamped into the clip's
+  bin ⌊((i+1)k − 1)/n⌋ = ⌈(i+1)k/n⌉ − 1, computed in integers in the shader, his step i as `units.vert` poses
+  his figure (its `int()` of his clip's first step plus the `mod`), the exact n a GPU's `mod` can return wrapped to 0
+  (review rounds 1 and 2), every bin clamped into the clip's
   (`stepIndex`, `stepBin`). `blend`: bin centres (j + ½)n/k apart, the two around (i + ½) mixed, wrapped the same way.
 - **A 2D atlas, RG8, mips** (R the shape, G the soft bake, as today). A row of cells holds the facings of one bin;
   the rows of all roles' bins are stacked, in as many side-by-side blocks as keep the atlas near square and within
@@ -167,7 +168,7 @@ facings shows a step when a man turns; `12` buys almost nothing over `8`.
 The owner picked the per-step shadow **without the oval**, and asked to "make the shadow at feet sharper and darker".
 
 **Shipping shape, behind the switch:** `?ushstep=8,8&ushcontact=0`. The per-step shape is read only by the near
-material, within the contact's band (60 to 100 m: `nearWeight`, `nearOn`). The far material keeps today's averaged
+material, within its band (60 to 100 m: `nearWeight`, `nearOn`; `?ushnearband` since review round 2). The far material keeps today's averaged
 shape, so there are two atlases: today's 1792 × 640 (2.9 MB with mips) and the per-step 1792 × 2560 (11.7 MB), **14.6 MB
 in all**. Both bakes together take 230 to 250 ms at load (Metal, loaded machine). Past 100 m the switch from the
 per-step shape to the averaged one is a hard switch, at a size where the two read alike.
@@ -208,7 +209,17 @@ Metal and two on SwiftShader (1-min load 4.5 to 7.8):
 | main 1093fdc3 | 155–160 | 1727–1769 | 6904–6928 |
 | default | 243–272 | 1797–1889 | 6912–6916 |
 
-About 100 ms more of bake at load; the page's build about 70 ms longer on Metal, the same on SwiftShader.
+Those default `shapeMs` included the textures' creation. Re-measured in review round 2 with `shapeMs` the bakes alone
+(`shadowShape`, both summed, as main times its one): three loads each on Metal, the machine loaded by another
+session (1-min load 31 to 34; the bake is CPU work and held within 4 ms across loads):
+
+| | `shapeMs` (the bakes alone) | `__buildMs` Metal |
+|---|---|---|
+| main 1093fdc3 | 154.5–155.7 | 1706–1773 |
+| default | 249.0–253.0 | 1790–1962 |
+
+About 95 ms more of bake at load; the page's build about 70 to 190 ms longer on Metal under that load (70 to 120 ms
+in the quieter first measure), the same on SwiftShader. #235 would move the per-step bake off the load.
 
 ### Frame cost
 
@@ -240,12 +251,26 @@ shape (`output/armies-review/24-step-feet/14-edge-100m-bare.jpg`). At 3× the tw
 if the owner sees it: fade the boost to 1 over the band by the near weight on the CPU (one uniform; no shader change);
 not built.
 
-### Checks (the final default, once)
+### Checks (the final code, after review round 2, once)
 
-- `npm test`: lint, format and typecheck passed. Vitest had 635 of 637 passing; the two failures were the sim's cost
-  tests (`test/formations.test.ts`, `test/soldiers.test.ts`, code this branch does not touch) under a 1-min load of
-  about 15. Rerun alone: exit 0.
-- `check:data`, `check:docs`, the build: exit 0.
+- `npm test` (lint, format, typecheck, Vitest 643 of 643), `check:data`, `check:docs`, the build: exit 0. (Round 3's
+  first run had two of the sim's cost tests over budget under a 1-min load of about 15; rerun alone they passed.)
 - `tools/golden.mjs` main 1093fdc3 against `?ushstep=0&ushcontact=1` on this branch, `?armies=20`, 8 cameras: a match
   (0.000 % at every region), exit 0.
 - `tools/guard.mjs` `?armies=20 --figures --base` main: exit 0.
+- The default against round 2's B (`?ushstep=8,8&ushcontact=0&ushfootk=3,0.6`), close march, close run and 40 m
+  march, bare and meadow: identical (0 pixels differ).
+
+## Review rounds
+
+- **Round 1 (severe, fixed):** the hold bin could pass the clip's last on a GPU (an inexact division, and a `mod`
+  returning n): the step wrapped, the bin in integers and clamped, tested under an emulated ANGLE Metal `mod`; the
+  default atlas (2560 texels a side) over WebGL2's promised 2048: a fallback to the averaged shape with a warning (an
+  error with an explicit `?ushstep`); the blend's bins wrapped and clamped; the foot boost on the shape alone, so
+  `?ushcontact=1` keeps decision 0071's oval; `?ushcontactat`, `?ushcontactband` an error without the oval; dead
+  timing fields removed; this plan rewritten for the shipped default; the deferred bake filed (#235).
+- **Round 2 (moderate, fixed; the last):** the shadow's step exactly `units.vert`'s (its `int()` of the clip's first
+  step plus the `mod`, the exact n wrapped), tested equal to the figure's under the emulated `mod`; the per-step band
+  its own switch (`?ushnearband`, `NEAR_BAND`), the oval's band its own; `shapeMs` the bakes alone, re-measured; the
+  role's clip check its own function; the fallback rule inlined; the far atlas disposed on the error path and
+  `Units.stepFallback` set on the fallback.

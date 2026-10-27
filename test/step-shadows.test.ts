@@ -9,6 +9,9 @@ import {
   STEP_SHADOW,
   applyContactParams,
   applyFootSharpParams,
+  applyNearBandParams,
+  NEAR_BAND,
+  ovalWeight,
   applyStepParams,
   footSharpen,
   nearOn,
@@ -21,7 +24,6 @@ import {
   shadowShape,
   stepAtlasLayout,
   AtlasTooLarge,
-  stepAtlasFallback,
   stepBin,
   stepBlend,
   stepIndex,
@@ -51,14 +53,28 @@ describe('the bin a step draws (stepBin)', () => {
     const qq = f32(q * (1 + ulp * 2 ** -23))
     return f32(x - f32(n * Math.floor(qq)))
   }
-  it("puts a GPU's step (its mod off by an ULP, even n itself) in the right bin, never past the clip's", () => {
+  it("takes the figure's own step (units.vert's int() of start + mod) on a GPU, its mod off by an ULP or n itself", () => {
+    for (let n = 1; n <= 200; n++) {
+      for (const start of [0, 49, 75, 1000]) {
+        for (let x = 0; x < 3 * n; x++) {
+          for (const ulp of [-1, 0, 1] as const) {
+            const m = gpuMod(x + 1000 * n, n, ulp)
+            // (units.vert: int f=int(r.x+mod(...)); at the exact n it poses the clip's closing row, its first pose)
+            const figure = Math.trunc(f32(start + m)) - start
+            const i = stepIndex(start, m, n)
+            expect(i).toBe(figure % n)
+            expect(i).toBe(x % n)
+          }
+        }
+      }
+    }
+  })
+  it("puts a GPU's step in the right bin, never past the clip's", () => {
     for (let n = 1; n <= 200; n++) {
       for (let k = 1; k <= Math.min(n, 16); k++) {
         for (let x = 0; x < 3 * n; x++) {
           for (const ulp of [-1, 0, 1] as const) {
-            const m = gpuMod(x + 1000 * n, n, ulp)
-            const i = stepIndex(m, n)
-            expect(i).toBe(x % n)
+            const i = stepIndex(49, gpuMod(x + 1000 * n, n, ulp), n)
             const j = stepBin(i, n, k)
             expect(j).toBeGreaterThanOrEqual(0)
             expect(j).toBeLessThan(k)
@@ -69,9 +85,9 @@ describe('the bin a step draws (stepBin)', () => {
     }
   })
   it("wraps the mod's n to 0 and clamps any bin into the clip's", () => {
-    expect(stepIndex(16, 16)).toBe(0)
-    expect(stepIndex(15.9999, 16)).toBe(0)
-    expect(stepIndex(-0.2, 16)).toBe(0)
+    expect(stepIndex(49, 16, 16)).toBe(0)
+    expect(stepIndex(49, 15, 16)).toBe(15)
+    expect(stepIndex(49, -0.2, 16)).toBe(0)
     expect(stepBin(16, 16, 8)).toBe(7)
     expect(stepBin(-1, 16, 8)).toBe(0)
   })
@@ -191,9 +207,6 @@ describe('the shape baked per step (shadowShape steps)', () => {
       shadowShape(d, lod, sun, roles, { facings: 8, soft: 0.12, posed: pv, steps: 8, maxSize: 2048 }),
     ).toThrow(AtlasTooLarge)
     expect(Math.max(s.width, s.height)).toBe(2560)
-    // (the page falls back to the averaged shape then, with a warning, unless ?ushstep asked for it)
-    expect(stepAtlasFallback(false)).toBe('fallback')
-    expect(stepAtlasFallback(true)).toBe('error')
   })
   it('fills every cell inside its empty border, the run differing step to step', () => {
     for (let row = 0; row < 32; row++) {
@@ -259,7 +272,7 @@ describe('unitdecal.vert picks the bin as stepBin and stepBlend do (the source)'
   it("his step as units.vert counts it, his bin, the blend's bins, the cell's block", () => {
     const v = src('unitdecal.vert')
     once(src('units.vert'), 'intf=int(r.x+mod(uVATStep+r.z,r.y));')
-    once(v, 'intii=int(floor(mod(uVATStep+aVAT.z,aVAT.y)+0.5));ii=clamp(ii>=ni?ii-ni:ii,0,ni-1);')
+    once(v, 'intii=int(aVAT.x+mod(uVATStep+aVAT.z,aVAT.y))-int(aVAT.x+0.5);ii=clamp(ii==ni?0:ii,0,ni-1);')
     once(v, 'floatjb=float(clamp(((ii+1)*ki-1)/ni,0,ki-1));')
     once(v, 'floatsp=(float(ii)+0.5)*float(ki)/float(ni)-0.5,sf=floor(sp);vS=clamp(sp-sf,0.0,1.0);')
     once(v, 'floatja=float(clamp((si+ki)%ki,0,ki-1)),jb=float(clamp((si+1)%ki,0,ki-1));')
@@ -278,12 +291,24 @@ describe('unitdecal.vert picks the bin as stepBin and stepBlend do (the source)'
 
 describe('the near material with the per-step shape (nearWeight, nearOn)', () => {
   const c = { ...SHADOW_CONTACT }
-  it("takes the contact's band with a contact, the default band with the per-step shape alone, none with neither", () => {
-    expect(nearWeight(null, false, 20)).toBe(0)
-    expect(nearWeight(null, true, 20)).toBe(1)
-    expect(nearWeight(null, true, SHADOW_CONTACT.band[1] + 1)).toBe(0)
-    expect(nearWeight({ ...c, band: [10, 20] }, true, 30)).toBe(0)
-    expect(nearWeight({ ...c, dark: 0 }, false, 20)).toBe(0)
+  const band = [...NEAR_BAND] as [number, number]
+  it("takes the per-step band for the per-step shape, the oval's own band for the oval, the larger of both", () => {
+    expect(NEAR_BAND).toEqual([60, 100])
+    expect(nearWeight(null, false, 20, band)).toBe(0)
+    expect(nearWeight(null, true, 20, band)).toBe(1)
+    expect(nearWeight(null, true, 101, band)).toBe(0)
+    expect(nearWeight(null, true, 150, [100, 200])).toBeGreaterThan(0)
+    expect(nearWeight({ ...c, band: [10, 20] }, false, 30, band)).toBe(0)
+    expect(nearWeight({ ...c, band: [10, 20] }, true, 30, band)).toBe(1)
+    expect(nearWeight({ ...c, dark: 0 }, false, 20, band)).toBe(0)
+    expect(ovalWeight({ ...c, band: [10, 20] }, 30)).toBe(0)
+    expect(ovalWeight(null, 10)).toBe(0)
+  })
+  it('reads ?ushnearband, 60,100 when absent, r0 < r1', () => {
+    const q = (v: string) => applyNearBandParams(new URLSearchParams(v))
+    expect(q('')).toEqual([60, 100])
+    expect(q('ushnearband=40,150')).toEqual([40, 150])
+    for (const v of ['100,60', '50', 'x,1']) expect(() => q(`ushnearband=${v}`), v).toThrow(/ushnearband/)
   })
   it('draws the near material within the band for the oval or the per-step shape', () => {
     expect(nearOn(null, true, 0.5)).toBe(true)

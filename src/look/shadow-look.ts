@@ -490,12 +490,28 @@ export function applyStepParams(q: URLSearchParams): StepShadow | null {
   return { steps, facings, blend: mode === 'blend' }
 }
 
-/** The near material's weight at the camera's distance r (m): the contact's (contactWeight over its band) with a
- *  contact, or with the per-step shape (steps) over the contact's default band, which it shares
- *  (docs/plans/active/step-shadows.md); 0 with neither */
-export function nearWeight(c: ShadowContact | null, steps: boolean, r: number): number {
-  if (c && c.dark > 0) return contactWeight(r, c.band)
-  return steps ? contactWeight(r, SHADOW_CONTACT.band) : 0
+/** The band of the camera's distance to its focus (m) where the per-step shape gives way to the averaged one: whole
+ *  to its start, drawn to its end (decision 0074; ?ushnearband) */
+export const NEAR_BAND: readonly [number, number] = [60, 100]
+/** ?ushnearband=<r0>,<r1> (m, r0 < r1): the per-step shape's band (NEAR_BAND when absent) */
+export function applyNearBandParams(q: URLSearchParams): [number, number] {
+  const b = parseNumbers(q, 'ushnearband', [2], [0, 1000])
+  if (b && !(b[1] > b[0])) throw new Error(`?ushnearband must be <r0>,<r1> with r0 < r1, not ${q.get('ushnearband')}`)
+  return b ? [b[0], b[1]] : [NEAR_BAND[0], NEAR_BAND[1]]
+}
+/** The contact oval's own weight at the camera's distance r (m): contactWeight over its band, 0 without one */
+export function ovalWeight(c: ShadowContact | null, r: number): number {
+  return c && c.dark > 0 ? contactWeight(r, c.band) : 0
+}
+/** The near material's weight at the camera's distance r (m): the larger of the oval's (its own band) and, with the
+ *  per-step shape (steps), the per-step band's (band: ?ushnearband); 0 with neither */
+export function nearWeight(
+  c: ShadowContact | null,
+  steps: boolean,
+  r: number,
+  band: readonly [number, number],
+): number {
+  return Math.max(ovalWeight(c, r), steps ? contactWeight(r, band) : 0)
 }
 /** Whether the decal draws with its near material this frame (weight w): the contact's oval (contactOvalOn) or the
  *  per-step shape, within the band; else the far one (today's shape, decision 0062's material) */
