@@ -217,4 +217,69 @@ describe("a map's ways", () => {
     const c = inkCost({ w: 30, h: 30, l })
     expect(snapToInk(c, 30, 30, [15, 10], 4)).toEqual([15, 10])
   })
+  it('refuses a waypoint off the image before moving it, and keeps one on a faint line', () => {
+    const g = sheet(30, 30, 230, 150, x => x === 10)
+    const c = inkCost(g)
+    expect(() => snapToInk(c, 30, 30, [-3, 7], 4)).toThrow(/off the 30 × 30 image/)
+    expect(() => snapToInk(c, 30, 30, [-10, 7], 4)).toThrow(/off/)
+    // a line 15 levels darker than its paper (not saturated) beside a letter's dark stroke 3 px off
+    const l = new Float32Array(30 * 30).fill(230)
+    for (let x = 0; x < 30; x++) l[10 * 30 + x] = 212
+    for (let x = 12; x < 18; x++) l[13 * 30 + x] = 60
+    expect(snapToInk(inkCost({ w: 30, h: 30, l }), 30, 30, [15, 10], 4)).toEqual([15, 10])
+  })
+  it('passes straight through a plain waypoint and round a right-angled corner without cutting them', () => {
+    const line = sheet(60, 30, 230, 150, (x, y) => y === 10 || (x === 40 && y >= 10))
+    const c = inkCost(line)
+    for (const pts of [
+      [
+        [5, 10],
+        [30, 10],
+        [55, 10],
+      ],
+      [
+        [5, 10],
+        [40, 10],
+        [40, 28],
+      ],
+    ] as Pt[][]) {
+      const t = traceWay(c, 60, 30, pts, [false, false, false])
+      expect(t.px.some(p => p[0] === pts[1][0] && p[1] === pts[1][1])).toBe(true)
+      // still a chain of neighbouring pixels
+      for (let k = 1; k < t.px.length; k++) {
+        expect(Math.max(Math.abs(t.px[k][0] - t.px[k - 1][0]), Math.abs(t.px[k][1] - t.px[k - 1][1]))).toBe(1)
+      }
+    }
+  })
+  it('refuses to cut a junction off with the end it runs along another way', () => {
+    const main: Pt[] = Array.from({ length: 61 }, (_, x) => [x - 20, 0])
+    const branch: Pt[] = [
+      ...Array.from({ length: 21 }, (_, x): Pt => [x, 1]),
+      ...Array.from({ length: 20 }, (_, k): Pt => [20, k + 2]),
+    ]
+    expect(() =>
+      forks(
+        [
+          { px: main, keep: new Set([0, 60]) },
+          { px: branch, keep: new Set([0, 10, branch.length - 1]) },
+        ],
+        3,
+        8,
+        ['main', 'branch'],
+      ),
+    ).toThrow(/branch: a junction lies on the end it runs along main/)
+  })
+  it('finds a stretch traced twice though a third way crosses it', () => {
+    const a: Pt[] = Array.from({ length: 80 }, (_, x): Pt => [x, 20])
+    const b: Pt[] = [
+      ...Array.from({ length: 20 }, (_, k): Pt => [5, k]),
+      ...Array.from({ length: 60 }, (_, x): Pt => [x + 6, 21]),
+      ...Array.from({ length: 19 }, (_, k): Pt => [65, 22 + k]),
+    ]
+    const across: Pt[] = Array.from({ length: 40 }, (_, k): Pt => [36, k + 2])
+    const ways = [a, b, across].map(px => ({ px, keep: new Set([0, px.length - 1]) }))
+    const twice = doubled(ways, 3, 32)
+    expect(twice).not.toBeNull()
+    expect([twice![0], twice![1]].sort()).toEqual([0, 1])
+  })
 })
