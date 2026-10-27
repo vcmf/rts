@@ -25,6 +25,8 @@ Track M's does.
 | Phase | What | Why now |
 |---|---|---|
 | **S1e-3** | The playtest kit (marks, the session file, the battle report) and the tuned S1e battle (#51) | In review; the tools every later phase is tuned with |
+| **U1–U9** | The unit model (`docs/proposals/unit-model.md`, its scenarios in `docs/proposals/unit-scenarios.md`): sectors, experience, closing and the assault, guns taken, categories, collision, ground with Track M; U8 is S1f-3's pathfinding and U9 includes S1f-4's group moves | The owner (2026-10-25): the units' rules first, as the heart of the game's logic, before the enemy that orders them |
+| **Collision and orders** | Its own proposal before U6: formed and loose bodies, the clash, the orders' kinds and queue (shift appends, what suspends or clears it, #179); research in `docs/research/` after the owner's review; first a visual bench (overlays of blocks, strips and contacts; one scenario per hard case; slow motion and single steps), then the code | The owner (2026-10-25): collision is checked visually; the unit model's reviews kept finding it the hardest part |
 | **S1f-1** | The plan reacts: a scenario plan's steps start on conditions (a formation's state, a charge over, a share of a side in the fight) as well as on times; a step survives a melee's pursuit or recoil (#179) | The timed plan is the S1e battle's weakest part: its cavalry rides home on the clock, and its second wave goes in at 15 min whatever happens |
 | **S1f-2** | The end of a battle: the side's share in the fight leaves out battalions rallied far behind, so `end.broken` goes back to one meaning for every scenario (#180); the battle stops going quiet after the result | The result is the playtest's verdict, and #180 makes it scenario-specific |
 | **S1f-3** | Pathfinding (`docs/proposals/sim-design.md` §7): A* on the cost grid dilated by the formation's width, time-sliced; a path with turns marches in column and re-forms on arrival | A formation today marches straight and halts at what it cannot cross: no flank march, no ford found. The AI needs it first (`docs/proposals/ai.md`, prerequisites) |
@@ -35,7 +37,7 @@ Then S2 (`docs/proposals/sim-design.md` §17): the battle in a worker (`docs/pla
 0048), vision as a core rule (Track M's fog of war needs it), smoke, commanders, the compact 2 m grids (Track M's
 maps over about 2 km need them), and issues #35, #36 and #38. S3 brings the brigade AI (`docs/proposals/ai.md`).
 
-The order of S1f-1 to S1f-4 can change after each phase; each plan says why if it does.
+S1f-1 and S1f-2 come after U1–U7: the reacting plan is better written once the units it orders behave by the model. S1f-3 and S1f-4 are the model's U8 and U9. The order can change after each phase; each plan says why if it does.
 
 ## Open questions
 
