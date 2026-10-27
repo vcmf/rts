@@ -34,7 +34,8 @@ Measured (the plan):
     The feet are the posed vertices near the clip's lowest point; no era names (0015).
   - Grown 0.1 m past the feet, solid over that, fading out over as far again (softness 1), at 0.9 of the cap's
     darkness: the owner's picks.
-  - Every foot of every clip's every step lies on its solid part (tested).
+  - Every foot of every clip's every step lies on its solid part, the nearer LODs' feet too (tested). The oval's
+    strip reaches past the shape's cell, which it reads nothing outside, so no strip edge cuts the fade (tested).
 - **Every shadow capped at about a tree's cast shadow.**
   - A covered sample takes the ground's shade, its luminance raised to 1.15, its hue kept. 1.15 was measured: a
     tree's shadow is darker than the shade, because the crown hides sky too.
@@ -50,7 +51,10 @@ Measured (the plan):
   - That keeps the cap: a fully covered pixel there is L(k)^gain at most, never darker than L(k)^1.15.
   - Across the band the gain eases from the look's to that, and where the cap no longer binds the capped look gives
     the uncapped one's pixel, so nothing pops at the switch (tested).
-  - Both materials are compiled at load; the page switches between them only when the band's edge is crossed.
+  - Its darkness is held to the ground's full shade too (a `?ushfoot` over 1 is divided down, the coverage kept), so
+    no switch breaks the cap (`heldLook`).
+  - The material not drawn is compiled in the background until ready; the page switches only when the band's edge
+    is crossed and the wanted one is ready, and until then the one drawn keeps the cap.
   - The cap's factor L(k)^0.15 is baked once into the shade's alpha (`src/look/shaders/unitshade.frag`), so the
     capped shader raises nothing to a power for it.
 - **Switches** for the A/B:

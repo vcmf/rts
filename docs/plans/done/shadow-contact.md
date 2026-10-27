@@ -285,3 +285,79 @@ the 1-minute load average was under 3. The values are the default arm's (`l2`) p
    - **125 m:** GPU +0.03, within the spread; frame +0.12 ms.
    - **250 m:** equal.
 
+## Review round 1 (2026-10-27)
+
+**The strip cut the oval** (severe).
+- The oval's strip was clamped to the shape's cell, 0.99 m sunward of the soles on the far LOD. The oval with its
+  pad and its fade (softness 1) reaches 1.5 to 1.7 m sunward. The reviewer measured a contact share of 0.65 (march)
+  and 0.88 (run) at the strip's sunward edge: a straight cut on columns marching toward or away from the sun.
+- Now the oval's material grows its strip past the cell (`contactReachOf`, `decalStrip`) and reads no shape outside
+  it (`vCell` in `unitdecal.vert`, `unitdecal.frag`). The other material never gets the reach (`contactUniform`'s
+  `near`).
+- Tested on the figure's data: every baked step of every clip, step and stride ovals, 64 facings, the close, middle
+  and far strips. The contact share at every strip edge is 0.
+- Sheet: `output/armies-review/22-shadow-contact/9-strip-cut-80m.jpg`, the sunward rank of the demo battalion at
+  80 m. There the cut was hidden by the neighbouring men's shadows; the crops differ by specks a few levels apart
+  (the grown strip's rows shift, and with them the decal's lift near the feet).
+
+**"Both compiled at load" was not true** (severe).
+- `setFarScale` and `setLodFade` change the defines after the materials are made, so the forced compile went stale.
+  The far material compiled on the first crossing of 100 m (a hitch).
+- Worse, while the near one was not ready the far one could draw with the eased gain, above 1.15: past the cap.
+- Now the material not drawn is compiled in the background (polled with `isReady` each frame until ready, and again
+  after any change of the defines), and the switch waits for it.
+- The far material's look keeps the cap whatever the weight (`heldLook`), so drawing it early is never darker than
+  the cap.
+
+**The far material broke the cap with a darkness over 1**, e.g. `?ushfoot` up to 1.5. Now its soles' and tip's
+darkness are divided by the darker when it is over 1 (the coverage, their ratio, unchanged; tested with 1.5).
+
+**Shader–mirror ties:** the capped lines of `unitdecal.frag` (lk, lg, room, the share, the contact, the cell mask),
+the alpha factor of `unitshade.frag`, the step and oval frame of `unitdecal.vert` against `units.vert`'s step formula
+are tied to their TS mirrors by source tests (`contactPoint` now mirrors the oval's frame and is tested on its own).
+
+**Comments** claiming the oval's read is skipped at weight 0 are fixed: past the band it is a different material,
+not a skipped read.
+
+**Without coverage** (`?msaa=1|2`): the first shadow at a pixel wins, so a neighbour's faint oval rim drawn first can
+keep a darker core from a pixel. This is documented in `docs/systems/look.md` (the sun shadows' faint edges already
+behaved so on that path) rather than changed unmeasured.
+
+**Also:**
+- **The bilinear cap:** the shade's colour and its cap factor (the alpha) are filtered separately, and their product
+  differs from the exact k · L(k)^0.15 by up to about 1 % across a texel where the shade changes fast (a tree
+  shadow's edge); the 8-bit alpha adds at most 0.4 %.
+- **The nearer LODs' feet** (lod0, lod1) are on the solid part of the far LOD's step ovals at every step (tested).
+
+**Goldens** (main 5227ec6 against the fixed branch):
+- The default page and `?armies=20&ushcontact=0`: a match at all 8 cameras.
+- `?armies=20`: differs only on the battalions. Darker / lighter pixels by more than 6 levels:
+
+  | camera | darker | lighter |
+  |---|---|---|
+  | start | 0 | 0 |
+  | yaw −40 | 0 | 325 |
+  | yaw +40 | 0 | 95 |
+  | close | 2,887 | 5,889 |
+  | river | 0 | 261 |
+  | wide | 0 | 9,252 |
+  | far-edge | 0 | 1,524 |
+  | winter | 0 | 0 |
+
+  Within a few pixels of before the fixes.
+- The shadows' measurements: unchanged within 0.003.
+
+**The cost after the fixes** (the larger strip within the band):
+
+Metal, main 5227ec6 against the fixed branch, alternated, 3 rounds started at load 2.82, 2.90 and 2.93. GPU and
+frame p50, ms, rounds in brackets:
+
+| zoom | main GPU | branch GPU | main frame | branch frame |
+|---|---|---|---|---|
+| 40 m | 13.05 (13.06, 13.03, 13.06) | 13.06 (13.05, 13.07, 13.06) | 9.02 | 7.76 (pacing) |
+| 63 m | 13.84 (13.84, 13.82, 13.85) | 13.89 (13.88, 13.89, 13.89) | 9.77 | 9.79 |
+| 125 m | 13.48 (13.48, 13.46, 13.50) | 13.49 (13.49, 13.49, 13.49) | 10.41 | 10.38 |
+| 250 m | 9.57 (9.58, 9.55, 9.58) | 9.56 (9.56, 9.58, 9.54) | 6.62 | 6.63 |
+
+No regression from the larger strip: 40, 125 and 250 m equal main, and 63 m is +0.05 ms of GPU as before the fixes.
+

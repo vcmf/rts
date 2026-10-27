@@ -12,8 +12,9 @@ import {
   applyLookParams,
   cappedCover,
   capShade,
-  contactGain,
   contactOvalOn,
+  contactPoint,
+  contactReachOf,
   contactShare,
   contactUniform,
   contactWeight,
@@ -21,6 +22,7 @@ import {
   decalStrip,
   farShare,
   footUniform,
+  heldLook,
   lookBetween,
   luma,
   decalPixel,
@@ -419,11 +421,12 @@ describe('the contact shadow and the cap (decision 0071)', () => {
     expect(contactWeight(125, b)).toBe(0)
     expect(contactWeight(250, b)).toBe(0)
   })
-  it('past its band only the cap is left: no darkness (the oval not read), no reach (the strip as without)', () => {
-    expect(contactUniform(SHADOW_CONTACT, 1, 0.9)).toEqual({ uniform: [0.1, 0.9, 1, 1.15], reach: 0.9 })
-    expect(contactUniform(SHADOW_CONTACT, 0.5, 0.9).uniform[1]).toBeCloseTo(0.45, 12)
-    expect(contactUniform(SHADOW_CONTACT, 0, 0.9)).toEqual({ uniform: [0.1, 0, 1, 1.15], reach: 0 })
-    expect(contactUniform({ ...SHADOW_CONTACT, dark: 0 }, 1, 0.9).reach).toBe(0)
+  it("the strip's reach only while the oval's material draws (the other reads no cell bounds), none past the band", () => {
+    expect(contactUniform(SHADOW_CONTACT, 1, 0.9, true)).toEqual({ uniform: [0.1, 0.9, 1, 1.15], reach: 0.9 })
+    expect(contactUniform(SHADOW_CONTACT, 0.5, 0.9, true).uniform[1]).toBeCloseTo(0.45, 12)
+    expect(contactUniform(SHADOW_CONTACT, 0, 0.9, true)).toEqual({ uniform: [0.1, 0, 1, 1.15], reach: 0 })
+    expect(contactUniform(SHADOW_CONTACT, 1, 0.9, false).reach).toBe(0)
+    expect(contactUniform({ ...SHADOW_CONTACT, dark: 0 }, 1, 0.9, true).reach).toBe(0)
   })
   it('draws the oval only within its band and with a darkness (else the material without it)', () => {
     expect(contactOvalOn(SHADOW_CONTACT, 1)).toBe(true)
@@ -440,14 +443,32 @@ describe('the contact shadow and the cap (decision 0071)', () => {
     expect(capShade([1, 1, 1], 1, 1.15)).toEqual([1, 1, 1])
     capShade(k, 0.5, 1.15).forEach((v, i) => expect(v).toBeCloseTo(1 + (c[i] - 1) * 0.5, 12))
   })
-  it("past the band the gain no higher than the cap's exponent, eased in across the band (no pop)", () => {
-    expect(contactGain(2, SHADOW_CONTACT, 1)).toBe(2)
-    expect(contactGain(1.5, SHADOW_CONTACT, 0)).toBe(1.15)
-    expect(contactGain(1.5, SHADOW_CONTACT, 0.5)).toBeCloseTo(1.325, 12)
-    expect(contactGain(1.1, SHADOW_CONTACT, 0)).toBe(1.1)
-    // the cap alone (no oval) and no contact: the look's own
-    expect(contactGain(1.5, { ...SHADOW_CONTACT, dark: 0 }, 0)).toBe(1.5)
-    expect(contactGain(1.5, null, 0)).toBe(1.5)
+  it("the material with the oval: the look's own, the gain eased toward the cap's exponent across the band", () => {
+    const fu: [number, number, number, number] = [1.05, 0.55, 0.4, 2.5]
+    expect(heldLook(fu, 2, SHADOW_CONTACT, 1, true)).toEqual({ foot: fu, gain: 2 })
+    expect(heldLook(fu, 1.5, SHADOW_CONTACT, 0.5, true).gain).toBeCloseTo(1.325, 12)
+    // the cap alone (no oval) and no contact: the look's own, either material
+    expect(heldLook(fu, 1.5, { ...SHADOW_CONTACT, dark: 0 }, 0, false)).toEqual({ foot: fu, gain: 1.5 })
+    expect(heldLook(fu, 1.5, null, 0, false)).toEqual({ foot: fu, gain: 1.5 })
+  })
+  it('the material without the oval keeps the cap at any weight and any switch (foot up to 1.5)', () => {
+    for (const w of [0, 0.5, 1]) {
+      for (const fu of [
+        [1, 1, 0, 3],
+        [1.05, 0.55, 0.4, 2.5],
+        [1.5, 0.6, 0.6, 3],
+      ] as [number, number, number, number][]) {
+        const h = heldLook(fu, 2, SHADOW_CONTACT, w, false)
+        expect(h.gain).toBe(1.15)
+        expect(Math.max(h.foot[0], h.foot[1])).toBeLessThanOrEqual(1)
+        expect(h.foot[0] / h.foot[1]).toBeCloseTo(fu[0] / fu[1], 12) // (the coverage, their ratio, unchanged)
+        // the darkest pixel it can draw, fully covered at its darkest, no darker than the cap
+        const dm = Math.max(h.foot[0], h.foot[1])
+        expect(luma(shadowShade(k, dm, h.gain))).toBeGreaterThanOrEqual(luma(k) ** 1.15 - 1e-12)
+      }
+    }
+    // (without the hold a foot of 1.5 at gain 1.15 would go past it)
+    expect(luma(shadowShade(k, 1.5, 1.15))).toBeLessThan(luma(k) ** 1.15)
   })
   it("past the band the uncapped shader at that gain is no darker than the cap, and the capped one's pixel", () => {
     const far = { s: 1, g: 1, foot: 1, dark: 1, cap: 1.15 }
@@ -509,12 +530,13 @@ describe('the contact shadow and the cap (decision 0071)', () => {
     expect(resolve([a, b])).toBe(resolve([b, a]))
     expect(resolve([a, b])).toBe(Math.min(resolve([a]), resolve([b])))
   })
-  it("the strip holds the contact's reach, never past the shape's cell, and is as before without it", () => {
+  it("the strip holds the contact's reach, past the shape's cell where it must, and is as before without it", () => {
     const base = { across: [-1, 1], along: [-0.3, 5] } as const
     const full = { across: [-1.4, 1.4], along: [-0.9, 5.4] } as const
     expect(decalStrip(base, full, 1, 1, 1.5, 0)).toEqual(decalStrip(base, full, 1, 1, 1.5))
     expect(decalStrip(base, full, 1, 1, 1.5, 0.7).box.map(v => +v.toFixed(9))).toEqual([-1, -0.7, 2, 5.7])
-    expect(decalStrip(base, full, 1, 1, 1.5, 2).box.map(v => +v.toFixed(9))).toEqual([-1.4, -0.9, 2.8, 5.9])
+    expect(decalStrip(base, full, 1, 1, 1.5, 2).box.map(v => +v.toFixed(9))).toEqual([-2, -2, 4, 7])
+    expect(decalStrip(base, full, 0, 1, 1.5, 2).box.map(v => +v.toFixed(9))).toEqual([-2, -2, 4, 7.4])
   })
 })
 
@@ -559,5 +581,99 @@ describe("the contact's ovals over the figure's feet (contactOvals)", () => {
       }
     }
     expect(contactOvals(d, pv, 'root').every(v => v === 0)).toBe(true)
+  })
+  it('the strip holds the whole oval, its fade too: no contact at any strip edge (every step, 64 facings)', () => {
+    const l = Math.hypot(-0.7, 0.45, 0.55)
+    const sun = [-0.7 / l, 0.45 / l, 0.55 / l] as const
+    const shape = shadowShape(d, lod, sun, ['halt', 'march', 'run', 'fire'], { facings: 16, soft: 0.12, posed: pv })
+    const full = { across: shape.across, along: shape.along }
+    const c = SHADOW_CONTACT
+    for (const mode of ['step', 'stride'] as const) {
+      const ov = contactOvals(d, pv, mode)
+      const reach = contactReachOf(ov, c.pad, c.soft)
+      for (const [t, len] of [
+        [0, 0.7],
+        [0.6, 0.85],
+        [1, 1],
+      ]) {
+        const [a0, l0, as, ls] = decalStrip(shape.base, full, t, len, 1.5, reach).box
+        const edge: [number, number][] = []
+        for (let i = 0; i <= 24; i++) {
+          const u = i / 24
+          edge.push([a0 + u * as, l0], [a0 + u * as, l0 + ls], [a0, l0 + u * ls], [a0 + as, l0 + u * ls])
+        }
+        let worst = 0
+        for (let st = 0; st < ov.length / 4; st++) {
+          const o = [...ov.slice(st * 4, st * 4 + 4)]
+          for (let f = 0; f < 64; f++) {
+            for (const [x, y] of edge) {
+              const q = contactPoint(x, y > 0 ? y * len : y, (2 * Math.PI * f) / 64, shape.dir, o, c.pad)
+              worst = Math.max(worst, contactShare(q, 1, c.soft))
+            }
+          }
+        }
+        expect(worst, `${mode} t ${t}`).toBe(0)
+      }
+    }
+  })
+  it("keeps the nearer LODs' feet on the solid part too (the ovals are the far LOD's)", () => {
+    const step = contactOvals(d, pv, 'step')
+    for (const near of d.lods.slice(0, -1)) {
+      const npv = posedVertices(d, near.name)
+      const nn = npv.width / 2
+      const at = (s: number, v: number) => (s * nn * 2 + v * 2) * 4
+      for (const r of Object.values(d.ranges)) {
+        let floor = Infinity
+        for (let s = r.start; s < r.end; s++) {
+          for (let v = 0; v < nn; v++) floor = Math.min(floor, npv.data[at(s, v) + 1])
+        }
+        let worst = 0
+        for (let s = r.start; s < r.end; s++) {
+          for (let v = 0; v < nn; v++) {
+            const o = at(s, v)
+            if (npv.data[o + 1] > floor + 0.12) continue
+            const qx = (npv.data[o] - step[s * 4]) / (step[s * 4 + 2] + SHADOW_CONTACT.pad)
+            const qz = (npv.data[o + 2] - step[s * 4 + 1]) / (step[s * 4 + 3] + SHADOW_CONTACT.pad)
+            worst = Math.max(worst, Math.hypot(qx, qz))
+          }
+        }
+        expect(worst, `${near.name}`).toBeLessThanOrEqual(1)
+      }
+    }
+  })
+  it("its frame is the shader's: a man faced 0 has his own x across and z along the sun's frame's turn", () => {
+    // (facing 0, the shadow along +z: across is -x; a point 1 m along the shadow is 1 m along his z)
+    expect(contactPoint(0, 1, 0, [0, 1], [0, 0, 1, 1], 0).map(v => +v.toFixed(12))).toEqual([0, 1])
+    expect(contactPoint(1, 0, 0, [0, 1], [0, 0, 1, 1], 0).map(v => +v.toFixed(12))).toEqual([-1, 0])
+    // (turned a quarter: his z now along world x)
+    expect(contactPoint(0, 1, Math.PI / 2, [1, 0], [0, 0, 1, 1], 0).map(v => +v.toFixed(12))).toEqual([0, 1])
+  })
+})
+
+describe('the contact and cap shaders match their mirrors (the source)', () => {
+  const src = (f: string) =>
+    readFileSync(new URL(`../src/look/shaders/${f}`, import.meta.url), 'utf8').replace(/\s+/g, '')
+  const L = `vec3(${SHADE_LUMA.join(',')})`
+  it("unitdecal.frag: the cap's room and the gained darkness from one dot, the contact, the share (cappedCover)", () => {
+    const f = src('unitdecal.frag')
+    expect(f).toContain(`lk=dot(K.rgb,${L});`)
+    expect(f).toContain('floatlg=pow(max(1.0-(1.0-lk)*fz*dm,1.0e-3),uShGain),room=fz*(1.0-lk*K.a);')
+    expect(f).toContain('vec3d=mix(vec3(1.0),K.rgb*K.a,fz);')
+    expect(f).toContain('a=room<1.0e-3?0.0:min(1.0,max(a*(1.0-lg)/room,ct));')
+    expect(f).toContain('floatct=uShContact.y*(1.0-smoothstep(1.0,1.0+uShContact.z,length(vCt)));')
+    expect(f).toContain('s*=step(0.0,vCell.x)*step(vCell.x,1.0)*step(0.0,vCell.y)*step(vCell.y,1.0);')
+  })
+  it("unitshade.frag: the cap's factor in the alpha, L(k)^(cap - 1) (capShade)", () => {
+    expect(src('unitshade.frag')).toContain(`gl_FragColor=vec4(k,pow(max(dot(k,${L}),1.0e-3),SH_CAP_E-1.0));`)
+  })
+  it("unitdecal.vert: his step as units.vert counts it, the oval's frame (contactPoint), his cell", () => {
+    const v = src('unitdecal.vert')
+    expect(src('units.vert')).toContain('intf=int(r.x+mod(uVATStep+r.z,r.y));')
+    expect(v).toContain('floatst=aVAT.x+mod(uVATStep+aVAT.z,aVAT.y);')
+    expect(v).toContain('vec2P=C*l0.x+uShDir*vAlong;')
+    expect(v).toContain(
+      'vCt=(vec2(dot(P,normalize(finalWorld[0].xz)),dot(P,normalize(finalWorld[2].xz)))-ov.xy)/max(ov.zw+uShContact.x,1.0e-3);',
+    )
+    expect(v).toContain('vCell=c/uShapeCell.xy;')
   })
 })

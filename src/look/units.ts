@@ -39,13 +39,14 @@ import {
   SHADOW_CONTACT,
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
-  contactGain,
   contactOvalOn,
+  contactReachOf,
   contactUniform,
   contactWeight,
   decalStrip,
   farShare,
   footUniform,
+  heldLook,
   lookBetween,
   type ShadowContact,
   type ShadowLook,
@@ -379,6 +380,7 @@ export class Units {
   private decal: ShaderMaterial | null = null // the simple shadows' material drawn now (useDecals, useDecalFor)
   private decalFar: ShaderMaterial | null = null // without the contact's oval (past its band; without a contact)
   private decalNear: ShaderMaterial | null = null // with it (within its band), null without a contact
+  private idleReady = false // the one of the two not drawn compiled (useDecalFor), false again when the defines change
   /** their share of the samples (their soft edge and their gradient: decalFragment, src/look/shadow-look.ts) as
    *  alpha to coverage, with the scene's 4 samples: order-independent; with fewer (?msaa=1|2: two samples would make
    *  the gradient one hard step on drivers that do not dither it) their share darkens the pixel instead, the first
@@ -962,11 +964,12 @@ export class Units {
     // (the simple shadow's bounds: stretched away from the sun by the longest shadow, as tall as the far figures grow)
     const k = this.scratch
     shadowBox(h, top * Math.max(1, this.look.close.len, this.look.far.len), k.a, k.b)
-    // (and the soft bake's reach sideways and behind: the outermost men's fringe)
-    k.a.x -= this.softPad
-    k.a.z -= this.softPad
-    k.b.x += this.softPad
-    k.b.z += this.softPad
+    // (and the soft bake's reach sideways and behind, or the contact's past the men's own: the outermost men's fringe)
+    const fringe = Math.max(this.softPad, this.contactReach - this.sidePad)
+    k.a.x -= fringe
+    k.a.z -= fringe
+    k.b.x += fringe
+    k.b.z += fringe
     h.lod[this.decalLod].getBoundingInfo().reConstruct(k.a, k.b)
     h.stale.fill(true)
     h.staleNext.fill(true)
@@ -1717,10 +1720,10 @@ export class Units {
     this.shapeBoxes = { base: shape.base, full: { across: shape.across, along: shape.along } }
     // (the soft bake's reach past the shape's own, on the decal's bounds: place)
     this.softPad = shape.base.across[0] - shape.across[0]
-    // within the contact's zoom band the oval and the cap; past it decision 0067's own shader, its gain no higher than
-    // the cap's exponent (contactGain: so no darker than the cap, at main's cost); with the cap alone (?ushcontact=0
-    // with ?ushcap) the cap at every zoom; with neither, 0067's. Both compiled now, so the switch at the band's edge
-    // (useDecalFor) never waits on a shader
+    // within the contact's zoom band the oval and the cap; past it decision 0067's own shader, its gain and darkness
+    // held to keep the cap (heldLook: no darker than the cap, at main's cost); with the cap alone (?ushcontact=0 with
+    // ?ushcap) the cap at every zoom; with neither, 0067's. The one not drawn is compiled in the background
+    // (useDecalFor), so the switch at the band's edge never waits on a shader
     const c = this.contact
     const oval = c !== null && c.dark > 0
     const far = make(false, c !== null && !oval)
@@ -1728,8 +1731,7 @@ export class Units {
     this.decalFar = far
     this.decalNear = near
     this.decal = near ?? far
-    const one = this.decalMesh()
-    for (const v of [far, near]) v?.forceCompilation(one, undefined, { useInstances: true })
+    this.idleReady = false
     this.setDecalLook(this.lookNow)
     for (const h of this.hosts) h.lod[this.decalLod].material = this.decal
   }
@@ -1741,8 +1743,15 @@ export class Units {
    *  oval's read, varying or texture: the cap alone). Switched only when it changes, once the one wanted is compiled
    *  (useDecals compiles both up front); the look is given to it afresh (setDecalLook) */
   private useDecalFor(): void {
-    const want = contactOvalOn(this.contact, this.contactW) && this.decalNear ? this.decalNear : this.decalFar
-    if (!want || want === this.decal || !want.isReady(this.decalMesh(), true)) return
+    const near = this.decalNear
+    const far = this.decalFar
+    if (!near || !far) return
+    // (the one not drawn compiled in the background until ready, after every change of the defines: never a hitch at
+    // the band's edge; until it is ready the one drawn stays, its look keeping the cap, heldLook)
+    const idle = this.decal === near ? far : near
+    if (!this.idleReady) this.idleReady = idle.isReady(this.decalMesh(), true)
+    const want = contactOvalOn(this.contact, this.contactW) ? near : far
+    if (want === this.decal || !this.idleReady) return
     this.decal = want
     for (const h of this.hosts) h.lod[this.decalLod].material = want
     this.lookSet.soft = NaN
@@ -1771,12 +1780,7 @@ export class Units {
     tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
     m.setTexture('uContactTex', tex)
     m.setFloat('uVATStep', 0)
-    let reach = 0
-    for (let i = 0; i < rows; i++) {
-      const o = i * 4
-      reach = Math.max(reach, Math.hypot(ov[o], ov[o + 1]) + Math.max(ov[o + 2], ov[o + 3]) + c.pad)
-    }
-    this.contactReach = c.dark > 0 ? reach * (1 + c.soft) : 0
+    this.contactReach = c.dark > 0 ? contactReachOf(ov, c.pad, c.soft) : 0
   }
   /** The contact's weight by the camera's distance (contactWeight over its band), kept for setDecalLook: 0 without a
    *  contact */
@@ -1830,13 +1834,16 @@ export class Units {
     Object.assign(p, l)
     this.lookTSet = this.lookT
     this.contactWSet = this.contactW
-    // (the contact's darkness by its weight: 0 skips its oval in the vertex shader, and its reach leaves the strip)
-    const cu = this.contact ? contactUniform(this.contact, this.contactW, this.contactReach) : null
+    // (the contact's darkness by its weight, and its reach on the strip only while the material with the oval draws;
+    // the material without it at a gain and darkness that keep the cap: heldLook)
+    const near = m === this.decalNear
+    const cu = this.contact ? contactUniform(this.contact, this.contactW, this.contactReach, near) : null
     if (cu) m.setVector4('uShContact', this.contactV.set(...cu.uniform))
+    const held = heldLook(footUniform(l, SHADOW_TIP), l.gain, this.contact, this.contactW, near)
     m.setFloat('uShSoft', l.soft)
-    m.setFloat('uShGain', contactGain(l.gain, this.contact, this.contactW))
+    m.setFloat('uShGain', held.gain)
     m.setFloat('uShLen', l.len)
-    m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
+    m.setVector4('uShFoot', this.footV.set(...held.foot))
     const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP, cu?.reach ?? 0)
     m.setVector4('uStrip', this.stripV.set(...strip.box))
     m.setVector4('uRows', this.rowsV.set(...strip.rows))
@@ -1905,6 +1912,7 @@ export class Units {
     }
     // (their shadows grow with them)
     for (const m of [this.decalFar, this.decalNear]) m?.setDefine('#define FAR_FROM', on ? FAR_FROM.toFixed(4) : false)
+    this.idleReady = false
   }
   /** A figure material's draws told whether their battalion fades each man (uLodFade, set as each mesh binds it: the
    *  material is shared by the battalions of a uniform; one drawing a single LOD draws every man, no per-man work) */
@@ -1941,6 +1949,7 @@ export class Units {
     this.farScaleOn = on
     for (const m of [...this.farMats.values(), ...this.tinyMats.values()]) m.setDefine('#define FAR_SCALE', on)
     for (const m of [this.decalFar, this.decalNear]) m?.setDefine('#define FAR_SCALE', on) // (their simple shadows too)
+    this.idleReady = false
   }
   /** each side's uniforms' coat colours (the guard's ΔE to the coat) */
   coats(): string[][] {

@@ -8,7 +8,7 @@ varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 // (SH_CONTACT: the oval; without it, past the contact's zoom band, the cap alone)
 uniform vec4 uShContact;
 #ifdef SH_CONTACT
-varying vec2 vCt;
+varying vec2 vCt,vCell;
 #endif
 #endif
 #include<painter>
@@ -39,6 +39,10 @@ void main(){
   vec2 t=vUV0*uShapeSize;float lod=min(SHAPE_MIPS,max(0.0,0.5*log2(max(dot(dFdx(t),dFdx(t)),dot(dFdy(t),dFdy(t))))));
   float g=smoothstep(uShFoot.z,uShFoot.w,vAlong);
   vec2 b=mix(textureLod(uShapeTex,vUV0,lod).rg,textureLod(uShapeTex,vUV1,lod).rg,vT);float s=mix(b.r,b.g,uShSoft*g);
+  #ifdef SH_CONTACT
+  // (no shape past his cell: the strip reaches past it for the oval, vCell from unitdecal.vert)
+  s*=step(0.0,vCell.x)*step(vCell.x,1.0)*step(0.0,vCell.y)*step(vCell.y,1.0);
+  #endif
   float dm=max(max(uShFoot.x,uShFoot.y),1e-4),a=min(1.0,s*mix(uShFoot.x,uShFoot.y,g)/dm);
   #ifdef SH_CAP
   // the capped look (cappedCover in src/look/shadow-look.ts mirrors it): every covered sample takes the cap's

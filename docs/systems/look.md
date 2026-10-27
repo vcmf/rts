@@ -680,9 +680,16 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `contactWeight`). Within the band every covered sample takes the cap's darkening (the shade's luminance raised to
   1.15, about a tree's cast shadow, its factor baked into the shade's alpha by `unitshade.frag`, `capShade`) and covers
   the share that gives the pixel its old darkening or the contact's, whichever is more (`cappedCover`): no pixel
-  darker than a tree's shadow at any gain, the overlap rule kept. Past it (`contactOvalOn`, `useDecalFor` in
-  `src/look/units.ts`) the decal draws with 0067's own material, both compiled at load, its gain held to the cap's
-  exponent (`contactGain`, eased across the band), so it is no darker than the cap and costs what 0067's does. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none;
+  darker than a tree's shadow at any gain, the overlap rule kept. The oval's material draws its strip past the
+  shape's cell where the oval reaches (`contactReachOf`, `decalStrip`'s reach) and reads no shape outside the cell
+  (`vCell`); the strip's edges hold the oval's whole fade (tested on the figure's every step, 64 facings). Past the
+  band (`contactOvalOn`, `useDecalFor` in `src/look/units.ts`) the decal draws with 0067's own material, its gain held
+  to the cap's exponent and its darkness to the ground's full shade (`heldLook`), so it is no darker than the cap
+  whatever the switches and costs what 0067's does. The material not drawn is compiled in the background (polled
+  until ready, again after any change of the defines); until it is ready the one drawn stays, its look still holding
+  the cap. Without the scene's coverage (`?msaa=1|2`) the first shadow at a pixel wins, so a neighbour's faint oval
+  rim (its fade, out to twice its size) drawn first can keep a darker core from a pixel there: order-dependent, as
+  the sun shadows' faint edges already were on that path. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none;
   with no `?ushcap` the shadows as 0067 left them), `?ushcontactat=step|stride|root`, `?ushcontactband`, `?ushcap`. The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so

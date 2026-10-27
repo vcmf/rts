@@ -72,9 +72,9 @@ export interface Strip {
  *  soles (each triangle on one side of them, so a strip shortened past them keeps the feet where they are) and its
  *  third where the lift's ramp ends (liftRamp m along the drawn shadow, liftRamp / len along the shape), so the lift,
  *  linear between rows, is whole there and the grass and legs do not poke through near the feet. Between, the rows'
- *  places (m) and the box blended. reach (m, 0 by default: as before): the base box grown to hold a disc of that radius
- *  about the root (the contact shadow's, decision 0071), never past the full box (the shape's
- *  cell: the strip never reads a neighbour's) */
+ *  places (m) and the box blended. reach (m, 0 by default: as before): the base and full boxes grown to hold a disc of
+ *  that radius about the root (the contact shadow's, decision 0071), past the shape's cell where it must: the
+ *  material with the oval reads no shape outside the cell (unitdecal.frag's vCell), so the strip may */
 export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: number, liftRamp: number, reach = 0): Strip {
   const boxOf = (b: ShapeBox): Strip['box'] => [
     b.across[0],
@@ -82,7 +82,10 @@ export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: numbe
     b.across[1] - b.across[0],
     b.along[1] - b.along[0],
   ]
-  if (reach > 0) base = grownBox(base, full, reach)
+  if (reach > 0) {
+    base = grownBox(base, reach)
+    full = grownBox(full, reach)
+  }
   if (t >= 1) return { box: boxOf(base), rows: [0, 1 / 3, 2 / 3, 1] }
   if (!(full.along[0] < 0 && full.along[1] > 0)) throw new Error('decalStrip: the box must hold the soles (along 0)')
   const ramp = Math.min(liftRamp / Math.max(len, 1e-3), full.along[1] * 0.9)
@@ -97,13 +100,10 @@ export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: numbe
   return { box, rows }
 }
 
-/** box grown to hold a disc of radius r (m) about the root, within full */
-function grownBox(box: ShapeBox, full: ShapeBox, r: number): ShapeBox {
-  const grow = (b: readonly [number, number], f: readonly [number, number]): [number, number] => [
-    Math.max(f[0], Math.min(b[0], -r)),
-    Math.min(f[1], Math.max(b[1], r)),
-  ]
-  return { across: grow(box.across, full.across), along: grow(box.along, full.along) }
+/** box grown to hold a disc of radius r (m) about the root */
+function grownBox(box: ShapeBox, r: number): ShapeBox {
+  const grow = (b: readonly [number, number]): [number, number] => [Math.min(b[0], -r), Math.max(b[1], r)]
+  return { across: grow(box.across), along: grow(box.along) }
 }
 
 /** The decal's rule at a fragment (src/look/shaders/unitdecal.frag, mirrored here for its tests): of the shape's value
@@ -302,15 +302,27 @@ export function contactWeight(r: number, band: readonly [number, number]): numbe
   return 1 - farShare(r, band)
 }
 
-/** The gain the decal draws with (decision 0071): the look's within the contact's band; past it, where the decal
- *  draws with decision 0067's own uncapped shader (cheaper), no higher than the cap's exponent, so a fully covered
- *  pixel, L(k)^gain at the far look's full darkness, is still no darker than the cap's L(k)^cap; turned from one to
- *  the other by the contact's weight w, so nothing pops at the band's end (where the cap no longer binds the capped
- *  look gives the uncapped one's pixel). With the cap alone (no oval) or neither, the look's */
-export function contactGain(gain: number, c: ShadowContact | null, w: number): number {
-  if (!c || c.dark <= 0) return gain
-  const far = Math.min(gain, c.cap)
-  return far + (gain - far) * w
+/** The look's gradient (footUniform) and gain the decal draws with (decision 0071). With the oval's material (near:
+ *  capped) as the look has them, the gain eased by the contact's weight w toward the cap's exponent across the band.
+ *  With the material without it (past the band, or the oval's not yet compiled) decision 0067's uncapped shader: its
+ *  gain no higher than the cap's exponent and its darkness at most the ground's full shade (the soles' and the tip's
+ *  divided by the darker when it is over 1: the coverage, their ratio, unchanged), so a fully covered pixel,
+ *  L(k)^gain, is never darker than the cap's L(k)^cap whatever the switches. With the cap alone (no oval) or neither,
+ *  as the look has them */
+export function heldLook(
+  foot: readonly [number, number, number, number],
+  gain: number,
+  c: ShadowContact | null,
+  w: number,
+  near: boolean,
+): { foot: [number, number, number, number]; gain: number } {
+  const f: [number, number, number, number] = [foot[0], foot[1], foot[2], foot[3]]
+  if (!c || c.dark <= 0) return { foot: f, gain }
+  const held = Math.min(gain, c.cap)
+  if (near) return { foot: f, gain: held + (gain - held) * w }
+  const dm = Math.max(f[0], f[1])
+  if (dm > 1) [f[0], f[1]] = [f[0] / dm, f[1] / dm]
+  return { foot: f, gain: held }
 }
 
 /** Whether the decal draws with the contact's oval this frame (its weight w): only within its band and with a
@@ -320,14 +332,48 @@ export function contactOvalOn(c: ShadowContact | null, w: number): boolean {
 }
 
 /** The contact's uniform for the decal (uShContact: its pad, its darkness by its weight w, its softness, the cap) and
- *  the strip's reach (m) for it: at weight 0 the darkness 0 (the vertex shader skips the oval's read) and no reach
- *  (the strip as without a contact), so past the band only the cap is left */
+ *  the strip's reach (m) for it: the reach only while the material with the oval draws (near; the other has no
+ *  vCell, so its strip must stay within the shape's cell), none at weight 0 */
 export function contactUniform(
   c: ShadowContact,
   w: number,
   reach: number,
+  near: boolean,
 ): { uniform: [number, number, number, number]; reach: number } {
-  return { uniform: [c.pad, c.dark * w, c.soft, c.cap], reach: w > 0 && c.dark > 0 ? reach : 0 }
+  return { uniform: [c.pad, c.dark * w, c.soft, c.cap], reach: near && w > 0 && c.dark > 0 ? reach : 0 }
+}
+
+/** How far the contact reaches from a man's root (m) over every baked step's oval (contactOvals: cx, cz, ax, az a
+ *  step), grown by pad and faded out to 1 + soft of its size: what the strip must hold (decalStrip's reach) */
+export function contactReachOf(ovals: Float32Array, pad: number, soft: number): number {
+  let r = 0
+  for (let i = 0; i < ovals.length; i += 4) {
+    r = Math.max(r, Math.hypot(ovals[i], ovals[i + 1]) + (Math.max(ovals[i + 2], ovals[i + 3]) + pad) * (1 + soft))
+  }
+  return r
+}
+
+/** A point of the strip in the contact's oval frame (unitdecal.vert, mirrored here for its tests): (across, along) m
+ *  from the root in the shadow's frame (along past the soles as drawn, the look's length applied), the man turned by
+ *  facing (rad, as shadowShape turns him), dir the shadow's direction on the ground; ov his step's oval [cx, cz, ax,
+ *  az], grown by pad; 1 at the oval's edge */
+export function contactPoint(
+  across: number,
+  along: number,
+  facing: number,
+  dir: readonly [number, number],
+  ov: readonly number[],
+  pad: number,
+): [number, number] {
+  const C = [-dir[1], dir[0]]
+  const px = C[0] * across + dir[0] * along
+  const pz = C[1] * across + dir[1] * along
+  const ca = Math.cos(facing)
+  const sa = Math.sin(facing)
+  // (his axes on the ground: the matrix's first and third columns, x (ca, -sa) and z (sa, ca))
+  const fx = px * ca - pz * sa
+  const fz = px * sa + pz * ca
+  return [(fx - ov[0]) / Math.max(ov[2] + pad, 1e-3), (fz - ov[1]) / Math.max(ov[3] + pad, 1e-3)]
 }
 
 /** The contact's share of the cap's darkening at q (the fragment's place in the oval's own frame: 1 at its edge), dark

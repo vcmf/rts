@@ -41,7 +41,9 @@ varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 // ground so the fragment's is exact. Only in the material drawn within the contact's zoom band (units.ts: past it a
 // material without SH_CONTACT, the cap alone)
 uniform sampler2D uContactTex;uniform float uVATStep;uniform vec4 uShContact;
-varying vec2 vCt;
+// vCell: the vertex in his shape's cell (0 to 1 inside it): the strip reaches past the cell for the oval (decalStrip),
+// and the fragment reads no shape there
+varying vec2 vCt,vCell;
 #endif
 void main(){
   #include<instancesVertex>
@@ -71,4 +73,8 @@ void main(){
   vT=fk-k0;
   float row=abs(aVAT.x-uRoleStart.y)<0.5?1.0:abs(aVAT.x-uRoleStart.z)<0.5?2.0:abs(aVAT.x-uRoleStart.w)<0.5?3.0:0.0;
   vec2 c=(l0-uShapeAt)*uShapeTexel.x+uShapeTexel.y;
-  vUV0=(vec2(k0,row)*uShapeCell.xy+c)*uShapeCell.zw;vUV1=(vec2(k1,row)*uShapeCell.xy+c)*uShapeCell.zw;}
+  vUV0=(vec2(k0,row)*uShapeCell.xy+c)*uShapeCell.zw;vUV1=(vec2(k1,row)*uShapeCell.xy+c)*uShapeCell.zw;
+  #ifdef SH_CONTACT
+  vCell=c/uShapeCell.xy;
+  #endif
+}
