@@ -9,16 +9,8 @@ import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
 import { lookArmies } from '../src/scenarios/look-world.ts'
 import { MainLink } from '../src/app/battle-link.ts'
-import { MAN_ALIVE } from '../src/render/men.ts'
-import {
-  SimMen,
-  RUN_FROM,
-  MARCH_FROM,
-  FIRE_FOR,
-  placeQuota,
-  pickPlacings,
-  type SourceMan,
-} from '../src/look/sim-men.ts'
+import { MAN_ALIVE, MARCH_FROM, RUN_FROM } from '../src/render/men.ts'
+import { SimMen, FIRE_FOR, placeQuota, pickPlacings, type SourceMan } from '../src/look/sim-men.ts'
 import { marchTo, spawns, ordersDue, SHORT, GIVE_UP, type Orders } from '../src/look/sim-armies.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
 import type { Battalion } from '../src/look/world/armies.ts'
@@ -69,7 +61,9 @@ describe("the sim's men as the renderer's", () => {
         const m = u.ids[j]
         expect([out.shown, out.x, out.z]).toEqual([true, layer.men.x[m], layer.men.z[m]])
         // at rest: his formation's heading, halted
-        expect([out.yaw, out.role]).toEqual([w.f.heading[i], 'halt'])
+        // (his way float32, as the pose the GPU draws him at)
+        expect(out.role).toBe('halt')
+        expect(out.yaw).toBeCloseTo(w.f.heading[i], 6)
       }
     }
     // no figure past the battalion's men
@@ -85,11 +79,17 @@ describe("the sim's men as the renderer's", () => {
     const out = man()
     M.vx[m] = 1
     M.vz[m] = 0
+    // (a step moves its revision on: the layer works out its men's gaits and ways again, as the men worker does)
+    u.rev++
+    link.see()
     manAt(source, 0, 3, out)
     // 1 m/s: between MARCH_FROM and RUN_FROM
     expect([MARCH_FROM < 1, 1 < RUN_FROM]).toEqual([true, true])
-    expect([out.role, out.yaw]).toEqual(['march', Math.PI / 2])
+    expect(out.role).toBe('march')
+    expect(out.yaw).toBeCloseTo(Math.PI / 2, 6)
     M.vz[m] = RUN_FROM + 0.1
+    u.rev++
+    link.see()
     manAt(source, 0, 3, out)
     expect(out.role).toBe('run')
     M.flags[m] &= ~MAN_ALIVE

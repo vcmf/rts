@@ -770,8 +770,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `maps/painted-world.ts`; on the page when it cannot share memory with them): each battalion spawned where it is laid
   out by a command (so the session replays), in column, firing at will; it marches to 90 m short of the fight's middle,
   then deploys into line. The renderer takes each man from the sim's men (`src/look/sim-men.ts`) in place of the
-  script: his place, his way (his velocity's; at rest his formation's heading), his role (run over 2.2 m/s, march over
-  0.3, else halt; fire while his company's volley is under 0.6 s old) and when it began; the fallen are not drawn (at
+  script: his place, his way and his gait, the frame's (the men worker works them out, `SoldierLayer.orient`, battle
+  threads PR 4c: his velocity's way, at rest his formation's heading; run over 2.2 m/s, march over 0.3, else halt),
+  his role from his gait (fire while his company's volley is under 0.6 s old) and when it began; the fallen are not drawn (at
   no size, under the ground; the colours at the battalion's centre). A battalion is re-placed when the men worker's
   revision of it moved on (it stepped its men, matched them again, or a company fired: `Unit.rev`, published in the
   frame's battalion table) or its last volley went stale, at most once a 12 fps step of real time (stepped as

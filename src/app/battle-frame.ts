@@ -41,7 +41,7 @@ const H_LEN = 16
 // revision (src/render/soldiers.ts Unit.rev: what changes with what it is drawn from)
 const U_ROW = 5
 
-type Typed = Uint8Array | Int8Array | Uint16Array | Int32Array | Uint32Array | Float64Array
+type Typed = Uint8Array | Int8Array | Uint16Array | Int32Array | Uint32Array | Float32Array | Float64Array
 type TypedCtor = new (buf: ArrayBufferLike, off: number, len: number) => Typed
 
 /** One column of the world: where it lives in a world (its table and key) and in a slot. */
@@ -67,6 +67,8 @@ export interface Layout {
   vz: number
   s: number
   flags: number
+  yaw: number
+  gait: number
 }
 
 // the world's own state columns (meta, rng, the free list) and its tables' columns, in a fixed order
@@ -108,7 +110,10 @@ export function layoutFor(w: World, cap: number): Layout {
   const vz = at(cap * 8)
   const s = at(cap * 4)
   const flags = at(cap)
-  return { cap, bytes: o, cols, head, units, ids, x, z, vx, vz, s, flags }
+  // the men's ways and gaits (SoldierLayer.orient: battle threads PR 4c)
+  const yaw = at(cap * 4)
+  const gait = at(cap)
+  return { cap, bytes: o, cols, head, units, ids, x, z, vx, vz, s, flags, yaw, gait }
 }
 
 /** Copies the battle's state into slot `buf` (laid out by `L`, with room for its men): the men, the battalions and
@@ -125,12 +130,16 @@ export function writeFrame(
   if (M.n > L.cap) return false
   const u8 = new Uint8Array(buf)
   if (world) copyColumns(b.w, buf, L)
+  // (the battalions whose revision moved oriented first: the frame's ways and gaits are never older than its revisions)
+  b.layer.orient()
   new Float64Array(buf, L.x, M.n).set(M.x.subarray(0, M.n))
   new Float64Array(buf, L.z, M.n).set(M.z.subarray(0, M.n))
   new Float64Array(buf, L.vx, M.n).set(M.vx.subarray(0, M.n))
   new Float64Array(buf, L.vz, M.n).set(M.vz.subarray(0, M.n))
   new Int32Array(buf, L.s, M.n).set(M.s.subarray(0, M.n))
   u8.set(M.flags.subarray(0, M.n), L.flags)
+  new Float32Array(buf, L.yaw, M.n).set(M.yaw.subarray(0, M.n))
+  u8.set(M.gait.subarray(0, M.n), L.gait)
   const rows = new Int32Array(buf, L.units, MAX_FORMATIONS * U_ROW)
   const ids = new Int32Array(buf, L.ids, L.cap)
   let nu = 0
@@ -187,6 +196,8 @@ export class FrameView {
     M.vz = new Float64Array(buf, L.vz, L.cap)
     M.s = new Int32Array(buf, L.s, L.cap)
     M.flags = new Uint8Array(buf, L.flags, L.cap)
+    M.yaw = new Float32Array(buf, L.yaw, L.cap)
+    M.gait = new Uint8Array(buf, L.gait, L.cap)
     this.layer.men = M
   }
 
@@ -221,6 +232,7 @@ export class FrameView {
           pose: new Float64Array(0),
           rev: 0,
           volleys: new Int32Array(0),
+          oriented: 0, // (the publisher's: its men's ways and gaits are the frame's)
           off,
         }
         this.cache.set(i, u)

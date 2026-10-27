@@ -26,7 +26,7 @@ import {
 import type { Scene, Obstacle } from './scene.ts'
 import { cosmeticRng } from './scene.ts'
 import { CLASS_STYLE } from './style.ts'
-import { Men, MAN_ALIVE, MAN_SETTLED, grown } from './men.ts'
+import { Men, MAN_ALIVE, MAN_SETTLED, MARCH_FROM, gaitAt, grown } from './men.ts'
 
 export const AHEAD = 0.6
 export const WALK = 1.35
@@ -65,6 +65,8 @@ export interface Unit {
   // battle threads PR 4b); volleys: its companies' last volley ticks, as last seen
   rev: number
   volleys: Int32Array
+  // the revision its men's ways and gaits were last worked out at (orient; −1: never)
+  oriented: number
 }
 
 const NO_UNITS: readonly Unit[] = []
@@ -315,6 +317,7 @@ export class SoldierLayer {
           pose: new Float64Array(8 + 2 * w.cr.maxNB).fill(NaN),
           rev: 0,
           volleys: new Int32Array(w.cr.maxC),
+          oriented: -1,
         }
         this.units.set(i, u)
         this.joinGroup(u)
@@ -763,6 +766,28 @@ export class SoldierLayer {
     this.flatZ = grown(this.flatZ, n)
     // no more cells hold men than there are men
     this.touched = grown(this.touched, n)
+  }
+  /** Works out the way each man faces and his gait (Men.yaw, Men.gait) for every battalion whose revision moved since
+   *  (battle threads PR 4c): what a renderer draws him with, so the readers of a published frame need not (call it
+   *  before publishing). His velocity's way when he marches, at rest his place's (its heading after a Face about, a
+   *  square's faces). */
+  orient(): void {
+    const M = this.men
+    const p = this.p
+    for (const u of this.units.values()) {
+      if (u.oriented === u.rev) continue
+      u.oriented = u.rev
+      this.frame(u.i, this.alphaNow)
+      for (let j = 0; j < u.n; j++) {
+        const m = u.ids[j]
+        if (!(M.flags[m] & MAN_ALIVE)) continue
+        const vx = M.vx[m]
+        const vz = M.vz[m]
+        const v = Math.hypot(vx, vz)
+        M.gait[m] = gaitAt(v)
+        M.yaw[m] = v > MARCH_FROM ? Math.atan2(vx, vz) : this.place(u.i, M.s[m], false, p)[2]
+      }
+    }
   }
   // how far men stand from their places (a measurement): max and mean, metres
   slotError(): { max: number; mean: number } {

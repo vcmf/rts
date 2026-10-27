@@ -12,6 +12,16 @@ export const MAN_SETTLED = 2
 /** Left the field with his battalion: neither standing nor fallen, so not drawn; his index is free. */
 export const MAN_LEFT = 4
 
+/** A man's gait (Men.gait): at rest, marching (over MARCH_FROM m/s), running (over RUN_FROM). */
+export const GAIT_HALT = 0
+export const GAIT_MARCH = 1
+export const GAIT_RUN = 2
+/** m/s: the speed from which a man marches, and runs (his gait). */
+export const MARCH_FROM = 0.3
+export const RUN_FROM = 2.2
+/** His gait at speed `v` (m/s). */
+export const gaitAt = (v: number): number => (v > RUN_FROM ? GAIT_RUN : v > MARCH_FROM ? GAIT_MARCH : GAIT_HALT)
+
 /** Every man the layer has had, at indices 0 to `n` − 1 (those flagged MAN_LEFT free). Read the arrays afresh
  * after an `add`: it may reallocate them. */
 export class Men {
@@ -34,6 +44,10 @@ export class Men {
   // his slot in his battalion's shape, and MAN_ALIVE | MAN_SETTLED | MAN_LEFT
   s: Int32Array
   flags: Uint8Array
+  // the way he faces (rad: (sin, cos) ahead) and his gait (GAIT_HALT, GAIT_MARCH, GAIT_RUN), as a renderer draws him:
+  // worked out by the layer (SoldierLayer.orient) for a battalion whose revision moved, cosmetic
+  yaw: Float32Array
+  gait: Uint8Array
 
   constructor(capacity = 1024) {
     this.x = new Float64Array(capacity)
@@ -46,6 +60,8 @@ export class Men {
     this.hz = new Float64Array(capacity)
     this.s = new Int32Array(capacity)
     this.flags = new Uint8Array(capacity)
+    this.yaw = new Float32Array(capacity)
+    this.gait = new Uint8Array(capacity)
   }
 
   /** A new man standing at slot `s`, at (x, z), at rest, with his drift's phases; returns his index. */
@@ -65,6 +81,8 @@ export class Men {
     this.hx[k] = 0
     this.hz[k] = 0
     this.flags[k] = MAN_ALIVE
+    this.yaw[k] = 0
+    this.gait[k] = GAIT_HALT
     return k
   }
 
@@ -87,11 +105,13 @@ export class Men {
     this.hz = grown(this.hz, n)
     this.s = grown(this.s, n)
     this.flags = grown(this.flags, n)
+    this.yaw = grown(this.yaw, n)
+    this.gait = grown(this.gait, n)
     this.reallocs++
   }
 }
 
-type Typed = Float64Array | Int32Array | Uint8Array
+type Typed = Float64Array | Float32Array | Int32Array | Uint8Array
 
 /** A copy of typed array `a` with room for `n` elements. */
 export function grown<T extends Typed>(a: T, n: number): T {

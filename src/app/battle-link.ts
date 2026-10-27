@@ -90,6 +90,8 @@ export class MainLink implements BattleLink {
     this.battle.advance(dt)
   }
   see(): Seen {
+    // (its men's ways and gaits worked out as a published frame's are: battle-frame.ts writeFrame)
+    this.battle.layer.orient()
     return this.seen
   }
   command(c: Command): void {

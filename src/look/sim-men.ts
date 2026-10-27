@@ -1,12 +1,12 @@
 // The look page's armies from the sim (docs/plans/active/battle-threads.md, PR 4b): each drawn battalion is a sim
 // formation, each figure one of its men in the men worker's published frame (src/app/battle-frame.ts), read where he
-// stands: his place, the way he faces (his velocity's, at rest his formation's heading), his role (run, march, halt;
+// stands: his place, the way he faces and his gait (the frame's: SoldierLayer.orient), his role (run, march, halt;
 // fire while his company's volley is fresh) and when it began. The renderer (src/look/units.ts) asks it in place of
 // the script (src/look/world/armies.ts) at ?sim. No Babylon: the tests read it in Node.
 import { typeOf, DT, M_TICK } from '../sim/index.ts'
 import type { Unit } from '../render/soldiers.ts'
 import type { Seen } from '../app/battle-link.ts'
-import { MAN_ALIVE } from '../render/men.ts'
+import { MAN_ALIVE, GAIT_HALT } from '../render/men.ts'
 import type { Battalion } from './world/armies.ts'
 
 /** A man as the renderer draws him: where (world x, z), the way he faces (rad, the figure's yaw as a battalion's
@@ -20,9 +20,8 @@ export interface SourceMan {
   shown: boolean
 }
 
-// a man's speed (m/s) from which he marches, and runs; how long a volley is fired (s, its clip's)
-export const MARCH_FROM = 0.3
-export const RUN_FROM = 2.2
+// how long a volley is fired (s, its clip's); a man's gait and way are the layer's (src/render/men.ts gaitAt,
+// SoldierLayer.orient: worked out in the men worker, battle threads PR 4c)
 export const FIRE_FOR = 0.6
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
 
@@ -89,7 +88,6 @@ export class SimMen implements MenSource {
   private k = -1
   private u: Unit | null = null
   private slotC: Int32Array = new Int32Array(0)
-  private readonly p = [0, 0, 0]
   // frames left to match battalions still unmatched (a spawn refused is never matched: given up then)
   private matchTries = 600
 
@@ -191,8 +189,6 @@ export class SimMen implements MenSource {
     at[0] = s.w.f.x[u.i]
     at[1] = s.w.f.z[u.i]
     this.slotC = typeOf(s.w, u.i).slotC
-    // its places now (its men at rest face theirs)
-    s.layer.frame(u.i, s.layer.alphaNow)
     // its fire roles' end: the last of its fresh volleys plus FIRE_FOR
     const w = s.w
     const C = w.cr.maxC
@@ -220,11 +216,9 @@ export class SimMen implements MenSource {
     }
     const w = s.w
     const f = w.f
-    const vx = M.vx[m]
-    const vz = M.vz[m]
-    const speed = Math.hypot(vx, vz)
-    let role: number = speed > RUN_FROM ? 2 : speed > MARCH_FROM ? 1 : 0
-    if (role === 0) {
+    // his gait (0 halt, 1 march, 2 run: ROLES' order) and way, the frame's
+    let role: number = M.gait[m]
+    if (role === GAIT_HALT) {
       // firing: his company's volley within FIRE_FOR s (the sim's tick of it, at the frame's tick)
       const c = this.slotC[M.s[m]]
       const shot = f.volleyTick[u.i * w.cr.maxC + c]
@@ -238,8 +232,7 @@ export class SimMen implements MenSource {
     }
     out.x = M.x[m]
     out.z = M.z[m]
-    // at rest, his place's way (its heading after a Face about, a square's faces): the battalion framed in begin()
-    out.yaw = speed > MARCH_FROM ? Math.atan2(vx, vz) : s.layer.place(u.i, M.s[m], false, this.p)[2]
+    out.yaw = M.yaw[m]
     out.role = ROLES[role]
     out.since = since[i]
     out.shown = true

@@ -311,6 +311,27 @@ tile) is no sim map. Two PRs, then PR 4.
   1 against itself: identical) differs on the men alone, at most 0.45 % of a region's pixels (mean 0.1 of 255) in
   the wide and far views: their turn's sine and cosine now taken in float32 on the GPU, not on the CPU.
 
+## PR 4c: the men worker orients the men (PR 4's step 3)
+
+- **Why** (PR 6's measurement, below): at `?sim` the look page's main-thread work outside rendering is 1.0 to 1.5 ms a
+  frame at p95 at the default and wide views, over the 1 ms bar, and it is the placing (`placeMs` 0.5 to 0.6 mean).
+  Measured in Node (40 battalions of 414, a tick's men): the source's read of a man (`SimMen.man`) about 100 ns, of
+  which his place in his formation (his heading at rest: `layer.place`) 53, the ground's height 24.
+- **Scope**: the soldier layer keeps two cosmetic columns per man, `yaw` (the way he faces, as the renderer's: his
+  velocity's over `MARCH_FROM`, else his place's heading) and `gait` (halt, march over 0.3 m/s, run over 2.2), worked
+  out for a battalion whenever its revision moves (`Unit.rev`: its men stepped, matched, a volley; flagged, and
+  oriented before the frame is published, so the columns are never older than the revision the page reads). The
+  published frame carries both (`src/app/battle-frame.ts`). The page's `SimMen.man` reads them instead of working them
+  out (no `hypot`, `atan2` or `layer.place` a man; no `layer.frame` a battalion); a fresh volley still makes the fire
+  role on the page (its age is the page's clock). The thresholds move with the work, from `src/look/sim-men.ts` to
+  the layer.
+- **Acceptance** (the look bench as PR 6's, `?sim`, interleaved with the epic, two clean rounds): the main thread's
+  work outside rendering under 1 ms at p95 at every zoom, `placeMs` at least a third lower; the men worker's turn at
+  32,000 men, 8× (`tools/bench-sim.ts`) no worse than PR 5's by more than 5 %; the look page's men unchanged (the
+  shots, `look-check`); replays unchanged (`app-check`).
+- **Stop**: if the men worker's turn grows past PR 5's by more than 5 %, orient only the men whose place or velocity
+  changed, and say so.
+
 ## PR 5 and PR 6: only if measured
 
 - **PR 5**, a separate soldier worker fed by the per-tick mirror, if PR 3 shows over 1 % late sub-steps. Acceptance:
