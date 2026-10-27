@@ -89,6 +89,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`research/dof-v2.md`](research/dof-v2.md): game depth of field near and far (Jimenez 2014, Gustafsson), what reads as painted, what fit our frame (measured).
 - [`research/procedural-trees.md`](research/procedural-trees.md): generating trees: L-systems, Weber–Penn, space colonization, growth models, the pipe model, clump crowns and bare winter trees.
 - [`research/frame-rate-120.md`](research/frame-rate-120.md): toward 120 fps: where the look page's frame goes (the frame interval, not the timer), the published techniques, ranked for us.
+- [`research/smoke.md`](research/smoke.md): powder smoke painted, readable and cheap: the staff map's flat clouds, games, stylised films, real-time cost, history; opaque cut-out puffs recommended.
 - [`research/tiny-glade-look.md`](research/tiny-glade-look.md): Tiny Glade's look (leaf cards, soft volume light, PCSS shadows, no filter in play) and what Track E took from it.
 - [`research/painterly-2d-on-3d.md`](research/painterly-2d-on-3d.md): brush masks inside painted materials, keeping paint attached per surface, a one-hill validation scene.
 - [`research/rts-engine-subsystems.md`](research/rts-engine-subsystems.md): RTS engine parts, Napoleonic simulation, browser concerns.
