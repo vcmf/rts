@@ -50,7 +50,7 @@ void main(){
   // pixel, so the darkest share still wins), on the share that gives the pixel the sun's shadow's darkening as the
   // uncapped look and the gain would, or the contact's, whichever is more, at most all: never darker than the cap
   #ifdef SH_CONTACT
-  float ct=uShContact.y*(1.0-smoothstep(1.0,1.0+uShContact.z,length(vCt)));
+  float ct=uShContact.y*(1.0-smoothstep(1.0,1.0+max(uShContact.z,1.0e-4),length(vCt)));
   #else
   float ct=0.0;
   #endif

@@ -47,7 +47,7 @@ Measured (the plan):
 - **Only where feet show, and no cost past them**: the oval is whole to 60 m from the camera's focus (the default
   zoom is 63 m), fades out to 100 m, and is gone beyond.
   - Past 100 m the decal draws with 0067's own shader, not the capped one: no oval, no cap code. Its gain is held
-    to the cap's exponent (`contactGain`: 1.15, not 0067's far 1.5).
+    to the cap's exponent (`heldLook`: 1.15, not 0067's far 1.5).
   - That keeps the cap: a fully covered pixel there is L(k)^gain at most, never darker than L(k)^1.15.
   - Across the band the gain eases from the look's to that, and where the cap no longer binds the capped look gives
     the uncapped one's pixel, so nothing pops at the switch (tested).

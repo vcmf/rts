@@ -20,6 +20,7 @@ import {
   contactWeight,
   decalFragment,
   decalStrip,
+  decalUniforms,
   farShare,
   footUniform,
   heldLook,
@@ -428,6 +429,15 @@ describe('the contact shadow and the cap (decision 0071)', () => {
     expect(contactUniform(SHADOW_CONTACT, 1, 0.9, false).reach).toBe(0)
     expect(contactUniform({ ...SHADOW_CONTACT, dark: 0 }, 1, 0.9, true).reach).toBe(0)
   })
+  it("wires the look to the material drawn: the strip's reach and the oval only to the near one", () => {
+    const fu: [number, number, number, number] = [1.05, 0.55, 0.4, 2.5]
+    const near = decalUniforms(fu, 2, SHADOW_CONTACT, 1, 1.7, true)
+    expect(near).toEqual({ foot: fu, gain: 2, contact: [0.1, 0.9, 1, 1.15], reach: 1.7 })
+    const far = decalUniforms(fu, 2, SHADOW_CONTACT, 1, 1.7, false)
+    expect(far.reach).toBe(0)
+    expect(far.gain).toBe(1.15)
+    expect(decalUniforms(fu, 2, null, 1, 1.7, false)).toEqual({ foot: fu, gain: 2, contact: null, reach: 0 })
+  })
   it('draws the oval only within its band and with a darkness (else the material without it)', () => {
     expect(contactOvalOn(SHADOW_CONTACT, 1)).toBe(true)
     expect(contactOvalOn(SHADOW_CONTACT, 0.01)).toBe(true)
@@ -447,6 +457,13 @@ describe('the contact shadow and the cap (decision 0071)', () => {
     const fu: [number, number, number, number] = [1.05, 0.55, 0.4, 2.5]
     expect(heldLook(fu, 2, SHADOW_CONTACT, 1, true)).toEqual({ foot: fu, gain: 2 })
     expect(heldLook(fu, 1.5, SHADOW_CONTACT, 0.5, true).gain).toBeCloseTo(1.325, 12)
+    // a darkness over 1 eased toward the held one across the band: at its end as the far material holds it (no pop)
+    const near0 = heldLook(fu, 1.5, SHADOW_CONTACT, 0, true)
+    expect(near0).toEqual(heldLook(fu, 1.5, SHADOW_CONTACT, 0, false))
+    expect(near0.foot[0]).toBeCloseTo(1, 12)
+    const half = heldLook(fu, 1.5, SHADOW_CONTACT, 0.5, true).foot[0]
+    expect(half).toBeGreaterThan(1)
+    expect(half).toBeLessThan(1.05)
     // the cap alone (no oval) and no contact: the look's own, either material
     expect(heldLook(fu, 1.5, { ...SHADOW_CONTACT, dark: 0 }, 0, false)).toEqual({ foot: fu, gain: 1.5 })
     expect(heldLook(fu, 1.5, null, 0, false)).toEqual({ foot: fu, gain: 1.5 })
@@ -588,13 +605,19 @@ describe("the contact's ovals over the figure's feet (contactOvals)", () => {
     const shape = shadowShape(d, lod, sun, ['halt', 'march', 'run', 'fire'], { facings: 16, soft: 0.12, posed: pv })
     const full = { across: shape.across, along: shape.along }
     const c = SHADOW_CONTACT
-    for (const mode of ['step', 'stride'] as const) {
+    for (const [mode, pad] of [
+      ['step', c.pad],
+      ['stride', c.pad],
+      ['step', 1],
+    ] as const) {
       const ov = contactOvals(d, pv, mode)
-      const reach = contactReachOf(ov, c.pad, c.soft)
+      const reach = contactReachOf(ov, pad, c.soft)
       for (const [t, len] of [
         [0, 0.7],
         [0.6, 0.85],
         [1, 1],
+        [0, 0.3],
+        [1, 0.3],
       ]) {
         const [a0, l0, as, ls] = decalStrip(shape.base, full, t, len, 1.5, reach).box
         const edge: [number, number][] = []
@@ -607,12 +630,12 @@ describe("the contact's ovals over the figure's feet (contactOvals)", () => {
           const o = [...ov.slice(st * 4, st * 4 + 4)]
           for (let f = 0; f < 64; f++) {
             for (const [x, y] of edge) {
-              const q = contactPoint(x, y > 0 ? y * len : y, (2 * Math.PI * f) / 64, shape.dir, o, c.pad)
+              const q = contactPoint(x, y > 0 ? y * len : y, (2 * Math.PI * f) / 64, shape.dir, o, pad)
               worst = Math.max(worst, contactShare(q, 1, c.soft))
             }
           }
         }
-        expect(worst, `${mode} t ${t}`).toBe(0)
+        expect(worst, `${mode} pad ${pad} t ${t} len ${len}`).toBe(0)
       }
     }
   })
@@ -651,29 +674,34 @@ describe("the contact's ovals over the figure's feet (contactOvals)", () => {
 })
 
 describe('the contact and cap shaders match their mirrors (the source)', () => {
+  // the source without its comments and whitespace; each pinned line found exactly once
   const src = (f: string) =>
-    readFileSync(new URL(`../src/look/shaders/${f}`, import.meta.url), 'utf8').replace(/\s+/g, '')
+    readFileSync(new URL(`../src/look/shaders/${f}`, import.meta.url), 'utf8')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\s+/g, '')
+  const once = (text: string, line: string) => expect(text.split(line).length - 1, line).toBe(1)
   const L = `vec3(${SHADE_LUMA.join(',')})`
   it("unitdecal.frag: the cap's room and the gained darkness from one dot, the contact, the share (cappedCover)", () => {
     const f = src('unitdecal.frag')
-    expect(f).toContain(`lk=dot(K.rgb,${L});`)
-    expect(f).toContain('floatlg=pow(max(1.0-(1.0-lk)*fz*dm,1.0e-3),uShGain),room=fz*(1.0-lk*K.a);')
-    expect(f).toContain('vec3d=mix(vec3(1.0),K.rgb*K.a,fz);')
-    expect(f).toContain('a=room<1.0e-3?0.0:min(1.0,max(a*(1.0-lg)/room,ct));')
-    expect(f).toContain('floatct=uShContact.y*(1.0-smoothstep(1.0,1.0+uShContact.z,length(vCt)));')
-    expect(f).toContain('s*=step(0.0,vCell.x)*step(vCell.x,1.0)*step(0.0,vCell.y)*step(vCell.y,1.0);')
+    once(f, `lk=dot(K.rgb,${L});`)
+    once(f, 'floatlg=pow(max(1.0-(1.0-lk)*fz*dm,1.0e-3),uShGain),room=fz*(1.0-lk*K.a);')
+    once(f, 'vec3d=mix(vec3(1.0),K.rgb*K.a,fz);')
+    once(f, 'a=room<1.0e-3?0.0:min(1.0,max(a*(1.0-lg)/room,ct));')
+    once(f, 'floatct=uShContact.y*(1.0-smoothstep(1.0,1.0+max(uShContact.z,1.0e-4),length(vCt)));')
+    once(f, 's*=step(0.0,vCell.x)*step(vCell.x,1.0)*step(0.0,vCell.y)*step(vCell.y,1.0);')
   })
   it("unitshade.frag: the cap's factor in the alpha, L(k)^(cap - 1) (capShade)", () => {
-    expect(src('unitshade.frag')).toContain(`gl_FragColor=vec4(k,pow(max(dot(k,${L}),1.0e-3),SH_CAP_E-1.0));`)
+    once(src('unitshade.frag'), `gl_FragColor=vec4(k,pow(max(dot(k,${L}),1.0e-3),SH_CAP_E-1.0));`)
   })
   it("unitdecal.vert: his step as units.vert counts it, the oval's frame (contactPoint), his cell", () => {
     const v = src('unitdecal.vert')
-    expect(src('units.vert')).toContain('intf=int(r.x+mod(uVATStep+r.z,r.y));')
-    expect(v).toContain('floatst=aVAT.x+mod(uVATStep+aVAT.z,aVAT.y);')
-    expect(v).toContain('vec2P=C*l0.x+uShDir*vAlong;')
-    expect(v).toContain(
+    once(src('units.vert'), 'intf=int(r.x+mod(uVATStep+r.z,r.y));')
+    once(v, 'floatst=aVAT.x+mod(uVATStep+aVAT.z,aVAT.y);')
+    once(v, 'vec2P=C*l0.x+uShDir*vAlong;')
+    once(
+      v,
       'vCt=(vec2(dot(P,normalize(finalWorld[0].xz)),dot(P,normalize(finalWorld[2].xz)))-ov.xy)/max(ov.zw+uShContact.x,1.0e-3);',
     )
-    expect(v).toContain('vCell=c/uShapeCell.xy;')
+    once(v, 'vCell=c/uShapeCell.xy;')
   })
 })

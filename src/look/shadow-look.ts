@@ -83,8 +83,8 @@ export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: numbe
     b.along[1] - b.along[0],
   ]
   if (reach > 0) {
-    base = grownBox(base, reach)
-    full = grownBox(full, reach)
+    base = grownBox(base, reach, len)
+    full = grownBox(full, reach, len)
   }
   if (t >= 1) return { box: boxOf(base), rows: [0, 1 / 3, 2 / 3, 1] }
   if (!(full.along[0] < 0 && full.along[1] > 0)) throw new Error('decalStrip: the box must hold the soles (along 0)')
@@ -100,10 +100,13 @@ export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: numbe
   return { box, rows }
 }
 
-/** box grown to hold a disc of radius r (m) about the root */
-function grownBox(box: ShapeBox, r: number): ShapeBox {
-  const grow = (b: readonly [number, number]): [number, number] => [Math.min(b[0], -r), Math.max(b[1], r)]
-  return { across: grow(box.across), along: grow(box.along) }
+/** box grown to hold a disc of radius r (m) about the root, as drawn: past the soles the strip is drawn len as long
+ *  (unitdecal.vert), so it reaches r / len along the shape there */
+function grownBox(box: ShapeBox, r: number, len: number): ShapeBox {
+  return {
+    across: [Math.min(box.across[0], -r), Math.max(box.across[1], r)],
+    along: [Math.min(box.along[0], -r), Math.max(box.along[1], r / Math.max(len, 1e-3))],
+  }
 }
 
 /** The decal's rule at a fragment (src/look/shaders/unitdecal.frag, mirrored here for its tests): of the shape's value
@@ -319,10 +322,32 @@ export function heldLook(
   const f: [number, number, number, number] = [foot[0], foot[1], foot[2], foot[3]]
   if (!c || c.dark <= 0) return { foot: f, gain }
   const held = Math.min(gain, c.cap)
-  if (near) return { foot: f, gain: held + (gain - held) * w }
-  const dm = Math.max(f[0], f[1])
-  if (dm > 1) [f[0], f[1]] = [f[0] / dm, f[1] / dm]
-  return { foot: f, gain: held }
+  // (the darkness held as the far material holds it; the near one eases to it by 1 - w, so nothing pops at the switch)
+  const dm = Math.max(f[0], f[1], 1)
+  const t = near ? w : 0
+  for (const i of [0, 1]) f[i] = f[i] / dm + (f[i] - f[i] / dm) * t
+  return { foot: f, gain: held + (gain - held) * t }
+}
+
+/** The look's uniforms for the decal's material drawn now (setDecalLook in units.ts): its gradient and gain
+ *  (heldLook), the contact's uniform and the strip's reach (contactUniform: the reach only to the material with the
+ *  oval, near) */
+export function decalUniforms(
+  foot: readonly [number, number, number, number],
+  gain: number,
+  c: ShadowContact | null,
+  w: number,
+  reach: number,
+  near: boolean,
+): {
+  foot: [number, number, number, number]
+  gain: number
+  contact: [number, number, number, number] | null
+  reach: number
+} {
+  const held = heldLook(foot, gain, c, w, near)
+  const cu = c ? contactUniform(c, w, reach, near) : null
+  return { foot: held.foot, gain: held.gain, contact: cu?.uniform ?? null, reach: cu?.reach ?? 0 }
 }
 
 /** Whether the decal draws with the contact's oval this frame (its weight w): only within its band and with a

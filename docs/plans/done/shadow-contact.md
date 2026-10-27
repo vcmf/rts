@@ -204,7 +204,7 @@ the feet, fully soft, 0.9 of the cap's darkness, 0.1 m past the feet. 0067's gai
 - It is whole to 60 m from the focus, fades out to 100 m, and is gone beyond (`SHADOW_CONTACT.band`, `contactWeight`).
 - The default zoom (63 m) keeps 0.98 of it; the wide one (125 m) none.
 - Past the band the decal draws with decision 0067's own material: no oval, no cap code (`contactOvalOn`,
-  `useDecalFor`). Its gain is held to the cap's exponent, 1.15, so it is still no darker than the cap (`contactGain`,
+  `useDecalFor`). Its gain is held to the cap's exponent, 1.15, so it is still no darker than the cap (`heldLook`,
   eased across the band so nothing pops; tested). Both materials are compiled at load; the switch happens once each
   time the band's edge is crossed. Why, and what was tried first: the cost, below.
 
@@ -361,3 +361,32 @@ frame p50, ms, rounds in brackets:
 
 No regression from the larger strip: 40, 125 and 250 m equal main, and 63 m is +0.05 ms of GPU as before the fixes.
 
+
+## Review round 2 (2026-10-27)
+
+No severe issue; the last round. Fixed:
+
+- **A softness of 0:** the contact's fade (`smoothstep(1, 1 + soft)`) was undefined there; it now takes at least 1e-4,
+  as the mirror does. The line is pinned by the source test.
+- **Stale names:** `contactGain` is `heldLook` in decision 0071 and here; units.ts no longer says both materials are
+  compiled up front.
+- **The strip on the shadow side:** past the soles the strip is drawn the look's length as long, so the grown box
+  holds reach / len there. The real-data strip test now also runs at len 0.3 and with a pad of 1: no contact at any
+  edge.
+- **Cull bounds:** the contact's reach is scaled by the far figures' growth before the men's own reach is taken off.
+- **The near material's darkness:** it now eases toward the held one by 1 − w, so a band that ends where the look's
+  darkness is still over 1 does not pop at the switch. Tested with foot 1.05: at w = 0 it equals the far material.
+- **The background compile:** it stops after 600 frames (10 s at 60 fps) with one warning, stays on the drawn
+  material, and does nothing until a battalion exists.
+- **The source tests** strip comments first and check each pinned line appears exactly once.
+- **The look's wiring** (`decalUniforms`: the gradient, the gain, the contact's uniform, and the strip's reach only to
+  the near material) is pulled out of `setDecalLook` and tested.
+
+**Goldens** (main 5227ec6 against the fix):
+- The default page and `?armies=20&ushcontact=0`: a match at all 8 cameras.
+- `?armies=20`: the same differences from main as round 1.
+- Against the round 1 build, 15 pixels differ by more than 6 levels, all at the close camera: the near material's
+  darkness easing within the band.
+
+**No new bench.** The default path's per-frame work is unchanged: the same shaders bar a `max` on a uniform, the
+same strips at the default lengths (the tip is far past reach / len), and slightly larger cull bounds.
