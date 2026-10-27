@@ -1,15 +1,11 @@
 #extension GL_OES_standard_derivatives : enable
 precision highp float;uniform sampler2D uShapeTex,uUnitShade;uniform vec2 uShapeSize;uniform float uUnitFar,uShSoft,uShGain;uniform vec4 uShFoot;
 varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
-#ifdef SH_CAP
-// the contact shadow and the cap (docs/decisions/0071-soldier-contact-shadow.md): uShContact (its pad, m: the vertex's; its
-// darkness, a share of the cap's darkening; its fade past the oval; the cap's exponent, baked into the shade); vCt: the
-// fragment in the contact's oval (1 at its edge, unitdecal.vert)
-// (SH_CONTACT: the oval; without it, past the contact's zoom band, the cap alone)
-uniform vec4 uShContact;
 #ifdef SH_CONTACT
-varying vec2 vCt,vCell;
-#endif
+// the contact shadow (docs/decisions/0071-soldier-contact-shadow.md): uShContact (its pad, m: the vertex's; its
+// darkness, a share of the ground's full shade, by its zoom weight; its fade past the oval); vCt: the fragment in the
+// contact's oval (1 at its edge), vCell in his shape's cell (0 to 1 inside), unitdecal.vert
+uniform vec4 uShContact;varying vec2 vCt,vCell;
 #endif
 #include<painter>
 // The simple shadows (src/look/units.ts): the shape's two facings blended, read through its mips where a pixel spans
@@ -43,36 +39,25 @@ void main(){
   // (no shape past his cell: the strip reaches past it for the oval, vCell from unitdecal.vert)
   s*=step(0.0,vCell.x)*step(vCell.x,1.0)*step(0.0,vCell.y)*step(vCell.y,1.0);
   #endif
-  float dm=max(max(uShFoot.x,uShFoot.y),1e-4),a=min(1.0,s*mix(uShFoot.x,uShFoot.y,g)/dm);
-  #ifdef SH_CAP
-  // the capped look (cappedCover in src/look/shadow-look.ts mirrors it): every covered sample takes the cap's
-  // darkening (the ground's shade, its luminance raised to the cap's exponent, its hue kept: the same for every shadow at a
-  // pixel, so the darkest share still wins), on the share that gives the pixel the sun's shadow's darkening as the
-  // uncapped look and the gain would, or the contact's, whichever is more, at most all: never darker than the cap
+  float dm=max(max(uShFoot.x,uShFoot.y),1e-4),v=s*mix(uShFoot.x,uShFoot.y,g);
   #ifdef SH_CONTACT
+  // the contact (contactFragment in src/look/shadow-look.ts mirrors it): one more darkness in the same rule, its share
+  // the oval's, solid over it and faded out to 1 + soft of its size; the look's darkest now the darker of the two (one
+  // value a frame, so every shadow still darkens a sample alike and the darkest share wins)
   float ct=uShContact.y*(1.0-smoothstep(1.0,1.0+max(uShContact.z,1.0e-4),length(vCt)));
-  #else
-  float ct=0.0;
+  dm=max(dm,uShContact.y);v=max(v,ct);
   #endif
+  float a=min(1.0,v/dm);
   #ifndef COVERAGE
-  if(s<0.02&&ct<0.02)discard;
-  #endif
-  // (the cap's factor L(k)^(cap - 1) baked in the shade's alpha, unitshade.frag: no power raised for it here)
-  // (the luminance is linear in the mix toward the shade, so one dot serves both: the gained darkness's lg and the
-  // cap's room, 1 - its luminance; the gained darkness's per-channel clamp at 0 left out: it takes a shade channel
-  // under 1 - 1 / dm, 0.05 at the default looks, far darker than any painted cast shadow's ratio)
-  vec4 K=texture2D(uUnitShade,vLM);float fz=uUnitFar*uShadowsOn,lk=dot(K.rgb,vec3(0.2126,0.7152,0.0722));
-  float lg=pow(max(1.0-(1.0-lk)*fz*dm,1.0e-3),uShGain),room=fz*(1.0-lk*K.a);
-  vec3 d=mix(vec3(1.0),K.rgb*K.a,fz);
-  a=room<1.0e-3?0.0:min(1.0,max(a*(1.0-lg)/room,ct));
+  #ifdef SH_CONTACT
+  if(v<0.02)discard;
   #else
-  #ifndef COVERAGE
   if(s<0.02)discard;
+  #endif
   #endif
   vec3 k=texture2D(uUnitShade,vLM).rgb;float f=uUnitFar*uShadowsOn*dm;
   vec3 d=max(mix(vec3(1.0),k,f),0.0);
   d*=pow(max(dot(d,vec3(0.2126,0.7152,0.0722)),1.0e-3),uShGain-1.0);
-  #endif
   #ifdef COVERAGE
   gl_FragColor=vec4(d,a);
   #else

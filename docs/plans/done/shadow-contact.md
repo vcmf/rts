@@ -390,3 +390,76 @@ No severe issue; the last round. Fixed:
 
 **No new bench.** The default path's per-frame work is unchanged: the same shaders bar a `max` on a uniform, the
 same strips at the default lengths (the tip is far past reach / len), and slightly larger cull bounds.
+
+## Matching the trees (2026-10-27)
+
+The owner, on the page (a white Austrian battalion on grass beside a tree's cast shadow): "here it looks darker and
+bluer than the tree shadow … should we make the unit shadows a bit lighter to match?"
+
+**Measured in that kind of frame:**
+- The Austrians at (15, 157) and the French at (142, −96), each beside a tree's shadow, at the close, default and
+  wide zooms, summer and winter, 1280 × 720.
+- The tree: patches inside its shadow against lit grass across the edge, per channel (linear) and in Lab.
+- The soldiers: the darkest 2 % (the contact) and the median (the tail) of the pixels they darken, against the same
+  pixels without their shadows. (The script lives in the session's scratchpad, not in git.)
+
+| | trees (6 views) | main | branch before (cap 1.15) | now |
+|---|---|---|---|---|
+| contact, luminance ratio | 0.14–0.28 | 0.07–0.16 | 0.19–0.25 | 0.23–0.29 |
+| contact, R G B ratio | [0.14–0.26, 0.16–0.27, 0.26–0.42] | [0.05–0.10, 0.07–0.17, 0.17–0.34] | [0.11–0.14, 0.19–0.25, 0.46–0.51] | [0.20–0.24, 0.23–0.29, 0.36–0.39] |
+| contact, Lab b* | +3 to +8 (inside the tree's shadow) | −3 to −1 | −3 to +1 | +7 to +11 |
+| tail, luminance ratio | | 0.31–0.55 | 0.39–0.55 | 0.44–0.59 |
+| hue distance to the trees | | 0.70 | 0.76 | ≈ 0.2 |
+
+The hue distance is the mean over the views of |Δ ln(R/G)| + |Δ ln(B/G)| between the contact's ratio and the tree's.
+Winter (snow; the trees bare, only one tree shadow in frame): the tree 0.25 [0.24 0.24 0.31]; now 0.24 to 0.29
+[0.24 0.23 0.25]; main 0.08 to 0.17.
+
+**Why "tree ≈ 0.17" disagreed with the eye.**
+- In luminance the earlier patches were right: the trees' shadows measure 0.14 to 0.28 of lit grass here too.
+- What differed was the hue. The decal darkens toward the ground's shade k, baked from the ground's macro colour.
+  The grass paints its own shadow, much redder: k's channel ratios are about [0.6, 1, 2.4] relative to green, the
+  trees' [0.95, 1, 1.8]. So a soldier's shadow at the same lightness read blue-grey beside a teal-green tree shadow.
+- 0067's gain then raised the contact's darkness past the tree's (0.07 to 0.16).
+- The cap at 1.15 fixed the darkness and kept the blue. In the owner's screenshot the tails are as light as the tree
+  shadow (L* 44 against 42) but bluer (b* 2 to 6 against 7).
+
+**Now the default:**
+- **Gain 1, close and far**, and the soles' darkness 1 (0062's 1.05): no part of the sun's shadow goes darker than k.
+- **The contact's core is k itself** (darkness 1), added to 0062's coverage rule (`contactFragment`). The cap and
+  its shader path are gone: at gain 1 the plain shader cannot pass k.
+- **The shade "desaturated" 0.65** (`SHADE_DESAT`, `?ushdesat`): each channel of k is moved 0.65 of the way toward
+  k's own luminance, so its lightness stays the same and its blue cast mostly goes. Baked once into the shade texture
+  (`unitshade.frag`); free per frame.
+  - Swept 0 / 0.5 / 0.75 / 1: hue distances 0.77 / 0.25 / 0.23 / 0.53. 0.65 sits between the two best.
+- `?ushcontact=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4` is decision 0067's page exactly (goldens: a match).
+- A k-dark contact is a little lighter than a tree's core where the crown also hides sky. That is the owner's
+  "a bit lighter".
+
+**A bug found on the way** (also in `af16faa9`): after a switch between the two decal materials, the "idle is ready"
+flag still described the previous idle material. Switching back to one compiled before a define change then drew
+nothing until it recompiled: the first close view of a page had no soldier shadows. Now the switch asks the wanted
+material itself, and the idle poll restarts after every switch.
+
+**Sheets:** `output/armies-review/22-shadow-contact/10-match-tree-close.jpg`, `-default.jpg`, `-wide.jpg` (native
+pixels: main | the branch before | now, the tree's and the soldiers' ratios and Lab on each).
+
+**Goldens** (main 5227ec6 against the new default):
+- The default page: a match at all 8 cameras.
+- `?armies=20&ushcontact=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4`: a match at all 8 cameras.
+- `?armies=20`: only the battalions, mostly lighter. Darker / lighter pixels by more than 6 levels:
+
+  | camera | darker | lighter |
+  |---|---|---|
+  | start | 0 | 0 |
+  | yaw −40 | 0 | 389 |
+  | yaw +40 | 0 | 106 |
+  | close | 930 | 8,310 |
+  | river | 0 | 346 |
+  | wide | 0 | 11,546 |
+  | far-edge | 0 | 2,755 |
+  | winter | 0 | 0 |
+
+**The cost:**
+
+BENCH10

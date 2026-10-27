@@ -21,11 +21,12 @@ export interface ShadowLook {
 }
 /** Up close (the owner, 2026-10-24: smaller, lighter, fuzzier, then darker and solid at the feet, lighter and softer
  *  away from them; softness 0.75 chosen from the review's sheet 7) and far (decision 0049's: one value end to
- *  end). The gain: the owner, 2026-10-26, "a bit too weak, can we make it darker": 2 up close, 1.5 far, chosen from
- *  the sheets of docs/plans/done/shadow-darker.md (no measurable cost on Metal) */
+ *  end). The gain and the soles' darkness: decision 0067's 2 up close and 1.5 far, then the owner, 2026-10-27, of the
+ *  shadows "darker and bluer than the tree shadow": no part darker than the ground's painted cast shadow, the shade
+ *  k itself (gain 1, the soles 1; the solid foot is the contact's, SHADOW_CONTACT; decision 0071) */
 export const SHADOW_LOOK: { readonly close: ShadowLook; readonly far: ShadowLook } = {
-  close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7, gain: 2 },
-  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1, gain: 1.5 },
+  close: { soft: 0.75, dark: 0.55, foot: 1, core: 0.4, len: 0.7, gain: 1 },
+  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1, gain: 1 },
 }
 /** The band of the camera's distance to its focus (m) over which the close look turns into the far one */
 export const SHADOW_LOOK_BAND: readonly [number, number] = [45, 85]
@@ -245,42 +246,40 @@ export function applyLookParams(
  *  whole travel in his clip (one a clip, turned with his facing); step, an oval over his feet at the clip's step he is
  *  posed at (it follows them) */
 export type ContactMode = 'root' | 'stride' | 'step'
-/** The contact shadow under each soldier's feet and the cap on every shadow's darkness (decision 0071). pad (m): how
- *  far the oval reaches past the feet (root: the disc's radius); dark: its share of the cap's darkening (1: as dark as
- *  the cap allows, 0: none); soft: its fade past the oval, a share of its size; cap: the darkest any covered sample
- *  goes, the ground's shade's luminance raised to it (1: the ground's painted cast shadow, k); band (m, the camera's
- *  distance to its focus): the contact whole up to its start, fading out across it, none past its end */
+/** The contact shadow under each soldier's feet (decision 0071). pad (m): how far the oval reaches past the feet
+ *  (root: the disc's radius); dark: its darkness, a share of the ground's full shade (1: the ground's painted cast
+ *  shadow, k, as a tree's shadow paints it; 0: none); soft: its fade past the oval, a share of its size; band (m, the
+ *  camera's distance to its focus): the contact whole up to its start, fading out across it, none past its end */
 export interface ShadowContact {
   mode: ContactMode
   pad: number
   dark: number
   soft: number
-  cap: number
   band: readonly [number, number]
 }
-/** The contact and cap by default. The owner, 2026-10-27, from docs/plans/done/shadow-contact.md's candidates: the
- *  oval that follows the feet (step), fully soft, 0.9 of the cap's darkness, 0.1 m past the feet; the cap at about a
- *  tree's cast shadow (a tree's shadow is darker than the ground's shade k, its crown hiding sky too: L(k)^1.15 is
- *  about it, measured in the plan); and the oval only where feet show: whole to about the default zoom (63 m), gone
- *  by the wide one (125 m) */
+/** The contact by default. The owner, 2026-10-27: the oval that follows the feet (step), fully soft, 0.1 m past the
+ *  feet, only where feet show (whole to about the default zoom, 63 m, gone by the wide one, 125 m); then, of the
+ *  shadows being "darker and bluer than the tree shadow": its core exactly the ground's painted cast shadow (dark 1,
+ *  the shade k itself: docs/plans/done/shadow-contact.md, "Matching the trees") */
 export const SHADOW_CONTACT: Readonly<ShadowContact> = {
   mode: 'step',
   pad: 0.1,
-  dark: 0.9,
+  dark: 1,
   soft: 1,
-  cap: 1.15,
   band: [60, 100],
 }
+/** The share of the way the ground's shade is turned toward its own grey, its luminance kept, by default (bakes.ts
+ *  unitShade, unitshade.frag): the shade of the ground's macro colour is bluer than a tree's painted shadow on the
+ *  grass; measured in the plan ("Matching the trees") */
+export const SHADE_DESAT = 0.65
 
-/** The contact and cap from the page's switches, SHADOW_CONTACT's where not given: ?ushcontact=<pad m 0..1>,<dark
- *  0..1>[,<soft 0..1>] (0 alone, or a pad or darkness of 0: no contact), ?ushcontactat=root|stride|step,
- *  ?ushcap=<1..4> (the cap's exponent), ?ushcontactband=<r0>,<r1> (m, r0 < r1). Null with no contact and no ?ushcap:
- *  the shadows exactly as decision 0067 left them (the A/B) */
+/** The contact from the page's switches, SHADOW_CONTACT's where not given: ?ushcontact=<pad m 0..1>,<dark
+ *  0..1>[,<soft 0..1>] (0 alone, or a pad or darkness of 0: none), ?ushcontactat=root|stride|step,
+ *  ?ushcontactband=<r0>,<r1> (m, r0 < r1). Null with none: the oval's material not made */
 export function applyContactParams(q: URLSearchParams): ShadowContact | null {
   const d = SHADOW_CONTACT
   const c = parseNumbers(q, 'ushcontact', [1, 2, 3], [0, 1])
   if (c?.length === 1 && c[0] !== 0) throw new Error(`?ushcontact must be 0 or <pad>,<dark>[,<soft>], not ${c[0]}`)
-  const capN = parseNumbers(q, 'ushcap', [1], [1, 4])
   const at = q.get('ushcontactat') ?? d.mode
   if (!['root', 'stride', 'step'].includes(at)) throw new Error(`?ushcontactat must be root, stride or step, not ${at}`)
   const band = parseNumbers(q, 'ushcontactband', [2], [0, 1000])
@@ -288,15 +287,20 @@ export function applyContactParams(q: URLSearchParams): ShadowContact | null {
     throw new Error(`?ushcontactband must be <r0>,<r1> with r0 < r1, not ${q.get('ushcontactband')}`)
   }
   const on = c === null || (c.length > 1 && c[0] > 0 && c[1] > 0)
-  if (!on && !capN) return null
+  if (!on) return null
   return {
     mode: at as ContactMode,
-    pad: !on ? 0 : c ? c[0] : d.pad,
-    dark: !on ? 0 : c ? c[1] : d.dark,
+    pad: c ? c[0] : d.pad,
+    dark: c ? c[1] : d.dark,
     soft: c?.[2] ?? d.soft,
-    cap: capN ? capN[0] : d.cap,
     band: band ? [band[0], band[1]] : d.band,
   }
+}
+
+/** ?ushdesat=<0..1>: the share of the way the ground's shade is turned toward its own grey (SHADE_DESAT by default; 0:
+ *  the shade as decision 0049 baked it) */
+export function shadeDesat(q: URLSearchParams): number {
+  return parseNumbers(q, 'ushdesat', [1], [0, 1])?.[0] ?? SHADE_DESAT
 }
 
 /** The contact's weight at the camera's distance r (m) to its focus: 1 up to band's start, 0 from its end, a
@@ -305,67 +309,24 @@ export function contactWeight(r: number, band: readonly [number, number]): numbe
   return 1 - farShare(r, band)
 }
 
-/** The look's gradient (footUniform) and gain the decal draws with (decision 0071). With the oval's material (near:
- *  capped) as the look has them, the gain eased by the contact's weight w toward the cap's exponent across the band.
- *  With the material without it (past the band, or the oval's not yet compiled) decision 0067's uncapped shader: its
- *  gain no higher than the cap's exponent and its darkness at most the ground's full shade (the soles' and the tip's
- *  divided by the darker when it is over 1: the coverage, their ratio, unchanged), so a fully covered pixel,
- *  L(k)^gain, is never darker than the cap's L(k)^cap whatever the switches. With the cap alone (no oval) or neither,
- *  as the look has them */
-export function heldLook(
-  foot: readonly [number, number, number, number],
-  gain: number,
-  c: ShadowContact | null,
-  w: number,
-  near: boolean,
-): { foot: [number, number, number, number]; gain: number } {
-  const f: [number, number, number, number] = [foot[0], foot[1], foot[2], foot[3]]
-  if (!c || c.dark <= 0) return { foot: f, gain }
-  const held = Math.min(gain, c.cap)
-  // (the darkness held as the far material holds it; the near one eases to it by 1 - w, so nothing pops at the switch)
-  const dm = Math.max(f[0], f[1], 1)
-  const t = near ? w : 0
-  for (const i of [0, 1]) f[i] = f[i] / dm + (f[i] - f[i] / dm) * t
-  return { foot: f, gain: held + (gain - held) * t }
-}
-
-/** The look's uniforms for the decal's material drawn now (setDecalLook in units.ts): its gradient and gain
- *  (heldLook), the contact's uniform and the strip's reach (contactUniform: the reach only to the material with the
- *  oval, near) */
-export function decalUniforms(
-  foot: readonly [number, number, number, number],
-  gain: number,
-  c: ShadowContact | null,
-  w: number,
-  reach: number,
-  near: boolean,
-): {
-  foot: [number, number, number, number]
-  gain: number
-  contact: [number, number, number, number] | null
-  reach: number
-} {
-  const held = heldLook(foot, gain, c, w, near)
-  const cu = c ? contactUniform(c, w, reach, near) : null
-  return { foot: held.foot, gain: held.gain, contact: cu?.uniform ?? null, reach: cu?.reach ?? 0 }
-}
-
 /** Whether the decal draws with the contact's oval this frame (its weight w): only within its band and with a
- *  darkness; else the material without it (no oval's varying, read or branch: the cap alone, units.ts useDecalFor) */
+ *  darkness; else the material without it (no oval's varying, read or cell test: decision 0062's; units.ts
+ *  useDecalFor) */
 export function contactOvalOn(c: ShadowContact | null, w: number): boolean {
   return c !== null && c.dark > 0 && w > 0
 }
 
-/** The contact's uniform for the decal (uShContact: its pad, its darkness by its weight w, its softness, the cap) and
- *  the strip's reach (m) for it: the reach only while the material with the oval draws (near; the other has no
- *  vCell, so its strip must stay within the shape's cell), none at weight 0 */
+/** The contact's uniform for the decal (uShContact: its pad, its darkness by its weight w, its softness) and the
+ *  strip's reach (m) for it: the reach only while the material with the oval draws (near; the other has no vCell, so
+ *  its strip must stay within the shape's cell), none at weight 0 */
 export function contactUniform(
-  c: ShadowContact,
+  c: ShadowContact | null,
   w: number,
   reach: number,
   near: boolean,
-): { uniform: [number, number, number, number]; reach: number } {
-  return { uniform: [c.pad, c.dark * w, c.soft, c.cap], reach: near && w > 0 && c.dark > 0 ? reach : 0 }
+): { uniform: [number, number, number, number] | null; reach: number } {
+  if (!c) return { uniform: null, reach: 0 }
+  return { uniform: [c.pad, c.dark * w, c.soft, 0], reach: near && w > 0 && c.dark > 0 ? reach : 0 }
 }
 
 /** How far the contact reaches from a man's root (m) over every baked step's oval (contactOvals: cx, cz, ax, az a
@@ -401,8 +362,8 @@ export function contactPoint(
   return [(fx - ov[0]) / Math.max(ov[2] + pad, 1e-3), (fz - ov[1]) / Math.max(ov[3] + pad, 1e-3)]
 }
 
-/** The contact's share of the cap's darkening at q (the fragment's place in the oval's own frame: 1 at its edge), dark
- *  its darkness, soft its fade: solid over the oval, fading to nothing at 1 + soft */
+/** The contact's share of the ground's full shade at q (the fragment's place in the oval's own frame: 1 at its
+ *  edge), dark its darkness, soft its fade: solid over the oval, fading to nothing at 1 + soft */
 export function contactShare(q: readonly [number, number], dark: number, soft: number): number {
   return dark * (1 - sstep(1, 1 + Math.max(soft, 1e-4), Math.hypot(q[0], q[1])))
 }
@@ -412,31 +373,24 @@ export function luma(c: readonly number[]): number {
   return c[0] * SHADE_LUMA[0] + c[1] * SHADE_LUMA[1] + c[2] * SHADE_LUMA[2]
 }
 
-/** The cap's darkening (unitdecal.frag under SH_CAP, mirrored here for its tests): the ground's shade k with its
- *  luminance raised to cap, its hue kept (k · L(k)^(cap - 1): the factor baked once into the shade's alpha,
- *  unitshade.frag, so the decal raises nothing to a power for it), toward none by the zoom's cross-fade share f */
-export function capShade(k: readonly number[], f: number, cap: number): [number, number, number] {
-  const m = Math.max(luma(k), 1e-3) ** (cap - 1)
-  return [1 + (k[0] * m - 1) * f, 1 + (k[1] * m - 1) * f, 1 + (k[2] * m - 1) * f]
+/** The decal's rule at a fragment with the contact (unitdecal.frag under SH_CONTACT, mirrored here for its tests):
+ *  decalFragment's, the contact's share ct (contactShare) one more darkness in it, its darkness c (its uniform's, by
+ *  its weight) among the look's: the share of the samples covered and the darkness every covered sample takes, the
+ *  same for every shadow, so the darkest share still wins whatever the order */
+export function contactFragment(
+  s: number,
+  g: number,
+  foot: number,
+  dark: number,
+  c: number,
+  ct: number,
+): { cover: number; dark: number } {
+  const dm = Math.max(foot, dark, c, 1e-4)
+  return { cover: Math.min(1, Math.max(s * (foot + (dark - foot) * g), ct) / dm), dark: dm }
 }
 
-/** The capped decal at a fragment (unitdecal.frag under SH_CAP, mirrored here for its tests): every covered sample
- *  takes the cap's darkening (capShade(k, f, cap): the same for every shadow at a pixel, so the darkest share still
- *  wins whatever the order), and the share is what gives the pixel the darkening the uncapped look would (the sun's
- *  shadow as decalFragment and the gain make it: its share of the gained full darkness), or the contact's, whichever
- *  is more, at most all of it: so no pixel goes darker than the cap, at any gain. k: the ground's shade; f: the zoom's
- *  cross-fade share (the shadows on); s, g, foot, dark, gain: the sun's shadow as before; contact: contactShare */
-export function cappedCover(
-  k: readonly number[],
-  f: number,
-  look: { s: number; g: number; foot: number; dark: number; gain: number; cap: number },
-  contact: number,
-): { cover: number; shade: [number, number, number] } {
-  const fr = decalFragment(look.s, look.g, look.foot, look.dark)
-  // (the gained darkness's luminance from the shade's, the mix being linear: the shader's one dot)
-  const lg = Math.max(1 - (1 - luma(k)) * f * fr.dark, 1e-3) ** look.gain
-  const shade = capShade(k, f, look.cap)
-  const room = 1 - luma(shade)
-  if (room < 1e-3) return { cover: 0, shade }
-  return { cover: Math.min(1, Math.max((fr.cover * (1 - lg)) / room, contact)), shade }
+/** The ground's shade turned toward its own grey by desat, its luminance kept (unitshade.frag under SH_DESAT) */
+export function desaturated(k: readonly number[], desat: number): [number, number, number] {
+  const l = luma(k)
+  return [k[0] + (l - k[0]) * desat, k[1] + (l - k[1]) * desat, k[2] + (l - k[2]) * desat]
 }

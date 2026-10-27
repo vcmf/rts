@@ -41,9 +41,9 @@ import {
   SHADOW_LOOK_BAND,
   contactOvalOn,
   contactReachOf,
+  contactUniform,
   contactWeight,
   decalStrip,
-  decalUniforms,
   farShare,
   footUniform,
   lookBetween,
@@ -337,9 +337,8 @@ export class Units {
    *  only with simpleClose (else the far look at every zoom, as before) */
   look: { close: ShadowLook; far: ShadowLook } = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
   lookBand: [number, number] = [...SHADOW_LOOK_BAND]
-  /** the contact shadow under each man's feet and the cap on every shadow's darkness (decision 0071; SHADOW_CONTACT,
-   *  ?ushcontact, ?ushcap: applyContactParams), or null: the shadows as decision 0067 left them. Read once, when the
-   *  shadows' material is made */
+  /** the contact shadow under each man's feet (decision 0071; SHADOW_CONTACT, ?ushcontact: applyContactParams), or
+   *  null: none. Read once, when the shadows' material is made */
   contact: ShadowContact | null = { ...SHADOW_CONTACT }
   private contactReach = 0 // m: how far the contact reaches from a man's root (the strip holds it: decalStrip)
   private contactW = 0 // the contact's weight this frame (contactWeight, by the camera's distance)
@@ -1646,7 +1645,7 @@ export class Units {
       ht.name = 'figureShadowGround'
       ht.wrapU = ht.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
     }
-    const make = (oval: boolean, capped: boolean): ShaderMaterial => {
+    const make = (oval: boolean): ShaderMaterial => {
       const m = this.mats0.make(oval ? 'unitShadow2DContact' : 'unitShadow2D', DECAL_VS, DECAL_FS, {
         attributes: ['position', 'aVAT', 'aNext'],
         uniforms: [
@@ -1679,7 +1678,6 @@ export class Units {
           ...(this.coverage ? ['#define COVERAGE'] : []),
           ...(this.farScaleOn ? ['#define FAR_SCALE'] : []),
           ...(this.fade ? [FADE_ON[1]] : []),
-          ...(capped ? ['#define SH_CAP'] : []),
           ...(oval ? ['#define SH_CONTACT', `#define CONTACT_ROWS ${d.vat.height.toFixed(1)}`] : []),
         ],
       })
@@ -1722,14 +1720,12 @@ export class Units {
     this.shapeBoxes = { base: shape.base, full: { across: shape.across, along: shape.along } }
     // (the soft bake's reach past the shape's own, on the decal's bounds: place)
     this.softPad = shape.base.across[0] - shape.across[0]
-    // within the contact's zoom band the oval and the cap; past it decision 0067's own shader, its gain and darkness
-    // held to keep the cap (heldLook: no darker than the cap, at main's cost); with the cap alone (?ushcontact=0 with
-    // ?ushcap) the cap at every zoom; with neither, 0067's. The one not drawn is compiled in the background
+    // within the contact's zoom band the material with the oval; past it, and without a contact, decision 0062's own
+    // (no oval's read, varying or cell test: main's cost). The one not drawn is compiled in the background
     // (useDecalFor), so the switch at the band's edge never waits on a shader
     const c = this.contact
-    const oval = c !== null && c.dark > 0
-    const far = make(false, c !== null && !oval)
-    const near = oval ? make(true, true) : null
+    const far = make(false)
+    const near = c !== null && c.dark > 0 ? make(true) : null
     this.decalFar = far
     this.decalNear = near
     this.decal = near ?? far
@@ -1744,34 +1740,44 @@ export class Units {
     return this.hosts[0]?.lod[this.decalLod] ?? null
   }
   /** The decal's material by the contact's weight this frame: with the oval within its band, without past it (no
-   *  oval's read, varying or texture: the cap alone). Switched only when it changes, once the one wanted is compiled
+   *  oval's read, varying or texture: decision 0062's). Switched only when it changes, once the one wanted is compiled
    *  (the one not drawn is compiled in the background here); the look is given to it afresh (setDecalLook) */
   private useDecalFor(): void {
     const near = this.decalNear
     const far = this.decalFar
-    if (!near || !far) return
-    // (the one not drawn compiled in the background until ready, after every change of the defines: never a hitch at
-    // the band's edge; until it is ready the one drawn stays, its look keeping the cap, heldLook)
-    const idle = this.decal === near ? far : near
     const mesh = this.decalMesh()
-    if (!this.idleReady && mesh && this.idlePolls < IDLE_POLLS) {
-      this.idleReady = idle.isReady(mesh, true)
-      // (a shader that never compiles: stop asking, say so once, and stay on the one drawn)
-      if (!this.idleReady && ++this.idlePolls === IDLE_POLLS) {
-        console.warn(`units: the ${idle.name} shadows' material is not ready after ${IDLE_POLLS} frames; not switching`)
-      }
-    }
+    if (!near || !far || !mesh) return
+    // (the one not drawn compiled in the background until ready, after every change of the defines and every switch:
+    // never a hitch at the band's edge; the switch itself asks the wanted one, so until it is ready the one drawn
+    // stays: a material not ready draws nothing)
     const want = contactOvalOn(this.contact, this.contactW) ? near : far
-    if (want === this.decal || !this.idleReady) return
-    this.decal = want
-    for (const h of this.hosts) h.lod[this.decalLod].material = want
+    if (want !== this.decal) {
+      if (want.isReady(mesh, true)) this.switchDecal(want)
+      return
+    }
+    const idle = want === near ? far : near
+    if (this.idleReady || this.idlePolls >= IDLE_POLLS) return
+    this.idleReady = idle.isReady(mesh, true)
+    // (a shader that never compiles: stop asking, say so once, and stay on the one drawn)
+    if (!this.idleReady && ++this.idlePolls === IDLE_POLLS) {
+      console.warn(
+        `units: the ${idle.name} shadows' material is not ready after ${IDLE_POLLS} frames; not compiling it`,
+      )
+    }
+  }
+  /** The decal drawn with m from now on (useDecalFor), its look given afresh, the other one compiled again */
+  private switchDecal(m: ShaderMaterial): void {
+    this.decal = m
+    for (const h of this.hosts) h.lod[this.decalLod].material = m
     this.lookSet.soft = NaN
+    this.idleReady = false
+    this.idlePolls = 0
   }
 
   /** The contact shadow's ovals (contactOvals, a texel a baked step) and its uniform on the shadows' material m, and
    *  how far it reaches from a man's root (the strip grown to hold it: decalStrip) */
   private useContact(m: ShaderMaterial, c: ShadowContact, oval: boolean): void {
-    m.setVector4('uShContact', new Vector4(c.pad, 0, c.soft, c.cap))
+    m.setVector4('uShContact', new Vector4(c.pad, 0, c.soft, 0))
     if (!oval) return
     const pv = this.posedFar ?? posedVertices(this.data, this.data.lods[this.farLod].name)
     const ov = contactOvals(this.data, pv, c.mode)
@@ -1845,21 +1851,13 @@ export class Units {
     Object.assign(p, l)
     this.lookTSet = this.lookT
     this.contactWSet = this.contactW
-    // (the contact's darkness by its weight, and its reach on the strip only while the material with the oval draws;
-    // the material without it at a gain and darkness that keep the cap: heldLook)
-    const u = decalUniforms(
-      footUniform(l, SHADOW_TIP),
-      l.gain,
-      this.contact,
-      this.contactW,
-      this.contactReach,
-      m === this.decalNear,
-    )
-    if (u.contact) m.setVector4('uShContact', this.contactV.set(...u.contact))
+    // (the contact's darkness by its weight, and its reach on the strip only while the material with the oval draws)
+    const u = contactUniform(this.contact, this.contactW, this.contactReach, m === this.decalNear)
+    if (u.uniform) m.setVector4('uShContact', this.contactV.set(...u.uniform))
     m.setFloat('uShSoft', l.soft)
-    m.setFloat('uShGain', u.gain)
+    m.setFloat('uShGain', l.gain)
     m.setFloat('uShLen', l.len)
-    m.setVector4('uShFoot', this.footV.set(...u.foot))
+    m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
     const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP, u.reach)
     m.setVector4('uStrip', this.stripV.set(...strip.box))
     m.setVector4('uRows', this.rowsV.set(...strip.rows))

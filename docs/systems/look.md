@@ -670,24 +670,22 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]`,
   `?ushband=<r0>,<r1>` and `?ushgain` (`<close>[,<far>]`, 1 to 3; decision 0067: the full darkening's strength,
   its luminance raised to that power and the channels scaled alike, then spread over the pixel by the coverage as
-  before; the hue kept where no channel is clamped at 0; `shadowShade`, `decalPixel`; by default 2 up close and 1.5
-  far, the owner's, 2026-10-26: `docs/plans/done/shadow-darker.md`; under `?ushadowclose=map` the cross-fade blends
+  before; the hue kept where no channel is clamped at 0; `shadowShade`, `decalPixel`; 0067's 2 up close and 1.5 far
+  (`docs/plans/done/shadow-darker.md`) are 1 since decision 0071, the switch kept; under `?ushadowclose=map` the cross-fade blends
   the map's shadow, which has no gain, against the gained decal) tune it live; `Units.lookNow` is
-  this frame's. **The contact and the cap** (decision 0071, `SHADOW_CONTACT`, `applyContactParams`): a solid oval under
+  this frame's. **The contact** (decision 0071, `SHADOW_CONTACT`, `applyContactParams`): a solid oval under
   each man's feet, the oval holding his feet at the step he is posed at (`contactOvals` in `src/look/units-data.ts`, a
   texel a VAT row; the vertex shader reads his step's, turns it with his facing and grows it by the pad, the fragment
   adds a `length` and a `smoothstep`), whole up close and to the default zoom, fading out over `band` (60 to 100 m:
-  `contactWeight`). Within the band every covered sample takes the cap's darkening (the shade's luminance raised to
-  1.15, about a tree's cast shadow, its factor baked into the shade's alpha by `unitshade.frag`, `capShade`) and covers
-  the share that gives the pixel its old darkening or the contact's, whichever is more (`cappedCover`): no pixel
-  darker than a tree's shadow at any gain, the overlap rule kept. The oval's material draws its strip past the
-  shape's cell where the oval reaches (`contactReachOf`, `decalStrip`'s reach) and reads no shape outside the cell
+  `contactWeight`). It is one more darkness in 0062's coverage rule (`contactFragment`), its core the shade k itself;
+  with the look's gain 1 and soles 1 no part of a soldier's shadow goes darker than the ground's painted cast shadow.
+  The shade is baked turned toward its own grey (`SHADE_DESAT`, `?ushdesat`; `unitshade.frag`), its luminance kept,
+  so the soldiers' shadows take the trees' hue on the grass, not a blue-grey. The oval's material draws its strip past
+  the shape's cell where the oval reaches (`contactReachOf`, `decalStrip`'s reach) and reads no shape outside the cell
   (`vCell`); the strip's edges hold the oval's whole fade (tested on the figure's every step, 64 facings). Past the
-  band (`contactOvalOn`, `useDecalFor` in `src/look/units.ts`) the decal draws with 0067's own material, its gain held
-  to the cap's exponent and its darkness to the ground's full shade (`heldLook`), so it is no darker than the cap
-  whatever the switches and costs what 0067's does. The material not drawn is compiled in the background (polled
-  until ready, again after any change of the defines); until it is ready the one drawn stays, its look still holding
-  the cap. Without the scene's coverage (`?msaa=1|2`) the first shadow at a pixel wins, so a neighbour's faint oval
+  band (`contactOvalOn`, `useDecalFor` in `src/look/units.ts`) the decal draws with 0062's own material. The material
+  not drawn is compiled in the background (polled until ready, again after any change of the defines or switch); the
+  switch waits until the wanted one is ready, so a material not ready is never drawn. Without the scene's coverage (`?msaa=1|2`) the first shadow at a pixel wins, so a neighbour's faint oval
   rim (its fade, out to twice its size) drawn first can keep a darker core from a pixel there: order-dependent, as
   the sun shadows' faint edges already were on that path. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none;
   with no `?ushcap` the shadows as 0067 left them), `?ushcontactat=step|stride|root`, `?ushcontactband`, `?ushcap`. The fragment reads the atlas and the ground's shade:

@@ -4,14 +4,14 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
+  SHADE_DESAT,
   SHADOW_CONTACT,
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
   SHADE_LUMA,
   applyContactParams,
   applyLookParams,
-  cappedCover,
-  capShade,
+  contactFragment,
   contactOvalOn,
   contactPoint,
   contactReachOf,
@@ -19,15 +19,15 @@ import {
   contactUniform,
   contactWeight,
   decalFragment,
+  decalPixel,
   decalStrip,
-  decalUniforms,
+  desaturated,
   farShare,
   footUniform,
-  heldLook,
   lookBetween,
   luma,
-  decalPixel,
   parseNumbers,
+  shadeDesat,
   shadowModes,
   shadowShade,
   simpleShadowsDraw,
@@ -56,9 +56,9 @@ describe('the look a zoom', () => {
     expect(SHADOW_LOOK.close.core).toBeGreaterThan(0)
     expect([SHADOW_LOOK.far.foot, SHADOW_LOOK.far.dark, SHADOW_LOOK.far.soft]).toEqual([1, 1, 0])
   })
-  it("is darker than decision 0062 shipped it: the owner's gain, 2 up close and 1.5 far (2026-10-26)", () => {
-    expect([SHADOW_LOOK.close.gain, SHADOW_LOOK.far.gain]).toEqual([2, 1.5])
-    expect(lookBetween(SHADOW_LOOK.close, SHADOW_LOOK.far, 0.5, { ...SHADOW_LOOK.far }).gain).toBeCloseTo(1.75, 12)
+  it("is never darker than the ground's painted shadow (2026-10-27): gain 1, the soles 1, close and far", () => {
+    expect([SHADOW_LOOK.close.gain, SHADOW_LOOK.far.gain]).toEqual([1, 1])
+    expect(Math.max(SHADOW_LOOK.close.foot, SHADOW_LOOK.close.dark, SHADOW_LOOK.far.foot, SHADOW_LOOK.far.dark)).toBe(1)
   })
   it("packs the gradient: the soles' and the tip's darkness, the core short of the tip, the tip shortened", () => {
     const l = { ...SHADOW_LOOK.close, len: 0.5, core: 3 }
@@ -194,7 +194,7 @@ describe("the darkening's gain (shadowShade)", () => {
     expect(frag.indexOf('vec3d=max(mix(vec3(1.0),k,f),0.0);')).toBeGreaterThan(0)
     expect(frag.indexOf('gl_FragColor=vec4(d,a);')).toBeGreaterThan(at)
     expect(frag.indexOf('gl_FragColor=vec4(mix(vec3(1.0),d,a),0.0);')).toBeGreaterThan(at)
-    expect(frag).toContain('#ifndefCOVERAGEif(s<0.02)discard;#endif')
+    expect(frag).toContain('#ifndefCOVERAGE#ifdefSH_CONTACTif(v<0.02)discard;#elseif(s<0.02)discard;#endif#endif')
     expect(frag).not.toContain('k,f*a')
   })
   it('never brightens a channel at any gain the switch takes (1 to 3)', () => {
@@ -236,7 +236,8 @@ describe("the page's switches", () => {
     expect(far).toEqual({ ...SHADOW_LOOK.far, dark: 0.9, foot: 1, core: 0.1 })
     const g = looks()
     applyLookParams(q('ushgain=1'), g.close, g.far)
-    expect([g.close.gain, g.far.gain]).toEqual([1, SHADOW_LOOK.far.gain]) // (1: as decision 0062 shipped it)
+    applyLookParams(q('ushgain=2'), g.close, g.far)
+    expect([g.close.gain, g.far.gain]).toEqual([2, SHADOW_LOOK.far.gain]) // (a second value: the far one)
     applyLookParams(q('ushgain=1.75,1.25'), g.close, g.far)
     expect([g.close.gain, g.far.gain]).toEqual([1.75, 1.25])
     expect(r.band).toEqual([30, 70])
@@ -387,167 +388,99 @@ describe('the shape with its soft bake', () => {
   })
 })
 
-describe('the contact shadow and the cap (decision 0071)', () => {
+describe('the contact shadow (decision 0071)', () => {
   const k = [0.25, 0.3, 0.42]
-  it("are on by default, the owner's (2026-10-27): the oval following the feet, soft, 0.9 dark, capped", () => {
-    expect(SHADOW_CONTACT).toEqual({ mode: 'step', pad: 0.1, dark: 0.9, soft: 1, cap: 1.15, band: [60, 100] })
+  it("is on by default, the owner's (2026-10-27): the oval following the feet, soft, its core the ground's shade", () => {
+    expect(SHADOW_CONTACT).toEqual({ mode: 'step', pad: 0.1, dark: 1, soft: 1, band: [60, 100] })
     expect(applyContactParams(q('armies=20'))).toEqual(SHADOW_CONTACT)
   })
-  it('turn off with ?ushcontact=0 (and no ?ushcap): the shadows exactly as decision 0067 left them', () => {
+  it('turns off with ?ushcontact=0, a pad or a darkness of 0', () => {
     expect(applyContactParams(q('ushcontact=0'))).toBeNull()
     expect(applyContactParams(q('ushcontact=0,1'))).toBeNull()
     expect(applyContactParams(q('ushcontact=0.1,0'))).toBeNull()
-    expect(applyContactParams(q('ushcontact=0&ushcap=1.3'))).toMatchObject({ pad: 0, dark: 0, cap: 1.3 })
   })
-  it('parse the contact, its place, its band and the cap, the defaults where not given', () => {
-    expect(applyContactParams(q('ushcontact=0.1,1'))).toEqual({ ...SHADOW_CONTACT, dark: 1 })
-    expect(applyContactParams(q('ushcontact=0.35,0.8,0.2&ushcontactat=root&ushcap=2&ushcontactband=40,70'))).toEqual({
+  it('parses the contact, its place and its band, the defaults where not given', () => {
+    expect(applyContactParams(q('ushcontact=0.1,0.8'))).toEqual({ ...SHADOW_CONTACT, dark: 0.8 })
+    expect(applyContactParams(q('ushcontact=0.35,0.8,0.2&ushcontactat=root&ushcontactband=40,70'))).toEqual({
       mode: 'root',
       pad: 0.35,
       dark: 0.8,
       soft: 0.2,
-      cap: 2,
       band: [40, 70],
     })
     expect(() => applyContactParams(q('ushcontact=0.1'))).toThrow(/ushcontact/)
-    expect(() => applyContactParams(q('ushcontact=0.1,1&ushcap=0.5'))).toThrow(/ushcap/)
     expect(() => applyContactParams(q('ushcontactat=feet'))).toThrow(/ushcontactat/)
     expect(() => applyContactParams(q('ushcontactband=70,40'))).toThrow(/ushcontactband/)
   })
-  it('the contact is whole up close and to the default zoom, gone by the wide one (only where feet show)', () => {
+  it("turns the ground's shade toward its grey by default, ?ushdesat to change it (0: as decision 0049 baked it)", () => {
+    expect(SHADE_DESAT).toBe(0.65)
+    expect(shadeDesat(q(''))).toBe(0.65)
+    expect(shadeDesat(q('ushdesat=0'))).toBe(0)
+    expect(() => shadeDesat(q('ushdesat=2'))).toThrow(/ushdesat/)
+    const d = desaturated(k, 0.65)
+    expect(luma(d)).toBeCloseTo(luma(k), 12) // (its luminance kept: no darker, no lighter)
+    expect(d[2] / d[1]).toBeLessThan(k[2] / k[1]) // (less blue)
+    expect(d[0] / d[1]).toBeGreaterThan(k[0] / k[1]) // (redder)
+    expect(desaturated(k, 0)).toEqual(k)
+  })
+  it('is whole up close and to the default zoom, gone by the wide one (only where feet show)', () => {
     const b = SHADOW_CONTACT.band
     expect(contactWeight(20, b)).toBe(1)
     expect(contactWeight(63, b)).toBeGreaterThan(0.95)
     expect(contactWeight(80, b)).toBeCloseTo(0.5, 9)
     expect(contactWeight(125, b)).toBe(0)
-    expect(contactWeight(250, b)).toBe(0)
   })
-  it("the strip's reach only while the oval's material draws (the other reads no cell bounds), none past the band", () => {
-    expect(contactUniform(SHADOW_CONTACT, 1, 0.9, true)).toEqual({ uniform: [0.1, 0.9, 1, 1.15], reach: 0.9 })
-    expect(contactUniform(SHADOW_CONTACT, 0.5, 0.9, true).uniform[1]).toBeCloseTo(0.45, 12)
-    expect(contactUniform(SHADOW_CONTACT, 0, 0.9, true)).toEqual({ uniform: [0.1, 0, 1, 1.15], reach: 0 })
+  it("gives the strip its reach only while the oval's material draws, none past the band or without a contact", () => {
+    expect(contactUniform(SHADOW_CONTACT, 1, 0.9, true)).toEqual({ uniform: [0.1, 1, 1, 0], reach: 0.9 })
+    expect(contactUniform(SHADOW_CONTACT, 0.5, 0.9, true).uniform?.[1]).toBeCloseTo(0.5, 12)
+    expect(contactUniform(SHADOW_CONTACT, 0, 0.9, true).reach).toBe(0)
     expect(contactUniform(SHADOW_CONTACT, 1, 0.9, false).reach).toBe(0)
-    expect(contactUniform({ ...SHADOW_CONTACT, dark: 0 }, 1, 0.9, true).reach).toBe(0)
+    expect(contactUniform(null, 1, 0.9, true)).toEqual({ uniform: null, reach: 0 })
   })
-  it("wires the look to the material drawn: the strip's reach and the oval only to the near one", () => {
-    const fu: [number, number, number, number] = [1.05, 0.55, 0.4, 2.5]
-    const near = decalUniforms(fu, 2, SHADOW_CONTACT, 1, 1.7, true)
-    expect(near).toEqual({ foot: fu, gain: 2, contact: [0.1, 0.9, 1, 1.15], reach: 1.7 })
-    const far = decalUniforms(fu, 2, SHADOW_CONTACT, 1, 1.7, false)
-    expect(far.reach).toBe(0)
-    expect(far.gain).toBe(1.15)
-    expect(decalUniforms(fu, 2, null, 1, 1.7, false)).toEqual({ foot: fu, gain: 2, contact: null, reach: 0 })
-  })
-  it('draws the oval only within its band and with a darkness (else the material without it)', () => {
+  it('draws the oval only within its band and with a darkness (else decision 0062s material)', () => {
     expect(contactOvalOn(SHADOW_CONTACT, 1)).toBe(true)
-    expect(contactOvalOn(SHADOW_CONTACT, 0.01)).toBe(true)
     expect(contactOvalOn(SHADOW_CONTACT, 0)).toBe(false)
     expect(contactOvalOn({ ...SHADOW_CONTACT, dark: 0 }, 1)).toBe(false)
     expect(contactOvalOn(null, 1)).toBe(false)
   })
-  it("the cap's darkening: the shade's luminance to the cap, its hue kept, none with the shadows off", () => {
-    const c = capShade(k, 1, 1.15)
-    expect(luma(c)).toBeCloseTo(luma(k) ** 1.15, 12)
-    expect(c[0] / c[2]).toBeCloseTo(k[0] / k[2], 12)
-    expect(capShade(k, 0, 1.15)).toEqual([1, 1, 1])
-    expect(capShade([1, 1, 1], 1, 1.15)).toEqual([1, 1, 1])
-    capShade(k, 0.5, 1.15).forEach((v, i) => expect(v).toBeCloseTo(1 + (c[i] - 1) * 0.5, 12))
-  })
-  it("the material with the oval: the look's own, the gain eased toward the cap's exponent across the band", () => {
-    const fu: [number, number, number, number] = [1.05, 0.55, 0.4, 2.5]
-    expect(heldLook(fu, 2, SHADOW_CONTACT, 1, true)).toEqual({ foot: fu, gain: 2 })
-    expect(heldLook(fu, 1.5, SHADOW_CONTACT, 0.5, true).gain).toBeCloseTo(1.325, 12)
-    // a darkness over 1 eased toward the held one across the band: at its end as the far material holds it (no pop)
-    const near0 = heldLook(fu, 1.5, SHADOW_CONTACT, 0, true)
-    expect(near0).toEqual(heldLook(fu, 1.5, SHADOW_CONTACT, 0, false))
-    expect(near0.foot[0]).toBeCloseTo(1, 12)
-    const half = heldLook(fu, 1.5, SHADOW_CONTACT, 0.5, true).foot[0]
-    expect(half).toBeGreaterThan(1)
-    expect(half).toBeLessThan(1.05)
-    // the cap alone (no oval) and no contact: the look's own, either material
-    expect(heldLook(fu, 1.5, { ...SHADOW_CONTACT, dark: 0 }, 0, false)).toEqual({ foot: fu, gain: 1.5 })
-    expect(heldLook(fu, 1.5, null, 0, false)).toEqual({ foot: fu, gain: 1.5 })
-  })
-  it('the material without the oval keeps the cap at any weight and any switch (foot up to 1.5)', () => {
-    for (const w of [0, 0.5, 1]) {
-      for (const fu of [
-        [1, 1, 0, 3],
-        [1.05, 0.55, 0.4, 2.5],
-        [1.5, 0.6, 0.6, 3],
-      ] as [number, number, number, number][]) {
-        const h = heldLook(fu, 2, SHADOW_CONTACT, w, false)
-        expect(h.gain).toBe(1.15)
-        expect(Math.max(h.foot[0], h.foot[1])).toBeLessThanOrEqual(1)
-        expect(h.foot[0] / h.foot[1]).toBeCloseTo(fu[0] / fu[1], 12) // (the coverage, their ratio, unchanged)
-        // the darkest pixel it can draw, fully covered at its darkest, no darker than the cap
-        const dm = Math.max(h.foot[0], h.foot[1])
-        expect(luma(shadowShade(k, dm, h.gain))).toBeGreaterThanOrEqual(luma(k) ** 1.15 - 1e-12)
-      }
-    }
-    // (without the hold a foot of 1.5 at gain 1.15 would go past it)
-    expect(luma(shadowShade(k, 1.5, 1.15))).toBeLessThan(luma(k) ** 1.15)
-  })
-  it("past the band the uncapped shader at that gain is no darker than the cap, and the capped one's pixel", () => {
-    const far = { s: 1, g: 1, foot: 1, dark: 1, cap: 1.15 }
-    for (const gain of [1, 1.1, 1.15]) {
-      for (const s of [0.2, 0.7, 1]) {
-        const fr = decalFragment(s, 1, 1, 1)
-        const uncapped = luma(decalPixel(k, fr.dark, gain, fr.cover, false))
-        expect(uncapped).toBeGreaterThanOrEqual(luma(k) ** 1.15 - 1e-12)
-        expect(pixel(cappedCover(k, 1, { ...far, s, gain }, 0))).toBeCloseTo(uncapped, 12)
-      }
-    }
-  })
-  it('the contact is solid over its oval and fades to nothing past it', () => {
+  it('is solid over its oval and fades to nothing past it', () => {
     expect(contactShare([0.5, 0.5], 1, 0.35)).toBe(1)
     expect(contactShare([0, 1], 0.8, 0.35)).toBe(0.8)
     expect(contactShare([0, 1.35], 1, 0.35)).toBe(0)
     expect(contactShare([0, 1.1], 1, 0.35)).toBeGreaterThan(contactShare([0, 1.2], 1, 0.35))
   })
-  // a pixel's luminance with one shadow: the covered samples take the shade, the rest none
-  const pixel = (c: { cover: number; shade: number[] }) => 1 - c.cover * (1 - luma(c.shade))
-  const looks = [
-    { s: 1, g: 0, foot: 1.05, dark: 0.55, gain: 2, cap: 1.15 },
-    { s: 0.6, g: 0.7, foot: 1.05, dark: 0.55, gain: 2, cap: 1.15 },
-    { s: 1, g: 1, foot: 1, dark: 1, gain: 3, cap: 1.15 },
-    { s: 0.3, g: 0.2, foot: 1.5, dark: 0.5, gain: 1, cap: 1.5 },
-  ]
-  it('never goes darker than the cap, at any gain, with or without the contact', () => {
-    for (const l of looks) {
-      for (const contact of [0, 0.5, 1]) {
-        const c = cappedCover(k, 1, l, contact)
-        expect(pixel(c)).toBeGreaterThanOrEqual(luma(k) ** l.cap - 1e-12)
-      }
+  // a pixel's luminance with one shadow: its covered samples darkened to mix(1, k, its darkness), the rest not
+  const pixel = (fr: { cover: number; dark: number }) => 1 - fr.cover * (1 - luma(shadowShade(k, fr.dark, 1)))
+  it("at the defaults is never darker than the ground's painted shadow, k, and its core is exactly k", () => {
+    const c = SHADOW_LOOK.close
+    for (const [s, g, ct] of [
+      [1, 0, 0],
+      [1, 0, 1],
+      [0.6, 0.7, 0.4],
+      [0, 0, 1],
+    ]) {
+      expect(pixel(contactFragment(s, g, c.foot, c.dark, SHADOW_CONTACT.dark, ct))).toBeGreaterThanOrEqual(
+        luma(k) - 1e-12,
+      )
     }
+    expect(pixel(contactFragment(0, 0, c.foot, c.dark, 1, 1))).toBeCloseTo(luma(k), 12)
   })
-  it('gives the sun shadow the darkening it had wherever that was lighter than the cap', () => {
-    const l = { s: 0.4, g: 0.8, foot: 1.05, dark: 0.55, gain: 1.25, cap: 1.15 }
-    const fr = decalFragment(l.s, l.g, l.foot, l.dark)
-    const was = 1 - fr.cover * (1 - luma(shadowShade(k, fr.dark, l.gain)))
-    expect(was).toBeGreaterThan(luma(k) ** l.cap)
-    expect(pixel(cappedCover(k, 1, l, 0))).toBeCloseTo(was, 12)
-  })
-  it("the contact at full darkness is the cap, the hue the ground shade's", () => {
-    const c = cappedCover(k, 1, { s: 0, g: 0, foot: 1.05, dark: 0.55, gain: 2, cap: 1.15 }, 1)
-    expect(c.cover).toBe(1)
-    expect(luma(c.shade)).toBeCloseTo(luma(k) ** 1.15, 12)
-    expect(c.shade[0] / c.shade[2]).toBeCloseTo(k[0] / k[2], 12)
-  })
-  it('darkens nothing with the shadows off or where the ground is already in full shadow', () => {
-    expect(cappedCover(k, 0, looks[0], 1).cover).toBe(0)
-    expect(cappedCover([1, 1, 1], 1, looks[0], 1).cover).toBe(0)
-  })
-  it('keeps the overlap rule: one shade for every shadow at a pixel, the darkest share wins whatever the order', () => {
+  it('keeps the overlap rule with the contact: one darkness a frame, the darkest share wins whatever the order', () => {
     const thresholds = [0.125, 0.375, 0.625, 0.875]
-    const resolve = (fr: { cover: number; shade: number[] }[]) =>
-      thresholds.map(t => (fr.find(f => f.cover > t) ? luma(fr[0].shade) : 1)).reduce((a, b) => a + b, 0) / 4
-    const a = cappedCover(k, 1, looks[1], 0)
-    const b = cappedCover(k, 1, looks[0], 0.6)
-    expect(a.shade).toEqual(b.shade)
+    const resolve = (frs: { cover: number; dark: number }[]) =>
+      thresholds.map(t => frs.find(f => f.cover > t)?.dark ?? 0).reduce((a, b) => a + b, 0) / 4
+    const c = SHADOW_LOOK.close
+    const a = contactFragment(1, 1, c.foot, c.dark, 1, 0.2) // a light tip with a faint rim
+    const b = contactFragment(0.2, 0, c.foot, c.dark, 1, 1) // the next man's contact
+    expect(a.dark).toBe(b.dark)
     expect(resolve([a, b])).toBe(resolve([b, a]))
-    expect(resolve([a, b])).toBe(Math.min(resolve([a]), resolve([b])))
+    expect(resolve([a, b])).toBe(Math.max(resolve([a]), resolve([b])))
   })
-  it("the strip holds the contact's reach, past the shape's cell where it must, and is as before without it", () => {
+  it("is decalFragment's rule exactly with no contact (decision 0062's material)", () => {
+    const c = SHADOW_LOOK.close
+    expect(contactFragment(0.6, 0.3, c.foot, c.dark, 0, 0)).toEqual(decalFragment(0.6, 0.3, c.foot, c.dark))
+  })
+  it("holds the contact's reach, past the shape's cell where it must, and is as before without it", () => {
     const base = { across: [-1, 1], along: [-0.3, 5] } as const
     const full = { across: [-1.4, 1.4], along: [-0.9, 5.4] } as const
     expect(decalStrip(base, full, 1, 1, 1.5, 0)).toEqual(decalStrip(base, full, 1, 1, 1.5))
@@ -673,7 +606,7 @@ describe("the contact's ovals over the figure's feet (contactOvals)", () => {
   })
 })
 
-describe('the contact and cap shaders match their mirrors (the source)', () => {
+describe('the contact shaders match their mirrors (the source)', () => {
   // the source without its comments and whitespace; each pinned line found exactly once
   const src = (f: string) =>
     readFileSync(new URL(`../src/look/shaders/${f}`, import.meta.url), 'utf8')
@@ -681,17 +614,16 @@ describe('the contact and cap shaders match their mirrors (the source)', () => {
       .replace(/\s+/g, '')
   const once = (text: string, line: string) => expect(text.split(line).length - 1, line).toBe(1)
   const L = `vec3(${SHADE_LUMA.join(',')})`
-  it("unitdecal.frag: the cap's room and the gained darkness from one dot, the contact, the share (cappedCover)", () => {
+  it('unitdecal.frag: the contact in decision 0062s rule, one darkness a frame (contactFragment)', () => {
     const f = src('unitdecal.frag')
-    once(f, `lk=dot(K.rgb,${L});`)
-    once(f, 'floatlg=pow(max(1.0-(1.0-lk)*fz*dm,1.0e-3),uShGain),room=fz*(1.0-lk*K.a);')
-    once(f, 'vec3d=mix(vec3(1.0),K.rgb*K.a,fz);')
-    once(f, 'a=room<1.0e-3?0.0:min(1.0,max(a*(1.0-lg)/room,ct));')
+    once(f, 'floatdm=max(max(uShFoot.x,uShFoot.y),1e-4),v=s*mix(uShFoot.x,uShFoot.y,g);')
     once(f, 'floatct=uShContact.y*(1.0-smoothstep(1.0,1.0+max(uShContact.z,1.0e-4),length(vCt)));')
+    once(f, 'dm=max(dm,uShContact.y);v=max(v,ct);')
+    once(f, 'floata=min(1.0,v/dm);')
     once(f, 's*=step(0.0,vCell.x)*step(vCell.x,1.0)*step(0.0,vCell.y)*step(vCell.y,1.0);')
   })
-  it("unitshade.frag: the cap's factor in the alpha, L(k)^(cap - 1) (capShade)", () => {
-    once(src('unitshade.frag'), `gl_FragColor=vec4(k,pow(max(dot(k,${L}),1.0e-3),SH_CAP_E-1.0));`)
+  it('unitshade.frag: the shade turned toward its grey, its luminance kept (desaturated)', () => {
+    once(src('unitshade.frag'), `k=mix(k,vec3(dot(k,${L})),SH_DESAT);`)
   })
   it("unitdecal.vert: his step as units.vert counts it, the oval's frame (contactPoint), his cell", () => {
     const v = src('unitdecal.vert')
