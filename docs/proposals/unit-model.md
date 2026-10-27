@@ -511,8 +511,8 @@ tires fastest.
 
 ### Collision
 
-Collision, and the orders and their queue, have their own proposal, `docs/proposals/collision-and-orders.md`,
-built on a visual bench of the hard cases. The rules a player sees, which it keeps:
+Collision, and the orders and their queue, have their own proposal, written before U6 from a visual bench of the
+hard cases (`docs/plans/active/track-s.md`). The rules a player sees, which it keeps:
 - **Formed bodies never overlap.** A formed battalion, regiment or battery, in any shape and while changing shape,
   never overlaps another formed body, friend or enemy.
 - **Loose bodies pass through friends:** routers, skirmish order, a battalion during an ordered passage of lines,

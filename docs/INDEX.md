@@ -49,7 +49,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`proposals/prepainted-terrain.md`](proposals/prepainted-terrain.md): a painted macro colour bake for the ground; strokes stay at runtime. *(draft)*
 - [`proposals/map-format.md`](proposals/map-format.md): the map format, one schema-checked description of a battlefield that the sim, the 3D battlefield and the staff map compile from. *(draft)*
 - [`proposals/unit-model.md`](proposals/unit-model.md): the unit model: categories, shapes and faces, sectors, engagement, experience levels, fire, the assault, guns taken, collision, pathfinding, counters and bonuses; phases U1–U9. *(draft)*
-- [`proposals/collision-and-orders.md`](proposals/collision-and-orders.md): formed and loose bodies, the clamp on bins with half gaps, the melee's rounds (a step back and a follow), the visual bench, the orders' queue and what suspends or clears it; phases C0–C4. *(draft)*
+- [`proposals/collision-and-orders.md`](proposals/collision-and-orders.md): formed and loose bodies, the clamp on bins with half gaps, a melee that holds until one side breaks, the visual bench, the orders' queue and what suspends or clears it; phases C0–C4. *(draft)*
 - [`proposals/unit-scenarios.md`](proposals/unit-scenarios.md): the situations the unit model must get right, each with its expected outcome and what the sim does today. *(draft)*
 - [`proposals/ai.md`](proposals/ai.md): the enemy AI: layers, influence maps, utility scores, lookahead with the sim, honest difficulty; built after pathfinding. *(draft)*
 - [`proposals/figure-animation.md`](proposals/figure-animation.md): animated figures: the simulation owns timing, clips are fitted to its phases by bindings checked at build time; the figure files and registry. *(accepted)*
@@ -58,6 +58,8 @@ designs written before building (frozen once built, their lasting content moves 
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
   [`plans/active/track-s.md`](plans/active/track-s.md) (Track S: the sim engine's remaining phases before the playtest, the `epic/sim-engine` branch),
+  [`plans/active/c0-bench.md`](plans/active/c0-bench.md) (C0: the visual bench, its overlay, time controls and cases),
+  [`plans/active/c1-claims.md`](plans/active/c1-claims.md) (C1: a prototype of the claim grid, experimental; its weak points and their order),
   [`plans/active/battle-threads.md`](plans/active/battle-threads.md) (the battle's threads: a worker, soldiers stepped at 12 fps),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
@@ -71,6 +73,7 @@ designs written before building (frozen once built, their lasting content moves 
   [`plans/active/s1d3-artillery.md`](plans/active/s1d3-artillery.md) (S1d-3: the battery fires roundshot and canister),
   [`plans/active/s1e1-battlefield.md`](plans/active/s1e1-battlefield.md) (S1e-1: the 1.2 km battlefield, the map's edge, leaving the field; the S1e split),
   [`plans/active/s1e2-sides.md`](plans/active/s1e2-sides.md) (S1e-2: your side, the enemy's plan, the end of a battle),
+  [`plans/active/s1e3-playtest.md`](plans/active/s1e3-playtest.md) (S1e-3: the playtest kit and the tuning from your play),
   [`plans/active/l2-detail.md`](plans/active/l2-detail.md) (Track E L2: the bench, the readability guard, the terrain detail layer),
   [`plans/active/l5-macro.md`](plans/active/l5-macro.md) (Track E L5: the ground's cover and macro colour, baked and in the shader, and the ablation),
   [`plans/active/armies-demo.md`](plans/active/armies-demo.md) (the first armies on the demo map, scripted),
@@ -88,6 +91,7 @@ designs written before building (frozen once built, their lasting content moves 
 
 - [`research/formation-collision-and-commands.md`](research/formation-collision-and-commands.md): formation collision and command queues: per-soldier games' blobs and breakthroughs, open engines' order-independent contact, the formation literature, bins as bodies, suspend rather than clear.
 - [`research/melee-outcomes.md`](research/melee-outcomes.md): how games and rule sets give ground in melee: fixed steps, a graded result from one margin, a blocked loser worse off, flank attacks and several units as one combat.
+- [`research/claim-grid-weak-points.md`](research/claim-grid-weak-points.md): the claim grid's weak points: jams (arrival, a lasting priority), acts that cannot be cut short (a reserved sweep), the clash (steps of the contact line), the grid's cost (rectangles, not men).
 - [`research/colour-and-light-review.md`](research/colour-and-light-review.md): the owner's colour and light references, and the coats' colour lost to the warm light, measured.
 - [`research/grass-and-fields.md`](research/grass-and-fields.md): grass and fields at an RTS camera: Tiny Glade, Total War, the techniques (ground pattern, blades, cards, shells) and their pitfalls.
 - [`research/painterly-grass.md`](research/painterly-grass.md): Tiny Glade's grass, the techniques that read as painted, what fits the RTS camera and the budget.

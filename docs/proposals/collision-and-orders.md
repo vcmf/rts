@@ -216,7 +216,7 @@ an indivisible one. Every other formation is **moving**.
   lower handle. The test at `charge.test`, the impact and the melee follow with that enemy, as
   `docs/systems/melee.md` does with its target today: a charge that strikes a square it was not aimed at takes that
   square's test at the impact (X-03).
-- **A melee holds** (decision 0069; built and tried on C1's claim grid, its plan's step 4, on the C1 branch). A
+- **A melee holds** (decision 0069; built and tried on C1's claim grid, `docs/plans/active/c1-claims.md`, step 4). A
   battalion in melee cannot step back or retreat, and nobody gives ground: the melee ends when one side breaks, or as
   today when a charger turns away from a square or the two fall out of contact.
   The research found every game and rule set gives ground in discrete steps or not at all

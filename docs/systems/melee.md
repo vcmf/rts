@@ -1,8 +1,8 @@
 ---
 status: current
 last_reviewed: 2026-10-11
-code: [src/sim/melee.ts, src/sim/formation.ts, src/sim/commands.ts, src/sim/morale.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-charge.ts, tools/calibrate-charge.ts, test/charge.test.ts]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine]
+code: [src/sim/melee.ts, src/sim/formation.ts, src/sim/claims.ts, src/sim/commands.ts, src/sim/morale.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-charge.ts, tools/calibrate-charge.ts, test/charge.test.ts]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0069-melee-holds-cornered-routers-cut-down]
 ---
 
 # Charges, melee and the square (S1d-2)
@@ -121,6 +121,14 @@ men of its companies within `contact + hold` of each.
 - **The winner:** a charging type pursues a broken foe at the gallop for `charge.pursue` seconds, costing it
   melee losses it does not return, and is then blown. A target that breaks before contact is pursued the same
   way. Infantry holds where it stands.
+
+**With the claim grid's prototype on** (`w.claims`; docs/plans/active/c1-claims.md, step 4): nobody in melee gives
+ground; it ends when one side breaks. A melee pair, and a charge with its target, stand at each other's core (the
+margin between them gives way); a pursuit stops at the router's margin and rides it down from there, and a charge
+stops at any other enemy's. A router held by others' cells for `HELD` seconds (`src/sim/morale.ts`) is halted and
+tries its fan's next direction at its retry, and goes on trying them while an enemy is near. Every enemy in the fight
+that reaches a router, running, held or with no way left, and not in melee with another, cuts it down as a pursuit
+does (`cutDown`); the reach is longer by the router's margin (`reachOf`).
 
 **Shocks** (`shockIn`): the test's and the impact's shocks are owed to the target and taken by its morale step
 with contagion, after relaxing (`morale.ts`).

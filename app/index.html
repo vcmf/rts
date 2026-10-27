@@ -33,7 +33,7 @@
 <div id="box"></div>
 <div id="north"><svg width="12" height="18" viewBox="0 0 12 18"><path d="M6 1 L10 16 L6 12.5 L2 16 Z" fill="none" stroke="#211f1c" stroke-width="1"/></svg><div>N</div></div>
 <div id="scale"><svg id="scalebar" width="140" height="22"></svg></div>
-<div id="hint">click a battalion to select (shift adds) · drag to box-select · click the ground to march · right-drag or space-drag to pan · scroll to zoom · P pause</div>
+<div id="hint">click a battalion to select (shift adds) · drag to box-select · click the ground to march · right-drag or space-drag to pan · scroll to zoom · P pause · M marks a moment for the playtest · D the bench's overlay · . and , a tick on or back · G go to a time</div>
 <div id="panel">
   <div class="t">Staff map</div>
   <div class="m" id="sub">S1c · fire and morale</div>
@@ -49,7 +49,10 @@
   <div class="row" id="styles"></div>
   <div class="cap">Time · view</div>
   <div class="row" id="speeds"></div>
-  <div class="row" style="margin-top:4px"><button data-view="slots">Slots</button><button data-view="replay">Copy replay</button></div>
+  <div class="row" style="margin-top:4px"><button data-view="slots">Slots</button><button data-view="replay">Save session</button></div>
+  <div class="row" style="margin-top:4px"><button data-time="back" title=",">◀ tick</button><button data-time="step" title=".">tick ▶</button><button data-time="goto" title="G">Go to…</button></div>
+  <div class="cap">Overlay (D)</div>
+  <div class="row" id="layers"></div>
   <div class="cap">Readout</div>
   <div id="stats"></div>
 </div>
