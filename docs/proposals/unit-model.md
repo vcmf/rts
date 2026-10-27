@@ -502,8 +502,7 @@ does. A level 6 battalion's bar is 1.8 times as big and its toughness 1.4, so it
 | **Manoeuvre** | ordinary | line, column of attack | keeps order; a line obliques within about 30°, beyond it a change front (`docs/proposals/sim-design.md` §7) |
 | **Quick time** | about 1.3× ordinary | any but the square | disorder and fatigue (I-11) |
 | **Double, the charge** | the assault's last metres; cavalry's trot and gallop | the charge's shapes | fatigue; momentum |
-| **Retire** | ordinary | as it stands | face about, march, face (today); its rear is exposed while it goes (F-06) |
-| **Fall back facing** | about 0.5× ordinary | as it stands | backward steps, facing the enemy; slow, but no exposed rear (new) |
+| **Retire** | ordinary | as it stands | face about, march, face (today); its rear is exposed while it goes (F-06). Every retreat turns its back: there is no stepping back facing the enemy |
 | **Change front** | a timed drill | line, column | tens of seconds; a wheel on a flank or on the centre (B-10) |
 
 **Fatigue** (S3, I-12): an accumulator from 0 to 1, raised by fast paces, slopes, melee and the gallop, and
@@ -640,7 +639,7 @@ braced against missiles, cavalry and elephants as tags.
 | Cavalry | one type | heavy and light; lancers; pursuit by level |
 | Artillery | pieces are companies of the battery | pieces apart from crews; guns taken; the last salvo; the guns' drain; horse artillery |
 | Collision | formations pass through each other | formed bodies never overlap; loose bodies pass through friends (its own proposal) |
-| Movement | straight moves, Retire | modes (quick time, fall back facing, change front); fatigue later |
+| Movement | straight moves, Retire | modes (quick time, change front); fatigue later |
 | Paths | none: a formation halts at what it cannot cross | A* on Track M's grid, march column on paths with turns |
 | Changes | timed, any time but in melee | also scaled by level, and slower under fire |
 
