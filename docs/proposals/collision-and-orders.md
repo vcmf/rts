@@ -1,6 +1,6 @@
 ---
 status: draft
-last_reviewed: 2026-10-25
+last_reviewed: 2026-10-27
 ---
 
 # Proposal: collision and orders
@@ -24,10 +24,9 @@ already has, and uses the lag model the sim already has to bend them.
 **Goals:**
 - **Formed bodies never overlap,** in any shape, moving, turning or changing shape.
 - **Loose bodies pass through friends,** at a cost, and never through enemies.
-- **In a clash ground changes hands only through the fight,** in steps: a battalion losing a round of melee steps
-  back as a whole, and its foe follows.
-- **Nothing is pushed.** A formation is never moved by another's motion; a melee's winner follows its foe by its own
-  step.
+- **Nobody in melee gives ground:** a melee holds until one side breaks (decision 0069). The broken one runs as a
+  block, and every enemy that reaches it cuts it down.
+- **Nothing is pushed.** A formation is never moved by another's motion.
 - **Deterministic and order-independent:** the reversed visiting order gives the same state, with no ordering
   rule to tune.
 - **Seen and checked:** every rule has a bench case that shows it on the page and a test that checks it.
@@ -56,7 +55,7 @@ An overlay, toggled by a key and by layer:
 | **Contacts** | each pair of blocks within the margin, as a line between their nearest points: grey for friends, red for enemies, orange for a charge, a thick line for a melee pair |
 | **Clamps** | per strip, its wanted advance and its allowed one (two arrows), and what clamped it |
 | **Reserved paths** | the ground a change of shape will cross until it ends, hatched |
-| **Statuses** | each formation's status and engagement in a label ("blocked by a friend", "in melee", "stepping back", "pinned") |
+| **Statuses** | each formation's status and engagement in a label ("blocked by a friend", "in melee", "blocked by a formation") |
 | **Orders** | the queue: waypoint lines coloured by kind of order, an outline of the formation at each destination, a suspended queue greyed |
 
 ### Time
@@ -73,7 +72,7 @@ own, and free to take orders after.
 
 | Id | Case | What it must show |
 |---|---|---|
-| X-01 | Two lines meet head on, one assaults | they halt in contact, the melee starts, the loser steps back round by round and then routs; no overlap |
+| X-01 | Two lines meet head on, one assaults | they halt in contact, the melee starts and holds until one routs; no overlap |
 | X-02 | Two lines meet with no charge | they stop at contact distance and fire at point-blank range |
 | X-03 | A cavalry line charges one battalion of a brigade line, its wing reaching the next battalion first | it strikes whichever it reaches; the charge does not stall |
 | X-04 | A recoil from a square | the regiment starts at contact and rides off; nothing freezes |
@@ -87,10 +86,12 @@ own, and free to take orders after.
 | X-12 | A battery's gunners flee into a square and go back | they shelter inside it, then man the guns again |
 | X-13 | A passage of lines: the second line passes through the first | it passes loose, the first cannot fire through it, it forms beyond |
 | X-14 | Forty battalions march through each other's paths | no overlap, no lock; the cost per tick |
-| X-15 | A veteran regiment charges a raw one at the halt, open ground behind it | the raw one steps back round by round, the veteran following, until it breaks |
-| X-16 | The same, a friendly regiment just behind the raw one | the raw one steps back until the friend is in the way, then is pinned and breaks sooner |
-| X-17 | The same, an enemy regiment just behind the raw one | the raw one is pinned at once and breaks sooner than in X-15 |
-| X-18 | A pair in melee, a second enemy charging the loser's flank | the loser is pinned from the flank charge on; the second enemy does not move |
+| X-15 | A veteran regiment charges a raw one at the halt, open ground behind it | the melee holds, neither moves; the raw one breaks and runs clear |
+| X-16 | The same, a friendly regiment just behind the raw one | the same; the router passes through its friend, the pursuit stops at the friend |
+| X-17 | The same, an enemy regiment just behind the raw one | the router is held on every way out and cut down where it stands |
+| X-18 | A pair in melee, a second enemy charging the steadier one's flank | the melee holds; the broken one runs clear of the pursuit, never stuck on its foe's ground |
+| X-19 | As X-15, the veteran 20 m to one side: the lines meet offset | the melee holds over a minute with few in contact, until one breaks |
+| X-20 | Two raw regiments abreast, each charged by a veteran | both melees hold side by side, the line kept, until each breaks |
 | Q-01 | Shift-chained: move, form line, face about, move | each runs in turn |
 | Q-02 | A chain with a charge in it | the charge runs, then the next order |
 | Q-03 | A chain interrupted by cavalry (the square) | the queue is suspended, then resumes after the square |
@@ -151,8 +152,7 @@ like that: each piece would get its own allowance. So C1 splits the movement of 
 
 1. **Propose.** After commands, the scenario's plan and the standing behaviour (steps 1–4 of the tick), every
    formation works out its whole motion for the tick from its start-of-tick state, without committing it: the turn,
-   the advance, the lags' catch-up, a wheel, a step back, a recoil, a router's run. A melee's step back and its
-   follow are not proposed here: they are made in the melee step (§ Contact). The result is a proposed end pose and, for each bin, the displacement of its places from start to end.
+   the advance, the lags' catch-up, a wheel, a step back, a recoil, a router's run. The result is a proposed end pose and, for each bin, the displacement of its places from start to end.
    A Face about, the start of a change of shape and a loose body's ask to form are proposals too, marked
    **indivisible**: they are granted whole or not at all.
 2. **Resolve.** Every proposal is checked against every other at once (§ The clamp, § Indivisible proposals).
@@ -214,59 +214,28 @@ an indivisible one. Every other formation is **moving**.
   lower handle. The test at `charge.test`, the impact and the melee follow with that enemy, as
   `docs/systems/melee.md` does with its target today: a charge that strikes a square it was not aimed at takes that
   square's test at the impact (X-03).
-- **A melee** stands in contact, and is judged in rounds (`docs/research/melee-outcomes.md`). Every game and rule
-  set surveyed moves a loser in discrete steps (a fixed distance, a hex, or a distance by the margin), or not at
-  all; none lets it give way continuously, and a continuous give way with a bend failed five reviews here (§
-  Alternatives considered). **Its geometry is settled on the bench first:** the rules below are the first design,
-  to be prototyped on C1's claim grid and rewritten from what the bench shows (whose bodies a step is tested
-  against, offset lines, brigade lines, a second enemy, whether a lone step ends the melee), with this proposal's
-  collision core (§ Resolution).
-  - **Ahead of:** a body stands ahead of a battalion when its places' centre lies beyond the battalion's front line
-    (its anchor's line across its heading) and within its frontage. It is a test of the two shapes, not of the
-    angle between anchors, which calls two wide lines a little offset a flank fight.
-  - **A round** of a pair ends every `collision.round` seconds (about 3 s), on the ticks where the tick plus the
-    pair's lower handle is a whole number of rounds: no clock is kept per melee, and the pairs on the field are not
-    judged together. A melee shorter than a round may see none. Between rounds the melee is as today: each side
-    strikes, owes losses and takes their shock.
-  - **Where:** a round is judged and moved at the end of the melee step (step 10), after the strikes, the shocks and
-    the step's own engagements, on the bodies as the movement step committed them, within the tick: nothing of the
-    world is carried to the next. It is not a proposal of the movement step.
-  - **Only a pair is judged:** two battalions each the other's foe, both in the fight, neither changing shape nor in
-    a trail shape (a march column, limbered guns), one ahead of the other. Each one's push on the other is the losses its strike owes the other
-    this tick, as expected (`rate × DT × men in contact × strength`, before they are drawn as whole men), times its
-    morale (taken as 0 below 0). Strength already falls with the morale's level, so the nerve counts twice: what
-    decides a melee between like units is whose nerve goes first, and a kind stronger in melee (cavalry against
-    foot) pushes harder. The one whose push is smaller by more than `collision.press` of the two loses the round;
-    at most one of a pair loses. Other enemies fighting either of them strike as today, and judge nothing.
-  - **The direction:** the loser steps along the winner's heading if the loser stands ahead of the winner (the
-    winner drives into it, from the front, a flank or the rear), else straight to the loser's rear (the winner is
-    ahead of it). It keeps its heading either way: it gives ground, it does not turn.
-  - **The pair's move:** the loser steps `collision.step` (about 2 m) as one rigid move, its shape and its lags as
-    they stand, and its foe follows by the same displacement, so the two stand as they stood. It is granted whole
-    or not at all. Its test, first design: neither's places at the end of the move meet impassable ground, the map's
-    edge, another body's places or margin (the friend or the enemy margin, loose enemies included), a reserved path,
-    or the ground of a pair moved before it in this tick; a body it already stood inside at the start refuses the
-    move only if the move brings it closer. The
-    pairs move in a keyed draw for the tick on the loser's handle, ties by handle, as the indivisible proposals are
-    ordered. The move sets no velocity: in melee both stand (`vx`, `vz` 0), and the soldier layer walks the men to
-    their new slots.
-  - **The winner cannot follow** when another enemy is fighting it, or the pair's move is not granted. Then the
-    loser's step alone is tried, by the same test; if it is granted the loser has fallen back out of the fight: both
-    leave the melee as a recoil leaves it, the winner stands, and neither pursues.
-  - **Pinned:** a loser that cannot step back takes `collision.pinned`, a shock to its morale, once for the round. It
-    cannot step back when neither move is granted (a friend, an enemy or impassable ground in the way), or when
-    another enemy is fighting it from a flank or the rear (not ahead of it): a battalion fighting front and flank
-    has nowhere to give. A second enemy ahead of it pins nothing; the step takes it from both. No more men are lost
-    than the strikes take; the cost of a lost round is the ground, or the nerve.
-  - **A battalion that keeps losing keeps stepping back,** about `collision.step / collision.round` (0.7 m/s), until
-    its nerve goes or the push turns; its foe keeps pace. That is the melee's trend made visible, and the morale it
-    loses on the way is the strikes' and, pinned, the shock's.
-  - **The order:** every pair due this tick is judged from the tick's strikes before any pair moves, and the moves
-    are made in the keyed order above, so the reversed visiting order gives the same state.
-  - **Seen:** the bench's Statuses layer shows a pair's last round ("stepping back", "pinned", "fell back") until its
-    next, from the melee step's scratch: a debug view, not world state.
+- **A melee holds** (decision 0069; built and tried on C1's claim grid, its plan's step 4, on the C1 branch). A
+  battalion in melee cannot step back or retreat, and nobody gives ground: the melee ends only when one side breaks.
+  The research found every game and rule set gives ground in discrete steps or not at all
+  (`docs/research/melee-outcomes.md`); both kinds were built on the claim grid (§ Alternatives considered), and the
+  owner chose not at all, as Total War does.
+  - **A melee pair stands at each other's core:** between them the margin gives way, never the places. They cannot
+    pass into each other, which left a router standing on its foe's ground, unable to move off it (X-18).
+  - **A charge reaches its target's core only;** any other enemy's margin stops it, so a pursuit does not ride
+    through the friend behind its router (X-16). A pursuit stops at the router's margin and rides it down from
+    there: the ride-down's reach is longer by the margin.
+  - **A broken battalion runs as a block,** faced about, in the direction fixed at its break, and tries its fan of
+    directions when held (`docs/systems/fire-morale.md`). A run held by others for `HELD` seconds counts as halted,
+    as at impassable ground; while an enemy is near it goes on trying the fan's directions in turn, since others
+    may move off its way.
+  - **A router the enemy reaches is cut down:** every enemy in the fight within the ride-down's reach, not in melee
+    with another, strikes it at the melee's rate, and it does not fight back, whether it runs, is held or has no
+    way left (X-17). There is no surrender.
+  - **The flank shock and fire into a melee** are the unit model's (§ Charges and melee there): a charge into the
+    flank or rear of a battalion already in melee shakes it once; a battalion in melee can be fired on wherever no
+    friend of the shooter stands across the line.
 
-  When the loser routs it is loose, and the pursuit is today's.
+  The broken battalion is loose (§ Loose bodies), and the pursuit is today's, stopped at its margin.
 
 ## Loose bodies
 
@@ -370,7 +339,7 @@ interruption, so this part is to be playtested.
 |---|---|---|
 | **C0** | The bench: the overlay's layers, the time controls, the cases as scenarios, their tests and screenshots on today's sim | all, as today |
 | **C1** | Formed bodies: the movement step as propose, resolve and commit; one allowance per bin per tick, half gaps, indivisible proposals and their reserved ground, jams and their right of way, spawns checked | X-04 to X-09, X-14 |
-| **C2** | Contact: the enemy margin, a move halted at the enemy, a charge striking the first enemy it reaches, the melee's gap on the bins, the melee's rounds: a step back and a follow (first tried on C1's claim grid) | X-01 to X-03, X-15 to X-18 |
+| **C2** | Contact: the enemy margin, a move halted at the enemy, a charge striking the first enemy it reaches, the melee's gap on the bins; the melee that holds and the cut-down of routers (built on C1's claim grid) carried into the resolution | X-01 to X-03, X-15 to X-20 |
 | **C3** | Loose bodies: routers, rallies on free ground, the passage of lines; fled gunners with U4, skirmishers with U5 | X-10 to X-13 |
 | **C4** | Orders: shift for every order, appends that keep a reaction, the cap and the pool's reserve, charges started at the head, suspend and resume, clearing on loss of command (#179), the queue on the page | Q-01 to Q-05 |
 
@@ -392,7 +361,14 @@ interruption, so this part is to be playtested.
   (a follower stopped once its flanks reached the lag limit; a held line never dressed, so its disorder stuck), who
   held it needed the gate to report every blocker, and flank attackers needed their own rules. Field of Glory's
   designers dropped push-backs and follow-ups from a free melee of many units for the same complexity
-  (`docs/research/melee-outcomes.md`); the steps keep push-back to a pair, and pin or end the melee otherwise.
+  (`docs/research/melee-outcomes.md`).
+- **Melee in rounds** (C1 step 4's second design, built on the claim grid): every 3 s the loser of a pair, by its
+  push (the losses its strike owes times its morale), stepped back 2 m as one rigid move and its foe followed; one
+  that could not was pinned and lost nerve. It worked on the bench (X-15 to X-20). Rejected by the owner as more
+  than the model needs: history had it, Total War does without it.
+- **Surrender of a router with no way out:** built on the claim grid. Rejected by the owner (Total War has none);
+  the record of who held the router, read back later, also broke replays. A router the enemy reaches is cut down
+  instead.
 - **Clearing the queue on contact** (today). Rejected: no game does it, and it loses the player's plan (#179).
 
 ## Drawbacks
@@ -405,15 +381,14 @@ interruption, so this part is to be playtested.
   start, the reactions' orders, the order pool and every rule that reads the head order. Each phase's plan lists its
   own.
 - **Blocked formations wait** until U8; the player has to order them round.
-- **A melee's step back is a new rule** and changes the charge calibration (`tools/calibrate-charge.ts`).
-- **Steps are coarse:** a battalion moves about 2 m at once. The soldier layer walks its men to their new slots, so
-  it reads as a shuffle back, not a jump.
+- **No ground is given in melee:** a line that history would have seen pushed back stands until it breaks. The
+  cut-down of routers is new, and changes the charge calibration (`tools/calibrate-charge.ts`).
 
 ## Open questions
 
 - **Cavalry through its own infantry's intervals:** historically it passed through a line's intervals. Loose for
   the passage, or a passage of lines ordered by the player?
-- **The round, the step and the pressing margin:** first guesses, tuned on X-01 and X-15 to X-18. Long melees come with the infantry assault (U3); whether a draw then needs a cap (both step apart after a
-  few rounds, as Sharp Practice does) is decided there.
+- **Long melees** come with the infantry assault (U3): whether a draw then needs a cap (both step apart after a
+  while, as Sharp Practice does) is decided there.
 - **The queue's resume timeout** and whether a resumed move should re-check the path (with U8, yes).
 - **Attack-move:** whether it is wanted beside charge and fire at will.
