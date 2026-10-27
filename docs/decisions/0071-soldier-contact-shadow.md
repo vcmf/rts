@@ -43,9 +43,16 @@ Measured (the plan):
   - So no gain makes a pixel darker than the cap. 0062's overlap rule holds unchanged (one colour for every shadow at
     a pixel).
   - 0067's gain stays, 2 up close and 1.5 far: it now only shapes the tail where that is lighter than the cap.
-- **Only where feet show**: the oval is whole to 60 m from the camera's focus (the default zoom is 63 m), fades out
-  to 100 m, and is gone beyond. Past 100 m the vertex shader skips the oval's read and the strip loses its reach, so
-  only the cap is left.
+- **Only where feet show, and no cost past them**: the oval is whole to 60 m from the camera's focus (the default
+  zoom is 63 m), fades out to 100 m, and is gone beyond.
+  - Past 100 m the decal draws with 0067's own shader, not the capped one: no oval, no cap code. Its gain is held
+    to the cap's exponent (`contactGain`: 1.15, not 0067's far 1.5).
+  - That keeps the cap: a fully covered pixel there is L(k)^gain at most, never darker than L(k)^1.15.
+  - Across the band the gain eases from the look's to that, and where the cap no longer binds the capped look gives
+    the uncapped one's pixel, so nothing pops at the switch (tested).
+  - Both materials are compiled at load; the page switches between them only when the band's edge is crossed.
+  - The cap's factor L(k)^0.15 is baked once into the shade's alpha (`src/look/shaders/unitshade.frag`), so the
+    capped shader raises nothing to a power for it.
 - **Switches** for the A/B:
   - `?ushcontact=<pad>,<dark>[,<soft>]`; `?ushcontact=0` for none, and with no `?ushcap` as well the shadows are
     exactly 0067's.
@@ -57,9 +64,11 @@ Measured (the plan):
 
 - At the close and default zooms, the darkest pixels of a soldier's shadow sit at or just above a tree's shadow, with
   a filled core instead of a stipple. The boots stand on dark ground at every step of a march.
-- The far zooms are lighter than 0067's in their darkest tenth (the cap): 0.24 against 0.17 at 125 m.
+- The far zooms are lighter than 0067's: the darkest tenth 0.25 against 0.17 at 125 m, and the tail too (median
+  0.38 against 0.30), from the far gain held at 1.15. That is the price of costing what main does there.
 - On snow, the contact is 0.21 to 0.25 of lit snow, against a conifer's shadow of about 0.23.
-- The cost on Metal: see the plan's bench.
+- No measurable cost on Metal at 40, 125 and 250 m; +0.05 ms of GPU at 63 m, inside the run-to-run spread of
+  earlier rounds (the plan's bench).
 - Tall meadow grass still covers the contact up close: the decal is not lifted at the feet, so it does not darken the
   shins.
 - In a tree's or hill's shadow (shade 1) the contact draws nothing, so it is never darker than that shadow.

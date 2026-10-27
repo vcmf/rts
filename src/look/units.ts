@@ -39,6 +39,8 @@ import {
   SHADOW_CONTACT,
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
+  contactGain,
+  contactOvalOn,
   contactUniform,
   contactWeight,
   decalStrip,
@@ -367,14 +369,16 @@ export class Units {
   }
   set decalLift(v: number) {
     this.lift = v
-    this.decal?.setFloat('uDecalLift', v)
+    for (const m of [this.decalFar, this.decalNear]) m?.setFloat('uDecalLift', v)
   }
   /** the simple shadows' ground height from the meadow map (main.ts: when there is one), else from the heightfield,
    *  sampled when they are made (setShadows): load-time only */
   groundMap = false
   /** the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): main.ts, before setShadows */
   shade: BaseTexture | null = null
-  private decal: ShaderMaterial | null = null // the simple shadows' (useDecals)
+  private decal: ShaderMaterial | null = null // the simple shadows' material drawn now (useDecals, useDecalFor)
+  private decalFar: ShaderMaterial | null = null // without the contact's oval (past its band; without a contact)
+  private decalNear: ShaderMaterial | null = null // with it (within its band), null without a contact
   /** their share of the samples (their soft edge and their gradient: decalFragment, src/look/shadow-look.ts) as
    *  alpha to coverage, with the scene's 4 samples: order-independent; with fewer (?msaa=1|2: two samples would make
    *  the gradient one hard step on drivers that do not dither it) their share darkens the pixel instead, the first
@@ -1117,6 +1121,7 @@ export class Units {
     const decalOn = decals && f > 0
     const ln = this.lookAt()
     this.contactAt()
+    this.useDecalFor()
     // (back from the simple shadows alone: fitted and drawn afresh)
     if (mapOn && !this.mapOn) {
       this.smBox.set = false
@@ -1134,7 +1139,7 @@ export class Units {
     this.depthMat.setFloat('uVATStep', step)
     this.depthVatMat.setFloat('uVATStep', step)
     this.depthProxyMat.setFloat('uVATStep', step)
-    if (this.contact) this.decal?.setFloat('uVATStep', step)
+    if (this.decal === this.decalNear) this.decal?.setFloat('uVATStep', step)
     // (stepped with the figures under ?smoothmove=0)
     if (decalOn) {
       this.decal?.setFloat('uStepFrac', this.smooth ? this.stepFrac : 0)
@@ -1587,7 +1592,8 @@ export class Units {
    *  it is drawn with, then put back */
   private useDecals(): void {
     if (this.decal) return
-    if (!this.shade) {
+    const shade = this.shade
+    if (!shade) {
       throw new Error("units: the simple shadows need the ground's shade (Units.shade, src/look/bakes.ts unitShade)")
     }
     const t0 = performance.now()
@@ -1611,48 +1617,9 @@ export class Units {
     )
     tex.name = 'figureShadowShape'
     tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
-    const m = this.mats0.make('unitShadow2D', DECAL_VS, DECAL_FS, {
-      attributes: ['position', 'aVAT', 'aNext'],
-      uniforms: [
-        'uRoleStart',
-        'uShapeAt',
-        'uShapeCell',
-        'uShapeTexel',
-        'uShapeSize',
-        'uShDir',
-        'uStepFrac',
-        'uFarK',
-        'uFarScale',
-        'uDecalLift',
-        'uShSoft',
-        'uShGain',
-        'uShLen',
-        'uShFoot',
-        'uStrip',
-        'uRows',
-        'uShContact',
-        'uVATStep',
-      ],
-      samplers: ['uShapeTex', 'uUnitShade', 'uContactTex'],
-      alpha: true,
-      defines: [
-        `#define FACINGS ${SHAPE_FACINGS.toFixed(1)}`,
-        `#define DECAL_ALONG ${DECAL_ALONG.toFixed(1)}`,
-        `#define LIFT_RAMP ${LIFT_RAMP.toFixed(2)}`,
-        `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`,
-        ...(this.coverage ? ['#define COVERAGE'] : []),
-        ...(this.farScaleOn ? ['#define FAR_SCALE'] : []),
-        ...(this.fade ? [FADE_ON[1]] : []),
-        ...(this.contact ? ['#define SH_CAP', `#define CONTACT_ROWS ${d.vat.height.toFixed(1)}`] : []),
-      ],
-    })
-    if (this.contact) this.useContact(m, this.contact)
-    m.backFaceCulling = false
-    m.disableDepthWrite = true
-    m.setTexture('uShapeTex', tex)
-    m.setTexture('uUnitShade', this.shade)
     // the ground's height under each vertex: the meadow map's (bound to every painted material, src/look/meadow.ts), or
     // without one the heightfield's, sampled here over the tile (GROUND_N² texels)
+    let ht: RawTexture | null = null
     if (!this.groundMap) {
       const n = GROUND_N
       const w = D.spec.tile
@@ -1660,7 +1627,7 @@ export class Units {
       for (let j = 0; j < n; j++) {
         for (let i = 0; i < n; i++) hd[j * n + i] = groundAt(((i + 0.5) / n) * w - w / 2, ((j + 0.5) / n) * w - w / 2)
       }
-      const ht = new RawTexture(
+      ht = new RawTexture(
         hd,
         n,
         n,
@@ -1673,47 +1640,119 @@ export class Units {
       )
       ht.name = 'figureShadowGround'
       ht.wrapU = ht.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
-      m.setTexture('uMeadow', ht)
     }
-    m.setVector4('uRoleStart', new Vector4(...ROLES.map(r => d.ranges[r].start)))
-    // the atlas's anchor: where a cell's first texel lies from a man's root (m; the strip moves, this does not)
-    m.setVector2('uShapeAt', new Vector2(shape.across[0], shape.along[0]))
-    m.setVector4('uShapeCell', new Vector4(shape.cellW, shape.cellH, 1 / shape.width, 1 / shape.height))
-    m.setVector2('uShapeSize', new Vector2(shape.width, shape.height))
-    m.setVector2('uShapeTexel', new Vector2(1 / shape.texel, shape.margin))
-    m.setVector2('uShDir', new Vector2(...shape.dir))
-    m.setFloat('uStepFrac', 0)
-    m.setVector2('uFarScale', this.farScaleV)
-    m.setFloat('uDecalLift', this.lift)
-    this.decal = m
+    const make = (oval: boolean, capped: boolean): ShaderMaterial => {
+      const m = this.mats0.make(oval ? 'unitShadow2DContact' : 'unitShadow2D', DECAL_VS, DECAL_FS, {
+        attributes: ['position', 'aVAT', 'aNext'],
+        uniforms: [
+          'uRoleStart',
+          'uShapeAt',
+          'uShapeCell',
+          'uShapeTexel',
+          'uShapeSize',
+          'uShDir',
+          'uStepFrac',
+          'uFarK',
+          'uFarScale',
+          'uDecalLift',
+          'uShSoft',
+          'uShGain',
+          'uShLen',
+          'uShFoot',
+          'uStrip',
+          'uRows',
+          'uShContact',
+          'uVATStep',
+        ],
+        samplers: ['uShapeTex', 'uUnitShade', 'uContactTex'],
+        alpha: true,
+        defines: [
+          `#define FACINGS ${SHAPE_FACINGS.toFixed(1)}`,
+          `#define DECAL_ALONG ${DECAL_ALONG.toFixed(1)}`,
+          `#define LIFT_RAMP ${LIFT_RAMP.toFixed(2)}`,
+          `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`,
+          ...(this.coverage ? ['#define COVERAGE'] : []),
+          ...(this.farScaleOn ? ['#define FAR_SCALE'] : []),
+          ...(this.fade ? [FADE_ON[1]] : []),
+          ...(capped ? ['#define SH_CAP'] : []),
+          ...(oval ? ['#define SH_CONTACT', `#define CONTACT_ROWS ${d.vat.height.toFixed(1)}`] : []),
+        ],
+      })
+      if (this.contact) this.useContact(m, this.contact, oval)
+      m.backFaceCulling = false
+      m.disableDepthWrite = true
+      m.setTexture('uShapeTex', tex)
+      m.setTexture('uUnitShade', shade)
+      if (ht) m.setTexture('uMeadow', ht)
+      m.setVector4('uRoleStart', new Vector4(...ROLES.map(r => d.ranges[r].start)))
+      // the atlas's anchor: where a cell's first texel lies from a man's root (m; the strip moves, this does not)
+      m.setVector2('uShapeAt', new Vector2(shape.across[0], shape.along[0]))
+      m.setVector4('uShapeCell', new Vector4(shape.cellW, shape.cellH, 1 / shape.width, 1 / shape.height))
+      m.setVector2('uShapeSize', new Vector2(shape.width, shape.height))
+      m.setVector2('uShapeTexel', new Vector2(1 / shape.texel, shape.margin))
+      m.setVector2('uShDir', new Vector2(...shape.dir))
+      m.setFloat('uStepFrac', 0)
+      m.setVector2('uFarScale', this.farScaleV)
+      m.setFloat('uDecalLift', this.lift)
+      // (a mode nothing else draws with: its blend is replaced at each bind, below)
+      m.alphaMode = Constants.ALPHA_EXCLUSION
+      const st = m.stencil
+      st.enabled = true
+      st.func = Constants.NOTEQUAL
+      st.funcRef = 1
+      st.funcMask = 0xff
+      st.mask = 0xff
+      st.opStencilFail = Constants.KEEP
+      st.opDepthFail = Constants.KEEP
+      st.opStencilDepthPass = Constants.REPLACE
+      const engine = this.scene.getEngine() as ThinEngine
+      const a2c = this.coverage
+      m.onBindObservable.add(() => {
+        engine.alphaState.setAlphaBlendFunctionParameters(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE, 0)
+        if (a2c) engine.setAlphaToCoverage(true)
+      })
+      if (a2c) m.onUnBindObservable.add(() => engine.setAlphaToCoverage(false))
+      return m
+    }
     this.shapeBoxes = { base: shape.base, full: { across: shape.across, along: shape.along } }
     // (the soft bake's reach past the shape's own, on the decal's bounds: place)
     this.softPad = shape.base.across[0] - shape.across[0]
+    // within the contact's zoom band the oval and the cap; past it decision 0067's own shader, its gain no higher than
+    // the cap's exponent (contactGain: so no darker than the cap, at main's cost); with the cap alone (?ushcontact=0
+    // with ?ushcap) the cap at every zoom; with neither, 0067's. Both compiled now, so the switch at the band's edge
+    // (useDecalFor) never waits on a shader
+    const c = this.contact
+    const oval = c !== null && c.dark > 0
+    const far = make(false, c !== null && !oval)
+    const near = oval ? make(true, true) : null
+    this.decalFar = far
+    this.decalNear = near
+    this.decal = near ?? far
+    const one = this.decalMesh()
+    for (const v of [far, near]) v?.forceCompilation(one, undefined, { useInstances: true })
     this.setDecalLook(this.lookNow)
-    // (a mode nothing else draws with: its blend is replaced at each bind, below)
-    m.alphaMode = Constants.ALPHA_EXCLUSION
-    const st = m.stencil
-    st.enabled = true
-    st.func = Constants.NOTEQUAL
-    st.funcRef = 1
-    st.funcMask = 0xff
-    st.mask = 0xff
-    st.opStencilFail = Constants.KEEP
-    st.opDepthFail = Constants.KEEP
-    st.opStencilDepthPass = Constants.REPLACE
-    const engine = this.scene.getEngine() as ThinEngine
-    const a2c = this.coverage
-    m.onBindObservable.add(() => {
-      engine.alphaState.setAlphaBlendFunctionParameters(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE, 0)
-      if (a2c) engine.setAlphaToCoverage(true)
-    })
-    if (a2c) m.onUnBindObservable.add(() => engine.setAlphaToCoverage(false))
-    for (const h of this.hosts) h.lod[this.decalLod].material = m
+    for (const h of this.hosts) h.lod[this.decalLod].material = this.decal
+  }
+  /** a battalion's simple-shadow mesh (its thin instances: the defines its material compiles with), else the LOD's */
+  private decalMesh(): Mesh {
+    return this.hosts[0]?.lod[this.decalLod] ?? this.lods[this.decalLod]
+  }
+  /** The decal's material by the contact's weight this frame: with the oval within its band, without past it (no
+   *  oval's read, varying or texture: the cap alone). Switched only when it changes, once the one wanted is compiled
+   *  (useDecals compiles both up front); the look is given to it afresh (setDecalLook) */
+  private useDecalFor(): void {
+    const want = contactOvalOn(this.contact, this.contactW) && this.decalNear ? this.decalNear : this.decalFar
+    if (!want || want === this.decal || !want.isReady(this.decalMesh(), true)) return
+    this.decal = want
+    for (const h of this.hosts) h.lod[this.decalLod].material = want
+    this.lookSet.soft = NaN
   }
 
   /** The contact shadow's ovals (contactOvals, a texel a baked step) and its uniform on the shadows' material m, and
    *  how far it reaches from a man's root (the strip grown to hold it: decalStrip) */
-  private useContact(m: ShaderMaterial, c: ShadowContact): void {
+  private useContact(m: ShaderMaterial, c: ShadowContact, oval: boolean): void {
+    m.setVector4('uShContact', new Vector4(c.pad, 0, c.soft, c.cap))
+    if (!oval) return
     const pv = this.posedFar ?? posedVertices(this.data, this.data.lods[this.farLod].name)
     const ov = contactOvals(this.data, pv, c.mode)
     const rows = ov.length / 4
@@ -1731,7 +1770,6 @@ export class Units {
     tex.name = 'figureContactOvals'
     tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
     m.setTexture('uContactTex', tex)
-    m.setVector4('uShContact', this.contactV.set(c.pad, 0, c.soft, c.cap))
     m.setFloat('uVATStep', 0)
     let reach = 0
     for (let i = 0; i < rows; i++) {
@@ -1796,7 +1834,7 @@ export class Units {
     const cu = this.contact ? contactUniform(this.contact, this.contactW, this.contactReach) : null
     if (cu) m.setVector4('uShContact', this.contactV.set(...cu.uniform))
     m.setFloat('uShSoft', l.soft)
-    m.setFloat('uShGain', l.gain)
+    m.setFloat('uShGain', contactGain(l.gain, this.contact, this.contactW))
     m.setFloat('uShLen', l.len)
     m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
     const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP, cu?.reach ?? 0)
@@ -1865,7 +1903,8 @@ export class Units {
         m.setDefine('#define FAR_FROM', on ? FAR_FROM.toFixed(4) : false)
       }
     }
-    this.decal?.setDefine('#define FAR_FROM', on ? FAR_FROM.toFixed(4) : false) // (their shadows grow with them)
+    // (their shadows grow with them)
+    for (const m of [this.decalFar, this.decalNear]) m?.setDefine('#define FAR_FROM', on ? FAR_FROM.toFixed(4) : false)
   }
   /** A figure material's draws told whether their battalion fades each man (uLodFade, set as each mesh binds it: the
    *  material is shared by the battalions of a uniform; one drawing a single LOD draws every man, no per-man work) */
@@ -1901,7 +1940,7 @@ export class Units {
   setFarScale(on: boolean): void {
     this.farScaleOn = on
     for (const m of [...this.farMats.values(), ...this.tinyMats.values()]) m.setDefine('#define FAR_SCALE', on)
-    this.decal?.setDefine('#define FAR_SCALE', on) // (their simple shadows with them)
+    for (const m of [this.decalFar, this.decalNear]) m?.setDefine('#define FAR_SCALE', on) // (their simple shadows too)
   }
   /** each side's uniforms' coat colours (the guard's ΔE to the coat) */
   coats(): string[][] {

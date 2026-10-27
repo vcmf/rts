@@ -677,10 +677,12 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   each man's feet, the oval holding his feet at the step he is posed at (`contactOvals` in `src/look/units-data.ts`, a
   texel a VAT row; the vertex shader reads his step's, turns it with his facing and grows it by the pad, the fragment
   adds a `length` and a `smoothstep`), whole up close and to the default zoom, fading out over `band` (60 to 100 m:
-  `contactWeight`), none past it (its darkness 0: the oval not read, the strip without its reach, `contactUniform`).
-  Every covered sample takes the cap's darkening (the shade's luminance raised to 1.15, about a tree's cast shadow) and
-  covers the share that gives the pixel its old darkening or the contact's, whichever is more (`cappedCover`): no
-  pixel darker than a tree's shadow at any gain, the overlap rule kept. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none;
+  `contactWeight`). Within the band every covered sample takes the cap's darkening (the shade's luminance raised to
+  1.15, about a tree's cast shadow, its factor baked into the shade's alpha by `unitshade.frag`, `capShade`) and covers
+  the share that gives the pixel its old darkening or the contact's, whichever is more (`cappedCover`): no pixel
+  darker than a tree's shadow at any gain, the overlap rule kept. Past it (`contactOvalOn`, `useDecalFor` in
+  `src/look/units.ts`) the decal draws with 0067's own material, both compiled at load, its gain held to the cap's
+  exponent (`contactGain`, eased across the band), so it is no darker than the cap and costs what 0067's does. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none;
   with no `?ushcap` the shadows as 0067 left them), `?ushcontactat=step|stride|root`, `?ushcontactband`, `?ushcap`. The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so

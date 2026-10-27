@@ -18,5 +18,11 @@ void main(){
   #endif
   vec3 alb=groundSeason(groundAt(vW.xz,pxMacro()));
   vec3 lit=paint(alb,N,vW,occ,0.12,0.0,sh),dark=paint(alb,N,vW,occ,0.12,0.0,1.0);
-  gl_FragColor=vec4(clamp(dark/max(lit,vec3(1.0e-3)),0.0,1.0),1.0);
+  vec3 k=clamp(dark/max(lit,vec3(1.0e-3)),0.0,1.0);
+  #ifdef SH_CAP_E
+  // the cap's factor on it (decision 0071, unitdecal.frag): its luminance to the power SH_CAP_E - 1
+  gl_FragColor=vec4(k,pow(max(dot(k,vec3(0.2126,0.7152,0.0722)),1.0e-3),SH_CAP_E-1.0));
+  #else
+  gl_FragColor=vec4(k,1.0);
+  #endif
 }

@@ -47,7 +47,7 @@ export interface Bakes {
   lightVP: Matrix
   smTexel: Vector2
   sky: SkyBake | null
-  unitShade(): RenderTargetTexture
+  unitShade(cap?: number): RenderTargetTexture
 }
 export interface SkyBake {
   ms: number
@@ -431,13 +431,14 @@ export function buildBakes(
 
   /* ---------- the simple shadows' shade (decision 0049, shaders/unitshade.frag): the ratio of the ground painted in a
      full cast shadow to it painted as it is, top-down over the tile with the light map's camera, after the bounce map
-     (it reads it); made only when the armies ask for it ---------- */
+     (it reads it); made only when the armies ask for it. cap (0: none): the cap's exponent on its luminance (decision
+     0071), its factor L^(cap - 1) baked into the alpha, so the decal raises nothing to a power for it ---------- */
   let shade: RenderTargetTexture | null = null
-  const unitShade = () => {
+  const unitShade = (cap = 0) => {
     if (shade) return shade
     const m = mats.make('unitShade', TER_VS, SHADE_FS, {
       attributes: ['position', 'normal', 'aRiver'],
-      defines: ['#define GROUND_BOUNCE'],
+      defines: ['#define GROUND_BOUNCE', ...(cap > 0 ? [`#define SH_CAP_E ${cap.toFixed(4)}`] : [])],
     })
     const t = (shade = new RenderTargetTexture(
       'unitShade',

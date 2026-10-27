@@ -11,6 +11,9 @@ import {
   applyContactParams,
   applyLookParams,
   cappedCover,
+  capShade,
+  contactGain,
+  contactOvalOn,
   contactShare,
   contactUniform,
   contactWeight,
@@ -421,6 +424,41 @@ describe('the contact shadow and the cap (decision 0071)', () => {
     expect(contactUniform(SHADOW_CONTACT, 0.5, 0.9).uniform[1]).toBeCloseTo(0.45, 12)
     expect(contactUniform(SHADOW_CONTACT, 0, 0.9)).toEqual({ uniform: [0.1, 0, 1, 1.15], reach: 0 })
     expect(contactUniform({ ...SHADOW_CONTACT, dark: 0 }, 1, 0.9).reach).toBe(0)
+  })
+  it('draws the oval only within its band and with a darkness (else the material without it)', () => {
+    expect(contactOvalOn(SHADOW_CONTACT, 1)).toBe(true)
+    expect(contactOvalOn(SHADOW_CONTACT, 0.01)).toBe(true)
+    expect(contactOvalOn(SHADOW_CONTACT, 0)).toBe(false)
+    expect(contactOvalOn({ ...SHADOW_CONTACT, dark: 0 }, 1)).toBe(false)
+    expect(contactOvalOn(null, 1)).toBe(false)
+  })
+  it("the cap's darkening: the shade's luminance to the cap, its hue kept, none with the shadows off", () => {
+    const c = capShade(k, 1, 1.15)
+    expect(luma(c)).toBeCloseTo(luma(k) ** 1.15, 12)
+    expect(c[0] / c[2]).toBeCloseTo(k[0] / k[2], 12)
+    expect(capShade(k, 0, 1.15)).toEqual([1, 1, 1])
+    expect(capShade([1, 1, 1], 1, 1.15)).toEqual([1, 1, 1])
+    capShade(k, 0.5, 1.15).forEach((v, i) => expect(v).toBeCloseTo(1 + (c[i] - 1) * 0.5, 12))
+  })
+  it("past the band the gain no higher than the cap's exponent, eased in across the band (no pop)", () => {
+    expect(contactGain(2, SHADOW_CONTACT, 1)).toBe(2)
+    expect(contactGain(1.5, SHADOW_CONTACT, 0)).toBe(1.15)
+    expect(contactGain(1.5, SHADOW_CONTACT, 0.5)).toBeCloseTo(1.325, 12)
+    expect(contactGain(1.1, SHADOW_CONTACT, 0)).toBe(1.1)
+    // the cap alone (no oval) and no contact: the look's own
+    expect(contactGain(1.5, { ...SHADOW_CONTACT, dark: 0 }, 0)).toBe(1.5)
+    expect(contactGain(1.5, null, 0)).toBe(1.5)
+  })
+  it("past the band the uncapped shader at that gain is no darker than the cap, and the capped one's pixel", () => {
+    const far = { s: 1, g: 1, foot: 1, dark: 1, cap: 1.15 }
+    for (const gain of [1, 1.1, 1.15]) {
+      for (const s of [0.2, 0.7, 1]) {
+        const fr = decalFragment(s, 1, 1, 1)
+        const uncapped = luma(decalPixel(k, fr.dark, gain, fr.cover, false))
+        expect(uncapped).toBeGreaterThanOrEqual(luma(k) ** 1.15 - 1e-12)
+        expect(pixel(cappedCover(k, 1, { ...far, s, gain }, 0))).toBeCloseTo(uncapped, 12)
+      }
+    }
   })
   it('the contact is solid over its oval and fades to nothing past it', () => {
     expect(contactShare([0.5, 0.5], 1, 0.35)).toBe(1)

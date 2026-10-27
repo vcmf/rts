@@ -190,8 +190,8 @@ cameras (the new path is compiled out without its switches).
 - In a tree's or a hill's shadow (k = 1) the contact draws nothing, as the sun's shadow: an ambient contact there would
   break the "never darker than a tree's shadow" rule.
 - Stride or step: settled, step (the outcome).
-- The capped path costs 0.3 ms of GPU (3 %) at 250 m and 0.08 ms at 125 m, with the contact already off there
-  (the outcome's bench): a material without the contact past its band, or a cheaper cap, would win it back.
+- The far zooms' tail is lighter than 0067's (the far gain held at 1.15 for the cost; the outcome). If the owner
+  wants it darker there, the capped shader keeps 1.5's tail at +0.3 ms at 250 m.
 - The cap's exponent is calibrated against one tree up close; the shade varies over the map, and a tree's shadow there
   with it.
 
@@ -203,8 +203,10 @@ the feet, fully soft, 0.9 of the cap's darkness, 0.1 m past the feet. 0067's gai
 **Also agreed: the oval only where feet show.**
 - It is whole to 60 m from the focus, fades out to 100 m, and is gone beyond (`SHADOW_CONTACT.band`, `contactWeight`).
 - The default zoom (63 m) keeps 0.98 of it; the wide one (125 m) none.
-- With its weight at 0 the vertex shader skips the oval's read (a uniform branch on its darkness) and the strip
-  loses its reach (`contactUniform`). Past the band only the cap is left.
+- Past the band the decal draws with decision 0067's own material: no oval, no cap code (`contactOvalOn`,
+  `useDecalFor`). Its gain is held to the cap's exponent, 1.15, so it is still no darker than the cap (`contactGain`,
+  eased across the band so nothing pops; tested). Both materials are compiled at load; the switch happens once each
+  time the band's edge is crossed. Why, and what was tried first: the cost, below.
 
 **Now the default** (decision 0071, `docs/systems/look.md`). `?ushcontact=0` (with no `?ushcap`) gives decision 0067's
 shadows exactly, for the A/B.
@@ -222,15 +224,16 @@ Each cell is tail / darkest 10 % / contact (2 %):
 |---|---|---|---|---|
 | close 20 m | 0.18 | 0.43 / 0.18 / 0.12 | 0.47 / 0.22 / 0.20 | as main |
 | default 63 m | 0.17 | 0.41 / 0.21 / 0.10 | 0.37 / 0.23 / 0.21 | as main |
-| wide 125 m | 0.17 | 0.30 / 0.17 / 0.15 | 0.33 / 0.24 / 0.23 | as main |
+| wide 125 m | 0.17 | 0.30 / 0.17 / 0.15 | 0.38 / 0.25 / 0.23 | as main |
 | winter close | (conifer 0.23) | 0.59 / 0.19 / 0.14 | 0.50 / 0.23 / 0.21 | |
 | winter default | | 0.45 / 0.25 / 0.13 | 0.41 / 0.27 / 0.25 | |
-| winter wide | | 0.34 / 0.20 / 0.18 | 0.40 / 0.27 / 0.25 | |
+| winter wide | | 0.34 / 0.20 / 0.18 | 0.42 / 0.28 / 0.27 | |
 
-At the wide zoom only the cap acts: lighter in its darkest tenth than main (0.24 against 0.17), never darker than the
-tree.
+At the wide zoom 0067's shader draws with the gain held at 1.15. Its darkest pixels sit where the cap put them (0.23),
+but its tail is lighter than main's (median 0.38 against 0.30; with the capped shader at gain 1.5 it was 0.33). That
+is the price of costing what main does there.
 
-**Goldens** (`node tools/golden.mjs`, SwiftShader, main 5227ec6 against the branch):
+**Goldens** (`node tools/golden.mjs`, SwiftShader, main 5227ec6 against the final branch):
 - The default page (no armies): a match, 0 differing pixels at all 8 cameras.
 - `?armies=20&ushcontact=0` against main's `?armies=20`: a match at all 8 cameras.
 - `?armies=20` against main's: differs only on the battalions (the diff images light nothing else). Pixels differing
@@ -239,39 +242,46 @@ tree.
   | camera | darker | lighter |
   |---|---|---|
   | start | 0 | 0 |
-  | yaw −40 | 211 | 134 |
-  | yaw +40 | 65 | 49 |
-  | close | 4,142 | 4,672 |
-  | river | 206 | 98 |
-  | wide | 6,128 | 5,377 |
-  | far-edge | 1,986 | 950 |
+  | yaw −40 | 0 | 325 |
+  | yaw +40 | 0 | 95 |
+  | close | 2,898 | 5,865 |
+  | river | 0 | 261 |
+  | wide | 0 | 9,252 |
+  | far-edge | 0 | 1,524 |
   | winter | 0 | 0 |
 
-  Worst regions: close 16.9 %, wide 6.2 %, far-edge 2.6 %. Darker where the contact fills the feet; lighter where
-  the cap lifts the old darkest samples and the stipple calms.
+  Worst regions: close 16.6 %, wide 5.7 %, far-edge 1.5 %.
+- The cameras past the band only lighten (the far gain held at 1.15). The close one darkens where the oval fills the
+  feet and lightens where the cap lifts main's darkest samples and the stipple calms.
 
 **The cost:**
 
-Metal, production builds (main 5227ec6 against this branch's default), `?armies=20&benchr=40,63,125,250`,
-alternated, 3 rounds. Each round started only once the 1-minute load average was under 3 (2.65, 2.98 and 2.89;
-3.3 to 4.8 by the rounds' ends). The default arm's (`l2`) p50, ms, the mean over its three yaws, with the three
-rounds in brackets:
+Metal, production builds (main 5227ec6 against the branch), `?armies=20`, alternated. Each round started only once
+the 1-minute load average was under 3. The values are the default arm's (`l2`) p50, ms, the mean over its three yaws.
 
-| zoom | main frame | branch frame | main GPU | branch GPU |
-|---|---|---|---|---|
-| 40 m | 8.97 (8.90, 9.03, 8.98) | 8.14 (9.02, 7.87, 7.55) | 13.06 (13.05, 13.04, 13.07) | 13.06 (13.07, 13.07, 13.05) |
-| 63 m | 9.78 (9.77, 9.78, 9.78) | 9.78 (9.75, 9.80, 9.78) | 13.85 (13.85, 13.84, 13.86) | 13.88 (13.89, 13.89, 13.86) |
-| 125 m | 10.45 (10.40, 10.45, 10.50) | 10.47 (10.40, 10.53, 10.47) | 13.50 (13.50, 13.48, 13.52) | 13.58 (13.60, 13.60, 13.55) |
-| 250 m | 6.62 (6.62, 6.63, 6.60) | 6.77 (6.78, 6.82, 6.72) | 9.56 (9.57, 9.56, 9.56) | 9.86 (9.86, 9.86, 9.86) |
+1. **The first default** (the capped shader at every zoom, the oval's read skipped past the band by a branch), 3
+   rounds: no cost at 40 and 63 m, but +0.08 ms GPU at 125 m and +0.30 ms GPU (3 %) at 250 m, outside the spread
+   in every round.
+2. **Ablations at 250 m**, 2 rounds each, GPU p50 against main's 9.51 to 9.63 ms:
+   - The oval compiled out past the band (a material without it): 9.78 to 9.80.
+   - The cap's `pow` baked into the shade's alpha: 9.78.
+   - The capped shader with one `dot` fewer: 9.80.
+   - The capped shader with a near-black floor (`?ushcap=4`, so other coverage): 9.82, the same.
+   - `?ushcontact=0` (0067's shader): 9.59, as main.
 
-The rounds agree within 0.05 ms of GPU p50 (frame p50 at 40 m flips between about 7.6 and 9.0 ms whatever the arm:
-pacing).
+   So the cost was neither the oval, nor the cap's floor and coverage, nor the `pow`: it is the capped shader itself
+   over the most shadow pixels of any zoom. Hence 0067's own shader past the band.
+3. **The final default**, 3 rounds, rounds started at load 2.32, 2.45 and 2.64:
 
-- **40 and 63 m (the contact whole):** no cost.
-- **125 m (the contact gone, only the cap):** +0.08 ms GPU, just outside the spread.
-- **250 m:** +0.30 ms GPU (3 %) and +0.15 ms frame (2 %), outside it in every round.
+   | zoom | main frame | branch frame | main GPU | branch GPU |
+   |---|---|---|---|---|
+   | 40 m | 8.98 (8.98, 8.92, 9.05) | 7.85 (7.83, 7.82, 7.90) | 13.04 (13.05, 13.04, 13.03) | 13.06 (13.07, 13.06, 13.06) |
+   | 63 m | 9.79 (9.77, 9.78, 9.83) | 9.81 (9.80, 9.85, 9.78) | 13.84 (13.86, 13.84, 13.83) | 13.89 (13.89, 13.89, 13.89) |
+   | 125 m | 10.37 (10.37, 10.33, 10.40) | 10.49 (10.48, 10.52, 10.48) | 13.48 (13.50, 13.48, 13.46) | 13.51 (13.51, 13.51, 13.51) |
+   | 250 m | 6.63 (6.63, 6.62, 6.63) | 6.64 (6.62, 6.67, 6.63) | 9.59 (9.60, 9.57, 9.58) | 9.58 (9.56, 9.60, 9.57) |
 
-So the oval itself costs nothing measurable, but the capped path does at the widest zoom, where it has the most men.
-An estimate, not measured: the per-vertex cost of the decal's extra varying and branch over 32,000 men (eight
-vertices each), and the cap's extra `pow` per fragment. Left as an open question below: compile the contact out past
-its band, or cheapen the capped path.
+   - **40 m:** GPU equal. The frame p50 there sits at about 7.8 or about 9.0 ms whatever the arm: pacing.
+   - **63 m:** +0.05 ms GPU, the oval and the cap; this round's spread is 0.03, the earlier rounds' about 0.05.
+   - **125 m:** GPU +0.03, within the spread; frame +0.12 ms.
+   - **250 m:** equal.
+

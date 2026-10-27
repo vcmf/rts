@@ -715,7 +715,7 @@ if (armiesParam !== null) {
   // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
   // after the bounce map (the season, the shadows' switch, the grain) and when the occlusion's switch changes
   if (simpleShadowsDraw(params)) {
-    const shade = (units.shade = bakes.unitShade())
+    const shade = (units.shade = bakes.unitShade(ushContact?.cap ?? 0))
     let ao = S.ao
     scene.onBeforeRenderObservable.add(() => {
       if (S.ao !== ao) {

@@ -302,6 +302,23 @@ export function contactWeight(r: number, band: readonly [number, number]): numbe
   return 1 - farShare(r, band)
 }
 
+/** The gain the decal draws with (decision 0071): the look's within the contact's band; past it, where the decal
+ *  draws with decision 0067's own uncapped shader (cheaper), no higher than the cap's exponent, so a fully covered
+ *  pixel, L(k)^gain at the far look's full darkness, is still no darker than the cap's L(k)^cap; turned from one to
+ *  the other by the contact's weight w, so nothing pops at the band's end (where the cap no longer binds the capped
+ *  look gives the uncapped one's pixel). With the cap alone (no oval) or neither, the look's */
+export function contactGain(gain: number, c: ShadowContact | null, w: number): number {
+  if (!c || c.dark <= 0) return gain
+  const far = Math.min(gain, c.cap)
+  return far + (gain - far) * w
+}
+
+/** Whether the decal draws with the contact's oval this frame (its weight w): only within its band and with a
+ *  darkness; else the material without it (no oval's varying, read or branch: the cap alone, units.ts useDecalFor) */
+export function contactOvalOn(c: ShadowContact | null, w: number): boolean {
+  return c !== null && c.dark > 0 && w > 0
+}
+
 /** The contact's uniform for the decal (uShContact: its pad, its darkness by its weight w, its softness, the cap) and
  *  the strip's reach (m) for it: at weight 0 the darkness 0 (the vertex shader skips the oval's read) and no reach
  *  (the strip as without a contact), so past the band only the cap is left */
@@ -324,8 +341,16 @@ export function luma(c: readonly number[]): number {
   return c[0] * SHADE_LUMA[0] + c[1] * SHADE_LUMA[1] + c[2] * SHADE_LUMA[2]
 }
 
+/** The cap's darkening (unitdecal.frag under SH_CAP, mirrored here for its tests): the ground's shade k with its
+ *  luminance raised to cap, its hue kept (k · L(k)^(cap - 1): the factor baked once into the shade's alpha,
+ *  unitshade.frag, so the decal raises nothing to a power for it), toward none by the zoom's cross-fade share f */
+export function capShade(k: readonly number[], f: number, cap: number): [number, number, number] {
+  const m = Math.max(luma(k), 1e-3) ** (cap - 1)
+  return [1 + (k[0] * m - 1) * f, 1 + (k[1] * m - 1) * f, 1 + (k[2] * m - 1) * f]
+}
+
 /** The capped decal at a fragment (unitdecal.frag under SH_CAP, mirrored here for its tests): every covered sample
- *  takes the cap's darkening (shadowShade(k, f, cap): the same for every shadow at a pixel, so the darkest share still
+ *  takes the cap's darkening (capShade(k, f, cap): the same for every shadow at a pixel, so the darkest share still
  *  wins whatever the order), and the share is what gives the pixel the darkening the uncapped look would (the sun's
  *  shadow as decalFragment and the gain make it: its share of the gained full darkness), or the contact's, whichever
  *  is more, at most all of it: so no pixel goes darker than the cap, at any gain. k: the ground's shade; f: the zoom's
@@ -337,8 +362,9 @@ export function cappedCover(
   contact: number,
 ): { cover: number; shade: [number, number, number] } {
   const fr = decalFragment(look.s, look.g, look.foot, look.dark)
-  const lg = luma(shadowShade(k, f * fr.dark, look.gain))
-  const shade = shadowShade(k, f, look.cap)
+  // (the gained darkness's luminance from the shade's, the mix being linear: the shader's one dot)
+  const lg = Math.max(1 - (1 - luma(k)) * f * fr.dark, 1e-3) ** look.gain
+  const shade = capShade(k, f, look.cap)
   const room = 1 - luma(shade)
   if (room < 1e-3) return { cover: 0, shade }
   return { cover: Math.min(1, Math.max((fr.cover * (1 - lg)) / room, contact)), shade }
