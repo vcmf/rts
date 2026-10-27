@@ -568,9 +568,10 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
 // ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one; ?ushgain=<1..3>[,<far>],
 // the darkening's strength, foot and tip alike (1: as decision 0062 shipped it; by default 2,1.5, the owner's:
 // docs/plans/done/shadow-darker.md)
-// the contact shadow and the cap (a test, docs/plans/active/shadow-contact.md): ?ushcontact=<pad m>,<dark>[,<soft>], a
-// solid oval under each man's feet; ?ushcontactat=root|stride|step, where it sits; ?ushcap=<exponent>, the darkest any
-// shadow goes (by default about a tree's cast shadow with a contact; none without either: the shadows as before)
+// the contact shadow and the cap (decision 0071, by default the owner's): ?ushcontact=<pad m>,<dark>[,<soft>], the
+// oval under each man's feet (0: none); ?ushcontactat=root|stride|step, where it sits; ?ushcontactband=<r0>,<r1>, the
+// zoom band (m from the focus) it fades out over; ?ushcap=<exponent>, the darkest any shadow goes (with
+// ?ushcontact=0 and no ?ushcap, the shadows as decision 0067 left them)
 // (src/look/shadow-look.ts parses them, a bad value an error at load)
 const shadowMode = shadowModes(params)
 const shadowLook = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }

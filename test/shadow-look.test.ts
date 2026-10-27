@@ -4,8 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
-  CONTACT_CAP,
-  CONTACT_SOFT,
+  SHADOW_CONTACT,
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
   SHADE_LUMA,
@@ -13,6 +12,8 @@ import {
   applyLookParams,
   cappedCover,
   contactShare,
+  contactUniform,
+  contactWeight,
   decalFragment,
   decalStrip,
   farShare,
@@ -380,32 +381,46 @@ describe('the shape with its soft bake', () => {
   })
 })
 
-describe('the contact shadow and the cap (docs/plans/active/shadow-contact.md)', () => {
+describe('the contact shadow and the cap (decision 0071)', () => {
   const k = [0.25, 0.3, 0.42]
-  it('are off without their switches: the shadows exactly as before', () => {
-    expect(applyContactParams(q('armies=20'))).toBeNull()
+  it("are on by default, the owner's (2026-10-27): the oval following the feet, soft, 0.9 dark, capped", () => {
+    expect(SHADOW_CONTACT).toEqual({ mode: 'step', pad: 0.1, dark: 0.9, soft: 1, cap: 1.15, band: [60, 100] })
+    expect(applyContactParams(q('armies=20'))).toEqual(SHADOW_CONTACT)
+  })
+  it('turn off with ?ushcontact=0 (and no ?ushcap): the shadows exactly as decision 0067 left them', () => {
+    expect(applyContactParams(q('ushcontact=0'))).toBeNull()
     expect(applyContactParams(q('ushcontact=0,1'))).toBeNull()
     expect(applyContactParams(q('ushcontact=0.1,0'))).toBeNull()
+    expect(applyContactParams(q('ushcontact=0&ushcap=1.3'))).toMatchObject({ pad: 0, dark: 0, cap: 1.3 })
   })
-  it('parse the contact, its place and the cap, the cap on by default with a contact', () => {
-    expect(applyContactParams(q('ushcontact=0.1,1'))).toEqual({
-      mode: 'stride',
-      pad: 0.1,
-      dark: 1,
-      soft: CONTACT_SOFT,
-      cap: CONTACT_CAP,
-    })
-    expect(applyContactParams(q('ushcontact=0.35,0.8,0.2&ushcontactat=root&ushcap=2'))).toEqual({
+  it('parse the contact, its place, its band and the cap, the defaults where not given', () => {
+    expect(applyContactParams(q('ushcontact=0.1,1'))).toEqual({ ...SHADOW_CONTACT, dark: 1 })
+    expect(applyContactParams(q('ushcontact=0.35,0.8,0.2&ushcontactat=root&ushcap=2&ushcontactband=40,70'))).toEqual({
       mode: 'root',
       pad: 0.35,
       dark: 0.8,
       soft: 0.2,
       cap: 2,
+      band: [40, 70],
     })
-    expect(applyContactParams(q('ushcap=1.3'))).toMatchObject({ pad: 0, dark: 0, cap: 1.3 })
     expect(() => applyContactParams(q('ushcontact=0.1'))).toThrow(/ushcontact/)
     expect(() => applyContactParams(q('ushcontact=0.1,1&ushcap=0.5'))).toThrow(/ushcap/)
-    expect(() => applyContactParams(q('ushcontact=0.1,1&ushcontactat=feet'))).toThrow(/ushcontactat/)
+    expect(() => applyContactParams(q('ushcontactat=feet'))).toThrow(/ushcontactat/)
+    expect(() => applyContactParams(q('ushcontactband=70,40'))).toThrow(/ushcontactband/)
+  })
+  it('the contact is whole up close and to the default zoom, gone by the wide one (only where feet show)', () => {
+    const b = SHADOW_CONTACT.band
+    expect(contactWeight(20, b)).toBe(1)
+    expect(contactWeight(63, b)).toBeGreaterThan(0.95)
+    expect(contactWeight(80, b)).toBeCloseTo(0.5, 9)
+    expect(contactWeight(125, b)).toBe(0)
+    expect(contactWeight(250, b)).toBe(0)
+  })
+  it('past its band only the cap is left: no darkness (the oval not read), no reach (the strip as without)', () => {
+    expect(contactUniform(SHADOW_CONTACT, 1, 0.9)).toEqual({ uniform: [0.1, 0.9, 1, 1.15], reach: 0.9 })
+    expect(contactUniform(SHADOW_CONTACT, 0.5, 0.9).uniform[1]).toBeCloseTo(0.45, 12)
+    expect(contactUniform(SHADOW_CONTACT, 0, 0.9)).toEqual({ uniform: [0.1, 0, 1, 1.15], reach: 0 })
+    expect(contactUniform({ ...SHADOW_CONTACT, dark: 0 }, 1, 0.9).reach).toBe(0)
   })
   it('the contact is solid over its oval and fades to nothing past it', () => {
     expect(contactShare([0.5, 0.5], 1, 0.35)).toBe(1)

@@ -73,7 +73,7 @@ export interface Strip {
  *  third where the lift's ramp ends (liftRamp m along the drawn shadow, liftRamp / len along the shape), so the lift,
  *  linear between rows, is whole there and the grass and legs do not poke through near the feet. Between, the rows'
  *  places (m) and the box blended. reach (m, 0 by default: as before): the base box grown to hold a disc of that radius
- *  about the root (the contact shadow's, docs/plans/active/shadow-contact.md), never past the full box (the shape's
+ *  about the root (the contact shadow's, decision 0071), never past the full box (the shape's
  *  cell: the strip never reads a neighbour's) */
 export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: number, liftRamp: number, reach = 0): Strip {
   const boxOf = (b: ShapeBox): Strip['box'] => [
@@ -238,45 +238,79 @@ export function applyLookParams(
   return { band: band ? [band[0], band[1]] : null }
 }
 
-/** Where the contact shadow sits (docs/plans/active/shadow-contact.md): root, a disc about the man's root; stride, an
- *  oval over his feet's whole travel in his clip (one a role, turned with his facing); step, an oval over his feet at
- *  the clip's step he is posed at (it follows them) */
+/** Where the contact shadow sits (decision 0071): root, a disc about the man's root; stride, an oval over his feet's
+ *  whole travel in his clip (one a clip, turned with his facing); step, an oval over his feet at the clip's step he is
+ *  posed at (it follows them) */
 export type ContactMode = 'root' | 'stride' | 'step'
-/** The contact shadow under each soldier's feet and the cap on every shadow's darkness (the plan above). pad (m): how
+/** The contact shadow under each soldier's feet and the cap on every shadow's darkness (decision 0071). pad (m): how
  *  far the oval reaches past the feet (root: the disc's radius); dark: its share of the cap's darkening (1: as dark as
  *  the cap allows, 0: none); soft: its fade past the oval, a share of its size; cap: the darkest any covered sample
- *  goes, the ground's shade's luminance raised to it (1: the ground's painted cast shadow, k; CONTACT_CAP: about a
- *  tree's cast shadow in the frame) */
+ *  goes, the ground's shade's luminance raised to it (1: the ground's painted cast shadow, k); band (m, the camera's
+ *  distance to its focus): the contact whole up to its start, fading out across it, none past its end */
 export interface ShadowContact {
   mode: ContactMode
   pad: number
   dark: number
   soft: number
   cap: number
+  band: readonly [number, number]
 }
-/** The cap's exponent on the ground's shade by default: a tree's cast shadow in the frame is darker than the shade k
- *  (its crown hides sky too); measured in the plan, L(k)^CONTACT_CAP ≈ the tree's shadow */
-export const CONTACT_CAP = 1.15
-/** The contact's softness by default (its fade past the oval, a share of its size) */
-export const CONTACT_SOFT = 0.35
+/** The contact and cap by default. The owner, 2026-10-27, from docs/plans/done/shadow-contact.md's candidates: the
+ *  oval that follows the feet (step), fully soft, 0.9 of the cap's darkness, 0.1 m past the feet; the cap at about a
+ *  tree's cast shadow (a tree's shadow is darker than the ground's shade k, its crown hiding sky too: L(k)^1.15 is
+ *  about it, measured in the plan); and the oval only where feet show: whole to about the default zoom (63 m), gone
+ *  by the wide one (125 m) */
+export const SHADOW_CONTACT: Readonly<ShadowContact> = {
+  mode: 'step',
+  pad: 0.1,
+  dark: 0.9,
+  soft: 1,
+  cap: 1.15,
+  band: [60, 100],
+}
 
-/** ?ushcontact=<pad m 0..1>,<dark 0..1>[,<soft 0..1>] (pad 0 or dark 0: none), ?ushcontactat=root|stride|step (by
- *  default stride), ?ushcap=<1..4> (the cap's exponent; by default CONTACT_CAP with a contact, none without): the
- *  contact and cap, or null for neither (the shadows exactly as before) */
+/** The contact and cap from the page's switches, SHADOW_CONTACT's where not given: ?ushcontact=<pad m 0..1>,<dark
+ *  0..1>[,<soft 0..1>] (0 alone, or a pad or darkness of 0: no contact), ?ushcontactat=root|stride|step,
+ *  ?ushcap=<1..4> (the cap's exponent), ?ushcontactband=<r0>,<r1> (m, r0 < r1). Null with no contact and no ?ushcap:
+ *  the shadows exactly as decision 0067 left them (the A/B) */
 export function applyContactParams(q: URLSearchParams): ShadowContact | null {
-  const c = parseNumbers(q, 'ushcontact', [2, 3], [0, 1])
+  const d = SHADOW_CONTACT
+  const c = parseNumbers(q, 'ushcontact', [1, 2, 3], [0, 1])
+  if (c?.length === 1 && c[0] !== 0) throw new Error(`?ushcontact must be 0 or <pad>,<dark>[,<soft>], not ${c[0]}`)
   const capN = parseNumbers(q, 'ushcap', [1], [1, 4])
-  const at = q.get('ushcontactat') ?? 'stride'
+  const at = q.get('ushcontactat') ?? d.mode
   if (!['root', 'stride', 'step'].includes(at)) throw new Error(`?ushcontactat must be root, stride or step, not ${at}`)
-  const on = c !== null && c[0] > 0 && c[1] > 0
+  const band = parseNumbers(q, 'ushcontactband', [2], [0, 1000])
+  if (band && !(band[1] > band[0])) {
+    throw new Error(`?ushcontactband must be <r0>,<r1> with r0 < r1, not ${q.get('ushcontactband')}`)
+  }
+  const on = c === null || (c.length > 1 && c[0] > 0 && c[1] > 0)
   if (!on && !capN) return null
   return {
     mode: at as ContactMode,
-    pad: on ? c[0] : 0,
-    dark: on ? c[1] : 0,
-    soft: c?.[2] ?? CONTACT_SOFT,
-    cap: capN ? capN[0] : CONTACT_CAP,
+    pad: !on ? 0 : c ? c[0] : d.pad,
+    dark: !on ? 0 : c ? c[1] : d.dark,
+    soft: c?.[2] ?? d.soft,
+    cap: capN ? capN[0] : d.cap,
+    band: band ? [band[0], band[1]] : d.band,
   }
+}
+
+/** The contact's weight at the camera's distance r (m) to its focus: 1 up to band's start, 0 from its end, a
+ *  smoothstep between (the oval is for feet that show) */
+export function contactWeight(r: number, band: readonly [number, number]): number {
+  return 1 - farShare(r, band)
+}
+
+/** The contact's uniform for the decal (uShContact: its pad, its darkness by its weight w, its softness, the cap) and
+ *  the strip's reach (m) for it: at weight 0 the darkness 0 (the vertex shader skips the oval's read) and no reach
+ *  (the strip as without a contact), so past the band only the cap is left */
+export function contactUniform(
+  c: ShadowContact,
+  w: number,
+  reach: number,
+): { uniform: [number, number, number, number]; reach: number } {
+  return { uniform: [c.pad, c.dark * w, c.soft, c.cap], reach: w > 0 && c.dark > 0 ? reach : 0 }
 }
 
 /** The contact's share of the cap's darkening at q (the fragment's place in the oval's own frame: 1 at its edge), dark

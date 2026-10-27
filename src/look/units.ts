@@ -36,8 +36,11 @@ import DECAL_FS from './shaders/unitdecal.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
 import {
+  SHADOW_CONTACT,
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
+  contactUniform,
+  contactWeight,
   decalStrip,
   farShare,
   footUniform,
@@ -330,11 +333,14 @@ export class Units {
    *  only with simpleClose (else the far look at every zoom, as before) */
   look: { close: ShadowLook; far: ShadowLook } = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
   lookBand: [number, number] = [...SHADOW_LOOK_BAND]
-  /** the contact shadow under each man's feet and the cap on every shadow's darkness
-   *  (docs/plans/active/shadow-contact.md; ?ushcontact, ?ushcap: applyContactParams), or null: the shadows as before.
-   *  Read once, when the shadows' material is made */
-  contact: ShadowContact | null = null
+  /** the contact shadow under each man's feet and the cap on every shadow's darkness (decision 0071; SHADOW_CONTACT,
+   *  ?ushcontact, ?ushcap: applyContactParams), or null: the shadows as decision 0067 left them. Read once, when the
+   *  shadows' material is made */
+  contact: ShadowContact | null = { ...SHADOW_CONTACT }
   private contactReach = 0 // m: how far the contact reaches from a man's root (the strip holds it: decalStrip)
+  private contactW = 0 // the contact's weight this frame (contactWeight, by the camera's distance)
+  private contactWSet = NaN // and the one last given to the material (setDecalLook)
+  private readonly contactV = new Vector4()
   // the look this frame (lookAt), given to the decal's material (setDecalLook)
   private readonly lookNow: ShadowLook = { ...SHADOW_LOOK.far }
   // the look last given to the decal's material (setDecalLook: only when it changes)
@@ -1110,6 +1116,7 @@ export class Units {
     const mapOn = this.shadows && f < 1 && this.shadowRT !== null
     const decalOn = decals && f > 0
     const ln = this.lookAt()
+    this.contactAt()
     // (back from the simple shadows alone: fitted and drawn afresh)
     if (mapOn && !this.mapOn) {
       this.smBox.set = false
@@ -1724,7 +1731,7 @@ export class Units {
     tex.name = 'figureContactOvals'
     tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
     m.setTexture('uContactTex', tex)
-    m.setVector4('uShContact', new Vector4(c.pad, c.dark, c.soft, c.cap))
+    m.setVector4('uShContact', this.contactV.set(c.pad, 0, c.soft, c.cap))
     m.setFloat('uVATStep', 0)
     let reach = 0
     for (let i = 0; i < rows; i++) {
@@ -1732,6 +1739,12 @@ export class Units {
       reach = Math.max(reach, Math.hypot(ov[o], ov[o + 1]) + Math.max(ov[o + 2], ov[o + 3]) + c.pad)
     }
     this.contactReach = c.dark > 0 ? reach * (1 + c.soft) : 0
+  }
+  /** The contact's weight by the camera's distance (contactWeight over its band), kept for setDecalLook: 0 without a
+   *  contact */
+  private contactAt(): void {
+    const c = this.contact
+    this.contactW = c && c.dark > 0 ? contactWeight(this.camera.radius, c.band) : 0
   }
 
   /** the figures' cast shadows on or off: off, the receivers compile without them (the bench's baseline arm). On, the
@@ -1775,14 +1788,18 @@ export class Units {
       l.core === p.core &&
       l.len === p.len &&
       l.gain === p.gain
-    if (!m || !b || (same && this.lookT === this.lookTSet)) return
+    if (!m || !b || (same && this.lookT === this.lookTSet && this.contactW === this.contactWSet)) return
     Object.assign(p, l)
     this.lookTSet = this.lookT
+    this.contactWSet = this.contactW
+    // (the contact's darkness by its weight: 0 skips its oval in the vertex shader, and its reach leaves the strip)
+    const cu = this.contact ? contactUniform(this.contact, this.contactW, this.contactReach) : null
+    if (cu) m.setVector4('uShContact', this.contactV.set(...cu.uniform))
     m.setFloat('uShSoft', l.soft)
     m.setFloat('uShGain', l.gain)
     m.setFloat('uShLen', l.len)
     m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
-    const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP, this.contactReach)
+    const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP, cu?.reach ?? 0)
     m.setVector4('uStrip', this.stripV.set(...strip.box))
     m.setVector4('uRows', this.rowsV.set(...strip.rows))
   }

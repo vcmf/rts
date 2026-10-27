@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-26
+last_reviewed: 2026-10-27
 code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts]
-decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker]
+decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow]
 ---
 
 # The look page (Track E, L0)
@@ -673,7 +673,15 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   before; the hue kept where no channel is clamped at 0; `shadowShade`, `decalPixel`; by default 2 up close and 1.5
   far, the owner's, 2026-10-26: `docs/plans/done/shadow-darker.md`; under `?ushadowclose=map` the cross-fade blends
   the map's shadow, which has no gain, against the gained decal) tune it live; `Units.lookNow` is
-  this frame's. The fragment reads the atlas and the ground's shade:
+  this frame's. **The contact and the cap** (decision 0071, `SHADOW_CONTACT`, `applyContactParams`): a solid oval under
+  each man's feet, the oval holding his feet at the step he is posed at (`contactOvals` in `src/look/units-data.ts`, a
+  texel a VAT row; the vertex shader reads his step's, turns it with his facing and grows it by the pad, the fragment
+  adds a `length` and a `smoothstep`), whole up close and to the default zoom, fading out over `band` (60 to 100 m:
+  `contactWeight`), none past it (its darkness 0: the oval not read, the strip without its reach, `contactUniform`).
+  Every covered sample takes the cap's darkening (the shade's luminance raised to 1.15, about a tree's cast shadow) and
+  covers the share that gives the pixel its old darkening or the contact's, whichever is more (`cappedCover`): no
+  pixel darker than a tree's shadow at any gain, the overlap rule kept. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none;
+  with no `?ushcap` the shadows as 0067 left them), `?ushcontactat=step|stride|root`, `?ushcontactband`, `?ushcap`. The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so
   a formation's overlapping shadows darken each sample once, at every distance (with fewer samples, `?msaa=1|2`, the

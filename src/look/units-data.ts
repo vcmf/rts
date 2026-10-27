@@ -902,7 +902,7 @@ export function enclosingOval(pts: readonly (readonly [number, number])[]): [num
   return [c[0], c[1], h[0] * k, h[1] * k]
 }
 
-/** The contact shadow's oval at each of the figure's baked steps (docs/plans/active/shadow-contact.md), in his own
+/** The contact shadow's oval at each of the figure's baked steps (decision 0071), in his own
  *  frame (x across him, z along him, m from his root): [cx, cz, ax, az] a step, over his feet (the posed LOD's
  *  vertices within FOOT_H of his clip's lowest). step: the feet at that step (it follows them); stride: the feet over
  *  the step's whole clip (one oval a clip); root: none (a disc about the root, its radius the contact's pad). No era

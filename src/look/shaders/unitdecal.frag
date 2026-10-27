@@ -2,7 +2,7 @@
 precision highp float;uniform sampler2D uShapeTex,uUnitShade;uniform vec2 uShapeSize;uniform float uUnitFar,uShSoft,uShGain;uniform vec4 uShFoot;
 varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 #ifdef SH_CAP
-// the contact shadow and the cap (docs/plans/active/shadow-contact.md): uShContact (its pad, m: the vertex's; its
+// the contact shadow and the cap (docs/decisions/0071-soldier-contact-shadow.md): uShContact (its pad, m: the vertex's; its
 // darkness, a share of the cap's darkening; its fade past the oval; the cap's exponent on the ground's shade); vCt: the
 // fragment in the contact's oval (1 at its edge, unitdecal.vert)
 uniform vec4 uShContact;varying vec2 vCt;

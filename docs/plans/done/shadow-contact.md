@@ -1,9 +1,9 @@
 ---
-status: active
-last_reviewed: 2026-10-26
+status: done
+last_reviewed: 2026-10-27
 ---
 
-# Plan: a contact shadow under the soldiers' feet, capped at a tree's shadow (a test)
+# Plan: a contact shadow under the soldiers' feet, capped at a tree's shadow
 
 Asked by the owner (2026-10-26), of the simple shadows (decisions 0062 and 0067): "darker and more solid at the
 foot of the soldier". Shown `?ushfoot=1.5,0.6,1.5,0.6&ushdark=0.5,0.6`: "darker than the tree shadow so not good,
@@ -12,9 +12,8 @@ the foot even in movement … as it's a fixed shadow, the shadow can be detached
 with fast performance is always preferred". The owner's rule: **no part of a soldier's shadow darker than a tree's
 cast shadow.**
 
-This branch is the test: switches only, the default unchanged (the shader's new path is behind a define that is
-off unless a switch asks for it). Once the owner picks, a follow-up makes the pick the default with a decision record
-amending 0062 and 0067 and the system doc (`docs/systems/look.md`).
+It began as a test behind switches (the measurements below are the test's, made before the default changed); the
+owner picked on 2026-10-27 (the outcome, at the end) and the pick is now the default: decision 0071.
 
 ## Why the foot is not solid today
 
@@ -182,7 +181,7 @@ cameras (the new path is compiled out without its switches).
   pixel darker than the cap at any gain (tested, and measured: the darkest pixels at about the tree's shadow).
 - The overlap rule holds under the cap (tested).
 - No measurable cost on Metal (below the run-to-run spread).
-- The owner picks the candidate; then the default, a decision record, the system doc, the goldens.
+- The owner picks the candidate; then the default, a decision record, the system doc, the goldens. Done (the outcome).
 
 ## Open questions
 
@@ -190,7 +189,89 @@ cameras (the new path is compiled out without its switches).
   not darken the shins); a contact on the grass blades would need the lift near the feet or the grass shader to read it.
 - In a tree's or a hill's shadow (k = 1) the contact draws nothing, as the sun's shadow: an ambient contact there would
   break the "never darker than a tree's shadow" rule.
-- Stride or step: the same cost; step hugs the feet and moves with them at the poses' 12 fps, stride is one still
-  oval a clip (merging into a band under a dense block).
+- Stride or step: settled, step (the outcome).
+- The capped path costs 0.3 ms of GPU (3 %) at 250 m and 0.08 ms at 125 m, with the contact already off there
+  (the outcome's bench): a material without the contact past its band, or a cheaper cap, would win it back.
 - The cap's exponent is calibrated against one tree up close; the shade varies over the map, and a tree's shadow there
   with it.
+
+## Outcome (2026-10-27)
+
+**The owner's pick:** `?ushcontact=0.1,0.9,1&ushcontactat=step` with the cap at 1.15. That is the oval that follows
+the feet, fully soft, 0.9 of the cap's darkness, 0.1 m past the feet. 0067's gain stays at 2 / 1.5 under the cap.
+
+**Also agreed: the oval only where feet show.**
+- It is whole to 60 m from the focus, fades out to 100 m, and is gone beyond (`SHADOW_CONTACT.band`, `contactWeight`).
+- The default zoom (63 m) keeps 0.98 of it; the wide one (125 m) none.
+- With its weight at 0 the vertex shader skips the oval's read (a uniform branch on its darkness) and the strip
+  loses its reach (`contactUniform`). Past the band only the cap is left.
+
+**Now the default** (decision 0071, `docs/systems/look.md`). `?ushcontact=0` (with no `?ushcap`) gives decision 0067's
+shadows exactly, for the A/B.
+
+**The motion check** (`output/armies-review/22-shadow-contact/7-default-motion-close.jpg`, `-default.jpg`):
+- A marching rear rank over one stride. The boots stand on the dark oval at every step; main's show the lighter,
+  stippled ground around them.
+- Softness 1 only widens the fade past the oval; the solid part is the feet's own oval plus the pad. Every foot
+  vertex of every clip's every step lies inside it (tested), marching and running alike, so the 0.1 m pad stays.
+
+**The default's measurements** (same camera and measure as above; `8-default-close.jpg`, `-default.jpg`, `-wide.jpg`).
+Each cell is tail / darkest 10 % / contact (2 %):
+
+| zoom | tree | main 5227ec6 | default now | `?ushcontact=0` |
+|---|---|---|---|---|
+| close 20 m | 0.18 | 0.43 / 0.18 / 0.12 | 0.47 / 0.22 / 0.20 | as main |
+| default 63 m | 0.17 | 0.41 / 0.21 / 0.10 | 0.37 / 0.23 / 0.21 | as main |
+| wide 125 m | 0.17 | 0.30 / 0.17 / 0.15 | 0.33 / 0.24 / 0.23 | as main |
+| winter close | (conifer 0.23) | 0.59 / 0.19 / 0.14 | 0.50 / 0.23 / 0.21 | |
+| winter default | | 0.45 / 0.25 / 0.13 | 0.41 / 0.27 / 0.25 | |
+| winter wide | | 0.34 / 0.20 / 0.18 | 0.40 / 0.27 / 0.25 | |
+
+At the wide zoom only the cap acts: lighter in its darkest tenth than main (0.24 against 0.17), never darker than the
+tree.
+
+**Goldens** (`node tools/golden.mjs`, SwiftShader, main 5227ec6 against the branch):
+- The default page (no armies): a match, 0 differing pixels at all 8 cameras.
+- `?armies=20&ushcontact=0` against main's `?armies=20`: a match at all 8 cameras.
+- `?armies=20` against main's: differs only on the battalions (the diff images light nothing else). Pixels differing
+  by more than 6 levels, darker / lighter:
+
+  | camera | darker | lighter |
+  |---|---|---|
+  | start | 0 | 0 |
+  | yaw −40 | 211 | 134 |
+  | yaw +40 | 65 | 49 |
+  | close | 4,142 | 4,672 |
+  | river | 206 | 98 |
+  | wide | 6,128 | 5,377 |
+  | far-edge | 1,986 | 950 |
+  | winter | 0 | 0 |
+
+  Worst regions: close 16.9 %, wide 6.2 %, far-edge 2.6 %. Darker where the contact fills the feet; lighter where
+  the cap lifts the old darkest samples and the stipple calms.
+
+**The cost:**
+
+Metal, production builds (main 5227ec6 against this branch's default), `?armies=20&benchr=40,63,125,250`,
+alternated, 3 rounds. Each round started only once the 1-minute load average was under 3 (2.65, 2.98 and 2.89;
+3.3 to 4.8 by the rounds' ends). The default arm's (`l2`) p50, ms, the mean over its three yaws, with the three
+rounds in brackets:
+
+| zoom | main frame | branch frame | main GPU | branch GPU |
+|---|---|---|---|---|
+| 40 m | 8.97 (8.90, 9.03, 8.98) | 8.14 (9.02, 7.87, 7.55) | 13.06 (13.05, 13.04, 13.07) | 13.06 (13.07, 13.07, 13.05) |
+| 63 m | 9.78 (9.77, 9.78, 9.78) | 9.78 (9.75, 9.80, 9.78) | 13.85 (13.85, 13.84, 13.86) | 13.88 (13.89, 13.89, 13.86) |
+| 125 m | 10.45 (10.40, 10.45, 10.50) | 10.47 (10.40, 10.53, 10.47) | 13.50 (13.50, 13.48, 13.52) | 13.58 (13.60, 13.60, 13.55) |
+| 250 m | 6.62 (6.62, 6.63, 6.60) | 6.77 (6.78, 6.82, 6.72) | 9.56 (9.57, 9.56, 9.56) | 9.86 (9.86, 9.86, 9.86) |
+
+The rounds agree within 0.05 ms of GPU p50 (frame p50 at 40 m flips between about 7.6 and 9.0 ms whatever the arm:
+pacing).
+
+- **40 and 63 m (the contact whole):** no cost.
+- **125 m (the contact gone, only the cap):** +0.08 ms GPU, just outside the spread.
+- **250 m:** +0.30 ms GPU (3 %) and +0.15 ms frame (2 %), outside it in every round.
+
+So the oval itself costs nothing measurable, but the capped path does at the widest zoom, where it has the most men.
+An estimate, not measured: the per-vertex cost of the decal's extra varying and branch over 32,000 men (eight
+vertices each), and the cap's extra `pow` per fragment. Left as an open question below: compile the contact out past
+its band, or cheapen the capped path.
