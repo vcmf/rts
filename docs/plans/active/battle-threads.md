@@ -336,6 +336,19 @@ tile) is no sim map. Two PRs, then PR 4.
   shots, `look-check`); replays unchanged (`app-check`).
 - **Stop**: if the men worker's turn grows past PR 5's by more than 5 %, orient only the men whose place or velocity
   changed, and say so.
+- **Outcome** (2026-10-27; interleaved with the epic, two rounds each, every run waiting for a quiet machine, the
+  load between runs up to 100 from other sessions): **met**, the close view by a hair.
+  - The men worker at 32,000 men, 8× (`tools/bench-sim.ts`; the sim page, which does not ask for the ways and gaits):
+    as the epic's within noise: its loop 10.15 against 10.18 ms a turn (round 2; round 1's epic run began under the
+    load's tail), stepping 3.83 to 3.87 against 3.85 to 3.90, publishing 0.21 against 0.21 to 0.24; the men's
+    sub-steps 100 %. (The day's absolute numbers ran about 1.5 ms over the morning's on both.)
+  - The look page at `?sim` (the look bench, Metal, the preview build): the placing, mean, 0.29 to 0.31 ms close
+    against 0.42, 0.39 to 0.40 default against 0.58 to 0.59, 0.43 to 0.51 wide against 0.68 to 0.73 (−29, −32 and
+    −33 %); the main thread's work outside rendering at p95 (the placing and the uploads; the sim tick is 0.01 to
+    0.02, #222) 0.51 to 0.75 ms close, 0.78 to 0.84 default, 0.95 wide (round 2), against the epic's 0.75 to 0.78,
+    1.15 to 1.19 and 1.41 to 1.51. Round 1's wide run (1.56 ms) is left out: its GPU frame 23.7 ms against about 17,
+    under another session's load.
+  - The page's men unchanged (the smoke shots before review; `app-check`: every session's replay reproduced in Node).
 
 ## PR 5 and PR 6: only if measured
 
