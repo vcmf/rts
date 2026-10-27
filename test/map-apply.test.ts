@@ -615,8 +615,7 @@ describe('M1b: applying features into the layers', () => {
       expect(L.depth[cell]).toBeGreaterThan(0)
     }
     // downhill, across the pond's low shore and the stream through it, no step between neighbouring nodes over 1.5 m
-    const without = L
-    for (let z = -50; z > -80; z -= 2) expect(Math.abs(hAt(without, 20, z) - hAt(without, 20, z - 2))).toBeLessThan(1.5)
+    for (let z = -50; z > -80; z -= 2) expect(Math.abs(hAt(L, 20, z) - hAt(L, 20, z - 2))).toBeLessThan(1.5)
   })
   it('a pond on a slope: no deeper than its depth over a stream, no bank uphill, any order (#230 review 2)', () => {
     const slope = {
@@ -788,6 +787,27 @@ describe('M1b: applying features into the layers', () => {
       X.water[Math.floor((z - X.z0) / X.cell) * X.nx + Math.floor((x - X.x0) / X.cell)]
     expect(at(L, 0, -25)).toBe(0)
     expect(at(apply(mini([slope, pond, lower]), cat), 0, -25)).toBeGreaterThan(0)
+    // a ditch across a flat pond's shore does not pull its level down: the pond keeps its depth
+    const ditched = apply(
+      mini([
+        { id: 'pond', kind: 'water.pond', circle: [[0, 0], 30] },
+        {
+          id: 'ditch',
+          kind: 'relief.ditch',
+          line: [
+            [-50, 0],
+            [-10, 0],
+          ],
+          depth: 1.6,
+          width: 4,
+        },
+      ]),
+      cat,
+    )
+    expect(at(ditched, 10, 10)).toBeGreaterThan(0)
+    expect(
+      ditched.depth[Math.floor((10 - ditched.z0) / 2) * ditched.nx + Math.floor((10 - ditched.x0) / 2)],
+    ).toBeGreaterThan(1000)
   })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(

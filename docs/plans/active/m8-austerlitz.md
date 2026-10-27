@@ -441,6 +441,14 @@ into the epic; this plan details each as it starts.
   decision 0077. A pond on a steep slope (17 %) is a shallow wedge (0.3 m): that is the rule, not a fault. Tests: the
   finger, the dry ground never cut, a pit under the level inside the pond is water (a cut through the shore lowers the
   level instead, as water drains), the stream's cliff on the map with the stream.
+- **Review round 3 of the redesign**: one severe, from round 2's own change: the shore was read from the edited ground,
+  so a ditch or a sunken way across a pond's shore pulled its level down and emptied it. Fixed: the level from the
+  shore as the landforms made it (the streams' rule), the water and the bed from the edited ground. Test: a ditch
+  across a flat pond's shore (fails without the fix). Documented, not changed (decision 0077): a pond given a level is
+  cut over its whole outline (its outline is its waterline); a concave pond's arms can shallow each other; a lake
+  larger than the map holds water near its lowest ground on it. Not taken: one walk of the pond's box instead of
+  three, allocation-free cell tests, a mask from the bed instead of a skip in `paintArea`, shared corner-mean and node
+  range helpers (the compile is 5 s). The review stops here (three rounds of the redesign).
 
 ## Open questions
 

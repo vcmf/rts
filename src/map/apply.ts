@@ -885,15 +885,16 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
     })
   }
   /**
-   * A pond's level from the ground as the water step found it (the landforms and the edits): the lowest point of its
-   * shore less the freeboard; with no shore cell on the map (a lake larger than the map), its lowest ground on it.
+   * A pond's level from its shore as the landforms made it (so a ditch, a cut or a sunken way across its shore cannot
+   * pull it down, as for the streams): the lowest point of its shore less the freeboard; with no shore cell on the map
+   * (a lake larger than the map), its lowest ground on it.
    */
   const shoreLevel = (field: Field): number | null => {
     let shore = Infinity
     let low = Infinity
     cells(field.box, c, (i, j, x, z) => {
       if (!field.inside(x, z)) return
-      const g = heightOf(L, x, z, He)
+      const g = hAt(x, z)
       low = Math.min(low, g)
       if (field.edge(x, z) < c) shore = Math.min(shore, g)
     })

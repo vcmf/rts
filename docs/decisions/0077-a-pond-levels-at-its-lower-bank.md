@@ -16,13 +16,16 @@ at its lower bank, and the higher ground is simply dry.
 
 ## Decision
 
-- A pond with no `level` levels at the lowest point of its shore (less the freeboard), read from the ground as the
-  water step finds it: the landforms and the edits, before any water (so the water features' order changes nothing).
+- A pond with no `level` levels at the lowest point of its shore (less the freeboard), read from its shore as the
+  landforms made it (a ditch, a cut or a sunken way across its shore does not pull it down, as for the streams).
+  Its water and its bed are read from the ground as the water step finds it: the landforms and the edits, before any
+  water (so the edits inside count, and the water features' order changes nothing).
 - Its water stands only where its bed lies under that level. The bed is the shallower of the old basin (the level
   less the depth, reached 10 m in from the drawn edge) and the ground less the freeboard, less the depth reached 10 m
   from the ground inside too high to hold water: a pond digs its basin, never more than its depth and freeboard, only
   in the ground near its level. Every other node is left as it is.
-- On flat ground this is the old basin, bit for bit; a pond given its own `level` is cut to it as before.
+- On flat ground this is the old basin, bit for bit; a pond given its own `level` is cut to it as before, its whole
+  outline: such a pond's outline is its waterline (drawn to it), as a quarry's or a dammed pond's.
 - A dam is never implied. Where a scenario wants a pond on a slope full, its dam is drawn as a feature of its own (a
   raised line across the valley) and the pond given the dam's level.
 
@@ -32,6 +35,9 @@ at its lower bank, and the higher ground is simply dry.
 - Bad: a pond drawn across a slope holds water only at its low end, and on a steep one only a shallow wedge (on a
   17 % slope, about 0.3 m deep): its survey outline is larger than its water.
 - Neutral: ponds on flat valley floors (most of Austerlitz's) are as they were.
+- Bad, rare: in a concave pond (a U, two lobes) the distance to high ground crosses dry land, so high ground in one arm
+  can make another shallower; a lake larger than the map, on uneven ground, levels at its lowest ground on the map and
+  holds water only near it.
 
 ## Alternatives considered
 
