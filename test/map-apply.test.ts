@@ -533,6 +533,47 @@ describe('M1b: applying features into the layers', () => {
       expect(Math.abs(hAt(mended, x, z) - hAt(ground, x, z))).toBeLessThan(1)
     }
   })
+  it('a pond across a slope is dammed: never cut more than its depth into the ground, dry uphill (#230)', () => {
+    // ground rising 10 m across the pond's 60 m (northward), the pond 1.5 m deep
+    const slope = {
+      id: 'slope',
+      kind: 'relief.ridge',
+      line: [
+        [-200, 150],
+        [200, 150],
+      ] as Pt[],
+      height: 40,
+      width: 600,
+    }
+    const pond = { id: 'pond', kind: 'water.pond', circle: [[0, -20] as Pt, 30] as [Pt, number] }
+    const dry = apply(mini([slope]), cat)
+    const wet = apply(mini([slope, pond]), cat)
+    let deepest = 0
+    let water = 0
+    let dryInside = 0
+    for (let j = 0; j <= wet.nz; j++) {
+      for (let i = 0; i <= wet.nx; i++) {
+        const [x, z] = [wet.x0 + i * wet.cell, wet.z0 + j * wet.cell]
+        if (x * x + (z + 20) * (z + 20) >= 30 * 30) continue
+        deepest = Math.max(deepest, hAt(dry, x, z) - hAt(wet, x, z))
+      }
+    }
+    for (let j = 0; j < wet.nz; j++) {
+      for (let i = 0; i < wet.nx; i++) {
+        const [x, z] = [wet.x0 + (i + 0.5) * wet.cell, wet.z0 + (j + 0.5) * wet.cell]
+        if (x * x + (z + 20) * (z + 20) >= 28 * 28) continue
+        if (wet.water[j * wet.nx + i]) water++
+        else dryInside++
+      }
+    }
+    // the ground across the pond rises more than its depth
+    expect(hAt(dry, 0, 8) - hAt(dry, 0, -48)).toBeGreaterThan(3)
+    expect(deepest).toBeLessThanOrEqual(1.5 + 1e-9)
+    expect(water).toBeGreaterThan(0)
+    expect(dryInside).toBeGreaterThan(0)
+    // the dam: the shore downhill stands at the water's level and its freeboard, above the ground that was there
+    expect(hAt(wet, 0, -52)).toBeGreaterThan(hAt(dry, 0, -52))
+  })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(
       mini([

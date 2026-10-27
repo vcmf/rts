@@ -403,6 +403,18 @@ into the epic; this plan details each as it starts.
   the row path for the other per-cell area loops (the compile is 5 s), the shared box mean (#227). Tests: the cycle
   (throws, not hangs).
 
+## Ponds on sloping ground (#230)
+
+- A pond took the lowest point of its shore, less the freeboard, as its level and carved its whole area down to it:
+  across a slope its uphill side was dug into the hill (the Nowetitz ponds 22.8 m). The ponds of 1805 were dammed on
+  their streams. Now (`src/map/apply.ts`, step 3): a pond with no level of its own stands at the median of its shore,
+  at most 2 m (`DAM`) above its lowest point, less the freeboard; its bed is cut only where the cut reaches under that
+  level and never more than its depth below the ground (ground up the slope stays dry, and its cells leave the water
+  layer); the ground 4 m (`DAM_OUT`) past its shore is raised to the level and the freeboard where lower, the dam. On
+  Austerlitz every one of the 18 ponds holds water (1.4 to 2.3 m deep at most); the deepest the water cuts below the
+  dry ground anywhere is 4.8 m, a stream at the map's west edge (an open question), no pond. Test: a pond across a
+  slope, never cut deeper than its depth, dry uphill, dammed downhill (fails without the fix: 9.9 m).
+
 ## Open questions
 
 - The road tracer reconciles roads traced one by one (#227); tracing the network incrementally would make the forks
@@ -429,5 +441,7 @@ into the epic; this plan details each as it starts.
 - The arable lies under every way, stream and village: a village's gardens and yards between its houses are a
   crop in the layers (the ruleset and the draft let the buildings and ways win), to draw as yards when the scenario
   needs it.
+- A stream entering at the map's west edge (at −3000, −200) is cut 4.8 m below the dry ground beside it: its banks
+  read past the edge; to look at with the streams' next change.
 - What is left of modern ground: Slatina's and Brno's built-up edge in the north-west corner, the airport's flat
   apron, Holubice's interchange slip roads, the low banks of today's roads. Light; the owner's check decides.

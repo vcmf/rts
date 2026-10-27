@@ -27,8 +27,12 @@ export const CELL = 2 // m (decision 0021)
 // widths where the catalogue gives none: a way's (every way kind sets one), and the bands of the line-shaped kinds
 // that take no width attribute (reeds along a bank, a flèche's earthwork), m
 // the water (§4 step 3): the level sits FREEBOARD m under the lower bank, read BANK_OUT m beyond each edge every
-// LEVEL_STEP m; a pond reaches its full depth SHORE_IN m in from its shore
+// LEVEL_STEP m; a pond reaches its full depth SHORE_IN m in from its shore. A pond on sloping ground is dammed: its
+// level the median of its shore, at most DAM m above the shore's lowest point; its shore DAM_OUT m wide raised to the
+// level where lower (the dam), and ground inside more than the pond's depth above the level left dry (#230)
 const FREEBOARD = 0.4
+const DAM = 2
+const DAM_OUT = 4
 const BANK_OUT = 3
 const LEVEL_STEP = 2
 const SHORE_IN = 10
@@ -893,23 +897,36 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
         if (bed > H[k]) H[k] = bed
       })
     } else {
-      // a pond or a lake: its level, or the lowest point of its shore less the freeboard; deepest SHORE_IN m in
+      // a pond or a lake: its level, or its shore's (as the landforms made it): the median, at most DAM above the
+      // lowest, less the freeboard; deepest SHORE_IN m in
       const field = areaField(f)
       if (!field) continue
       let lv = typeof a.level === 'number' ? a.level : Infinity
       if (lv === Infinity) {
+        const shore: number[] = []
         cells(field.box, c, (i, j, x, z) => {
           if (!field.inside(x, z)) return
           const e = field.edge(x, z)
-          if (e < c) lv = Math.min(lv, hAt(x, z) - FREEBOARD)
+          if (e < c) shore.push(hAt(x, z))
         })
-      } // the shore, as the landforms made it
+        shore.sort((p, q) => p - q)
+        if (shore.length) lv = Math.min(shore[0] + DAM, shore[(shore.length - 1) >> 1]) - FREEBOARD
+      }
+      if (lv === Infinity) continue
       const D = num(a.depth, 1.5)
+      // the bed: never more than the depth below the ground, and only where that reaches under the level (ground the
+      // depth or more above the level, up a slope, stays dry)
       nodes(field.box, 0, (k, x, z) => {
         const e = field.edge(x, z)
-        if (e <= 0) return
-        const bed = lv - D * smooth(e / SHORE_IN)
+        if (e <= 0 || H[k] - D >= lv) return
+        const bed = Math.max(lv - D * smooth(e / SHORE_IN), H[k] - D)
         if (bed < H[k]) H[k] = bed
+      })
+      // the dam: the ground just past the shore raised to the level and the freeboard where lower
+      nodes(field.box, DAM_OUT + c, (k, x, z) => {
+        const e = field.edge(x, z)
+        if (e > 0 || e < -DAM_OUT) return
+        if (H[k] < lv + FREEBOARD) H[k] = lv + FREEBOARD
       })
       paintArea(f, L.water, k1, cell => {
         level[cell] = lv
@@ -923,6 +940,10 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       const W = nx + 1
       const g = (H[j * W + i] + H[j * W + i + 1] + H[(j + 1) * W + i] + H[(j + 1) * W + i + 1]) / 4
       L.depth[cell] = Math.max(0, Math.min(65535, Math.round((level[cell] - g) * 1000)))
+      // a pond's or a lake's cell left dry (its ground above the level, on a slope) is not water
+      if (!L.depth[cell] && L.water[cell] && /^water\.(pond|lake)/.test(L.table[L.water[cell] - 1].kind)) {
+        L.water[cell] = 0
+      }
     }
   }
   for (const { f, r } of order) {
