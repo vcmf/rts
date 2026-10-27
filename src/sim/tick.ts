@@ -12,7 +12,8 @@ import { HASH_EVERY } from './time.ts'
 import type { Handle } from './handle.ts'
 import { assertFinite } from './num.ts'
 import { formationTick, menOf } from './formation.ts'
-import { hashWorld } from './serialize.ts'
+import { serialize } from './serialize.ts'
+import { fnv1a } from './hash.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep } from './morale.ts'
 import { meleeStep, standingStep } from './melee.ts'
@@ -56,6 +57,8 @@ export interface Meter {
 export interface TickResult {
   tick: number
   hash: number | null
+  // on a hash tick, the world as it was hashed (serialize): a save of it at no further cost (the bench's timeline)
+  bytes: Uint8Array | null
   dropped: Dropped[]
   departed: { id: Handle; men: number }[]
 }
@@ -82,7 +85,12 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     standingStep(w)
   })
   step('5–6 formations: orders, changes, movement', () => {
-    for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i]) formationTick(w, i)
+    // in slot order, or reversed (a test switch of its own, the bench's: formations step one by one, and none may gain
+    // by its slot; a charge does today, #187)
+    for (let k = 0; k < MAX_FORMATIONS; k++) {
+      const i = w.scratch.reverseMoves ? MAX_FORMATIONS - 1 - k : k
+      if (w.f.alive[i]) formationTick(w, i)
+    }
   })
   // 7 vision: S2
   step('8 fire', () => {
@@ -141,8 +149,12 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     }
   }
   let hash: number | null = null
+  let bytes: Uint8Array | null = null
   step('15 hash', () => {
-    if (t % HASH_EVERY === 0) hash = hashWorld(w)
+    if (t % HASH_EVERY === 0) {
+      bytes = serialize(w)
+      hash = fnv1a(bytes)
+    }
   })
-  return { tick: t, hash, dropped, departed }
+  return { tick: t, hash, bytes, dropped, departed }
 }

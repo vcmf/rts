@@ -11,6 +11,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { formationField, type MapDef } from '../maps/formation-field.ts'
 import { battlefield } from '../maps/battlefield.ts'
+import { bench } from '../maps/bench.ts'
 import { fnv1a } from '../src/sim/hash.ts'
 import { DATA_MAGIC, DATA_FORMAT, hex } from '../src/sim/data.ts'
 
@@ -117,7 +118,7 @@ export const dataFile = (name: string): string =>
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let ok = true
-  for (const map of [await formationField(), battlefield()]) {
+  for (const map of [await formationField(), battlefield(), bench()]) {
     const bytes = buildSimData(map)
     const file = dataFile(map.name)
     if (process.argv.includes('--check')) {

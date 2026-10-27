@@ -3,13 +3,13 @@
 // a command through `issue`, and the external log is kept, so a session can be replayed.
 import fieldUrl from '../../data/formation-field.simdata?url'
 import battleUrl from '../../data/battlefield.simdata?url'
+import benchUrl from '../../data/bench.simdata?url'
 import {
   loadSimData,
   compileRuleset,
   makeWorld,
   typeOf,
-  issue,
-  advanceTick,
+  deserialize,
   formationHandle,
   STATUS,
   menOf,
@@ -28,8 +28,10 @@ import {
   END_DRAW,
   attachScenario,
   fightShares,
+  formedOverlaps,
+  placeAll,
+  mkPlaced,
   type Command,
-  type Stamped,
   type World,
   type HashPoint,
   type Replay,
@@ -38,13 +40,18 @@ import {
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
 import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS, PAGE_SEED } from '../scenarios/page.ts'
+import { BENCH_CASES } from '../scenarios/bench.ts'
 import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
+import { Overlay, LAYERS, type Layer } from '../render/overlay.ts'
+import { mkTimeline, order, step, mark as markAt, goTo as timelineGoTo } from './timeline.ts'
 
 // the soldier layer steps once a frame, up to MEN_DT of game time (tested at that step); a longer frame
 // takes more steps, at most MEN_STEPS (then the men fall behind the sim and catch up)
-const SPEEDS = [0, 1, 2, 4, 8]
+const SPEEDS = [0, 0.25, 0.5, 1, 2, 4, 8]
+// the most going to a time plays on at a press: five minutes
+const JUMP = 300 * TICK_HZ
 const MEN_DT = 0.2
 const MEN_STEPS = 4
 
@@ -53,22 +60,32 @@ async function main(): Promise<void> {
   const scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
   // the scenario's map, at the version it was placed for
   const mapName = scenario.map ?? DEFAULT_MAP
-  const urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl }
+  const urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl, bench: benchUrl }
   if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) {
     throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
   }
   const data = loadSimData(new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer()), MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)
-  const w: World = makeWorld(data, cr, PAGE_SEED, false)
-  attachScenario(w, scenario)
-  scenario.setup(w)
+  // a fresh world for the scenario at the page's seed (going back to a tick builds one again)
+  const fresh = (): World => {
+    const v = makeWorld(data, cr, PAGE_SEED, false)
+    attachScenario(v, scenario)
+    scenario.setup(v)
+    return v
+  }
+  let w: World = fresh()
   // the side you command (S1e-2): a scenario that names one lets you select only its formations; none, both
   const mine = (i: number): boolean => scenario.player === undefined || w.f.side[i] === scenario.player
-  const log: Stamped[] = []
-  const hashes: HashPoint[] = []
-  const dropped: Dropped[] = []
+  // the player's orders, the hash points and the saves going back uses (src/app/timeline.ts)
+  const tl = mkTimeline()
+  const load = (bytes: Uint8Array): World => {
+    const v = deserialize(bytes, data, cr, false, w.terrain)
+    attachScenario(v, scenario)
+    return v
+  }
   const scene = buildScene(w)
-  const layer = new SoldierLayer(w, scene)
+  let layer = new SoldierLayer(w, scene)
+  let over = new Overlay(w)
   const map = new StaffMap(w, scene)
   const t0 = performance.now()
   map.buildBase((a, b) => {
@@ -79,6 +96,11 @@ async function main(): Promise<void> {
   })
   const buildMs = performance.now() - t0
 
+  // a bench case names itself under the panel's title
+  const bench = BENCH_CASES.find(c => c.scenario === scenario)
+  if (bench) document.getElementById('sub')!.textContent = bench.title
+  const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
+  const lookAt = bench ? `look at ${bench.keys.map(clock).join(' · ')} (G)` : ''
   const mapC = document.getElementById('map') as HTMLCanvasElement
   const unitC = document.getElementById('units') as HTMLCanvasElement
   const mg = mapC.getContext('2d')!
@@ -90,6 +112,9 @@ async function main(): Promise<void> {
   let speed = 1
   let acc = 0
   let showSlots = false
+  // the bench's overlay (docs/plans/active/c0-bench.md): D shows it, the panel picks its layers
+  let overlay = false
+  const layersOn = new Set<Layer>(LAYERS)
   let paused = false
   let simMs = 0
   let drawMs = 0
@@ -108,20 +133,32 @@ async function main(): Promise<void> {
   addEventListener('resize', resize)
   resize()
 
-  // commands from the player: stamped, logged, applied at the next tick
-  const external = (c: Command) => issue(w, c, log)
+  // commands from the player: stamped, logged, applied at the next tick. After going back to a tick, the orders the log
+  // holds past it are a future that did not happen: an order then forgets them, as a branch
+  const external = (c: Command) => order(tl, w, c)
   // a panel order also disarms a pending charge (C)
   const forSelection = (make: (h: number) => Command) => {
     charging = false
     for (const i of selected) external(make(formationHandle(w, i)))
   }
   // hash points without section hashes: those would cost a second serialization each time
-  const tick = () => {
-    const r = advanceTick(w)
+  // a tick; a warning from the timeline (a tick played again gave another world) pauses the page and says so
+  const tick = (): boolean => {
+    const was = tl.warnings
+    const r = step(tl, w)
     layer.sync(0, r.departed)
-    dropped.push(...r.dropped)
-    if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] })
     for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
+    return !warned(was)
+  }
+  // a divergence the timeline found since it counted `was`: pauses the page and says so
+  function warned(was: number): boolean {
+    if (tl.warnings === was) return false
+    paused = true
+    acc = 0
+    note = tl.warning
+    noteT = performance.now()
+    console.warn(tl.warning)
+    return true
   }
 
   // the frame: ticks owed at the game speed, then the men (in game time), then the drawing
@@ -131,7 +168,7 @@ async function main(): Promise<void> {
     const a = performance.now()
     let n = 0
     while (acc >= DT && n < 20) {
-      tick()
+      if (!tick()) break
       acc -= DT
       n++
     }
@@ -148,6 +185,7 @@ async function main(): Promise<void> {
     }
     const a = performance.now()
     map.drawUnits(ug, view, layer, selected, showSlots)
+    if (overlay) over.draw(ug, view, w, layersOn)
     drawMs = drawMs * 0.9 + (performance.now() - a) * 0.1
   }
   let last: number | null = null
@@ -187,7 +225,7 @@ async function main(): Promise<void> {
   }
   for (const s of SPEEDS) {
     const b = document.createElement('button')
-    b.textContent = s ? `${s}×` : 'pause'
+    b.textContent = s ? `${s === 0.25 ? '¼' : s === 0.5 ? '½' : s}×` : 'pause'
     b.dataset.speed = String(s)
     b.onclick = () => setSpeed(s)
     speedsEl.append(b)
@@ -199,6 +237,74 @@ async function main(): Promise<void> {
       .forEach(e => e.classList.toggle('on', +e.dataset.speed! === s))
   }
   setSpeed(1)
+  const layersEl = document.getElementById('layers')!
+  for (const l of LAYERS) {
+    const b = document.createElement('button')
+    b.textContent = l
+    b.classList.add('on')
+    b.onclick = () => {
+      if (layersOn.has(l)) layersOn.delete(l)
+      else layersOn.add(l)
+      b.classList.toggle('on', layersOn.has(l))
+    }
+    layersEl.append(b)
+  }
+  // time for the bench: a tick on, a tick back, a time to go to. Going back builds the world again and replays the
+  // commands logged before that tick, as a replay does (src/sim/replay.ts play), so the moment is the same one
+  const stepTick = () => {
+    paused = true
+    acc = 0
+    if (tick()) layer.step(DT, 0)
+  }
+  const goTo = (target: number) => {
+    // back to the start, or on as far as the scenario's time limit (ten minutes past the furthest tick without one)
+    const end = scenario.minutes ? Math.round(scenario.minutes * 60 * TICK_HZ) : tl.reached + 600 * TICK_HZ
+    let T = Math.max(0, Math.min(Math.round(target), end))
+    // on by at most five minutes at a press, so the page answers again soon (press G again to go on)
+    if (T > w.meta[M_TICK] + JUMP) {
+      T = w.meta[M_TICK] + JUMP
+      note = `went on five minutes, to ${clock(T / TICK_HZ)}: G again to go on`
+      noteT = performance.now()
+    }
+    if (T === w.meta[M_TICK]) return
+    const was = tl.warnings
+    let got: World
+    try {
+      got = timelineGoTo(tl, T, fresh, load, w)
+    } catch (e) {
+      // the timeline is left as it was, and the page stays where it is
+      note = String(e)
+      noteT = performance.now()
+      console.error(e)
+      return
+    }
+    w = got
+    warned(was)
+    layer = new SoldierLayer(w, scene)
+    layer.sync(0, [])
+    map.w = w
+    over = new Overlay(w)
+    for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
+    paused = true
+    acc = 0
+  }
+  const askGoTo = () => {
+    const said = prompt('Go to a time (m:ss, or seconds)')
+    releaseHeld()
+    const m = said?.trim().match(/^(?:(\d+):([0-5]?\d)|(\d+(?:\.\d+)?))$/)
+    if (!m) {
+      if (said?.trim()) {
+        note = `not a time: ${said.trim()} (m:ss, or seconds)`
+        noteT = performance.now()
+      }
+      return
+    }
+    goTo((m[3] !== undefined ? Number(m[3]) : Number(m[1]) * 60 + Number(m[2])) * TICK_HZ)
+  }
+  document.querySelectorAll<HTMLElement>('[data-time]').forEach(el => {
+    el.onclick = () =>
+      el.dataset.time === 'step' ? stepTick() : el.dataset.time === 'back' ? goTo(w.meta[M_TICK] - 1) : askGoTo()
+  })
   const orders: Record<string, (id: number) => Command> = {
     face: id => ({ type: 'face', id }),
     retire: id => ({ type: 'retire', id, metres: 30 }),
@@ -237,7 +343,6 @@ async function main(): Promise<void> {
   // M marks a moment of the playtest (docs/plans/active/s1e3-playtest.md): the prompt holds the page (and the
   // battle) while you say what happened; Cancel marks nothing, and says so on screen (a browser that suppresses
   // dialogs returns at once as if cancelled, so M is never silent). The report prints where everyone stood then
-  const marks: { tick: number; note: string }[] = []
   const mark = (text?: string) => {
     let said = text ?? null
     if (text === undefined) {
@@ -250,8 +355,8 @@ async function main(): Promise<void> {
       noteT = performance.now()
       return
     }
-    marks.push({ tick: w.meta[M_TICK], note: said.trim() })
-    note = `moment ${marks.length} marked`
+    markAt(tl, w, said.trim())
+    note = `moment ${tl.marks.length} marked`
     noteT = performance.now()
   }
 
@@ -421,6 +526,8 @@ async function main(): Promise<void> {
       space = true
       e.preventDefault()
       if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur()
+    } else if (e.metaKey || e.ctrlKey || e.altKey) {
+      // the page's keys, not with Cmd, Ctrl or Alt held (copy, print, switching tabs, minimising)
     } else if (e.key === 'p' || e.key === 'P') {
       paused = !paused
     } else if (e.key === 'Escape') {
@@ -428,8 +535,12 @@ async function main(): Promise<void> {
       charging = false
     } else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
-    // not Cmd+M (minimise), nor a held key's repeats
-    else if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat) mark()
+    // going back once a press, not on a held key's repeats
+    else if (e.key === 'd' || e.key === 'D') overlay = !overlay
+    else if (e.key === '.') stepTick()
+    else if (e.key === ',' && !e.repeat) goTo(w.meta[M_TICK] - 1)
+    else if ((e.key === 'g' || e.key === 'G') && !e.repeat) askGoTo()
+    else if ((e.key === 'm' || e.key === 'M') && !e.repeat) mark()
   })
 
   function drawScale(): void {
@@ -467,7 +578,11 @@ async function main(): Promise<void> {
     }
     // yours: the plan's refusals are not shown
     let d: Dropped | undefined
-    for (let k = dropped.length - 1; k >= 0 && !d; k--) if (dropped[k].seq >= 0) d = dropped[k]
+    // the last of yours the world has reached (after going back, later ones wait for it to be played again)
+    const dropped = tl.dropped
+    for (let k = dropped.length - 1; k >= 0 && !d; k--) {
+      if (dropped[k].seq >= 0 && dropped[k].tick <= w.meta[M_TICK]) d = dropped[k]
+    }
     if (note && performance.now() - noteT < 3000) lines.push(note)
     // the battle (S1e-2): each side's men in the fight, as a share of those it spawned, and the result once decided
     const shares = fightShares(w)
@@ -492,7 +607,8 @@ async function main(): Promise<void> {
       head.join('\n') +
       '\n' +
       (lines.length ? lines.join('\n') : 'nothing selected') +
-      `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\nsim + men ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\nfps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
+      (lookAt ? '\n' + lookAt : '') +
+      `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · tick ${w.meta[M_TICK]} · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\nsim + men ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\nfps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
   }
   // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce, as far as it has run:
   // commands issued while paused wait for their tick and are left out
@@ -504,22 +620,45 @@ async function main(): Promise<void> {
       scenario: scenario.name,
       seed: PAGE_SEED,
       ticks: w.meta[M_TICK],
-      log: log.filter(s => s.tick <= w.meta[M_TICK]),
+      log: tl.log.filter(s => s.tick <= w.meta[M_TICK]),
     },
-    hashes,
+    // after going back, the log and the hash points may hold a future the world has not reached again
+    hashes: tl.hashes.filter(h => h.tick <= w.meta[M_TICK]),
   })
-  const session = () => ({ ...replay(), marks: [...marks] })
+  // the marks the world has reached (after going back, later ones wait for it to be played again)
+  const session = () => ({ ...replay(), marks: tl.marks.filter(m => m.tick <= w.meta[M_TICK]) })
 
   // headless hooks (tools/app-check.mjs): orders and time without real time passing
   Object.assign(window, {
     APP: {
-      w,
-      layer,
+      get w() {
+        return w
+      },
+      get layer() {
+        return layer
+      },
+      goTo,
+      stepTick,
+      overlaps: () => formedOverlaps(w, placeAll(w, mkPlaced(w))).length,
+      overlay: (on: boolean, layers?: Layer[]) => {
+        overlay = on
+        if (layers) {
+          layersOn.clear()
+          for (const l of layers) layersOn.add(l)
+        }
+        draw()
+      },
       map,
       selected,
-      log,
-      hashes,
-      dropped,
+      get log() {
+        return tl.log
+      },
+      get hashes() {
+        return tl.hashes
+      },
+      get dropped() {
+        return tl.dropped
+      },
       select: (ids: number[]) => {
         selected.clear()
         for (const i of ids) if (mine(i)) selected.add(i)
@@ -538,7 +677,9 @@ async function main(): Promise<void> {
         paused = true
         const sp = speed
         speed = 1
-        for (let n = Math.round(sec * 30); n > 0; n--) advance(1 / 30)
+        // stops where the timeline warns, as the page does
+        const was = tl.warnings
+        for (let n = Math.round(sec * 30); n > 0 && tl.warnings === was; n--) advance(1 / 30)
         speed = sp
         draw()
       },
