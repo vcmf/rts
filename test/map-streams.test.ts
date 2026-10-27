@@ -12,7 +12,8 @@ function grid(n: number, f: (x: number, z: number) => number): Grid {
   return { nx: n, nz: n, cell, x0, z0: x0, h }
 }
 const run = (g: Grid, minNodes: number) => {
-  const { to, acc } = drainage(g, fill(g))
+  const { h } = fill(g, 0)
+  const { to, acc } = drainage(g, h)
   return streams(g, to, acc, minNodes)
 }
 
@@ -20,13 +21,13 @@ describe('streams from a heightfield', () => {
   it('fills a sink so that it drains, every step down', () => {
     // a bowl in a slope: its bottom lower than its rim
     const g = grid(21, (x, z) => 100 - x * 0.05 + (Math.hypot(x, z) < 30 ? -5 : 0))
-    const f = fill(g)
+    const { h: f } = fill(g, 0)
     const { to } = drainage(g, f)
     // from the bowl's middle, down to the edge without climbing
     let k = 10 * 21 + 10
     let steps = 0
-    while (to[k] >= 0 && steps < 100) {
-      expect(f[to[k]]).toBeLessThan(f[k])
+    while (to[k] >= 0 && steps < 1000) {
+      expect(f[to[k]]).toBeLessThanOrEqual(f[k])
       k = to[k]
       steps++
     }
@@ -59,6 +60,31 @@ describe('streams from a heightfield', () => {
     const end = trib!.pts[trib!.pts.length - 1]
     expect(longest.pts.some(p => p[0] === end[0] && p[1] === end[1])).toBe(true)
     expect(trib!.km2).toBeLessThan(longest.km2)
+  })
+  it('drains a flat basin through its middle to its outlet, and a flat that reaches the edge off it', () => {
+    // a flat floor (60 × 60 m) in a rim, its outlet a notch in the middle of the south side
+    const g = grid(31, (x, z) => {
+      if (Math.abs(x) <= 60 && Math.abs(z) <= 60) return 100
+      if (Math.abs(x) <= 5 && z < -60) return 100 - (-60 - z) * 0.1
+      return 110 + Math.abs(x) * 0.01
+    })
+    const { h } = fill(g, 0)
+    const { to } = drainage(g, h)
+    // from the flat's north-west corner down to the notch, every node drains, and the path keeps off the west rim
+    let k = (15 + 6) * 31 + (15 - 6)
+    const xs: number[] = []
+    for (let s = 0; s < 200 && to[k] >= 0; s++) {
+      xs.push((k % 31) - 15)
+      k = to[k]
+    }
+    expect(Math.floor(k / 31)).toBe(0) // off the south edge, through the notch
+    // it leaves the corner for the middle: most of its way within 3 nodes of x = 0
+    expect(xs.filter(x => Math.abs(x) <= 3).length).toBeGreaterThan(xs.length / 2)
+    // a flat reaching the grid's edge drains off it: every node of it drains
+    const open = grid(21, (x, z) => (z < 0 ? 100 : 100 + z * 0.1))
+    const f2 = fill(open, 0)
+    const d2 = drainage(open, f2.h)
+    for (let j = 1; j < 10; j++) for (let i = 1; i < 20; i++) expect(d2.to[j * 21 + i]).toBeGreaterThanOrEqual(0)
   })
   it('simplifies a line within its tolerance, keeping its ends', () => {
     const line: [number, number][] = [

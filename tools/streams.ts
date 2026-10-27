@@ -2,13 +2,14 @@
 // drawn on a map lies in its valley. The sinks are filled (priority flood), each node drains to the lowest of its eight
 // neighbours, the ground draining through each node is summed, and the nodes draining more than a threshold are
 // traced into lines, each from its head down to where it joins a larger one or leaves the box: upstream first, as the
-// language reads a stream. Plain float64 in a tool, not the sim's. Tested in test/map-streams.test.ts.
+// language reads a stream; a flat (a filled basin) drains through its middle (Barnes, Lehman and Mulla 2014). Plain
+// float64 in a tool, not the sim's. Tested in test/map-streams.test.ts.
 //   node tools/streams.ts <file.rdem> <x0> <z0> <x1> <z1> <min km²> <out.json>
 // The box in the file's frame (m, centred, x east, z north); the lines out in the same frame, with each one's
 // catchment where it ends (km²) and the line it flows into.
 import fs from 'node:fs'
 import path from 'node:path'
-import { decodeRdem, type Dem } from '../src/map/dem.ts'
+import { decodeRdem, demHalf, type Dem } from '../src/map/dem.ts'
 
 /** A grid of heights: nx × nz nodes `cell` m apart, node (i, j) at (x0 + i·cell, z0 + j·cell), the south row first. */
 export interface Grid {
@@ -82,9 +83,9 @@ class Heap {
 
 /**
  * The grid with its sinks filled (priority flood, Barnes et al. 2014, with an epsilon): every node has a way down to
- * the edge, each step down by at least `eps`, so flat ground drains too.
+ * the edge, each step down by at least `eps` (with 0, a filled basin is left flat, for `drainage` to resolve).
  */
-export function fill(g: Grid, eps = 1e-4): Float64Array {
+export function fill(g: Grid, eps = 1e-4): { h: Float64Array } {
   const { nx, nz } = g
   const h = Float64Array.from(g.h)
   const done = new Uint8Array(nx * nz)
@@ -113,21 +114,26 @@ export function fill(g: Grid, eps = 1e-4): Float64Array {
       q.push(n, h[n])
     }
   }
-  return h
+  return { h }
 }
 
 /**
  * Where each node drains (the neighbour of steepest descent on the filled grid; −1 at the edge), and the ground
- * draining through it, in nodes (its own included).
+ * draining through it, in nodes (its own included). A flat (nodes of one height with no lower neighbour, as filling
+ * makes of a pond's basin or a dam's backwater) drains as Barnes, Lehman and Mulla (2014) resolve it: each of its nodes
+ * toward the flat's outlets and away from its higher rim, by breadth-first distances over the flat, so the flow
+ * curves through the middle of a basin instead of running in ruled lines to the outlet.
  */
 export function drainage(g: Grid, filled: Float64Array): { to: Int32Array; acc: Float64Array } {
   const { nx, nz } = g
   const n = nx * nz
   const to = new Int32Array(n).fill(-1)
+  const edge = (i: number, j: number) => i === 0 || j === 0 || i === nx - 1 || j === nz - 1
+  const flat = new Uint8Array(n)
   for (let j = 0; j < nz; j++) {
     for (let i = 0; i < nx; i++) {
       const k = j * nx + i
-      if (i === 0 || j === 0 || i === nx - 1 || j === nz - 1) continue
+      if (edge(i, j)) continue
       let best = 0
       for (let d = 0; d < 8; d++) {
         const m = (j + DJ[d]) * nx + i + DI[d]
@@ -137,12 +143,108 @@ export function drainage(g: Grid, filled: Float64Array): { to: Int32Array; acc: 
           to[k] = m
         }
       }
+      if (to[k] < 0) flat[k] = 1
     }
   }
-  // highest first: each node's flow is complete before it passes it on
-  const order = Array.from({ length: n }, (_, k) => k).sort((a, b) => filled[b] - filled[a])
+  // the flats' distances: from their outlets (a node of the same height that drains), and from their higher rim
+  const toLow = new Int32Array(n).fill(-1)
+  const fromHigh = new Int32Array(n).fill(-1)
+  const low: number[] = []
+  const high: number[] = []
+  const same = (a: number, b: number) => filled[a] === filled[b]
+  for (let k = 0; k < n; k++) {
+    if (!flat[k]) continue
+    const i = k % nx
+    const j = (k - i) / nx
+    for (let d = 0; d < 8; d++) {
+      const m = (j + DJ[d]) * nx + i + DI[d]
+      // an outlet: a node of the same height that drains, or one on the grid's edge (it drains off the grid)
+      const mi = m % nx
+      const mj = (m - mi) / nx
+      if (!flat[m] && (to[m] >= 0 || edge(mi, mj)) && same(k, m) && toLow[m] < 0) {
+        toLow[m] = 0
+        low.push(m)
+      }
+      if (filled[m] > filled[k] && fromHigh[k] < 0) {
+        fromHigh[k] = 0
+        high.push(k)
+      }
+    }
+  }
+  const spread = (dist: Int32Array, seeds: number[]) => {
+    for (let q = 0; q < seeds.length; q++) {
+      const k = seeds[q]
+      const i = k % nx
+      const j = (k - i) / nx
+      for (let d = 0; d < 8; d++) {
+        const a = i + DI[d]
+        const b = j + DJ[d]
+        if (a < 0 || b < 0 || a >= nx || b >= nz) continue
+        const m = b * nx + a
+        if (flat[m] && dist[m] < 0 && same(k, m)) {
+          dist[m] = dist[k] + 1
+          seeds.push(m)
+        }
+      }
+    }
+  }
+  spread(toLow, low)
+  spread(fromHigh, high)
+  // each flat's farthest from its rim, so "away from the rim" counts down to its middle
+  const far = new Map<number, number>()
+  const flatOf = new Int32Array(n).fill(-1)
+  for (let k = 0; k < n; k++) {
+    if (!flat[k] || flatOf[k] >= 0) continue
+    const stack = [k]
+    flatOf[k] = k
+    let most = Math.max(0, fromHigh[k])
+    while (stack.length) {
+      const c = stack.pop()!
+      const i = c % nx
+      const j = (c - i) / nx
+      for (let d = 0; d < 8; d++) {
+        const m = (j + DJ[d]) * nx + i + DI[d]
+        if (flat[m] && flatOf[m] < 0 && same(c, m)) {
+          flatOf[m] = k
+          most = Math.max(most, fromHigh[m])
+          stack.push(m)
+        }
+      }
+    }
+    far.set(k, most)
+  }
+  // a flat node's key: twice its distance to an outlet plus its distance from the rim's far side; it drains to its
+  // neighbour of the lowest key (an outlet: 0)
+  const key = (m: number) =>
+    flat[m] ? 2 * toLow[m] + (fromHigh[m] >= 0 ? far.get(flatOf[m])! - fromHigh[m] : 0) : toLow[m] === 0 ? -1 : Infinity
+  for (let k = 0; k < n; k++) {
+    if (!flat[k] || toLow[k] < 0) continue
+    const i = k % nx
+    const j = (k - i) / nx
+    let best = key(k)
+    for (let d = 0; d < 8; d++) {
+      const m = (j + DJ[d]) * nx + i + DI[d]
+      if (!same(k, m)) continue
+      const km = key(m)
+      if (km < best) {
+        best = km
+        to[k] = m
+      }
+    }
+  }
+  // the flow summed in topological order (every node after all that drain into it)
+  const into = new Int32Array(n)
+  for (let k = 0; k < n; k++) if (to[k] >= 0) into[to[k]]++
   const acc = new Float64Array(n).fill(1)
-  for (const k of order) if (to[k] >= 0) acc[to[k]] += acc[k]
+  const ready: number[] = []
+  for (let k = 0; k < n; k++) if (!into[k]) ready.push(k)
+  for (let q = 0; q < ready.length; q++) {
+    const k = ready[q]
+    const t = to[k]
+    if (t < 0) continue
+    acc[t] += acc[k]
+    if (--into[t] === 0) ready.push(t)
+  }
   return { to, acc }
 }
 
@@ -207,38 +309,85 @@ export function streams(g: Grid, to: Int32Array, acc: Float64Array, minNodes: nu
   return out
 }
 
-/** A line with points closer than `tol` m to the chord of their neighbours left out (Douglas–Peucker). */
-export function simplify(pts: [number, number][], tol: number): [number, number][] {
+/**
+ * A line with the points closer than `tol` m to the segment between their kept neighbours left out (Douglas–Peucker,
+ * by the distance to the segment, so a hairpin's far points stay), and every point `keep` holds kept (where another
+ * stream joins it).
+ */
+export function simplify(
+  pts: [number, number][],
+  tol: number,
+  keep: (p: [number, number]) => boolean = () => false,
+): [number, number][] {
   if (pts.length < 3) return pts
-  const keep = new Uint8Array(pts.length)
-  keep[0] = keep[pts.length - 1] = 1
-  const stack: [number, number][] = [[0, pts.length - 1]]
+  const kept = new Uint8Array(pts.length)
+  kept[0] = kept[pts.length - 1] = 1
+  for (let k = 1; k < pts.length - 1; k++) if (keep(pts[k])) kept[k] = 1
+  // between each pair of points kept so far, split at the farthest from their segment while it is farther than tol
+  const marks = kept.reduce<number[]>((a, v, k) => (v ? [...a, k] : a), [])
+  const stack: [number, number][] = marks.slice(1).map((b, k) => [marks[k], b])
   while (stack.length) {
     const [a, b] = stack.pop()!
     const [ax, az] = pts[a]
     const [bx, bz] = pts[b]
-    const len = Math.hypot(bx - ax, bz - az) || 1
+    const dx = bx - ax
+    const dz = bz - az
+    const L2 = dx * dx + dz * dz
     let far = -1
     let dmax = tol
     for (let k = a + 1; k < b; k++) {
-      const d = Math.abs((bx - ax) * (az - pts[k][1]) - (ax - pts[k][0]) * (bz - az)) / len
+      const [px, pz] = pts[k]
+      const t = L2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / L2)) : 0
+      const d = Math.hypot(px - (ax + t * dx), pz - (az + t * dz))
       if (d > dmax) {
         dmax = d
         far = k
       }
     }
     if (far >= 0) {
-      keep[far] = 1
+      kept[far] = 1
       stack.push([a, far], [far, b])
     }
   }
-  return pts.filter((_, k) => keep[k])
+  return pts.filter((_, k) => kept[k])
+}
+
+/**
+ * The grid evened by `passes` passes of a 3 × 3 mean (its edge rows kept): the file's 1 cm steps make flats a fill
+ * routes straight across; evened, the flow follows the valley's shape. A valley floor moves by well under a node.
+ */
+export function evened(g: Grid, passes: number): Grid {
+  let h = g.h
+  const { nx, nz } = g
+  for (let p = 0; p < passes; p++) {
+    const o = Float64Array.from(h)
+    for (let j = 1; j < nz - 1; j++) {
+      for (let i = 1; i < nx - 1; i++) {
+        let sum = 0
+        for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) sum += h[(j + b) * nx + i + a]
+        o[j * nx + i] = sum / 9
+      }
+    }
+    h = o
+  }
+  return { ...g, h }
+}
+
+/** The streams of a grid over a threshold, evened first, simplified to `tol` m with their joins kept. */
+export function streamsOf(g: Grid, minKm2: number, tol = 3, passes = 2): Stream[] {
+  const ge = evened(g, passes)
+  // filled level (no epsilon): its flats are resolved by drainage
+  const { h } = fill(ge, 0)
+  const { to, acc } = drainage(ge, h)
+  const raw = streams(ge, to, acc, (minKm2 * 1e6) / (g.cell * g.cell))
+  // the points other streams end on: each kept on the stream it joins
+  const joins = new Set(raw.filter(s => s.into !== null).map(s => s.pts[s.pts.length - 1].join(',')))
+  return raw.map(s => ({ ...s, pts: simplify(s.pts, tol, p => joins.has(p.join(','))) }))
 }
 
 /** The part of a heightfield file inside a box of its frame, as a grid of its nodes. */
 export function gridOf(d: Dem, box: [number, number, number, number]): Grid {
-  const hx = ((d.nx - 1) * d.cell) / 2
-  const hz = ((d.nz - 1) * d.cell) / 2
+  const { x: hx, z: hz } = demHalf(d)
   const i0 = Math.max(0, Math.ceil((box[0] + hx) / d.cell))
   const j0 = Math.max(0, Math.ceil((box[1] + hz) / d.cell))
   const i1 = Math.min(d.nx - 1, Math.floor((box[2] + hx) / d.cell))
@@ -263,9 +412,7 @@ function main(): void {
   const d = decodeRdem(new Uint8Array(fs.readFileSync(file)))
   const g = gridOf(d, [x0, z0, x1, z1])
   const t0 = performance.now()
-  const filled = fill(g)
-  const { to, acc } = drainage(g, filled)
-  const found = streams(g, to, acc, (km2 * 1e6) / (g.cell * g.cell)).map(s => ({ ...s, pts: simplify(s.pts, 3) }))
+  const found = streamsOf(g, km2)
   fs.writeFileSync(out, JSON.stringify(found))
   const ms = performance.now() - t0
   console.log(`${found.length} streams draining over ${km2} km², ${g.nx} × ${g.nz} nodes, ${ms.toFixed(0)} ms → ${out}`)

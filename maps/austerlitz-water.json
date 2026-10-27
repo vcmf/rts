@@ -1,0 +1,23 @@
+{
+  "note": "tools/water.ts's inputs for maps/austerlitz.map.json (docs/plans/active/m8-austerlitz.md M8b): the named streams by a point they pass (the relief file's frame, m), and the 1805 ponds as ellipses read off the First Military Survey's scan ([id, u, v, semi-axes in px, degrees, v down])",
+  "piece": "field",
+  "scan": "first-survey",
+  "minKm2": 2.5,
+  "traceKm2": 0.5,
+  "width": 1,
+  "named": [
+    { "at": [-1100, 1345], "id": "goldbach", "width": 4, "depth": 0.8, "note": "the Goldbach, from Jirschikowitz past Puntowitz, Kobelnitz, Sokolnitz and Telnitz to Menitz" },
+    { "at": [3120, -2500], "id": "littawa", "width": 8, "depth": 1.2, "note": "the Littawa, from Krenowitz past Klein Hostieradek and Aujezd to Satschan" },
+    { "at": [-700, 3600], "id": "slapanitz-brook", "width": 2, "depth": 0.5, "note": "the brook from Šlapanice to the Goldbach" },
+    { "at": [900, 600], "id": "pratze-brook", "width": 1.5, "depth": 0.4, "note": "the brook from the Pratzen past its ponds to the Goldbach" }
+  ],
+  "ponds": [
+    ["kobelnitz-pond", 1610, 1960, 110, 55, 90], ["kobelnitz-pond2", 1670, 1780, 52, 42, 0], ["pratze-pond", 1985, 1825, 22, 20, 0],
+    ["pratze-pond2", 2035, 1860, 16, 14, 0], ["puntowitz-pond", 2220, 1520, 30, 22, 90], ["jirschikowitz-pond", 2410, 1080, 30, 18, 0],
+    ["blasowitz-pond", 2512, 1085, 25, 18, 0], ["blasowitz-pond2", 2785, 1080, 28, 22, 0], ["sokolnitz-pond", 1535, 2595, 30, 20, 90],
+    ["west-pond", 1110, 2475, 42, 32, 0], ["west-pond2", 1145, 2570, 38, 32, 0], ["west-pond3", 1165, 2715, 22, 18, 0],
+    ["west-pond4", 1135, 2810, 75, 35, -34], ["west-pond5", 1025, 2925, 95, 38, -40], ["west-pond6", 910, 3070, 110, 40, -45],
+    ["satschan-pond", 2760, 3125, 65, 43, 20], ["nowetitz-pond", 3215, 3150, 60, 45, 90], ["nowetitz-pond2", 3415, 3205, 70, 48, -10],
+    ["nowetitz-pond3", 3625, 3160, 55, 42, 0], ["holubitz-pond", 3550, 1060, 125, 40, -79]
+  ]
+}

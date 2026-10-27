@@ -528,7 +528,10 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
     const edgeAt = (x: number, z: number) => {
       let e = field.edge(x, z)
       // never below 0 (past a line's end)
-      for (const l of kept?.lines ?? []) e = Math.min(e, Math.max(0, nearLine(l.line, x, z).d - l.near))
+      // a line counts only nearer than the ring's edge: cut off there (a far cell's search crosses no whole grid)
+      for (const l of kept?.lines ?? []) {
+        e = Math.min(e, Math.max(0, nearLine(l.line, x, z, Math.max(0, e) + l.near).d - l.near))
+      }
       return e
     }
     cells(field.box, 0, (i, j, x, z) => {
