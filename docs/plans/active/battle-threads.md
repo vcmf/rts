@@ -348,7 +348,7 @@ tile) is no sim map. Two PRs, then PR 4.
     0.02, #222) 0.51 to 0.75 ms close, 0.78 to 0.84 default, 0.95 wide (round 2), against the epic's 0.75 to 0.78,
     1.15 to 1.19 and 1.41 to 1.51. Round 1's wide run (1.56 ms) is left out: its GPU frame 23.7 ms against about 17,
     under another session's load.
-  - The page's men unchanged (the smoke shots before review; `app-check`: every session's replay reproduced in Node).
+  - Replays unchanged (`app-check`: every session's replay reproduced in Node). The look page's men: below.
 
 ## PR 5 and PR 6: only if measured
 
