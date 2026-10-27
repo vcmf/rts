@@ -347,6 +347,36 @@ into the epic; this plan details each as it starts.
   village's street when both its ends are nearest it (the inputs name the street where it matters); a prefilter of
   the obstacles by box (the tool runs in seconds).
 
+## M8f in detail
+
+- **The survey's green** (`tools/ground.ts`, its inputs committed in `maps/austerlitz-ground.json`, pure parts tested
+  in `test/map-ground.test.ts`): a pixel is green where its saturation over a 13 px box exceeds 0.40 at a hue of 48°
+  or greener (the paper's is about 0.31 at 46°, the wash and the woods' about 0.45 at 50 to 60°), on the map only (its
+  centre 3 m inside the edge); corners where two green or two paper pixels meet only diagonally filled, so every ring
+  is simple; the green split into its four-connected regions; regions under 1500 m² of map dropped. At 3.85 m a pixel
+  the woods' stipple and the meadows' wash cannot be told apart by texture (measured: the same spread of value), so a
+  region is a meadow where an input seed falls within 10 px of it, an orchard where it lies inside an orchard drawn
+  round, a wood otherwise. Each region is traced round its pixels' edges (outer ring and holes), simplified by 1.5 px
+  (less where that would cross itself), placed through the scan's fit and the piece. The open land between is the
+  survey's arable: one `ground.field` over the whole map at priority 5, under the meadows (10) and the marsh. Only the
+  tool's features (with the scan as source and its note) are written again.
+- **66 woods, 5 meadows, the pheasantry's orchard, the arable.** The meadows: the brook from Kobelnitz north to
+  Puntowitz, the Pratzen brook's wash, the Littawa's meadows by Zbeschau and Schaburnitz. The Goldbach's ribbon below
+  Sokolnitz the survey stipples like its woods: left a wood (the owner's check).
+- **Areas painted by rows** (`src/map/geometry.ts` `ringRow`, `src/map/apply.ts`): an area's cells were each tested
+  against every vertex of its rings, which made the 4700 vertices of the woods and meadows cost 17 s of a 22.5 s
+  compile. Each row's crossings with the rings now give its inside cells at once, with the same sums and the same
+  exact test of a point on an edge as `inRing` (fuzzed against it, `test/map-ring-row.test.ts`): the same cells, every
+  committed hash unchanged; the compile 6.0 s.
+
+## Acceptance (M8f)
+
+- `test/map-ground.test.ts`: the box mean, green against paper, the regions, the corners filled, the rings (a block,
+  a hole, both simple). `test/map-ring-row.test.ts`: rows against `inRing` over random rings, on edges and vertices.
+- The map validates and expands; its compile 6.0 s in Node (measured); every determinism hash and `check:data`
+  unchanged by the painting by rows; the outlines over the survey and the lit view for the owner.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
 ## Open questions
 
 - The road tracer reconciles roads traced one by one (#227); tracing the network incrementally would make the forks

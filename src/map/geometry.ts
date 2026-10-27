@@ -129,6 +129,65 @@ export function inRing(ring: Pt[], p: Pt): boolean {
   return inside
 }
 
+/**
+ * `inRing` for a row of points at once: the points (xs[k], z), xs ascending, 1 where inside. The same answer as
+ * `inRing` for each (the same crossings, by the same sums, and the same exact test of a point on an edge), in time for
+ * the ring's edges and the row's points rather than their product.
+ */
+export function ringRow(ring: Pt[], z: number, xs: ArrayLike<number>): Uint8Array {
+  const n = xs.length
+  const out = new Uint8Array(n)
+  const cross: number[] = []
+  const on: [number, number][] = [] // spans of x where a point may lie on an edge, tested exactly
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]
+    const b = ring[j]
+    if (a[1] > z !== b[1] > z) {
+      const xc = ((b[0] - a[0]) * (z - a[1])) / (b[1] - a[1]) + a[0]
+      cross.push(xc)
+      on.push([xc, xc])
+    } else if (a[1] === z || b[1] === z) on.push([Math.min(a[0], b[0]), Math.max(a[0], b[0])])
+  }
+  // a point is inside when an odd number of crossings lie to its right (inRing's p.x < crossing)
+  cross.sort((p, q) => p - q)
+  let c = 0
+  for (let k = 0; k < n; k++) {
+    while (c < cross.length && cross[c] <= xs[k]) c++
+    out[k] = (cross.length - c) % 2
+  }
+  // a point on an edge counts as inside: the points from the one before each span to the one after it, tested exactly
+  for (const [lo, hi] of on) {
+    let k = 0
+    let hiK = n - 1
+    // the last point before lo, and the first after hi, by halving
+    for (let l = 0, r = n - 1; l <= r;) {
+      const m = (l + r) >> 1
+      if (xs[m] < lo) {
+        k = m
+        l = m + 1
+      } else r = m - 1
+    }
+    for (let l = 0, r = n - 1; l <= r;) {
+      const m = (l + r) >> 1
+      if (xs[m] > hi) {
+        hiK = m
+        r = m - 1
+      } else l = m + 1
+    }
+    for (; k <= hiK; k++) {
+      if (out[k]) continue
+      const p: Pt = [xs[k], z]
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        if (orient(ring[i], ring[j], p) === 0 && within(ring[i], ring[j], p)) {
+          out[k] = 1
+          break
+        }
+      }
+    }
+  }
+  return out
+}
+
 /** Whether a line is closed: its last point is its first, with at least three others (a walled yard, a loop). */
 export function isClosedLine(line: Pt[]): boolean {
   const last = line[line.length - 1]
