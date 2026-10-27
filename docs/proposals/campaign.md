@@ -75,7 +75,13 @@ The composition is ruleset data (decision 0015), so an era, a nation or a year c
 
 A whole division of skirmishers is a game simplification: French corps spread their light infantry through
 every division, each line battalion with its own voltigeurs. The British Light Division of the Peninsula is
-the nearest real one.
+the nearest real one. A screen in every division would be more historical, but it is one more behaviour inside
+every unit; one skirmisher unit a corps keeps the game simple (the owner's choice).
+
+The skirmisher division is **smaller than a line division, about two thirds** (about 250–300 figures against
+400): the Light Division had about 3,000–4,000 men against 5,000–7,000 for a line division. Fewer men, but
+faster, in open order (harder to hit at range, a front as wide as a line division's), and fragile against
+cavalry and in melee. Its size is ruleset data.
 
 ### Armies are corps
 
@@ -249,8 +255,8 @@ has to write the same contract.
    time (decision 0009). How campaign hours map to battle minutes, and whether long waits for arrivals are
    played fast.
 9. **Fog on the campaign map**: how wide the estimates are, and how fast they age.
-10. **Skirmishers**: a skirmisher division of its own (proposed), or a screen every infantry division can throw
-    out, as each French battalion did with its voltigeurs?
+10. ~~**Skirmishers**: a division of their own, or a screen in every division?~~ A skirmisher division a corps,
+    about two thirds of a line division (§ The scale), the owner's choice: a screen in every division is too complex.
 11. **Drill at a division's scale**: a division forms square as one block, where a real one formed a square per
     battalion. Does it still read as drill?
 

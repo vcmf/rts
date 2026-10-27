@@ -14,8 +14,8 @@ as in Total War: a miniature of the war, not the war at full size.
 ## Decision
 
 We will let one unit on the battle map, drawn with about 400 figures (decision 0018), stand for a division, a
-figure a symbol for about 15–20 men. A standard Napoleonic corps is 6 units: 1 skirmisher division, 3 line
-infantry divisions, 1 cavalry division, 1 artillery unit. Corps compositions are ruleset data
+figure a symbol for about 15–20 men. A standard Napoleonic corps is 6 units: 1 skirmisher division (about two
+thirds the size of a line division), 3 line infantry divisions, 1 cavalry division, 1 artillery unit. Corps compositions are ruleset data
 (decision 0015); the engine's word stays neutral. Decision 0018's numbers stand; what a unit means changes.
 The design is `docs/proposals/campaign.md` § The scale.
 
