@@ -14,6 +14,7 @@ import { assertFinite } from './num.ts'
 import { formationTick, menOf } from './formation.ts'
 import { serialize } from './serialize.ts'
 import { fnv1a } from './hash.ts'
+import { buildClaims, claimFormation, claimOrder } from './claims.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep } from './morale.ts'
 import { meleeStep, standingStep } from './melee.ts'
@@ -85,11 +86,21 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     standingStep(w)
   })
   step('5–6 formations: orders, changes, movement', () => {
-    // in slot order, or reversed (a test switch of its own, the bench's: formations step one by one, and none may gain
-    // by its slot; a charge does today, #187)
-    for (let k = 0; k < MAX_FORMATIONS; k++) {
-      const i = w.scratch.reverseMoves ? MAX_FORMATIONS - 1 - k : k
-      if (w.f.alive[i]) formationTick(w, i)
+    if (!w.claims) {
+      // in slot order, or reversed (a test switch of its own, the bench's: formations step one by one, and none may
+      // gain by its slot; a charge does today, #187)
+      for (let k = 0; k < MAX_FORMATIONS; k++) {
+        const i = w.scratch.reverseMoves ? MAX_FORMATIONS - 1 - k : k
+        if (w.f.alive[i]) formationTick(w, i)
+      }
+      return
+    }
+    // the claim grid's prototype: in a keyed order, each formation's new cells claimed after it steps (its old ones
+    // stay claimed until the next tick's rebuild, so two cannot swap places through each other)
+    buildClaims(w)
+    for (const i of claimOrder(w)) {
+      formationTick(w, i)
+      if (w.f.alive[i]) claimFormation(w, i)
     }
   })
   // 7 vision: S2

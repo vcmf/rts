@@ -320,6 +320,20 @@ describe('melee', () => {
     expect(s.f(cav, 'blownUntil')).toBeGreaterThan(s.w.meta[M_TICK])
     expect(s.orders(cav)).toBe(0)
   })
+  it('with the claim grid on, the pursuit rides the router down from its margin', () => {
+    // the pursuit stops at the router's margin, a cell out, and its reach is a cell longer (rideDown)
+    const s = new S(1, noSquare)
+    s.w.claims = true
+    const foe = s.inf(0, 60, PI, 1, 'line', 0.6)
+    const cav = s.cav(0, -100, 0, 0, 'line', 1)
+    s.charge(cav, foe)
+    s.until(() => !s.out(foe), 180)
+    s.until(() => s.f(cav, 'chPhase') !== CH_PURSUIT, 5)
+    expect(s.f(cav, 'chPhase')).toBe(CH_PURSUIT)
+    const m = s.men(foe)
+    s.until(() => s.f(cav, 'chPhase') === CH_PURSUIT, 30)
+    expect(s.men(foe)).toBeLessThan(m - 10)
+  })
   it('a regiment turns away when its foe finishes forming square and holds it; the square is out of melee too', () => {
     const quiet = { front: 0, flank: 0, rear: 0 }
     const rs = withMelee({ threat: quiet, impact: { kill: 0, shock: quiet }, rate: 0.001 })

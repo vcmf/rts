@@ -14,6 +14,7 @@ import type { Places, Arc, GateBits, Filled } from './formation.ts'
 import type { FireGeo } from './fire.ts'
 import type { Melee } from './melee.ts'
 import type { PlanStep } from './plan.ts'
+import type { Claims } from './claims.ts'
 
 export const MAX_FORMATIONS = 128
 export const MAX_ORDERS = 2048
@@ -225,6 +226,8 @@ export interface World {
   planHash: number
   planDue: number[]
   debug: boolean
+  // the claim grid's prototype (src/sim/claims.ts): on where the scenario asks for it, attached like the plan
+  claims: boolean
   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass; reverseMoves:
   // one for the formation step)
   scratch: {
@@ -235,6 +238,7 @@ export interface World {
     fireGeo?: FireGeo
     fireSight?: Int32Array
     fireEpoch?: number
+    claims?: Claims
     fireCrossed?: Float64Array
     reverse?: boolean
     reverseMoves?: boolean
@@ -373,6 +377,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     planHash: 0,
     planDue: [],
     debug,
+    claims: false,
     scratch: {},
   }
   w.meta[M_FREE] = N

@@ -28,6 +28,7 @@ type Spawn = {
   shape: string
   unit?: string
   men?: number
+  quality?: number
 }
 const step = (at: number, unit: number, cmd: PlanCommand): PlanStep => ({ at, unit, cmd })
 const move = (x: number, z: number, append = false): PlanCommand => ({ type: 'move', points: [[x, z]], append })
@@ -67,6 +68,24 @@ function bench(
 const LINE = 'line'
 const COL = 'column'
 const CAV = 'cavalry'
+
+// the melee's cases (C1, step 4): a veteran regiment charges a raw one at the halt, from 160 m, the veteran `dx`
+// metres to the east; `extra` stand beside them
+function charged(id: string, title: string, extra: Spawn[] = [], dx = 0): BenchCase {
+  return bench(
+    id,
+    title,
+    [
+      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
+      { side: 0, x: dx, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
+      ...extra,
+    ],
+    [step(1, 1, { type: 'charge', target: 0 })],
+    90,
+    [dx / 2, 20, 3],
+    [30, 40, 50],
+  )
+}
 
 export const BENCH_CASES: BenchCase[] = [
   bench(
@@ -272,6 +291,46 @@ export const BENCH_CASES: BenchCase[] = [
     [0, 0, 1.4],
     [200, 300],
   ),
+  charged(
+    'x15-melee-holds',
+    'X-15: a veteran regiment charges a raw one at the halt; the melee holds until one breaks',
+  ),
+  charged('x16-friend-behind', 'X-16: as X-15, with a friendly regiment standing just behind the raw one', [
+    { side: 1, x: 0, z: 49, heading: S, shape: LINE, unit: CAV },
+  ]),
+  charged(
+    'x17-enemy-behind',
+    'X-17: as X-15, with an enemy regiment just behind the raw one: broken, it has no way out and is cut down',
+    [{ side: 0, x: 0, z: 49, heading: N, shape: LINE, unit: CAV }],
+  ),
+  bench(
+    'x18-flank-charge',
+    'X-18: a veteran regiment charges a steady one at the halt; a second regiment charges it in its east flank',
+    [
+      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.9 },
+      { side: 0, x: 0, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
+      { side: 0, x: 170, z: 42, heading: W, shape: COL, unit: CAV, quality: 0.6 },
+    ],
+    [step(1, 1, { type: 'charge', target: 0 }), step(20, 2, { type: 'charge', target: 0 })],
+    90,
+    [60, 20, 3],
+    [30, 40, 50],
+  ),
+  charged('x19-offset-lines', 'X-19: as X-15, the veteran 20 m to the east, so the two lines meet offset', [], 20),
+  bench(
+    'x20-brigade-lines',
+    'X-20: two raw regiments abreast, each charged by a veteran regiment',
+    [
+      { side: 1, x: -80, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
+      { side: 1, x: 82, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
+      { side: 0, x: -80, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
+      { side: 0, x: 82, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
+    ],
+    [step(1, 2, { type: 'charge', target: 0 }), step(1, 3, { type: 'charge', target: 1 })],
+    90,
+    [0, 20, 2],
+    [30, 40, 50],
+  ),
   bench(
     'q01-shift-chain',
     'Q-01: a move, then form line, face about and a move, each appended',
@@ -330,9 +389,18 @@ export const BENCH_CASES: BenchCase[] = [
   ),
 ]
 
+/** A case with the claim grid's prototype on (docs/plans/active/c1-claims.md): `bench-…-claims` on the page. */
+export const withClaims = (c: BenchCase): BenchCase => ({
+  ...c,
+  id: `${c.id}-claims`,
+  title: `${c.title} (with claims)`,
+  scenario: { ...c.scenario, name: `${c.scenario.name}-claims`, claims: true },
+})
+export const CLAIM_CASES: BenchCase[] = BENCH_CASES.map(withClaims)
+
 export const BENCH_SCENARIOS: Record<string, Scenario> = Object.fromEntries(
-  BENCH_CASES.map(c => [c.scenario.name, c.scenario]),
+  [...BENCH_CASES, ...CLAIM_CASES].map(c => [c.scenario.name, c.scenario]),
 )
 export const BENCH_VIEWS: Record<string, [number, number, number]> = Object.fromEntries(
-  BENCH_CASES.map(c => [c.scenario.name, c.view]),
+  [...BENCH_CASES, ...CLAIM_CASES].map(c => [c.scenario.name, c.view]),
 )
