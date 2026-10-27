@@ -405,33 +405,27 @@ into the epic; this plan details each as it starts.
 
 ## Ponds on sloping ground (#230)
 
-- A pond took the lowest point of its shore, less the freeboard, as its level and carved its whole area down to it:
-  across a slope its uphill side was dug into the hill (the Nowetitz ponds 22.8 m). The ponds of 1805 were dammed on
-  their streams. Now (`src/map/apply.ts`, step 3): a pond with no level of its own stands at the median of its shore,
-  at most 2 m (`DAM`) above its lowest point, less the freeboard; its bed is cut only where the cut reaches under that
-  level and never more than its depth below the ground (ground up the slope stays dry, and its cells leave the water
-  layer); the ground 4 m (`DAM_OUT`) past its shore is raised to the level and the freeboard where lower, the dam. On
-  Austerlitz every one of the 18 ponds holds water (1.4 to 2.3 m deep at most); the deepest the water cuts below the
-  dry ground anywhere is 4.8 m, a stream at the map's west edge (an open question), no pond. Test: a pond across a
-  slope, never cut deeper than its depth, dry uphill, dammed downhill (fails without the fix: 9.9 m).
-- **Review round 1** (`/code-review high`): severe, each run by the reviewer. A pond given its own `level` below the
-  ground was no longer cut and vanished; every flat pond lost its shore ring (its depth rounds to 0); the dam filled
-  the channel of a stream through it and ended in a 4 m cliff; the system doc's water step was the old rule. Fixed:
-  the dam and its limits apply only to a level from the shore (a given level cuts as before); only a cell whose four
-  corners are dry ground up the slope leaves the pond (`paintArea` takes a cell to skip), so a flat pond keeps its
-  outline; the dam never rises over other water and eases down over 10 m outside, padded for an ellipse's long axis;
-  a pond with no shore on the map is no pond (was painted at the deepest depth). Tests: the given level, the flat
-  outline, the stream through the dam, the dam's outer side (each fails without its fix).
-- **Review round 2**: severe, run by the reviewer: the pond cut a further depth below a stream's channel; one pond's
-  dam raised a neighbouring pond's ground, by their ids; a stream ran through the dam in a slot with 3.6 m walls; the
-  water met dry ground up the slope at a 1.8 m bank; the dam filled a sunken way's or a ditch's cut below it. The
-  per-pond steps were the cause, so redesigned: every pond's level and water from the ground as the landforms made it;
-  its water only where that ground is at most the freeboard above the level, its bed (a height) reached from the
-  nearest node that is not, by a chamfer distance (`chamfer`), so the shore tapers up a slope as on the drawn edge;
-  the dams once all the water is in, fading within 10 m of any water or cut cell, the highest raise where they meet.
-  Measured on Austerlitz: 18 ponds hold water (1.5 to 2.3 m deep), smaller on slopes (only where the ground lies near
-  their level); the compile 6.5 s (the dams' distance over the grid). Tests: under the stream, the uphill shore, the
-  slot, two ponds renamed (bit for bit), the ditch.
+- A pond took the lowest point of its shore, less the freeboard, as its level and carved its whole outline down to
+  it: across a slope its uphill side was dug into the hill (the Nowetitz ponds 22.8 m). Water lies level at its lower
+  bank, so the higher ground inside the survey's outline is dry ground, not water. Now (`src/map/apply.ts`, step 3):
+  a pond with no level of its own still levels at the lowest point of its shore; its water stands only on the nodes
+  inside whose ground (as it is, edits included) lies less than its depth and the freeboard above that level; its bed
+  is reached 10 m from the nearest node that is not (the drawn edge, or the dry ground up the slope: a chamfer
+  distance, `chamfer`) and never more than its depth and the freeboard below the ground, so the shore up a slope
+  tapers; a cell with no water corner leaves the pond (`paintArea` takes a cell to skip). A flat pond is cut as
+  before; a pond given its own `level` exactly as before.
+- On Austerlitz every one of the 18 ponds holds water (1.0 to 1.5 m deep at most), the ponds on slopes smaller (their
+  low end); the compile 5.0 s. The deepest the water cuts below the dry ground anywhere is 4.8 m, a stream at the map's
+  west edge (an open question), no pond.
+- **Review rounds**: three, then the design changed. The first version raised a dam on the pond's downhill shore so
+  its whole outline could hold water at the median of its shore: each round found the implicit dam colliding with
+  something else in the water step (a given level, a flat pond's shore ring, a stream through it, a neighbouring
+  pond, a sunken way or a ditch, and at last its own water, so it never reached the level). The owner's reading
+  settled it: the water stands at the lower bank and the higher ground stays dry, no dam needed. Drawn dams, if a
+  scenario wants a slope's pond full, would be features of their own. Tests: a pond across a slope (never cut more
+  than its depth and freeboard, dry uphill), a given level, a flat pond's whole outline, a stream through a sloping
+  pond (its water, no cliff), no deeper over a stream, no bank uphill, two ponds renamed (bit for bit), a ditch below
+  a pond.
 
 ## Open questions
 
