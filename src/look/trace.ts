@@ -24,7 +24,7 @@ export const TRACE_FIELDS = [
   'draws', // and draw calls
   'cpuMs', // the frame's JavaScript: from its start to its end (the GPU's time is the interval's rest)
   'simMs', // the page's sim tick (?sim: src/look/sim-armies.ts; the battle's frame, the frame taken, the orders)
-  'longTasks', // long tasks (over 50 ms: the bench's PerformanceObserver), counted in the frame whose end sees them
+  'longTasks', // long tasks (over 50 ms: the bench's PerformanceObserver), charged to the next recorded frame
   'longMs', // and their time
 ] as const
 export type TraceField = (typeof TRACE_FIELDS)[number]

@@ -298,6 +298,7 @@ export async function runBench(
   // per mesh is patched (the thin-instance uploads are counted where src/look/units.ts makes them), each render target
   // and effect keeps its bit on itself once named (no lookup a draw), the counters are indexed by number (trace.ts)
   const rtNames: string[] = []
+  const longHeld = { n: 0, ms: 0 } // long tasks heard of, not yet charged to a recorded frame
   const recMs = new Float64Array(TRACE_MAX)
   const recC = new Float64Array(TRACE_MAX * NF)
   const recRt = new Int32Array(TRACE_MAX)
@@ -361,12 +362,13 @@ export async function runBench(
     undo.push(() => {
       eng._createShaderProgram = compile
     })
-    // long tasks (the browser's, over 50 ms), counted into the frame being recorded when the observer hears of them
-    if (PerformanceObserver.supportedEntryTypes.includes('longtask')) {
+    // long tasks (the browser's, over 50 ms): held until the next recorded frame (the observer hears of them after
+    // they end, maybe in a frame not recorded), so none is lost; charged to that frame
+    if (PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
       const long = new PerformanceObserver(list => {
         for (const e of list.getEntries()) {
-          TRACE.c[TR.longTasks]++
-          TRACE.c[TR.longMs] += e.duration
+          longHeld.n++
+          longHeld.ms += e.duration
         }
       })
       long.observe({ type: 'longtask' })
@@ -426,6 +428,9 @@ export async function runBench(
     // (the trace: the counters of the frame that just ended, recorded with its interval, then cleared)
     if (TRACING) {
       if (timing && lastT && !passFrame) {
+        TRACE.c[TR.longTasks] += longHeld.n
+        TRACE.c[TR.longMs] += longHeld.ms
+        longHeld.n = longHeld.ms = 0
         if (recN < TRACE_MAX) {
           recMs[recN] = t - lastT
           recC.set(TRACE.c, recN * NF)
@@ -581,12 +586,13 @@ export async function runBench(
   const r = engine.getRenderingCanvas()
   return {
     tool: 'look-bench',
-    // 8: trace (?benchtrace=1: each run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is
+    // 9: the trace's simMs, longTasks and longMs (battle threads PR 6's measurement); 8: trace (?benchtrace=1: each
+    // run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is
     // measured); 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under
     // the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render
     // scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a
     // version-2 file orbits the start
-    version: 8,
+    version: 9,
     build: __BUILD__,
     date: new Date().toISOString(),
     userAgent: navigator.userAgent,

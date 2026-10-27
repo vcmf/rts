@@ -794,11 +794,12 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
 - **The bench**: `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions in
   line, `facingAt`). `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?benchtrace=1`
-  records every measured frame (version 8): its interval and what happened in it (`src/look/trace.ts`: the figures'
+  records every measured frame (version 9): its interval and what happened in it (`src/look/trace.ts`: the figures'
   shadow map drawn and its casters and triangles, the sun's box refit, the trodden mask drawn and its CPU ms,
   battalions placed and place()'s and frame()'s CPU ms, thin-instance uploads and their KB and ms, the flags' update,
   every render target drawn by name and every effect-renderer bake as `fx:<name>`, shader compiles, active meshes, draw
-  calls, the frame's JavaScript ms), and `traceSummary`: per zoom and arm, each event's share of the frames over their
+  calls, the frame's JavaScript ms, the page's sim tick's ms at `?sim`, long tasks and their ms, each charged to the
+  next recorded frame after the browser reports it), and `traceSummary`: per zoom and arm, each event's share of the frames over their
   run's 90th percentile against its share of all frames (the enrichment), printed by `tools/bench-look.mjs` (and
   `--print <json>` for a saved run). Timings come from untraced runs; the trace explains them. Off, nothing is hooked;
   on, it patches no prototype the render loop calls per mesh and looks nothing up by name a draw. Hooks: `__units`

@@ -370,18 +370,20 @@ tile) is no sim map. Two PRs, then PR 4.
     p95 (an eighth of the 8.33 ms frame), or long tasks fall in over 1 % of frames; else it is closed as not needed,
     the look page's remaining frame cost being its rendering (the script's page alike; #215; decision 0050, Track E).
     Either way the plan says so, with the numbers.
-  - **Outcome** (2026-10-27): **PR 6 not needed** (the owner: "record pr 6 as not needed and do pr 4 step 3"). Three
-    rounds of the bench (Metal, the preview build; the clean round at load 4 to 6, each run waiting for a quiet
-    machine; the GPU still busier than its clean frame at some views, a session's browser not seen in the load, so
-    the frame times there run high: the work below is the CPU's and steady across the rounds). At `?sim`, the main
-    thread's work outside rendering a frame, p95: **0.72 to 0.93 ms close, 0.98 to 1.51 default, 1.18 to 1.37
-    wide**; mean, the placing (`placeMs`) 0.51 to 0.60, the uploads (`tiMs`) 0.18 to 0.22, **the page's sim tick
-    (`simMs`) 0.01 to 0.02**. Long tasks: in 0.02 % of the frames (3 of about 12,500 in the clean round; none in the
-    second round's 6,600). The script's page: 0.1 ms, no long task. The rule trips by a little at default and wide,
-    on the placing alone, which neither of PR 6's options removes: rendering in a worker carries the placing with it,
-    and the layer already runs in the men worker (PR 5). The workers cost the page nothing measurable; the page's
-    frame is its rendering (the script's alike; #215; decision 0050, Track E). Next: PR 4's step 3 (below), the men
-    worker writing each man's pose and clip, so the page copies them instead of placing.
+  - **Outcome** (2026-10-27): **the rule tripped; PR 6 closed as not needed all the same, by the owner** ("record pr
+    6 as not needed and do pr 4 step 3"), for the reason below. Method, as run: three rounds of the traced bench
+    (Metal, the preview build), not the two clean rounds planned: one clean (load 4 to 6, each run waiting for a quiet
+    machine), the GPU still busier than its clean frame at some views (a session's browser not seen in the load), so
+    the frame times there run high; the numbers below are traced timings (the trace's own `performance.now()` calls
+    in them), the CPU's, and steady across the three rounds. At `?sim`, the main thread's work outside rendering a
+    frame, p95: **0.72 to 0.93 ms close, 0.98 to 1.51 default, 1.18 to 1.37 wide**: over the 1 ms bar at default and
+    wide. Mean: the placing (`placeMs`) 0.51 to 0.60, the uploads (`tiMs`) 0.18 to 0.22, the page's sim tick (`simMs`)
+    0.01 to 0.02. Long tasks: in 0.02 % of the frames (3 of about 12,500 in the clean round). The script's page:
+    0.1 ms, no long task. Not measured: the page's handling of the workers' messages (their `onmessage`, its own task
+    between frames; a long one would show among the long tasks). **Why not PR 6**: what trips the rule is the placing,
+    which neither of PR 6's options removes (rendering in a worker carries the placing with it; the layer already runs
+    in the men worker, PR 5); the page's frame is its rendering (the script's alike; #215; decision 0050, Track E). The
+    placing is PR 4c's next: the men worker works out each man's way and gait, so the page reads them.
 
 ## Open questions
 
