@@ -213,11 +213,33 @@ export function demFileNames(map: unknown): string[] {
 // the attributes a dem source carries, beside id, kind, ref and note
 export const DEM_SOURCE_KEYS = ['file', 'hash', 'credit', 'licence'] as const
 
-/** A `relief.dem` piece's shift from map to file coordinates, from its resolved attributes. */
-export const demShift = (attrs: Record<string, unknown>): { x: number; z: number } => {
+/** A `relief.dem` piece's shift from map to file coordinates, from its resolved attributes (part of `demPlace`). */
+const demShift = (attrs: Record<string, unknown>): { x: number; z: number } => {
   const s = attrs.shift as { x?: number; z?: number } | undefined
   return { x: s?.x ?? 0, z: s?.z ?? 0 }
 }
+/**
+ * Where a `relief.dem` piece reads its file (decision 0070): a map point (x, z) reads the file at (k x + shift.x,
+ * k z + shift.z), and its height above the datum is the file's divided by k, so the piece is a scale model of its
+ * ground (k 1: true size).
+ */
+export interface DemPlace {
+  x: number
+  z: number
+  k: number
+}
+/**
+ * A `relief.dem` piece's placement in its file, from its resolved attributes: its scale 1 when it is none or no number
+ * of at least 1 (the validator names it; the page draws a copy being typed in before it validates).
+ */
+export const demPlace = (attrs: Record<string, unknown>): DemPlace => ({
+  ...demShift(attrs),
+  k: typeof attrs.scale === 'number' && Number.isFinite(attrs.scale) && attrs.scale >= 1 ? attrs.scale : 1,
+})
+/** The file point a map point reads through a placement. */
+export const toFile = (p: DemPlace, x: number, z: number): [number, number] => [p.k * x + p.x, p.k * z + p.z]
+/** The map point that reads a file point through a placement. */
+export const toMap = (p: DemPlace, fx: number, fz: number): [number, number] => [(fx - p.x) / p.k, (fz - p.z) / p.k]
 
 // the files already hashed and decoded, by their bytes: the page's worker keeps a file's bytes across compiles, so a
 // save of the map's text does not hash and decode 10 MB again
@@ -245,7 +267,7 @@ function readFile(bytes: Uint8Array): { hash: string; dem?: Dem; error?: string 
 export function checkDemFiles(
   map: MapFile,
   files: MapFiles,
-  pieces: { f: Feature; i: number; box: [number, number, number, number]; shift: { x: number; z: number } }[],
+  pieces: { f: Feature; i: number; box: [number, number, number, number]; place: DemPlace }[],
   range: { min: number; max: number },
 ): { issues: Issue[]; dems: Map<string, Dem> } {
   const issues: Issue[] = []
@@ -272,10 +294,12 @@ export function checkDemFiles(
     else issues.push({ id: null, path, message: `"${src.file}": ${got.error}` })
   })
   const datum = map.datum ?? 0
-  for (const { f, i, box: b, shift: sh } of pieces) {
+  for (const { f, i, box: b, place } of pieces) {
     const d = typeof f.source === 'string' ? dems.get(f.source) : undefined
     if (!d) continue
-    const box: [number, number, number, number] = [b[0] + sh.x, b[1] + sh.z, b[2] + sh.x, b[3] + sh.z]
+    const [fx0, fz0] = toFile(place, b[0], b[1])
+    const [fx1, fz1] = toFile(place, b[2], b[3])
+    const box: [number, number, number, number] = [fx0, fz0, fx1, fz1]
     const h = demHalf(d)
     if (box[0] < -h.x || box[1] < -h.z || box[2] > h.x || box[3] > h.z) {
       issues.push({
@@ -286,11 +310,13 @@ export function checkDemFiles(
       continue
     }
     const [lo, hi] = demRange(d, box)
-    if (lo - datum < range.min || hi - datum > range.max) {
+    // a scale model's heights above the datum are the file's divided by its scale
+    if ((lo - datum) / place.k < range.min || (hi - datum) / place.k > range.max) {
+      const scaled = place.k === 1 ? '' : `, divided by its scale ${place.k}`
       issues.push({
         id: f.id,
         path: `features[${i}]`,
-        message: `its heights, ${lo.toFixed(1)}–${hi.toFixed(1)} m, less the datum ${datum} m, leave ${range.min}…${range.max} m: set the map's datum near the lowest`,
+        message: `its heights, ${lo.toFixed(1)}–${hi.toFixed(1)} m, less the datum ${datum} m${scaled}, leave ${range.min}…${range.max} m: set the map's datum near the lowest`,
       })
     }
   }

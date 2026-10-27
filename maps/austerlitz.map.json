@@ -2,17 +2,17 @@
   "format": 1,
   "id": "austerlitz",
   "name": "Austerlitz",
-  "note": "Austerlitz, 1805 (docs/plans/active/one-map-austerlitz.md): a 6 km map (decision 0061). Step 1, the real relief alone: the field's heights from ČÚZK's terrain model, one piece over the whole extent, centred on the crop's centre. The designed map (pieces moved closer, the 1805 features) is step 4.",
+  "note": "Austerlitz, 1805 (docs/plans/active/m8-austerlitz.md): a 6 km map (decision 0061) of the whole field as a scale model at 2× (decision 0070): 12 km of ČÚZK's terrain read into 6 km, its heights halved with it, so slopes and sight are the field's. From the highway in the north to Satschan in the south.",
   "seed": 1805,
   "season": "winter",
   "datum": 180,
   "extent": { "w": 6000, "h": 6000 },
   "play": { "w": 6000, "h": 6000 },
   "sources": [
-    {"id":"cuzk","kind":"dem","ref":"ČÚZK DMR 4G, 49.118 N 16.737 E, a transverse Mercator centred there","file":"austerlitz.rdem","hash":"sha256:9e2dec99f07e5c56a5ccf525a7f0b915a1c3ad1202c54e0600de938ee76bb7f5","credit":"© ČÚZK, 2026 (DMR 4G)","licence":"CC BY 4.0"},
-    {"id":"first-survey","kind":"scan","file":"scans/austerlitz-first-survey.jpg","ref":"Habsburg First Military Survey (Josephine), Moravia, 1764-1768, 1:28,800; WMS layer Military1 of Chartae Antiquae (VÚGTK and HÚ AV ČR)","credit":"© VÚGTK, v.v.i. & HÚ AV ČR, v.v.i.","licence":"none stated; watermarked; kept out of git (docs/research/period-maps.md)","frame":"cuzk","points":[[3180,745,1992.07,2202.36],[1480,3280,-1372.82,-1768.1],[2785,2860,1423.86,-1501.18],[2615,2560,1449,-1003.87],[1100,2060,-788.37,133.51],[1610,710,-380.44,2406.83],[3176,2783,2169.98,-1211.23]],"note":"control points at landmarks (Wikidata, CC0): the churches of Prace, Telnice and Újezd, the chapel of St Anthony, Sokolnice castle, the belfry of Kobylnice, Peclův mill; each pixel read off the scan. The survey is off by about 560 m between them (each point where the others put it: docs/plans/done/m7-editor.md M7e)"}
+    {"id":"cuzk","kind":"dem","ref":"ČÚZK DMR 4G, 49.1325 N 16.745 E, a transverse Mercator centred there","file":"austerlitz.rdem","hash":"sha256:84b60c9125020a0a38dd7388f301cbdcd4eb534e9bdd5b7f32995e5fa25f7ee8","credit":"© ČÚZK, 2026 (DMR 4G)","licence":"CC BY 4.0"},
+    {"id":"first-survey","kind":"scan","file":"scans/austerlitz-first-survey.jpg","ref":"Habsburg First Military Survey (Josephine), Moravia, 1764-1768, 1:28,800; WMS layer Military1 of Chartae Antiquae (VÚGTK and HÚ AV ČR)","credit":"© VÚGTK, v.v.i. & HÚ AV ČR, v.v.i.","licence":"none stated; watermarked; kept out of git (docs/research/period-maps.md)","frame":"cuzk","points":[[1712,1084,-1341.78,4126.15],[601,1767,-5597.53,1652.23],[2354,1925,1408.32,589.6],[1673,2896,-1956.99,-3380.5],[2122,2662,864.91,-2616.56],[1545,2449,-1372.34,-1478.95],[1962,3098,-949.52,-4737.55]],"note":"fetched with tools/scan-wms.ts over the relief file (49.1325 N 16.745 E, 15 km); control points at dated landmarks (Wikidata, CC0): the churches of Šlapanice, Tuřany, Prace and Telnice, the chapel of St Anthony, Sokolnice castle, Žatčany; each pixel read off the scan. The survey is off by about 560 m between them (each point where the others put it: docs/plans/active/m8-austerlitz.md)"}
   ],
   "features": [
-    { "id": "field", "kind": "relief.dem", "source": "cuzk", "note": "the real ground: today's terrain, so modern embankments and quarries are still in it until step 4 levels them" }
+    {"id":"field","kind":"relief.dem","source":"cuzk","note":"the real ground at 2×, the window 0.5 km south of the crop's centre: today's terrain, so modern embankments and quarries are still in it until they are levelled","scale":2,"shift":{"x":0,"z":-500}}
   ]
 }

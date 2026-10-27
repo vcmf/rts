@@ -5,7 +5,7 @@
 // page's, not the sim's). Tested in test/map-scan.test.ts.
 import type { Catalogue, Feature, MapFile, Pt, Source } from '../../map/schema.ts'
 import { inRing } from '../../map/geometry.ts'
-import { demShift } from '../../map/dem.ts'
+import { demPlace, toFile, type DemPlace } from '../../map/dem.ts'
 import { resolve } from '../../map/resolve.ts'
 import { isDemKind } from '../../map/validate.ts'
 
@@ -237,10 +237,17 @@ export function nearPoint(points: ControlPoint[], p: ControlPoint): number {
  * spline through them (exact at each; a scan's local distortions bent out), each point's residual where the others
  * alone put it. Points in a line are placed by the first two.
  */
-export function fitScan(points: ControlPoint[], w: number, h: number, extent: { w: number; h: number }): ScanFit {
+export function fitScan(
+  points: ControlPoint[],
+  w: number,
+  h: number,
+  extent: { w: number; h: number; x?: number; z?: number },
+): ScanFit {
   const s = Math.min(extent.w / w, extent.h / h)
-  // over the extent, centred: the image's centre on the map's, north up
-  let t: Affine = [s, 0, (-w * s) / 2, 0, -s, (h * s) / 2]
+  // over the extent (in the frame: the map's as its piece reads it), centred on it, north up
+  const cx = extent.x ?? 0
+  const cz = extent.z ?? 0
+  let t: Affine = [s, 0, cx - (w * s) / 2, 0, -s, cz + (h * s) / 2]
   const exact = (how: ScanFit['how'], a: Affine, problem: string | null = null): ScanFit => ({
     ...affinePlacement(a),
     how,
@@ -293,11 +300,12 @@ export function fitScan(points: ControlPoint[], w: number, h: number, extent: { 
   return { ...fit, how: 'spline', residuals, rms, problem: folded }
 }
 
-/** Where a scan shows on the map: an area (none: the whole extent), and the shift from a map point to its frame. */
+/** Where a scan shows on the map: an area (none: the whole extent), and how a map point reads its frame. */
 export interface Piece {
   id: string | null // the relief.dem feature, or none for a scan in the map's own frame
   area: Pt[][] | null
-  shift: { x: number; z: number }
+  /** How a map point reads its file: shifted, and scaled (decision 0070); none, the map point is the frame point. */
+  place: DemPlace
   /** Cut from the scan's frame's file (it shows the scan); another file's piece hides what lies under it. */
   own: boolean
 }
@@ -308,7 +316,7 @@ export interface Piece {
  * a scan in the map's own frame, the whole map unmoved. A piece that cannot be read (an unknown preset) is left out.
  */
 export function scanPieces(map: MapFile, cat: Catalogue, scan: Source): Piece[] {
-  if (scan.frame === undefined) return [{ id: null, area: null, shift: { x: 0, z: 0 }, own: true }]
+  if (scan.frame === undefined) return [{ id: null, area: null, place: { x: 0, z: 0, k: 1 }, own: true }]
   const out: { p: Piece; priority: number }[] = []
   for (const f of map.features) {
     let r: ReturnType<typeof resolve>
@@ -319,7 +327,7 @@ export function scanPieces(map: MapFile, cat: Catalogue, scan: Source): Piece[] 
     }
     if (!isDemKind(r.kind)) continue
     const own = f.source === scan.frame
-    out.push({ p: { id: f.id, area: f.area ?? null, shift: demShift(r.attrs), own }, priority: r.priority })
+    out.push({ p: { id: f.id, area: f.area ?? null, place: demPlace(r.attrs), own }, priority: r.priority })
   }
   out.sort((a, b) => a.priority - b.priority || (a.p.id! < b.p.id! ? -1 : a.p.id! > b.p.id! ? 1 : 0))
   return out.map(o => o.p)
@@ -334,7 +342,7 @@ export function inPiece(piece: Piece, x: number, z: number): boolean {
 /** The frame point a map point shows: through the piece on top there, or null where none of the scan's is on top. */
 export function frameAt(pieces: Piece[], x: number, z: number): Pt | null {
   const p = topAt(pieces, x, z)
-  return p?.own ? [x + p.shift.x, z + p.shift.z] : null
+  return p?.own ? toFile(p.place, x, z) : null
 }
 /** The piece on top at a map point (the last in painting order that holds it), or null. */
 export function topAt(pieces: Piece[], x: number, z: number): Piece | null {

@@ -85,11 +85,12 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0058](0058-one-map-view-lit.md) | One map view: the editor's draft and the game's staff map, lit with a 3D feel | accepted |
 | [0059](0059-map-ink-upscaled-by-easu.md) | The map's ink is upscaled by FSR 1's EASU, on its alpha | accepted |
 | [0060](0060-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
-| [0061](0061-square-designed-maps-2-to-6-km.md) | Square maps of 2 to 6 km a side, designed for play, at true local scale | accepted |
+| [0061](0061-square-designed-maps-2-to-6-km.md) | Square maps of 2 to 6 km a side, designed for play, at true local scale (amended by 0070) | accepted |
 | [0062](0062-simple-shadows-at-every-zoom.md) | The simple shadow at every zoom, softer, lighter and shorter up close | accepted |
-| [0063](0063-real-relief-as-placed-pieces.md) | Real relief is placed pieces of a pinned heightfield, read by bicubic | accepted |
+| [0063](0063-real-relief-as-placed-pieces.md) | Real relief is placed pieces of a pinned heightfield, read by bicubic (amended by 0070) | accepted |
 | [0064](0064-lit-view-flat-plane-baked-in-the-worker.md) | The lit map view is one flat plane in Babylon, its bakes made in the compile worker | accepted |
 | [0065](0065-map-ink-as-distance-fields-houses-as-boxes.md) | The lit map draws from the cells, its edges smoothed by distance fields; its houses are lit boxes | accepted |
 | [0066](0066-editor-writes-the-intent-file-in-place.md) | The editor edits the intent file in the page and saves only what changed, through the dev server | accepted |
 | [0067](0067-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |
 | [0069](0069-scans-placed-in-their-relief-frame.md) | A scan to trace from is a source placed in its relief file's frame, bent through control points, kept out of git | accepted |
+| [0070](0070-a-field-as-a-scale-model.md) | A real field may be fitted to a map as a scale model: distances and heights scaled by one factor (amends 0061 and 0063) | accepted |

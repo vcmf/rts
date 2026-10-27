@@ -23,6 +23,7 @@ import {
   type ScanFit,
 } from './scan.ts'
 import { setField } from './fields.ts'
+import { toMap } from '../../map/dem.ts'
 import { ScanGl } from './scan-gl.ts'
 
 /** What the overlay needs from the page. */
@@ -87,7 +88,7 @@ export class Trace {
   private shown: { scan: Source; fit: ScanFit; pieces: Piece[]; img: ImageBitmap } | null = null
   private last: unknown[] = []
   /** The placement, worked out again only when the scan or its image changes (not on every edit of the copy). */
-  private fitFor: { scan: Source; img: ImageBitmap; extent: MapFile['extent']; fit: ScanFit } | null = null
+  private fitFor: { scan: Source; img: ImageBitmap; at: string; fit: ScanFit } | null = null
   /** The GPU's part, or why there is none (no WebGL2): made when a scan is first shown, not for every map. */
   private glMade: ScanGl | string | null = null
   private get gl(): ScanGl | string {
@@ -157,14 +158,20 @@ export class Trace {
       const img = image.img
       const f = this.fitFor
       // a placement with fewer than two points follows the map's extent too
-      const same = f && f.scan === scan && f.img === img && f.extent === doc.extent
-      const fit = same ? f.fit : fitScan(scan.points ?? [], img.width, img.height, doc.extent)
-      this.fitFor = { scan, img, fit, extent: doc.extent }
+      const pieces = scanPieces(doc, cat, scan)
+      const pl = pieces.find(p => p.own)?.place ?? { x: 0, z: 0, k: 1 }
+      const at = `${doc.extent.w},${doc.extent.h},${pl.x},${pl.z},${pl.k}`
+      // a placement of fewer than two points follows the extent as its piece reads it
+      const same = f && f.scan === scan && f.img === img && f.at === at
+      // with too few points the image lies over the map's extent as its frame's first piece reads it (scaled, moved)
+      const over = { w: doc.extent.w * pl.k, h: doc.extent.h * pl.k, x: pl.x, z: pl.z }
+      const fit = same ? f.fit : fitScan(scan.points ?? [], img.width, img.height, over)
+      this.fitFor = { scan, img, fit, at }
       if (typeof this.gl !== 'string') {
         this.gl.setImage(img)
         if (!same) this.gl.setMesh(scanMesh(fit.toFrame, img.width, img.height))
       }
-      this.shown = { scan, fit, pieces: scanPieces(doc, cat, scan), img }
+      this.shown = { scan, fit, pieces, img }
     }
     this.panel(scan, image)
     this.host.redraw()
@@ -238,7 +245,7 @@ export class Trace {
                 ? 'two points: moved, turned, scaled'
                 : n === 3
                   ? 'three points: an affine fit through them (a fourth tells its error)'
-                  : `${n} points, bent through each: ${s.fit.rms === null ? '—' : `${s.fit.rms.toFixed(1)} m`} root mean square where the others put each`
+                  : `${n} points, bent through each: ${s.fit.rms === null ? '—' : this.metres(s.fit.rms)} root mean square where the others put each`
       const where = s.pieces.some(p => p.own) ? '' : ' · its frame has no relief piece on the map: it shows nowhere'
       this.ui.state.textContent = `${s.img.width} × ${s.img.height} px · ${how}${where}`
     }
@@ -253,10 +260,19 @@ export class Trace {
         rm.dataset.point = String(k)
         rm.addEventListener('click', () => this.removePoint(k))
         // the list numbers the points as the map does; a residual the others cannot give (in a line) shows as —
-        li.append(`${Number.isFinite(r) ? `${r.toFixed(1)} m` : '—'} `, rm)
+        li.append(`${Number.isFinite(r) ? this.metres(r) : '—'} `, rm)
         return li
       }),
     )
+  }
+
+  /**
+   * A distance in the scan's frame as the panel says it: metres of the field, and on a scale model's map (decision
+   * 0070) its share of the map too.
+   */
+  private metres(r: number): string {
+    const k = this.shown?.pieces.find(p => p.own)?.place.k ?? 1
+    return k === 1 ? `${r.toFixed(1)} m` : `${r.toFixed(0)} m of the field (${(r / k).toFixed(0)} m on the map)`
   }
 
   /** The copy with the shown scan's points replaced, or null when the scan is gone from it. */
@@ -324,7 +340,7 @@ export class Trace {
     const p = s?.pieces.find(q => q.own)
     if (!s || !p) return null
     const [x, z] = s.fit.toFrame(u, v)
-    return [x - p.shift.x, z - p.shift.z]
+    return toMap(p.place, x, z)
   }
   /** The last draw's time, ms. */
   ms = 0
@@ -372,7 +388,7 @@ export class Trace {
     if (p.area) o.clip(path, 'evenodd')
     // the scan through the view, moved as the piece is, on the GPU's canvas, then into the clip
     const gl = this.gl as ScanGl
-    gl.render(Math.round(width * dpr), Math.round(height * dpr), this.host.viewMatrix(), p.shift)
+    gl.render(Math.round(width * dpr), Math.round(height * dpr), this.host.viewMatrix(), p.place)
     o.drawImage(gl.canvas, 0, 0, width, height)
     o.restore()
   }
@@ -392,10 +408,10 @@ export class Trace {
     ;(s.scan.points ?? []).forEach(([u, v, x, z], k) => {
       const [px, pz] = s.fit.toFrame(u, v)
       for (const p of s.pieces) {
-        const at: Pt = [x - p.shift.x, z - p.shift.z]
+        const at: Pt = toMap(p.place, x, z)
         // shown through the piece on top there alone (another of the same file may hold the place too, moved)
         if (!p.own || topAt(s.pieces, at[0], at[1]) !== p) continue
-        const a = this.host.project(px - p.shift.x, pz - p.shift.z)
+        const a = this.host.project(...toMap(p.place, px, pz))
         const b = this.host.project(at[0], at[1])
         if (!a || !b) continue
         ctx.beginPath()

@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-26
 code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, src/app/map/pin.ts, test/map-fields.test.ts, test/map-pin.test.ts, src/app/map/scan.ts, src/app/map/scan-gl.ts, src/app/map/trace.ts, test/map-scan.test.ts, tools/geo.ts, tools/scan-wms.ts, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place, 0067-ids-are-named-when-made, 0069-scans-placed-in-their-relief-frame]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place, 0067-ids-are-named-when-made, 0069-scans-placed-in-their-relief-frame, 0070-a-field-as-a-scale-model]
 ---
 
 # The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a–c, M7a–c)
@@ -164,7 +164,10 @@ maps/kinds.json ──► checkCatalogue ─┐
 - **Real relief** (`src/map/dem.ts`, decision 0063): a `dem` source names an `.rdem` heightfield beside the map
   (`file`, pinned by its SHA-256 `hash`, with its `credit` and `licence`), and each `relief.dem` feature places a
   piece of it: the whole extent with no shape, or an `area`, moved within the file by `shift` {x, z}, at true scale
-  (decision 0061). A piece sets the height in its area (the other landforms add) and blends into the ground under it
+  (decision 0061), or as a scale model (`scale` k, 1 to 4, decision 0070): a map point (x, z) reads the file at
+  (k x + shift.x, k z + shift.z) and its height above the datum is the file's divided by k, so slopes and sight angles
+  are the file's (`demPlace`, `toFile`, `toMap`: the one placement apply, the file checks and the scan read).
+  Austerlitz is one piece at 2× (12 km of the field in 6 km). A piece sets the height in its area (the other landforms add) and blends into the ground under it
   over its `edge`; later landforms add on top and the edits apply after, so the 1805 cleanup is `relief.level`,
   `.lower` and `.cut` over the real ground. Heights are above sea level in the file and taken back to the map's
   frame by its `datum`, which a map with real relief must set.
@@ -335,14 +338,14 @@ maps/kinds.json ──► checkCatalogue ─┐
       `scan` source's image (under the git-ignored `maps/scans/`) drawn under the outlines at an opacity the panel's
       scan box sets (kept per map and scan in the browser), in each `relief.dem` piece cut from its `frame`'s file
       (clipped to its area, painted in the pieces' priority and id order; a piece of another file on top hides it and
-      takes no click), moved by the piece's `shift`; with no frame, over the map unmoved. Its placement from its control points `[u, v, x, z]`: none, over the extent; one, moved;
+      takes no click), read as the piece reads its file (its `shift`, its `scale`); with no frame, over the map unmoved. Its placement from its control points `[u, v, x, z]`: none, over the extent; one, moved;
       two, a similarity; three, the affine map through them; four or more, a thin-plate spline through every point,
       and back by Newton's method on it (a second spline the other way its first guess), each point's residual where
       the others alone put it, and their root mean square, shown in the panel; two points on one pixel or place keep
       the affine fit of them all, saying so (the page refuses a point where one is). The image is drawn on the GPU
       (`src/app/map/scan-gl.ts`): a 64 × 64 mesh of frame points over it (`scanMesh`), through the view's own matrix
       (`LitView.viewProjection`), so the tilted view's perspective is exact and the near limit is clipped there; each
-      piece is drawn with its shift and composited through its area's clip into an offscreen canvas at full opacity,
+      piece is drawn with its placement and composited through its area's clip into an offscreen canvas at full opacity,
       then onto the view. The image is decoded once into a bitmap; one larger than the GPU's texture limit is not
       shown, saying so. A point is added by two clicks (the editor's capture: Escape drops it, Backspace takes a click back),
       one edit of the map's sources: where a landmark shows on the scan, then where it is on the map; each listed
@@ -441,8 +444,9 @@ same positions and strengths on the valley as on the original battlefield.
 
 `test/map-dem.test.ts` (M5): the `.rdem` round trip and its refusals; SHA-256 against Node's; bicubic exact on the
 nodes and on a quadratic surface between them, with constant second differences along a 2 m profile (no lattice);
-a whole-extent piece and its shift, an area piece's inside, blend and outside; the same bytes twice; the validator's
-and the file checks' refusals; the test map's real heights and its sim compile.
+a whole-extent piece and its shift, an area piece's inside, blend and outside; (M8a) a scale model's heights and its
+slopes the file's; the same bytes twice; the validator's and the file checks' refusals (a scale model past its file, a
+scale below 1); the test map's real heights and its sim compile.
 
 `test/render-lit-bake.test.ts` (M6a): the relief bake on flat ground, the cast shadow away from the light for each of
 its 8 directions, the exposure of a block's top and foot, no seam at the grid's edge; the cells' mask with its yards;

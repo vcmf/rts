@@ -6,7 +6,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import type { Catalogue, MapFile } from '../src/map/schema.ts'
 import type { Dem, MapFiles } from '../src/map/dem.ts'
-import { decodeRdem, demHeight, demRange, encodeRdem, sha256 } from '../src/map/dem.ts'
+import { decodeRdem, demHeight, demRange, encodeRdem, sha256, demPlace, toFile, toMap } from '../src/map/dem.ts'
 import { checkFiles, validate } from '../src/map/validate.ts'
 import { apply, heightOf } from '../src/map/apply.ts'
 import { engineMap, layersOf } from '../maps/engine.ts'
@@ -125,6 +125,47 @@ describe('M5: relief.dem in apply', () => {
       expect(heightOf(L, x, z)).toBeCloseTo(fileHeight(d, x + 30, z - 40) - 200, 6)
     }
   })
+  it('a scale model (decision 0070): the file read at k times the map, its heights above the datum divided by k', () => {
+    const d = decodeRdem(FILE)
+    const map = base()
+    map.features[0].scale = 1.5
+    map.features[0].shift = { x: 20, z: -30 }
+    const L = compile(map)
+    for (const [x, z] of [
+      [0, 0],
+      [-98, 52],
+      [76, -24],
+    ]) {
+      expect(heightOf(L, x, z)).toBeCloseTo((fileHeight(d, 1.5 * x + 20, 1.5 * z - 30) - 200) / 1.5, 6)
+    }
+    // slopes are the file's: a rise over a run on the map is the file's over its own run
+    const mapSlope = (heightOf(L, 40, 10) - heightOf(L, 20, 10)) / 20
+    const fileSlope = (fileHeight(d, 80, -15) - fileHeight(d, 50, -15)) / 30
+    expect(mapSlope).toBeCloseTo(fileSlope, 6)
+  })
+  it("checks a scale model's heights as the map has them: the file's above the datum, divided by the scale", () => {
+    // a flat file 200 m above sea level, a datum of -250: 450 m above it, past the height's 400 m at true size
+    const flat = rdem(81, 81, 5, () => 0)
+    const map = base()
+    map.sources![0].hash = sha256(flat)
+    map.datum = -250
+    expect(
+      checkFiles(map, cat, files(flat))
+        .issues.map(i => i.message)
+        .join('; '),
+    ).toMatch(/leave -100/)
+    // at 1.5×, 300 m above the datum: within
+    map.features[0].scale = 1.5
+    expect(checkFiles(map, cat, files(flat)).issues).toEqual([])
+  })
+  it('takes a map point to its file and back through a placement, scaled', () => {
+    const pl = demPlace({ scale: 2.5, shift: { x: 30, z: -40 } })
+    expect(pl).toEqual({ x: 30, z: -40, k: 2.5 })
+    expect(toFile(pl, 10, 4)).toEqual([55, -30])
+    expect(toMap(pl, ...toFile(pl, 10, 4))).toEqual([10, 4])
+    // a scale that is no number of at least 1 (a copy being typed): read as 1, never a division by 0
+    for (const scale of [0, -2, Number.NaN, 'x']) expect(demPlace({ scale }).k).toBe(1)
+  })
   it('an area piece sets its inside, blends over its edge, and leaves the ground beyond it', () => {
     const d = decodeRdem(FILE)
     const map = base()
@@ -214,6 +255,31 @@ describe('M5: what the validator and the file checks refuse', () => {
     ['a missing file', () => {}, /not found/, new Map()],
     ['a file that changed', () => {}, /has hash/, files(rdem(81, 81, 5, () => 7))],
     ['a piece past its file', m => (m.features[0].shift = { x: 150, z: 0 }), /past its file/],
+    // 200 m of map at 2× reads 400 m of the file, all of it: moved 30 m east, past its edge
+    [
+      'a scale model past its file',
+      m => Object.assign(m.features[0], { scale: 2, shift: { x: 30, z: 0 } }),
+      /past its file/,
+    ],
+    ['a scale below 1', m => (m.features[0].scale = 0.5), /at least 1/],
+    [
+      'a scale on another kind of relief',
+      m =>
+        m.features.push({
+          id: 'flat',
+          kind: 'relief.level',
+          area: [
+            [
+              [0, 0],
+              [20, 0],
+              [20, 20],
+            ],
+          ],
+          to: 0,
+          scale: 2,
+        }),
+      /belongs to relief\.dem pieces/,
+    ],
     ['heights out of range above the datum', m => (m.datum = 700), /leave -100/],
   ]
   for (const [what, edit, msg, f] of cases) {
@@ -233,12 +299,13 @@ describe('M5: the test map, for the sim', () => {
   const { map, layers: L } = layersOf('maps/dem-test.map.json')
   const d = decodeRdem(new Uint8Array(fs.readFileSync(path.join(root, 'maps/austerlitz.rdem'))))
   it('reads the real heights where only the shifted piece lies', () => {
+    const sh = map.features.find(f => f.id === 'slope')!.shift as { x: number; z: number }
     for (const [x, z] of [
       [600, 600],
       [-200, 0],
       [800, -900],
     ]) {
-      expect(heightOf(L, x, z)).toBeCloseTo(demHeight(d, x + 400, z + 300) - (map.datum ?? 0), 6)
+      expect(heightOf(L, x, z)).toBeCloseTo(demHeight(d, x + sh.x, z + sh.z) - (map.datum ?? 0), 6)
     }
   })
   it('compiles for the sim', () => {
