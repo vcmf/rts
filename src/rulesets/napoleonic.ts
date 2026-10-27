@@ -378,6 +378,7 @@ export const napoleonic: Ruleset = {
     hold: 3,
     threat: { front: 0.12, flank: 0.25, rear: 0.3 },
     impact: { kill: 0.12, shock: { front: 0.2, flank: 0.35, rear: 0.4 } },
+    second: { flank: 0.15, rear: 0.2 }, // under the guard: 0.6 × (0.75 − 0.4) = 0.21
     rate: 0.01,
     strength: { line: 1.0, column: 1.0, skirmish: 0.5, horse: 1.6, guns: 0.3 },
     cohesion: 0.5,

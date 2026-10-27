@@ -79,7 +79,6 @@ const near = (w: World, i: number, x: number, z: number, d: number) => Math.hypo
 // today formations pass through each other: these cases overlap (and C1–C3 make them pass)
 const OVERLAP_TODAY = new Set([
   'x02-meet',
-  'x03-brigade-charge', // the charging regiment rides on into the regiments it meets
   'x05-into-friend',
   'x06-three-on-a-gap',
   'x07-threading',

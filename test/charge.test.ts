@@ -22,9 +22,6 @@ import {
   bracedOf,
   gapBetween,
   sideStruck,
-  Q_FRONT,
-  Q_FLANK,
-  Q_REAR,
   CH_CLOSING,
   CH_TESTED,
   CH_PURSUIT,
@@ -141,15 +138,32 @@ describe('the charge', () => {
     // its near end swings 22 m closer
     expect(ga).toBeLessThan(40 - 20)
   })
-  it('the side struck: front, flank and rear; a battalion changing shape has no front', () => {
+  it('the side struck, as weights (front, flank, rear); a battalion changing shape has no front', () => {
     const s = new S()
     const t = s.inf(0, 0, 0, 1)
     const a = s.cav(0, 80, PI)
     const b = s.cav(120, -5, -PI / 2)
     const c = s.cav(0, -80, 0)
-    expect([a, b, c].map(h => sideStruck(s.w, s.slot(h), s.slot(t)))).toEqual([Q_FRONT, Q_FLANK, Q_REAR])
+    const [fa, fb, fc] = [a, b, c].map(h => sideStruck(s.w, s.slot(h), s.slot(t)))
+    expect(fa).toEqual([1, 0, 0])
+    expect(fb[1]).toBeGreaterThan(0.99)
+    expect(fc).toEqual([0, 0, 1])
     s.order({ type: 'form', id: t, shape: 'column' })
-    expect(sideStruck(s.w, s.slot(a), s.slot(t))).toBe(Q_FLANK)
+    expect(sideStruck(s.w, s.slot(a), s.slot(t))[0]).toBe(0)
+  })
+  it('P-19: lines meeting square on are struck in front; offset, the squadron over the end reads mostly flank', () => {
+    // X-19: two regiments' lines a metre apart, the charger's offset dx metres to the east
+    const front = (dx: number) => {
+      const s = new S()
+      const t = s.cav(0, 0, 0, 1)
+      const a = s.cav(dx, 4, PI, 0)
+      expect(gapBetween(s.w, s.slot(a), s.slot(t))).toBeCloseTo(1, 2)
+      return sideStruck(s.w, s.slot(a), s.slot(t))[0]
+    }
+    expect(front(0)).toBe(1)
+    expect(front(20)).toBeCloseTo(0.84, 1)
+    expect(Math.abs(front(20) - 0.84)).toBeLessThan(0.03)
+    expect(Math.abs(front(30) - 0.78)).toBeLessThan(0.03)
   })
   it('braced: a square 1, a line 0; partly while forming square, less as it leaves it', () => {
     const s = new S()
@@ -451,6 +465,53 @@ describe('the square against cavalry (standing behaviour)', () => {
     expect(s.shape(ln)).toBe('line')
     // the square's orders went with the player's
     expect(s.orders(ln)).toBe(0)
+  })
+})
+
+describe('a second enemy (decision 0069, E-16)', () => {
+  // a line of quality 1 charged in front by a regiment of quality 1; once they are in melee, a second regiment charges
+  // its rear (or, with `alone`, only the second charges). The line's morale on the tick the second strikes, and the
+  // state after
+  const e16 = (rs: Ruleset, alone = false, rev = false) => {
+    const s = new S(2, rs)
+    s.w.scratch.reverse = rev
+    const t = s.inf(0, 0, 0, 1, 'line', 1)
+    const a = s.cav(0, 70, PI, 0, 'line', 1)
+    const b = s.cav(0, -110, 0)
+    if (!alone) {
+      s.charge(a, t)
+      s.until(() => !s.f(t, 'foe'), 60)
+      expect(s.f(t, 'foe')).not.toBe(0)
+    }
+    s.charge(b, t)
+    s.until(() => !s.f(b, 'foe') && s.f(b, 'chPhase') !== 0, 60)
+    if (!alone) expect(s.f(t, 'foe')).toBe(a)
+    const morale = s.f(t, 'morale')
+    expect(s.f(b, 'foe')).toBe(t)
+    s.advance(20)
+    const f = s.w.f
+    return { morale, state: JSON.stringify([f.x, f.z, f.men, f.morale, f.mstate, f.foe].map(v => [...v])) }
+  }
+  // no threat at the test, which would break the line before the second strikes (the impact's shock alone)
+  const quiet = withMelee({ ...noSquare.melee, threat: { front: 0, flank: 0, rear: 0 } })
+  const none = withMelee({ ...quiet.melee, second: { flank: 0, rear: 0 } })
+  it('P-20: a charge into the rear of a battalion already in melee shakes it again, by the side it strikes', () => {
+    const diff = e16(quiet).morale - e16(none).morale
+    expect(diff).toBeLessThan(0)
+    // the regiment is wider than the line: its squadrons over the ends strike partly in the flank
+    expect(-diff).toBeGreaterThan(0.9 * napoleonic.melee.second.flank)
+    expect(-diff).toBeLessThanOrEqual(napoleonic.melee.second.rear + 1e-9)
+    // not in melee when it struck: no second shock
+    expect(e16(quiet, true).morale).toBe(e16(none, true).morale)
+  })
+  it('P-20: the same in the reversed visiting order', () => {
+    expect(e16(quiet, false, true)).toEqual(e16(quiet))
+  })
+  it('P-20: the ruleset refuses a second shock that could rout a battalion of the default quality alone', () => {
+    const M = napoleonic.morale
+    const sec = napoleonic.melee.second
+    expect(Math.max(sec.flank, sec.rear)).toBeLessThanOrEqual(0.6 * (M.quality - M.rout))
+    expect(() => compileRuleset(withMelee({ second: { flank: 0.15, rear: 0.25 } }))).toThrow(/melee.second/)
   })
 })
 

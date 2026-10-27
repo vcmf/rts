@@ -124,6 +124,8 @@ export interface MeleeDef {
   hold: number
   threat: Quarters
   impact: { kill: number; shock: Quarters }
+  // the shock of a charge striking a battalion already in melee with another, by the side it strikes (decision 0069)
+  second: { flank: number; rear: number }
   rate: number
   strength: Record<string, number>
   cohesion: number
@@ -596,6 +598,13 @@ export function compileRuleset(rs: Ruleset): Compiled {
   if (M.contagion.shock > 0.6 * (M.quality - M.rout)) {
     throw new Error(
       `ruleset ${rs.name}: morale.contagion.shock over 0.6 of the gap from the default quality to the rout`,
+    )
+  }
+  // nor a second enemy's charge (decision 0069)
+  const sec = rs.melee.second
+  if (!(sec.flank >= 0 && sec.rear >= 0 && Math.max(sec.flank, sec.rear) <= 0.6 * (M.quality - M.rout))) {
+    throw new Error(
+      `ruleset ${rs.name}: melee.second must be ≥ 0 and at most 0.6 of the gap from the quality to the rout`,
     )
   }
   if (!(M.rally.max >= 0 && M.rally.max < 255)) {

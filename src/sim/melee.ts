@@ -52,6 +52,7 @@ import { marginWidth } from './claims.ts'
 import { enemyNear } from './morale.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
+import { threatWeights, byWeights } from './sectors.ts'
 import { sin, cos } from './num.ts'
 import { TICK_HZ, DT } from './time.ts'
 
@@ -64,18 +65,16 @@ const K_IMPACT = 14
 const K_RECOIL = 15
 const K_MELEE = 16
 const K_CUT = 17
-export const Q_FRONT = 0
-export const Q_FLANK = 1
-export const Q_REAR = 2 // the side a charge comes from, in the target's frame
-const COS45 = Math.SQRT1_2
 // a charge whose gap has not been measured yet (the melee step measures it after the first movement)
 export const GAP_UNKNOWN = 1e9
 
-// per-world scratch: the shock each attacker sends this step and to whom, the melee pairs as the step began,
-// and per-company masks of the companies in contact
+// per-world scratch: the shock each attacker sends this step and to whom, the melee pairs before the charges move
+// (inMelee0: who was already in melee, for the second enemy) and after them (foe0: the pairs that strike), and
+// per-company masks of the companies in contact
 export interface Melee {
   shockTo: Int32Array
   shockBy: Float64Array
+  inMelee0: Int32Array
   foe0: Int32Array
   mi: Uint8Array
   mj: Uint8Array
@@ -86,6 +85,7 @@ const scratchOf = (w: World): Melee =>
   (w.scratch.melee = {
     shockTo: new Int32Array(MAX_FORMATIONS),
     shockBy: new Float64Array(MAX_FORMATIONS),
+    inMelee0: new Int32Array(MAX_FORMATIONS),
     foe0: new Int32Array(MAX_FORMATIONS),
     mi: new Uint8Array(MAX_COMPANIES),
     mj: new Uint8Array(MAX_COMPANIES),
@@ -153,33 +153,30 @@ function inContact(w: World, G: FireGeo, i: number, j: number, lim: number, mask
   }
   return men
 }
-// the side of battalion j that a charge from battalion i strikes: from j's centre (its companies' with men) to
-// i's, within 45° of j's facing is its front, beyond 135° its rear, else a flank. A battalion changing shape has
-// no front: its companies are on the move, and it is struck as in the flank
-function quarter(w: World, G: FireGeo, i: number, j: number): number {
+const wk = new Float64Array(3)
+/**
+ * The side of battalion j that a charge from battalion i strikes (docs/proposals/sectors-model.md § 5), as weights
+ * (front, flank, rear) into `out`: i's companies' threat weights on j's face, each weighted by its men, over the
+ * companies marked in `mask` (those in contact), or over all with men when `mask` is null. A battalion changing shape
+ * has no front. G must be this tick's geometry.
+ */
+function sideOf(w: World, G: FireGeo, i: number, j: number, mask: Uint8Array | null, out: Float64Array): Float64Array {
   const f = w.f
   const CS = w.cr.maxC
-  const C = typeOf(w, j).C
-  let x = 0
-  let z = 0
-  let n = 0
-  for (let q = 0; q < C; q++) {
-    const m = j * CS + q
-    if (f.men[m] > 0) {
-      x += G.cx[m]
-      z += G.cz[m]
-      n++
-    }
+  let men = 0
+  out.fill(0)
+  for (let c = 0, C = typeOf(w, i).C; c < C; c++) {
+    const k = i * CS + c
+    if (f.men[k] <= 0 || (mask && !mask[c])) continue
+    threatWeights(w, G, j, i, k, wk)
+    for (let n = 0; n < 3; n++) out[n] += f.men[k] * wk[n]
+    men += f.men[k]
   }
-  if (!n) return Q_FRONT
-  const dx = f.x[i] - x / n
-  const dz = f.z[i] - z / n
-  const d = sqrt(dx * dx + dz * dz)
-  const along = dx * sin(f.heading[j]) + dz * cos(f.heading[j])
-  return along >= d * COS45 ? (f.trans[j] ? Q_FLANK : Q_FRONT) : along <= -d * COS45 ? Q_REAR : Q_FLANK
+  if (!men) out[0] = 1
+  else for (let n = 0; n < 3; n++) out[n] /= men
+  return out
 }
-const bySide = (q: { front: number; flank: number; rear: number }, s: number): number =>
-  s === Q_FRONT ? q.front : s === Q_FLANK ? q.flank : q.rear
+const side = new Float64Array(3)
 
 // how far battalion i stands in a shape proof against a charge from any side (0..1): during a change into one,
 // the change's progress; out of one, 1 less it
@@ -213,7 +210,8 @@ function owe(w: World, j: number, mask: Uint8Array, lambda: number, rs: Uint32Ar
 // the gap between battalions i and j, and the side of j that a charge from i would strike, as they stand (tests,
 // debugging: each rebuilds the block geometry)
 export const gapBetween = (w: World, i: number, j: number): number => gapOf(w, blockGeometry(w), i, j)
-export const sideStruck = (w: World, i: number, j: number): number => quarter(w, blockGeometry(w), i, j)
+export const sideStruck = (w: World, i: number, j: number): number[] =>
+  Array.from(sideOf(w, blockGeometry(w), i, j, null, new Float64Array(3)))
 
 /* ---------------- step 10: charges and melee ---------------- */
 /**
@@ -235,6 +233,7 @@ export function meleeStep(w: World): void {
   const G = w.scratch.fireGeoTick === tick ? w.scratch.fireGeo! : blockGeometry(w)
   S.shockTo.fill(-1)
   S.shockBy.fill(0)
+  S.inMelee0.set(f.foe)
   for (let n = 0; n < N; n++) {
     const i = rev ? N - 1 - n : n
     if (f.alive[i] && f.chPhase[i]) chargeStep(w, G, S, i, tick)
@@ -412,12 +411,12 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
     return
   }
   const b = bracedOf(w, j)
-  const side = quarter(w, G, i, j)
   // the test before contact, once (a charge launched inside the test's distance takes it at once)
   if (f.chPhase[i] === CH_CLOSING && gap <= ch.test) {
     f.chPhase[i] = CH_TESTED
     S.shockTo[i] = j
-    S.shockBy[i] += bySide(M.threat, side) * (1 - b) * (0.5 + nextUnit(keyedStream(ks, seed, tick, h, j, K_TEST)))
+    sideOf(w, G, i, j, null, side)
+    S.shockBy[i] += byWeights(M.threat, side) * (1 - b) * (0.5 + nextUnit(keyedStream(ks, seed, tick, h, j, K_TEST)))
     if (
       b > 0 &&
       nextUnit(keyedStream(ks, seed, tick, h, j, K_REFUSE)) < M.refuse * b * (f.mstate[j] >= MS_WAVERING ? 0.5 : 1)
@@ -434,8 +433,12 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
   const men = inContact(w, G, i, j, M.contact, S.mi)
   inContact(w, G, j, i, M.contact, S.mj)
   owe(w, j, S.mj, M.impact.kill * mom * men * (1 - bb), keyedStream(ks, seed, tick, h, j, K_IMPACT))
+  sideOf(w, G, i, j, S.mi, side)
   S.shockTo[i] = j
-  S.shockBy[i] += bySide(M.impact.shock, side) * mom * (1 - bb)
+  S.shockBy[i] += byWeights(M.impact.shock, side) * mom * (1 - bb)
+  // a second enemy (decision 0069): j was already in melee with another when the step began; once, whatever the
+  // momentum
+  if (S.inMelee0[j]) S.shockBy[i] += side[1] * M.second.flank + side[2] * M.second.rear
   if (nextUnit(keyedStream(ks, seed, tick, h, j, K_RECOIL)) < bb) {
     recoil(w, i, j, tick)
     return
