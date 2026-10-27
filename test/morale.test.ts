@@ -370,90 +370,30 @@ describe('flank support', () => {
   })
 })
 
-describe('the wavering fall-back', () => {
-  // side 1 at x = −10 facing west, an enemy (holding fire) 100 m west; spawned at the default quality, its
-  // quality then lowered, so its morale falls into wavering (spawned at 0.45 it would start there, not falling)
-  const setup = () => {
+describe('a wavering battalion keeps fighting (decision 0071)', () => {
+  it('P-24: with no orders, losing men to an enemy in front of it, it stands and fires; it never Retires by itself', () => {
+    // side 1 at x = −10 facing west, an enemy firing at it 100 m west; spawned at the default quality, its quality
+    // then lowered, so its morale falls into wavering (the old fall-back's case)
     const s = new W()
     SIDES_SET(s)
-    s.spawn(0, -110, -35)
+    s.spawn(0, -110, -35, { fire: 'at will' })
     const h = s.spawn(1, -10, -35, { fire: 'at will' })
-    s.w.f.quality[s.i(h)] = 0.45
-    return [s, h] as const
-  }
-  it('a wavering battalion without orders, morale falling, an enemy in range, Retires 15 m once, faces the front and fires again', () => {
-    const [s, h] = setup()
     const i = s.i(h)
-    let fell = -1
+    const men = menOf(s.w, i)
+    s.w.f.quality[i] = 0.45
+    let wavering = -1
+    let moved = false
     s.run(120, () => {
-      if (fell < 0 && s.w.f.fellBack[i]) fell = s.w.meta[M_TICK]
+      if (s.state(h) !== MS_WAVERING) return
+      if (wavering < 0) wavering = s.w.meta[M_TICK]
+      // the heading is kept to 0.1 mrad
+      moved ||= s.w.f.x[i] !== -10 || Math.abs(s.w.f.heading[i] + E) > 1e-4 || s.w.f.ordHead[i] >= 0
     })
-    expect(fell).toBeGreaterThan(0)
-    expect(s.state(h)).toBe(MS_WAVERING)
-    expect(s.w.f.x[i]).toBeCloseTo(-10 + M.fallback.metres, 0)
-    expect(s.w.f.heading[i]).toBeCloseTo(-E, 4) // the spawn's heading, to 0.1 mrad
-    expect(s.w.f.ordHead[i]).toBe(-1) // once: no second Retire while still wavering
+    expect(wavering).toBeGreaterThan(0)
+    expect(menOf(s.w, i)).toBeLessThan(men)
+    expect(moved).toBe(false)
     const last = Math.max(...s.w.f.volleyTick.slice(i * s.w.cr.maxC, i * s.w.cr.maxC + 4))
-    expect(last).toBeGreaterThan(fell + 20 * 10) // it fired after the Retire
-  })
-  it('not with orders', () => {
-    const [s, h] = setup()
-    s.do({ type: 'move', id: h, points: [[-10, 150]], append: false })
-    let fell = false
-    s.run(60, () => {
-      fell ||= s.w.f.fellBack[s.i(h)] === 1
-    })
-    expect(s.state(h)).toBe(MS_WAVERING)
-    expect(fell).toBe(false)
-  })
-  it('not with no enemy within musket range', () => {
-    const s = new W()
-    SIDES_SET(s)
-    const h = s.spawn(1, -10, -35)
-    s.w.f.quality[s.i(h)] = 0.45
-    let fell = false
-    s.run(60, () => {
-      fell ||= s.w.f.fellBack[s.i(h)] === 1
-    })
-    expect(s.state(h)).toBe(MS_WAVERING)
-    expect(fell).toBe(false)
-  })
-  it('not with the enemy behind it: a Retire, back from its facing, would march toward the enemy', () => {
-    // faced east, its back to the enemy 100 m west (a rallied battalion faces the way it ran)
-    const s = new W()
-    SIDES_SET(s)
-    s.spawn(0, -110, -35)
-    const h = s.spawn(1, -10, -35, { heading: E })
-    s.w.f.quality[s.i(h)] = 0.45
-    let fell = false
-    s.run(60, () => {
-      fell ||= s.w.f.fellBack[s.i(h)] === 1
-    })
-    expect(s.state(h)).toBe(MS_WAVERING)
-    expect(fell).toBe(false)
-    expect(s.w.f.x[s.i(h)]).toBe(-10)
-  })
-  it('not on the slow crawl of a morale settling onto a fixed target', () => {
-    const [s, h] = setup()
-    const i = s.i(h)
-    s.set(h, 0.45 + 1e-4) // wavering, a hair above its target: it creeps down by about 2.5e-7 a tick
-    let fell = false
-    s.run(30, () => {
-      fell ||= s.w.f.fellBack[i] === 1
-    })
-    expect(fell).toBe(false)
-  })
-  it('not on a dip into wavering that recovers (its morale rising)', () => {
-    const [s, h] = setup()
-    const i = s.i(h)
-    s.w.f.quality[i] = M.quality
-    s.set(h, 0.48)
-    // the flag clears once it recovers
-    let fell = false
-    s.run(30, () => {
-      fell ||= s.w.f.fellBack[i] === 1 || s.w.f.ordHead[i] >= 0
-    })
-    expect(fell).toBe(false)
+    expect(last).toBeGreaterThan(wavering) // it fired while wavering
   })
 })
 
@@ -465,28 +405,26 @@ describe('determinism', () => {
     const run = record(lev, cr, sc, 2, 14000, () => {})
     expect(play(run.replay, lev, cr, sc, run.hashes)).toBeNull()
   })
-  it('a save taken with one battalion rallying, one routing and one mid-fall-back reproduces', () => {
+  it('a save taken with one battalion rallying, one routing and one wavering reproduces', () => {
     // side 0: a router that runs to the west edge and rallies, a second routing, and east of the stream a
-    // wavering line falling back from side 1's line 60 m in front of it (side 1 stays east: the edge is safe)
+    // wavering line in a firefight with side 1's line 60 m in front of it (side 1 stays east: the edge is safe)
     const s = new W()
     SIDES_SET(s)
     const r1 = s.spawn(0, -60, -35)
     const r2 = s.spawn(0, -60, 25)
     s.spawn(1, 170, -95)
-    const fb = s.spawn(0, 110, -95, { fire: 'at will' })
+    const wv = s.spawn(0, 110, -95, { fire: 'at will' })
     const until = (ok: () => boolean) => {
       for (let n = 0; n < 20 * 600 && !ok(); n++) s.tick()
       expect(ok()).toBe(true)
     }
     s.breakNow(r1)
     until(() => s.state(r1) === MS_RALLYING)
-    // just above wavering, its quality lowered: it falls back within about 6 s, inside the 30 s rally
-    s.w.f.quality[s.i(fb)] = 0.45
-    s.set(fb, 0.51)
+    s.w.f.quality[s.i(wv)] = 0.45
+    s.set(wv, 0.49)
     s.breakNow(r2)
-    until(() => s.w.f.fellBack[s.i(fb)] === 1 && s.w.f.ordHead[s.i(fb)] >= 0)
-    // the rally lasts 30 s: the fall-back must come first
-    expect([s.state(r1), s.state(r2), s.state(fb)]).toEqual([MS_RALLYING, MS_ROUTING, MS_WAVERING])
+    s.tick()
+    expect([s.state(r1), s.state(r2), s.state(wv)]).toEqual([MS_RALLYING, MS_ROUTING, MS_WAVERING])
     const w2 = deserialize(serialize(s.w), lev, cr, true, levTerrain)
     for (let n = 0; n < 1200; n++) {
       advanceTick(s.w)

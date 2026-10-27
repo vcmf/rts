@@ -85,9 +85,6 @@ export interface MoraleDef {
   contagion: { shock: number; front: number; back: number }
   // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
   support: { bonus: number; reach: number; arc: number }
-  // a wavering battalion without orders Retires `metres` once its morale has fallen by more than `rate` a second for
-  // `after` seconds
-  fallback: { metres: number; after: number; rate: number }
   // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
   rally: { safe: number; calm: number; time: number; cost: number; max: number }
   shatter: number // a router below this share of its spawn strength shatters

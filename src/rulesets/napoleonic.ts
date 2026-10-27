@@ -365,7 +365,6 @@ export const napoleonic: Ruleset = {
     // brigade, so a 400-man line 113 m from its neighbour feels the same shock and support
     contagion: { shock: 0.15, front: 560, back: 280 },
     support: { bonus: 0.04, reach: 280, arc: 0.7853981633974483 },
-    fallback: { metres: 15, after: 3, rate: 0.0005 },
     rally: { safe: 250, calm: 20, time: 30, cost: 0.1, max: 2 },
     shatter: 0.5,
     leave: 12, // S1e-1: shattered formations that reach the map's edge leave the field
