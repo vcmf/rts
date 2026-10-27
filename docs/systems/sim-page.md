@@ -57,8 +57,8 @@ own world, the layer synced after each with the departures since its last (behin
 still holds, the departures whole from the log), steps the men on their clock at the sim's speed (the alpha the game
 time since its own world's tick), and publishes a frame at most 120
 times a second when something changed (`src/app/battle-frame.ts`): every column of the world's state, the men
-(position, velocity, slot, flags, and the way each faces and his gait: `SoldierLayer.orient`, worked out for each
-battalion whose revision moved, before the frame is written; battle threads PR 4c), each battalion's men, and the clock (the leftover game time, the speed, the
+(position, velocity, slot, flags, and the way each faces and his gait: worked out by the steering as it sets his
+velocity, and by `SoldierLayer.orient` before the frame is written for a battalion a sync changed; battle threads PR 4c), each battalion's men, and the clock (the leftover game time, the speed, the
 publish time). Three slots in shared memory: the worker fills the one neither newest nor held, the page holds the
 newest for its frame; neither waits. The page
 reads a slot in place: a `World` whose columns are views on it and a `SoldierLayer` on that world that is never

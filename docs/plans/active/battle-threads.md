@@ -319,8 +319,11 @@ tile) is no sim map. Two PRs, then PR 4.
   which his place in his formation (his heading at rest: `layer.place`) 53, the ground's height 24.
 - **Scope**: the soldier layer keeps two cosmetic columns per man, `yaw` (the way he faces, as the renderer's: his
   velocity's over `MARCH_FROM`, else his place's heading) and `gait` (halt, march over 0.3 m/s, run over 2.2), worked
-  out for a battalion whenever its revision moves (`Unit.rev`: its men stepped, matched, a volley; flagged, and
-  oriented before the frame is published, so the columns are never older than the revision the page reads). The
+  out by the steering as it sets each man's velocity (its formation framed already), and for a battalion a sync
+  changed (new men, a Face about: `Unit.menRev`, its men's revision, which a volley does not move) by `orient()`
+  before the frame is published, so the columns are never older than the revision the page reads. (Review round 1:
+  orienting every moved battalion at publishing framed it a second time a step, 9 % on the men worker's turn at
+  32,000 men, 8×, over the stop below.) The
   published frame carries both (`src/app/battle-frame.ts`). The page's `SimMen.man` reads them instead of working them
   out (no `hypot`, `atan2` or `layer.place` a man; no `layer.frame` a battalion); a fresh volley still makes the fire
   role on the page (its age is the page's clock). The thresholds move with the work, from `src/look/sim-men.ts` to

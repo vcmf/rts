@@ -63,6 +63,24 @@ describe("the men's ways and gaits", () => {
     // (both kinds seen)
     expect([moving > 0, moving < want.size]).toEqual([true, true])
   })
+  it('are kept current by the steering itself for a battalion stepped since its last change (no framing again)', () => {
+    const b = battle()
+    // oriented once (as each frame published is), then stepped on: steering keeps them so
+    b.layer.orient()
+    b.advanceBy(10)
+    const want = expected(b)
+    const M = b.layer.men
+    const fresh = [...b.layer.units.values()].filter(u => u.oriented === u.menRev)
+    expect(fresh.length).toBeGreaterThan(0)
+    for (const u of fresh) {
+      for (const m of u.ids.subarray(0, u.n)) {
+        const w = want.get(m)
+        if (!w) continue
+        expect(M.yaw[m]).toBeCloseTo(w[0], 5)
+        expect(M.gait[m]).toBe(w[1])
+      }
+    }
+  })
   it('are worked out again only for a battalion whose revision moved', () => {
     const b = battle()
     const L = b.layer
