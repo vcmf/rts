@@ -21,11 +21,12 @@ export interface ShadowLook {
 }
 /** Up close (the owner, 2026-10-24: smaller, lighter, fuzzier, then darker and solid at the feet, lighter and softer
  *  away from them; softness 0.75 chosen from the review's sheet 7) and far (decision 0049's: one value end to
- *  end). The gain: the owner, 2026-10-26, "a bit too weak, can we make it darker": 2 up close, 1.5 far, chosen from
- *  the sheets of docs/plans/done/shadow-darker.md (no measurable cost on Metal) */
+ *  end). The gain and the soles' darkness: decision 0067's 2 up close and 1.5 far, then the owner, 2026-10-27, of the
+ *  shadows "darker and bluer than the tree shadow": no part darker than the ground's painted cast shadow, the shade
+ *  k itself (gain 1, the soles 1; the solid foot is the contact's, SHADOW_CONTACT; decision 0071) */
 export const SHADOW_LOOK: { readonly close: ShadowLook; readonly far: ShadowLook } = {
-  close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7, gain: 2 },
-  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1, gain: 1.5 },
+  close: { soft: 0.75, dark: 0.55, foot: 1, core: 0.4, len: 0.7, gain: 1 },
+  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1, gain: 1 },
 }
 /** The band of the camera's distance to its focus (m) over which the close look turns into the far one */
 export const SHADOW_LOOK_BAND: readonly [number, number] = [45, 85]
@@ -72,14 +73,20 @@ export interface Strip {
  *  soles (each triangle on one side of them, so a strip shortened past them keeps the feet where they are) and its
  *  third where the lift's ramp ends (liftRamp m along the drawn shadow, liftRamp / len along the shape), so the lift,
  *  linear between rows, is whole there and the grass and legs do not poke through near the feet. Between, the rows'
- *  places (m) and the box blended */
-export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: number, liftRamp: number): Strip {
+ *  places (m) and the box blended. reach (m, 0 by default: as before): the base and full boxes grown to hold a disc of
+ *  that radius about the root (the contact shadow's, decision 0071), past the shape's cell where it must: the
+ *  material with the oval reads no shape outside the cell (unitdecal.frag's vCell), so the strip may */
+export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: number, liftRamp: number, reach = 0): Strip {
   const boxOf = (b: ShapeBox): Strip['box'] => [
     b.across[0],
     b.along[0],
     b.across[1] - b.across[0],
     b.along[1] - b.along[0],
   ]
+  if (reach > 0) {
+    base = grownBox(base, reach, len)
+    full = grownBox(full, reach, len)
+  }
   if (t >= 1) return { box: boxOf(base), rows: [0, 1 / 3, 2 / 3, 1] }
   if (!(full.along[0] < 0 && full.along[1] > 0)) throw new Error('decalStrip: the box must hold the soles (along 0)')
   const ramp = Math.min(liftRamp / Math.max(len, 1e-3), full.along[1] * 0.9)
@@ -92,6 +99,15 @@ export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: numbe
   const box = fb.map((v, i) => mix(v, bb[i])) as Strip['box']
   const rows = closeRows.map((v, i) => (mix(v, farRows[i]) - box[1]) / box[3]) as Strip['rows']
   return { box, rows }
+}
+
+/** box grown to hold a disc of radius r (m) about the root, as drawn: past the soles the strip is drawn len as long
+ *  (unitdecal.vert), so it reaches r / len along the shape there */
+function grownBox(box: ShapeBox, r: number, len: number): ShapeBox {
+  return {
+    across: [Math.min(box.across[0], -r), Math.max(box.across[1], r)],
+    along: [Math.min(box.along[0], -r), Math.max(box.along[1], r / Math.max(len, 1e-3))],
+  }
 }
 
 /** The decal's rule at a fragment (src/look/shaders/unitdecal.frag, mirrored here for its tests): of the shape's value
@@ -224,4 +240,210 @@ export function applyLookParams(
   const band = parseNumbers(q, 'ushband', [2], [0, 1000])
   if (band && !(band[1] > band[0])) throw new Error(`?ushband must be <r0>,<r1> with r0 < r1, not ${q.get('ushband')}`)
   return { band: band ? [band[0], band[1]] : null }
+}
+
+/** Where the contact shadow sits (decision 0071): root, a disc about the man's root; stride, an oval over his feet's
+ *  whole travel in his clip (one a clip, turned with his facing); step, an oval over his feet at the clip's step he is
+ *  posed at (it follows them) */
+export type ContactMode = 'root' | 'stride' | 'step'
+/** The contact shadow under each soldier's feet (decision 0071). pad (m): how far the oval reaches past the feet
+ *  (root: the disc's radius); dark: its darkness, a share of the ground's full shade (1: the ground's painted cast
+ *  shadow, k, as a tree's shadow paints it; 0: none); soft: its fade past the oval, a share of its size; band (m, the
+ *  camera's distance to its focus): the contact whole up to its start, fading out across it, none past its end */
+export interface ShadowContact {
+  mode: ContactMode
+  pad: number
+  dark: number
+  soft: number
+  band: readonly [number, number]
+}
+/** The contact by default. The owner, 2026-10-27: the oval that follows the feet (step), fully soft, 0.1 m past the
+ *  feet, only where feet show (whole to about the default zoom, 63 m, gone by the wide one, 125 m); then, of the
+ *  shadows being "darker and bluer than the tree shadow": its core exactly the ground's painted cast shadow (dark 1,
+ *  the shade k itself: docs/plans/done/shadow-contact.md, "Matching the trees") */
+export const SHADOW_CONTACT: Readonly<ShadowContact> = {
+  mode: 'step',
+  pad: 0.1,
+  dark: 1,
+  soft: 1,
+  band: [60, 100],
+}
+/** m: the least lift of the decal with the contact's oval (unitdecal.vert): its half behind the soles, where the
+ *  lift is otherwise 0, lies at the ground's sampled height, and the terrain can stand a little higher there and hide
+ *  it (the oval cut along the soles, the owner, 2026-10-27); 3 cm keeps it drawn, and darkens no boot (8 cm did) */
+export const CONTACT_FLOOR = 0.03
+
+/** The decal's lift toward the camera (m) a distance along (m from the soles, along the shadow) (unitdecal.vert,
+ *  mirrored here for its tests): lift, the decal's (Units.decalLift), grown over ramp m past the soles (none on his
+ *  shins), and with the contact's oval at least CONTACT_FLOOR */
+export function decalLift(along: number, lift: number, ramp: number, oval: boolean): number {
+  const l = lift * sstep(0, ramp, along)
+  return oval ? Math.max(l, CONTACT_FLOOR) : l
+}
+
+/** The share of the way the ground's shade is turned toward its own grey, its luminance kept, by default (bakes.ts
+ *  unitShade, unitshade.frag): the shade of the ground's macro colour is bluer than a tree's painted shadow on the
+ *  grass; measured in the plan ("Matching the trees") */
+export const SHADE_DESAT = 0.65
+
+/** The contact from the page's switches, SHADOW_CONTACT's where not given: ?ushcontact=<pad m 0..1>,<dark
+ *  0..1>[,<soft 0..1>] (0 alone, or a pad or darkness of 0: none), ?ushcontactat=root|stride|step,
+ *  ?ushcontactband=<r0>,<r1> (m, r0 < r1). Null with none: the oval's material not made */
+export function applyContactParams(q: URLSearchParams): ShadowContact | null {
+  const d = SHADOW_CONTACT
+  const c = parseNumbers(q, 'ushcontact', [1, 2, 3], [0, 1])
+  if (c?.length === 1 && c[0] !== 0) throw new Error(`?ushcontact must be 0 or <pad>,<dark>[,<soft>], not ${c[0]}`)
+  const at = q.get('ushcontactat') ?? d.mode
+  if (!['root', 'stride', 'step'].includes(at)) throw new Error(`?ushcontactat must be root, stride or step, not ${at}`)
+  const band = parseNumbers(q, 'ushcontactband', [2], [0, 1000])
+  if (band && !(band[1] > band[0])) {
+    throw new Error(`?ushcontactband must be <r0>,<r1> with r0 < r1, not ${q.get('ushcontactband')}`)
+  }
+  const on = c === null || (c.length > 1 && c[0] > 0 && c[1] > 0)
+  if (!on) return null
+  return {
+    mode: at as ContactMode,
+    pad: c ? c[0] : d.pad,
+    dark: c ? c[1] : d.dark,
+    soft: c?.[2] ?? d.soft,
+    band: band ? [band[0], band[1]] : d.band,
+  }
+}
+
+/** ?ushdesat=<0..1>: the share of the way the ground's shade is turned toward its own grey (SHADE_DESAT by default; 0:
+ *  the shade as decision 0049 baked it) */
+export function shadeDesat(q: URLSearchParams): number {
+  return parseNumbers(q, 'ushdesat', [1], [0, 1])?.[0] ?? SHADE_DESAT
+}
+
+/** The contact's weight at the camera's distance r (m) to its focus: 1 up to band's start, 0 from its end, a
+ *  smoothstep between (the oval is for feet that show) */
+export function contactWeight(r: number, band: readonly [number, number]): number {
+  return 1 - farShare(r, band)
+}
+
+/** Whether the decal draws with the contact's oval this frame (its weight w): only within its band and with a
+ *  darkness; else the material without it (no oval's varying, read or cell test: decision 0062's; units.ts
+ *  useDecalFor) */
+export function contactOvalOn(c: ShadowContact | null, w: number): boolean {
+  return c !== null && c.dark > 0 && w > 0
+}
+
+/** The contact's uniform for the decal (uShContact: its pad, its darkness by its weight w, its softness) and the
+ *  strip's reach (m) for it: the reach only while the material with the oval draws (near; the other has no vCell, so
+ *  its strip must stay within the shape's cell), none at weight 0 */
+export function contactUniform(
+  c: ShadowContact | null,
+  w: number,
+  reach: number,
+  near: boolean,
+): { uniform: [number, number, number, number] | null; reach: number } {
+  if (!c) return { uniform: null, reach: 0 }
+  // (the fourth unused)
+  return { uniform: [c.pad, c.dark * w, c.soft, 0], reach: near && w > 0 && c.dark > 0 ? reach : 0 }
+}
+
+/** How far the contact reaches from a man's root (m) over every baked step's oval (contactOvals: cx, cz, ax, az a
+ *  step), grown by pad and faded out to 1 + soft of its size: what the strip must hold (decalStrip's reach) */
+export function contactReachOf(ovals: Float32Array, pad: number, soft: number): number {
+  let r = 0
+  for (let i = 0; i < ovals.length; i += 4) {
+    r = Math.max(r, Math.hypot(ovals[i], ovals[i + 1]) + (Math.max(ovals[i + 2], ovals[i + 3]) + pad) * (1 + soft))
+  }
+  return r
+}
+
+/** A point of the strip in the contact's oval frame (unitdecal.vert, mirrored here for its tests): (across, along) m
+ *  from the root in the shadow's frame (along past the soles as drawn, the look's length applied), the man turned by
+ *  facing (rad, as shadowShape turns him), dir the shadow's direction on the ground; ov his step's oval [cx, cz, ax,
+ *  az], grown by pad; 1 at the oval's edge */
+export function contactPoint(
+  across: number,
+  along: number,
+  facing: number,
+  dir: readonly [number, number],
+  ov: readonly number[],
+  pad: number,
+): [number, number] {
+  const C = [-dir[1], dir[0]]
+  const px = C[0] * across + dir[0] * along
+  const pz = C[1] * across + dir[1] * along
+  const ca = Math.cos(facing)
+  const sa = Math.sin(facing)
+  // (his axes on the ground: the matrix's first and third columns, x (ca, -sa) and z (sa, ca))
+  const fx = px * ca - pz * sa
+  const fz = px * sa + pz * ca
+  return [(fx - ov[0]) / Math.max(ov[2] + pad, 1e-3), (fz - ov[1]) / Math.max(ov[3] + pad, 1e-3)]
+}
+
+/** The contact's share of the ground's full shade at q (the fragment's place in the oval's own frame: 1 at its
+ *  edge), dark its darkness, soft its fade: solid over the oval, fading to nothing at 1 + soft */
+export function contactShare(q: readonly [number, number], dark: number, soft: number): number {
+  return dark * (1 - sstep(1, 1 + Math.max(soft, 1e-4), Math.hypot(q[0], q[1])))
+}
+
+/** The luminance of a colour (SHADE_LUMA) */
+export function luma(c: readonly number[]): number {
+  return c[0] * SHADE_LUMA[0] + c[1] * SHADE_LUMA[1] + c[2] * SHADE_LUMA[2]
+}
+
+/** The decal's rule at a fragment with the contact (unitdecal.frag under SH_CONTACT, mirrored here for its tests):
+ *  decalFragment's, the contact's share ct (contactShare) one more darkness in it, its darkness c (its uniform's, by
+ *  its weight) among the look's: the share of the samples covered and the darkness every covered sample takes, the
+ *  same for every shadow, so the darkest share still wins whatever the order */
+export function contactFragment(
+  s: number,
+  g: number,
+  foot: number,
+  dark: number,
+  c: number,
+  ct: number,
+): { cover: number; dark: number } {
+  const dm = Math.max(foot, dark, c, 1e-4)
+  return { cover: Math.min(1, Math.max(s * (foot + (dark - foot) * g), ct) / dm), dark: dm }
+}
+
+/** The ground's shade turned toward its own grey by desat, its luminance kept (unitshade.frag under SH_DESAT) */
+export function desaturated(k: readonly number[], desat: number): [number, number, number] {
+  const l = luma(k)
+  return [k[0] + (l - k[0]) * desat, k[1] + (l - k[1]) * desat, k[2] + (l - k[2]) * desat]
+}
+
+/** One of the decal's two materials (units.ts): with the contact's oval (near) or without (far) */
+export type DecalSide = 'near' | 'far'
+/** The background compile's state (units.ts useDecalFor): whether the material not drawn is ready, and the frames
+ *  asked so far (of the one wanted, or of the idle one) */
+export interface DecalPoll {
+  idleReady: boolean
+  polls: number
+}
+/** A frame's step of the decal's material (units.ts useDecalFor): switch to the wanted one only once it is ready (a
+ *  material not ready draws nothing), and after a switch ask the new idle one afresh; else ask the idle one until it is
+ *  ready. Every unanswered ask counts against limit, the wanted one's too; at limit, give up (gaveUp: the frame to warn
+ *  once) and stay on the one drawn. ready(side): asks that material (compiling it if needed) */
+export function decalStep(
+  want: DecalSide,
+  drawn: DecalSide,
+  poll: DecalPoll,
+  ready: (side: DecalSide) => boolean,
+  limit: number,
+): { switchTo: DecalSide | null; poll: DecalPoll; gaveUp: boolean } {
+  if (poll.polls >= limit) return { switchTo: null, poll, gaveUp: false }
+  if (want !== drawn) {
+    if (ready(want)) return { switchTo: want, poll: { idleReady: false, polls: 0 }, gaveUp: false }
+    const polls = poll.polls + 1
+    return { switchTo: null, poll: { idleReady: poll.idleReady, polls }, gaveUp: polls === limit }
+  }
+  if (poll.idleReady) return { switchTo: null, poll, gaveUp: false }
+  if (ready(drawn === 'near' ? 'far' : 'near')) {
+    return { switchTo: null, poll: { idleReady: true, polls: poll.polls }, gaveUp: false }
+  }
+  const polls = poll.polls + 1
+  return { switchTo: null, poll: { idleReady: false, polls }, gaveUp: polls === limit }
+}
+
+/** The background compile's state after the materials' defines change (units.ts setFarScale, setLodFade): both to be
+ *  compiled again, with a fresh budget */
+export function decalDefinesChanged(): DecalPoll {
+  return { idleReady: false, polls: 0 }
 }
