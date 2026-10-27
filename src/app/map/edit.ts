@@ -1,5 +1,5 @@
 // The map editor's edits (docs/plans/done/m7-editor.md M7a): what a click picks, a feature's handles, and the edits
-// of its shape, as pure functions on the map's intent features (never the expanded map: decision 0066). Every edit
+// of its shape, as pure functions on the map's intent features (never the expanded map: decision 0078). Every edit
 // returns a new feature and leaves the old one as it was, so the history can keep both. Snapping only helps: an edit
 // always applies, and what the validator then finds is shown at once (the engine's rules, never copies of them). A
 // field that names a point by its place in a list (a shared edge's `at`) is kept in step as points come and go.

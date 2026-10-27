@@ -1,4 +1,4 @@
-// The editor's stable save (docs/plans/done/m7-editor.md M7a, decision 0066): a map written back into its text
+// The editor's stable save (docs/plans/done/m7-editor.md M7a, decision 0078): a map written back into its text
 // rewrites only what changed.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'

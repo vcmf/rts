@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-25
 ---
 
-# 0066 The editor edits the intent file in the page and saves only what changed, through the dev server
+# 0078 The editor edits the intent file in the page and saves only what changed, through the dev server
 
 ## Context
 

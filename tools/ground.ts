@@ -311,7 +311,7 @@ function main(): void {
     const stem = kind.split('.')[1]
     count.set(stem, (count.get(stem) ?? 0) + 1)
     // named by its outer ring's middle on the map, to 10 m: the same region keeps its id from run to run (decision
-    // 0067), whatever else changes
+    // 0079), whatever else changes
     const [cx, cz] = area[0].reduce(([a, b], p) => [a + p[0] / area[0].length, b + p[1] / area[0].length], [0, 0])
     const at = (v: number, pos: string, neg: string) => `${v < 0 ? neg : pos}${Math.abs(Math.round(v / 10) * 10)}`
     let id = `${stem}-${at(cx, 'e', 'w')}-${at(cz, 'n', 's')}`

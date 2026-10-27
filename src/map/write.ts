@@ -1,4 +1,4 @@
-// The editor's stable save (docs/plans/done/m7-editor.md, decision 0066): a map written back into the text it was
+// The editor's stable save (docs/plans/done/m7-editor.md, decision 0078): a map written back into the text it was
 // read from, rewriting only what changed. An unchanged feature or field keeps its bytes, whatever its layout; a changed
 // one is written in place in the file's one layout (src/map/format.ts), a new feature appended, a deleted one cut with
 // its separator. Tested in test/map-write.test.ts.
@@ -201,7 +201,7 @@ export function writerFrom(earlier: string | null): FeatureWriter {
 }
 
 /**
- * The map's file, written into the text it was read from (`base`): only what changed is rewritten (decision 0066).
+ * The map's file, written into the text it was read from (`base`): only what changed is rewritten (decision 0078).
  * With no base, or one that is not a JSON object with a list of features, the map in the file's one layout
  * (`formatMap`). A changed feature is written by `write` (on one line; `writerFrom` keeps an earlier text's bytes).
  */

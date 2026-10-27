@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-26
 ---
 
-# 0067 The map editor names a feature or a map when it is made; renames are done in the file
+# 0079 The map editor names a feature or a map when it is made; renames are done in the file
 
 ## Context
 

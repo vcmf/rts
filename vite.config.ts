@@ -36,7 +36,7 @@ const mapsHot: Plugin = {
     },
   },
 }
-// the map editor's save (docs/plans/done/m7-editor.md, decision 0066): POST /__map/save with the file, the text the
+// the map editor's save (docs/plans/done/m7-editor.md, decision 0078): POST /__map/save with the file, the text the
 // page read and the new text; 409 with the file's text if it changed on disk since. Dev only: the built page does not
 // edit
 const mapsSave: Plugin = {

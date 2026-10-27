@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-26
 code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, src/app/map/pin.ts, test/map-fields.test.ts, test/map-pin.test.ts, src/app/map/scan.ts, src/app/map/scan-gl.ts, src/app/map/trace.ts, test/map-scan.test.ts, tools/geo.ts, tools/scan-wms.ts, tools/streams.ts, test/map-streams.test.ts, tools/water.ts, test/map-water.test.ts, maps/austerlitz-water.json, tools/ways.ts, test/map-ways.test.ts, maps/austerlitz-ways.json, tools/works.ts, test/map-works.test.ts, maps/austerlitz-works.json, tools/villages.ts, test/map-villages.test.ts, maps/austerlitz-villages.json, tools/ground.ts, test/map-ground.test.ts, maps/austerlitz-ground.json, test/map-ring-row.test.ts, tools/labels.ts, test/map-labels.test.ts, maps/austerlitz-labels.json, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place, 0067-ids-are-named-when-made, 0069-scans-placed-in-their-relief-frame, 0070-a-field-as-a-scale-model, 0073-modern-works-mended-from-their-surroundings, 0077-a-pond-levels-at-its-lower-bank]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0078-editor-writes-the-intent-file-in-place, 0079-ids-are-named-when-made, 0069-scans-placed-in-their-relief-frame, 0070-a-field-as-a-scale-model, 0073-modern-works-mended-from-their-surroundings, 0077-a-pond-levels-at-its-lower-bank]
 ---
 
 # The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a–c, M7a–c)
@@ -253,7 +253,7 @@ maps/kinds.json ──► checkCatalogue ─┐
   - errors are listed while the last good drawing stays;
   - a saved map or catalogue reaches the page through a small Vite plugin (`map-changed`, `vite.config.ts`) and
     recompiles;
-  - **the editor** (M7a, decision 0066, `src/app/map/editor.ts`, the edits in `src/app/map/edit.ts`): the page reads
+  - **the editor** (M7a, decision 0078, `src/app/map/editor.ts`, the edits in `src/app/map/edit.ts`): the page reads
     the map's intent (never the expanded map) into memory, edits it there and compiles each finished edit from that
     copy. A file whose structure the editor cannot read (`wellFormed`: features objects with a text id, presets
     objects, shapes as their kind of value) opens read-only, saying why.
@@ -319,7 +319,7 @@ maps/kinds.json ──► checkCatalogue ─┐
         Ctrl Z is the field's own text undo; Cmd or Ctrl S applies it and saves.
       - Its text is read as its kind of value only (a number's that is no number stays text for the validator to
         name). The validator's problems show under their fields (by path), those of no field above the JSON.
-      - Ids are not edited in the page (decision 0067): a feature's is set when it is made, a map's names its file;
+      - Ids are not edited in the page (decision 0079): a feature's is set when it is made, a map's names its file;
         a rename is done in the file (an id also seeds its generator and the base relief's noise, and names its
         children).
       - The form is built again only when its fields change (another kind); otherwise its inputs are given their

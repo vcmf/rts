@@ -29,7 +29,7 @@ tools on top).
 | **M7d** | A generator chosen for the selection and its parameters as a form, the expansion redrawn on each change; pinning a generated feature (its expanded form copied into the file) | A pinned child equals its expansion |
 | **M7e** | The tracing overlay: an image (a period map, a survey) placed under the lit view by matching points, its opacity a setting, stored beside the map as a source the compilers ignore | The 1805 map of Austerlitz placed over the real relief to within the image's own error |
 
-## Decisions taken here (decision 0066)
+## Decisions taken here (decision 0078)
 
 - **The file stays the only truth.** The editor reads the intent file (not the expanded map), edits a copy in the
   page's memory, and writes it back. No state of the editor goes into the file.
@@ -131,7 +131,7 @@ tools on top).
   Delete acted on a drag in progress; a file the writer would lay out otherwise read as unsaved; a byte order mark
   made a file unsaveable; refusals were not JSON. Three rounds had each found the editor's state handled in another
   handler, or a rule of the engine copied and drifting: the design was wrong, not the code. Stopped and redesigned
-  with the owner (above, decision 0066 amended in this PR before it merged). The review count restarts.
+  with the owner (above, decision 0078 amended in this PR before it merged). The review count restarts.
 - **Redesign**: every edit of a shape goes through the validator (`refusal`, in `Editor`); the barrier snap takes the
   nearest candidate that passes `barrierProblem`, or leaves the point; `isBarrier` reads the kind through presets
   (`featureKind`, now exported); one mode (idle, pressing, dragging) and `ready()` before every command; a click on a
@@ -168,7 +168,7 @@ tools on top).
   (1) The gate rested on the validator being a complete oracle, which it is not: each precision fix led to the next
   finding. (2) Index fields (`follow.at`) shift under point edits. (3) No trust boundary on what the editor reads.
   (4) A press inside a selected area both moved it and was meant to pan. The owner chose all four changes (above;
-  decision 0066 amended in this PR). The review count restarts.
+  decision 0078 amended in this PR). The review count restarts.
 - **Second redesign**: the gate is gone; `check` validates the copy after each edit and shows what it finds;
   `wellFormed` on reading, read-only otherwise; `shiftFollow` keeps `at` in step (an outer ring that is a shared
   edge's rest may keep one point); `down` takes only the outline and the handles. With it, round 3's other findings:
@@ -205,7 +205,7 @@ tools on top).
 
 ## M7b in detail
 
-Creating, with the same state machine and the same save (decision 0066 holds; no new decision):
+Creating, with the same state machine and the same save (decision 0078 holds; no new decision):
 
 - **A new map** (the panel's "new map"): its id (also the file's name, `maps/<id>.map.json`, refused when taken), name,
   size (the extent, square, and the play area inside it), seed (a random uint32 proposed, or when left blank) and
@@ -286,7 +286,7 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
   next finding. (2) Double clicks: the browser's click, click, dblclick were read by each step in its own way, and
   leaks across steps kept coming. (3) Copies of the rules: the drawing and the form checked what the validator
   checks (ids, `along`'s range, targets' shapes, seed and play), each copy a little off, one crashing, against
-  decision 0066. The owner chose all three changes (2026-10-26); they apply decision 0066, which is not amended. The
+  decision 0078. The owner chose all three changes (2026-10-26); they apply decision 0078, which is not amended. The
   review count restarts.
 - **Redesign**: (a) the disk is the file's last text and whether it exists; `onDisk` takes text or none, one rule for
   made, changed and deleted, a 409 the same conflict, the panel saying which; a deletion keeps the copy and its
@@ -320,8 +320,8 @@ Creating, with the same state machine and the same save (decision 0066 holds; no
 
 ## M7c in detail
 
-Decision 0066 holds: a form sets values, the validator judges them at once (no copy of the rules); each change is one
-edit. Decision 0067 (from the second redesign below): ids are set when a feature or a map is made, and renamed in the
+Decision 0078 holds: a form sets values, the validator judges them at once (no copy of the rules); each change is one
+edit. Decision 0079 (from the second redesign below): ids are set when a feature or a map is made, and renamed in the
 file.
 
 - `src/app/map/fields.ts` (pure, tested in `test/map-fields.test.ts`):
@@ -381,7 +381,7 @@ file.
   on blur), and the JSON box was a second editor of the same feature competing with the fields; each fix made the
   next finding. (2) The rename's scope: following every reference grew to generated and pinned children, their
   selectors and recorded parameters, and each round found one more place an id lives. The owner chose all three
-  changes (2026-10-26); decision 0066 holds (they apply it). The review count restarts.
+  changes (2026-10-26); decision 0078 holds (they apply it). The review count restarts.
 - **Redesign**: (a) the text not applied is explicit (`pending`): a field shows the copy unless it holds some; it is
   applied on change and before any command of the editor (a press outside the form, Cmd or Ctrl S, Z, Y); refused,
   it stays with its reason until changed, or Escape drops it; the editor's commands say whether they changed the copy
@@ -444,7 +444,7 @@ file.
   loses only the effective one); one notion of a map's presets (`presetsOf` in `src/map/catalogue.ts`: objects with a
   text kind), read by `resolve` too; a refused field's text stays the field's while it is applied (no flash, the caret
   kept); a new choice in a list is given in place (no rebuild); the feature's JSON cut at 20 000 characters; decision
-  0067 records the owner's choice on renames.
+  0079 records the owner's choice on renames.
 
 ## Results (M7c)
 
@@ -457,7 +457,7 @@ file.
 
 ## M7d in detail
 
-Decision 0066 holds: the form sets values, the validator and expansion judge them; each change is one edit, and each
+Decision 0078 holds: the form sets values, the validator and expansion judge them; each change is one edit, and each
 edit compiles, so the expansion is redrawn on every change already (M7a). Nothing here re-implements a generator's
 rules: the choice lists every generator, and what does not fit is the validator's to say.
 

@@ -2,7 +2,7 @@
 // then each reference it takes set by clicking its target, as pure functions on a draft. A draft is never in the map's
 // copy: the editor adds the feature it makes in one edit when the last step is done. The steps come from the
 // catalogue's `shapes` and `refs` (never a kind's name: decision 0015). Points are rounded as a drag rounds them, a
-// barrier's snapped to the lattice in 8 directions; what the validator then finds is shown at once (decision 0066).
+// barrier's snapped to the lattice in 8 directions; what the validator then finds is shown at once (decision 0078).
 // Tested in test/map-draw.test.ts.
 import type { Ellipse, Feature, MapFile, Pt, RefName, ShapeName } from '../../map/schema.ts'
 import { ID, REFS } from '../../map/schema.ts'

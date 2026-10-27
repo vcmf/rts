@@ -396,7 +396,7 @@ into the epic; this plan details each as it starts.
 - **Round 2**: moderate and light only, so the review stops here. Fixed: the pinch removal could fill and clear the
   same pixel for ever where what it may fill is not convex (none on Austerlitz; a 4 × 3 case found by fuzzing): past
   64 passes it throws; the woods and meadows were numbered in the scan's order, so any change renumbered the rest:
-  each is named by its middle to 10 m (decision 0067); a meadow seed whose region was dropped (too small, an orchard's)
+  each is named by its middle to 10 m (decision 0079); a meadow seed whose region was dropped (too small, an orchard's)
   went silently: an error, and two seeds in one region a note (the check found the Pratzen brook's seed in a sliver
   since the hue's change: moved onto the ribbon); `ringRow`'s doc says its points are on whole centimetres, as the
   cells' are; the per-block arrays and the unused centre sums gone. Not taken: an active-edge table in `ringRow` and
