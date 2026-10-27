@@ -26,7 +26,7 @@ import {
 import type { Scene, Obstacle } from './scene.ts'
 import { cosmeticRng } from './scene.ts'
 import { CLASS_STYLE } from './style.ts'
-import { Men, MAN_ALIVE, MAN_SETTLED, grown } from './men.ts'
+import { Men, MAN_ALIVE, MAN_SETTLED, MARCH_FROM, GAIT_HALT, gaitAt, grown } from './men.ts'
 
 export const AHEAD = 0.6
 export const WALK = 1.35
@@ -65,6 +65,10 @@ export interface Unit {
   // battle threads PR 4b); volleys: its companies' last volley ticks, as last seen
   rev: number
   volleys: Int32Array
+  // menRev: bumped with rev but by a volley (its men moved, or were matched again); oriented: the menRev its men's
+  // ways and gaits were last worked out at (orient; −1: never)
+  menRev: number
+  oriented: number
 }
 
 const NO_UNITS: readonly Unit[] = []
@@ -86,6 +90,9 @@ export class SoldierLayer {
   private walkOf: Float64Array
   private runOf: Float64Array
   alphaNow = 1
+  /** Whether the men's ways and gaits are kept (Men.yaw, Men.gait: the steering's and orient's; battle threads PR 4c):
+   *  for a reader that draws them (the look page), off for one that does not (the sim page: none of the work). */
+  orients = false
   // `step`'s groups: how many (0 before the first step), and the units in each
   private grouped = 0
   private byGroup: Unit[][] = []
@@ -315,6 +322,8 @@ export class SoldierLayer {
           pose: new Float64Array(8 + 2 * w.cr.maxNB).fill(NaN),
           rev: 0,
           volleys: new Int32Array(w.cr.maxC),
+          menRev: 0,
+          oriented: -1,
         }
         this.units.set(i, u)
         this.joinGroup(u)
@@ -322,6 +331,7 @@ export class SoldierLayer {
       }
       this.sign(u.sig, i)
       u.rev++
+      u.menRev++
       if (u.faces !== f.faces[i]) {
         // Face about: each man's slot is now the half-turn of his old one
         const T = U.shapes[f.shape[i]].turn
@@ -565,6 +575,8 @@ export class SoldierLayer {
     const MZ = M.z
     const MVX = M.vx
     const MVZ = M.vz
+    const MY = M.yaw
+    const MG = M.gait
     const FL = M.flags
     const MS = M.s
     const MDX = M.dx
@@ -591,6 +603,8 @@ export class SoldierLayer {
       const ids = u.ids
       // (a man not skipped: the battalion's revision moves on)
       let touched = false
+      // its men's ways and gaits current before this step (no sync changed it since): kept so by the step's (orient)
+      const fresh = this.orients && u.oriented === u.menRev
       for (let j = 0, n = u.n; j < n; j++) {
         const m = ids[j]
         const fl = FL[m]
@@ -635,7 +649,10 @@ export class SoldierLayer {
         if (fl & MAN_SETTLED) {
           if (busy || Math.hypot(tx - MHX[m], tz - MHZ[m]) > 0.3) FL[m] = fl & ~MAN_SETTLED
           else {
-            if (wasV) touched = true
+            // (his place's way framed anew: it may have turned under him; the revision moves on if it did)
+            const y0 = MY[m]
+            if (this.orients) this.halted(i, m)
+            if (wasV || MY[m] !== y0) touched = true
             MVX[m] = 0
             MVZ[m] = 0
             continue
@@ -648,7 +665,10 @@ export class SoldierLayer {
           FL[m] |= MAN_SETTLED
           MHX[m] = tx
           MHZ[m] = tz
-          if (wasV) touched = true
+          if (wasV) {
+            touched = true
+            if (this.orients) this.halted(i, m)
+          }
           MVX[m] = 0
           MVZ[m] = 0
           continue
@@ -747,11 +767,18 @@ export class SoldierLayer {
         // a trunk's push never takes him off the map
         MX[m] = Math.min(xMax, Math.max(t.x0, mx))
         MZ[m] = Math.min(zMax, Math.max(t.z0, mz))
-        if (MX[m] !== wasX || MZ[m] !== wasZ || wasV !== (vx !== 0 || vz !== 0)) touched = true
+        // (his gait too: a man held at the map's edge may change it standing)
+        const g0 = MG[m]
         MVX[m] = vx
         MVZ[m] = vz
+        if (this.orients) this.moved(i, m, vx, vz)
+        if (MX[m] !== wasX || MZ[m] !== wasZ || wasV !== (vx !== 0 || vz !== 0) || MG[m] !== g0) touched = true
       }
-      if (touched) u.rev++
+      if (touched) {
+        u.rev++
+        u.menRev++
+      }
+      if (fresh) u.oriented = u.menRev
     }
   }
   private poseNow: Float64Array
@@ -763,6 +790,38 @@ export class SoldierLayer {
     this.flatZ = grown(this.flatZ, n)
     // no more cells hold men than there are men
     this.touched = grown(this.touched, n)
+  }
+  /** Man `m` of formation `i` (framed) come to rest: his place's way, at a halt (Men.yaw, Men.gait; orient's rule). */
+  private halted(i: number, m: number): void {
+    const M = this.men
+    M.gait[m] = GAIT_HALT
+    M.yaw[m] = this.place(i, M.s[m], false, this.pYaw)[2]
+  }
+  /** Man `m` of formation `i` (framed) steered to velocity (vx, vz): his way and gait (orient's rule). */
+  private moved(i: number, m: number, vx: number, vz: number): void {
+    const v = Math.sqrt(vx * vx + vz * vz)
+    if (v > MARCH_FROM) {
+      this.men.gait[m] = gaitAt(v)
+      this.men.yaw[m] = Math.atan2(vx, vz)
+    } else this.halted(i, m)
+  }
+  private readonly pYaw = [0, 0, 0]
+  /** Works out the way each man faces and his gait (Men.yaw, Men.gait) for every battalion whose men moved since
+   *  (`menRev`: a volley alone works nothing out; battle threads PR 4c): what a renderer draws him with, so the
+   *  readers of a published frame need not (call it before publishing). His velocity's way when he marches, at rest
+   *  his place's (its heading after a Face about, a square's faces). */
+  orient(): void {
+    if (!this.orients) return
+    const M = this.men
+    for (const u of this.units.values()) {
+      if (u.oriented === u.menRev) continue
+      u.oriented = u.menRev
+      this.frame(u.i, this.alphaNow)
+      for (let j = 0; j < u.n; j++) {
+        const m = u.ids[j]
+        if (M.flags[m] & MAN_ALIVE) this.moved(u.i, m, M.vx[m], M.vz[m])
+      }
+    }
   }
   // how far men stand from their places (a measurement): max and mean, metres
   slotError(): { max: number; mean: number } {

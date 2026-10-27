@@ -52,6 +52,9 @@ export interface BattleLink {
   /** What to read and draw this frame: the newest frame published (held until the next call), or the battle itself
    * on the main thread. */
   see(): Seen
+  /** The men's ways and gaits worked out for the battalions whose men moved (SoldierLayer.orient), for a reader that
+   * draws them (the look page): a published frame carries them already, the battle on the main thread does not. */
+  orient(): void
   command(c: Command): void
   /** The game speed (0: paused). */
   setSpeed(speed: number): void
@@ -77,9 +80,11 @@ export class MainLink implements BattleLink {
   private readonly seen: Seen
   readonly data: SimData
   readonly failed = null
-  constructor(data: SimData, cr: Compiled, scenario: Scenario) {
+  /** `orients`: the men's ways and gaits kept (SoldierLayer.orients), for a reader that draws them. */
+  constructor(data: SimData, cr: Compiled, scenario: Scenario, orients = false) {
     this.data = data
     this.battle = new Battle(data, scenario, cr)
+    this.battle.layer.orients = orients
     this.scene = this.battle.scene
     this.log = this.battle.log
     this.dropped = this.battle.dropped
@@ -91,6 +96,9 @@ export class MainLink implements BattleLink {
   }
   see(): Seen {
     return this.seen
+  }
+  orient(): void {
+    this.battle.layer.orient()
   }
   command(c: Command): void {
     this.battle.command(c)
@@ -142,7 +150,16 @@ export class WorkerLink implements BattleLink {
   /** Starts the sim worker on the scenario (`key`: its key in BATTLE_SCENARIOS; `bytes`: the map's, `data` loaded from
    * them; `ruleset`: its name in src/rulesets/index.ts, the napoleonic one if none, `cr` compiled from it), then the
    * men worker once the sim has written its first world; `ready` resolves at the first frame. */
-  constructor(sim: Worker, men: Worker, bytes: Uint8Array, data: SimData, cr: Compiled, key: string, ruleset?: string) {
+  constructor(
+    sim: Worker,
+    men: Worker,
+    bytes: Uint8Array,
+    data: SimData,
+    cr: Compiled,
+    key: string,
+    ruleset?: string,
+    orients = false,
+  ) {
     this.sim = sim
     this.men = men
     this.data = data
@@ -158,7 +175,7 @@ export class WorkerLink implements BattleLink {
     const ring = makeRing(this.shape)
     sim.onmessage = (e: MessageEvent<FromSim>) => {
       const m = e.data
-      if (m.type === 'ready') this.toMen({ type: 'init', data: bytes, version: data.version, ring, ruleset })
+      if (m.type === 'ready') this.toMen({ type: 'init', data: bytes, version: data.version, ring, ruleset, orients })
       else if (m.type === 'events') {
         this.log.push(...m.log)
         this.dropped.push(...m.dropped)
@@ -228,6 +245,9 @@ export class WorkerLink implements BattleLink {
     this.seen = v
     return v
   }
+  orient(): void {
+    // (the men worker orients each frame before publishing it: battle-frame.ts writeFrame)
+  }
   command(c: Command): void {
     this.toSim({ type: 'command', c })
   }
@@ -270,13 +290,15 @@ export interface LinkStart {
   key: string
   ruleset?: string
   workers: (() => [Worker, Worker]) | null
+  // the men's ways and gaits kept, for a reader that draws them (the look page: SoldierLayer.orients)
+  orients?: boolean
 }
 
 /** The battle in its workers when given them and they start, else on the page (said on the console when they fail). */
 export async function startLink(o: LinkStart): Promise<BattleLink> {
   if (o.workers) {
     const [sim, men] = o.workers()
-    const wl = new WorkerLink(sim, men, o.bytes, o.data, o.cr, o.key, o.ruleset)
+    const wl = new WorkerLink(sim, men, o.bytes, o.data, o.cr, o.key, o.ruleset, o.orients)
     try {
       await wl.ready()
       return wl
@@ -284,5 +306,5 @@ export async function startLink(o: LinkStart): Promise<BattleLink> {
       console.warn(`the battle runs on the page: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
-  return new MainLink(o.data, o.cr, o.scenario)
+  return new MainLink(o.data, o.cr, o.scenario, o.orients)
 }

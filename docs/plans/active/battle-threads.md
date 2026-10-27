@@ -311,6 +311,47 @@ tile) is no sim map. Two PRs, then PR 4.
   1 against itself: identical) differs on the men alone, at most 0.45 % of a region's pixels (mean 0.1 of 255) in
   the wide and far views: their turn's sine and cosine now taken in float32 on the GPU, not on the CPU.
 
+## PR 4c: the men worker orients the men (PR 4's step 3)
+
+- **Why** (PR 6's measurement, below): at `?sim` the look page's main-thread work outside rendering is 1.0 to 1.5 ms a
+  frame at p95 at the default and wide views, over the 1 ms bar, and it is the placing (`placeMs` 0.5 to 0.6 mean).
+  Measured in Node (40 battalions of 414, a tick's men): the source's read of a man (`SimMen.man`) about 100 ns, of
+  which his place in his formation (his heading at rest: `layer.place`) 53, the ground's height 24.
+- **Scope**: the soldier layer keeps two cosmetic columns per man, `yaw` (the way he faces, as the renderer's: his
+  velocity's over `MARCH_FROM`, else his place's heading) and `gait` (halt, march over 0.3 m/s, run over 2.2), worked
+  out by the steering as it sets each man's velocity (its formation framed already), and for a battalion a sync
+  changed (new men, a Face about: `Unit.menRev`, its men's revision, which a volley does not move) by `orient()`
+  before the frame is published, so the columns are never older than the revision the page reads. (Review round 1:
+  orienting every moved battalion at publishing framed it a second time a step, 9 % on the men worker's turn at
+  32,000 men, 8×, over the stop below; in the steering, 7 to 11 %: it runs every sub-step, 8 × the look page's 12 Hz
+  re-placing at 8×.) So only a reader that draws them asks for them (`SoldierLayer.orients`, `LinkStart.orients`:
+  the look page); the sim page's layer does none of the work. The
+  published frame carries both (`src/app/battle-frame.ts`). The page's `SimMen.man` reads them instead of working them
+  out (no `hypot`, `atan2` or `layer.place` a man; no `layer.frame` a battalion); a fresh volley still makes the fire
+  role on the page (its age is the page's clock). The thresholds move with the work, from `src/look/sim-men.ts` to
+  the layer.
+- **Acceptance** (the look bench as PR 6's, `?sim`, interleaved with the epic, two clean rounds): the main thread's
+  work outside rendering under 1 ms at p95 at every zoom, `placeMs` at least a third lower; the men worker's turn at
+  32,000 men, 8× (`tools/bench-sim.ts`) no worse than PR 5's by more than 5 %; the look page's men unchanged (the
+  shots, `look-check`); replays unchanged (`app-check`).
+- **Stop**: if the men worker's turn grows past PR 5's by more than 5 %, orient only the men whose place or velocity
+  changed, and say so.
+- **Outcome** (2026-10-27; interleaved with the epic, two rounds each, every run waiting for a quiet machine, the
+  load between runs up to 100 from other sessions): **met**, the close view by a hair.
+  - The men worker at 32,000 men, 8× (`tools/bench-sim.ts`; the sim page, which does not ask for the ways and gaits):
+    as the epic's within noise: its loop 10.15 against 10.18 ms a turn (round 2; round 1's epic run began under the
+    load's tail), stepping 3.83 to 3.87 against 3.85 to 3.90, publishing 0.21 against 0.21 to 0.24; the men's
+    sub-steps 100 %. (The day's absolute numbers ran about 1.5 ms over the morning's on both.)
+  - The look page at `?sim` (the look bench, Metal, the preview build): the placing, mean, 0.29 to 0.31 ms close
+    against 0.42, 0.39 to 0.40 default against 0.58 to 0.59, 0.43 to 0.51 wide against 0.68 to 0.73 (−29, −32 and
+    −33 %); the main thread's work outside rendering at p95 (the placing and the uploads; the sim tick is 0.01 to
+    0.02, #222) 0.51 to 0.75 ms close, 0.78 to 0.84 default, 0.95 wide (round 2), against the epic's 0.75 to 0.78,
+    1.15 to 1.19 and 1.41 to 1.51. Round 1's wide run (1.56 ms) is left out: its GPU frame 23.7 ms against about 17,
+    under another session's load.
+  - Replays unchanged (`app-check`: every session's replay reproduced in Node). The look page's men unchanged: shots
+    of the epic and this PR at `?sim` (close, split to the nearest LOD; wide; 30 s later, the lines deployed) the
+    same men, ways and lines; `look-check` at `?armies=40&sim` (about 34,900 instances, none floating).
+
 ## PR 5 and PR 6: only if measured
 
 - **PR 5**, a separate soldier worker fed by the per-tick mirror, if PR 3 shows over 1 % late sub-steps. Acceptance:

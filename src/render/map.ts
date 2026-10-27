@@ -20,7 +20,7 @@ import {
 } from '../sim/index.ts'
 import type { Scene } from './scene.ts'
 import type { SoldierLayer, Unit } from './soldiers.ts'
-import { MAN_ALIVE, MAN_LEFT } from './men.ts'
+import { MAN_ALIVE, MAN_LEFT, MARCH_FROM } from './men.ts'
 import { CLASS_STYLE, INK, SIDE_INK, FIRE_INK, MORALE_INK } from './style.ts'
 
 // k: pixels per metre; north up
@@ -455,7 +455,7 @@ export class StaffMap {
             const sp = Math.hypot(M.vx[m], M.vz[m])
             let dx = M.vx[m] / sp
             let dz = M.vz[m] / sp
-            if (!(sp > 0.3)) {
+            if (!(sp > MARCH_FROM)) {
               layer.place(u.i, M.s[m], false, p)
               dx = Math.sin(p[2])
               dz = Math.cos(p[2])

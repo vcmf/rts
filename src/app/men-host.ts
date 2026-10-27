@@ -14,7 +14,7 @@ import { rulesetOf } from '../rulesets/index.ts'
 
 /** What the page sends the men worker: the map's bytes and the tick ring, then requests. */
 export type ToMen =
-  | { type: 'init'; data: Uint8Array; version: number; ring: RingBuffers; ruleset?: string }
+  | { type: 'init'; data: Uint8Array; version: number; ring: RingBuffers; ruleset?: string; orients?: boolean }
   | { type: 'advance'; id: number; sec: number }
   | { type: 'record'; id: number; on: boolean }
 
@@ -147,12 +147,15 @@ export function serveMen(port: Port<ToMen>): void {
         false,
       )
       layer = new SoldierLayer(w, buildScene(w))
+      layer.orients = !!m.orients
       src.w = w
       src.layer = layer
       ring = new RingReader(w, m.ring)
       // the world before the first tick: the page starts this worker once the sim worker has written it
       if (!take(TAKE).taken) throw new Error('men worker: the tick ring is empty (the sim worker not started)')
       now()
+      // (its men oriented at the clock's alpha, as every later frame's: SoldierLayer.orient)
+      layer.alphaNow = src.acc / DT
       publish()
       last = performance.now()
       host.start()

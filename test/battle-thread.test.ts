@@ -48,7 +48,7 @@ describe('the published frame', () => {
     const M = b.layer.men
     const V = v.layer.men
     expect(V.n).toBe(M.n)
-    for (const k of ['x', 'z', 'vx', 'vz', 's', 'flags'] as const) {
+    for (const k of ['x', 'z', 'vx', 'vz', 's', 'flags', 'yaw', 'gait'] as const) {
       expect([...V[k].subarray(0, V.n)]).toEqual([...M[k].subarray(0, M.n)])
     }
     expect(

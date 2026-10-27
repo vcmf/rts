@@ -125,6 +125,8 @@ export async function playSim(
     scenario: lookArmies,
     key: 'look-armies',
     ruleset: a.ruleset,
+    // (the renderer draws each man by his way and gait: the men worker keeps them)
+    orients: true,
     workers: own
       ? null
       : () => [
@@ -134,7 +136,11 @@ export async function playSim(
   })
   // as many men as figures, at most the type's slots (the figures past them are not drawn)
   for (const c of spawns(bs, Math.min(men, type.slots), a)) battle.command(c)
-  const source = new SimMen(bs, men, () => battle.see())
+  // (the men's ways and gaits: a published frame carries them, the battle on the page works them out first)
+  const source = new SimMen(bs, men, () => {
+    battle.orient()
+    return battle.see()
+  })
   const to = bs.map(b => marchTo(b, mid))
   const states: Orders[] = bs.map(() => ({ marched: false, moving: false, formed: false, sentAt: 0 }))
   return {

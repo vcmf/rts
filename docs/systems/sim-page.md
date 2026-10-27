@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-26
-code: [app/index.html, src/app/main.ts, src/app/battle.ts, src/app/battle-frame.ts, src/app/battle-link.ts, src/app/host.ts, src/app/sim-host.ts, src/app/sim-worker.ts, src/app/men-host.ts, src/app/men-worker.ts, src/app/tick-ring.ts, src/app/page-rules.ts, src/render/men.ts, src/render/men-clock.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, test/battle-thread.test.ts, test/page-rules.test.ts, tools/app-check.mjs, tools/bench-sim.ts, tools/preview.ts, tools/battle-report.ts]
+code: [app/index.html, src/app/main.ts, src/app/battle.ts, src/app/battle-frame.ts, src/app/battle-link.ts, src/app/host.ts, src/app/sim-host.ts, src/app/sim-worker.ts, src/app/men-host.ts, src/app/men-worker.ts, src/app/tick-ring.ts, src/app/page-rules.ts, src/render/men.ts, src/render/men-clock.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, test/battle-thread.test.ts, test/orient.test.ts, test/page-rules.test.ts, tools/app-check.mjs, tools/bench-sim.ts, tools/preview.ts, tools/battle-report.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
 ---
 
@@ -57,7 +57,9 @@ own world, the layer synced after each with the departures since its last (behin
 still holds, the departures whole from the log), steps the men on their clock at the sim's speed (the alpha the game
 time since its own world's tick), and publishes a frame at most 120
 times a second when something changed (`src/app/battle-frame.ts`): every column of the world's state, the men
-(position, velocity, slot, flags), each battalion's men, and the clock (the leftover game time, the speed, the
+(position, velocity, slot, flags, and the way each faces and his gait: worked out by the steering as it sets his
+velocity, and by `SoldierLayer.orient` before the frame is written for a battalion a sync changed, when the page asks
+for them, `LinkStart.orients`: the look page does, this page does not; battle threads PR 4c), each battalion's men, and the clock (the leftover game time, the speed, the
 publish time). Three slots in shared memory: the worker fills the one neither newest nor held, the page holds the
 newest for its frame; neither waits. The page
 reads a slot in place: a `World` whose columns are views on it and a `SoldierLayer` on that world that is never
