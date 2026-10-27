@@ -149,19 +149,28 @@ into the epic; this plan details each as it starts.
 ## M8c in detail
 
 - **Ways traced off the survey** (`tools/ways.ts`, its inputs committed in `maps/austerlitz-ways.json`, pure parts
-  tested in `test/map-ways.test.ts`): each road given as a few waypoints in the scan's pixels (its ends and the
-  junctions it is sure of; a waypoint off the road's line makes a spur), and between each two the cheapest path over
-  the scan, eight neighbours, searched in their box padded by 80 px. A pixel costs 1 on ink, up to 31 on paper: ink is
-  darker than the mean of the 15 px box around it, by 25 levels for the full discount, so the sheets' paper (0.65 to
-  0.95 of white) does not matter. The pixel path steps between a road's two drawn edges, so it is evened by a moving
-  mean over 8 px each side (narrowed near its ends), placed through the scan's fit and the relief piece, simplified to
-  3 m of field and cut at the map's edge (no piece under 20 m). Only the tool's own features (way kinds with the scan
-  as their source) are written again; a way drawn by hand stays.
-- The ways: the Brünn–Olmütz highway (the Kaiserstraße) along the north, the post road from Brünn to Satschan by
-  Sokolnitz and Telnitz (6 m), and the roads between the villages: Kobelnitz–Pratze, Puntowitz–Pratze,
-  Blasowitz–Pratze, Pratze–Hostieradek–Krenowitz, the Goldbach road from Kobelnitz to Telnitz, the road by
-  St Anthony's chapel to Aujezd, Satschan–Aujezd–Krenowitz. 12 ways. The survey's field tracks are not drawn: the
-  generators' fields bring their own (M8f).
+  tested in `test/map-ways.test.ts`): each road given as a few waypoints in the scan's pixels, a junction other roads
+  meet at by its name (`junctions`: one pixel, so every road through it has the same point). Each waypoint and junction
+  is moved onto the cheapest pixel within 4 px (one clicked beside the drawn line), and between each two the tool
+  takes the cheapest path over the scan, eight neighbours, searched in their box padded by 80 px. A pixel costs 1 on
+  ink, up to 31 on paper: ink is darker than the mean of the 15 px box around it, by 25 levels for the full discount,
+  so the sheets' paper (0.65 to 0.95 of white) does not matter.
+- **Roads meet exactly.** Where two legs come back along each other within 12 px of a waypoint (a spur: the waypoint
+  beside the road), both are cut back to where they part. A road running along an earlier one at an end (within 3 px
+  for more than 8) is cut back to where it leaves it and joined to that road's pixel, the fork: the shared stretch
+  belongs to the first road listed, and both keep the fork. The pixel path, which steps between a road's two drawn
+  edges, is evened by a moving mean over 8 px each side between the points it keeps (its ends, its junctions, its
+  forks), placed through the scan's fit (`scanFitOf`, shared with `tools/water.ts`) and the relief piece, simplified
+  to 3 m of field with those points kept, and cut at the map's edge (no piece under 20 m).
+- Only the tool's own features are written again: way kinds with the scan as their source and an id of the inputs (or
+  of one of their pieces); a way drawn by hand stays, whatever its source. A piece's id already taken is refused.
+- The ways: the Brünn–Olmütz highway (the Kaiserstraße) along the north, the post road from Turas past Sokolnitz to
+  Telnitz (6 m), and the roads between the villages: Telnitz–Satschan–Aujezd, Kobelnitz–Pratze, Šlapanice–Blasowitz,
+  Šlapanice–Puntowitz, Puntowitz–Pratze, Aujezd–Hostieradek–Krenowitz, the Goldbach road from Kobelnitz to Telnitz,
+  Pratze to St Anthony's chapel, Pratze north to Blasowitz and south to Hostieradek. 12 ways. The survey's field
+  tracks are not drawn: the generators' fields bring their own (M8f). Where a road forks off another just before the
+  village it is named for, it runs on into the village alone (30 to 52 m at Kobelnitz, Aujezd and Blasowitz): the
+  village's street, which M8e builds along.
 - The survey, not the relief, gives their line: unlike a stream, a road leaves no mark in a 5 m relief the tool can
   follow, and the survey's error (562 m RMS between landmarks, M8a) is the price; the villages of M8e are placed on the
   same scan, so a road and its village keep together.
@@ -169,10 +178,25 @@ into the epic; this plan details each as it starts.
 ## Acceptance (M8c)
 
 - `test/map-ways.test.ts`: ink cheap against its own paper whatever its shade, the path along a drawn line rather
-  than across paper, the search box, the evening (a zigzag onto its middle, a straight path unchanged).
-- The map validates and compiles (4.3 s apply in Node); screenshots of the ways, and of the traced lines over the
-  survey, for the owner.
+  than across paper, the search box, a waypoint off the image refused, the snap, a spur cut and a junction kept, the
+  fork, the evening between kept points, the tool's own ids.
+- The map validates and compiles (4.3 to 4.8 s apply in Node); checked by script: every junction and fork meets the
+  road it is on (0.00 m), no turn over 140°, no stretch of one way within 4 m of another; screenshots of the ways, and
+  of the traced lines over the survey, for the owner.
 - `npm test`, `check:data`, the build, the docs check and the page check pass.
+
+## Review rounds (M8c)
+
+- **Round 1** (`/code-review high`): severe. Junctions meant to be shared were typed as nearby pixels in each road,
+  so the roads stopped 9 to 21 m short of each other, and evening and simplifying moved the points they met at; a
+  waypoint on paper beside the line forced a spur into the field (up to 125 m at Kobelnitz); three pairs of roads
+  traced the same drawn stretch twice, 300 to 500 m each; the rerun would have deleted a hand-drawn way citing the
+  survey. Fixed as above (named junctions, the snap, the spur cut, the fork, the kept points, the inputs' ids), and the
+  waypoints are checked against the image, the search skips a node already settled, the scan's fit is one function
+  for both tools, a piece's id is checked against the map's. Three inputs were wrong on the survey and are moved: the
+  Pratze, Telnitz and Kobelnitz junctions off their crossings, Puntowitz's middle waypoint in a field, the road by
+  St Anthony's chapel traced along its lettering (it now ends at the chapel; the survey shows no clear road on to
+  Aujezd). Tests for each.
 
 ## Open questions
 

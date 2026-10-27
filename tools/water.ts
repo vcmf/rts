@@ -17,7 +17,7 @@ import { cm } from '../src/map/util.ts'
 import { lineLength, pointAt } from '../src/map/geometry.ts'
 import { nearScan } from '../src/map/apply.ts'
 import { writeMap } from '../src/map/write.ts'
-import { fitScan, type ScanFit } from '../src/app/map/scan.ts'
+import { fitScan, type ControlPoint, type ScanFit } from '../src/app/map/scan.ts'
 import { gridOf, streamsOf } from './streams.ts'
 
 /** The tool's inputs for one map (a committed file beside it). */
@@ -264,6 +264,27 @@ export function scanSize(file: string): [number, number] {
   throw new Error(`${file}: no size in its header`)
 }
 
+/**
+ * A scan's placement as the page draws it: its fit over the map's extent as its relief piece reads it, and its size in
+ * pixels (from the file beside the map).
+ */
+export function scanFitOf(
+  map: MapFile,
+  place: DemPlace,
+  scan: { file?: string; points?: ControlPoint[] },
+  dir: string,
+): ScanFit & { size: [number, number] } {
+  if (!scan.file) throw new Error('the scan names no file')
+  const size = scanSize(path.join(dir, scan.file))
+  const fit = fitScan(scan.points ?? [], size[0], size[1], {
+    w: map.extent.w * place.k,
+    h: map.extent.h * place.k,
+    x: place.x,
+    z: place.z,
+  })
+  return { ...fit, size }
+}
+
 function main(): void {
   const [mapFile, inputsFile] = process.argv.slice(2)
   if (!mapFile || !inputsFile) {
@@ -284,14 +305,7 @@ function main(): void {
   const half: Pt = [map.extent.w / 2, map.extent.h / 2]
   const { x: hx, z: hz } = demHalf(d)
   const all = streamsOf(gridOf(d, [-hx, -hz, hx, hz]), ins.traceKm2)
-  // the scan's placement: its fit over the extent as the piece reads it (as the page draws it)
-  const img = scanSize(path.join(path.dirname(mapFile), scan.file))
-  const fit: ScanFit = fitScan(scan.points ?? [], img[0], img[1], {
-    w: map.extent.w * place.k,
-    h: map.extent.h * place.k,
-    x: place.x,
-    z: place.z,
-  })
+  const fit = scanFitOf(map, place, scan, path.dirname(mapFile))
   const MIN_R = 6 // m of map: the smallest pond's semi-axis written
   // the ponds in the file's frame, each onto the nearest traced stream within 400 m of field, its semi-axes as written
   const placed = ins.ponds.map(([id, u, v, a, b, deg]) => {
