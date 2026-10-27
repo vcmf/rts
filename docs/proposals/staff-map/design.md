@@ -157,7 +157,8 @@ Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
 | Selected | Thin double outline in ink, plus an expanded label (§8) |
 
 ### Colours
-From `docs/art-bible.md` §4: France `#2C4FA8`, Russia `#2F6B3C`, Britain `#B3302A`.
+From `docs/art-bible.md` §4 as it was then (historical: the coats are now the era's dyes, decision 0068,
+`src/rulesets/napoleonic-dyes.ts`): France `#2C4FA8`, Russia `#2F6B3C`, Britain `#B3302A`.
 **Austria** (`#E9E3D3`) would vanish on winter paper, so Austrian blocks are filled a brighter
 white (`#fbfaf6`; a light stone beige `#F4EDDC` in the lit style, at the owner's request) and always carry a bold grey-blue edge (`#4f6279`); a routing Austrian block
 blinks between that grey-blue and white. Every army colour is checked against every

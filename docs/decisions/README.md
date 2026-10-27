@@ -90,9 +90,14 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0063](0063-real-relief-as-placed-pieces.md) | Real relief is placed pieces of a pinned heightfield, read by bicubic (amended by 0070) | accepted |
 | [0064](0064-lit-view-flat-plane-baked-in-the-worker.md) | The lit map view is one flat plane in Babylon, its bakes made in the compile worker | accepted |
 | [0065](0065-map-ink-as-distance-fields-houses-as-boxes.md) | The lit map draws from the cells, its edges smoothed by distance fields; its houses are lit boxes | accepted |
-| [0066](0066-editor-writes-the-intent-file-in-place.md) | The editor edits the intent file in the page and saves only what changed, through the dev server | accepted |
-| [0067](0067-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |
+| [0066](0066-figures-lod-cross-fade.md) | The figures' LODs cross-faded per man by a screen-door dither | proposed |
+| [0067](0067-simple-shadows-darker.md) | The soldiers' simple shadows darker: a gain on their darkening (amends 0062; its values superseded by 0071) | accepted |
+| [0068](0068-dye-palette.md) | Uniforms name dyes from one palette, by cloth part | accepted |
 | [0069](0069-scans-placed-in-their-relief-frame.md) | A scan to trace from is a source placed in its relief file's frame, bent through control points, kept out of git | accepted |
 | [0070](0070-a-field-as-a-scale-model.md) | A real field may be fitted to a map as a scale model: distances and heights scaled by one factor (amends 0061 and 0063) | accepted |
+| [0071](0071-soldier-contact-shadow.md) | A contact shadow under the soldiers' feet; their shadows no darker than the ground's painted shadow (amends 0062, supersedes 0067's values; its oval superseded by 0074) | accepted |
 | [0073](0073-modern-works-mended-from-their-surroundings.md) | Modern works are mended out of real relief by rebuilding the ground from what lies around them | accepted |
+| [0074](0074-soldier-shadow-per-step.md) | The soldiers' shadow from their pose up close, baked per animation step; no contact oval (amends 0062, supersedes 0071's oval) | accepted |
 | [0077](0077-a-pond-levels-at-its-lower-bank.md) | A pond with no level of its own levels at its lower bank; a dam is drawn, never implied | accepted |
+| [0078](0078-editor-writes-the-intent-file-in-place.md) | The editor edits the intent file in the page and saves only what changed, through the dev server | accepted |
+| [0079](0079-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |

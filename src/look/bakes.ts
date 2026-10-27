@@ -47,7 +47,7 @@ export interface Bakes {
   lightVP: Matrix
   smTexel: Vector2
   sky: SkyBake | null
-  unitShade(): RenderTargetTexture
+  unitShade(desat?: number): RenderTargetTexture
 }
 export interface SkyBake {
   ms: number
@@ -431,13 +431,14 @@ export function buildBakes(
 
   /* ---------- the simple shadows' shade (decision 0049, shaders/unitshade.frag): the ratio of the ground painted in a
      full cast shadow to it painted as it is, top-down over the tile with the light map's camera, after the bounce map
-     (it reads it); made only when the armies ask for it ---------- */
+     (it reads it); made only when the armies ask for it. desat (0: none): its hue toward its own grey by that share,
+     its luminance kept (decision 0071: a tree's painted shadow on the grass is less blue) ---------- */
   let shade: RenderTargetTexture | null = null
-  const unitShade = () => {
+  const unitShade = (desat = 0) => {
     if (shade) return shade
     const m = mats.make('unitShade', TER_VS, SHADE_FS, {
       attributes: ['position', 'normal', 'aRiver'],
-      defines: ['#define GROUND_BOUNCE'],
+      defines: ['#define GROUND_BOUNCE', ...(desat > 0 ? [`#define SH_DESAT ${desat.toFixed(4)}`] : [])],
     })
     const t = (shade = new RenderTargetTexture(
       'unitShade',

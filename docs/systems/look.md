@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-24
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom]
+last_reviewed: 2026-10-27
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts]
+decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step]
 ---
 
 # The look page (Track E, L0)
@@ -53,7 +53,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
 | `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (the default with the generated trees; `?trees=cards` on the pack's; L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
-| `src/look/post.ts` | A pixel that is not a finite number is left out of the depth of field's downsample, or takes its neighbours' mean in the finishing pass (`?nanmark` shows it magenta, on half floats: `docs/plans/done/nan-guard.md`). The scene renders into a 4× MSAA target of 8 bits a channel, the depth of field's too (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`). The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; zoom 15 to 260 m, held out where the eye would come within 6 m of the ground under it, which from 41 m out it never does, the player's wanted zoom kept apart (`ZoomHold`: the wheel, the pinch, the slider and the tools set it, `zoomOf`, `__proto.zoom`) so the camera comes back in past a hill: decision 0051; frames wider than the checked 16:9 keep its horizontal field of view), with RTS controls (`rtsControls`: the arrows or WASD pan in the ground plane and Q, E turn, faster as it zooms out; a trackpad's two-finger swipe pans and its pinch zooms; a mouse wheel zooms; dragging turns and pans; the panel's Zoom slider follows), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b). On WebGL2 a last pass, `easu` (decision 0045): the screen from the chain's scale, a copy at 1, FSR 1's edge-adaptive upscale from 0.9 up (Babylon's, its gathers read once each), bilinear at the other scales, upscaled with the paper grain and a dither; the chain's passes sized by objects resized in place. |
+| `src/look/post.ts` | A pixel that is not a finite number is left out of the depth of field's downsample, or takes its neighbours' mean in the finishing pass (`?nanmark` shows it magenta, on half floats: `docs/plans/done/nan-guard.md`). The scene renders into a 4× MSAA target of 8 bits a channel, the depth of field's too (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`). The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; zoom 15 to 260 m, held out where the eye would come within 6 m of the ground under it, which from 41 m out it never does, the player's wanted zoom kept apart (`holdView` and `ZoomHold` in `src/look/spec.ts`, run before each frame: the wheel, the pinch, the slider and the tools set it, `zoomOf`, `__proto.zoom`) so the camera comes back in past a hill: decision 0051; frames wider than the checked 16:9 keep its horizontal field of view), with RTS controls (`rtsControls`: the arrows or WASD pan in the ground plane and Q, E turn, faster as it zooms out; a trackpad's two-finger swipe pans and its pinch zooms; a mouse wheel zooms; dragging turns and pans; the panel's Zoom slider follows), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b). On WebGL2 a last pass, `easu` (decision 0045): the screen from the chain's scale, a copy at 1, FSR 1's edge-adaptive upscale from 0.9 up (Babylon's, its gathers read once each), bilinear at the other scales, upscaled with the paper grain and a dither; the chain's passes sized by objects resized in place. |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop (and its readout, top right: over the last 120 frames the frame interval's median and slowest 5 %, the render's CPU time, the share of frames that missed their slot (past one and a half of the median); `docs/plans/done/frame-readout.md`), and the debug globals the checks read; `?bloom=0` opens with the bloom off; the render scale defaults to Auto (by zoom: 0.9, then 0.8 and 0.75 as the camera's radius passes 80 and 88 % of its range from 45 m (the range it was tuned on: the closer zoom keeps 0.9, decision 0051), 4 m of hysteresis each way: decision 0045, after 0036, which records why it is not driven by missed frames; on WebGL2 the canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (`post.scale`), its last pass (`easu` in `post.ts`) drawing the screen: FSR 1's EASU from 0.9 up and under 1, bilinear at the other scales, a copy at 1, the paper grain laid after an upscale, the dither before the 8-bit target and after the upscale; on WebGL1 the canvas is drawn smaller and stretched; `?upscale=bilinear` stretches at every scale; the paper grain stays in screen pixels; the check tools pin it to 1: `docs/plans/done/dynamic-scale.md`, `docs/plans/done/render-scale.md`); `?msaa=1|2|4`, `?far=off`, `?rt16`, `?nowide` are the frame-rate A/Bs (`docs/plans/done/wide-perf.md`) |
 | `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
 | `src/look/lab.ts` | Test objects the tools add: the readability guard's army blocks, the detail check's test hill |
@@ -355,18 +355,24 @@ crowns as cards.
 
 The owner's Tripo models (`assets/buildings`, git-ignored; art bible §10) go through `tools/building-to-js.py`
 (Blender headless; its header has the commands) to `prototypes/buildings.data.js`: metres, normals sharp past 30°, UV0
-and a role per face (0 wall, 1 roof, 2 timber, 3 opening, 4 accent). The import cuts each model to about 2,300 triangles (the
-flat regions dissolved within a role and a UV island, then collapsed); the windmill's lattice sails made again as four
-solid canvas blades on timber stocks (the accent role). The role is the median colour of the texels
-under the face, nearest in Lab to the model's reference colours, with priors on the face's orientation (a roof faces
-up, a wall and an opening stand) and height (the house's terracotta chimney pots). Pack colours are never used: the
-page paints each role from its palette (`src/look/buildings.ts`, `PALETTE`, muted against the armies), and the texture
-keeps only its value over its local mean (a box of texels round each: `data/buildings/<model>-detail.png`, 128 = 1;
-the faces the export makes, the windmill's sails, a UV below 0 and no detail), a third of it showing
+and a role per face (0 wall, 1 roof, 2 timber, 3 opening, 4 accent). The models are Tripo's own low-poly exports
+(`docs/plans/done/tripo-lowpoly-buildings.md`: 1,454-1,794 triangles, kept as made, the windmill's lattice sails
+with them; the first models' cut and rebuilt sails are in git history, `docs/plans/done/buildings.md`). The role is the
+most common class of the face's texels other than opening and shutter (each texel's colour nearest in Lab to the
+model's reference colours, with priors on the face's orientation, a roof faces up, a wall and an opening stand, and
+height, the house's terracotta chimney pots); a face too small to hold four texels takes the median colour under it. A
+low-poly model paints its windows and shutters across larger faces, so a wall's or timber's texels of the opening or
+shutter class are kept as inlays (the detail texture's G and B: only near-rectangular parts, closed and their holes
+filled, off any texel a face of another role covers), which `building.frag` paints in the opening's and the model's
+shutter colour on wall and timber faces only (a mask's texel at an island's edge or in a coarser mip never reaches a
+roof). Pack colours are never used: the page paints each role from its palette (`src/look/buildings.ts`, `PALETTE`,
+muted against the armies), and the texture keeps only its value over its local mean (a box of texels round each, the
+inlays left out of it: `data/buildings/<model>-detail.png`'s R, 128 = 1, 1 on an inlay), a third of it showing
 (`DETAIL_AMT`) under the paint's grain (`shaders/building.frag`: the painter's ramp, the cast shadow, the sky's
 occlusion, the ground's bounce, the snow on what faces up, the air). One instanced mesh a model. Placed in
 `src/look/world/buildings.ts` (authored: the windmill in the large wheat field; six houses in an irregular cluster in
-the village, each turned a quarter turn of its own and a little more: doors to the road, a gable to it, side-on, a back
+the village, four stone cottages, a farmhouse and a small manor, each turned a quarter turn of its own and a little
+more: doors to the road, a gable to it, side-on, a back
 to it), each on its footprint's lowest ground, sunk 0.2 m. The turn is Babylon's instance yaw, verified against its
 Matrix (`test/buildings.test.ts`) and on the page: a local point (x, z) goes to (x cos + z sin, −x sin + z cos)
 (`toWorld`, `toLocal`: the one rule the footprints, the yards, the ground's samples and `pavePaint`'s frame use); the
@@ -556,6 +562,8 @@ camera: `l2` (the page) and `l0` (the L0 grain on the terrain); `?bench=dof` `no
 with the blur off unless its URL sets `?dof`, as do the debug views, `?water` and `?river=debug`, which write no
 distance to alpha). `?benchat=<x>,<z>` (within the play area) makes the
 cameras orbit that point instead of the camera's start, and the JSON records it as `focus` (the forest bench).
+`?benchr=<m>[,<m>…]` measures those radii at the start's pitch instead of close, default and wide (the LOD
+cross-fade's bench, `docs/plans/done/lod-fade.md`).
 - **GPU time** comes from our own `EXT_disjoint_timer_query_webgl2` queries (`src/look/gputimer.ts`). Queries
   cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,
   post) on the others, each as segments of consecutive draws, only in the camera's own render pass. Frames with
@@ -596,8 +604,11 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `?uvat=0`: the far LOD skinned); a man's step from his clip's first row, its length and his phase. Materials are
   per uniform and LOD. The figures are painted as the army blocks (`KEEP_HUE`, `BOUNCE`, `NOSNOW`) and blur by their
   depth (decision 0040). A battalion's instances are written when it moves (once a 1/12 s step) or changes phase; its
-  LOD by the figure's height in pixels (48, ±10 %). **The nearest LOD** (a figure with three, decision 0051;
-  `?nearestpx=<px>`, 0: none): a battalion whose bounds' nearest point is within 90 % of `nearestPx` (100 px) and in the view
+  LOD by the figure's height in pixels (48; the tiny LOD's 12), **cross-faded per man** (below; `?lodfade=0`: the hard
+  switch, a battalion wholly at one LOD by its centre's height, ±10 %: `drawsNear`, `drawsTiny` in
+  `src/look/units-data.ts`). **The nearest LOD** (a figure with three, decision 0051;
+  `?nearestpx=<px>`, 0: none; keep it at least `lodPx` × 1.25, the near band's top, so the nearest LOD only takes men
+  the near LOD would draw whole): a battalion whose bounds' nearest point is within 90 % of `nearestPx` (100 px) and in the view
   is split, each man whose sphere is in the view and who stands taller than it (±10 %) drawn at the nearest LOD, the rest
   at the near one (`setSplit`, `share`: the next LOD's buffers swapped to the rest's list; the lists written again
   when a man changes LOD or the men move); skinned like the near LOD. A battalion's nearest-LOD mesh and lists are made at its first split (about 1 MB of geometry a battalion otherwise), then disabled while unsplit. Only within about
@@ -656,9 +667,52 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   whatever the strip; the decal's bounds padded by the soft bake's reach; up close softer, lighter at the tip, shorter, dark and solid at the feet; far 0049's look
   (one value end to end), turned from one to the other by a smoothstep of the camera's
   distance to its focus over `SHADOW_LOOK_BAND` (45 to 85 m; with `?ushadowclose=map` the far look everywhere).
-  `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]` and
-  `?ushband=<r0>,<r1>` tune it live; `Units.lookNow` is
-  this frame's. The fragment reads the atlas and the ground's shade:
+  `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]`,
+  `?ushband=<r0>,<r1>` and `?ushgain` (`<close>[,<far>]`, 1 to 3; decision 0067: the full darkening's strength,
+  its luminance raised to that power and the channels scaled alike, then spread over the pixel by the coverage as
+  before; the hue kept where no channel is clamped at 0; `shadowShade`, `decalPixel`; 0067's 2 up close and 1.5 far
+  (`docs/plans/done/shadow-darker.md`) are 1 since decision 0071, the switch kept; under `?ushadowclose=map` the cross-fade blends
+  the map's shadow, which has no gain, against the gained decal) tune it live; `Units.lookNow` is
+  this frame's. **The contact** (decision 0071, `SHADOW_CONTACT`, `applyContactParams`; off by default since decision
+  0074, `?ushcontact=1` turns it on): a solid oval under
+  each man's feet, the oval holding his feet at the step he is posed at (`contactOvals` in `src/look/units-data.ts`, a
+  texel a VAT row; the vertex shader reads his step's, turns it with his facing and grows it by the pad, the fragment
+  adds a `length` and a `smoothstep`), whole up close and to the default zoom, fading out over `band` (60 to 100 m:
+  `contactWeight`). It is one more darkness in 0062's coverage rule (`contactFragment`), its core the shade k itself;
+  with the look's gain 1 and soles 1 no part of a soldier's shadow goes darker than the ground's painted cast shadow.
+  The shade is baked turned toward its own grey (`SHADE_DESAT`, `?ushdesat`; `unitshade.frag`), its luminance kept,
+  so the soldiers' shadows take the trees' hue on the grass, not a blue-grey. The oval's material draws its strip past
+  the shape's cell where the oval reaches (`contactReachOf`, `decalStrip`'s reach) and reads no shape outside the cell
+  (`vCell`); the strip's edges hold the oval's whole fade (tested on the figure's every step, 64 facings). Past the
+  band (`contactOvalOn`, `useDecalFor` in `src/look/units.ts`) the decal draws with 0062's own material. The material
+  not drawn is compiled in the background (polled until ready, again after any change of the defines or switch); the
+  switch waits until the wanted one is ready (`decalStep`), so a material not ready is never drawn. The oval's
+  material lifts the decal at least `CONTACT_FLOOR` (3 cm; `decalLift`): its half behind the soles, otherwise unlifted,
+  lay at the ground's sampled height and the terrain hid it there, cutting the oval along the soles. Without the
+  scene's coverage (`?msaa=1|2`) a fragment of the oval's rim fainter than 0.02 is discarded as the sun shadow's faint
+  edge is, so off the oval it draws as 0062's. Under `?ushadowclose=map` the cross-fade blends the map's shadow, which
+  darkens to the ground's own shadow colour, against the decal's desaturated shade: the hue shifts a little across the
+  band. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none), `?ushcontactat=step|stride|root`, `?ushcontactband`,
+  `?ushdesat`; `?ushstep=0&ushcontact=1` is decision 0071's look (main at 1093fdc3, tested to match),
+  `?ushstep=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4` decision 0067's. **The shape per step** (decision 0074, the
+  default; `docs/plans/done/step-shadows.md`, #229): `?ushstep=<steps>[,<facings>[,hold|blend]]` (absent: `8,8`,
+  hold, `STEP_SHADOW`; 0: the averaged shape at every zoom) bakes the shape per clip step bin (k = min(n, steps) bins a clip, each the average of its own steps) and facing,
+  the cells stacked in an atlas of as many blocks as keep it within 4096 texels a side (`stepAtlasLayout`,
+  `shadowShape`'s `steps`); the decal's vertex shader picks his bin from his step (`stepBin`; `blend`: the two bins
+  either side, `stepBlend`, four reads) under `SH_STEPS`, so his shadow steps with his pose at 12 fps. Only the near
+  material reads it (within its band, 60 to 100 m, `NEAR_BAND`, `?ushnearband=<r0>,<r1>`: `nearWeight`, `nearOn`; with
+  or without the oval, whose own band stays `?ushcontactband`); the far
+  one keeps today's averaged shape, a second, small atlas. `?ushfootk=<boost>[,<reach m>]` (`footSharpen`) multiplies
+  the per-step shape's share of the samples at the soles, back to 1 by the reach, so the feet go darker and
+  crisper-edged; the share is capped at 1, so never past the ground's shade k (decision 0071's ceiling). By default
+  3, 0.6 m (`FOOT_SHARP`, the owner's pick); 1 is none. At 100 m the near material gives way to the far one in one
+  frame (a scatter of foot pixels changes: the plan, "The 100 m edge"). A GPU whose texture size cannot hold the
+  per-step atlas (`AtlasTooLarge`) draws the averaged shape at every zoom, with a warning, and sets
+  `Units.stepFallback` (`window.__units.stepFallback`, for the benches and the guard); an explicit `?ushstep` is then
+  an error at load. The shader takes his step as `units.vert` poses him (its `int()` of the clip's first step plus the
+  `mod`), wraps the exact n a GPU's `mod` can return to 0, and takes the bin in integers, clamped (`stepIndex`,
+  `stepBin`): his shadow's step is his figure's on every GPU.
+  The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so
   a formation's overlapping shadows darken each sample once, at every distance (with fewer samples, `?msaa=1|2`, the
@@ -668,7 +722,8 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   bounce map and when the occlusion's switch changes; so the darkening is the map's on the same ground (the air on top
   is not in the ratio). **The stencil**: only on the scene's target (the first finishing pass's, `MSAA.stencil` in
   `src/look/post.ts`) and only when the simple shadows are on: its depth is DEPTH24_STENCIL8 then, else DEPTH32F as
-  before; the canvas has none (`?stencil=all`: the engine's own on every target, the A/B; `0`: none). No render target
+  before; the canvas has none (`?stencil=all`: the engine's own on every target, the A/B; `0`: none; the rule is
+  `stencilFor` in `src/look/shadow-look.ts`, tested). No render target
   and no reads in the receivers. Each man's shadow
   moves every frame with smooth places (below: `aNext`, his move to his next step's place, written with his place;
   `uStepFrac`, the share of the step gone, from the CPU's clock), else at
@@ -682,16 +737,27 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   the figures, their flags and the map's casters move by `aNext` × `uStepFrac` too (`SMOOTH`, `units.vert`,
   `flag.vert`), and the simple shadows with them, the poses still stepped at 12 fps; the map is then drawn every frame
   the clock moves while a caster's men move. Off, the figures and their simple shadows move at the steps.
-- **Uniforms** (the owner's call 2026-10-22): a battalion wears a uniform by id, whatever its side; a uniform
-  (`Uniform`, `src/sim/ruleset.ts`; the era's in `src/rulesets/napoleonic-uniforms.ts`; the demo's sides' in
-  `src/scenarios/armies-demo.ts`) is its colours by the figure's roles, its flag's, and its **far rule**: from above, a
+- **Uniforms** (the owner's calls 2026-10-22 and 2026-10-26, decision 0068, `docs/plans/active/dye-palette.md`): a
+  battalion wears a uniform by id, whatever its side. A uniform (`Dress`, `src/sim/ruleset.ts`; the era's in
+  `src/rulesets/napoleonic-uniforms.ts`; the demo's sides' in `src/scenarios/armies-demo.ts`) names a dye per cloth
+  part (coat, facings, trousers, waistcoat, headgear, greatcoat) from the era's dye set
+  (`src/rulesets/napoleonic-dyes.ts`: cloth dyes, the flags' own dyes, the materials, the boots' dye), and its flag's
+  bands by flag dye. The page resolves it onto the figure's roles (`src/look/world/dyes.ts`, `dressed`,
+  `FIGURE_PARTS`: the white role shows the trousers, the dark role the boots, the neutral roles the materials) into
+  a `Uniform`: its colours by role, its flag's, and its **far rule**: from above, a
   far figure shows its headgear, pack and leather more than its coat; under 'coat' those roles take the coat a value
-  step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the LOD switch, with the trees' and
+  step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the near band (`FAR_FROM`), with the trees' and
   hills' shadow on it halved and a warm rim on what faces up (`FAR`); under 'own' the far figure keeps its own. Unset,
   a coat under luminance 0.18 (Rec. 709 on linear sRGB, a mid grey: `FAR_COAT_BELOW`) takes 'coat'. `?farpal=0|1`
-  forces the rule off or on for every uniform.
+  forces the rule off or on for every uniform. Test switches: `?uniforms=all` dresses each side's battalions in the
+  scenario's `reviewSides` in turn (`wearInTurn`: the era's eight uniforms on the demo map), `?uniforms=all-greatcoats`
+  the same with every man in his greatcoat (over the coat and facings; the share by the cold is the plan's later
+  step); `?dye=<dye>:<rrggbb>[;…]` (the hex bare or with its `#` as `%23`, e.g. `?dye=imperial-blue:1F2B52`) swaps cloth dyes' values for every uniform that names them (`dyeOverride`). A
+  malformed value, an unknown dye or uniform throws. The checks' blocks take four uniforms' coats from the same data
+  (`tools/army-blocks.mjs`, `BLOCK_UNIFORMS`; `ARMY_COATS=<name>=<rrggbb>,…`, four, the `#` optional, for other coats).
 - **The tiny LOD** (`docs/plans/active/armies-32k.md`, step 3, experimental; `?tinylod=0`: none, `?tinypx=<px>`: its
-  switch): a battalion whose figure falls under 12 px tall (±10 %) draws the far LOD's parts as boxes instead (`tinyMesh`,
+  switch): a man whose figure falls under 12 px tall draws the far LOD's parts as boxes instead, each man at his own
+  height in the 9.6 to 15 px band (the LOD cross-fade, below; `?lodfade=0`: a battalion under 12 px, ±10 %; `tinyMesh`,
   `src/look/units-data.ts`: the shadow proxy's parts, `boneParts`, 8 shared corners each, 112 vertices, wound with
   their fronts out as the figure's, #164), a corner's
   colour a mix of the roles (`TINY`: three vec4 weights) calibrated at load so the boxes show each role in the far
@@ -699,8 +765,33 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   palette, lift, growth, the smooth moves between steps); the coat mask dithered by the coat's weight (a 4 × 4 ordered
   dither); it never casts into the map, and its men keep their simple shadows (decision 0049) as the far LOD's do. A
   host's LODs: the figure's nearest first, the shadow proxy, the simple shadow, then the tiny LOD (built only when on).
-- **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from 90 % of the LOD
-  switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here) and 1.15 tall; render only.
+- **The LOD cross-fade** (decision 0066, `docs/plans/done/lod-fade.md`, #188; `src/look/lod-fade.ts`, tested in
+  `test/lod-fade.test.ts`; `?lodfade=0`: the hard switch): in a band round each switch (`NEAR_FADE`, `TINY_FADE`: 0.8
+  to 1.25 × it) a battalion draws both LODs and each man is drawn at his own LOD by his own height on screen (his
+  root's distance, as the far palette's), switching at his own point in the band (`manHash` of his index in his
+  battalion, `aMan`: an instance attribute written with each list, so a split battalion's reordered lists hash him
+  alike) over a fade of his own (`FADE_WIDTH`, 35 % of the band on a log scale) by the 4 × 4 ordered dither: a
+  pixel's threshold picks exactly one LOD (`lodCover`, `drawsPixel`, `dropsMan`; `units.vert` and `units.frag` mirror
+  them under `LODFADE`, `LOD_SLOT`; the cover snapped to the dither's 16 levels, `snapCover`, so interpolating it
+  cannot flip a pixel: a flat varying cost 1.5 to 4 ms of GPU on ANGLE's Metal), so a man is never hidden and nothing
+  is blended or sorted. The exact split also needs a man's share bit-identical in the three LODs' programs: the same
+  inputs (his root from the same instance matrix and move, the shared uniforms) and the same arithmetic; the snap
+  leaves 1/32 between a share and a threshold for any difference, and absorbs the CPU's float64 against the shader's
+  float32 at a band's edges (`lodsDrawn` may draw a LOD whose men all drop). A LOD's men outside it are dropped in the
+  vertex shader before their pose is fetched (off screen). A battalion draws a second LOD only
+  while one of its men can be in a band (`battalionLods`, `lodsDrawn`, by its bounds' nearest and farthest points,
+  `boxPxRange`); one drawing a single LOD skips the per-man work (`uLodFade` 0, set as each mesh binds the shared
+  material). **A split battalion fades too**: its near LOD draws its men not at the nearest from their own list, each
+  at his own LOD, and its far LOD the band's share of them, so the nearest LOD's switch moves no other man (the
+  review's finding: before, its men inside the near band were forced near while split, a pop at the split's on and
+  off). The far palette, lift and growth start at the band's foot (`FAR_FROM`, 0.8 × the switch; 0.9 with
+  `?lodfade=0`), so they are 0 across the band. The tiny's coat mask rescales the dither's threshold over the share the
+  tiny draws (the guard's coat share unchanged in its band). Measured on Metal (the plan): the step a switch made in
+  one frame (1.2 to 3.4 ΔE on a battalion's block) spread over the band; the LODs' colours still differ (the far LOD's
+  coverage and facings, the tiny's mix), the fade spreads it.
+- **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from the near band's foot
+  (`FAR_FROM`: 80 % of the LOD switch; 90 % with `?lodfade=0`) to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here; `farWidthScale` in
+  `src/look/units-data.ts`) and 1.15 tall; render only.
 - **Trodden ground** (`?trample=0`: none): a 256² mask over a box round the ground in view (64 to 1,024 m), drawn on
   the CPU (each man where he stands and up to 3.8 m behind him) when the box moves or at most every 0.25 s while men
   move (a view that leaves the box refits it at once; a box grown over twice the view refits by the wall's clock),
@@ -739,7 +830,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
 
 ### The readability guard (L2a)
 
-`node tools/guard.mjs <url> [--base <url>]`: six clusters of the four army coats (art bible §4) at battalion
+`node tools/guard.mjs <url> [--base <url>]`: six clusters of four uniforms' coats (`tools/army-blocks.mjs`) at battalion
 size, on the default view, summer and winter. Each block's luma against the ground's at the same pixels (from a
 render without blocks) must differ by 0.10; with `--base`, a block fails only if it separated on the base. The
 blocks are painted by the shared painter at unit crispness, without snow (`NOSNOW`), as units will be. Its

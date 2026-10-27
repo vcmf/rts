@@ -36,22 +36,53 @@ import DECAL_FS from './shaders/unitdecal.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
 import {
+  CONTACT_FLOOR,
+  FOOT_SHARP,
+  STEP_SHADOW,
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
+  contactReachOf,
+  contactUniform,
+  NEAR_BAND,
+  nearOn,
+  nearWeight,
+  ovalWeight,
+  decalDefinesChanged,
+  decalStep,
   decalStrip,
   farShare,
   footUniform,
   lookBetween,
+  type DecalPoll,
+  type DecalSide,
+  type ShadowContact,
   type ShadowLook,
   type ShapeBox,
+  type StepShadow,
 } from './shadow-look.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
 import {
+  FADE_WIDTH,
+  FAR_FROM,
+  NEAR_FADE,
+  TINY_FADE,
+  battalionLods,
+  boxPxRange,
+  lodCount,
+  nextLodBuffers,
+  splitLists,
+  type BattalionAt,
+  type Lods,
+} from './lod-fade.ts'
+import {
   TINY_ROLES,
+  farWidthScale,
+  contactOvals,
   posedMesh,
   posedVertices,
   shadowProxy,
   shadowShape,
+  AtlasTooLarge,
   tinyMesh,
   type UnitData,
 } from './units-data.ts'
@@ -81,6 +112,7 @@ interface Host {
   tiny: boolean
   matrices: Float32Array
   settings: Float32Array
+  man: Float32Array // each man's index (aMan: the LOD cross-fade's hash), in the battalion's order
   jitter: Float32Array
   // the nearest LOD (a figure with three LODs, its men tall on screen: setSplit, share): each man drawn at the nearest
   // LOD or the next by his own size on screen. split: the battalion's men are shared out; sel: a man at the nearest
@@ -94,7 +126,11 @@ interface Host {
   restM: Float32Array
   restS: Float32Array
   restN: Float32Array
+  nearI: Float32Array // (and their indices, aMan)
+  restI: Float32Array
   resplit: boolean
+  lods: Lods // the LODs drawn this frame (battalionLods)
+  fading: boolean // more than one of them: its figure meshes fade each man (uLodFade)
   next: Float32Array // each man's move to his next step's place (x, y, z): the places between two steps (aNext)
   moving: boolean // re-placed at every step (its phase moves its men)
   cx: number
@@ -155,6 +191,8 @@ const GL_SRC_COLOR = 0x0300
 const GROUND_N = 512 // the simple shadows' own ground heights without the meadow map: texels a side over the tile
 const SHAPE_MIPS = 3 // the shape's mips read at most: a cell's 8-texel border holds to the fourth (unitdecal.frag)
 const SHAPE_FACINGS = 16 // the simple shadow's facings (shadowShape)
+// frames the shadows' idle material is asked to compile before the page gives up on it (useDecalFor): 10 s at 60 fps
+const IDLE_POLLS = 600
 /** the cross-fade's band (decision 0049): the camera's distance to its focus (m) where the map gives way to the simple
  *  shadows, from the map alone to the simple shadows alone (?ushadowswitch=<r0>,<r1>); near the LOD switch (48 px at
  *  1080 lines: 63 m) */
@@ -163,6 +201,16 @@ export const SHADOW_SWITCH: readonly [number, number] = [60, 85]
  *  look's gradient ends */
 const SHADOW_TIP = (FIGURE * Math.hypot(SUN.x, SUN.z)) / SUN.y
 const SOFT_BLUR = 0.12 // m: the soft bake's sigma (shadowShape's soft)
+// the LOD cross-fade's uniforms (units.vert: the bands, and a draw's men in order, set by bindFade)
+const FADE_UNIFORMS = ['uLodBand', 'uLodFade']
+
+/** The LOD cross-fade's defines for a figure material (decision 0066): its LOD (slot: 0 near, 1 far, 2 tiny), a man's
+ *  own fade (FADE_WIDTH), and the fade on (setLodFade turns it off) */
+function fadeDefines(slot: 0 | 1 | 2): string[] {
+  return [`#define LOD_SLOT ${slot}`, `#define LOD_FADE_W ${FADE_WIDTH.toFixed(4)}`, ...FADE_ON]
+}
+// the defines the cross-fade turns on (setLodFade): the fade, and the far ramps' start at the near band's foot
+const FADE_ON = ['#define LODFADE', `#define FAR_FROM ${FAR_FROM.toFixed(4)}`]
 
 // an axis-aligned box wholly outside one of the planes (its corner most along the plane's normal behind it)
 function boxOutside(planes: Plane[], x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): boolean {
@@ -225,6 +273,17 @@ export class Units {
    *  battalions whose bounds are out of the view or whose nearest point is under 90 % of it never look:
    *  ?nearestpx=<px>, 0 for none) */
   nearestPx = 100
+  /** the LOD cross-fade (decision 0066; ?lodfade=0: the hard switch, a battalion at one LOD): setLodFade */
+  private fade = true
+  // the bands this frame, px (NEAR_FADE, TINY_FADE of lodPx, tinyPx), and as the materials' uniform
+  private readonly nearBand: [number, number] = [0, 0]
+  private readonly tinyBandV: [number, number] = [0, 0]
+  private readonly bandV = new Vector4()
+  // the figure meshes of the battalions that draw more than one LOD (h.fading): each man faded (uLodFade 1); the
+  // others draw every man
+  private readonly fadingMeshes = new Set<Mesh>()
+  private readonly pxRange: [number, number] = [0, 0] // (scratch: boxPxRange)
+  private readonly at: BattalionAt = { pLo: 0, pHi: 0, px: 0, split: false, wasNear: false, wasTiny: false }
   // the LODs' places in a host's meshes: the far LOD (the data's last), the near one before it, then the shadow proxy
   // and the simple shadow; the nearest LOD is the first when the figure has three (the data says which it has)
   private readonly farLod: number
@@ -288,14 +347,34 @@ export class Units {
    *  only with simpleClose (else the far look at every zoom, as before) */
   look: { close: ShadowLook; far: ShadowLook } = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
   lookBand: [number, number] = [...SHADOW_LOOK_BAND]
+  /** the contact shadow under each man's feet (decision 0071; ?ushcontact: applyContactParams), or null: none (the
+   *  default since decision 0074). Read once, when the shadows' material is made */
+  contact: ShadowContact | null = null
+  /** the shape baked per animation step for the near material (decision 0074; ?ushstep: applyStepParams), or null:
+   *  the shape averaged over each clip at every zoom. Read once, when the shadows' material is made */
+  stepShadow: StepShadow | null = { ...STEP_SHADOW }
+  /** a ?ushstep given on the page: a per-step atlas this GPU cannot hold is then an error at load, not a fallback to
+   *  the averaged shape (useDecals) */
+  stepExplicit = false
+  /** the per-step shape's foot sharpening ([boost, reach m]: footSharpen, ?ushfootk; FOOT_SHARP), [1, 0]: none */
+  footSharp: [number, number] = [FOOT_SHARP[0], FOOT_SHARP[1]]
+  private contactReach = 0 // m: how far the contact reaches from a man's root (the strip holds it: decalStrip)
+  private contactW = 0 // the contact oval's weight this frame (ovalWeight, by the camera's distance)
+  private nearW = 0 // the near material's weight this frame (nearWeight: the oval's or the per-step band's)
+  /** the per-step shape's band (m from the camera's focus: NEAR_BAND, ?ushnearband) */
+  stepBand: [number, number] = [NEAR_BAND[0], NEAR_BAND[1]]
+  /** the per-step atlas did not fit this GPU's texture size: the averaged shape at every zoom (useDecals) */
+  stepFallback = false
+  private contactWSet = NaN // and the one last given to the material (setDecalLook)
+  private readonly contactV = new Vector4()
   // the look this frame (lookAt), given to the decal's material (setDecalLook)
   private readonly lookNow: ShadowLook = { ...SHADOW_LOOK.far }
   // the look last given to the decal's material (setDecalLook: only when it changes)
-  private readonly lookSet: ShadowLook = { soft: NaN, dark: NaN, foot: NaN, core: NaN, len: NaN }
+  private readonly lookSet: ShadowLook = { soft: NaN, dark: NaN, foot: NaN, core: NaN, len: NaN, gain: NaN }
   private lookT = 1 // the far look's share this frame (lookAt), the strip's too (setDecalLook)
   private lookTSet = NaN
   // the shape's boxes (useDecals): what it alone fills (the far strip's), with the soft bake's reach (the close one's)
-  private shapeBoxes: { base: ShapeBox; full: ShapeBox } | null = null
+  private readonly shapeBoxes = new Map<ShaderMaterial, { base: ShapeBox; full: ShapeBox }>()
   private softPad = 0 // m: the soft bake's reach past the shape's own (the decal's bounds)
   private readonly stripV = new Vector4()
   private readonly rowsV = new Vector4()
@@ -314,14 +393,18 @@ export class Units {
   }
   set decalLift(v: number) {
     this.lift = v
-    this.decal?.setFloat('uDecalLift', v)
+    for (const m of [this.decalFar, this.decalNear]) m?.setFloat('uDecalLift', v)
   }
   /** the simple shadows' ground height from the meadow map (main.ts: when there is one), else from the heightfield,
    *  sampled when they are made (setShadows): load-time only */
   groundMap = false
   /** the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): main.ts, before setShadows */
   shade: BaseTexture | null = null
-  private decal: ShaderMaterial | null = null // the simple shadows' (useDecals)
+  private decal: ShaderMaterial | null = null // the simple shadows' material drawn now (useDecals, useDecalFor)
+  private decalFar: ShaderMaterial | null = null // without the contact's oval (past its band; without a contact)
+  private decalNear: ShaderMaterial | null = null // with it (within its band), null without a contact
+  // the background compile (useDecalFor, decalStep): afresh after every switch and every change of the defines
+  private decalPoll: DecalPoll = decalDefinesChanged()
   /** their share of the samples (their soft edge and their gradient: decalFragment, src/look/shadow-look.ts) as
    *  alpha to coverage, with the scene's 4 samples: order-independent; with fewer (?msaa=1|2: two samples would make
    *  the gradient one hard step on drivers that do not dither it) their share darkens the pixel instead, the first
@@ -335,7 +418,7 @@ export class Units {
   private smT = NaN // the clock when the map was last drawn (a frozen clock draws it no more)
   private farScaleOn = false
   private farScaleV = new Vector2(1, 1)
-  /** ms the simple shadow's shape took to make (shadowShape, at load) */
+  /** ms the simple shadow's shapes took to bake (shadowShape, at load: today's, and the per-step one) */
   shapeMs = 0
 
   /** receivers: the painted materials the figures' shadows fall on (the ground and the grass); the page's clock */
@@ -411,25 +494,12 @@ export class Units {
       Constants.TEXTURETYPE_HALF_FLOAT,
     )
     vat.name = 'figureVAT'
-    const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT', 'aVid', 'aNext']
+    const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT', 'aVid', 'aNext', 'aMan']
     const n = data.palette.length
-    // the far figure's growth (setFarScale): across up to FAR_SCALE_XZ, but never wider than 95 % of a file (the far
-    // LOD's shoulders, measured between 1.2 and 1.5 m up), and FAR_SCALE_Y tall
+    // the far figure's growth (setFarScale): across up to FAR_SCALE_XZ, but never wider than 95 % of a file
+    // (farWidthScale), and FAR_SCALE_Y tall
     const fm = data.mesh[data.lods[this.farLod].name]
-    let x0 = Infinity
-    let x1 = -Infinity
-    for (let v = 0; v < fm.positions.length / 3; v++) {
-      const y = fm.positions[v * 3 + 1]
-      if (y > 1.2 && y < 1.5) {
-        x0 = Math.min(x0, fm.positions[v * 3])
-        x1 = Math.max(x1, fm.positions[v * 3])
-      }
-    }
-    // (no vertex in that band, a figure of another shape: not widened)
-    const farScale = new Vector2(
-      x1 > x0 ? Math.min(FAR_SCALE_XZ, (0.95 * drill.fileSpacing) / (x1 - x0)) : 1,
-      FAR_SCALE_Y,
-    )
+    const farScale = new Vector2(farWidthScale(fm.positions, drill.fileSpacing, FAR_SCALE_XZ), FAR_SCALE_Y)
     this.farScaleV = farScale
     // 1: the battalions' bounds' side pad, from the baked poses: the far LOD's farthest reach from a man's root across
     // every step (his musket at the present), as wide as the far figures grow, a little to spare
@@ -448,22 +518,33 @@ export class Units {
       })
       const m = mats.make(`units_${id}`, UNITS_VS, UNITS_FS, {
         attributes,
-        uniforms: ['uVATStep', 'uStepFrac', 'uPal', 'uMask', 'uCoatRole'],
+        uniforms: ['uVATStep', 'uStepFrac', 'uPal', 'uMask', 'uCoatRole', 'uFarK', ...FADE_UNIFORMS],
         samplers: ['uVAT'],
-        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`],
+        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, ...fadeDefines(0)],
       })
       m.setTexture('uVAT', vat)
       m.setColor3Array('uPal', pal)
       m.setFloat('uMask', -1)
       m.setFloat('uCoatRole', data.palette.indexOf('coat'))
       this.mats.set(id, m)
+      this.bindFade(m)
       // the far LOD's: its far palette and its lift crossfaded in below the LOD switch under its far rule (FAR,
       // setFarRule; units.vert, units.frag), its vertices posed (VAT_POS, setPosed)
       const f = mats.make(`units_${id}_far`, UNITS_VS, UNITS_FS, {
         attributes,
-        uniforms: ['uVATStep', 'uStepFrac', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'],
+        uniforms: [
+          'uVATStep',
+          'uStepFrac',
+          'uPal',
+          'uPalFar',
+          'uFarK',
+          'uFarScale',
+          'uMask',
+          'uCoatRole',
+          ...FADE_UNIFORMS,
+        ],
         samplers: ['uVAT', 'uVATP'],
-        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`],
+        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, ...fadeDefines(1)],
       })
       const far = farPalette(u.colours)
       f.setTexture('uVAT', vat)
@@ -476,13 +557,31 @@ export class Units {
       f.setFloat('uCoatRole', data.palette.indexOf('coat'))
       f.setVector2('uFarScale', farScale)
       this.farMats.set(id, f)
+      this.bindFade(f)
       // the tiny LOD's: the far LOD's material on the tiny mesh (its own posed vertices: uVATP below)
       if (!tinyPx) continue
       const t = mats.make(`units_${id}_tiny`, UNITS_VS, UNITS_FS, {
         attributes: [...attributes, 'aRW0', 'aRW1', 'aRW2'],
-        uniforms: ['uVATStep', 'uStepFrac', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'],
+        uniforms: [
+          'uVATStep',
+          'uStepFrac',
+          'uPal',
+          'uPalFar',
+          'uFarK',
+          'uFarScale',
+          'uMask',
+          'uCoatRole',
+          ...FADE_UNIFORMS,
+        ],
         samplers: ['uVAT', 'uVATP'],
-        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, '#define TINY'],
+        defines: [
+          '#define NOSNOW',
+          '#define KEEP_HUE',
+          '#define BOUNCE',
+          `#define PAL_N ${n}`,
+          '#define TINY',
+          ...fadeDefines(2),
+        ],
       })
       t.setTexture('uVAT', vat)
       t.setColor3Array('uPal', pal)
@@ -494,6 +593,7 @@ export class Units {
       t.setFloat('uCoatRole', data.palette.indexOf('coat'))
       t.setVector2('uFarScale', farScale)
       this.tinyMats.set(id, t)
+      this.bindFade(t)
     }
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
     this.depthMat = new ShaderMaterial(
@@ -725,12 +825,14 @@ export class Units {
     const matrices = new Float32Array(men * 16)
     const settings = new Float32Array(men * 3)
     const next = new Float32Array(men * 3)
+    const man = Float32Array.from({ length: men }, (_, i) => i)
     // (the nearest LOD's buffers its own, made at the first split; the next LOD's swapped to the rest's while split)
     lod.forEach((m, li) => {
       if (this.hasNearest && li === 0) return
       m.thinInstanceSetBuffer('matrix', matrices, 16, false)
       m.thinInstanceSetBuffer('aVAT', settings, 3, false)
       m.thinInstanceSetBuffer('aNext', next, 3, false)
+      m.thinInstanceSetBuffer('aMan', man, 1, true)
       m.doNotSyncBoundingInfo = true // (its bounds are place()'s: a buffer swapped in must not refit them)
     })
     const all = () => lod.map(() => true)
@@ -742,6 +844,7 @@ export class Units {
       tiny: false,
       matrices,
       settings,
+      man,
       jitter,
       next,
       moving: false,
@@ -764,7 +867,11 @@ export class Units {
       restM: none(),
       restS: none(),
       restN: none(),
+      nearI: none(),
+      restI: none(),
       resplit: true,
+      lods: { near: false, far: false, tiny: false },
+      fading: false,
     })
   }
 
@@ -881,11 +988,12 @@ export class Units {
     // (the simple shadow's bounds: stretched away from the sun by the longest shadow, as tall as the far figures grow)
     const k = this.scratch
     shadowBox(h, top * Math.max(1, this.look.close.len, this.look.far.len), k.a, k.b)
-    // (and the soft bake's reach sideways and behind: the outermost men's fringe)
-    k.a.x -= this.softPad
-    k.a.z -= this.softPad
-    k.b.x += this.softPad
-    k.b.z += this.softPad
+    // (and the soft bake's reach sideways and behind, or the contact's past the men's own: the outermost men's fringe)
+    const fringe = Math.max(this.softPad, this.contactReach * this.farScaleV.x - this.sidePad)
+    k.a.x -= fringe
+    k.a.z -= fringe
+    k.b.x += fringe
+    k.b.z += fringe
     h.lod[this.decalLod].getBoundingInfo().reConstruct(k.a, k.b)
     h.stale.fill(true)
     h.staleNext.fill(true)
@@ -915,18 +1023,25 @@ export class Units {
       h.restM = new Float32Array(men * 16)
       h.restS = new Float32Array(men * 3)
       h.restN = new Float32Array(men * 3)
+      h.nearI = new Float32Array(men)
+      h.restI = new Float32Array(men)
       const m = this.hostMesh(0, h.b, h.index)
       m.thinInstanceSetBuffer('matrix', h.nearM, 16, false)
       m.thinInstanceSetBuffer('aVAT', h.nearS, 3, false)
       m.thinInstanceSetBuffer('aNext', h.nearN, 3, false)
+      m.thinInstanceSetBuffer('aMan', h.nearI, 1, false)
       m.doNotSyncBoundingInfo = true
       m.getBoundingInfo().reConstruct(h.lo, h.hi)
       h.lod[0] = m
+      if (h.fading) this.fadingMeshes.add(m) // (made while its battalion fades: faded with the rest)
     }
     const l = h.lod[this.nextLod]
-    l.thinInstanceSetBuffer('matrix', on ? h.restM : h.matrices, 16, false)
-    l.thinInstanceSetBuffer('aVAT', on ? h.restS : h.settings, 3, false)
-    l.thinInstanceSetBuffer('aNext', on ? h.restN : h.next, 3, false)
+    const own = { m: h.matrices, s: h.settings, n: h.next, i: h.man }
+    const buf = nextLodBuffers(on, own, { m: h.restM, s: h.restS, n: h.restN, i: h.restI })
+    l.thinInstanceSetBuffer('matrix', buf.m, 16, false)
+    l.thinInstanceSetBuffer('aVAT', buf.s, 3, false)
+    l.thinInstanceSetBuffer('aNext', buf.n, 3, false)
+    l.thinInstanceSetBuffer('aMan', buf.i, 1, !on)
     h.lod[0].setEnabled(on && this.shown)
     if (on) {
       h.sel.fill(0)
@@ -968,24 +1083,12 @@ export class Units {
     }
     if (!changed && !h.resplit) return false
     h.resplit = false
-    let a = 0
-    let b = 0
-    for (let i = 0; i < sel.length; i++) {
-      const mi = m.subarray(i * 16, i * 16 + 16)
-      const si = s.subarray(i * 3, i * 3 + 3)
-      const ni = n.subarray(i * 3, i * 3 + 3)
-      if (sel[i]) {
-        h.nearM.set(mi, a * 16)
-        h.nearS.set(si, a * 3)
-        h.nearN.set(ni, a * 3)
-        a++
-      } else {
-        h.restM.set(mi, b * 16)
-        h.restS.set(si, b * 3)
-        h.restN.set(ni, b * 3)
-        b++
-      }
-    }
+    const [a, b] = splitLists(
+      sel,
+      { m, s, n },
+      { m: h.nearM, s: h.nearS, n: h.nearN, i: h.nearI },
+      { m: h.restM, s: h.restS, n: h.restN, i: h.restI },
+    )
     h.lod[0].thinInstanceCount = a
     h.lod[this.nextLod].thinInstanceCount = b
     h.stale[0] =
@@ -1044,6 +1147,8 @@ export class Units {
     const mapOn = this.shadows && f < 1 && this.shadowRT !== null
     const decalOn = decals && f > 0
     const ln = this.lookAt()
+    this.contactAt()
+    this.useDecalFor()
     // (back from the simple shadows alone: fitted and drawn afresh)
     if (mapOn && !this.mapOn) {
       this.smBox.set = false
@@ -1061,6 +1166,7 @@ export class Units {
     this.depthMat.setFloat('uVATStep', step)
     this.depthVatMat.setFloat('uVATStep', step)
     this.depthProxyMat.setFloat('uVATStep', step)
+    if (this.decal === this.decalNear) this.decal?.setFloat('uVATStep', step)
     // (stepped with the figures under ?smoothmove=0)
     if (decalOn) {
       this.decal?.setFloat('uStepFrac', this.smooth ? this.stepFrac : 0)
@@ -1086,8 +1192,18 @@ export class Units {
     const pxPerM = (cam.getProjectionMatrix().m[5] * engine.getRenderHeight()) / 2
     const camPos = cam.globalPosition
     this.farK.set(FIGURE * pxPerM, this.lodPx)
-    for (const m of this.farMats.values()) m.setVector2('uFarK', this.farK)
-    for (const m of this.tinyMats.values()) m.setVector2('uFarK', this.farK)
+    this.nearBand[0] = this.lodPx * NEAR_FADE[0]
+    this.nearBand[1] = this.lodPx * NEAR_FADE[1]
+    this.tinyBandV[0] = this.tinyPx * TINY_FADE[0]
+    this.tinyBandV[1] = this.tinyPx * TINY_FADE[1]
+    const tinyBand = this.tinyLod >= 0 ? this.tinyBandV : null
+    this.bandV.set(this.nearBand[0], this.nearBand[1], tinyBand ? tinyBand[0] : 0, tinyBand ? tinyBand[1] : 0)
+    for (const map of [this.mats, this.farMats, this.tinyMats]) {
+      for (const m of map.values()) {
+        m.setVector2('uFarK', this.farK)
+        m.setVector4('uLodBand', this.bandV)
+      }
+    }
     let moved = step !== this.smStep // (the map changes with the poses' step, the men's places, the casters' LOD)
     let anyMoved = false // (a battalion's men written this frame: the trodden ground follows)
     // the camera's planes, once a frame: the nearest LOD's tests and the shadow casters' cull (cull) read them
@@ -1138,27 +1254,32 @@ export class Units {
         split = (FIGURE * pxPerM) / Math.max(1, Math.hypot(dx, dy, dz)) >= this.nearestPx * (h.split ? 0.8 : 0.9)
         if (split) split = !boxOutside(this.camPlanes, lo.x, lo.y, lo.z, hi.x, hi.y, hi.z)
       }
-      const near = split || (h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1)
+      const d = this.drawsAt(h, px, split, camPos, FIGURE * pxPerM, tinyBand)
+      const near = d.near
       if (near !== h.near && this.casterNear) moved = true
       if (split !== h.split) {
         this.setSplit(h, split)
         if (this.casterNear) moved = true
       }
       if (split && this.share(h, camPos, pxPerM) && this.casterNear) moved = true
-      // the tiny LOD below tinyPx (±10 %, as the near one), never where the near LOD is drawn
-      const tiny = !near && this.tinyLod >= 0 && (h.tiny ? px < this.tinyPx * 1.1 : px < this.tinyPx * 0.9)
+      const tiny = d.tiny
       h.near = near
       h.tiny = tiny
       h.lod[this.nextLod].isVisible = near && (!split || h.lod[this.nextLod].thinInstanceCount > 0)
-      h.lod[this.farLod].isVisible = !near && !tiny
+      h.lod[this.farLod].isVisible = d.far
       h.lod[this.decalLod].isVisible = decalOn
       if (this.tinyLod >= 0) h.lod[this.tinyLod].isVisible = tiny
       if (h.sel.length) h.lod[0].isVisible = split && h.lod[0].thinInstanceCount > 0 // (made at the first split)
+      this.setFading(h, this.fade && lodCount(d) > 1)
       // the LODs drawn, the one that casts for the battalion, the simple shadows while they show; a hidden one is
       // updated when drawn again
       const kc = this.casterOf(h)
       for (let k = 0; k < h.lod.length; k++) {
-        const drawn = near ? k === this.nextLod || (split && k === 0) : k === (tiny ? this.tinyLod : this.farLod)
+        const drawn =
+          (k === this.nextLod && near) ||
+          (split && k === 0) ||
+          (k === this.farLod && d.far) ||
+          (k === this.tinyLod && tiny)
         if (
           !drawn &&
           !(mapOn && (k === kc || (split && k === 0 && kc === this.nextLod))) &&
@@ -1172,6 +1293,8 @@ export class Units {
         }
         if (h.staleSet[k]) {
           this.upload(h.lod[k], 'aVAT', h.settings.length)
+          // (a split battalion's lists: their men's indices with their clips)
+          if (split && (k === 0 || k === this.nextLod)) this.upload(h.lod[k], 'aMan', h.man.length)
           h.staleSet[k] = false
         }
         if (h.staleNext[k] && (k === this.decalLod || this.smooth)) {
@@ -1496,66 +1619,59 @@ export class Units {
    *  it is drawn with, then put back */
   private useDecals(): void {
     if (this.decal) return
-    if (!this.shade) {
+    const shade = this.shade
+    if (!shade) {
       throw new Error("units: the simple shadows need the ground's shade (Units.shade, src/look/bakes.ts unitShade)")
     }
-    const t0 = performance.now()
     const d = this.data
-    const shape = shadowShape(d, d.lods[this.farLod].name, [SUN.x, SUN.y, SUN.z], ROLES, {
-      facings: SHAPE_FACINGS,
-      soft: SOFT_BLUR,
-      posed: this.posedFar,
-    })
-    this.shapeMs = performance.now() - t0
-    const tex = new RawTexture(
-      shape.data,
-      shape.width,
-      shape.height,
-      Constants.TEXTUREFORMAT_RG,
-      this.scene,
-      true,
-      false,
-      Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
-      Constants.TEXTURETYPE_UNSIGNED_BYTE,
-    )
-    tex.name = 'figureShadowShape'
-    tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
-    const m = this.mats0.make('unitShadow2D', DECAL_VS, DECAL_FS, {
-      attributes: ['position', 'aVAT', 'aNext'],
-      uniforms: [
-        'uRoleStart',
-        'uShapeAt',
-        'uShapeCell',
-        'uShapeTexel',
-        'uShapeSize',
-        'uShDir',
-        'uStepFrac',
-        'uFarK',
-        'uFarScale',
-        'uDecalLift',
-        'uShSoft',
-        'uShLen',
-        'uShFoot',
-        'uStrip',
-        'uRows',
-      ],
-      samplers: ['uShapeTex', 'uUnitShade'],
-      alpha: true,
-      defines: [
-        `#define FACINGS ${SHAPE_FACINGS.toFixed(1)}`,
-        `#define DECAL_ALONG ${DECAL_ALONG.toFixed(1)}`,
-        `#define LIFT_RAMP ${LIFT_RAMP.toFixed(2)}`,
-        `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`,
-        ...(this.coverage ? ['#define COVERAGE'] : []),
-        ...(this.farScaleOn ? ['#define FAR_SCALE'] : []),
-      ],
-    })
-    m.backFaceCulling = false
-    m.disableDepthWrite = true
-    m.setTexture('uShapeTex', tex)
-    m.setTexture('uUnitShade', this.shade)
+    let ss = this.stepShadow
+    // today's shape (averaged over each clip) for the far material; with ?ushstep a second, per step, for the near one
+    // (within the per-step band, stepBand: decision 0074). shapeMs: the bakes alone (shadowShape), as main timed it
+    let bakeMs = 0
+    const bake = (steps: number, facings: number) => {
+      const tb = performance.now()
+      const shape = shadowShape(d, d.lods[this.farLod].name, [SUN.x, SUN.y, SUN.z], ROLES, {
+        facings,
+        soft: SOFT_BLUR,
+        posed: this.posedFar,
+        steps,
+        maxSize: Math.min(4096, this.scene.getEngine().getCaps().maxTextureSize),
+      })
+      bakeMs += performance.now() - tb
+      const tex = new RawTexture(
+        shape.data,
+        shape.width,
+        shape.height,
+        Constants.TEXTUREFORMAT_RG,
+        this.scene,
+        true,
+        false,
+        Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
+        Constants.TEXTURETYPE_UNSIGNED_BYTE,
+      )
+      tex.name = steps > 0 ? 'figureShadowShapeSteps' : 'figureShadowShape'
+      tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
+      return { shape, tex }
+    }
+    const farBake = bake(0, SHAPE_FACINGS)
+    let nearBake: ReturnType<typeof bake> | null = null
+    try {
+      nearBake = ss ? bake(ss.steps, ss.facings) : null
+    } catch (e) {
+      // (a per-step atlas over this GPU's texture size: the averaged shape at every zoom, today's look, unless the
+      // page asked for it by ?ushstep)
+      if (!(e instanceof AtlasTooLarge) || this.stepExplicit) {
+        farBake.tex.dispose()
+        throw e
+      }
+      console.warn(`units: ${e.message}: the soldiers' shadows fall back to the clip-averaged shape`)
+      ss = this.stepShadow = null
+      this.stepFallback = true
+    }
+    this.shapeMs = bakeMs
     // the ground's height under each vertex: the meadow map's (bound to every painted material, src/look/meadow.ts), or
     // without one the heightfield's, sampled here over the tile (GROUND_N² texels)
+    let ht: RawTexture | null = null
     if (!this.groundMap) {
       const n = GROUND_N
       const w = D.spec.tile
@@ -1563,7 +1679,7 @@ export class Units {
       for (let j = 0; j < n; j++) {
         for (let i = 0; i < n; i++) hd[j * n + i] = groundAt(((i + 0.5) / n) * w - w / 2, ((j + 0.5) / n) * w - w / 2)
       }
-      const ht = new RawTexture(
+      ht = new RawTexture(
         hd,
         n,
         n,
@@ -1576,42 +1692,182 @@ export class Units {
       )
       ht.name = 'figureShadowGround'
       ht.wrapU = ht.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
-      m.setTexture('uMeadow', ht)
     }
-    m.setVector4('uRoleStart', new Vector4(...ROLES.map(r => d.ranges[r].start)))
-    // the atlas's anchor: where a cell's first texel lies from a man's root (m; the strip moves, this does not)
-    m.setVector2('uShapeAt', new Vector2(shape.across[0], shape.along[0]))
-    m.setVector4('uShapeCell', new Vector4(shape.cellW, shape.cellH, 1 / shape.width, 1 / shape.height))
-    m.setVector2('uShapeSize', new Vector2(shape.width, shape.height))
-    m.setVector2('uShapeTexel', new Vector2(1 / shape.texel, shape.margin))
-    m.setVector2('uShDir', new Vector2(...shape.dir))
-    m.setFloat('uStepFrac', 0)
-    m.setVector2('uFarScale', this.farScaleV)
-    m.setFloat('uDecalLift', this.lift)
-    this.decal = m
-    this.shapeBoxes = { base: shape.base, full: { across: shape.across, along: shape.along } }
-    // (the soft bake's reach past the shape's own, on the decal's bounds: place)
-    this.softPad = shape.base.across[0] - shape.across[0]
+    const make = (oval: boolean, steps: boolean): ShaderMaterial => {
+      const { shape, tex } = steps && nearBake ? nearBake : farBake
+      const name = `unitShadow2D${oval ? 'Contact' : ''}${steps ? 'Steps' : ''}`
+      const m = this.mats0.make(name, DECAL_VS, DECAL_FS, {
+        attributes: ['position', 'aVAT', 'aNext'],
+        uniforms: [
+          'uRoleStart',
+          'uShapeAt',
+          'uShapeCell',
+          'uShapeTexel',
+          'uShapeSize',
+          'uShDir',
+          'uStepFrac',
+          'uFarK',
+          'uFarScale',
+          'uDecalLift',
+          'uShSoft',
+          'uShGain',
+          'uShLen',
+          'uShFoot',
+          'uStrip',
+          'uRows',
+          'uShContact',
+          'uVATStep',
+          'uStepBins',
+          'uStepRow',
+          'uStepRPB',
+          'uShFootK',
+        ],
+        samplers: ['uShapeTex', 'uUnitShade', 'uContactTex'],
+        alpha: true,
+        defines: [
+          `#define FACINGS ${shape.facings.toFixed(1)}`,
+          ...(steps && ss ? ['#define SH_STEPS', ...(ss.blend ? ['#define SH_STEP_BLEND'] : [])] : []),
+          `#define DECAL_ALONG ${DECAL_ALONG.toFixed(1)}`,
+          `#define LIFT_RAMP ${LIFT_RAMP.toFixed(2)}`,
+          `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`,
+          ...(this.coverage ? ['#define COVERAGE'] : []),
+          ...(this.farScaleOn ? ['#define FAR_SCALE'] : []),
+          ...(this.fade ? [FADE_ON[1]] : []),
+          ...(oval
+            ? [
+                '#define SH_CONTACT',
+                `#define CONTACT_ROWS ${d.vat.height.toFixed(1)}`,
+                `#define CONTACT_FLOOR ${CONTACT_FLOOR.toFixed(3)}`,
+              ]
+            : []),
+        ],
+      })
+      if (this.contact) this.useContact(m, this.contact, oval)
+      m.backFaceCulling = false
+      m.disableDepthWrite = true
+      m.setTexture('uShapeTex', tex)
+      m.setTexture('uUnitShade', shade)
+      if (ht) m.setTexture('uMeadow', ht)
+      m.setVector4('uRoleStart', new Vector4(...ROLES.map(r => d.ranges[r].start)))
+      // the atlas's anchor: where a cell's first texel lies from a man's root (m; the strip moves, this does not)
+      m.setVector2('uShapeAt', new Vector2(shape.across[0], shape.along[0]))
+      m.setVector4('uShapeCell', new Vector4(shape.cellW, shape.cellH, 1 / shape.width, 1 / shape.height))
+      m.setVector2('uShapeSize', new Vector2(shape.width, shape.height))
+      m.setVector2('uShapeTexel', new Vector2(1 / shape.texel, shape.margin))
+      m.setVector2('uShDir', new Vector2(...shape.dir))
+      if (steps && ss) {
+        m.setVector4('uStepBins', new Vector4(...shape.bins))
+        m.setVector4('uStepRow', new Vector4(...shape.binRow))
+        m.setFloat('uStepRPB', shape.rowsPerBlock)
+        m.setFloat('uVATStep', 0)
+        m.setVector2('uShFootK', new Vector2(...this.footSharp))
+      }
+      this.shapeBoxes.set(m, { base: shape.base, full: { across: shape.across, along: shape.along } })
+      // (the soft bake's reach past the shape's own, on the decal's bounds: place)
+      this.softPad = Math.max(this.softPad, shape.base.across[0] - shape.across[0])
+      m.setFloat('uStepFrac', 0)
+      m.setVector2('uFarScale', this.farScaleV)
+      m.setFloat('uDecalLift', this.lift)
+      // (a mode nothing else draws with: its blend is replaced at each bind, below)
+      m.alphaMode = Constants.ALPHA_EXCLUSION
+      const st = m.stencil
+      st.enabled = true
+      st.func = Constants.NOTEQUAL
+      st.funcRef = 1
+      st.funcMask = 0xff
+      st.mask = 0xff
+      st.opStencilFail = Constants.KEEP
+      st.opDepthFail = Constants.KEEP
+      st.opStencilDepthPass = Constants.REPLACE
+      const engine = this.scene.getEngine() as ThinEngine
+      const a2c = this.coverage
+      m.onBindObservable.add(() => {
+        engine.alphaState.setAlphaBlendFunctionParameters(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE, 0)
+        if (a2c) engine.setAlphaToCoverage(true)
+      })
+      if (a2c) m.onUnBindObservable.add(() => engine.setAlphaToCoverage(false))
+      return m
+    }
+    // within the contact's zoom band the material with the oval; past it, and without a contact, decision 0062's own
+    // (no oval's read, varying or cell test: main's cost). The one not drawn is compiled in the background
+    // (useDecalFor), so the switch at the band's edge never waits on a shader
+    // (with ?ushstep the near material reads the per-step shape, with the oval or without)
+    const c = this.contact
+    const oval = c !== null && c.dark > 0
+    const far = make(false, false)
+    const near = oval || ss ? make(oval, nearBake !== null) : null
+    this.decalFar = far
+    this.decalNear = near
+    this.decal = near ?? far
+    this.decalPoll = decalDefinesChanged()
     this.setDecalLook(this.lookNow)
-    // (a mode nothing else draws with: its blend is replaced at each bind, below)
-    m.alphaMode = Constants.ALPHA_EXCLUSION
-    const st = m.stencil
-    st.enabled = true
-    st.func = Constants.NOTEQUAL
-    st.funcRef = 1
-    st.funcMask = 0xff
-    st.mask = 0xff
-    st.opStencilFail = Constants.KEEP
-    st.opDepthFail = Constants.KEEP
-    st.opStencilDepthPass = Constants.REPLACE
-    const engine = this.scene.getEngine() as ThinEngine
-    const a2c = this.coverage
-    m.onBindObservable.add(() => {
-      engine.alphaState.setAlphaBlendFunctionParameters(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE, 0)
-      if (a2c) engine.setAlphaToCoverage(true)
-    })
-    if (a2c) m.onUnBindObservable.add(() => engine.setAlphaToCoverage(false))
+    for (const h of this.hosts) h.lod[this.decalLod].material = this.decal
+  }
+  /** a battalion's simple-shadow mesh (its thin instances: the defines its material compiles with), or null with no
+   *  battalion yet */
+  private decalMesh(): Mesh | null {
+    return this.hosts[0]?.lod[this.decalLod] ?? null
+  }
+  /** The decal's material by the contact's weight this frame: with the oval within its band, without past it (no
+   *  oval's read, varying or texture: decision 0062's). Switched only when it changes, once the one wanted is compiled
+   *  (the one not drawn is compiled in the background here); the look is given to it afresh (setDecalLook) */
+  private useDecalFor(): void {
+    const near = this.decalNear
+    const far = this.decalFar
+    const mesh = this.decalMesh()
+    if (!near || !far || !mesh) return
+    // (the one not drawn compiled in the background until ready, after every change of the defines and every switch:
+    // never a hitch at the band's edge; the switch itself waits for the wanted one: a material not ready draws
+    // nothing; decalStep)
+    const mat = (side: DecalSide) => (side === 'near' ? near : far)
+    const step = decalStep(
+      nearOn(this.contact, this.stepShadow !== null, this.nearW) ? 'near' : 'far',
+      this.decal === near ? 'near' : 'far',
+      this.decalPoll,
+      side => mat(side).isReady(mesh, true),
+      IDLE_POLLS,
+    )
+    this.decalPoll = step.poll
+    // (a shader that never compiles: stop asking, say so once, and stay on the one drawn)
+    if (step.gaveUp) console.warn(`units: the simple shadows' other material not ready after ${IDLE_POLLS} frames`)
+    if (!step.switchTo) return
+    const m = mat(step.switchTo)
+    this.decal = m
     for (const h of this.hosts) h.lod[this.decalLod].material = m
+    this.lookSet.soft = NaN
+  }
+
+  /** The contact shadow's ovals (contactOvals, a texel a baked step) and its uniform on the shadows' material m, and
+   *  how far it reaches from a man's root (the strip grown to hold it: decalStrip) */
+  private useContact(m: ShaderMaterial, c: ShadowContact, oval: boolean): void {
+    m.setVector4('uShContact', new Vector4(c.pad, 0, c.soft, 0))
+    if (!oval) return
+    const pv = this.posedFar ?? posedVertices(this.data, this.data.lods[this.farLod].name)
+    const ov = contactOvals(this.data, pv, c.mode)
+    const rows = ov.length / 4
+    const tex = new RawTexture(
+      ov,
+      rows,
+      1,
+      Constants.TEXTUREFORMAT_RGBA,
+      this.scene,
+      false,
+      false,
+      Constants.TEXTURE_NEAREST_SAMPLINGMODE,
+      Constants.TEXTURETYPE_FLOAT,
+    )
+    tex.name = 'figureContactOvals'
+    tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
+    m.setTexture('uContactTex', tex)
+    m.setFloat('uVATStep', 0)
+    this.contactReach = c.dark > 0 ? contactReachOf(ov, c.pad, c.soft) : 0
+  }
+  /** The contact oval's weight by the camera's distance (ovalWeight), kept for setDecalLook, and the near
+   *  material's (nearWeight), for useDecalFor */
+  private contactAt(): void {
+    const r = this.camera.radius
+    this.contactW = ovalWeight(this.contact, r)
+    this.nearW = nearWeight(this.contact, this.stepShadow !== null, r, this.stepBand)
   }
 
   /** the figures' cast shadows on or off: off, the receivers compile without them (the bench's baseline arm). On, the
@@ -1642,20 +1898,31 @@ export class Units {
     for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', map)
   }
   /** The simple shadows' look (decision 0062) given to their material when it changed: the soft bake's share at the
-   *  tip, the length, the gradient from the soles (uShFoot, footUniform) and the strip by the far look's share
-   *  (uStrip, uRows: decalStrip) */
+   *  tip, the gain (uShGain), the length, the gradient from the soles (uShFoot, footUniform) and the strip by the far
+   *  look's share (uStrip, uRows: decalStrip) */
   private setDecalLook(l: ShadowLook): void {
     const m = this.decal
-    const b = this.shapeBoxes
+    const b = m && this.shapeBoxes.get(m)
     const p = this.lookSet
-    const same = l.soft === p.soft && l.dark === p.dark && l.foot === p.foot && l.core === p.core && l.len === p.len
-    if (!m || !b || (same && this.lookT === this.lookTSet)) return
+    const same =
+      l.soft === p.soft &&
+      l.dark === p.dark &&
+      l.foot === p.foot &&
+      l.core === p.core &&
+      l.len === p.len &&
+      l.gain === p.gain
+    if (!m || !b || (same && this.lookT === this.lookTSet && this.contactW === this.contactWSet)) return
     Object.assign(p, l)
     this.lookTSet = this.lookT
+    this.contactWSet = this.contactW
+    // (the contact's darkness by its weight, and its reach on the strip only while the material with the oval draws)
+    const u = contactUniform(this.contact, this.contactW, this.contactReach, m === this.decalNear)
+    if (u.uniform) m.setVector4('uShContact', this.contactV.set(...u.uniform))
     m.setFloat('uShSoft', l.soft)
+    m.setFloat('uShGain', l.gain)
     m.setFloat('uShLen', l.len)
     m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
-    const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP)
+    const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP, u.reach)
     m.setVector4('uStrip', this.stripV.set(...strip.box))
     m.setVector4('uRows', this.rowsV.set(...strip.rows))
   }
@@ -1711,11 +1978,56 @@ export class Units {
       for (const [id, m] of map) m.setDefine('#define FAR', force ?? farRule(this.uniforms[id]) === 'coat')
     }
   }
+  /** The LOD cross-fade on (decision 0066: each man at his own LOD in a band round each switch) or off (?lodfade=0:
+   *  the hard switch, a battalion wholly at one LOD by its centre's height on screen, ±10 %) */
+  setLodFade(on: boolean): void {
+    this.fade = on
+    for (const map of [this.mats, this.farMats, this.tinyMats]) {
+      for (const m of map.values()) {
+        m.setDefine('#define LODFADE', on)
+        m.setDefine('#define FAR_FROM', on ? FAR_FROM.toFixed(4) : false)
+      }
+    }
+    // (their shadows grow with them)
+    for (const m of [this.decalFar, this.decalNear]) m?.setDefine('#define FAR_FROM', on ? FAR_FROM.toFixed(4) : false)
+    this.decalPoll = decalDefinesChanged()
+  }
+  /** A figure material's draws told whether their battalion fades each man (uLodFade, set as each mesh binds it: the
+   *  material is shared by the battalions of a uniform; one drawing a single LOD draws every man, no per-man work) */
+  private bindFade(m: ShaderMaterial): void {
+    m.onBindObservable.add(mesh => m.getEffect()?.setFloat('uLodFade', this.fadingMeshes.has(mesh as Mesh) ? 1 : 0))
+  }
+  /** A battalion's figure meshes (the nearest's list, the near, far and tiny LODs) faded or not (fadingMeshes) */
+  private setFading(h: Host, on: boolean): void {
+    if (on === h.fading) return
+    h.fading = on
+    for (const k of [0, this.nextLod, this.farLod, this.tinyLod]) {
+      // (none for the tiny LOD off; nor the nearest's place before its first split: the shared source mesh holds it)
+      if (k < 0 || (k === 0 && this.hasNearest && h.sel.length === 0)) continue
+      if (on) this.fadingMeshes.add(h.lod[k])
+      else this.fadingMeshes.delete(h.lod[k])
+    }
+  }
+  /** The LODs a battalion draws this frame (battalionLods, src/look/lod-fade.ts, into h.lods): by its bounds' heights
+   *  on screen (k, a figure's height in pixels at 1 m) with the cross-fade, else by its centre's (px) */
+  private drawsAt(h: Host, px: number, split: boolean, cam: Vector3, k: number, tiny: [number, number] | null): Lods {
+    const [lo, hi] = boxPxRange(h.lo, h.hi, cam, k, this.pxRange)
+    const at = this.at
+    at.pLo = lo
+    at.pHi = hi
+    at.px = px
+    at.split = split
+    at.wasNear = h.near
+    at.wasTiny = h.tiny
+    const tinyPx = this.tinyLod >= 0 ? this.tinyPx : 0
+    return battalionLods(at, this.fade, this.lodPx, tinyPx, this.nearBand, tiny, h.lods)
+  }
   /** the far figures drawn larger as they shrink on screen (?farscale=0: their own size) */
   setFarScale(on: boolean): void {
     this.farScaleOn = on
     for (const m of [...this.farMats.values(), ...this.tinyMats.values()]) m.setDefine('#define FAR_SCALE', on)
-    this.decal?.setDefine('#define FAR_SCALE', on) // (their simple shadows with them)
+    for (const m of [this.decalFar, this.decalNear]) m?.setDefine('#define FAR_SCALE', on) // (their simple shadows too)
+    this.decalPoll = decalDefinesChanged()
   }
   /** each side's uniforms' coat colours (the guard's ΔE to the coat) */
   coats(): string[][] {
