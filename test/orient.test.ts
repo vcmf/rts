@@ -70,11 +70,16 @@ describe("the men's ways and gaits", () => {
     const M = L.men
     const u = [...L.units.values()][0]
     const m = [...u.ids.subarray(0, u.n)].find(k => M.flags[k] & MAN_ALIVE)!
+    const before = [M.gait[m], M.yaw[m]]
     M.vx[m] = 1.5
     M.vz[m] = 0
     L.orient()
-    expect(M.gait[m]).not.toBe(GAIT_MARCH)
+    expect([M.gait[m], M.yaw[m]]).toEqual(before)
+    // a volley alone (the battalion's revision, not its men's) works nothing out again
     u.rev++
+    L.orient()
+    expect([M.gait[m], M.yaw[m]]).toEqual(before)
+    u.menRev++
     L.orient()
     expect([M.gait[m], M.yaw[m]]).toEqual([GAIT_MARCH, Math.fround(Math.PI / 2)])
   })
@@ -83,7 +88,7 @@ describe("the men's ways and gaits", () => {
     const b = battle()
     const L = layoutFor(b.w, capFor(b.layer.men.n))
     const buf = new ArrayBuffer(L.bytes)
-    expect([...b.layer.units.values()].some(u => u.oriented !== u.rev)).toBe(true)
+    expect([...b.layer.units.values()].some(u => u.oriented !== u.menRev)).toBe(true)
     expect(writeFrame(b, buf, L, stats)).toBe(true)
     const v = new FrameView(data, cr, b.w.terrain, b.scene, buf, L)
     v.read(0)

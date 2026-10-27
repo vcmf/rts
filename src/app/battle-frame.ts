@@ -232,7 +232,9 @@ export class FrameView {
           pose: new Float64Array(0),
           rev: 0,
           volleys: new Int32Array(0),
-          oriented: 0, // (the publisher's: its men's ways and gaits are the frame's)
+          // (oriented by the publisher: its men's ways and gaits are the frame's, never worked out here)
+          menRev: 0,
+          oriented: 0,
           off,
         }
         this.cache.set(i, u)

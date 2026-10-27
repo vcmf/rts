@@ -65,7 +65,9 @@ export interface Unit {
   // battle threads PR 4b); volleys: its companies' last volley ticks, as last seen
   rev: number
   volleys: Int32Array
-  // the revision its men's ways and gaits were last worked out at (orient; −1: never)
+  // menRev: bumped with rev but by a volley (its men moved, or were matched again); oriented: the menRev its men's
+  // ways and gaits were last worked out at (orient; −1: never)
+  menRev: number
   oriented: number
 }
 
@@ -317,6 +319,7 @@ export class SoldierLayer {
           pose: new Float64Array(8 + 2 * w.cr.maxNB).fill(NaN),
           rev: 0,
           volleys: new Int32Array(w.cr.maxC),
+          menRev: 0,
           oriented: -1,
         }
         this.units.set(i, u)
@@ -325,6 +328,7 @@ export class SoldierLayer {
       }
       this.sign(u.sig, i)
       u.rev++
+      u.menRev++
       if (u.faces !== f.faces[i]) {
         // Face about: each man's slot is now the half-turn of his old one
         const T = U.shapes[f.shape[i]].turn
@@ -750,11 +754,15 @@ export class SoldierLayer {
         // a trunk's push never takes him off the map
         MX[m] = Math.min(xMax, Math.max(t.x0, mx))
         MZ[m] = Math.min(zMax, Math.max(t.z0, mz))
-        if (MX[m] !== wasX || MZ[m] !== wasZ || wasV !== (vx !== 0 || vz !== 0)) touched = true
+        // (his velocity too: his way and gait are drawn from it, SoldierLayer.orient, even held at the map's edge)
+        if (MX[m] !== wasX || MZ[m] !== wasZ || MVX[m] !== vx || MVZ[m] !== vz) touched = true
         MVX[m] = vx
         MVZ[m] = vz
       }
-      if (touched) u.rev++
+      if (touched) {
+        u.rev++
+        u.menRev++
+      }
     }
   }
   private poseNow: Float64Array
@@ -767,16 +775,16 @@ export class SoldierLayer {
     // no more cells hold men than there are men
     this.touched = grown(this.touched, n)
   }
-  /** Works out the way each man faces and his gait (Men.yaw, Men.gait) for every battalion whose revision moved since
-   *  (battle threads PR 4c): what a renderer draws him with, so the readers of a published frame need not (call it
-   *  before publishing). His velocity's way when he marches, at rest his place's (its heading after a Face about, a
-   *  square's faces). */
+  /** Works out the way each man faces and his gait (Men.yaw, Men.gait) for every battalion whose men moved since
+   *  (`menRev`: a volley alone works nothing out; battle threads PR 4c): what a renderer draws him with, so the
+   *  readers of a published frame need not (call it before publishing). His velocity's way when he marches, at rest
+   *  his place's (its heading after a Face about, a square's faces). */
   orient(): void {
     const M = this.men
     const p = this.p
     for (const u of this.units.values()) {
-      if (u.oriented === u.rev) continue
-      u.oriented = u.rev
+      if (u.oriented === u.menRev) continue
+      u.oriented = u.menRev
       this.frame(u.i, this.alphaNow)
       for (let j = 0; j < u.n; j++) {
         const m = u.ids[j]

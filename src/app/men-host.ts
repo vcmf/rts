@@ -153,6 +153,8 @@ export function serveMen(port: Port<ToMen>): void {
       // the world before the first tick: the page starts this worker once the sim worker has written it
       if (!take(TAKE).taken) throw new Error('men worker: the tick ring is empty (the sim worker not started)')
       now()
+      // (its men oriented at the clock's alpha, as every later frame's: SoldierLayer.orient)
+      layer.alphaNow = src.acc / DT
       publish()
       last = performance.now()
       host.start()

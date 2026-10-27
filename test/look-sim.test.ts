@@ -41,7 +41,10 @@ function start() {
   const link = new MainLink(data, cr, lookArmies)
   for (const c of spawns(BS, MEN, A)) link.command(c)
   link.frame(DT)
-  const source = new SimMen(BS, MEN, () => link.see())
+  const source = new SimMen(BS, MEN, () => {
+    link.orient()
+    return link.see()
+  })
   return { link, source }
 }
 
@@ -80,16 +83,16 @@ describe("the sim's men as the renderer's", () => {
     M.vx[m] = 1
     M.vz[m] = 0
     // (a step moves its revision on: the layer works out its men's gaits and ways again, as the men worker does)
-    u.rev++
-    link.see()
+    u.menRev++
+    link.orient()
     manAt(source, 0, 3, out)
     // 1 m/s: between MARCH_FROM and RUN_FROM
     expect([MARCH_FROM < 1, 1 < RUN_FROM]).toEqual([true, true])
     expect(out.role).toBe('march')
     expect(out.yaw).toBeCloseTo(Math.PI / 2, 6)
     M.vz[m] = RUN_FROM + 0.1
-    u.rev++
-    link.see()
+    u.menRev++
+    link.orient()
     manAt(source, 0, 3, out)
     expect(out.role).toBe('run')
     M.flags[m] &= ~MAN_ALIVE

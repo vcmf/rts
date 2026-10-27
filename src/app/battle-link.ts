@@ -52,6 +52,9 @@ export interface BattleLink {
   /** What to read and draw this frame: the newest frame published (held until the next call), or the battle itself
    * on the main thread. */
   see(): Seen
+  /** The men's ways and gaits worked out for the battalions whose men moved (SoldierLayer.orient), for a reader that
+   * draws them (the look page): a published frame carries them already, the battle on the main thread does not. */
+  orient(): void
   command(c: Command): void
   /** The game speed (0: paused). */
   setSpeed(speed: number): void
@@ -90,9 +93,10 @@ export class MainLink implements BattleLink {
     this.battle.advance(dt)
   }
   see(): Seen {
-    // (its men's ways and gaits worked out as a published frame's are: battle-frame.ts writeFrame)
-    this.battle.layer.orient()
     return this.seen
+  }
+  orient(): void {
+    this.battle.layer.orient()
   }
   command(c: Command): void {
     this.battle.command(c)
@@ -229,6 +233,9 @@ export class WorkerLink implements BattleLink {
     v.read(performance.timeOrigin + performance.now())
     this.seen = v
     return v
+  }
+  orient(): void {
+    // (the men worker orients each frame before publishing it: battle-frame.ts writeFrame)
   }
   command(c: Command): void {
     this.toSim({ type: 'command', c })
