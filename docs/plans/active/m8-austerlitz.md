@@ -422,6 +422,16 @@ into the epic; this plan details each as it starts.
   outline; the dam never rises over other water and eases down over 10 m outside, padded for an ellipse's long axis;
   a pond with no shore on the map is no pond (was painted at the deepest depth). Tests: the given level, the flat
   outline, the stream through the dam, the dam's outer side (each fails without its fix).
+- **Review round 2**: severe, run by the reviewer: the pond cut a further depth below a stream's channel; one pond's
+  dam raised a neighbouring pond's ground, by their ids; a stream ran through the dam in a slot with 3.6 m walls; the
+  water met dry ground up the slope at a 1.8 m bank; the dam filled a sunken way's or a ditch's cut below it. The
+  per-pond steps were the cause, so redesigned: every pond's level and water from the ground as the landforms made it;
+  its water only where that ground is at most the freeboard above the level, its bed (a height) reached from the
+  nearest node that is not, by a chamfer distance (`chamfer`), so the shore tapers up a slope as on the drawn edge;
+  the dams once all the water is in, fading within 10 m of any water or cut cell, the highest raise where they meet.
+  Measured on Austerlitz: 18 ponds hold water (1.5 to 2.3 m deep), smaller on slopes (only where the ground lies near
+  their level); the compile 6.5 s (the dams' distance over the grid). Tests: under the stream, the uphill shore, the
+  slot, two ponds renamed (bit for bit), the ditch.
 
 ## Open questions
 

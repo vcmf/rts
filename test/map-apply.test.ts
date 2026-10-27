@@ -620,6 +620,66 @@ describe('M1b: applying features into the layers', () => {
     const without = apply(mini([slope, pond]), cat)
     for (let z = -50; z > -80; z -= 2) expect(Math.abs(hAt(without, 20, z) - hAt(without, 20, z - 2))).toBeLessThan(1.5)
   })
+  it('a dammed pond: no deeper than its depth over a stream, no bank uphill, no slot walls, any order (#230 review 2)', () => {
+    const slope = {
+      id: 'slope',
+      kind: 'relief.ridge',
+      line: [
+        [-200, 150],
+        [200, 150],
+      ] as Pt[],
+      height: 40,
+      width: 600,
+    }
+    const pond = { id: 'z-pond', kind: 'water.pond', circle: [[0, -20] as Pt, 30] as [Pt, number] }
+    const brook = {
+      id: 'brook',
+      kind: 'water.stream',
+      line: [
+        [0, 40],
+        [0, -150],
+      ] as Pt[],
+    }
+    const dry = apply(mini([slope]), cat)
+    const streamOnly = apply(mini([slope, brook]), cat)
+    const both = apply(mini([slope, pond, brook]), cat)
+    // over the stream the pond never cuts below the deeper of the stream's channel and its own depth (and freeboard)
+    for (const z of [-10, -22, -35]) {
+      const floor = Math.min(hAt(streamOnly, 0, z), hAt(dry, 0, z) - 1.5 - 0.4)
+      expect(hAt(both, 0, z)).toBeGreaterThanOrEqual(floor - 1e-9)
+    }
+    // no slot walls across the stream below the dam, no bank at the uphill shore: no step over 1.6 m in 2 m
+    for (let z = -60; z <= -50; z += 2) {
+      for (let x = -10; x < 10; x += 2) expect(Math.abs(hAt(both, x, z) - hAt(both, x + 2, z))).toBeLessThan(1.6)
+    }
+    const alone = apply(mini([slope, pond]), cat)
+    for (let z = -40; z < 10; z += 2) expect(Math.abs(hAt(alone, 0, z) - hAt(alone, 0, z + 2))).toBeLessThan(1)
+    // two ponds near each other: the same ground whatever their ids
+    const pair = (a: string, b: string) =>
+      apply(
+        mini([
+          slope,
+          { id: a, kind: 'water.pond', circle: [[0, 0], 20] },
+          { id: b, kind: 'water.pond', circle: [[0, -30], 6] },
+        ]),
+        cat,
+      ).height
+    expect(Array.from(pair('a-pond', 'b-pond'))).toEqual(Array.from(pair('z-pond', 'b-pond')))
+    // a ditch just below the dam keeps its cut
+    const ditch = {
+      id: 'ditch',
+      kind: 'relief.ditch',
+      line: [
+        [-40, -56],
+        [40, -56],
+      ] as Pt[],
+      depth: 1.5,
+      width: 4,
+    }
+    const dammed = apply(mini([slope, pond, ditch]), cat)
+    const cut = apply(mini([slope, ditch]), cat)
+    expect(hAt(dammed, 0, -56)).toBeCloseTo(hAt(cut, 0, -56), 6)
+  })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(
       mini([
