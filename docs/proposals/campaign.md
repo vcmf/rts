@@ -8,7 +8,7 @@ last_reviewed: 2026-10-27
 A campaign map of roads where every side gives its orders for the day at once and all armies then march at
 the same time. Where two enemies meet, a battle starts; allies near enough can be called to it by courier,
 and arrive during the battle, tired and strung out. The battle is the one already being built
-(`docs/proposals/sim-design.md`); this proposal is the layer around it. Decisions 0074 and 0075 (proposed)
+(`docs/proposals/sim-design.md`); this proposal is the layer around it. Decisions 0074, 0075 and 0076 (proposed)
 record the choices that change the vision.
 
 ## Context and goals / non-goals
@@ -54,9 +54,32 @@ The campaign map is a graph of roads: towns and crossroads are nodes, roads are 
 kind (high road, country road). Armies move only along roads. Bridges, defiles and towns on crossroads are
 where roads can be held and cut.
 
+### The scale: a unit is a division
+
+The armies are small on purpose: the game is a miniature of the war, not the war at full size. One unit on
+the battle map, drawn with about 400 figures (decision 0018), stands for a **division**; a figure is a symbol
+for about 15–20 men (decision 0076, proposed). Only the meaning changes: about 20 units a side, as the
+vision already has.
+
+A standard corps is **6 units**:
+- 1 skirmisher (light infantry) division;
+- 3 line infantry divisions;
+- 1 cavalry division;
+- 1 artillery unit, the corps' guns.
+
+The composition is ruleset data (decision 0015), so an era, a nation or a year can change it:
+- **a cavalry corps** (Murat's reserve): cavalry divisions and horse artillery, no infantry;
+- **a corps short of cavalry** (the French of 1813, after Russia): a weak cavalry unit or none, and so a short
+  scouting radius (§ Knowledge);
+- the engine names a "formation unit"; "division" is the Napoleonic ruleset's word.
+
+A whole division of skirmishers is a game simplification: French corps spread their light infantry through
+every division, each line battalion with its own voltigeurs. The British Light Division of the Peninsula is
+the nearest real one.
+
 ### Armies are corps
 
-- An army is a **corps**, with a maximum size.
+- An army is a **corps** of a few units (§ The scale), with a maximum size.
 - **Speed falls with size**: a small corps marches at the full road speed, a big one slower.
 - **One column a road**: a corps cannot pass another on the same road, it follows its tail. Two corps on one
   road are slow, so an army spreads over parallel roads ("march divided, fight united").
@@ -226,6 +249,10 @@ has to write the same contract.
    time (decision 0009). How campaign hours map to battle minutes, and whether long waits for arrivals are
    played fast.
 9. **Fog on the campaign map**: how wide the estimates are, and how fast they age.
+10. **Skirmishers**: a skirmisher division of its own (proposed), or a screen every infantry division can throw
+    out, as each French battalion did with its voltigeurs?
+11. **Drill at a division's scale**: a division forms square as one block, where a real one formed a square per
+    battalion. Does it still read as drill?
 
 ## Review
 
