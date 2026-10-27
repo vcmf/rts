@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-26
 code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, src/app/map/pin.ts, test/map-fields.test.ts, test/map-pin.test.ts, src/app/map/scan.ts, src/app/map/scan-gl.ts, src/app/map/trace.ts, test/map-scan.test.ts, tools/geo.ts, tools/scan-wms.ts, tools/streams.ts, test/map-streams.test.ts, tools/water.ts, test/map-water.test.ts, maps/austerlitz-water.json, tools/ways.ts, test/map-ways.test.ts, maps/austerlitz-ways.json, tools/works.ts, test/map-works.test.ts, maps/austerlitz-works.json, tools/villages.ts, test/map-villages.test.ts, maps/austerlitz-villages.json, tools/ground.ts, test/map-ground.test.ts, maps/austerlitz-ground.json, test/map-ring-row.test.ts, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place, 0067-ids-are-named-when-made, 0069-scans-placed-in-their-relief-frame, 0070-a-field-as-a-scale-model, 0073-modern-works-mended-from-their-surroundings]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0066-editor-writes-the-intent-file-in-place, 0067-ids-are-named-when-made, 0069-scans-placed-in-their-relief-frame, 0070-a-field-as-a-scale-model, 0073-modern-works-mended-from-their-surroundings, 0077-a-pond-levels-at-its-lower-bank]
 ---
 
 # The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a–c, M7a–c)
@@ -211,12 +211,11 @@ maps/kinds.json ──► checkCatalogue ─┐
     0.4 m freeboard, taken every 2 m and never rising downstream (the line's order is the flow; `Layers.streams` keeps
     each profile). Its channel is carved from its depth (a ramp `along` gives pools), shallower toward the banks; a
     ford raises the bed to its depth over its width, where the stream passes nearest its point; a pond sits at its
-    `level` (cut to it as given), or levels at the lowest point of its shore less the freeboard (#230): from the ground as the landforms made it,
-    the ground inside more than its depth and the freeboard above that level is dry and left as it is; elsewhere the
-    bed is the shallower of the basin (the level less the depth, deepest 10 m in from the drawn edge) and the ground
-    less the freeboard, less the depth reached 10 m from the dry ground (a chamfer distance): on flat ground the basin,
-    up a slope a tapering shore; its water is where the bed lies under the level (a cell with no such corner and one
-    inside leaves the pond). Each water cell's depth is its
+    `level` (cut to it as given), or levels at the lowest point of its shore less the freeboard (decision 0077, #230), read from the ground as
+    the water step finds it (landforms and edits): its bed the shallower of the basin (the level less the depth,
+    deepest 10 m in from the drawn edge) and the ground less the freeboard, less the depth reached 10 m from the ground
+    inside too high to hold water (a chamfer distance); its water where that bed lies under the level, cut to it, every
+    other node left as it is (on a slope, its low end; on flat ground the basin as before). Each water cell's depth is its
     body's level less the cell's mean ground (`Layers.depth`, mm);
   - a bridge decks the road's cells over the water at the height of the higher of the road's two ends, 4 m past
     each bank (the sim classifies them `bridge`: level, dry);

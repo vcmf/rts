@@ -432,6 +432,15 @@ into the epic; this plan details each as it starts.
   the landforms made it, the water where the bed lies under the level, the old basin the bound (a flat pond bit for
   bit as before), a sliver narrower than a cell keeps its cells. Tests: a flat pond against a given level (bit for
   bit), no water cell's ground above the pond's lowest shore, a stream through it renamed, a sliver.
+- **Review round 2 of the redesign**: severe. A finger of the outline narrower than a cell, up the slope, was painted
+  water; the pond read the ground before the edits; nodes whose bed stayed above the level were still cut (a dry
+  trench); on a steep slope the bed tapered from the drawn edge too, so the pond was a puddle; a lake with no shore on
+  the map vanished. Fixed: the ground as the water step finds it (landforms and edits); only a node whose bed lies
+  under the level is cut; the dig tapers from the ground too high to hold water only; a sliver cell is the pond's
+  only if its ground lies no higher than the shore; with no shore on the map, the lowest ground on it. The rule is
+  decision 0077. A pond on a steep slope (17 %) is a shallow wedge (0.3 m): that is the rule, not a fault. Tests: the
+  finger, the dry ground never cut, a pit under the level inside the pond is water (a cut through the shore lowers the
+  level instead, as water drains), the stream's cliff on the map with the stream.
 
 ## Open questions
 

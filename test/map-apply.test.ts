@@ -614,8 +614,8 @@ describe('M1b: applying features into the layers', () => {
       const cell = Math.floor((z - L.z0) / L.cell) * L.nx + Math.floor((0.5 - L.x0) / L.cell)
       expect(L.depth[cell]).toBeGreaterThan(0)
     }
-    // downhill, across the pond's low shore, no step between neighbouring nodes over 1.5 m
-    const without = apply(mini([slope, pond]), cat)
+    // downhill, across the pond's low shore and the stream through it, no step between neighbouring nodes over 1.5 m
+    const without = L
     for (let z = -50; z > -80; z -= 2) expect(Math.abs(hAt(without, 20, z) - hAt(without, 20, z - 2))).toBeLessThan(1.5)
   })
   it('a pond on a slope: no deeper than its depth over a stream, no bank uphill, any order (#230 review 2)', () => {
@@ -694,8 +694,8 @@ describe('M1b: applying features into the layers', () => {
       width: 600,
     }
     const pond = { id: 'pond', kind: 'water.pond', circle: [[0, -20] as Pt, 30] as [Pt, number] }
-    // no water above its line up the slope: no water cell's ground lies above the lowest point of the pond's shore
-    // (the most its water can reach)
+    // no water above its line up the slope: every water cell has a corner no higher than the lowest point of the pond's
+    // shore (the most its water can reach): a cell at the waterline straddles it, none lies wholly above it
     const bare = apply(mini([slope]), cat)
     let shoreMin = Infinity
     for (let a = 0; a < 360; a += 2) {
@@ -708,13 +708,18 @@ describe('M1b: applying features into the layers', () => {
       for (let i = 0; i < L.nx; i++) {
         if (!L.water[j * L.nx + i]) continue
         const W = L.nx + 1
-        const g =
-          (L.height[j * W + i] + L.height[j * W + i + 1] + L.height[(j + 1) * W + i] + L.height[(j + 1) * W + i + 1]) /
-          4
-        highest = Math.max(highest, g)
+        const corners = [
+          L.height[j * W + i],
+          L.height[j * W + i + 1],
+          L.height[(j + 1) * W + i],
+          L.height[(j + 1) * W + i + 1],
+        ]
+        highest = Math.max(highest, Math.min(...corners))
       }
     }
-    expect(highest).toBeLessThan(shoreMin + 0.1)
+    expect(highest).toBeLessThan(shoreMin + 0.05)
+    // and it holds water at its low end (shallow: on a slope this steep, about 17 %, a pond with no dam is a wedge)
+    expect(Math.max(...L.depth)).toBeGreaterThan(100)
     // a stream through it: the same ground whichever sorts first
     const brook = (id: string) => ({
       id,
@@ -730,6 +735,59 @@ describe('M1b: applying features into the layers', () => {
     // a pond narrower than a cell keeps its cells
     const sliver = apply(mini([{ id: 'sliver', kind: 'water.pond', ellipse: [[0, 1], 30, 0.8, 0] }]), cat)
     expect(sliver.water.some(v => v > 0)).toBe(true)
+    // ground inside the outline that holds no water is never cut: a node whose cells are all dry is the bare ground
+    for (let j = 1; j < L.nz; j++) {
+      for (let i = 1; i < L.nx; i++) {
+        const cells = [
+          L.water[(j - 1) * L.nx + i - 1],
+          L.water[(j - 1) * L.nx + i],
+          L.water[j * L.nx + i - 1],
+          L.water[j * L.nx + i],
+        ]
+        if (cells.every(v => !v)) expect(L.height[j * (L.nx + 1) + i]).toBe(bare.height[j * (L.nx + 1) + i])
+      }
+    }
+    // a finger of the outline narrower than a cell, up the slope, holds no water up there
+    const finger = {
+      id: 'finger',
+      kind: 'water.pond',
+      area: [
+        [
+          [-30, -50],
+          [30, -50],
+          [30, 10],
+          [1.6, 10],
+          [1.6, 40],
+          [0.4, 40],
+          [0.4, 10],
+          [-30, 10],
+        ],
+      ] as Pt[][],
+    }
+    const F = apply(mini([slope, finger]), cat)
+    for (let j = Math.floor((15 - F.z0) / F.cell); j < F.nz; j++) {
+      for (let i = 0; i < F.nx; i++) expect(F.water[j * F.nx + i]).toBe(0)
+    }
+    // the edits count: ground lowered under the level inside the pond (clear of its shore, which sets the level) is
+    // its water
+    const lower = {
+      id: 'lower',
+      kind: 'relief.lower',
+      area: [
+        [
+          [-10, -40],
+          [10, -40],
+          [10, -20],
+          [-10, -20],
+        ],
+      ] as Pt[][],
+      height: 6,
+      edge: 0,
+    }
+    const at = (X: Layers, x: number, z: number) =>
+      X.water[Math.floor((z - X.z0) / X.cell) * X.nx + Math.floor((x - X.x0) / X.cell)]
+    expect(at(L, 0, -25)).toBe(0)
+    expect(at(apply(mini([slope, pond, lower]), cat), 0, -25)).toBeGreaterThan(0)
   })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(
