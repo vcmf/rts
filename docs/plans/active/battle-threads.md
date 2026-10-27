@@ -360,6 +360,16 @@ tile) is no sim map. Two PRs, then PR 4.
       `MARCH_BUDGET`, `LAYER_BUDGET`) pass on the quiet machine.
 - **PR 6**, rendering in a worker (OffscreenCanvas), or the layer in WebAssembly with f32x4 SIMD (cosmetic, so
   determinism does not apply), only if main-thread jank is measured to cost frames after PR 3.
+  - **The measurement** (started 2026-10-27, the owner: "lets continue", after PR 4): the sim page's p99 already meets
+    the goal (PR 5: 6.8 ms at 32,000 men, 8×), so the question is the look page at `?sim`. The bench's trace gains
+    the page's sim tick (`simMs`: the battle's frame on the page, the newest frame taken, the orders) and long tasks
+    (`longTasks`, `longMs`: a `PerformanceObserver`, counted in the frame whose end sees them); with `placeMs` and
+    `tiMs` they are the main thread's work outside rendering. The same bench as PR 4 (`?armies=40`, Metal, the
+    preview build, script and `?sim` interleaved, two clean rounds).
+  - **Decision**: PR 6 goes ahead if, at `?sim`, that work (`simMs` + `placeMs` + `tiMs`) is over 1 ms a frame at
+    p95 (an eighth of the 8.33 ms frame), or long tasks fall in over 1 % of frames; else it is closed as not needed,
+    the look page's remaining frame cost being its rendering (the script's page alike; #215; decision 0050, Track E).
+    Either way the plan says so, with the numbers.
 
 ## Open questions
 

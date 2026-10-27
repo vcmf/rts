@@ -361,6 +361,17 @@ export async function runBench(
     undo.push(() => {
       eng._createShaderProgram = compile
     })
+    // long tasks (the browser's, over 50 ms), counted into the frame being recorded when the observer hears of them
+    if (PerformanceObserver.supportedEntryTypes.includes('longtask')) {
+      const long = new PerformanceObserver(list => {
+        for (const e of list.getEntries()) {
+          TRACE.c[TR.longTasks]++
+          TRACE.c[TR.longMs] += e.duration
+        }
+      })
+      long.observe({ type: 'longtask' })
+      undo.push(() => long.disconnect())
+    }
   }
   const seg = (label: string | null) => {
     if (open === label) return

@@ -23,6 +23,9 @@ export const TRACE_FIELDS = [
   'activeMeshes', // Babylon's active meshes
   'draws', // and draw calls
   'cpuMs', // the frame's JavaScript: from its start to its end (the GPU's time is the interval's rest)
+  'simMs', // the page's sim tick (?sim: src/look/sim-armies.ts; the battle's frame, the frame taken, the orders)
+  'longTasks', // long tasks (over 50 ms: the bench's PerformanceObserver), counted in the frame whose end sees them
+  'longMs', // and their time
 ] as const
 export type TraceField = (typeof TRACE_FIELDS)[number]
 /** each field's index (TRACE.c[TR.sm]: a number, no lookup by name a call) */
