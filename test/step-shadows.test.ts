@@ -4,7 +4,10 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
+  FOOT_SHARP,
   SHADOW_CONTACT,
+  STEP_SHADOW,
+  applyContactParams,
   applyFootSharpParams,
   applyStepParams,
   footSharpen,
@@ -99,10 +102,11 @@ describe("the step atlas's layout (stepAtlasLayout)", () => {
 
 describe('the page switch (?ushstep: applyStepParams)', () => {
   const q = (s: string) => applyStepParams(new URLSearchParams(s))
-  it('reads steps, facings and the mode; 0 or absent is today', () => {
-    expect(q('')).toBeNull()
+  it('reads steps, facings and the mode; absent is decision 0074s 8,8,hold, 0 the clip-averaged shape', () => {
+    expect(q('')).toEqual({ steps: 8, facings: 8, blend: false })
+    expect(q('')).toEqual(STEP_SHADOW)
     expect(q('ushstep=0')).toBeNull()
-    expect(q('ushstep=8')).toEqual({ steps: 8, facings: 16, blend: false })
+    expect(q('ushstep=8')).toEqual({ steps: 8, facings: 8, blend: false })
     expect(q('ushstep=4,8,blend')).toEqual({ steps: 4, facings: 8, blend: true })
     expect(q('ushstep=12,16,hold')).toEqual({ steps: 12, facings: 16, blend: false })
   })
@@ -249,11 +253,27 @@ describe("the per-step shape's feet sharpened (footSharpen, ?ushfootk)", () => {
     expect(footSharpen(0.2, 2, 0.4)).toBeCloseTo(1.5, 9)
     for (const a of [-1, 0, 0.1, 0.5, 2]) expect(footSharpen(a, 1, 0.4)).toBe(1)
   })
-  it('reads the switch: none when absent, the reach 0.4 m by default, refusing values outside 1..4 and 0..1 m', () => {
+  it('reads the switch: 3,0.6 when absent, the reach 0.6 m by default, refusing values outside 1..4 and 0..1 m', () => {
     const q = (v: string) => applyFootSharpParams(new URLSearchParams(v))
-    expect(q('')).toEqual([1, 0])
-    expect(q('ushfootk=2')).toEqual([2, 0.4])
+    expect(q('')).toEqual([3, 0.6])
+    expect(q('')).toEqual([...FOOT_SHARP])
+    expect(q('ushfootk=1')).toEqual([1, 0.6])
+    expect(q('ushfootk=2')).toEqual([2, 0.6])
     expect(q('ushfootk=3,0.5')).toEqual([3, 0.5])
     for (const v of ['0.5', '5', '2,2', 'x']) expect(() => q(`ushfootk=${v}`), v).toThrow(/ushfootk/)
+  })
+})
+
+describe("main's look one URL away (decision 0074's A/B recipe)", () => {
+  it('?ushstep=0&ushcontact=1 gives decision 0071s page: no per-step shape, 0071s oval', () => {
+    const q = new URLSearchParams('armies=20&ushstep=0&ushcontact=1')
+    expect(applyStepParams(q)).toBeNull()
+    expect(applyContactParams(q)).toEqual(SHADOW_CONTACT)
+  })
+  it('the default: the per-step shape 8,8 held, no oval, the feet 3,0.6', () => {
+    const q = new URLSearchParams('armies=20')
+    expect(applyStepParams(q)).toEqual({ steps: 8, facings: 8, blend: false })
+    expect(applyContactParams(q)).toBeNull()
+    expect(applyFootSharpParams(q)).toEqual([3, 0.6])
   })
 })

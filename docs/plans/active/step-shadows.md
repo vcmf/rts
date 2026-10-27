@@ -46,10 +46,15 @@ Out: making it the default (the owner judges first; a decision record then), the
 
 ## Acceptance
 
-- `?ushstep` absent: the page as main (the shader's defines unchanged, the bake unchanged).
-- The measurements and images above; the owner's judgement in motion; then a recommendation (default or not, which
-  setting, the oval or not) and its decision record in a follow-up.
-- `npm test`, `check:data`, `check-docs`, build: exit 0.
+As first planned (a test behind the switch): `?ushstep` absent the page as main; the measurements and images; the
+owner's judgement. Done; the owner picked the per-step shadow without the oval, feet B. Now (round 3, decision 0074):
+
+- The default: `8,8` held in the near material (to 100 m), no oval, `?ushfootk` 3,0.6; today's averaged shape far.
+- `?ushstep=0&ushcontact=1` gives main's page (1093fdc3) exactly: tested (the switches' parse) and compared by the
+  golden screenshots.
+- The Metal bench against main 1093fdc3, three quiet rounds, 20 to 250 m; memory and load time for the default.
+- The 100 m edge watched; any pop reported with its cheapest fix (no fade built without the owner).
+- `npm test`, `check:data`, `check:docs`, build, `tools/guard.mjs` against main, the unit page checks: exit 0.
 
 ## Open questions
 
@@ -182,3 +187,61 @@ dark strokes under the front rank; B's less so.
 **Facings:** with 8 facings the shadow blends the two nearest baked facings per pixel, so a turning man's shadow
 cross-fades rather than jumps. In the demo the men turn at once (column to run), so no slow turn could be shot; the
 running men's headings fall between baked facings, and 8 and 16 facings look the same there (sheet 13).
+
+## Round 3 (2026-10-27): B the default (decision 0074)
+
+The owner picked B. The default is now `8,8` held in the near material, no oval, `?ushfootk` 3,0.6 (`STEP_SHADOW`,
+`FOOT_SHARP`); far, today's averaged shape. `?ushstep=0&ushcontact=1` is main's page (1093fdc3); checked by the
+switches' tests and by the golden screenshots against main (the check batch below).
+
+### Memory, load
+
+Two atlases, 2.9 + 11.7 = **14.6 MB** with mips (main: 2.9 MB). Production builds, `?armies=20`, three loads each on
+Metal and two on SwiftShader (1-min load 4.5 to 7.8):
+
+| | `shapeMs` (both bakes) | `__buildMs` Metal | `__buildMs` SwiftShader |
+|---|---|---|---|
+| main 1093fdc3 | 155–160 | 1727–1769 | 6904–6928 |
+| default | 243–272 | 1797–1889 | 6912–6916 |
+
+About 100 ms more of bake at load; the page's build about 70 ms longer on Metal, the same on SwiftShader.
+
+### Frame cost
+
+The Metal bench, `?armies=20&benchr=20,40,63,125,250`, main 1093fdc3 (port 4351) against the default (4350), the
+arms alternated, five tries, each started at a 1-min load of 2.9 or less. The bench itself lifts the 1-min load to
+about 4 to 5, main's runs as much as the default's. Try 1's default run hit another session's spike (the load ended
+at 33): it is dropped. The default arm's (`l2`) GPU frame p50 / frame p50, ms, the mean over its three yaws, main ·
+default; the load at each run's start → end:
+
+| try | load main | load default | 20 m | 40 m | 63 m | 125 m | 250 m |
+|---|---|---|---|---|---|---|---|
+| 2 | 2.6 → 5.1 | 5.1 → 5.1 | 11.57/7.90 · 11.60/7.88 | 13.49/9.35 · 13.72/9.55 | 14.28/10.22 · 14.57/10.38 | 13.47/10.30 · 13.58/10.38 | 9.81/6.90 · 9.90/7.00 |
+| 3 | 2.5 → 4.0 | 4.0 → 7.0 | 11.50/7.95 · 11.56/7.87 | 13.53/9.23 · 13.40/9.25 | 14.22/10.20 · 14.11/9.95 | 13.43/10.27 · 13.37/10.22 | 9.77/6.88 · 9.78/6.90 |
+| 4 | 2.9 → 5.0 | 5.0 → 4.2 | 11.57/7.93 · 11.56/7.90 | 14.00/9.55 · 13.48/9.42 | 14.31/10.28 · 14.25/10.25 | 13.55/10.28 · 13.42/10.20 | 9.81/6.90 · 9.79/6.92 |
+| 5 | 2.8 → 4.9 | 4.9 → 4.9 | 11.58/7.88 · 11.58/7.88 | 13.51/9.33 · 13.49/9.42 | 14.31/10.27 · 14.25/10.23 | 13.51/10.28 · 13.43/10.20 | 9.85/6.95 · 9.79/6.93 |
+
+The default is within the noise of main at every zoom. GPU p50 ranges, the default against main: 20 m 11.56–11.60
+against 11.50–11.58; 40 m 13.40–13.72 against 13.49–14.00; 63 m 14.11–14.57 against 14.22–14.31; 125 m 13.37–13.58
+against 13.43–13.55; 250 m 9.78–9.90 against 9.77–9.85. No measurable cost, at 20 m (where the per-step shape matters
+most) within 0.06 ms. The logs: the session scratchpad's `step/bench2/`.
+
+### The 100 m edge
+
+Zooming out across 100 m on bare ground, a march frozen (radii 94 to 106 m): the near material gives way to the far one
+in one frame. In the frame just inside (99.6 m) the switch changes 1.3 % of the pixels by more than 8 levels and 0.15 %
+by more than 24 (the default against `?ushstep=0` there). The camera's own move from 99.6 to 100.4 m changes 20 %. It
+is a scatter of single pixels at the men's feet: the foot boost, which the far material does not have, more than the
+shape (`output/armies-review/24-step-feet/14-edge-100m-bare.jpg`). At 3× the two frames look alike. The cheapest fix,
+if the owner sees it: fade the boost to 1 over the band by the near weight on the CPU (one uniform; no shader change);
+not built.
+
+### Checks (the final default, once)
+
+- `npm test`: lint, format and typecheck passed. Vitest had 635 of 637 passing; the two failures were the sim's cost
+  tests (`test/formations.test.ts`, `test/soldiers.test.ts`, code this branch does not touch) under a 1-min load of
+  about 15. Rerun alone: exit 0.
+- `check:data`, `check:docs`, the build: exit 0.
+- `tools/golden.mjs` main 1093fdc3 against `?ushstep=0&ushcontact=1` on this branch, `?armies=20`, 8 cameras: a match
+  (0.000 % at every region), exit 0.
+- `tools/guard.mjs` `?armies=20 --figures --base` main: exit 0.

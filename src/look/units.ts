@@ -37,7 +37,8 @@ import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
 import {
   CONTACT_FLOOR,
-  SHADOW_CONTACT,
+  FOOT_SHARP,
+  STEP_SHADOW,
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
   contactReachOf,
@@ -343,16 +344,16 @@ export class Units {
    *  only with simpleClose (else the far look at every zoom, as before) */
   look: { close: ShadowLook; far: ShadowLook } = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
   lookBand: [number, number] = [...SHADOW_LOOK_BAND]
-  /** the contact shadow under each man's feet (decision 0071; SHADOW_CONTACT, ?ushcontact: applyContactParams), or
-   *  null: none. Read once, when the shadows' material is made */
-  contact: ShadowContact | null = { ...SHADOW_CONTACT }
-  /** the shape baked per animation step (?ushstep: applyStepParams, docs/plans/active/step-shadows.md), or null:
-   *  today's, averaged over each clip. Read once, when the shadows' material is made */
-  stepShadow: StepShadow | null = null
+  /** the contact shadow under each man's feet (decision 0071; ?ushcontact: applyContactParams), or null: none (the
+   *  default since decision 0074). Read once, when the shadows' material is made */
+  contact: ShadowContact | null = null
+  /** the shape baked per animation step for the near material (decision 0074; ?ushstep: applyStepParams), or null:
+   *  the shape averaged over each clip at every zoom. Read once, when the shadows' material is made */
+  stepShadow: StepShadow | null = { ...STEP_SHADOW }
   /** the shape atlases' sizes (texels, RG8 with mips: today's, then the per-step one with ?ushstep), once made */
   shapeSizes: [number, number][] = []
-  /** the per-step shape's foot sharpening ([boost, reach m]: footSharpen, ?ushfootk), [1, 0]: none */
-  footSharp: [number, number] = [1, 0]
+  /** the per-step shape's foot sharpening ([boost, reach m]: footSharpen, ?ushfootk; FOOT_SHARP), [1, 0]: none */
+  footSharp: [number, number] = [FOOT_SHARP[0], FOOT_SHARP[1]]
   private contactReach = 0 // m: how far the contact reaches from a man's root (the strip holds it: decalStrip)
   private contactW = 0 // the contact's weight this frame (contactWeight, by the camera's distance)
   private contactWSet = NaN // and the one last given to the material (setDecalLook)

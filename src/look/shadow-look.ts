@@ -286,25 +286,29 @@ export function decalLift(along: number, lift: number, ramp: number, oval: boole
  *  grass; measured in the plan ("Matching the trees") */
 export const SHADE_DESAT = 0.65
 
-/** The contact from the page's switches, SHADOW_CONTACT's where not given: ?ushcontact=<pad m 0..1>,<dark
- *  0..1>[,<soft 0..1>] (0 alone, or a pad or darkness of 0: none), ?ushcontactat=root|stride|step,
- *  ?ushcontactband=<r0>,<r1> (m, r0 < r1). Null with none: the oval's material not made */
+/** The contact from the page's switches: off by default since decision 0074 (the per-step shape holds the feet);
+ *  ?ushcontact=1 decision 0071's (SHADOW_CONTACT), ?ushcontact=<pad m 0..1>,<dark 0..1>[,<soft 0..1>] (a pad or
+ *  darkness of 0: none; SHADOW_CONTACT's where not given), ?ushcontact=0 none; ?ushcontactat=root|stride|step,
+ *  ?ushcontactband=<r0>,<r1> (m, r0 < r1) shape it when it is on. Null with none: the oval's material not made */
 export function applyContactParams(q: URLSearchParams): ShadowContact | null {
   const d = SHADOW_CONTACT
   const c = parseNumbers(q, 'ushcontact', [1, 2, 3], [0, 1])
-  if (c?.length === 1 && c[0] !== 0) throw new Error(`?ushcontact must be 0 or <pad>,<dark>[,<soft>], not ${c[0]}`)
+  if (c?.length === 1 && c[0] !== 0 && c[0] !== 1) {
+    throw new Error(`?ushcontact must be 0, 1 or <pad>,<dark>[,<soft>], not ${c[0]}`)
+  }
   const at = q.get('ushcontactat') ?? d.mode
   if (!['root', 'stride', 'step'].includes(at)) throw new Error(`?ushcontactat must be root, stride or step, not ${at}`)
   const band = parseNumbers(q, 'ushcontactband', [2], [0, 1000])
   if (band && !(band[1] > band[0])) {
     throw new Error(`?ushcontactband must be <r0>,<r1> with r0 < r1, not ${q.get('ushcontactband')}`)
   }
-  const on = c === null || (c.length > 1 && c[0] > 0 && c[1] > 0)
-  if (!on) return null
+  const whole = c?.length === 1 && c[0] === 1
+  const on = whole || (c !== null && c.length > 1 && c[0] > 0 && c[1] > 0)
+  if (!c || !on) return null
   return {
     mode: at as ContactMode,
-    pad: c ? c[0] : d.pad,
-    dark: c ? c[1] : d.dark,
+    pad: whole ? d.pad : c[0],
+    dark: whole ? d.dark : c[1],
     soft: c?.[2] ?? d.soft,
     band: band ? [band[0], band[1]] : d.band,
   }
@@ -456,15 +460,17 @@ export interface StepShadow {
   facings: number
   blend: boolean
 }
-/** ?ushstep=<steps 1..32>[,<facings 4..32>[,hold|blend]] (0 alone or absent: today's shape, averaged over the clip,
- *  null); the facings 16 and hold by default. A setting whose atlas cannot fit 4096 texels a side (at 16 facings, more
- *  than 12 steps) is refused at load (stepAtlasLayout, src/look/units-data.ts) */
+/** The per-step shape by default (decision 0074, the owner's pick, 2026-10-27): 8 bins a clip, 8 facings, held */
+export const STEP_SHADOW: Readonly<StepShadow> = { steps: 8, facings: 8, blend: false }
+/** ?ushstep=<steps 1..32>[,<facings 4..32>[,hold|blend]] (absent: STEP_SHADOW; 0: today's shape, averaged over the
+ *  clip, null, decision 0062's); the facings 8 and hold by default. A setting whose atlas cannot fit 4096 texels a side
+ *  (at 16 facings, more than 12 steps) is refused at load (stepAtlasLayout, src/look/units-data.ts) */
 export function applyStepParams(q: URLSearchParams): StepShadow | null {
   const v = q.get('ushstep')
-  if (v === null) return null
+  if (v === null) return { ...STEP_SHADOW }
   const f = v.split(',')
   const steps = Number(f[0])
-  const facings = f.length > 1 ? Number(f[1]) : 16
+  const facings = f.length > 1 ? Number(f[1]) : STEP_SHADOW.facings
   const mode = f[2] ?? 'hold'
   const whole = (s: string | undefined) => s !== undefined && /^\d+$/.test(s)
   const ok =
@@ -498,9 +504,12 @@ export function nearOn(c: ShadowContact | null, steps: boolean, w: number): bool
 export function footSharpen(along: number, boost: number, reach: number): number {
   return boost + (1 - boost) * sstep(0, Math.max(reach, 1e-3), along)
 }
-/** ?ushfootk=<boost 1..4>[,<reach m 0..1>]: the per-step shape's foot sharpening (footSharpen); [1, 0] (none) when
- *  absent, the reach 0.4 m by default */
+/** The per-step shape's foot sharpening by default (decision 0074, the owner's pick B, 2026-10-27): the share at
+ *  the soles three times, back to 1 by 0.6 m */
+export const FOOT_SHARP: readonly [number, number] = [3, 0.6]
+/** ?ushfootk=<boost 1..4>[,<reach m 0..1>]: the per-step shape's foot sharpening (footSharpen); FOOT_SHARP when
+ *  absent, the reach 0.6 m when not given; 1: none */
 export function applyFootSharpParams(q: URLSearchParams): [number, number] {
   const n = parseNumbers(q, 'ushfootk', [1, 2], [1, 4], [0, 1])
-  return n ? [n[0], n[1] ?? 0.4] : [1, 0]
+  return n ? [n[0], n[1] ?? FOOT_SHARP[1]] : [FOOT_SHARP[0], FOOT_SHARP[1]]
 }

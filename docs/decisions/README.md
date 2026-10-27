@@ -65,4 +65,5 @@ recorded here on 2026-10-08.
 | [0066](0066-figures-lod-cross-fade.md) | The figures' LODs cross-faded per man by a screen-door dither | proposed |
 | [0067](0067-simple-shadows-darker.md) | The soldiers' simple shadows darker: a gain on their darkening (amends 0062; its values superseded by 0071) | accepted |
 | [0068](0068-dye-palette.md) | Uniforms name dyes from one palette, by cloth part | accepted |
-| [0071](0071-soldier-contact-shadow.md) | A contact shadow under the soldiers' feet; their shadows no darker than the ground's painted shadow (amends 0062, supersedes 0067's values) | accepted |
+| [0071](0071-soldier-contact-shadow.md) | A contact shadow under the soldiers' feet; their shadows no darker than the ground's painted shadow (amends 0062, supersedes 0067's values; its oval superseded by 0074) | accepted |
+| [0074](0074-soldier-shadow-per-step.md) | The soldiers' shadow from their pose up close, baked per animation step; no contact oval (amends 0062, supersedes 0071's oval) | accepted |

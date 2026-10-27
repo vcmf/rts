@@ -571,19 +571,21 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
 // ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one; ?ushgain=<1..3>[,<far>],
 // the darkening's strength, foot and tip alike (1, the default since decision 0071: as decision 0062 shipped it;
 // decision 0067's 2,1.5: docs/plans/done/shadow-darker.md)
-// the contact shadow (decision 0071, by default the owner's): ?ushcontact=<pad m>,<dark>[,<soft>], the oval under each
-// man's feet (0: none); ?ushcontactat=root|stride|step, where it sits; ?ushcontactband=<r0>,<r1>, the zoom band (m
-// from the focus) it fades out over; ?ushdesat=<0..1>, the ground's shade turned toward its grey (0: as before;
-// ?ushcontact=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4 is decision 0067's page)
+// the contact shadow (decision 0071; off since decision 0074): ?ushcontact=1 (0071's) or <pad m>,<dark>[,<soft>], the
+// oval under each man's feet (0: none); ?ushcontactat=root|stride|step, where it sits; ?ushcontactband=<r0>,<r1>, the
+// zoom band (m from the focus) it fades out over; ?ushdesat=<0..1>, the ground's shade turned toward its grey (0: as
+// before). The earlier pages: ?ushstep=0&ushcontact=1 is decision 0071's (main at 1093fdc3);
+// ?ushstep=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4 is decision 0067's
 // (src/look/shadow-look.ts parses them, a bad value an error at load)
 const shadowMode = shadowModes(params)
 const shadowLook = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
 const ushBand = applyLookParams(params, shadowLook.close, shadowLook.far).band
 const ushContact = applyContactParams(params)
-// the shape baked per animation step (a test, docs/plans/active/step-shadows.md): ?ushstep=<steps a clip>[,<facings>
-// [,hold|blend]] (0 or absent: the shape averaged over each clip, as before)
+// the shape baked per animation step up close (decision 0074, docs/plans/active/step-shadows.md): ?ushstep=<steps a
+// clip>[,<facings>[,hold|blend]] (absent: 8,8,hold; 0: the shape averaged over each clip at every zoom, as before)
 const ushStep = applyStepParams(params)
-// ?ushfootk=<boost>[,<reach m>]: the per-step shape's feet darker and crisper, never past the ground's shade
+// ?ushfootk=<boost>[,<reach m>]: the per-step shape's feet darker and crisper, never past the ground's shade (absent:
+// 3,0.6; 1: none)
 const ushFootK = applyFootSharpParams(params)
 const ushDesat = shadeDesat(params)
 const uShadowSwitch = params.get('ushadowswitch')

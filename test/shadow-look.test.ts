@@ -395,9 +395,12 @@ describe('the shape with its soft bake', () => {
 
 describe('the contact shadow (decision 0071)', () => {
   const k = [0.25, 0.3, 0.42]
-  it("is on by default, the owner's (2026-10-27): the oval following the feet, soft, its core the ground's shade", () => {
+  it("is off by default since decision 0074; ?ushcontact=1 is 0071's: the oval following the feet, its core k", () => {
     expect(SHADOW_CONTACT).toEqual({ mode: 'step', pad: 0.1, dark: 1, soft: 1, band: [60, 100] })
-    expect(applyContactParams(q('armies=20'))).toEqual(SHADOW_CONTACT)
+    expect(applyContactParams(q('armies=20'))).toBeNull()
+    expect(applyContactParams(q('ushcontact=1'))).toEqual(SHADOW_CONTACT)
+    expect(applyContactParams(q('ushcontact=1&ushcontactat=root'))).toEqual({ ...SHADOW_CONTACT, mode: 'root' })
+    expect(() => applyContactParams(q('ushcontact=0.5'))).toThrow(/ushcontact/)
   })
   it('turns off with ?ushcontact=0, a pad or a darkness of 0', () => {
     expect(applyContactParams(q('ushcontact=0'))).toBeNull()
