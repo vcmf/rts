@@ -15,6 +15,7 @@ import type { FireGeo } from './fire.ts'
 import type { Melee } from './melee.ts'
 import type { PlanStep } from './plan.ts'
 import type { Claims } from './claims.ts'
+import type { Faces } from './sectors.ts'
 
 export const MAX_FORMATIONS = 128
 export const MAX_ORDERS = 2048
@@ -239,6 +240,7 @@ export interface World {
     fireSight?: Int32Array
     fireEpoch?: number
     claims?: Claims
+    faces?: Faces // the formations' faces this tick (src/sim/sectors.ts)
     fireCrossed?: Float64Array
     reverse?: boolean
     reverseMoves?: boolean

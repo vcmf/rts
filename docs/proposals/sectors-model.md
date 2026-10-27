@@ -38,11 +38,11 @@ step; stamped `fireGeoTick`), so every reader in the tick sees the faces after t
 - **all:** a braced shape (`FormationDef.braced`, the square), formed. No geometry: every point is front.
 - **one:** every other formed shape but a trail shape. From the blocks of its companies with men, corners projected on
   its frame: `L = min x`, `R = max x`, `F = max y` (the front edge), `B = min y` (the rear edge).
-- **trail:** a trail shape (march column, limbered guns), formed. Two frames: the head company's (its centre, its
-  facing on the trail) and the tail company's. In each, the company's four block corners are projected on that frame
-  (whatever the block's own rotation: a column of route's blocks lie at a quarter turn); the head segment lies across
-  the head's facing at the largest projected `y`, the tail segment at the tail's smallest, each `wc` wide (the larger
-  of the company's projected width across and one file step), centred on the company.
+- **trail:** a trail shape (march column, limbered guns), formed. Two frames, each a company's own box: the head
+  company's (the first with men; origin its centre, heading its facing on the trail) for the front, the tail
+  company's (the last with men) for the rear. Each box is its company's four block corners projected on that frame,
+  whatever the block's own rotation (a column of route's blocks lie at a quarter turn), so the head's front edge is
+  the column's head and its width the column's (measured: 2.6 m for the infantry's column of route).
 - **none:** a formation changing shape, whatever it changes from and to (the unit model: a formation changing shape
   has no front). Its `L`, `R`, `F`, `B` as for **one**, from its placed blocks, but no point is front (§ 3). Being
   caught changing shape, forming square included, is struck and drained as in the flank, or the rear from behind.
@@ -69,25 +69,25 @@ step; stamped `fireGeoTick`), so every reader in the tick sees the faces after t
   0.412 to 0.588, that is 35° to 55°: the proposal's about 10° either side);
 - **the corner ramp** `g(d) = clamp(1 + d / c, 0, 1)`: 1 ahead of the edge, falling to 0 a corner's length behind it,
   so a point sliding past the face's end from ahead to beside changes smoothly;
-- `front = s(t(a, o)) × g(a)`, `rear = s(t(b, o)) × g(b)` (they cannot both be above 0 for a face at least `2c`
-  deep), `flank = 1 − front − rear`.
+- `front = s(t(a, o)) × g(a)`, `rear = s(t(b, o)) × g(b)`, rescaled to sum to 1 if together above 1 (a face less
+  than `c` deep), `flank = 1 − front − rear`.
 
-A point within the face's width and inside the footprint (`o = 0`, `B < y < F`) is a degenerate case (two bodies
-overlapping): it is read by the half it lies in, front ahead of `(F + B) / 2`, rear behind.
+A point inside another body's footprint (two bodies overlapping) needs no rule of its own: within `c` of the front
+edge it is partly front, of the rear edge partly rear, deeper flank, continuously.
 
 **Kind all:** `(1, 0, 0)`. **Kind none:** `front = 0`, `rear` as for one, `flank = 1 − rear`. **Kind trail:** `front`
-from the head segment (in the head's frame, its ends `L`, `R`, its line `F`, read for `a`), `rear` from the tail
-segment (in the tail's frame, its line `B`, read for `b`); if `front + rear > 1` (a column doubled back on itself)
-both are scaled to sum to 1; `flank = 1 − front − rear`.
+from the head's box (its frame, read for `a`), `rear` from the tail's box (its frame, read for `b`), rescaled as above
+(a column doubled back on itself); `flank = 1 − front − rear`.
 
 **Properties.**
 - **P-4:** the weights are each in 0..1 and sum to 1, for every point and every kind.
 - **P-5:** a point straight ahead of the face, within its width, is front 1 at any distance, contact included (`o = 0`,
   `a > 0`).
-- **P-6:** at range (`a + o >= 50 m`): on the 45° line from the nearer end front is 0.5 within 0.02; at 35° and less it
-  is 1 within 0.02; at 55° and more, 0 within 0.02.
-- **P-7:** scale: at range (`a + o >= 50 m`), multiplying a point's `a` and `o` by any factor from 1 to 10 changes its
-  weights by less than 0.02 (the same at 50 m and at 500 m).
+- **P-6:** on the 45° line from the nearer end front is 0.5 within 0.05 from 50 m, within 0.02 from 150 m (the
+  corner's `c` leans it a little to the front up close: measured 0.540 at 50 m, 0.507 at 300 m); at 35° front is 1
+  within the same; at 55°, 0 within the same (measured 0.046 at 50 m, 0.007 at 300 m).
+- **P-7:** scale: from 150 m, moving a point out along its ray from the nearer end by up to 3 times changes its
+  weights by less than 0.02.
 - **P-8:** mirror (kinds one and none): a point and its mirror across the face's centre line have the same weights.
 - **P-9:** monotone: walking round the face's end at a fixed distance, from straight ahead to straight to the side,
   front never rises and flank never falls; the same round the rear.
@@ -104,9 +104,9 @@ both are scaled to sum to 1; `flank = 1 − front − rear`.
 
 `threatWeights(face, Q) → (front, flank, rear)` for a threat that is a block `Q` (a charger's or a shooter's company).
 
-**Definition.** `Q`'s corners projected on the face's frame give its span across, `[x0, x1]` (for a trail, on the
-head's frame for its front and on the tail's for its rear, the rescale of § 3 applied per slice). The span is cut into
-`N = 8` equal slices; for each slice's centre `x`, the slice of `Q` at that `x` is an interval `[ymin, ymax]`, and its
+**Definition.** `Q`'s corners projected on the face's frame give its span across, `[x0, x1]` (for a trail, the front
+read on the head's frame and the rear on the tail's, each the mean over its own slices, then rescaled as in § 3). The
+span is cut into `N = 8` equal slices; for each slice's centre `x`, the slice of `Q` at that `x` is an interval `[ymin, ymax]`, and its
 **nearest point to the body** is `y = ymin` if `ymin > F`, `ymax` if `ymax < B`, else the point of the interval nearest
 `(F + B) / 2`. The threat's weights are the mean of the eight points' weights (§ 3). A point threat (a centre) is one
 slice.
@@ -117,8 +117,8 @@ slice.
   nearer end reads front 1.
 - **P-15:** a squadron striking a line's end at right angles (its span within the line's depth, beside its end) reads
   flank 1.
-- **P-16:** stability: a block at least 8 m wide moved 0.1 m in any direction changes its weights by at most 0.05, at
-  range and at contact (each slice by at most P-10's 0.2 over the corner's 1 m, and only a slice or two are in the
+- **P-16:** stability: a block at least 8 m wide, not overlapping the formation, moved 0.1 m in any direction changes its
+  weights by at most 0.05, at range and at contact (each slice by at most P-10's 0.2, and only a slice or two in the
   corner at once).
 - **P-17:** the result is the same, within 1e-12, whatever the order of `Q`'s corners; a charger's companies are summed
   in company order, so the side struck is the same bit for bit however they are listed.
@@ -193,7 +193,7 @@ changes (a rout, a cut change) reaches another's `Δ`.
 
 | Module | What | Signatures |
 |---|---|---|
-| `src/sim/sectors.ts` (new) | faces, point and threat weights, `byWeights` | `buildFaces(w, G)`; `pointWeights(G, j, x, z, out)`; `threatWeights(G, j, k, out)` (k a company of another formation); `byWeights(t, w)` |
+| `src/sim/sectors.ts` (new) | faces, point and threat weights, `byWeights` | `buildFaces(w, G)`; `pointWeights(w, j, x, z, out)`; `threatWeights(w, G, j, i, k, out)` (k a company of formation i); `byWeights(t, w)` |
 | `src/sim/fire.ts` | the faces built with the geometry; exposure; the screen test | `blockGeometry` calls `buildFaces`; `exposure(w, G, k, j)`; `screenShare(w, G, k, m, side)`; `inArc` and `sees` exported for `canHurt` |
 | `src/sim/artillery.ts` | canister's exposure | the cone's λ takes `exposure` for the aimed target |
 | `src/sim/melee.ts` | the side struck; the second enemy | `sideStruck(w, G, i, j, mask, out)` replaces `quarter`; `S.inMelee0` copied before the charges; the geometry it builds is stamped `fireGeoTick` |
@@ -213,7 +213,7 @@ fire, else by the first of the melee or morale steps that needs it, which stamps
 side struck and the second enemy; before step 12's loop, `tick.ts` runs the threat pass; then each battalion's morale
 with its drain.
 
-## 8. Numbers (first guesses, `src/rulesets/napoleonic.ts`)
+## 8. Numbers (first guesses; in `src/sim/sectors.ts` until step 3 moves them into `src/rulesets/napoleonic.ts`)
 
 | Number | Value | Stands for |
 |---|---|---|
@@ -226,6 +226,10 @@ with its drain.
 | `melee.second` | flank 0.15, rear 0.2 | under the guard (0.6 × 0.35 = 0.21) |
 
 ## 9. Tests
+
+**Proved (step 2):** `test/sectors.test.ts`, P-1 to P-17 and P-3b, 18 tests, on the shipped ruleset's line, column of
+attack, column of route, square, cavalry line and battery, limbered and unlimbered.
+
 
 `test/sectors.test.ts` (new) proves P-1 to P-17 on sampled inputs: faces and points drawn from a keyed stream
 (`keyedStream`, a fixed seed), a few thousand per property, for each kind of face (a line, a column of attack, a march
