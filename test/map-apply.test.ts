@@ -509,6 +509,30 @@ describe('M1b: applying features into the layers', () => {
       expect(Array.from(three(ids))).toEqual(first)
     }
   })
+  it("a circle mend mostly off the map takes its free rim's mean, not a plane tilted on a sliver of it", () => {
+    const slope = { id: 'hill', kind: 'relief.hill', point: [900, 700] as Pt, height: 60, width: 2400 }
+    // a bump on the sliver of rim that lies on the map, which a plane through that sliver tilts on
+    const bump = { id: 'bump', kind: 'relief.hill', point: [176, 190] as Pt, height: 6, width: 24 }
+    const pit = {
+      id: 'pit',
+      kind: 'relief.plateau',
+      circle: [[200, 200] as Pt, 14] as [Pt, number],
+      height: -6,
+      edge: 6,
+    }
+    const ground = apply(mini([slope, bump]), cat)
+    const mended = apply(
+      mini([slope, bump, pit, { id: 'mend', kind: 'relief.mend', circle: [[214, 214], 30], edge: 10 }]),
+      cat,
+    )
+    for (const [x, z] of [
+      [198, 198],
+      [195, 199],
+      [199, 192],
+    ] as Pt[]) {
+      expect(Math.abs(hAt(mended, x, z) - hAt(ground, x, z))).toBeLessThan(1)
+    }
+  })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(
       mini([

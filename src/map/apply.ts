@@ -586,11 +586,13 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
           const o = n.over > 0 ? 0 : n.side * n.d
           if (l && r) target[q] = r[1] + ((l[1] - r[1]) * (o + r[0])) / (l[0] + r[0])
           else if (l || r) {
-            // one side: its slope across the line, from a second sample R farther out, carried in (level if none)
+            // one side: its slope across the line, from a second sample R farther out, carried in; level where the
+            // side's free ground lies past twice the reach (a slope carried farther drifts off the ground) or none
             const [u, v] = l ? [-tz, tx] : [tz, -tx]
             const [s1, h1] = (l ?? r)!
             const s2 = s1 + R
-            const far = free(px + u * s2, pz + v * s2) > 0 ? heightOf(L, px + u * s2, pz + v * s2, H) : h1
+            const far =
+              s1 <= 2 * R && free(px + u * s2, pz + v * s2) > 0 ? heightOf(L, px + u * s2, pz + v * s2, H) : h1
             // the node's distance out along that side, negative across the line
             const t = l ? o : -o
             target[q] = h1 + ((far - h1) * (t - s1)) / (s2 - s1)
@@ -601,16 +603,19 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
         // the rim: the nodes within two cells past the edge's blend that no mend reaches
         const [cx, cz] = [(m.box[0] + m.box[2]) / 2, (m.box[1] + m.box[3]) / 2]
         let [n1, sx, sz, sxx, sxz, szz, sh, sxh, szh] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-        let rim = 0 // the rim's free nodes, and all of them (free or not) below
+        // the whole rim's nodes, on the map or off it (the grid's spacing, unclipped), against which the free ones
+        // (n1) are counted
         let ring = 0
-        nodes(m.box, m.edge + 2 * c, (_k, x, z) => {
-          const e = field.edge(x, z)
-          if (e < -m.edge && e >= -m.edge - 2 * c) ring++
-        })
+        const pad = m.edge + 2 * c
+        for (let gz = Math.floor((m.box[1] - pad - z0) / c); gz <= Math.ceil((m.box[3] + pad - z0) / c); gz++) {
+          for (let gx = Math.floor((m.box[0] - pad - x0) / c); gx <= Math.ceil((m.box[2] + pad - x0) / c); gx++) {
+            const e = field.edge(x0 + gx * c, z0 + gz * c)
+            if (e < -m.edge && e >= -m.edge - 2 * c) ring++
+          }
+        }
         nodes(m.box, m.edge + 2 * c, (k, x, z) => {
           const e = field.edge(x, z)
           if (e >= -m.edge || e < -m.edge - 2 * c || reached[k]) return
-          rim++
           const [u, v, h] = [x - cx, z - cz, H[k]]
           n1 += 1
           sx += u
@@ -623,10 +628,11 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
           szh += v * h
         })
         if (n1 === 0) continue
-        // the normal equations by Cramer's rule; a rim in a line, or mostly reached by other mends (under half of it
-        // free: a plane from a short arc tilts on its noise), takes its mean
+        // the normal equations by Cramer's rule; a rim in a line, or under a quarter of it free (reached by other
+        // mends or off the map: a plane from a shorter arc tilts on its noise; a quarter still holds the ground's
+        // slope, which a mean loses), takes its mean
         const det = n1 * (sxx * szz - sxz * sxz) - sx * (sx * szz - sxz * sz) + sz * (sx * sxz - sxx * sz)
-        const flat = Math.abs(det) < 1e-9 * (n1 * sxx * szz + 1) || 2 * rim < ring
+        const flat = Math.abs(det) < 1e-9 * (n1 * sxx * szz + 1) || 4 * n1 < ring
         const p0 = flat
           ? sh / n1
           : (sh * (sxx * szz - sxz * sxz) - sx * (sxh * szz - sxz * szh) + sz * (sxh * sxz - sxx * szh)) / det

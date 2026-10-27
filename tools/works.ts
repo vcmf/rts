@@ -129,6 +129,7 @@ function main(): void {
   const NOTE = ': a modern work, mended from the ground around it'
   const half: Pt = [map.extent.w / 2, map.extent.h / 2]
   const features: Record<string, unknown>[] = []
+  const made = new Set<string>()
   const report: string[] = []
   for (const w of ins.lines) {
     if (w.pts.length < 2) throw new Error(`${w.id}: a line needs two points or more`)
@@ -144,9 +145,13 @@ function main(): void {
     )
     // cut at the map's edge (the grid reaches 100 m past it; no piece under 20 m)
     const pieces = mapPieces(untangle(simplify(evenKept(t, 6).map(toPoint), 1)), { x: 0, z: 0, k: 1 }, half, 20)
+    if (!pieces.length) throw new Error(`${w.id}: no piece of 20 m or more inside the map`)
     pieces.forEach((line, k) => {
+      const id = k ? `${w.id}${k + 1}` : w.id
+      if (made.has(id)) throw new Error(`${id}: the tool makes two features with this id`)
+      made.add(id)
       features.push({
-        id: k ? `${w.id}${k + 1}` : w.id,
+        id,
         kind: 'relief.mend',
         line,
         width: w.width,
@@ -158,6 +163,8 @@ function main(): void {
   }
   for (const a of ins.areas) {
     const { id, edge, note, ...shape } = a
+    if (made.has(id)) throw new Error(`${id}: the tool makes two features with this id`)
+    made.add(id)
     features.push({
       id,
       kind: 'relief.mend',

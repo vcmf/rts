@@ -284,6 +284,18 @@ into the epic; this plan details each as it starts.
   mends found through the kind chain (a subkind mends); their sums in an order of their content, so a rename changes
   no bit; the point along a line by halving over its vertices' distances; the free check unrolled. Tests: the edge, a
   subkind, three overlapping mends renamed (bit for bit), the snap's threshold.
+- **Round 3**: moderate and light only, so the review stops here. Fixed: a slope carried across from one side is
+  carried only from free ground within twice the reach (farther, the side is level: a slope carried over hundreds of
+  metres drifts off the ground); an area's rim is counted on the map and off it, and under a quarter of it free takes
+  its mean (measured: a plane through a quarter of a circle's rim holds the ground's slope better than a mean, by
+  0.7 m; through a sliver it tilts by 1.7 m); the tool refuses two features of one id and a line that gives no piece
+  inside the map (its old mend would go silently). Tests: the sliver of rim (fails without it). Not taken, with why:
+  a node with no free ground on either side keeps the work, unreported (apply has no warnings; the before and after
+  images show it, and none is left on Austerlitz); a spur doubling back almost on itself survives `untangle` (none in
+  the committed lines; the trace's spur cut takes most); the side walks per node rather than per station along the
+  line, and the point along a line beside `pointAt` (measured cost acceptable; to share when the tracer is reworked,
+  #227); the mend marked as an edit and excluded from the edits loop by its kind (one check, in apply only). The
+  slope's limit has no test of its own (it needs a far side with a step in it).
 
 ## Open questions
 
