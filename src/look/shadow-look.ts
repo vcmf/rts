@@ -289,7 +289,8 @@ export const SHADE_DESAT = 0.65
 /** The contact from the page's switches: off by default since decision 0074 (the per-step shape holds the feet);
  *  ?ushcontact=1 decision 0071's (SHADOW_CONTACT), ?ushcontact=<pad m 0..1>,<dark 0..1>[,<soft 0..1>] (a pad or
  *  darkness of 0: none; SHADOW_CONTACT's where not given), ?ushcontact=0 none; ?ushcontactat=root|stride|step,
- *  ?ushcontactband=<r0>,<r1> (m, r0 < r1) shape it when it is on. Null with none: the oval's material not made */
+ *  ?ushcontactband=<r0>,<r1> (m, r0 < r1) shape it when it is on, and are an error without it. Null with none: the
+ *  oval's material not made */
 export function applyContactParams(q: URLSearchParams): ShadowContact | null {
   const d = SHADOW_CONTACT
   const c = parseNumbers(q, 'ushcontact', [1, 2, 3], [0, 1])
@@ -304,7 +305,12 @@ export function applyContactParams(q: URLSearchParams): ShadowContact | null {
   }
   const whole = c?.length === 1 && c[0] === 1
   const on = whole || (c !== null && c.length > 1 && c[0] > 0 && c[1] > 0)
-  if (!c || !on) return null
+  if (!c || !on) {
+    for (const k of ['ushcontactat', 'ushcontactband']) {
+      if (q.has(k)) throw new Error(`?${k} shapes the contact's oval: it needs ?ushcontact=1 (or <pad>,<dark>)`)
+    }
+    return null
+  }
   return {
     mode: at as ContactMode,
     pad: whole ? d.pad : c[0],

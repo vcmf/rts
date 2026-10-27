@@ -3,66 +3,70 @@ status: active
 last_reviewed: 2026-10-27
 ---
 
-# Plan: the soldiers' simple shadows from their pose, baked per animation step (a test)
+# Plan: the soldiers' simple shadows from their pose, baked per animation step
 
 Asked by the owner (2026-10-27, #229): a "basically correct" soldier shadow, the shadow of each man's actual pose,
 crisp at the foot and blurred on top (decision 0062's gradient), no musket sticks (the blur and the lightness stay),
-cheap. Today's shape (decisions 0049, 0062) is one bake a role and a facing, averaged over the clip's steps, so a
+cheap. The old shape (decisions 0049, 0062) is one bake a role and a facing, averaged over the clip's steps, so a
 marching man's feet leave it; decision 0071 patched that with a contact oval under the feet, which carpets dense
 marching and firing formations. The per-figure shadow map (decisions 0047, 0049, 0062) is the costlier alternative.
 
+Shipped as the default (decision 0074, the owner's picks of rounds 1 to 3 below); this plan first built it as a test
+behind a switch.
+
 ## Scope
 
-In, behind a switch (the default page unchanged):
+In:
 
-- `?ushstep=<steps a clip>[,<facings>[,blend]]` (0 or absent: today's shape). The shape baked per clip step bin ×
-  facing (× role, a clip a role), with today's rasteriser and soft bake; the decal's vertex shader picks the man's
-  cell from his clip and his current step (`units.vert`'s step rule) and blends two facings as today; between baked
-  steps it holds the bin's bake (`hold`, the default) or blends two bins (`blend`: four reads instead of two).
-- Works with and without the contact oval (`?ushcontact=0`).
-- Measurements: the atlas's GPU memory with its mips, the bake's load cost (Metal, SwiftShader), the frame cost
-  (Metal bench), the feet-on-shadow share from the figure's data with and without the oval, at a few settings.
-- Review images in `output/armies-review/23-step-shadows/`: motion strips over a stride (march, run, fire) at 20 m
-  and 63 m, today against per-step with and without the oval.
+- **The default** (decision 0074): the shape baked per clip step bin and facing, `8,8`, the bin held, read by the
+  near material within 100 m of the camera's focus; the far material keeps the clip-averaged shape. No contact oval.
+  The feet darker and crisper (`?ushfootk`, 3, 0.6 m), never past the ground's shade k.
+- **Switches** for the A/B: `?ushstep=<steps>[,<facings>[,hold|blend]]` (0: the averaged shape at every zoom),
+  `?ushfootk=<boost>[,<reach m>]` (1: none), `?ushcontact=1` (decision 0071's oval). `?ushstep=0&ushcontact=1` is
+  main's page at 1093fdc3.
+- **A GPU whose texture size cannot hold the per-step atlas** (it needs 2560 texels a side; WebGL2 promises 2048):
+  the averaged shape at every zoom, with a warning; with an explicit `?ushstep`, an error at load.
+- Measurements (memory, load, frame cost, the feet on the shape) and review images
+  (`output/armies-review/23-step-shadows/`, `24-step-feet/`).
 
-Out: making it the default (the owner judges first; a decision record then), the figure shadow map, a GPU bake.
+Out: the figure shadow map; a GPU bake; baking the per-step atlas only when the near zoom is first reached (#235); a
+fade at the 100 m edge (the owner's call: Open questions).
 
 ## Approach
 
 - **Bins, not points.** A clip of n steps baked in k = min(n, S) bins; bin j holds the steps from ⌊jn/k⌋ to
   ⌊(j+1)n/k⌋ − 1, its shape their average (at most a few samples a bin): with k = n each step is its own pose; with
   fewer bins the shape is the pose over that short span (march: 16 steps in 8 bins of 1/6 s). A man at step i draws
-  bin ⌈(i+1)k/n⌉ − 1 (exact in float32 for the figure's step counts). `blend`: bin centres (j + ½)n/k apart, the
-  two around (i + ½) mixed.
+  bin ⌊((i+1)k − 1)/n⌋ = ⌈(i+1)k/n⌉ − 1, computed in integers in the shader, his step i from the shader's `mod`
+  rounded and wrapped into the clip (a GPU's `mod` can return n: review round 1), every bin clamped into the clip's
+  (`stepIndex`, `stepBin`). `blend`: bin centres (j + ½)n/k apart, the two around (i + ½) mixed, wrapped the same way.
 - **A 2D atlas, RG8, mips** (R the shape, G the soft bake, as today). A row of cells holds the facings of one bin;
   the rows of all roles' bins are stacked, in as many side-by-side blocks as keep the atlas near square and within
-  4096 texels a side (WebGL2's guaranteed size is 2048; Metal and SwiftShader give 8192 or more: checked at load). A
-  cell keeps today's size and 8-texel border, so the mips up to the third never bleed. No 2D array: the decal's shader
+  4096 texels a side or the GPU's size if smaller (`stepAtlasLayout`; `AtlasTooLarge` when it cannot fit). A cell
+  keeps today's size and 8-texel border, so the mips up to the third never bleed. No 2D array: the decal's shader
   stays GLSL ES 1.0-style and the cell maths is a few ALU.
-- **The decal's shader:** `SH_STEPS` (and `SH_STEP_BLEND`) in `unitdecal.vert`/`.frag`; uniforms the bins a role,
-  the first row a role and the rows a block. `uVATStep` set every frame while it is on.
-- Pure functions with tests: the bin of a step (and its mirror against the shader's text), the atlas layout and its
-  size, the cell of a (role, bin, facing).
+- **The decal's shader:** `SH_STEPS` (and `SH_STEP_BLEND`) in `unitdecal.vert`/`.frag`, in the near material only;
+  uniforms the bins a role, the first row a role and the rows a block. The foot boost on the shape's own share,
+  before the contact's oval joins it.
+- Pure functions with tests: the step and the bin (and their mirror against the shader's text, under a GPU-like
+  `mod`), the blend's bins, the atlas layout and its size, the fallback, the switches.
 
 ## Acceptance
 
-As first planned (a test behind the switch): `?ushstep` absent the page as main; the measurements and images; the
-owner's judgement. Done; the owner picked the per-step shadow without the oval, feet B. Now (round 3, decision 0074):
-
-- The default: `8,8` held in the near material (to 100 m), no oval, `?ushfootk` 3,0.6; today's averaged shape far.
-- `?ushstep=0&ushcontact=1` gives main's page (1093fdc3) exactly: tested (the switches' parse) and compared by the
-  golden screenshots.
-- The Metal bench against main 1093fdc3, three quiet rounds, 20 to 250 m; memory and load time for the default.
+- The default as decision 0074 says; `?ushstep=0&ushcontact=1` gives main's page (1093fdc3) exactly: the switches'
+  tests and the golden screenshots (a match).
+- The Metal bench against main 1093fdc3, 20 to 250 m: no measurable cost; memory and load time for the default.
 - The 100 m edge watched; any pop reported with its cheapest fix (no fade built without the owner).
-- `npm test`, `check:data`, `check:docs`, build, `tools/guard.mjs` against main, the unit page checks: exit 0.
+- A GPU too small for the per-step atlas falls back to the averaged shape (tested).
+- `npm test`, `check:data`, `check:docs`, build, `tools/guard.mjs` against main: exit 0.
 
 ## Open questions
 
-- Hold or blend: blend smooths the bins only where k < n; at 8 steps the march is 2 steps a bin.
-- Fewer facings: 8 instead of 16 halves the memory; does the facings' blend hide the coarser step?
+- The 100 m edge: a fade of the foot boost over the band (one uniform, no shader change) if the owner sees the switch
+  (round 3, "The 100 m edge").
 - Halt and fire move little at the feet: they could take fewer bins (one value a role is simple; a list later).
-- The far zooms: the stepping is invisible past the default zoom; a per-step material only within a band (like the
-  oval's) would keep main's cost there.
+- The per-step atlas is mostly empty (every cell holds the union of all facings' boxes); packing each facing's own box
+  would cut its memory, and could bring it under 2048 texels a side.
 
 ## Results (2026-10-27)
 

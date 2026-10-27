@@ -705,7 +705,10 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   the per-step shape's share of the samples at the soles, back to 1 by the reach, so the feet go darker and
   crisper-edged; the share is capped at 1, so never past the ground's shade k (decision 0071's ceiling). By default
   3, 0.6 m (`FOOT_SHARP`, the owner's pick); 1 is none. At 100 m the near material gives way to the far one in one
-  frame (a scatter of foot pixels changes: the plan, "The 100 m edge").
+  frame (a scatter of foot pixels changes: the plan, "The 100 m edge"). A GPU whose texture size cannot hold the
+  per-step atlas (`AtlasTooLarge`) draws the averaged shape at every zoom, with a warning (`stepAtlasFallback`; an
+  explicit `?ushstep` is an error at load). The shader takes his step from its `mod` rounded and wrapped into the clip,
+  the bin in integers, clamped (`stepIndex`, `stepBin`): a GPU's `mod` can return the clip's length itself.
   The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so

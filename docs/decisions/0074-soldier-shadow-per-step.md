@@ -41,6 +41,8 @@ for the feet. The plan and its measurements: `docs/plans/active/step-shadows.md`
 
 - Each man's shadow shows his pose and moves with his legs up close; the boots stand on their own small, dark shadows.
 - No oval carpet under dense formations.
+- The per-step atlas needs 2560 texels a side; WebGL2 promises 2048. A GPU that cannot hold it draws the averaged
+  shape at every zoom (0062's look, with a warning); an explicit `?ushstep` is then an error at load.
 - 14.6 MB of shape atlases instead of 2.9 MB; the two bakes take 243 to 272 ms at load against main's 155 to 160 (the plan).
 - Frame cost: within the noise of main at 20, 40, 63, 125 and 250 m (the Metal bench, four usable tries; at 20 m
   11.56–11.60 ms of GPU against 11.50–11.58; the plan's table, with the load of each run).

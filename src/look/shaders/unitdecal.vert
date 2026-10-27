@@ -51,8 +51,10 @@ uniform float uVATStep;
 #ifdef SH_STEPS
 // the shape baked per animation step (?ushstep, docs/plans/active/step-shadows.md): a role's clip in uStepBins.<role>
 // bins, its first cell row uStepRow.<role>; the rows in blocks of uStepRPB side by side, each FACINGS cells wide
-// (shadowShape, stepAtlasLayout in src/look/units-data.ts). His step his clip's (units.vert's rule); the bin he is in
-// ceil((i+1)k/n)-1 (stepBin), or with SH_STEP_BLEND the two either side of him, mixed by vS (stepBlend)
+// (shadowShape, stepAtlasLayout in src/look/units-data.ts). His step his clip's (units.vert's rule), in whole steps
+// and wrapped into the clip (a GPU's mod can return n itself: stepIndex); the bin he is in in integers,
+// ((i+1)k-1)/n (stepBin), or with SH_STEP_BLEND the two either side of him, mixed by vS (stepBlend); every bin
+// clamped into the clip's, so no rounding reads another clip's cell
 uniform vec4 uStepBins,uStepRow;uniform float uStepRPB;
 #ifdef SH_STEP_BLEND
 varying vec2 vUV2,vUV3;varying float vS;
@@ -98,15 +100,18 @@ void main(){
   float row=abs(aVAT.x-uRoleStart.y)<0.5?1.0:abs(aVAT.x-uRoleStart.z)<0.5?2.0:abs(aVAT.x-uRoleStart.w)<0.5?3.0:0.0;
   vec2 c=(l0-uShapeAt)*uShapeTexel.x+uShapeTexel.y;
   #ifdef SH_STEPS
-  float n=aVAT.y,i=mod(uVATStep+aVAT.z,n);
   float kb=row<0.5?uStepBins.x:row<1.5?uStepBins.y:row<2.5?uStepBins.z:uStepBins.w;
   float r0=row<0.5?uStepRow.x:row<1.5?uStepRow.y:row<2.5?uStepRow.z:uStepRow.w;
+  int ni=max(int(aVAT.y+0.5),1),ki=max(int(kb+0.5),1);
+  int ii=int(floor(mod(uVATStep+aVAT.z,aVAT.y)+0.5));
+  ii=clamp(ii>=ni?ii-ni:ii,0,ni-1);
   #ifdef SH_STEP_BLEND
-  float sp=(i+0.5)*kb/n-0.5,sf=floor(sp);vS=sp-sf;
-  float ja=mod(sf+kb,kb),jb=mod(sf+1.0,kb);
+  float sp=(float(ii)+0.5)*float(ki)/float(ni)-0.5,sf=floor(sp);vS=clamp(sp-sf,0.0,1.0);
+  int si=int(sf);
+  float ja=float(clamp((si+ki)%ki,0,ki-1)),jb=float(clamp((si+1)%ki,0,ki-1));
   vUV0=stepUV(r0+ja,k0,c);vUV1=stepUV(r0+ja,k1,c);vUV2=stepUV(r0+jb,k0,c);vUV3=stepUV(r0+jb,k1,c);
   #else
-  float jb=ceil((i+1.0)*kb/n)-1.0;
+  float jb=float(clamp(((ii+1)*ki-1)/ni,0,ki-1));
   vUV0=stepUV(r0+jb,k0,c);vUV1=stepUV(r0+jb,k1,c);
   #endif
   #else

@@ -640,11 +640,17 @@ export interface ShadowShape {
   blocks: number
 }
 
+/** A man's step in his n-step clip from the shader's mod (m, in [0, n], a GPU's mod can return n itself): rounded to
+ *  a whole step and wrapped into [0, n - 1] (unitdecal.vert mirrors it) */
+export function stepIndex(m: number, n: number): number {
+  const i = Math.floor(m + 0.5)
+  return Math.min(Math.max(i >= n ? i - n : i, 0), n - 1)
+}
 /** The bin a man at step i of an n-step clip draws when it is baked in k bins (bin j holding the steps from ⌊jn/k⌋ to
- *  ⌊(j+1)n/k⌋ − 1): ⌈(i+1)k/n⌉ − 1. Exact in float32 too (a ratio of small integers is an integer only where it
- *  must be), so unitdecal.vert's copy of it picks the same bin */
+ *  ⌊(j+1)n/k⌋ − 1): ⌈(i+1)k/n⌉ − 1, computed in integers as ⌊((i+1)k − 1)/n⌋ (exact on any GPU; unitdecal.vert's
+ *  copy is the same integer expression) and clamped into [0, k − 1] */
 export function stepBin(i: number, n: number, k: number): number {
-  return Math.ceil(((i + 1) * k) / n) - 1
+  return Math.min(Math.max(Math.floor(((i + 1) * k - 1) / n), 0), k - 1)
 }
 /** The steps of bin j of k in an n-step clip starting at `start`: at most `samples` of them, evenly */
 export function binSteps(start: number, n: number, k: number, j: number, samples: number): number[] {
@@ -658,7 +664,19 @@ export function binSteps(start: number, n: number, k: number, j: number, samples
 export function stepBlend(i: number, n: number, k: number): { j0: number; j1: number; s: number } {
   const p = ((i + 0.5) * k) / n - 0.5
   const f = Math.floor(p)
-  return { j0: (f + k) % k, j1: (f + 1) % k, s: p - f }
+  const bin = (j: number) => Math.min(Math.max(j % k, 0), k - 1)
+  return { j0: bin(f + k), j1: bin(f + 1), s: Math.min(Math.max(p - f, 0), 1) }
+}
+
+/** The step atlas cannot fit the texture size (stepAtlasLayout) */
+export class AtlasTooLarge extends Error {
+  override name = 'AtlasTooLarge'
+}
+/** What the page does when the per-step atlas cannot fit this GPU's texture size (decision 0074's default needs 2560
+ *  texels a side; WebGL2 guarantees 2048): fall back to the clip-averaged shape (today's look), with a warning, unless
+ *  the page asked for the per-step shape by ?ushstep (explicit): then an error at load, as every bad switch is */
+export function stepAtlasFallback(explicit: boolean): 'fallback' | 'error' {
+  return explicit ? 'error' : 'fallback'
 }
 
 /** The step atlas's layout: `rows` rows of `facings` cells (cellW × cellH texels) in blocks side by side, as few
@@ -681,7 +699,9 @@ export function stepAtlasLayout(
       best = { blocks: b, rowsPerBlock, width, height }
     }
   }
-  if (!best) throw new Error(`stepAtlasLayout: ${rows} rows of ${facings} cells of ${cellW} × ${cellH} exceed ${max}`)
+  if (!best) {
+    throw new AtlasTooLarge(`the step atlas's ${rows} rows of ${facings} cells of ${cellW} × ${cellH} exceed ${max}`)
+  }
   return best
 }
 

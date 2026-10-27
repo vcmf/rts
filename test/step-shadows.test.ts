@@ -20,8 +20,11 @@ import {
   posedVertices,
   shadowShape,
   stepAtlasLayout,
+  AtlasTooLarge,
+  stepAtlasFallback,
   stepBin,
   stepBlend,
+  stepIndex,
 } from '../src/look/units-data.ts'
 
 const f32 = Math.fround
@@ -41,12 +44,47 @@ describe('the bin a step draws (stepBin)', () => {
       }
     }
   })
-  it('gives the same bin in float32, as the shader computes it', () => {
+  // a GPU's mod(x, n) as ANGLE Metal computes it, x − n·floor(x·rcp(n)), in float32, the product 1 ULP off either
+  // way: it can return n itself (#review round 1)
+  const gpuMod = (x: number, n: number, ulp: -1 | 0 | 1) => {
+    const q = f32(f32(x) * f32(1 / n))
+    const qq = f32(q * (1 + ulp * 2 ** -23))
+    return f32(x - f32(n * Math.floor(qq)))
+  }
+  it("puts a GPU's step (its mod off by an ULP, even n itself) in the right bin, never past the clip's", () => {
     for (let n = 1; n <= 200; n++) {
-      for (let k = 1; k <= Math.min(n, 32); k++) {
-        for (let i = 0; i < n; i++) {
-          expect(Math.ceil(f32(f32(f32(i + 1) * k) / n)) - 1).toBe(stepBin(i, n, k))
+      for (let k = 1; k <= Math.min(n, 16); k++) {
+        for (let x = 0; x < 3 * n; x++) {
+          for (const ulp of [-1, 0, 1] as const) {
+            const m = gpuMod(x + 1000 * n, n, ulp)
+            const i = stepIndex(m, n)
+            expect(i).toBe(x % n)
+            const j = stepBin(i, n, k)
+            expect(j).toBeGreaterThanOrEqual(0)
+            expect(j).toBeLessThan(k)
+            expect(Math.floor((j * n) / k)).toBeLessThanOrEqual(i)
+          }
         }
+      }
+    }
+  })
+  it("wraps the mod's n to 0 and clamps any bin into the clip's", () => {
+    expect(stepIndex(16, 16)).toBe(0)
+    expect(stepIndex(15.9999, 16)).toBe(0)
+    expect(stepIndex(-0.2, 16)).toBe(0)
+    expect(stepBin(16, 16, 8)).toBe(7)
+    expect(stepBin(-1, 16, 8)).toBe(0)
+  })
+  it('blends two bins in the clip, the share in [0, 1], even from the n a GPU mod can give', () => {
+    for (const [n, k] of [
+      [16, 8],
+      [166, 8],
+      [8, 8],
+    ]) {
+      for (const i of [0, n - 1, n]) {
+        const b = stepBlend(i, n, k)
+        for (const j of [b.j0, b.j1]) expect(j >= 0 && j < k).toBe(true)
+        expect(b.s >= 0 && b.s <= 1).toBe(true)
       }
     }
   })
@@ -148,6 +186,15 @@ describe('the shape baked per step (shadowShape steps)', () => {
     // (today's: one bin a role, a block)
     expect([today.bins, today.binRow, today.rowsPerBlock, today.blocks]).toEqual([[1, 1, 1, 1], [0, 1, 2, 3], 4, 1])
   })
+  it("refuses an atlas over the GPU's size by AtlasTooLarge: decision 0074's default needs 2560, WebGL2 promises 2048", () => {
+    expect(() =>
+      shadowShape(d, lod, sun, roles, { facings: 8, soft: 0.12, posed: pv, steps: 8, maxSize: 2048 }),
+    ).toThrow(AtlasTooLarge)
+    expect(Math.max(s.width, s.height)).toBe(2560)
+    // (the page falls back to the averaged shape then, with a warning, unless ?ushstep asked for it)
+    expect(stepAtlasFallback(false)).toBe('fallback')
+    expect(stepAtlasFallback(true)).toBe('error')
+  })
   it('fills every cell inside its empty border, the run differing step to step', () => {
     for (let row = 0; row < 32; row++) {
       for (let k = 0; k < 8; k++) {
@@ -212,18 +259,20 @@ describe('unitdecal.vert picks the bin as stepBin and stepBlend do (the source)'
   it("his step as units.vert counts it, his bin, the blend's bins, the cell's block", () => {
     const v = src('unitdecal.vert')
     once(src('units.vert'), 'intf=int(r.x+mod(uVATStep+r.z,r.y));')
-    once(v, 'floatn=aVAT.y,i=mod(uVATStep+aVAT.z,n);')
-    once(v, 'floatjb=ceil((i+1.0)*kb/n)-1.0;')
-    once(v, 'floatsp=(i+0.5)*kb/n-0.5,sf=floor(sp);vS=sp-sf;')
-    once(v, 'floatja=mod(sf+kb,kb),jb=mod(sf+1.0,kb);')
+    once(v, 'intii=int(floor(mod(uVATStep+aVAT.z,aVAT.y)+0.5));ii=clamp(ii>=ni?ii-ni:ii,0,ni-1);')
+    once(v, 'floatjb=float(clamp(((ii+1)*ki-1)/ni,0,ki-1));')
+    once(v, 'floatsp=(float(ii)+0.5)*float(ki)/float(ni)-0.5,sf=floor(sp);vS=clamp(sp-sf,0.0,1.0);')
+    once(v, 'floatja=float(clamp((si+ki)%ki,0,ki-1)),jb=float(clamp((si+1)%ki,0,ki-1));')
     once(v, 'floatbl=floor((rw+0.5)/uStepRPB);')
     once(v, 'return(vec2(bl*FACINGS+k,rw-bl*uStepRPB)*uShapeCell.xy+c)*uShapeCell.zw;')
   })
-  it('unitdecal.frag: the feet sharpened as footSharpen does, before the share is capped at 1', () => {
-    once(
-      src('unitdecal.frag'),
-      'v*=mix(uShFootK.x,1.0,smoothstep(0.0,max(uShFootK.y,1.0e-3),vAlong));#endiffloata=min(1.0,v/dm);',
-    )
+  it("unitdecal.frag: the feet sharpened as footSharpen does, on the shape alone, before the contact's oval", () => {
+    const f = src('unitdecal.frag')
+    const boost = 'v*=mix(uShFootK.x,1.0,smoothstep(0.0,max(uShFootK.y,1.0e-3),vAlong));'
+    once(f, `v=s*mix(uShFoot.x,uShFoot.y,g);#ifdefSH_STEPS${boost}#endif`)
+    // (the oval joins after it, so ?ushcontact=1 draws decision 0071's oval unboosted)
+    expect(f.indexOf(boost)).toBeLessThan(f.indexOf('dm=max(dm,uShContact.y);v=max(v,ct);'))
+    once(f, 'floata=min(1.0,v/dm);')
   })
 })
 
@@ -275,5 +324,15 @@ describe("main's look one URL away (decision 0074's A/B recipe)", () => {
     expect(applyStepParams(q)).toEqual({ steps: 8, facings: 8, blend: false })
     expect(applyContactParams(q)).toBeNull()
     expect(applyFootSharpParams(q)).toEqual([3, 0.6])
+  })
+})
+
+describe("the contact's own switches need the contact (applyContactParams)", () => {
+  it('?ushcontactat and ?ushcontactband without ?ushcontact are an error, not ignored', () => {
+    const q = (v: string) => applyContactParams(new URLSearchParams(v))
+    expect(() => q('ushcontactat=root')).toThrow(/needs \?ushcontact=1/)
+    expect(() => q('ushcontactband=40,70')).toThrow(/needs \?ushcontact=1/)
+    expect(() => q('ushcontact=0&ushcontactat=root')).toThrow(/needs \?ushcontact=1/)
+    expect(q('ushcontact=1&ushcontactband=40,70')).toEqual({ ...SHADOW_CONTACT, band: [40, 70] })
   })
 })

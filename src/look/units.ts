@@ -80,6 +80,8 @@ import {
   posedVertices,
   shadowProxy,
   shadowShape,
+  AtlasTooLarge,
+  stepAtlasFallback,
   tinyMesh,
   type UnitData,
 } from './units-data.ts'
@@ -350,8 +352,9 @@ export class Units {
   /** the shape baked per animation step for the near material (decision 0074; ?ushstep: applyStepParams), or null:
    *  the shape averaged over each clip at every zoom. Read once, when the shadows' material is made */
   stepShadow: StepShadow | null = { ...STEP_SHADOW }
-  /** the shape atlases' sizes (texels, RG8 with mips: today's, then the per-step one with ?ushstep), once made */
-  shapeSizes: [number, number][] = []
+  /** a ?ushstep given on the page: a per-step atlas this GPU cannot hold is then an error at load, not a fallback to
+   *  the averaged shape (stepAtlasFallback) */
+  stepExplicit = false
   /** the per-step shape's foot sharpening ([boost, reach m]: footSharpen, ?ushfootk; FOOT_SHARP), [1, 0]: none */
   footSharp: [number, number] = [FOOT_SHARP[0], FOOT_SHARP[1]]
   private contactReach = 0 // m: how far the contact reaches from a man's root (the strip holds it: decalStrip)
@@ -409,10 +412,8 @@ export class Units {
   private smT = NaN // the clock when the map was last drawn (a frozen clock draws it no more)
   private farScaleOn = false
   private farScaleV = new Vector2(1, 1)
-  /** ms the simple shadow's shape took to make (shadowShape, at load) */
+  /** ms the simple shadow's shapes took to bake (shadowShape, at load: today's, and the per-step one) */
   shapeMs = 0
-  /** ms the shape and its texture took (shadowShape, the upload and its mips asked for: the GPU may finish later) */
-  shapeTexMs = 0
 
   /** receivers: the painted materials the figures' shadows fall on (the ground and the grass); the page's clock */
   private readonly scene: Scene
@@ -1616,12 +1617,13 @@ export class Units {
     if (!shade) {
       throw new Error("units: the simple shadows need the ground's shade (Units.shade, src/look/bakes.ts unitShade)")
     }
-    const t0 = performance.now()
     const d = this.data
-    const ss = this.stepShadow
+    let ss = this.stepShadow
     // today's shape (averaged over each clip) for the far material; with ?ushstep a second, per step, for the near one
     // (within the contact's band: docs/plans/active/step-shadows.md)
+    let bakeMs = 0
     const bake = (steps: number, facings: number) => {
+      const tb = performance.now()
       const shape = shadowShape(d, d.lods[this.farLod].name, [SUN.x, SUN.y, SUN.z], ROLES, {
         facings,
         soft: SOFT_BLUR,
@@ -1640,15 +1642,23 @@ export class Units {
         Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
         Constants.TEXTURETYPE_UNSIGNED_BYTE,
       )
+      bakeMs += performance.now() - tb
       tex.name = steps > 0 ? 'figureShadowShapeSteps' : 'figureShadowShape'
       tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
       return { shape, tex }
     }
     const farBake = bake(0, SHAPE_FACINGS)
-    const nearBake = ss ? bake(ss.steps, ss.facings) : null
-    this.shapeMs = performance.now() - t0
-    this.shapeTexMs = this.shapeMs
-    this.shapeSizes = [farBake, nearBake].flatMap(b => (b ? [[b.shape.width, b.shape.height] as [number, number]] : []))
+    let nearBake: ReturnType<typeof bake> | null = null
+    try {
+      nearBake = ss ? bake(ss.steps, ss.facings) : null
+    } catch (e) {
+      // (a per-step atlas over this GPU's texture size: the averaged shape at every zoom, today's look, unless the
+      // page asked for it by ?ushstep)
+      if (!(e instanceof AtlasTooLarge) || stepAtlasFallback(this.stepExplicit) === 'error') throw e
+      console.warn(`units: ${e.message}: the soldiers' shadows fall back to the clip-averaged shape`)
+      ss = this.stepShadow = null
+    }
+    this.shapeMs = bakeMs
     // the ground's height under each vertex: the meadow map's (bound to every painted material, src/look/meadow.ts), or
     // without one the heightfield's, sampled here over the tile (GROUND_N² texels)
     let ht: RawTexture | null = null
@@ -1775,7 +1785,7 @@ export class Units {
     const c = this.contact
     const oval = c !== null && c.dark > 0
     const far = make(false, false)
-    const near = oval || ss ? make(oval, ss !== null) : null
+    const near = oval || ss ? make(oval, nearBake !== null) : null
     this.decalFar = far
     this.decalNear = near
     this.decal = near ?? far

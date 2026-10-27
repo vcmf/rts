@@ -720,6 +720,7 @@ if (armiesParam !== null) {
   units.look = shadowLook
   units.contact = ushContact
   units.stepShadow = ushStep
+  units.stepExplicit = params.has('ushstep')
   units.footSharp = ushFootK
   if (ushBand) units.lookBand = ushBand
   if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]

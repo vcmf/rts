@@ -51,18 +51,19 @@ void main(){
   s*=step(0.0,vCell.x)*step(vCell.x,1.0)*step(0.0,vCell.y)*step(vCell.y,1.0);
   #endif
   float dm=max(max(uShFoot.x,uShFoot.y),1e-4),v=s*mix(uShFoot.x,uShFoot.y,g);
+  #ifdef SH_STEPS
+  // the per-step shape's feet darker and crisper (?ushfootk, footSharpen in src/look/shadow-look.ts): its share of the
+  // samples boosted at the soles (uShFootK.x), back to 1 by uShFootK.y m; capped at 1 below, so never past the look's
+  // darkest (decision 0071: no darker than the ground's painted cast shadow). The shape's alone, before the contact's
+  // oval joins it (?ushcontact=1 keeps decision 0071's oval exactly)
+  v*=mix(uShFootK.x,1.0,smoothstep(0.0,max(uShFootK.y,1.0e-3),vAlong));
+  #endif
   #ifdef SH_CONTACT
   // the contact (contactFragment in src/look/shadow-look.ts mirrors it): one more darkness in the same rule, its share
   // the oval's, solid over it and faded out to 1 + soft of its size; the look's darkest now the darker of the two (one
   // value a frame, so every shadow still darkens a sample alike and the darkest share wins)
   float ct=uShContact.y*(1.0-smoothstep(1.0,1.0+max(uShContact.z,1.0e-4),length(vCt)));
   dm=max(dm,uShContact.y);v=max(v,ct);
-  #endif
-  #ifdef SH_STEPS
-  // the per-step shape's feet darker and crisper (?ushfootk, footSharpen in src/look/shadow-look.ts): its share of the
-  // samples boosted at the soles (uShFootK.x), back to 1 by uShFootK.y m; capped at 1 below, so never past the look's
-  // darkest (decision 0071: no darker than the ground's painted cast shadow)
-  v*=mix(uShFootK.x,1.0,smoothstep(0.0,max(uShFootK.y,1.0e-3),vAlong));
   #endif
   float a=min(1.0,v/dm);
   #ifndef COVERAGE
