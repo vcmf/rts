@@ -10,7 +10,7 @@ date: 2026-10-26
 C1's claim grid keeps formations apart. Its step 4 had to say what happens where two meet in melee. Two designs gave
 ground: a continuous give way (the companies in contact bent back, then the whole stepped back; five reviews failed
 it) and rounds (every 3 s the loser stepped back 2 m as a whole and its foe followed; it worked on the bench,
-docs/plans/active/c1-claims.md). Judging them, the owner chose a simpler model, as Total War has it. A surrender for a
+`docs/plans/active/c1-claims.md`). Judging them, the owner chose a simpler model, as Total War has it. A surrender for a
 trapped router was built and reviewed three times; it needed a record of who held the router, which broke replays,
 and the owner dropped the concept (Total War has none; Ultimate General has).
 
@@ -20,8 +20,9 @@ and the owner dropped the concept (Total War has none; Ultimate General has).
   as before when a charger turns away from a square or the two fall out of contact.
 - **A broken battalion runs as a block**, faced about, in the direction fixed at its break (its side's rear, else away
   from the nearest enemy, else straight back), and tries a fan of other directions when held
-  (docs/systems/fire-morale.md). Wavering and shattered battalions keep their block.
-- **No surrender.** Every enemy in the fight that reaches a broken battalion cuts it down, as a pursuit rides a router
+  (`docs/systems/fire-morale.md`). Wavering and shattered battalions keep their block.
+- **No surrender.** Every enemy in the fight that reaches a broken battalion, but one in melee with another, cuts it
+  down, as a pursuit rides a router
   down, and it does not fight back; one with no direction left is cut down where it stands. With the claim grid on, a
   router held by others goes on trying its directions and runs once one clears. (Built with the claim grid, C1.)
 - Owner decisions for later work, recorded here: every type but artillery has a firearm and a melee mode, a player
