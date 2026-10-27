@@ -89,7 +89,7 @@ commits or PRs.
 - **Blur is the player's choice** (decision 0024): gameplay depth of field is a setting, on by default and mild
   enough that formations at the edges read; depth comes from painting first.
 - **The painterly look lives in assets and materials**, not in a heavy full-screen filter.
-- **Readable first**: armies are the most saturated objects on screen; never hide a formation.
+- **Readable first**: armies stand out from the ground by colour or by value; never hide a formation.
 - **Pack colours are never used**: materials map to roles and our palette paints them.
 - **Static light is baked once per map**; only moving things get runtime lighting.
 - **The simulation never imports the renderer** and changes only through commands (decision 0005,
