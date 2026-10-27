@@ -68,4 +68,4 @@ recorded here on 2026-10-08.
 | [0071](0071-soldier-contact-shadow.md) | A contact shadow under the soldiers' feet; their shadows no darker than the ground's painted shadow (amends 0062, supersedes 0067's values) | accepted |
 | [0074](0074-campaign-on-roads.md) | A campaign of armies on roads, moved at once; battles come from it | proposed |
 | [0075](0075-battle-maps-2-to-6-km.md) | Battle maps 2–6 km a side, by battle | proposed |
-| [0076](0076-a-unit-is-a-division.md) | A unit stands for a division; a corps is about 6 units | proposed |
+| [0076](0076-a-unit-is-a-division.md) | A unit stands for a division; a corps is 5–6 units | proposed |
