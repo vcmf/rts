@@ -533,6 +533,282 @@ describe('M1b: applying features into the layers', () => {
       expect(Math.abs(hAt(mended, x, z) - hAt(ground, x, z))).toBeLessThan(1)
     }
   })
+  it('a pond across a slope fills its low end: never cut more than its depth into the ground, dry uphill (#230)', () => {
+    // ground rising 10 m across the pond's 60 m (northward), the pond 1.5 m deep
+    const slope = {
+      id: 'slope',
+      kind: 'relief.ridge',
+      line: [
+        [-200, 150],
+        [200, 150],
+      ] as Pt[],
+      height: 40,
+      width: 600,
+    }
+    const pond = { id: 'pond', kind: 'water.pond', circle: [[0, -20] as Pt, 30] as [Pt, number] }
+    const dry = apply(mini([slope]), cat)
+    const wet = apply(mini([slope, pond]), cat)
+    let deepest = 0
+    let water = 0
+    let dryInside = 0
+    for (let j = 0; j <= wet.nz; j++) {
+      for (let i = 0; i <= wet.nx; i++) {
+        const [x, z] = [wet.x0 + i * wet.cell, wet.z0 + j * wet.cell]
+        if (x * x + (z + 20) * (z + 20) >= 30 * 30) continue
+        deepest = Math.max(deepest, hAt(dry, x, z) - hAt(wet, x, z))
+      }
+    }
+    for (let j = 0; j < wet.nz; j++) {
+      for (let i = 0; i < wet.nx; i++) {
+        const [x, z] = [wet.x0 + (i + 0.5) * wet.cell, wet.z0 + (j + 0.5) * wet.cell]
+        if (x * x + (z + 20) * (z + 20) >= 28 * 28) continue
+        if (wet.water[j * wet.nx + i]) water++
+        else dryInside++
+      }
+    }
+    // the ground across the pond rises more than its depth
+    expect(hAt(dry, 0, 8) - hAt(dry, 0, -48)).toBeGreaterThan(3)
+    expect(deepest).toBeLessThanOrEqual(1.5 + 0.4 + 1e-9)
+    expect(water).toBeGreaterThan(0)
+    expect(dryInside).toBeGreaterThan(0)
+  })
+  it('a pond with its own level is cut as given; a flat pond keeps its whole outline (#230 review)', () => {
+    const count = (L: Layers) => L.water.reduce((n, v) => n + (v ? 1 : 0), 0)
+    const sunk = apply(mini([{ id: 'pond', kind: 'water.pond', circle: [[0, 0], 30], level: -5 }]), cat)
+    expect(count(sunk)).toBeGreaterThan(700)
+    expect(hAt(sunk, 0, 0)).toBeCloseTo(-6.5, 6)
+    // on flat ground every cell whose centre lies inside is the pond's, its shallow shore ring too
+    const flat = apply(mini([{ id: 'pond', kind: 'water.pond', circle: [[0, 0], 30] }]), cat)
+    let inside = 0
+    for (let j = 0; j < flat.nz; j++) {
+      for (let i = 0; i < flat.nx; i++) {
+        const [x, z] = [flat.x0 + (i + 0.5) * flat.cell, flat.z0 + (j + 0.5) * flat.cell]
+        if (x * x + z * z < 900) inside++
+      }
+    }
+    expect(count(flat)).toBe(inside)
+  })
+  it('a stream through a pond on a slope keeps its water below it, and no cliff is left (#230 review)', () => {
+    const slope = {
+      id: 'slope',
+      kind: 'relief.ridge',
+      line: [
+        [-200, 150],
+        [200, 150],
+      ] as Pt[],
+      height: 40,
+      width: 600,
+    }
+    const pond = { id: 'z-pond', kind: 'water.pond', circle: [[0, -20] as Pt, 30] as [Pt, number] }
+    const brook = {
+      id: 'brook',
+      kind: 'water.stream',
+      line: [
+        [0, 40],
+        [0, -150],
+      ] as Pt[],
+    }
+    const L = apply(mini([slope, pond, brook]), cat)
+    // the stream's cells below the pond still hold water
+    for (const z of [-53, -55, -57]) {
+      const cell = Math.floor((z - L.z0) / L.cell) * L.nx + Math.floor((0.5 - L.x0) / L.cell)
+      expect(L.depth[cell]).toBeGreaterThan(0)
+    }
+    // downhill, across the pond's low shore and the stream through it, no step between neighbouring nodes over 1.5 m
+    for (let z = -50; z > -80; z -= 2) expect(Math.abs(hAt(L, 20, z) - hAt(L, 20, z - 2))).toBeLessThan(1.5)
+  })
+  it('a pond on a slope: no deeper than its depth over a stream, no bank uphill, any order (#230 review 2)', () => {
+    const slope = {
+      id: 'slope',
+      kind: 'relief.ridge',
+      line: [
+        [-200, 150],
+        [200, 150],
+      ] as Pt[],
+      height: 40,
+      width: 600,
+    }
+    const pond = { id: 'z-pond', kind: 'water.pond', circle: [[0, -20] as Pt, 30] as [Pt, number] }
+    const brook = {
+      id: 'brook',
+      kind: 'water.stream',
+      line: [
+        [0, 40],
+        [0, -150],
+      ] as Pt[],
+    }
+    const dry = apply(mini([slope]), cat)
+    const streamOnly = apply(mini([slope, brook]), cat)
+    const both = apply(mini([slope, pond, brook]), cat)
+    // over the stream the pond never cuts below the deeper of the stream's channel and its own depth (and freeboard)
+    for (const z of [-10, -22, -35]) {
+      const floor = Math.min(hAt(streamOnly, 0, z), hAt(dry, 0, z) - 1.5 - 0.4)
+      expect(hAt(both, 0, z)).toBeGreaterThanOrEqual(floor - 1e-9)
+    }
+    // no slot walls across the stream below the pond, no bank at the uphill shore: no step over 1.6 m in 2 m
+    for (let z = -60; z <= -50; z += 2) {
+      for (let x = -10; x < 10; x += 2) expect(Math.abs(hAt(both, x, z) - hAt(both, x + 2, z))).toBeLessThan(1.6)
+    }
+    const alone = apply(mini([slope, pond]), cat)
+    for (let z = -40; z < 10; z += 2) expect(Math.abs(hAt(alone, 0, z) - hAt(alone, 0, z + 2))).toBeLessThan(1)
+    // two ponds near each other: the same ground whatever their ids
+    const pair = (a: string, b: string) =>
+      apply(
+        mini([
+          slope,
+          { id: a, kind: 'water.pond', circle: [[0, 0], 20] },
+          { id: b, kind: 'water.pond', circle: [[0, -30], 6] },
+        ]),
+        cat,
+      ).height
+    expect(Array.from(pair('a-pond', 'b-pond'))).toEqual(Array.from(pair('z-pond', 'b-pond')))
+    // a ditch just below the pond keeps its cut
+    const ditch = {
+      id: 'ditch',
+      kind: 'relief.ditch',
+      line: [
+        [-40, -56],
+        [40, -56],
+      ] as Pt[],
+      depth: 1.5,
+      width: 4,
+    }
+    const ponded = apply(mini([slope, pond, ditch]), cat)
+    const cut = apply(mini([slope, ditch]), cat)
+    expect(hAt(ponded, 0, -56)).toBeCloseTo(hAt(cut, 0, -56), 6)
+  })
+  it('a pond levelled from its shore: flat as before, no water above its line, any order, slivers kept (#230 redesign)', () => {
+    // on flat ground the same ground as the old rule, which a given level still follows
+    const flatOwn = apply(mini([{ id: 'pond', kind: 'water.pond', circle: [[0, 0], 30] }]), cat)
+    const flatGiven = apply(mini([{ id: 'pond', kind: 'water.pond', circle: [[0, 0], 30], level: -0.4 }]), cat)
+    expect(Array.from(flatOwn.height)).toEqual(Array.from(flatGiven.height))
+    const slope = {
+      id: 'slope',
+      kind: 'relief.ridge',
+      line: [
+        [-200, 150],
+        [200, 150],
+      ] as Pt[],
+      height: 40,
+      width: 600,
+    }
+    const pond = { id: 'pond', kind: 'water.pond', circle: [[0, -20] as Pt, 30] as [Pt, number] }
+    // no water above its line up the slope: every water cell has a corner no higher than the lowest point of the pond's
+    // shore (the most its water can reach): a cell at the waterline straddles it, none lies wholly above it
+    const bare = apply(mini([slope]), cat)
+    let shoreMin = Infinity
+    for (let a = 0; a < 360; a += 2) {
+      const t = (a * Math.PI) / 180
+      shoreMin = Math.min(shoreMin, hAt(bare, 30 * Math.cos(t), -20 + 30 * Math.sin(t)))
+    }
+    const L = apply(mini([slope, pond]), cat)
+    let highest = -Infinity
+    for (let j = 0; j < L.nz; j++) {
+      for (let i = 0; i < L.nx; i++) {
+        if (!L.water[j * L.nx + i]) continue
+        const W = L.nx + 1
+        const corners = [
+          L.height[j * W + i],
+          L.height[j * W + i + 1],
+          L.height[(j + 1) * W + i],
+          L.height[(j + 1) * W + i + 1],
+        ]
+        highest = Math.max(highest, Math.min(...corners))
+      }
+    }
+    expect(highest).toBeLessThan(shoreMin + 0.05)
+    // and it holds water at its low end (shallow: on a slope this steep, about 17 %, a pond with no dam is a wedge)
+    expect(Math.max(...L.depth)).toBeGreaterThan(100)
+    // a stream through it: the same ground whichever sorts first
+    const brook = (id: string) => ({
+      id,
+      kind: 'water.stream',
+      line: [
+        [0, 40],
+        [0, -150],
+      ] as Pt[],
+    })
+    expect(Array.from(apply(mini([slope, pond, brook('a-brook')]), cat).height)).toEqual(
+      Array.from(apply(mini([slope, pond, brook('z-brook')]), cat).height),
+    )
+    // a pond narrower than a cell keeps its cells
+    const sliver = apply(mini([{ id: 'sliver', kind: 'water.pond', ellipse: [[0, 1], 30, 0.8, 0] }]), cat)
+    expect(sliver.water.some(v => v > 0)).toBe(true)
+    // ground inside the outline that holds no water is never cut: a node whose cells are all dry is the bare ground
+    for (let j = 1; j < L.nz; j++) {
+      for (let i = 1; i < L.nx; i++) {
+        const cells = [
+          L.water[(j - 1) * L.nx + i - 1],
+          L.water[(j - 1) * L.nx + i],
+          L.water[j * L.nx + i - 1],
+          L.water[j * L.nx + i],
+        ]
+        if (cells.every(v => !v)) expect(L.height[j * (L.nx + 1) + i]).toBe(bare.height[j * (L.nx + 1) + i])
+      }
+    }
+    // a finger of the outline narrower than a cell, up the slope, holds no water up there
+    const finger = {
+      id: 'finger',
+      kind: 'water.pond',
+      area: [
+        [
+          [-30, -50],
+          [30, -50],
+          [30, 10],
+          [1.6, 10],
+          [1.6, 40],
+          [0.4, 40],
+          [0.4, 10],
+          [-30, 10],
+        ],
+      ] as Pt[][],
+    }
+    const F = apply(mini([slope, finger]), cat)
+    for (let j = Math.floor((15 - F.z0) / F.cell); j < F.nz; j++) {
+      for (let i = 0; i < F.nx; i++) expect(F.water[j * F.nx + i]).toBe(0)
+    }
+    // the edits count: ground lowered under the level inside the pond (clear of its shore, which sets the level) is
+    // its water
+    const lower = {
+      id: 'lower',
+      kind: 'relief.lower',
+      area: [
+        [
+          [-10, -40],
+          [10, -40],
+          [10, -20],
+          [-10, -20],
+        ],
+      ] as Pt[][],
+      height: 6,
+      edge: 0,
+    }
+    const at = (X: Layers, x: number, z: number) =>
+      X.water[Math.floor((z - X.z0) / X.cell) * X.nx + Math.floor((x - X.x0) / X.cell)]
+    expect(at(L, 0, -25)).toBe(0)
+    expect(at(apply(mini([slope, pond, lower]), cat), 0, -25)).toBeGreaterThan(0)
+    // a ditch across a flat pond's shore does not pull its level down: the pond keeps its depth
+    const ditched = apply(
+      mini([
+        { id: 'pond', kind: 'water.pond', circle: [[0, 0], 30] },
+        {
+          id: 'ditch',
+          kind: 'relief.ditch',
+          line: [
+            [-50, 0],
+            [-10, 0],
+          ],
+          depth: 1.6,
+          width: 4,
+        },
+      ]),
+      cat,
+    )
+    expect(at(ditched, 10, 10)).toBeGreaterThan(0)
+    expect(
+      ditched.depth[Math.floor((10 - ditched.z0) / 2) * ditched.nx + Math.floor((10 - ditched.x0) / 2)],
+    ).toBeGreaterThan(1000)
+  })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(
       mini([

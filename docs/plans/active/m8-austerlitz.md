@@ -403,6 +403,53 @@ into the epic; this plan details each as it starts.
   the row path for the other per-cell area loops (the compile is 5 s), the shared box mean (#227). Tests: the cycle
   (throws, not hangs).
 
+## Ponds on sloping ground (#230)
+
+- A pond took the lowest point of its shore, less the freeboard, as its level and carved its whole outline down to
+  it: across a slope its uphill side was dug into the hill (the Nowetitz ponds 22.8 m). Water lies level at its lower
+  bank, so the higher ground inside the survey's outline is dry ground, not water. Now (`src/map/apply.ts`, step 3), a
+  pond with no level of its own still levels at the lowest point of its shore and, from the ground as the landforms
+  made it (so the water features' order changes nothing): the ground inside more than its depth and the freeboard
+  above the level is dry and left as it is; elsewhere the bed is the shallower of the old basin (the level less the
+  depth, reached 10 m from the drawn edge) and the ground less the freeboard, less the depth reached 10 m from the dry
+  ground (`chamfer`); its water is where that bed lies under the level. On flat ground the basin always wins: the same
+  ground as before, bit for bit; a pond given its own `level` exactly as before.
+- On Austerlitz every one of the 18 ponds holds water (1.0 to 1.5 m deep at most), the ponds on slopes smaller (their
+  low end); the compile 5.1 s. The deepest the water cuts below the dry ground anywhere is 4.8 m, a stream at the map's
+  west edge (an open question), no pond.
+- **Review rounds**: three, then the design changed. The first version raised a dam on the pond's downhill shore so
+  its whole outline could hold water at the median of its shore: each round found the implicit dam colliding with
+  something else in the water step (a given level, a flat pond's shore ring, a stream through it, a neighbouring
+  pond, a sunken way or a ditch, and at last its own water, so it never reached the level). The owner's reading
+  settled it: the water stands at the lower bank and the higher ground stays dry, no dam needed. Drawn dams, if a
+  scenario wants a slope's pond full, would be features of their own. Tests: a pond across a slope (never cut more
+  than its depth and freeboard, dry uphill), a given level, a flat pond's whole outline, a stream through a sloping
+  pond (its water, no cliff), no deeper over a stream, no bank uphill, two ponds renamed (bit for bit), a ditch below
+  a pond.
+- **Review round 1 of the redesign**: severe. A band of cells above the waterline was painted water (the wet test
+  was the uncut ground near the level, not the bed under it); a flat pond's shore was no longer cut as before; the
+  wet test read the ground streams had already cut, so the ids decided. Fixed as above: the bed from the ground as
+  the landforms made it, the water where the bed lies under the level, the old basin the bound (a flat pond bit for
+  bit as before), a sliver narrower than a cell keeps its cells. Tests: a flat pond against a given level (bit for
+  bit), no water cell's ground above the pond's lowest shore, a stream through it renamed, a sliver.
+- **Review round 2 of the redesign**: severe. A finger of the outline narrower than a cell, up the slope, was painted
+  water; the pond read the ground before the edits; nodes whose bed stayed above the level were still cut (a dry
+  trench); on a steep slope the bed tapered from the drawn edge too, so the pond was a puddle; a lake with no shore on
+  the map vanished. Fixed: the ground as the water step finds it (landforms and edits); only a node whose bed lies
+  under the level is cut; the dig tapers from the ground too high to hold water only; a sliver cell is the pond's
+  only if its ground lies no higher than the shore; with no shore on the map, the lowest ground on it. The rule is
+  decision 0077. A pond on a steep slope (17 %) is a shallow wedge (0.3 m): that is the rule, not a fault. Tests: the
+  finger, the dry ground never cut, a pit under the level inside the pond is water (a cut through the shore lowers the
+  level instead, as water drains), the stream's cliff on the map with the stream.
+- **Review round 3 of the redesign**: one severe, from round 2's own change: the shore was read from the edited ground,
+  so a ditch or a sunken way across a pond's shore pulled its level down and emptied it. Fixed: the level from the
+  shore as the landforms made it (the streams' rule), the water and the bed from the edited ground. Test: a ditch
+  across a flat pond's shore (fails without the fix). Documented, not changed (decision 0077): a pond given a level is
+  cut over its whole outline (its outline is its waterline); a concave pond's arms can shallow each other; a lake
+  larger than the map holds water near its lowest ground on it. Not taken: one walk of the pond's box instead of
+  three, allocation-free cell tests, a mask from the bed instead of a skip in `paintArea`, shared corner-mean and node
+  range helpers (the compile is 5 s). The review stops here (three rounds of the redesign).
+
 ## Open questions
 
 - The road tracer reconciles roads traced one by one (#227); tracing the network incrementally would make the forks
@@ -429,5 +476,7 @@ into the epic; this plan details each as it starts.
 - The arable lies under every way, stream and village: a village's gardens and yards between its houses are a
   crop in the layers (the ruleset and the draft let the buildings and ways win), to draw as yards when the scenario
   needs it.
+- A stream entering at the map's west edge (at −3000, −200) is cut 4.8 m below the dry ground beside it: its banks
+  read past the edge; to look at with the streams' next change.
 - What is left of modern ground: Slatina's and Brno's built-up edge in the north-west corner, the airport's flat
   apron, Holubice's interchange slip roads, the low banks of today's roads. Light; the owner's check decides.

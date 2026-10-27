@@ -27,7 +27,9 @@ export const CELL = 2 // m (decision 0021)
 // widths where the catalogue gives none: a way's (every way kind sets one), and the bands of the line-shaped kinds
 // that take no width attribute (reeds along a bank, a flèche's earthwork), m
 // the water (§4 step 3): the level sits FREEBOARD m under the lower bank, read BANK_OUT m beyond each edge every
-// LEVEL_STEP m; a pond reaches its full depth SHORE_IN m in from its shore
+// LEVEL_STEP m; a pond reaches its full depth SHORE_IN m in from its shore. A pond with no level of its own levels at
+// the lowest point of its shore (decision 0077); its water stands only where its bed lies under that level (on a
+// slope, its low end): the ground up the slope stays dry, never cut into (#230)
 const FREEBOARD = 0.4
 const BANK_OUT = 3
 const LEVEL_STEP = 2
@@ -267,6 +269,41 @@ interface Field {
   // `inside` for a row of points (xs[k], z) at once, xs ascending (an area's: its rings' crossings with the row)
   row?(z: number, xs: ArrayLike<number>): Uint8Array
 }
+
+/**
+ * Each node's distance (m) to the nearest node where `mask` is 0, over a w × h grid of nodes `cell` m apart: 0 there,
+ * else by two passes of steps of `cell` across and cell·√2 diagonally (a chamfer distance, within 8 % of the true
+ * one). Infinity where the grid has no 0.
+ */
+function chamfer(mask: Uint8Array, w: number, h: number, cell: number): Float64Array {
+  const d = Float64Array.from(mask, v => (v ? Infinity : 0))
+  const diag = cell * Math.SQRT2
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const k = y * w + x
+      if (!d[k]) continue
+      if (x > 0) d[k] = Math.min(d[k], d[k - 1] + cell)
+      if (y > 0) {
+        d[k] = Math.min(d[k], d[k - w] + cell)
+        if (x > 0) d[k] = Math.min(d[k], d[k - w - 1] + diag)
+        if (x < w - 1) d[k] = Math.min(d[k], d[k - w + 1] + diag)
+      }
+    }
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      const k = y * w + x
+      if (!d[k]) continue
+      if (x < w - 1) d[k] = Math.min(d[k], d[k + 1] + cell)
+      if (y < h - 1) {
+        d[k] = Math.min(d[k], d[k + w] + cell)
+        if (x < w - 1) d[k] = Math.min(d[k], d[k + w + 1] + diag)
+        if (x > 0) d[k] = Math.min(d[k], d[k + w - 1] + diag)
+      }
+    }
+  }
+  return d
+}
 function areaField(f: Feature): Field | null {
   if (f.area) {
     const rings = f.area
@@ -300,7 +337,11 @@ function areaField(f: Feature): Field | null {
   if (f.circle) {
     const [[cx, cz], r] = f.circle
     const d = (x: number, z: number) => Math.sqrt((x - cx) * (x - cx) + (z - cz) * (z - cz))
-    return { box: [cx - r, cz - r, cx + r, cz + r], inside: (x, z) => d(x, z) < r, edge: (x, z) => r - d(x, z) }
+    return {
+      box: [cx - r, cz - r, cx + r, cz + r],
+      inside: (x, z) => d(x, z) < r,
+      edge: (x, z) => r - d(x, z),
+    }
   }
   if (f.ellipse) {
     const [[cx, cz], ra, rb, ang] = f.ellipse
@@ -717,6 +758,8 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
     k1: number,
     onCell?: (cell: number, edge: number) => void,
     needEdge = false,
+    // a cell of the area the caller leaves unpainted (a pond's ground left dry up a slope)
+    skip?: (i: number, j: number) => boolean,
   ) => {
     const field = areaField(f)
     if (!field) return
@@ -732,7 +775,7 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       return e
     }
     const paint = (i: number, j: number, x: number, z: number) => {
-      if (!kept?.masks.some(m => m[j * nx + i] === 1)) {
+      if (!kept?.masks.some(m => m[j * nx + i] === 1) && !skip?.(i, j)) {
         layer[j * nx + i] = k1
         onCell?.(j * nx + i, needEdge ? edgeAt(x, z) : 0)
       }
@@ -841,7 +884,93 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       }
     })
   }
+  /**
+   * A pond's level from its shore as the landforms made it (so a ditch, a cut or a sunken way across its shore cannot
+   * pull it down, as for the streams): the lowest point of its shore less the freeboard; with no shore cell on the map
+   * (a lake larger than the map), its lowest ground on it.
+   */
+  const shoreLevel = (field: Field): number | null => {
+    let shore = Infinity
+    let low = Infinity
+    cells(field.box, c, (i, j, x, z) => {
+      if (!field.inside(x, z)) return
+      const g = hAt(x, z)
+      low = Math.min(low, g)
+      if (field.edge(x, z) < c) shore = Math.min(shore, g)
+    })
+    const lv = shore < Infinity ? shore : low
+    return lv < Infinity ? lv - FREEBOARD : null
+  }
+
+  // a pond's nodes: outside its outline, inside it and dry (its ground up a slope), inside it and under its level
+  const OUT = 0
+  const DRY = 1
+  const WET = 2
+
+  /**
+   * A pond's bed, levelled from its shore, from the ground as the water step found it (so the order of the water
+   * features changes nothing, and the edits count). Inside its outline, the bed is the shallower of the old basin (the
+   * level less the depth, reached SHORE_IN m from the drawn edge) and the ground less the freeboard, less the depth
+   * reached SHORE_IN m from the ground inside too high to hold water (more than its depth and freeboard above the
+   * level: a chamfer distance): so a pond digs its basin, never more than its depth and freeboard, only in the ground
+   * near its level. A node whose bed lies under the level is the pond's water and is cut to it, every other node is
+   * left as it is (the ground up a slope is never cut into). On flat ground the basin, as before; up a slope a
+   * shore that tapers to its low end. Returns whether a cell is the pond's: one with a water corner; with no corner
+   * inside (a sliver narrower than a cell), one whose ground lies no higher than its shore.
+   */
+  const pondBed = (field: Field, lv: number, D: number): { holds(i: number, j: number): boolean } => {
+    const W = nx + 1
+    const i0 = Math.max(0, Math.floor((field.box[0] - x0) / c))
+    const i1 = Math.min(nx, Math.ceil((field.box[2] - x0) / c))
+    const j0 = Math.max(0, Math.floor((field.box[1] - z0) / c))
+    const j1 = Math.min(nz, Math.ceil((field.box[3] - z0) / c))
+    const bw = i1 - i0 + 1
+    const bh = j1 - j0 + 1
+    const e = new Float64Array(bw * bh)
+    const kind = new Uint8Array(bw * bh) // OUT, DRY, WET
+    const low = new Uint8Array(bw * bh) // inside, and low enough to hold water
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const q = (j - j0) * bw + i - i0
+        e[q] = field.edge(x0 + i * c, z0 + j * c)
+        if (e[q] > 0) {
+          kind[q] = DRY
+          if (He[j * W + i] < lv + FREEBOARD + D) low[q] = 1
+        }
+      }
+    }
+    // the distance to the ground inside too high to hold water (the drawn edge is the basin's): Infinity where none,
+    // as on flat ground
+    const dist = chamfer(
+      Uint8Array.from(kind, (v, q) => (v === DRY && !low[q] ? 0 : 1)),
+      bw,
+      bh,
+      c,
+    )
+    for (let q = 0; q < bw * bh; q++) {
+      if (!low[q]) continue
+      const k = (j0 + Math.floor(q / bw)) * W + i0 + (q % bw)
+      const bed = Math.max(lv - D * smooth(e[q] / SHORE_IN), He[k] - FREEBOARD - D * smooth(dist[q] / SHORE_IN))
+      if (bed >= lv) continue
+      kind[q] = WET
+      if (bed < H[k]) H[k] = bed
+    }
+    const at = (i: number, j: number) => (i >= i0 && i <= i1 && j >= j0 && j <= j1 ? kind[(j - j0) * bw + i - i0] : OUT)
+    return {
+      holds: (i, j) => {
+        const [a, b, d, f] = [at(i, j), at(i + 1, j), at(i, j + 1), at(i + 1, j + 1)]
+        if (a === WET || b === WET || d === WET || f === WET) return true
+        if (a !== OUT || b !== OUT || d !== OUT || f !== OUT) return false
+        const g = (He[j * W + i] + He[j * W + i + 1] + He[(j + 1) * W + i] + He[(j + 1) * W + i + 1]) / 4
+        return g <= lv + FREEBOARD
+      },
+    }
+  }
+
   // 3. water: levels, channels, fords, ponds; then each water cell's depth below its body's level
+  // the ground as the water step finds it (the landforms and the edits): what a pond levelled from its shore reads,
+  // so the water features' order changes nothing
+  const He = Float64Array.from(H)
   const level = new Float64Array(n).fill(NaN)
   const streams = new Map<string, { line: Pt[]; hw: number; levelAt(along: number): number }>()
   for (const { f, r } of order) {
@@ -893,27 +1022,39 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
         if (bed > H[k]) H[k] = bed
       })
     } else {
-      // a pond or a lake: its level, or the lowest point of its shore less the freeboard; deepest SHORE_IN m in
+      // a pond or a lake: its level, or its shore's; deepest SHORE_IN m in
       const field = areaField(f)
       if (!field) continue
-      let lv = typeof a.level === 'number' ? a.level : Infinity
-      if (lv === Infinity) {
-        cells(field.box, c, (i, j, x, z) => {
-          if (!field.inside(x, z)) return
-          const e = field.edge(x, z)
-          if (e < c) lv = Math.min(lv, hAt(x, z) - FREEBOARD)
-        })
-      } // the shore, as the landforms made it
       const D = num(a.depth, 1.5)
-      nodes(field.box, 0, (k, x, z) => {
-        const e = field.edge(x, z)
-        if (e <= 0) return
-        const bed = lv - D * smooth(e / SHORE_IN)
-        if (bed < H[k]) H[k] = bed
-      })
-      paintArea(f, L.water, k1, cell => {
-        level[cell] = lv
-      })
+      if (typeof a.level === 'number') {
+        // a level given: cut to it as given
+        const lv = a.level
+        nodes(field.box, 0, (k, x, z) => {
+          const e = field.edge(x, z)
+          if (e <= 0) return
+          const bed = lv - D * smooth(e / SHORE_IN)
+          if (bed < H[k]) H[k] = bed
+        })
+        paintArea(f, L.water, k1, cell => {
+          level[cell] = lv
+        })
+        continue
+      }
+      const lv = shoreLevel(field)
+      // no shore on the map (a pond too small for a cell, or off it): nothing to level it by, so no pond
+      if (lv === null) continue
+      const pond = pondBed(field, lv, D)
+      paintArea(
+        f,
+        L.water,
+        k1,
+        cell => {
+          level[cell] = lv
+        },
+        false,
+        // a cell that holds none of the pond's water is not the pond's
+        (i, j) => !pond.holds(i, j),
+      )
     }
   }
   for (let j = 0; j < nz; j++) {
