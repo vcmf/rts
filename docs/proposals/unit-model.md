@@ -244,9 +244,10 @@ against cavalry under fire is the period's central dilemma (L-01).
 - turning costs time (Face about 3 s; a change front tens of seconds).
 
 A battalion that marches across an enemy's front, or turns its back to retire under fire, pays all four (A-10,
-F-06). **Retiring within an enemy's fire range** costs more: a one-off morale shock when it starts, besides its back
-to the enemy (it cannot fire, and fire strikes it as in the rear). Out of a melee there is no retiring at all
-(§ Collision).
+F-06). **A Retire ordered within an enemy's fire range** costs more: a one-off morale shock when it starts, besides
+its back to the enemy (it cannot fire, and fire strikes it as in the rear). The shock is for turning the back on the
+player's order: the wavering fall-back, the morale's own reaction, does not pay it. From a melee there is no retiring
+at all (§ Collision).
 
 ## Experience
 
@@ -420,14 +421,17 @@ with their own numbers:
 
 ### Firearm and melee modes
 
-Every type but artillery has two modes, a **firearm** mode and a **melee** mode, and the player sets which:
-- **firearm:** it stands, or moves, and fires at will (or as its fire orders say);
-- **melee:** it does not fire, and an order to attack an enemy is a charge: cavalry's, or infantry's assault with the
-  bayonet (§ The assault);
-- **by type:** skirmishers have the firearm mode only, and some militia (the Russian opolchenie) the melee mode only;
-  line infantry and cavalry have both (cavalry's firearm mode is its carbines, where its type has them);
-- **in contact:** a battalion an enemy reaches in melee fights in melee as a whole, whatever its mode, until one side
-  breaks; a firearm-only type fights at a heavy disadvantage. The sim fights battalions and companies, not single
+A type may have a **firearm** mode, a **melee** mode or both; artillery has neither. Where it has both, the player
+sets which:
+- **firearm:** it fires as § Fire says (its fire mode, and fire discipline, which may set it to at will; formed
+  bodies fire at the halt, skirmish order on the move);
+- **melee:** it holds its fire, whatever its fire mode or fire discipline says, and an order to attack an enemy is a
+  charge: cavalry's, or infantry's assault with the bayonet (§ The assault);
+- **by type:** line infantry has both; skirmishers the firearm mode only; some militia (the Russian opolchenie) the
+  melee mode only; cavalry the melee mode, and both where its type has carbines (pistols and carbines later,
+  § Formations);
+- **in contact:** a battalion an enemy reaches in melee fights in melee as a whole, whatever its mode, until the
+  melee ends; a firearm-only type fights at a heavy disadvantage. The sim fights battalions and companies, not single
   men: the soldiers on screen are drawn from them.
 
 ### What melee adds
@@ -443,10 +447,12 @@ Charges and melee work as today, with these additions:
 - **Ground** (E-13, E-14): no gallop over woods, villages, marsh or a barrier its kind cannot jump; uphill takes
   momentum. The ground's speed already slows a charge; momentum should read the slope too.
 - **A second enemy in the flank or rear:** a charge that strikes a battalion already in melee from its flank or rear
-  gives it a one-off morale shock, besides the impact (the sector tables).
-- **Fire into a melee:** a battalion in melee can be fired on from any side where no friend of the shooter stands
-  across the line of fire, and cannot fire back. One battalion pinning an enemy in melee while another fires into its
-  flank is a tactic the rules allow and the AI may use.
+  gives it a further one-off morale shock, on top of the impact's own shock by sector: a new ruleset number, a
+  first guess the size of the impact's flank shock.
+
+Fire into a melee needs nothing new: today a battalion in melee can be fired on from any side where no friend of the
+shooter stands across the line of fire, and cannot fire back. One battalion holding an enemy in melee while another
+fires into its flank is a tactic the rules already allow, and the AI may use it.
 
 ## Morale
 
@@ -513,8 +519,9 @@ built on a visual bench of the hard cases. The rules a player sees, which it kee
   and gunners who fled their guns, sheltering in a square or a line. The friend takes disorder. A loose body turns
   formed again only on free ground, and never passes through an enemy.
 - **Enemies stand at contact and fire;** a charge or an assault that reaches any enemy strikes it, and the melee
-  follows. **Nobody in melee gives ground:** a battalion in melee cannot step back or retreat, and the melee ends
-  only when one side breaks (decision 0069, on the claim grid's branch).
+  follows. **Nobody in melee gives ground:** a battalion in melee cannot step back or retreat; the melee ends when one
+  side breaks, or as today when a charger turns away from a square or the two fall out of contact (decision 0069, on
+  the claim grid's branch).
 - **A broken battalion runs as a block:** it faces about and runs, wavering and shattered battalions keeping their
   block. Every enemy that reaches it cuts it down, and it does not fight back; there is no surrender.
 - **Nothing is pushed.** A formation that meets a friend waits or goes round; until pathfinding (U8) it halts with
