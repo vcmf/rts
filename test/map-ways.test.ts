@@ -282,4 +282,12 @@ describe("a map's ways", () => {
     expect(twice).not.toBeNull()
     expect([twice![0], twice![1]].sort()).toEqual([0, 1])
   })
+  it('takes the cost at or under which a waypoint is on its line from its caller', () => {
+    // a pixel costing 18: on a line by the scan's rule (21.5), off it by a stricter one, which moves it onto the ink
+    const c = new Float32Array(9 * 9).fill(31)
+    c[4 * 9 + 4] = 18
+    c[4 * 9 + 6] = 1
+    expect(snapToInk(c, 9, 9, [4, 4], 3)).toEqual([4, 4])
+    expect(snapToInk(c, 9, 9, [4, 4], 3, 2, 16)).toEqual([6, 4])
+  })
 })

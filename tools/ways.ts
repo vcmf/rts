@@ -150,13 +150,14 @@ const INK = 21.5
 /**
  * A waypoint moved onto the ink within `r` of it, if it is not on it: the nearest pixel costing no more than the
  * cheapest there by `slack` (a waypoint already on its line stays, however faint the line; one clicked beside it moves
- * onto the line, not onto a darker letter or hatching beyond it).
+ * onto the line, not onto a darker letter or hatching beyond it). `ink`: the cost at or under which a pixel is on
+ * a line.
  */
-export function snapToInk(cost: Float32Array, w: number, h: number, p: Pt, r: number, slack = 2): Pt {
+export function snapToInk(cost: Float32Array, w: number, h: number, p: Pt, r: number, slack = 2, ink = INK): Pt {
   const [u, v] = [Math.round(p[0]), Math.round(p[1])]
   if (!(u >= 0 && v >= 0 && u < w && v < h)) throw new Error(`pixel ${p.join(', ')} is off the ${w} × ${h} image`)
   // on ink already (a faint line too): it stays
-  if (cost[v * w + u] <= INK) return [u, v]
+  if (cost[v * w + u] <= ink) return [u, v]
   const near: [Pt, number, number][] = []
   for (let y = Math.max(0, v - r); y <= Math.min(h - 1, v + r); y++) {
     for (let x = Math.max(0, u - r); x <= Math.min(w - 1, u + r); x++) {

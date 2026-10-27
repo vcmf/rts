@@ -6,7 +6,7 @@
 // other feature is kept (the stable save, src/map/write.ts).
 //   node tools/works.ts <map.json> <works inputs.json>
 // The inputs: { piece, lines: [{ id, width, edge?, note, pts: [[x, z], …] }], areas: [{ id, edge?, note, circle |
-// ellipse | area }] }, in the map's metres; a line's width and edge in the map's metres too (a scale model's halves).
+// area }] }, in the map's metres; a line's width and edge in the map's metres too (a scale model's halves).
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Feature, MapFile, Pt } from '../src/map/schema.ts'
@@ -14,12 +14,13 @@ import { decodeRdem, demPlace, toFile, toMap } from '../src/map/dem.ts'
 import { writeMap } from '../src/map/write.ts'
 import { gridOf, simplify, type Grid } from './streams.ts'
 import { evenKept, snapToInk, traceWay } from './ways.ts'
+import { mapPieces } from './water.ts'
 
 /** The tool's inputs for one map (a committed file beside it). */
 export interface WorkInputs {
   piece: string
   lines: { id: string; width: number; edge?: number; note: string; pts: Pt[] }[]
-  areas: ({ id: string; edge?: number; note: string } & Pick<Feature, 'circle' | 'ellipse' | 'area'>)[]
+  areas: ({ id: string; edge?: number; note: string } & Pick<Feature, 'circle' | 'area'>)[]
 }
 
 /**
@@ -126,12 +127,14 @@ function main(): void {
     return [Math.round(x * 100) / 100, Math.round(z * 100) / 100]
   }
   const NOTE = ': a modern work, mended from the ground around it'
+  const half: Pt = [map.extent.w / 2, map.extent.h / 2]
   const features: Record<string, unknown>[] = []
   const report: string[] = []
   for (const w of ins.lines) {
     if (w.pts.length < 2) throw new Error(`${w.id}: a line needs two points or more`)
     // the waypoints onto the work within 4 nodes (20 m of field), then the path along it, evened over 6 nodes
-    const pts = w.pts.map(p => snapToInk(cost, g.nx, g.nz, toNode(p), 4))
+    // (on the work: a node 0.75 m or more off its box's mean, half the full discount, costing 16 or less)
+    const pts = w.pts.map(p => snapToInk(cost, g.nx, g.nz, toNode(p), 4, 2, 16))
     const t = traceWay(
       cost,
       g.nx,
@@ -139,16 +142,19 @@ function main(): void {
       pts,
       pts.map(() => false),
     )
-    const line = untangle(simplify(evenKept(t, 6).map(toPoint), 1))
-    features.push({
-      id: w.id,
-      kind: 'relief.mend',
-      line,
-      width: w.width,
-      ...(w.edge !== undefined ? { edge: w.edge } : {}),
-      note: `${w.note}${NOTE}`,
+    // cut at the map's edge (the grid reaches 100 m past it; no piece under 20 m)
+    const pieces = mapPieces(untangle(simplify(evenKept(t, 6).map(toPoint), 1)), { x: 0, z: 0, k: 1 }, half, 20)
+    pieces.forEach((line, k) => {
+      features.push({
+        id: k ? `${w.id}${k + 1}` : w.id,
+        kind: 'relief.mend',
+        line,
+        width: w.width,
+        ...(w.edge !== undefined ? { edge: w.edge } : {}),
+        note: `${w.note}${NOTE}`,
+      })
     })
-    report.push(`${w.id}: ${t.px.length} nodes traced, ${line.length} points`)
+    report.push(`${w.id}: ${t.px.length} nodes traced, ${pieces.length} piece(s)`)
   }
   for (const a of ins.areas) {
     const { id, edge, note, ...shape } = a

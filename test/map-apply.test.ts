@@ -435,6 +435,80 @@ describe('M1b: applying features into the layers', () => {
     const b = apply(mini([slope, pit, bank, { ...mendPit, id: 'b' }, { ...line, id: 'a' }]), cat)
     expect(Array.from(a.height)).toEqual(Array.from(b.height))
   })
+  it("a mend by the map's edge reads only the side on the map; a subkind mends; three mends sum whatever their ids", () => {
+    const slope = { id: 'hill', kind: 'relief.hill', point: [900, 700] as Pt, height: 60, width: 2400 }
+    // an embankment 12 m from the north edge: its north side lies off the map, so the south side alone sets the ground
+    const edgeLine: Pt[] = [
+      [-150, 188],
+      [150, 188],
+    ]
+    const ground = apply(mini([slope]), cat)
+    const mended = apply(
+      mini([
+        slope,
+        { id: 'bank', kind: 'relief.ridge', line: edgeLine, height: 5, width: 30 },
+        { id: 'mend', kind: 'relief.mend', line: edgeLine, width: 20, edge: 10 },
+      ]),
+      cat,
+    )
+    for (const x of [-60, 0, 60]) expect(Math.abs(hAt(mended, x, 188) - hAt(ground, x, 188))).toBeLessThan(0.1)
+    // a subkind of relief.mend mends like it
+    const sub = clone(cat)
+    sub.kinds['relief.mend.rail'] = { set: { width: 20 } }
+    const pit = {
+      id: 'pit',
+      kind: 'relief.plateau',
+      circle: [[-100, -120] as Pt, 25] as [Pt, number],
+      height: -6,
+      edge: 8,
+    }
+    const rail = apply(
+      mini([
+        slope,
+        { id: 'bank', kind: 'relief.ridge', line: edgeLine, height: 5, width: 30 },
+        { id: 'mend', kind: 'relief.mend.rail', line: edgeLine, edge: 10 },
+      ]),
+      sub,
+    )
+    expect(Math.abs(hAt(rail, 0, 188) - hAt(ground, 0, 188))).toBeLessThan(0.1)
+    // three mends overlapping at the pit: the same bits whichever ids they carry
+    const three = (ids: string[]) =>
+      apply(
+        mini([
+          slope,
+          pit,
+          { id: ids[0], kind: 'relief.mend', circle: [[-100, -120], 35], edge: 10 },
+          {
+            id: ids[1],
+            kind: 'relief.mend',
+            line: [
+              [-200, -120],
+              [0, -120],
+            ],
+            width: 20,
+            edge: 10,
+          },
+          {
+            id: ids[2],
+            kind: 'relief.mend',
+            line: [
+              [-100, -200],
+              [-100, -40],
+            ],
+            width: 20,
+            edge: 10,
+          },
+        ]),
+        cat,
+      ).height
+    const first = Array.from(three(['a', 'b', 'c']))
+    for (const ids of [
+      ['c', 'b', 'a'],
+      ['b', 'c', 'a'],
+    ]) {
+      expect(Array.from(three(ids))).toEqual(first)
+    }
+  })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(
       mini([

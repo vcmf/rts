@@ -232,16 +232,17 @@ into the epic; this plan details each as it starts.
 
 - **`relief.mend`** (decision 0073): a new relief kind that rebuilds the ground under a modern work from the ground
   around it. Along a line, each node takes the blend across the line of the ground on each side, sampled along the
-  line's chord over its reach at the first ground no mend reaches; over an area, a circle or an ellipse, the plane
-  through the ground on its rim that no mend reaches (least squares); blended in over `edge`. Mends are part of the
+  line's chord over its reach at the first ground no mend reaches (a side past the map's edge left out, the other's
+  slope carried across); over an area or a circle, the plane through the ground on its rim that no mend reaches
+  (least squares; its mean where under half the rim is free); blended in over `edge`. Mends are part of the
   relief (step 1, before the water's levels and the edits read the ground); every mend reads the unmended ground and
   overlapping ones take their mean, so neither order nor ids matter.
 - **The works traced off the relief** (`tools/works.ts`, its inputs committed in `maps/austerlitz-works.json`, pure
   parts tested in `test/map-works.test.ts`): each line given as a few waypoints in the map's metres, and between each
   two the cheapest path over the relief file, a node costing 1 where it stands 1.5 m or more off the mean of the 105 m
   box around it (an embankment's crest, a cutting's floor) and up to 31 on plain ground; M8c's snap and spur cut; the
-  path evened, simplified to 1 m and any loop it makes cut out. Only the tool's mends (known by their note) are written
-  again.
+  path evened, simplified to 1 m, any loop it makes cut out and cut at the map's edge. A waypoint is on its work where
+  it stands 0.75 m off its box's mean. Only the tool's mends (known by their note) are written again.
 - The works: the D1 west of Šlapanice with its interchange's ramp and loop, the D1 north of Jirschikowitz and
   Blasowitz to the Holubice interchange, the Brno–Přerov railway from Šlapanice east, the railway from Křenovice
   south and west to Újezd, the railway embankment past Sokolnice, the Brno–Veselí railway's low embankment across the
@@ -255,7 +256,7 @@ into the epic; this plan details each as it starts.
   across a mended pit levelled on the mended ground; an embankment with a bend mended through it; two overlapping
   mends the same whichever id sorts first.
 - `test/map-works.test.ts`: the work's cost, a line's loops (a crossing, a spur back to a point) cut out.
-- The map validates and compiles; the mends add about 1.4 s to its 5.7 s apply in Node (measured). The relief less its
+- The map validates and compiles; the mends add 1.0 to 1.6 s to its apply in Node (measured under load). The relief less its
   local mean, before and after, for the owner's check.
 - `npm test`, `check:data`, the build, the docs check and the page check pass.
 
@@ -274,6 +275,15 @@ into the epic; this plan details each as it starts.
   `Near` carrying its segment (the chord needs points away from the nearest one anyway). Found on the way, on the epic
   as it stands: a pond on sloping ground is carved up to 22.8 m into the hill (#230). Tests: the stream, the bend,
   the order (each fails without its fix).
+- **Round 2**: severe. A line mend whose side met the map's edge took the height clamped at the edge, the
+  embankment's own (the D1 north of Blasowitz runs 5 m inside the north edge); the tool never cut its lines at the
+  map's edge. Fixed: a side that meets the edge, or finds no free ground within 400 m, is left out and the other side's
+  slope is carried across from a second sample; the lines are cut by `mapPieces`. Also: the tool's own "on the work"
+  threshold for the snap (the scan's was looser); ellipses dropped from the mend's shapes (their blend reaches past the
+  box the mend visits; no work needs one); an area whose rim is mostly reached by other mends takes the rim's mean;
+  mends found through the kind chain (a subkind mends); their sums in an order of their content, so a rename changes
+  no bit; the point along a line by halving over its vertices' distances; the free check unrolled. Tests: the edge, a
+  subkind, three overlapping mends renamed (bit for bit), the snap's threshold.
 
 ## Open questions
 
