@@ -35,6 +35,9 @@ export interface FormationDef {
   // to tail): its places only; a change into or out of it passes through the block's spacing
   step?: { file: number; rank: number }
   braced?: boolean // proof against a charge from any side (the square; S1d-2)
+  // fire from its flank and from its rear over fire from its front (each ≥ 1; docs/proposals/sectors-model.md § 5);
+  // none: 1, as from the front
+  exposure?: { flank: number; rear: number }
   place(g: Geometry): Placement[]
 }
 export interface TerrainDef {
@@ -393,6 +396,13 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     if (!paces.includes(d.pace)) throw new Error(`${at}: shape ${n}'s pace ${d.pace} is not one of the paces`)
     if (d.roadPace && !paces.includes(d.roadPace)) {
       throw new Error(`${at}: shape ${n}'s roadPace ${d.roadPace} is not one of the paces`)
+    }
+    // a flank or rear under 1 would make fire from the front the worst
+    if (
+      d.exposure &&
+      !(d.exposure.flank >= 1 && d.exposure.rear >= 1 && d.exposure.flank + d.exposure.rear < Infinity)
+    ) {
+      throw new Error(`${at}: shape ${n}'s exposure must be finite and ≥ 1 (flank and rear)`)
     }
   }
   // a change time naming a shape it has not would be ignored, and the default taken in silence (#156)

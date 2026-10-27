@@ -22,6 +22,8 @@ import {
   aimOf,
   companySees,
   hashWorld,
+  blockGeometry,
+  exposure,
   anyWet,
   STATUS,
   cellK,
@@ -232,7 +234,9 @@ describe('casualties', () => {
     s.spawn(0, -150, Z, E)
     const b = s.spawn(1, -45.25, Z, 0)
     const before = [0, 1, 2, 3].map(c => s.w.f.men[s.i(b) * s.w.cr.maxC + c])
-    s.run(120)
+    // 20 s: company 0 alone has lost men. The shooter stands on the target's flank (exposure 1.8): by 30 s the
+    // company is gone, and the target routs, its block re-packed
+    s.run(20)
     const lost = [0, 1, 2, 3].map(c => before[c] - s.w.f.men[s.i(b) * s.w.cr.maxC + c])
     console.log('losses by company', lost)
     expect(lost[0]).toBeGreaterThan(0)
@@ -509,6 +513,60 @@ describe('morale', () => {
       s.run(60)
       expect([s.state(a) !== MS_ROUTING, s.state(b) !== MS_ROUTING]).toEqual([true, true])
     }
+  })
+})
+
+describe('exposure (sectors-model § 5)', () => {
+  // a line facing north (+z) and a shooting line `d` m off its front, its east end (facing west) or its rear
+  const TZ = Z + 160 // room behind the target as well as ahead
+  const at = (where: 'front' | 'flank' | 'rear', d: number, hold = false) => {
+    const s = new W()
+    const b = s.spawn(1, FIGHT_X, TZ, 0, { quality: 1, fire: 'hold' })
+    blockGeometry(s.w)
+    const end = s.w.scratch.faces!.R[2 * s.i(b)]
+    const [x, z, hd] =
+      where === 'front'
+        ? [FIGHT_X, TZ + d, Math.PI]
+        : where === 'flank'
+          ? [FIGHT_X + end + d, TZ, -E]
+          : [FIGHT_X, TZ - d, 0]
+    const a = s.spawn(0, x, z, hd, hold ? { fire: 'hold' } : {})
+    expect(s.dropped, `${where} ${d}`).toEqual([])
+    return { s, a, b }
+  }
+  // the exposure of the target to each of the shooter's companies with men
+  const exposures = (s: W, a: number, b: number): number[] => {
+    const G = blockGeometry(s.w)
+    const CS = s.w.cr.maxC
+    return [0, 1, 2, 3].map(c => exposure(s.w, G, s.i(a) * CS + c, s.i(b)))
+  }
+  it('P-18: fire from the front is the depth factor alone; from a flank or the rear never less', () => {
+    const base = cr.depthByKind[cr.kinds.indexOf('line')]
+    for (const d of [20, 80, 150]) {
+      const front = at('front', d, true)
+      for (const e of exposures(front.s, front.a, front.b)) expect(e).toBe(base)
+      const flank = at('flank', d, true)
+      for (const e of exposures(flank.s, flank.a, flank.b)) {
+        expect(e).toBeGreaterThanOrEqual(base)
+        expect(e).toBeLessThanOrEqual(1.8 * base)
+      }
+      expect(Math.max(...exposures(flank.s, flank.a, flank.b))).toBeCloseTo(1.8 * base, 1)
+      const rear = at('rear', d, true)
+      for (const e of exposures(rear.s, rear.a, rear.b)) expect(e).toBeCloseTo(1.2 * base, 9)
+    }
+  })
+  it('P-18 (A-07): a line fired on from its flank loses more men than from its front at the same range', () => {
+    const lost = (where: 'front' | 'flank') => {
+      const { s, b } = at(where, 50)
+      const before = s.men(b)
+      s.run(120)
+      return before - s.men(b)
+    }
+    const front = lost('front')
+    const flank = lost('flank')
+    console.log('lost from the front', front, 'from the flank', flank)
+    expect(front).toBeGreaterThan(5)
+    expect(flank).toBeGreaterThan(1.2 * front)
   })
 })
 

@@ -55,6 +55,7 @@ const infantry: UnitType = {
       kind: 'line',
       pace: 'ordinary',
       closeAcross: true,
+      exposure: { flank: 1.8, rear: 1.2 }, // enfiladed, the ball runs down the files
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * (BW(g) + g.fileSpacing), z: 0, rot: 0, face: 0 })),
     },
     // the companies over four faces, facing out (square, above)
@@ -64,6 +65,7 @@ const infantry: UnitType = {
     column: {
       kind: 'column',
       pace: 'ordinary',
+      exposure: { flank: 1.2, rear: 1.1 },
       place: g =>
         each(g, c => ({
           x: c === g.companies - 1 && g.companies % 2 ? 0 : ((c % 2) - 0.5) * (BW(g) + g.fileSpacing),
@@ -78,6 +80,7 @@ const infantry: UnitType = {
       pace: 'ordinary',
       roadPace: 'routeStep',
       trail: true,
+      exposure: { flank: 1.5, rear: 1.0 },
       place: g =>
         each(g, c => ({ x: ((g.ranks - 1) * g.rankSpacing) / 2, z: -c * (BW(g) + 1.0), rot: -PI / 2, face: 0 })),
     },
@@ -124,12 +127,14 @@ const cavalry: UnitType = {
     line: {
       kind: 'horse',
       pace: 'walk',
+      exposure: { flank: 1.2, rear: 1.1 },
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * (BW(g) + SQ_GAP), z: 0, rot: 0, face: 0 })),
     },
     // column of squadrons at half distance: each squadron half its frontage behind the one ahead
     column: {
       kind: 'horse',
       pace: 'walk',
+      exposure: { flank: 1.2, rear: 1.1 },
       place: g => each(g, c => ({ x: 0, z: -c * ((g.ranks - 1) * g.rankSpacing + BW(g) / 2), rot: 0, face: 0 })),
     },
     // column of route by fours at the trot: each squadron's block turned along the road as a column of twos,
@@ -139,6 +144,7 @@ const cavalry: UnitType = {
       kind: 'horse',
       pace: 'trot',
       trail: true,
+      exposure: { flank: 1.5, rear: 1.0 },
       step: { file: 3.0, rank: 1.0 },
       place: g =>
         each(g, c => ({
@@ -197,6 +203,7 @@ const battery: UnitType = {
     unlimbered: {
       kind: 'guns',
       pace: 'manhandle',
+      exposure: { flank: 1.5, rear: 1.0 },
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * 16, z: 0, rot: 0, face: 0 })),
     },
     // on the move: piece, limber and team one behind the other on the trail, 18 m apart, at the walk
@@ -204,6 +211,7 @@ const battery: UnitType = {
       kind: 'guns',
       pace: 'gunWalk',
       trail: true,
+      exposure: { flank: 1.5, rear: 1.0 },
       place: g => each(g, c => ({ x: 0, z: -c * 18, rot: 0, face: 0 })),
     },
   },
