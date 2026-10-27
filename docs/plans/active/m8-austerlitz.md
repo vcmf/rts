@@ -407,15 +407,15 @@ into the epic; this plan details each as it starts.
 
 - A pond took the lowest point of its shore, less the freeboard, as its level and carved its whole outline down to
   it: across a slope its uphill side was dug into the hill (the Nowetitz ponds 22.8 m). Water lies level at its lower
-  bank, so the higher ground inside the survey's outline is dry ground, not water. Now (`src/map/apply.ts`, step 3):
-  a pond with no level of its own still levels at the lowest point of its shore; its water stands only on the nodes
-  inside whose ground (as it is, edits included) lies less than its depth and the freeboard above that level; its bed
-  is reached 10 m from the nearest node that is not (the drawn edge, or the dry ground up the slope: a chamfer
-  distance, `chamfer`) and never more than its depth and the freeboard below the ground, so the shore up a slope
-  tapers; a cell with no water corner leaves the pond (`paintArea` takes a cell to skip). A flat pond is cut as
-  before; a pond given its own `level` exactly as before.
+  bank, so the higher ground inside the survey's outline is dry ground, not water. Now (`src/map/apply.ts`, step 3), a
+  pond with no level of its own still levels at the lowest point of its shore and, from the ground as the landforms
+  made it (so the water features' order changes nothing): the ground inside more than its depth and the freeboard
+  above the level is dry and left as it is; elsewhere the bed is the shallower of the old basin (the level less the
+  depth, reached 10 m from the drawn edge) and the ground less the freeboard, less the depth reached 10 m from the dry
+  ground (`chamfer`); its water is where that bed lies under the level. On flat ground the basin always wins: the same
+  ground as before, bit for bit; a pond given its own `level` exactly as before.
 - On Austerlitz every one of the 18 ponds holds water (1.0 to 1.5 m deep at most), the ponds on slopes smaller (their
-  low end); the compile 5.0 s. The deepest the water cuts below the dry ground anywhere is 4.8 m, a stream at the map's
+  low end); the compile 5.1 s. The deepest the water cuts below the dry ground anywhere is 4.8 m, a stream at the map's
   west edge (an open question), no pond.
 - **Review rounds**: three, then the design changed. The first version raised a dam on the pond's downhill shore so
   its whole outline could hold water at the median of its shore: each round found the implicit dam colliding with
@@ -426,6 +426,12 @@ into the epic; this plan details each as it starts.
   than its depth and freeboard, dry uphill), a given level, a flat pond's whole outline, a stream through a sloping
   pond (its water, no cliff), no deeper over a stream, no bank uphill, two ponds renamed (bit for bit), a ditch below
   a pond.
+- **Review round 1 of the redesign**: severe. A band of cells above the waterline was painted water (the wet test
+  was the uncut ground near the level, not the bed under it); a flat pond's shore was no longer cut as before; the
+  wet test read the ground streams had already cut, so the ids decided. Fixed as above: the bed from the ground as
+  the landforms made it, the water where the bed lies under the level, the old basin the bound (a flat pond bit for
+  bit as before), a sliver narrower than a cell keeps its cells. Tests: a flat pond against a given level (bit for
+  bit), no water cell's ground above the pond's lowest shore, a stream through it renamed, a sliver.
 
 ## Open questions
 

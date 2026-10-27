@@ -211,10 +211,12 @@ maps/kinds.json ──► checkCatalogue ─┐
     0.4 m freeboard, taken every 2 m and never rising downstream (the line's order is the flow; `Layers.streams` keeps
     each profile). Its channel is carved from its depth (a ramp `along` gives pools), shallower toward the banks; a
     ford raises the bed to its depth over its width, where the stream passes nearest its point; a pond sits at its
-    `level` (cut to it as given), or levels at the lowest point of its shore less the freeboard (#230): its water only on the nodes inside whose
-    ground lies less than its depth and the freeboard above that level (on a slope, its low end; the ground up the
-    slope stays dry, never cut into), its bed reached 10 m from the nearest node that is not (the drawn edge, or the
-    dry ground: a chamfer distance) and never more than its depth and the freeboard below the ground; deepest 10 m in. Each water cell's depth is its
+    `level` (cut to it as given), or levels at the lowest point of its shore less the freeboard (#230): from the ground as the landforms made it,
+    the ground inside more than its depth and the freeboard above that level is dry and left as it is; elsewhere the
+    bed is the shallower of the basin (the level less the depth, deepest 10 m in from the drawn edge) and the ground
+    less the freeboard, less the depth reached 10 m from the dry ground (a chamfer distance): on flat ground the basin,
+    up a slope a tapering shore; its water is where the bed lies under the level (a cell with no such corner and one
+    inside leaves the pond). Each water cell's depth is its
     body's level less the cell's mean ground (`Layers.depth`, mm);
   - a bridge decks the road's cells over the water at the height of the higher of the road's two ends, 4 m past
     each bank (the sim classifies them `bridge`: level, dry);

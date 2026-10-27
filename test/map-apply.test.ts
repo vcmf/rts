@@ -609,12 +609,12 @@ describe('M1b: applying features into the layers', () => {
       ] as Pt[],
     }
     const L = apply(mini([slope, pond, brook]), cat)
-    // the stream's cells below the dam still hold water
+    // the stream's cells below the pond still hold water
     for (const z of [-53, -55, -57]) {
       const cell = Math.floor((z - L.z0) / L.cell) * L.nx + Math.floor((0.5 - L.x0) / L.cell)
       expect(L.depth[cell]).toBeGreaterThan(0)
     }
-    // downhill, across the dam's outer side, no step between neighbouring nodes over 1.5 m
+    // downhill, across the pond's low shore, no step between neighbouring nodes over 1.5 m
     const without = apply(mini([slope, pond]), cat)
     for (let z = -50; z > -80; z -= 2) expect(Math.abs(hAt(without, 20, z) - hAt(without, 20, z - 2))).toBeLessThan(1.5)
   })
@@ -646,7 +646,7 @@ describe('M1b: applying features into the layers', () => {
       const floor = Math.min(hAt(streamOnly, 0, z), hAt(dry, 0, z) - 1.5 - 0.4)
       expect(hAt(both, 0, z)).toBeGreaterThanOrEqual(floor - 1e-9)
     }
-    // no slot walls across the stream below the dam, no bank at the uphill shore: no step over 1.6 m in 2 m
+    // no slot walls across the stream below the pond, no bank at the uphill shore: no step over 1.6 m in 2 m
     for (let z = -60; z <= -50; z += 2) {
       for (let x = -10; x < 10; x += 2) expect(Math.abs(hAt(both, x, z) - hAt(both, x + 2, z))).toBeLessThan(1.6)
     }
@@ -663,7 +663,7 @@ describe('M1b: applying features into the layers', () => {
         cat,
       ).height
     expect(Array.from(pair('a-pond', 'b-pond'))).toEqual(Array.from(pair('z-pond', 'b-pond')))
-    // a ditch just below the dam keeps its cut
+    // a ditch just below the pond keeps its cut
     const ditch = {
       id: 'ditch',
       kind: 'relief.ditch',
@@ -674,9 +674,62 @@ describe('M1b: applying features into the layers', () => {
       depth: 1.5,
       width: 4,
     }
-    const dammed = apply(mini([slope, pond, ditch]), cat)
+    const ponded = apply(mini([slope, pond, ditch]), cat)
     const cut = apply(mini([slope, ditch]), cat)
-    expect(hAt(dammed, 0, -56)).toBeCloseTo(hAt(cut, 0, -56), 6)
+    expect(hAt(ponded, 0, -56)).toBeCloseTo(hAt(cut, 0, -56), 6)
+  })
+  it('a pond levelled from its shore: flat as before, no water above its line, any order, slivers kept (#230 redesign)', () => {
+    // on flat ground the same ground as the old rule, which a given level still follows
+    const flatOwn = apply(mini([{ id: 'pond', kind: 'water.pond', circle: [[0, 0], 30] }]), cat)
+    const flatGiven = apply(mini([{ id: 'pond', kind: 'water.pond', circle: [[0, 0], 30], level: -0.4 }]), cat)
+    expect(Array.from(flatOwn.height)).toEqual(Array.from(flatGiven.height))
+    const slope = {
+      id: 'slope',
+      kind: 'relief.ridge',
+      line: [
+        [-200, 150],
+        [200, 150],
+      ] as Pt[],
+      height: 40,
+      width: 600,
+    }
+    const pond = { id: 'pond', kind: 'water.pond', circle: [[0, -20] as Pt, 30] as [Pt, number] }
+    // no water above its line up the slope: no water cell's ground lies above the lowest point of the pond's shore
+    // (the most its water can reach)
+    const bare = apply(mini([slope]), cat)
+    let shoreMin = Infinity
+    for (let a = 0; a < 360; a += 2) {
+      const t = (a * Math.PI) / 180
+      shoreMin = Math.min(shoreMin, hAt(bare, 30 * Math.cos(t), -20 + 30 * Math.sin(t)))
+    }
+    const L = apply(mini([slope, pond]), cat)
+    let highest = -Infinity
+    for (let j = 0; j < L.nz; j++) {
+      for (let i = 0; i < L.nx; i++) {
+        if (!L.water[j * L.nx + i]) continue
+        const W = L.nx + 1
+        const g =
+          (L.height[j * W + i] + L.height[j * W + i + 1] + L.height[(j + 1) * W + i] + L.height[(j + 1) * W + i + 1]) /
+          4
+        highest = Math.max(highest, g)
+      }
+    }
+    expect(highest).toBeLessThan(shoreMin + 0.1)
+    // a stream through it: the same ground whichever sorts first
+    const brook = (id: string) => ({
+      id,
+      kind: 'water.stream',
+      line: [
+        [0, 40],
+        [0, -150],
+      ] as Pt[],
+    })
+    expect(Array.from(apply(mini([slope, pond, brook('a-brook')]), cat).height)).toEqual(
+      Array.from(apply(mini([slope, pond, brook('z-brook')]), cat).height),
+    )
+    // a pond narrower than a cell keeps its cells
+    const sliver = apply(mini([{ id: 'sliver', kind: 'water.pond', ellipse: [[0, 1], 30, 0.8, 0] }]), cat)
+    expect(sliver.water.some(v => v > 0)).toBe(true)
   })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(
