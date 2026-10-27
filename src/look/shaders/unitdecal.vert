@@ -3,7 +3,7 @@ precision highp float;attribute vec3 position;
 // THE SIMPLE SHADOWS (decision 0049; src/look/units.ts): each soldier draws his own shadow in the main pass, a grid lying
 // on the ground from his feet along the sun's shadow (uShDir; position: 0 to 1 across it in x, along it in z), on the
 // battalion's own instances: his place moves with him every frame (the step's place and the share of the next step's
-// move gone: aNext, uStepFrac). His facing (the matrix's turn) picks two of the shape's facings, blended; his clip's
+// move gone: aNext, uStepFrac). His facing (his pose's turn) picks two of the shape's facings, blended; his clip's
 // first step (aVAT.x) his role's row (uRoleStart). uShapeAt: the atlas's anchor, where a cell's first texel lies (m
 // from his feet, across and along: the strip moves within it, the shape's texels stay where they are); uShapeCell: a cell's texels across and along, 1 / the atlas's size; uShapeTexel: 1 / the shape's texel
 // (m), a cell's border (texels). Each vertex sits on the ground (uMeadow's R: the meadow map's height, or without one
@@ -20,6 +20,8 @@ precision highp float;attribute vec3 position;
 // fragment's gradient where it lies on the shape)
 uniform mat4 viewProjection;uniform vec3 uCamPos;
 attribute vec3 aVAT;attribute vec3 aNext;
+// his pose (units.vert's): x, y, z, his turn about y, as world0; his matrix from it (unitPose)
+#include<unitPose>
 uniform vec4 uRoleStart,uShapeCell,uStrip,uRows;uniform vec2 uShDir,uShapeTexel,uShapeAt;uniform float uStepFrac,uDecalLift,uShLen;
 uniform mat4 uLMVP;
 uniform sampler2D uMeadow;
@@ -34,7 +36,7 @@ uniform vec2 uFarK,uFarScale;
 #endif
 varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 void main(){
-  #include<instancesVertex>
+  mat4 finalWorld=poseWorld(world0);
   vec3 p=finalWorld[3].xyz+aNext*uStepFrac;
   float j=position.z*DECAL_ALONG;
   vec2 q=vec2(position.x,j<0.5?uRows.x:j<1.5?uRows.y:j<2.5?uRows.z:uRows.w);
@@ -51,7 +53,7 @@ void main(){
   float lift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);
   gl_Position=viewProjection*vec4(g+toCam*(lift/max(0.2,toCam.y)),1.0);
   vec4 lp=uLMVP*vec4(g,1.0);vLM=lp.xy/lp.w*0.5+0.5;
-  float a=atan(-finalWorld[0].z,finalWorld[0].x),fk=fract(a/6.2831853)*FACINGS,k0=floor(fk),k1=mod(k0+1.0,FACINGS);
+  float a=world0.w,fk=fract(a/6.2831853)*FACINGS,k0=floor(fk),k1=mod(k0+1.0,FACINGS);
   vT=fk-k0;
   float row=abs(aVAT.x-uRoleStart.y)<0.5?1.0:abs(aVAT.x-uRoleStart.z)<0.5?2.0:abs(aVAT.x-uRoleStart.w)<0.5?3.0:0.0;
   vec2 c=(l0-uShapeAt)*uShapeTexel.x+uShapeTexel.y;
