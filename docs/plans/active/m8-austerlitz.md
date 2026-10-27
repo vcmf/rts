@@ -450,6 +450,28 @@ into the epic; this plan details each as it starts.
   three, allocation-free cell tests, a mask from the bed instead of a skip in `paintArea`, shared corner-mean and node
   range helpers (the compile is 5 s). The review stops here (three rounds of the redesign).
 
+## M8g in detail
+
+- **Zones.** The language's zones are overrides (`zone.go`, `zone.nogo`) and labels; a scenario's deployment areas
+  belong to the scenario (the proposal rules `deploy` out of maps). Austerlitz needs no override: every cell is the
+  ground it is. So M8g gives the staff map its names.
+- **Labels** (`tools/labels.ts`, its inputs committed in `maps/austerlitz-labels.json`, its anchor tested in
+  `test/map-labels.test.ts`): each place named at the feature it names (a line at its middle, a village at the middle
+  of its stretch of street, a pond or an area at its centre) or, for a height, at the highest point of the compiled
+  ground in a box. 19 labels: the 11 villages (the period's German names, today's Czech after them), the Goldbach,
+  the Littawa and the Pratzen brook, the Kobelnitz and Satschan ponds, the pheasantry, the Olmütz highway, the Pratzen
+  heights. Only the tool's labels are written again. The page does not draw labels yet (the staff map will).
+- **The owner's check of the whole**: the lit and flat views, the line infantry's passability, and the survey over the
+  map (`scratch/m8/check/`), against the survey: the relief, the water, the ways, the villages, the woods and meadows.
+
+## Acceptance (M8g)
+
+- `test/map-labels.test.ts`: a line's middle, a village's stretch's middle, a shape's centre, a village on a missing
+  way.
+- The map validates and expands (330 features), and compiles; the owner checks it reads as the field (the proposal's
+  M8 acceptance).
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
 ## Open questions
 
 - The road tracer reconciles roads traced one by one (#227); tracing the network incrementally would make the forks
