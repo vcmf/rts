@@ -244,7 +244,9 @@ against cavalry under fire is the period's central dilemma (L-01).
 - turning costs time (Face about 3 s; a change front tens of seconds).
 
 A battalion that marches across an enemy's front, or turns its back to retire under fire, pays all four (A-10,
-F-06).
+F-06). **Retiring within an enemy's fire range** costs more: a one-off morale shock when it starts, besides its back
+to the enemy (it cannot fire, and fire strikes it as in the rear). Out of a melee there is no retiring at all
+(§ Collision).
 
 ## Experience
 
@@ -416,7 +418,21 @@ with their own numbers:
 
 ## Charges and melee
 
-Charges and melee work as today, with four additions:
+### Firearm and melee modes
+
+Every type but artillery has two modes, a **firearm** mode and a **melee** mode, and the player sets which:
+- **firearm:** it stands, or moves, and fires at will (or as its fire orders say);
+- **melee:** it does not fire, and an order to attack an enemy is a charge: cavalry's, or infantry's assault with the
+  bayonet (§ The assault);
+- **by type:** skirmishers have the firearm mode only, and some militia (the Russian opolchenie) the melee mode only;
+  line infantry and cavalry have both (cavalry's firearm mode is its carbines, where its type has them);
+- **in contact:** a battalion an enemy reaches in melee fights in melee as a whole, whatever its mode, until one side
+  breaks; a firearm-only type fights at a heavy disadvantage. The sim fights battalions and companies, not single
+  men: the soldiers on screen are drawn from them.
+
+### What melee adds
+
+Charges and melee work as today, with these additions:
 - **By category** (E-06, E-07):
   - heavy cavalry: more impact and melee strength, armour against sabres, more fatigue, a shorter pursuit;
   - light cavalry: less impact, faster paces, a longer pursuit that it controls by level.
@@ -426,6 +442,11 @@ Charges and melee work as today, with four additions:
   caught; veterans rally after a short pursuit.
 - **Ground** (E-13, E-14): no gallop over woods, villages, marsh or a barrier its kind cannot jump; uphill takes
   momentum. The ground's speed already slows a charge; momentum should read the slope too.
+- **A second enemy in the flank or rear:** a charge that strikes a battalion already in melee from its flank or rear
+  gives it a one-off morale shock, besides the impact (the sector tables).
+- **Fire into a melee:** a battalion in melee can be fired on from any side where no friend of the shooter stands
+  across the line of fire, and cannot fire back. One battalion pinning an enemy in melee while another fires into its
+  flank is a tactic the rules allow and the AI may use.
 
 ## Morale
 
@@ -492,13 +513,14 @@ hard cases (`docs/plans/active/track-s.md`). The rules a player sees, which it k
   and gunners who fled their guns, sheltering in a square or a line. The friend takes disorder. A loose body turns
   formed again only on free ground, and never passes through an enemy.
 - **Enemies stand at contact and fire;** a charge or an assault that reaches any enemy strikes it, and the melee
-  follows. In a clash ground changes hands only through the fight, in steps: a battalion losing a round of melee
-  steps back as a whole and its foe follows; one that cannot step back (anything in the way, or a second enemy
-  on its flank or rear) loses nerve instead.
+  follows. **Nobody in melee gives ground:** a battalion in melee cannot step back or retreat, and the melee ends
+  only when one side breaks (decision 0069, on the claim grid's branch).
+- **A broken battalion runs as a block:** it faces about and runs, wavering and shattered battalions keeping their
+  block. Every enemy that reaches it cuts it down, and it does not fight back; there is no surrender.
 - **Nothing is pushed.** A formation that meets a friend waits or goes round; until pathfinding (U8) it halts with
   the status "blocked by a friend".
 - **A router stopped by an enemy** is halted, as one stopped by impassable ground is today, so it tries the next
-  direction of its fan.
+  direction of its fan, and goes on trying while an enemy is near (the way may clear).
 
 ### Pathfinding
 
@@ -684,6 +706,12 @@ bar in U2. U6 must come before U8, since pathfinding hands moving formations to 
 
 ## Open questions
 
+- **Rallying, after Total War** (research, 2026-10-26: Napoleon's and Warhammer's morale tables): a router there rallies
+  when its rout timer runs out, if no enemy within about 80 m is stronger than a third of it and it is not engaged;
+  it shatters on its third rout, below a deep morale floor while running, or when its general dies; an army below
+  about a quarter of its strength takes a large morale penalty. Today's rally (no enemy within 250 m, no losses for
+  20 s, two rallies at most, shattered below half strength) has the first part; the army-wide collapse and the
+  general (his presence for a rally, his death for the routers) are left for when generals come.
 - **The ceiling of the bar's recovery:** what share of the losses' cost stays for the battle (a half, as a first
   guess). Too little and a battered battalion comes back fresh; too much and nothing ever recovers.
 - **The level up's refill** is a lump of morale mid-battle, once per battle. If playtests find it swings fights,
