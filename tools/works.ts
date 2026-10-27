@@ -10,9 +10,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Feature, MapFile, Pt } from '../src/map/schema.ts'
-import { decodeRdem, demPlace, toFile, toMap, type Dem } from '../src/map/dem.ts'
+import { decodeRdem, demPlace, toFile, toMap } from '../src/map/dem.ts'
 import { writeMap } from '../src/map/write.ts'
-import { simplify } from './streams.ts'
+import { gridOf, simplify, type Grid } from './streams.ts'
 import { evenKept, snapToInk, traceWay } from './ways.ts'
 
 /** The tool's inputs for one map (a committed file beside it). */
@@ -22,42 +22,12 @@ export interface WorkInputs {
   areas: ({ id: string; edge?: number; note: string } & Pick<Feature, 'circle' | 'ellipse' | 'area'>)[]
 }
 
-/** A part of a heightfield as a grid: w × h heights, the south row first, its node (0, 0) at (x0, z0), `cell` apart. */
-export interface Grid {
-  w: number
-  h: number
-  x0: number
-  z0: number
-  cell: number
-  h0: Float64Array
-}
-
-/** The part of a relief file over a box of its frame (west, south, east, north), whole nodes. */
-export function gridOf(d: Dem, box: [number, number, number, number]): Grid {
-  const i0 = Math.max(0, Math.floor(box[0] / d.cell + (d.nx - 1) / 2))
-  const j0 = Math.max(0, Math.floor(box[1] / d.cell + (d.nz - 1) / 2))
-  const i1 = Math.min(d.nx - 1, Math.ceil(box[2] / d.cell + (d.nx - 1) / 2))
-  const j1 = Math.min(d.nz - 1, Math.ceil(box[3] / d.cell + (d.nz - 1) / 2))
-  const w = i1 - i0 + 1
-  const h = j1 - j0 + 1
-  const h0 = new Float64Array(w * h)
-  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) h0[j * w + i] = d.base + d.cm[(j0 + j) * d.nx + i0 + i] / 100
-  return {
-    w,
-    h,
-    x0: (i0 - (d.nx - 1) / 2) * d.cell,
-    z0: (j0 - (d.nz - 1) / 2) * d.cell,
-    cell: d.cell,
-    h0,
-  }
-}
-
 /**
  * Each node's cost to pass, for a path along a work: 1 where the ground stands `full` m or more off the mean of the
  * `r`-node box around it (an embankment's crest, a cutting's floor), up to 1 + `dear` on plain ground.
  */
 export function workCost(g: Grid, r = 10, full = 1.5, dear = 30): Float32Array {
-  const { w, h, h0 } = g
+  const { nx: w, nz: h, h: h0 } = g
   const I = new Float64Array((w + 1) * (h + 1))
   for (let y = 0; y < h; y++) {
     let row = 0
@@ -131,7 +101,7 @@ function main(): void {
   if (!piece || !dem?.file) throw new Error(`no piece ${ins.piece} or its dem source`)
   const place = demPlace(piece as unknown as Record<string, unknown>)
   const d = decodeRdem(new Uint8Array(fs.readFileSync(path.join(path.dirname(mapFile), dem.file))))
-  // the file over the map's extent, a little more
+  // the file over the map's extent and 100 m more (the nodes inside that box)
   const [hw, hh] = [map.extent.w / 2 + 100, map.extent.h / 2 + 100]
   const [wx, sz] = toFile(place, -hw, -hh)
   const [ex, nz] = toFile(place, hw, hh)
@@ -146,7 +116,9 @@ function main(): void {
   const toNode = ([x, z]: Pt): Pt => {
     const [fx, fz] = toFile(place, x, z)
     const p: Pt = [(fx - g.x0) / g.cell, (fz - g.z0) / g.cell]
-    if (!(p[0] >= 0 && p[1] >= 0 && p[0] <= g.w - 1 && p[1] <= g.h - 1)) throw new Error(`${x}, ${z} is off the relief`)
+    if (!(p[0] >= 0 && p[1] >= 0 && p[0] <= g.nx - 1 && p[1] <= g.nz - 1)) {
+      throw new Error(`${x}, ${z} is off the relief`)
+    }
     return p
   }
   const toPoint = ([i, j]: Pt): Pt => {
@@ -159,11 +131,11 @@ function main(): void {
   for (const w of ins.lines) {
     if (w.pts.length < 2) throw new Error(`${w.id}: a line needs two points or more`)
     // the waypoints onto the work within 4 nodes (20 m of field), then the path along it, evened over 6 nodes
-    const pts = w.pts.map(p => snapToInk(cost, g.w, g.h, toNode(p), 4))
+    const pts = w.pts.map(p => snapToInk(cost, g.nx, g.nz, toNode(p), 4))
     const t = traceWay(
       cost,
-      g.w,
-      g.h,
+      g.nx,
+      g.nz,
       pts,
       pts.map(() => false),
     )

@@ -11,7 +11,6 @@
     {"id": "d1-ramp", "width": 25, "edge": 10, "note": "the D1 interchange's ramp south of its loop", "pts": [[-1960, 2050], [-1800, 1960], [-1720, 1800], [-1690, 1640]]}
   ],
   "areas": [
-    {"id": "quarry-slapanice", "edge": 40, "note": "the pits and heaps north of Šlapanice", "area": [[[-960, 2790], [-760, 2790], [-680, 2560], [-720, 2180], [-830, 2160], [-960, 2420]]]},
     {"id": "basin-slapanice", "edge": 30, "note": "the walled basin north-east of Šlapanice", "area": [[[-500, 2660], [-200, 2660], [-200, 2290], [-500, 2290]]]},
     {"id": "tanks-slatina", "edge": 10, "note": "the tank farm's bunds south of Slatina", "area": [[[-2440, 1660], [-2260, 1660], [-2260, 1490], [-2440, 1490]]]},
     {"id": "pit-ujezd", "edge": 10, "note": "the rectangular pit west of Újezd and the stepped ground beside it", "area": [[[-450, -480], [310, -480], [310, -640], [-450, -640]]]},

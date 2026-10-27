@@ -373,6 +373,68 @@ describe('M1b: applying features into the layers', () => {
     )
     expect(Math.abs(hAt(cut, 0, 0) - hAt(ground, 0, 0) + 1)).toBeLessThan(0.15)
   })
+  it('a mend is part of the relief: water is levelled on the mended ground, bends mend, the order of mends is moot', () => {
+    const slope = { id: 'hill', kind: 'relief.hill', point: [900, 700] as Pt, height: 60, width: 2400 }
+    const pit = {
+      id: 'pit',
+      kind: 'relief.plateau',
+      circle: [[-100, -120] as Pt, 25] as [Pt, number],
+      height: -6,
+      edge: 8,
+    }
+    const mendPit = { id: 'mend-pit', kind: 'relief.mend', circle: [[-100, -120] as Pt, 35] as [Pt, number], edge: 10 }
+    const brook = {
+      id: 'brook',
+      kind: 'water.stream',
+      line: [
+        [-190, -120],
+        [-10, -120],
+      ] as Pt[],
+    }
+    // a stream across a mended pit: its level from the mended ground, not the pit's floor
+    const dry = apply(mini([slope, pit, mendPit]), cat)
+    const wet = apply(mini([slope, pit, mendPit, brook]), cat)
+    expect(hAt(dry, -100, -120) - hAt(wet, -100, -120)).toBeLessThan(2)
+    // an embankment with a bend, mended along the same bend: the inside and the outside of the bend too
+    const bend: Pt[] = [
+      [-150, 0],
+      [0, 0],
+      [0, 150],
+    ]
+    const ground = apply(mini([slope]), cat)
+    const mended = apply(
+      mini([
+        slope,
+        { id: 'bank', kind: 'relief.ridge', line: bend, height: 5, width: 30 },
+        { id: 'mend', kind: 'relief.mend', line: bend, width: 40, edge: 10 },
+      ]),
+      cat,
+    )
+    for (const [x, z] of [
+      [-8, 8],
+      [-4, 4],
+      [10, -10],
+      [-30, 3],
+      [3, 40],
+    ] as Pt[]) {
+      expect(Math.abs(hAt(mended, x, z) - hAt(ground, x, z))).toBeLessThan(0.3)
+    }
+    // two overlapping mends: the same ground whichever id sorts first
+    const line = {
+      kind: 'relief.mend',
+      line: [
+        [-250, -120],
+        [50, -120],
+      ] as Pt[],
+      width: 20,
+      edge: 10,
+    }
+    // an embankment along the line crosses the circle's rim: the circle's plane must not read it, whichever goes first
+    const bank = { id: 'bank', kind: 'relief.ridge', line: line.line, height: 5, width: 16 }
+    const a = apply(mini([slope, pit, bank, { ...mendPit, id: 'a' }, { ...line, id: 'b' }]), cat)
+    const b = apply(mini([slope, pit, bank, { ...mendPit, id: 'b' }, { ...line, id: 'a' }]), cat)
+    expect(Array.from(a.height)).toEqual(Array.from(b.height))
+  })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(
       mini([
