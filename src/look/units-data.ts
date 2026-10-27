@@ -632,6 +632,71 @@ export interface ShadowShape {
   // whole blocks of 8 texels): the far strip's (decalStrip, src/look/shadow-look.ts), decision 0049's own
   base: { across: [number, number]; along: [number, number] }
   dir: [number, number] // the shadow's direction on the ground (x, z): away from the sun
+  // the step bins (?ushstep, docs/plans/done/step-shadows.md): a role's bins (1 each: today's averaged shape) and
+  // its first cell row; the rows stacked in blocks of rowsPerBlock, side by side (stepAtlasLayout)
+  bins: number[]
+  binRow: number[]
+  rowsPerBlock: number
+  blocks: number
+}
+
+/** A man's step in his n-step clip (first step start) as units.vert poses him, from the shader's mod m (in [0, n]:
+ *  a GPU's mod can return n itself): ⌊start + m⌋ − start (units.vert's int(), in float32), the exact n wrapped to 0,
+ *  clamped into [0, n − 1] (unitdecal.vert mirrors it). His shadow's step is so his figure's on every GPU */
+export function stepIndex(start: number, m: number, n: number): number {
+  const i = Math.trunc(Math.fround(start + m)) - start
+  return Math.min(Math.max(i === n ? 0 : i, 0), n - 1)
+}
+/** The bin a man at step i of an n-step clip draws when it is baked in k bins (bin j holding the steps from ⌊jn/k⌋ to
+ *  ⌊(j+1)n/k⌋ − 1): ⌈(i+1)k/n⌉ − 1, computed in integers as ⌊((i+1)k − 1)/n⌋ (exact on any GPU; unitdecal.vert's
+ *  copy is the same integer expression) and clamped into [0, k − 1] */
+export function stepBin(i: number, n: number, k: number): number {
+  return Math.min(Math.max(Math.floor(((i + 1) * k - 1) / n), 0), k - 1)
+}
+/** The steps of bin j of k in an n-step clip starting at `start`: at most `samples` of them, evenly */
+export function binSteps(start: number, n: number, k: number, j: number, samples: number): number[] {
+  const a = Math.floor((j * n) / k)
+  const b = Math.floor(((j + 1) * n) / k)
+  const m = Math.min(b - a, samples)
+  return Array.from({ length: m }, (_, i) => start + a + Math.floor((i * (b - a)) / m))
+}
+/** The two bins either side of step i (their centres (j + ½)n/k) and the second's share, for ?ushstep's blend
+ *  (unitdecal.vert's SH_STEP_BLEND mirrors it): wrapped round the loop */
+export function stepBlend(i: number, n: number, k: number): { j0: number; j1: number; s: number } {
+  const p = ((i + 0.5) * k) / n - 0.5
+  const f = Math.floor(p)
+  const bin = (j: number) => Math.min(Math.max(j % k, 0), k - 1)
+  return { j0: bin(f + k), j1: bin(f + 1), s: Math.min(Math.max(p - f, 0), 1) }
+}
+
+/** The step atlas cannot fit the texture size (stepAtlasLayout) */
+export class AtlasTooLarge extends Error {
+  override name = 'AtlasTooLarge'
+}
+/** The step atlas's layout: `rows` rows of `facings` cells (cellW × cellH texels) in blocks side by side, as few
+ *  blocks as keep each side within max texels, the one nearest square among them. Throws when none fits */
+export function stepAtlasLayout(
+  cellW: number,
+  cellH: number,
+  facings: number,
+  rows: number,
+  max = 4096,
+): { blocks: number; rowsPerBlock: number; width: number; height: number } {
+  let best: { blocks: number; rowsPerBlock: number; width: number; height: number } | null = null
+  for (let b = 1; b <= rows; b++) {
+    const rowsPerBlock = Math.ceil(rows / b)
+    const width = b * facings * cellW
+    const height = rowsPerBlock * cellH
+    if (width > max) break
+    if (height > max) continue
+    if (!best || Math.max(width, height) < Math.max(best.width, best.height)) {
+      best = { blocks: b, rowsPerBlock, width, height }
+    }
+  }
+  if (!best) {
+    throw new AtlasTooLarge(`the step atlas's ${rows} rows of ${facings} cells of ${cellW} × ${cellH} exceed ${max}`)
+  }
+  return best
 }
 
 /** The simple shadow's shape (decision 0049, docs/plans/active/simple-soldier-shadows.md), baked at load from the
@@ -642,7 +707,10 @@ export interface ShadowShape {
  *  0: none): a second channel, the same shape blurred by that sigma instead and brought back to the shape's own darkest
  *  value in its cell (a softer edge, not a lighter shadow: the close zoom's, decision 0062). Every soldier
  *  of a figure casts it: no era names, the roles are the bake's (decision 0015). posed: the LOD's posedVertices, if
- *  already made */
+ *  already made. steps (0: the average above): the shape per animation step instead (?ushstep,
+ *  docs/plans/done/step-shadows.md): a role's clip in min(n, steps) bins (stepBin), each the average of up to
+ *  binSamples of its own steps, a row of facings a bin, the rows in blocks within maxSize texels a side
+ *  (stepAtlasLayout) */
 export function shadowShape(
   d: UnitData,
   lod: string,
@@ -655,6 +723,9 @@ export function shadowShape(
     maxSteps = 12,
     soft = 0,
     posed = null as ReturnType<typeof posedVertices> | null,
+    steps = 0,
+    binSamples = 4,
+    maxSize = 4096,
   } = {},
 ): ShadowShape {
   if (!(soft >= 0)) throw new Error(`shadowShape: the soft blur must be 0 or more m, not ${soft}`)
@@ -669,14 +740,28 @@ export function shadowShape(
   const C = [-A[1], A[0]]
   const kx = sun[0] / sun[1]
   const kz = sun[2] / sun[1]
-  const stepsOf = (r: string) => {
+  // a role's clip (an error when the figure has none)
+  const clipOf = (r: string): UnitRange => {
     const rg = d.ranges[r]
     if (!rg) throw new Error(`shadowShape: the figure has no clips for the role ${r}`)
+    return rg
+  }
+  const stepsOf = (rg: UnitRange) => {
     const n = rg.end - rg.start
     const k = Math.min(n, maxSteps)
     return Array.from({ length: k }, (_, i) => rg.start + Math.floor((i * n) / k))
   }
-  const steps = roles.map(stepsOf)
+  // a role's bins, each its steps (today: one bin, up to maxSteps of the clip's steps evenly; ?ushstep: k = min(n,
+  // steps) bins, each up to binSamples of its own)
+  const bins = roles.map(r => {
+    const rg = clipOf(r)
+    if (steps <= 0) return [stepsOf(rg)]
+    const n = rg.end - rg.start
+    const k = Math.min(n, steps)
+    return Array.from({ length: k }, (_, j) => binSteps(rg.start, n, k, j, binSamples))
+  })
+  const binRow = bins.map((_, r) => bins.slice(0, r).reduce((a, b) => a + b.length, 0))
+  const rowsAll = bins.reduce((a, b) => a + b.length, 0)
   // the projections: [role][facing][step] → (across, along) a vertex, and the bounds over all of them
   const proj = (f: number, a: number, out: Float64Array) => {
     const ca = Math.cos(a)
@@ -697,7 +782,7 @@ export function shadowShape(
   let c1 = -Infinity
   let a0 = Infinity
   let a1 = -Infinity
-  for (const ss of steps) {
+  for (const ss of bins.flat()) {
     for (const f of ss) {
       for (let k = 0; k < facings; k++) {
         proj(f, (2 * Math.PI * k) / facings, buf)
@@ -731,8 +816,12 @@ export function shadowShape(
   const ih = bh + 2 * ex
   const cellW = iw + 2 * margin
   const cellH = ih + 2 * margin
-  const W = cellW * facings
-  const H = cellH * roles.length
+  const lay =
+    steps > 0
+      ? stepAtlasLayout(cellW, cellH, facings, rowsAll, maxSize)
+      : { blocks: 1, rowsPerBlock: roles.length, width: cellW * facings, height: cellH * roles.length }
+  const W = lay.width
+  const H = lay.height
   const ch = soft > 0 ? 2 : 1
   const out = new Uint8Array(W * H * ch)
   const sw = iw
@@ -751,10 +840,14 @@ export function shadowShape(
     return ker.map(v => v / ks)
   }
   const kers = soft > 0 ? [kernel(blur), kernel(soft)] : [kernel(blur)]
-  roles.forEach((_, r) => {
+  // a cell (role r's bin j, facing k) at its block's column and its row in the block
+  const cells = bins.flatMap((rb, r) => rb.map((ss, j) => ({ ss, row: binRow[r] + j })))
+  for (const { ss, row } of cells) {
+    const bx = Math.floor(row / lay.rowsPerBlock) * facings
+    const by = row % lay.rowsPerBlock
     for (let k = 0; k < facings; k++) {
       acc.fill(0)
-      for (const f of steps[r]) {
+      for (const f of ss) {
         proj(f, (2 * Math.PI * k) / facings, buf)
         cov.fill(0)
         // each triangle's projection, the texels whose centres it covers
@@ -798,13 +891,32 @@ export function shadowShape(
         }
         for (let i = 0; i < cov.length; i++) acc[i] += cov[i]
       }
-      for (let i = 0; i < acc.length; i++) acc[i] /= steps[r].length
+      // (the blurs only over the texels the shape covers and their reach: the rest of the cell stays 0)
+      let bx0 = iw
+      let bx1 = -1
+      let by0 = ih
+      let by1 = -1
+      for (let y = 0; y < ih; y++) {
+        for (let x = 0; x < iw; x++) {
+          if (acc[y * iw + x] === 0) continue
+          acc[y * iw + x] /= ss.length
+          bx0 = Math.min(bx0, x)
+          bx1 = Math.max(bx1, x)
+          by0 = Math.min(by0, y)
+          by1 = Math.max(by1, y)
+        }
+      }
+      if (bx1 < 0) continue
       // blurred across, then along (each channel by its kernel); the soft one brought to the shape's darkest value
       let peak = 0
       kers.forEach((ker, c) => {
         const R = (ker.length - 1) / 2
-        for (let y = 0; y < ih; y++) {
-          for (let x = 0; x < iw; x++) {
+        const x0 = Math.max(0, bx0 - R)
+        const x1 = Math.min(iw - 1, bx1 + R)
+        const y0 = Math.max(0, by0 - R)
+        const y1 = Math.min(ih - 1, by1 + R)
+        for (let y = by0; y <= by1; y++) {
+          for (let x = x0; x <= x1; x++) {
             let s = 0
             for (let j = -R; j <= R; j++) {
               const xx = x + j
@@ -814,12 +926,12 @@ export function shadowShape(
           }
         }
         let top = 0
-        for (let y = 0; y < ih; y++) {
-          for (let x = 0; x < iw; x++) {
+        for (let y = y0; y <= y1; y++) {
+          for (let x = x0; x <= x1; x++) {
             let s = 0
             for (let j = -R; j <= R; j++) {
               const yy = y + j
-              if (yy >= 0 && yy < ih) s += tmp[yy * iw + x] * ker[j + R]
+              if (yy >= by0 && yy <= by1) s += tmp[yy * iw + x] * ker[j + R]
             }
             acc2[y * iw + x] = s
             top = Math.max(top, s)
@@ -827,15 +939,15 @@ export function shadowShape(
         }
         if (c === 0) peak = top
         const g = c === 0 || top === 0 ? 1 : Math.min(peak, 1) / top
-        for (let y = 0; y < ih; y++) {
-          for (let x = 0; x < iw; x++) {
+        for (let y = y0; y <= y1; y++) {
+          for (let x = x0; x <= x1; x++) {
             const v = Math.round(255 * Math.min(1, acc2[y * iw + x] * g))
-            out[((r * cellH + margin + y) * W + k * cellW + margin + x) * ch + c] = v
+            out[((by * cellH + margin + y) * W + (bx + k) * cellW + margin + x) * ch + c] = v
           }
         }
       })
     }
-  })
+  }
   return {
     width: W,
     height: H,
@@ -851,6 +963,10 @@ export function shadowShape(
     along: [a0, a0 + ih * texel],
     base,
     dir: [A[0], A[1]],
+    bins: bins.map(b => b.length),
+    binRow,
+    rowsPerBlock: lay.rowsPerBlock,
+    blocks: lay.blocks,
   }
 }
 

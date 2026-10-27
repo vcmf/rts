@@ -286,25 +286,35 @@ export function decalLift(along: number, lift: number, ramp: number, oval: boole
  *  grass; measured in the plan ("Matching the trees") */
 export const SHADE_DESAT = 0.65
 
-/** The contact from the page's switches, SHADOW_CONTACT's where not given: ?ushcontact=<pad m 0..1>,<dark
- *  0..1>[,<soft 0..1>] (0 alone, or a pad or darkness of 0: none), ?ushcontactat=root|stride|step,
- *  ?ushcontactband=<r0>,<r1> (m, r0 < r1). Null with none: the oval's material not made */
+/** The contact from the page's switches: off by default since decision 0074 (the per-step shape holds the feet);
+ *  ?ushcontact=1 decision 0071's (SHADOW_CONTACT), ?ushcontact=<pad m 0..1>,<dark 0..1>[,<soft 0..1>] (a pad or
+ *  darkness of 0: none; SHADOW_CONTACT's where not given), ?ushcontact=0 none; ?ushcontactat=root|stride|step,
+ *  ?ushcontactband=<r0>,<r1> (m, r0 < r1) shape it when it is on, and are an error without it. Null with none: the
+ *  oval's material not made */
 export function applyContactParams(q: URLSearchParams): ShadowContact | null {
   const d = SHADOW_CONTACT
   const c = parseNumbers(q, 'ushcontact', [1, 2, 3], [0, 1])
-  if (c?.length === 1 && c[0] !== 0) throw new Error(`?ushcontact must be 0 or <pad>,<dark>[,<soft>], not ${c[0]}`)
+  if (c?.length === 1 && c[0] !== 0 && c[0] !== 1) {
+    throw new Error(`?ushcontact must be 0, 1 or <pad>,<dark>[,<soft>], not ${c[0]}`)
+  }
   const at = q.get('ushcontactat') ?? d.mode
   if (!['root', 'stride', 'step'].includes(at)) throw new Error(`?ushcontactat must be root, stride or step, not ${at}`)
   const band = parseNumbers(q, 'ushcontactband', [2], [0, 1000])
   if (band && !(band[1] > band[0])) {
     throw new Error(`?ushcontactband must be <r0>,<r1> with r0 < r1, not ${q.get('ushcontactband')}`)
   }
-  const on = c === null || (c.length > 1 && c[0] > 0 && c[1] > 0)
-  if (!on) return null
+  const whole = c?.length === 1 && c[0] === 1
+  const on = whole || (c !== null && c.length > 1 && c[0] > 0 && c[1] > 0)
+  if (!c || !on) {
+    for (const k of ['ushcontactat', 'ushcontactband']) {
+      if (q.has(k)) throw new Error(`?${k} shapes the contact's oval: it needs ?ushcontact=1 (or <pad>,<dark>)`)
+    }
+    return null
+  }
   return {
     mode: at as ContactMode,
-    pad: c ? c[0] : d.pad,
-    dark: c ? c[1] : d.dark,
+    pad: whole ? d.pad : c[0],
+    dark: whole ? d.dark : c[1],
     soft: c?.[2] ?? d.soft,
     band: band ? [band[0], band[1]] : d.band,
   }
@@ -446,4 +456,82 @@ export function decalStep(
  *  compiled again, with a fresh budget */
 export function decalDefinesChanged(): DecalPoll {
   return { idleReady: false, polls: 0 }
+}
+
+/** The shadow's shape baked per animation step (?ushstep, docs/plans/done/step-shadows.md, #229): steps, the bins a
+ *  clip (at most; a clip of fewer steps gets one a step); facings, the shape's facings; blend, two bins mixed by the
+ *  man's step between their centres (four reads), else the bin he is in held (two) */
+export interface StepShadow {
+  steps: number
+  facings: number
+  blend: boolean
+}
+/** The per-step shape by default (decision 0074, the owner's pick, 2026-10-27): 8 bins a clip, 8 facings, held */
+export const STEP_SHADOW: Readonly<StepShadow> = { steps: 8, facings: 8, blend: false }
+/** ?ushstep=<steps 1..32>[,<facings 4..32>[,hold|blend]] (absent: STEP_SHADOW; 0: today's shape, averaged over the
+ *  clip, null, decision 0062's); the facings 8 and hold by default. A setting whose atlas cannot fit 4096 texels a side
+ *  (at 16 facings, more than 12 steps) is refused at load (stepAtlasLayout, src/look/units-data.ts) */
+export function applyStepParams(q: URLSearchParams): StepShadow | null {
+  const v = q.get('ushstep')
+  if (v === null) return { ...STEP_SHADOW }
+  const f = v.split(',')
+  const steps = Number(f[0])
+  const facings = f.length > 1 ? Number(f[1]) : STEP_SHADOW.facings
+  const mode = f[2] ?? 'hold'
+  const whole = (s: string | undefined) => s !== undefined && /^\d+$/.test(s)
+  const ok =
+    f.length <= 3 &&
+    whole(f[0]) &&
+    steps <= 32 &&
+    (f.length < 2 || (whole(f[1]) && facings >= 4 && facings <= 32)) &&
+    (mode === 'hold' || mode === 'blend')
+  if (!ok) throw new Error(`?ushstep must be <steps 0..32>[,<facings 4..32>[,hold|blend]], not ${v}`)
+  if (steps === 0) return null
+  return { steps, facings, blend: mode === 'blend' }
+}
+
+/** The band of the camera's distance to its focus (m) where the per-step shape gives way to the averaged one: whole
+ *  to its start, drawn to its end (decision 0074; ?ushnearband) */
+export const NEAR_BAND: readonly [number, number] = [60, 100]
+/** ?ushnearband=<r0>,<r1> (m, r0 < r1): the per-step shape's band (NEAR_BAND when absent) */
+export function applyNearBandParams(q: URLSearchParams): [number, number] {
+  const b = parseNumbers(q, 'ushnearband', [2], [0, 1000])
+  if (b && !(b[1] > b[0])) throw new Error(`?ushnearband must be <r0>,<r1> with r0 < r1, not ${q.get('ushnearband')}`)
+  return b ? [b[0], b[1]] : [NEAR_BAND[0], NEAR_BAND[1]]
+}
+/** The contact oval's own weight at the camera's distance r (m): contactWeight over its band, 0 without one */
+export function ovalWeight(c: ShadowContact | null, r: number): number {
+  return c && c.dark > 0 ? contactWeight(r, c.band) : 0
+}
+/** The near material's weight at the camera's distance r (m): the larger of the oval's (its own band) and, with the
+ *  per-step shape (steps), the per-step band's (band: ?ushnearband); 0 with neither */
+export function nearWeight(
+  c: ShadowContact | null,
+  steps: boolean,
+  r: number,
+  band: readonly [number, number],
+): number {
+  return Math.max(ovalWeight(c, r), steps ? contactWeight(r, band) : 0)
+}
+/** Whether the decal draws with its near material this frame (weight w): the contact's oval (contactOvalOn) or the
+ *  per-step shape, within the band; else the far one (today's shape, decision 0062's material) */
+export function nearOn(c: ShadowContact | null, steps: boolean, w: number): boolean {
+  return contactOvalOn(c, w) || (steps && w > 0)
+}
+
+/** The per-step shape's foot sharpening at a fragment along m from the soles (unitdecal.frag under SH_STEPS,
+ *  mirrored here for its tests): its share of the samples multiplied by boost at the soles (and behind them), back to
+ *  1 by reach m along the shadow (a smoothstep). The share is capped at 1, so the feet go darker and crisper-edged,
+ *  never past the look's darkest (the ground's shade k at foot 1, gain 1): the trees' cast shadow, decision 0071 */
+export function footSharpen(along: number, boost: number, reach: number): number {
+  return boost + (1 - boost) * sstep(0, Math.max(reach, 1e-3), along)
+}
+/** The per-step shape's foot sharpening by default (decision 0074, the owner's pick B, 2026-10-27): the share at
+ *  the soles three times, back to 1 by 0.6 m */
+export const FOOT_SHARP: readonly [number, number] = [3, 0.6]
+/** ?ushfootk=<boost 1..4>[,<reach m 0..1>]: the per-step shape's foot sharpening (footSharpen); FOOT_SHARP when
+ *  absent, the reach 0.6 m when not given; 1: none */
+export function applyFootSharpParams(q: URLSearchParams): [number, number] {
+  const n = parseNumbers(q, 'ushfootk', [1, 2], [1, 4], [0, 1])
+  return n ? [n[0], n[1] ?? FOOT_SHARP[1]] : [FOOT_SHARP[0], FOOT_SHARP[1]]
 }
