@@ -10,7 +10,7 @@
     {"id": "satschan-road", "kind": "way.road", "note": "the road from Telnitz past Satschan and Sternhof to Aujezd", "pts": ["telnitz", [1625, 3212], [1650, 3450], [1900, 3362], [1987, 3250], [2075, 3175], [2075, 3025], "aujezd"]},
     {"id": "kobelnitz-road", "kind": "way.road", "note": "the road from Kobelnitz to Pratze", "pts": ["kobelnitz", "pratze"]},
     {"id": "blasowitz-road", "kind": "way.road", "note": "the road from Šlapanice past Jirschikowitz to Blasowitz", "pts": ["slapanice", [2250, 1175], "jirschikowitz", "blasowitz"]},
-    {"id": "puntowitz-road", "kind": "way.road", "note": "the road from Šlapanice to Puntowitz", "pts": [[1775, 1200], "slapanice", "puntowitz-w"]},
+    {"id": "puntowitz-road", "kind": "way.road", "note": "the road from Šlapanice to Puntowitz", "pts": ["slapanice", "puntowitz-w"]},
     {"id": "pratze-road", "kind": "way.road", "note": "the road from Puntowitz to Pratze", "pts": ["puntowitz-e", "pratze"]},
     {"id": "krenowitz-road", "kind": "way.road", "note": "the road from Aujezd past Klein Hostieradek and Zbeschau to Krenowitz", "pts": ["aujezd", "hostieradek", [2962, 2112], [3350, 2075]]},
     {"id": "goldbach-road", "kind": "way.road", "note": "the road down the Goldbach from Kobelnitz past Sokolnitz to Telnitz", "pts": ["kobelnitz", [1640, 2365], [1440, 2675], "telnitz"]},

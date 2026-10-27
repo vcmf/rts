@@ -9,9 +9,12 @@
 // the scan's pixels, v down; `way` names the street where the nearest way is not it.
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Feature, MapFile, Pt } from '../src/map/schema.ts'
+import type { AttrValue, Catalogue, Feature, MapFile, Pt } from '../src/map/schema.ts'
 import { demPlace, toMap } from '../src/map/dem.ts'
 import { nearLine } from '../src/map/apply.ts'
+import { distanceToPolygon } from '../src/map/reach.ts'
+import { resolve } from '../src/map/resolve.ts'
+import { num } from '../src/map/util.ts'
 import { lineLength, pointAt } from '../src/map/geometry.ts'
 import { writeMap } from '../src/map/write.ts'
 import { scanFitOf } from './water.ts'
@@ -101,6 +104,21 @@ export function placeChurch(
   return null
 }
 
+/**
+ * Whether a church's ground keeps `gap` m from every obstacle (water, ways, buildings, at their resolved widths; a
+ * crossing or an end inside it 0) and its setback from its own `street`.
+ */
+export function churchClear(
+  ring: Pt[],
+  obstacles: { f: Feature; attrs: Record<string, AttrValue> }[],
+  street: string,
+  gap: number,
+): boolean {
+  return obstacles.every(
+    ({ f, attrs }) => distanceToPolygon(f, attrs, ring) >= (f.id === street ? CHURCH_OFF - 0.01 : gap),
+  )
+}
+
 function main(): void {
   const [mapFile, inputsFile] = process.argv.slice(2)
   if (!mapFile || !inputsFile) {
@@ -119,29 +137,23 @@ function main(): void {
     const [fx, fz] = fit.toFrame(u, v)
     return toMap(place, fx, fz)
   }
+  const cat = JSON.parse(fs.readFileSync(path.join(path.dirname(import.meta.filename), '../maps/kinds.json'), 'utf8'))
+  // each feature's attributes as the catalogue resolves them (a way's or a stream's width by its kind)
+  const attrsOf = (f: Feature) => resolve(f, map, cat as Catalogue).attrs
   const ways = map.features
     .filter(f => (f.kind ?? '').startsWith('way.') && f.line)
-    .map(f => ({ id: f.id, line: f.line!, width: typeof f.width === 'number' ? f.width : 5 }))
+    .map(f => ({ f, id: f.id, line: f.line!, width: num(attrsOf(f).width, 5) }))
   const NOTE = ': read off the survey'
-  // the least distance from a church's corners and sides to the edge of any water line or way but its own street
-  const waters = map.features
-    .filter(f => (f.kind ?? '').startsWith('water.') && f.line)
-    .map(f => ({ id: f.id, line: f.line!, width: typeof f.width === 'number' ? f.width : 2 }))
+  const mine = (f: Feature) =>
+    (f.kind === 'built.village' || f.kind === 'built.church') && f.source === ins.scan && (f.note ?? '').endsWith(NOTE)
+  // what a church keeps CLEAR m from: water (streams and ponds), every way, other buildings; and its own street by
+  // its setback, so a bend cannot bring the street under it (the same distances the generators keep:
+  // src/map/reach.ts, a crossing or an end inside the church 0)
   const CLEAR = 3
-  const clearance = (ring: Pt[], street: string) => {
-    let d = Infinity
-    for (const l of [...ways, ...waters]) {
-      if (l.id === street) continue
-      for (let k = 0; k < ring.length; k++) {
-        const [a, b] = [ring[k], ring[(k + 1) % ring.length]]
-        // its corners and its sides' middles
-        for (const p of [a, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as Pt]) {
-          d = Math.min(d, nearLine(l.line, p[0], p[1]).d - l.width / 2)
-        }
-      }
-    }
-    return d
-  }
+  const obstacles = map.features
+    .filter(f => /^(water|way|built)\./.test(f.kind ?? '') && !mine(f) && f.kind !== 'built.village')
+    .map(f => ({ f, attrs: attrsOf(f) }))
+  const clear = (ring: Pt[], street: string) => churchClear(ring, obstacles, street, CLEAR)
   const features: Record<string, unknown>[] = []
   const report: string[] = []
   const made = new Set<string>()
@@ -171,23 +183,27 @@ function main(): void {
     })
     let church = ''
     if (v.church) {
-      const way = ways.find(w => w.id === near.id)!
-      // on its side of the street near the survey's point, else across it or along it, clear of water and other ways
-      const ring = placeChurch(way.line, toPoint(v.church), way.width / 2, r => clearance(r, near.id) >= CLEAR)
-      if (!ring) throw new Error(`${v.id}: no ground for its church within 60 m of the survey's, ${CLEAR} m clear`)
+      // along the way nearest the survey's church (by a crossroads, not always the village's street), on its side,
+      // else across or along it, clear of water, ways and buildings
+      const at = toPoint(v.church)
+      const way = ways.reduce((a, w) => (nearLine(w.line, at[0], at[1]).d < nearLine(a.line, at[0], at[1]).d ? w : a))
+      const ring = placeChurch(way.line, at, way.width / 2, r => clear(r, way.id))
+      if (!ring) {
+        throw new Error(
+          `${v.id}: no ground for its church within 60 m along ${way.id} of the survey's, ${CLEAR} m clear`,
+        )
+      }
       add({
         id: `${v.id}-church`,
         kind: 'built.church',
         source: ins.scan,
         area: [ring],
-        note: `the church of ${v.note.replace(/^the /, '')}${NOTE}`,
+        note: `the church of ${v.note}${NOTE}`,
       })
       church = ', its church'
     }
     report.push(`${v.id}: ${v.houses} houses along ${near.id} from ${from.toFixed(0)} to ${to.toFixed(0)} m${church}`)
   }
-  const mine = (f: Feature) =>
-    (f.kind === 'built.village' || f.kind === 'built.church') && f.source === ins.scan && (f.note ?? '').endsWith(NOTE)
   const others = map.features.filter(f => !mine(f))
   for (const f of features) {
     if (others.some(o => o.id === f.id)) throw new Error(`${String(f.id)}: another feature has this id`)

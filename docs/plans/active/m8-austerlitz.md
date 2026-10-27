@@ -308,9 +308,10 @@ into the epic; this plan details each as it starts.
   parts tested in `test/map-villages.test.ts`): each village given as the stretch of its street where the survey draws
   its houses (two pixels on the scan) and their number, written as a `built.village` along the way nearest that
   stretch (or the one named) with the street-village generator (at least half its houses); its church, where the
-  survey draws one, a `built.church` of 24 × 11 m (real size: decision 0070) along its street 6 m past the street's
-  edge, on the survey's side, else across the street, else slid along it by 5 m up to 60 m, until it lies 3 m clear of
-  water and every other way. Only the tool's features (villages and churches with the scan as source and its note) are
+  survey draws one, a `built.church` of 24 × 11 m (real size: decision 0070) along the way nearest the survey's
+  church, 6 m past its edge, on the survey's side, else across it, else slid along it by 5 m up to 60 m, until it
+  lies 3 m clear of water (streams and ponds), every other way and every building, and its own way by its setback (the
+  generators' distances, `src/map/reach.ts`, at the catalogue's widths). Only the tool's features (villages and churches with the scan as source and its note) are
   written again.
 - The villages: Pratze, Kobelnitz (its street and the south end down the Goldbach road), Telnitz, Aujezd, Klein
   Hostieradek, Blasowitz, Šlapanice's main street, Puntowitz, Sokolnitz, Satschan, Jirschikowitz: 12 villages, 140
@@ -319,10 +320,24 @@ into the epic; this plan details each as it starts.
 ## Acceptance (M8e)
 
 - `test/map-villages.test.ts`: the nearest way and the stretch along it, a church's ground on either side, its place
-  across or along the street when its side is taken.
+  across or along the street when its side is taken, its clearance (a pond, a stream across it between its corners,
+  its own street bending in).
 - The map validates and expands (237 features: every village its houses, no two villages' zones meeting); the
   churches clear of water and other ways; screenshots of the villages for the owner.
 - `npm test`, `check:data`, the build, the docs check and the page check pass.
+
+## Review rounds (M8e)
+
+- **Round 1** (`/code-review high`): severe. A church's clearance sampled its corners and sides' middles against
+  water lines and ways only, at widths of 5 and 2 m: a pond, a stream across it between samples, its own street at a
+  bend (Kobelnitz's 1.6 m from its street's edge, not 6) and the highway's 9 m passed; Telnitz's church point lies by
+  the crossroads, off its village street's start, so the church went to the far side; `puntowitz-road` kept a lead-in
+  that `slapanice-street` now traces, a 15 m loop at Šlapanice; the churches' notes read "the church of village of".
+  Fixed: the clearance is `src/map/reach.ts`'s distance to a polygon (a crossing or an end inside it 0), over water,
+  ways and buildings, at their resolved widths, and the own way by its setback; a church goes along the way nearest
+  its survey point; the lead-in dropped. Tests: the pond, the stream, the bend (each fails without the shared
+  distance). On the map: every church 5 m or more from water and ways, 6 m from its own way; Telnitz's 67 m from the
+  survey's point (the crossroads leaves no closer ground).
 
 ## Open questions
 

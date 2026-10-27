@@ -1,8 +1,8 @@
 // A map's villages read off its scan (docs/plans/active/m8-austerlitz.md M8e): the street a village's stretch lies on,
-// a church's ground beside its street, and where it goes when its side is taken.
+// a church's ground beside its street, where it goes when its side is taken, and what it keeps clear of.
 import { describe, it, expect } from 'vitest'
-import type { Pt } from '../src/map/schema.ts'
-import { churchAt, nearestWay, placeChurch } from '../tools/villages.ts'
+import type { Feature, Pt } from '../src/map/schema.ts'
+import { churchAt, churchClear, nearestWay, placeChurch } from '../tools/villages.ts'
 
 const street: Pt[] = [
   [0, 0],
@@ -40,5 +40,40 @@ describe("a map's villages", () => {
     const slid = placeChurch(street, at, 2.5, r => r.every(p => p[0] > 130))!
     expect(Math.min(...slid.map(p => p[0]))).toBeGreaterThan(130)
     expect(placeChurch(street, at, 2.5, () => false)).toBeNull()
+  })
+  it('keeps a church clear of a pond, of a stream across it between its corners, and its own street by its setback', () => {
+    const ring = churchAt(street, 100, true, 2.5) // x 88 … 112, z 8.5 … 19.5
+    const own = { f: { id: 'street', kind: 'way.road', line: street } as Feature, attrs: { width: 5 } }
+    expect(churchClear(ring, [own], 'street', 3)).toBe(true)
+    // a pond lying under it
+    const pond = { f: { id: 'pond', kind: 'water.pond', ellipse: [[100, 14], 30, 10, 0] } as Feature, attrs: {} }
+    expect(churchClear(ring, [own, pond], 'street', 3)).toBe(false)
+    // a 2 m brook across its long sides, 6 m from every corner and side's middle
+    const brook = {
+      f: {
+        id: 'brook',
+        kind: 'water.stream',
+        line: [
+          [94, 0],
+          [94, 30],
+        ],
+      } as Feature,
+      attrs: { width: 2 },
+    }
+    expect(churchClear(ring, [own, brook], 'street', 3)).toBe(false)
+    // its own street bending in under it
+    const bent = {
+      f: {
+        id: 'street',
+        kind: 'way.road',
+        line: [
+          [0, 0],
+          [105, 0],
+          [112, 12],
+        ],
+      } as Feature,
+      attrs: { width: 5 },
+    }
+    expect(churchClear(ring, [bent], 'street', 3)).toBe(false)
   })
 })
