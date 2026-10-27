@@ -320,11 +320,40 @@ export function phaseAt(
   const tm = APPROACH / marchSpeed
   const th = tm + HALT
   const deploy = deployTime(d, runSpeed)
-  const tf = th + deploy + LINE_PAUSE
+  const tf = fireStart(d, marchSpeed, runSpeed)
   if (t < tm) return { phase: 'column', start: 0, deployEnd: th + deploy }
   if (t < th) return { phase: 'halt', start: tm, deployEnd: th + deploy }
   if (t < tf) return { phase: 'deploy', start: th, deployEnd: th + deploy }
   return { phase: 'fire', start: tf, deployEnd: th + deploy }
+}
+/** the local time (s since its cycle started) at which a battalion in line starts to fire: the column's approach, the
+ *  halt, the deployment at the run and the pause in line (phaseAt's fire phase) */
+export function fireStart(d: Drill, marchSpeed: number, runSpeed: number): number {
+  return APPROACH / marchSpeed + HALT + deployTime(d, runSpeed) + LINE_PAUSE
+}
+
+/** a battalion's place in the script at the clock T (s): its cycle and its local time in it, written into out. offset:
+ *  the battalion's (s); holdFrom (?firehold=1: the bench's and the stills' fire): null runs the whole cycle, else the
+ *  local time is held in the fire phase, running from holdFrom (fireStart) to the cycle's end and over again, each
+ *  run a cycle of its own */
+export function scriptClock(
+  T: number,
+  offset: number,
+  holdFrom: number | null,
+  out: { cycle: number; local: number },
+): { cycle: number; local: number } {
+  const t = T - offset
+  if (holdFrom === null) {
+    const cycle = Math.floor(t / CYCLE)
+    out.cycle = cycle
+    out.local = t - cycle * CYCLE
+    return out
+  }
+  const run = CYCLE - holdFrom
+  const cycle = Math.floor(t / run)
+  out.cycle = cycle
+  out.local = holdFrom + (t - cycle * run)
+  return out
 }
 const deployTimes = new Map<string, number>()
 function deployTime(d: Drill, runSpeed: number): number {

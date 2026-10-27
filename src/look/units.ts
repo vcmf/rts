@@ -90,8 +90,10 @@ import {
   CYCLE,
   farPalette,
   farRule,
+  fireStart,
   manAt,
   phaseAt,
+  scriptClock,
   slots,
   type Battalion,
   type Drill,
@@ -158,7 +160,8 @@ const SM_HOLD = 6 // m: lazy, the held sun box must cover the view by this much
 const FLAG_W = 1.4
 const FLAG_H = 1.1
 const FLAG_TOP = 3.0
-const FLAG_WIND = 0.6
+/** the wind's way, rad from +x toward +z: the flags fly and the smoke drifts toward (cos, sin) of it */
+export const FLAG_WIND = 0.6
 const FLAG_MIN_PX = 12
 // the trodden ground's mask: texels a side; s between its redraws while men move
 const TR_N = 256
@@ -260,6 +263,11 @@ export class Units {
   private readonly slot: ReturnType<typeof slots>
   private readonly speed: { march: number; run: number }
   private readonly man: ManState = { x: 0, z: 0, face: 0, role: 'halt', since: 0, moving: false }
+  private readonly clockAt = { cycle: 0, local: 0 } // (scratch: scriptClock)
+  /** the script held in its fire phase (?firehold=1: every battalion in line firing, for the bench and the smoke's
+   *  stills; scriptClock), set before the first frame */
+  holdFire = false
+  private placed = 0 // battalions placed so far (placeCount)
   /** the far LOD's switch by default (main.ts checks ?tinypx under it) */
   static readonly LOD_PX = 48
   /** the figure height in pixels below which a battalion draws its far LOD (±10%, so it does not flicker) */
@@ -984,6 +992,7 @@ export class Units {
     const pad = this.sidePad
     h.lo.set(minX - pad, minY - 0.3, minZ - pad)
     h.hi.set(maxX + pad, maxY + top, maxZ + pad)
+    this.placed++
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
     // (the simple shadow's bounds: stretched away from the sun by the longest shadow, as tall as the far figures grow)
     const k = this.scratch
@@ -1210,11 +1219,11 @@ export class Units {
     if ((this.hasNearest && this.nearestPx > 0) || (mapOn && this.tightCull)) {
       Frustum.GetPlanesToRef(cam.getTransformationMatrix(), this.camPlanes)
     }
+    const hold = this.holdFire ? fireStart(this.drill, this.speed.march, this.speed.run) : null
     for (const h of this.hosts) {
       if (!this.shown) continue
-      const t = T - h.b.offset
-      const cycle = Math.floor(t / CYCLE)
-      const local = t - cycle * CYCLE
+      // (a reserve stands in column whatever the hold)
+      const { cycle, local } = scriptClock(T, h.b.offset, h.b.reserve ? null : hold, this.clockAt)
       const cycleStart = T - local
       const p = h.b.reserve ? RESERVE.phase : phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
       // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
@@ -2294,6 +2303,25 @@ export class Units {
     return this.hosts.length * this.slot.line.length
   }
   /** the battalions as placed (the tools aim their cameras at them) */
+  /** how many times a battalion's men have been placed: it changes whenever a formation's ground does (the smoke's
+   *  clearance mask, src/look/smoke.ts) */
+  get placeCount(): number {
+    return this.placed
+  }
+  /** each battalion's ground box as it stands (its men's roots, padded by their reach: the bounds place() keeps),
+   *  [x0, z0, x1, z1] m a battalion into out (4 floats each, at least 4 × battalions); returns how many */
+  boxes(out: Float32Array): number {
+    let n = 0
+    for (const h of this.hosts) {
+      if (h.step < 0) continue // (not placed yet)
+      out[n * 4] = h.lo.x
+      out[n * 4 + 1] = h.lo.z
+      out[n * 4 + 2] = h.hi.x
+      out[n * 4 + 3] = h.hi.z
+      n++
+    }
+    return n
+  }
   get battalions(): Battalion[] {
     return this.hosts.map(h => h.b)
   }

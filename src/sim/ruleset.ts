@@ -205,6 +205,26 @@ export interface DyeSet {
   materials: Readonly<Record<string, string>>
   boots: string
 }
+/** the smoke a unit's fire makes, as the renderer paints it (docs/plans/active/smoke-puffs.md, decision 0080): a puff
+ *  for a group of files when a rank fires, born at the muzzles, carried ahead by the shot's blast, rising and drifting
+ *  with the wind, growing, then eroded away. Era data (src/rulesets/<era>-smoke.ts); metres, seconds, sRGB. Not read
+ *  by the simulation */
+export interface PuffDef {
+  files: number // a puff for this many files of a firing rank
+  life: readonly [number, number] // s: a puff's life, the shortest and the longest
+  erode: number // the share of its life after which its shape erodes away
+  radius: readonly [number, number] // m: at birth and grown
+  grow: number // s: the growth's time constant
+  ahead: number // m ahead of the front rank at birth (the muzzles)
+  height: number // m above the ground at birth
+  jet: readonly [number, number] // the blast: m/s ahead at birth, and the time constant it dies over (s)
+  rise: readonly [number, number] // m/s up at birth, and the time constant it slows over (s)
+  drift: number // m/s: the wind's carry
+  jitter: number // s: the men's own spread about their rank's shot
+  colour: string // the smoke's own colour, lit by the scene's light
+  flash: readonly [string, number] // the muzzle flash: its colour and how long the young puff shows it (s)
+}
+
 /** the cloth parts a dress names a dye for */
 export type ClothPart = 'coat' | 'facings' | 'trousers' | 'waistcoat' | 'headgear' | 'greatcoat'
 /** a uniform as its cloth parts' dyes, by name, never a colour (decision 0068): its coat, facings, trousers (or
