@@ -11,7 +11,7 @@ export { presetsOf }
 import { CLEAR_KEYS, FOLLOW_KEYS, KEEPS_OFF } from './follow.ts'
 import { listOf, num } from './util.ts'
 import type { Dem, MapFiles } from './dem.ts'
-import { DEM_FILE, DEM_SOURCE_KEYS, checkDemFiles, demShift } from './dem.ts'
+import { DEM_FILE, DEM_SOURCE_KEYS, checkDemFiles, demPlace } from './dem.ts'
 import { resolve } from './resolve.ts'
 import {
   allowedIn,
@@ -832,7 +832,7 @@ export function checkFiles(map: MapFile, cat: Catalogue, files: MapFiles): { iss
     const e = f.area ? num(r.attrs.edge, 0) : 0
     const b = f.area ? boxOf(f, r.attrs) : [-map.extent.w / 2, -map.extent.h / 2, map.extent.w / 2, map.extent.h / 2]
     const box: [number, number, number, number] = [b[0] - e, b[1] - e, b[2] + e, b[3] + e]
-    return [{ f, i, box, shift: demShift(r.attrs) }]
+    return [{ f, i, box, place: demPlace(r.attrs) }]
   })
   return checkDemFiles(map, files, pieces, range)
 }

@@ -20,7 +20,7 @@ import type { Clear } from './util.ts'
 import { listOf, num, smooth } from './util.ts'
 import { addFbmGrid } from './noise.ts'
 import type { Dem } from './dem.ts'
-import { demSampler, demShift } from './dem.ts'
+import { demPlace, demSampler } from './dem.ts'
 
 export const CELL = 2 // m (decision 0021)
 // widths where the catalogue gives none: a way's (every way kind sets one), and the bands of the line-shaped kinds
@@ -437,11 +437,12 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       // (the whole extent with no shape) and blended into the ground under it over its edge
       const d = dems.get(f.source as string)
       if (!d) throw new Error(`${f.id}: its dem source "${String(f.source)}" was not loaded (checkFiles first)`)
-      const sh = demShift(a)
+      // read through its placement: a scale model's heights above the datum divided by its scale (decision 0070)
+      const pl = demPlace(a)
       const datum = map.datum ?? 0
       const read = demSampler(d)
       const set = (k: number, x: number, z: number, w: number) => {
-        H[k] += (read(x + sh.x, z + sh.z) - datum - H[k]) * w
+        H[k] += ((read(pl.k * x + pl.x, pl.k * z + pl.z) - datum) / pl.k - H[k]) * w
       }
       if (!f.area) {
         nodes([x0, z0, -x0, -z0], 0, (k, x, z) => set(k, x, z, 1))

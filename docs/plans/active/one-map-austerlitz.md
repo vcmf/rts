@@ -142,8 +142,8 @@ edit, and validates.
 Real authoring work, on the editor, from the real terrain and the chosen period map, as a 6 km designed map
 (decision 0061). The whole field is about 13 km north to south, so the map keeps its landmarks at their real sizes
 and moves them closer: the Pratzen plateau, the Goldbach valley, the villages along it, the ponds, the highway on the
-northern edge. How the relief is rearranged (cutting and placing pieces of the real heightfield, or a relief drawn
-over them with relief edits) is settled at the start of this step.
+northern edge. How the relief is rearranged was settled at the start of this step: the field as a scale model at 2×,
+its heights halved with it (decision 0070, the owner, 2026-10-27; `docs/plans/active/m8-austerlitz.md`).
 - **Ways:** the period roads and tracks in the crop.
 - **Water:** the Goldbach and its brooks, and whatever of the ponds lies in the crop, as in 1805.
 - **Villages:** those in the crop (Pratzen, Sokolnitz, Telnitz, Kobelnitz, Puntowitz and others), as street villages

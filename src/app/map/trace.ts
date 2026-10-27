@@ -23,6 +23,7 @@ import {
   type ScanFit,
 } from './scan.ts'
 import { setField } from './fields.ts'
+import { toMap } from '../../map/dem.ts'
 import { ScanGl } from './scan-gl.ts'
 
 /** What the overlay needs from the page. */
@@ -324,7 +325,7 @@ export class Trace {
     const p = s?.pieces.find(q => q.own)
     if (!s || !p) return null
     const [x, z] = s.fit.toFrame(u, v)
-    return [x - p.shift.x, z - p.shift.z]
+    return toMap(p.place, x, z)
   }
   /** The last draw's time, ms. */
   ms = 0
@@ -372,7 +373,7 @@ export class Trace {
     if (p.area) o.clip(path, 'evenodd')
     // the scan through the view, moved as the piece is, on the GPU's canvas, then into the clip
     const gl = this.gl as ScanGl
-    gl.render(Math.round(width * dpr), Math.round(height * dpr), this.host.viewMatrix(), p.shift)
+    gl.render(Math.round(width * dpr), Math.round(height * dpr), this.host.viewMatrix(), p.place)
     o.drawImage(gl.canvas, 0, 0, width, height)
     o.restore()
   }
@@ -392,10 +393,10 @@ export class Trace {
     ;(s.scan.points ?? []).forEach(([u, v, x, z], k) => {
       const [px, pz] = s.fit.toFrame(u, v)
       for (const p of s.pieces) {
-        const at: Pt = [x - p.shift.x, z - p.shift.z]
+        const at: Pt = toMap(p.place, x, z)
         // shown through the piece on top there alone (another of the same file may hold the place too, moved)
         if (!p.own || topAt(s.pieces, at[0], at[1]) !== p) continue
-        const a = this.host.project(px - p.shift.x, pz - p.shift.z)
+        const a = this.host.project(...toMap(p.place, px, pz))
         const b = this.host.project(at[0], at[1])
         if (!a || !b) continue
         ctx.beginPath()

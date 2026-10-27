@@ -277,6 +277,13 @@ describe('where a scan shows', () => {
     expect(frameAt(pieces, 50, 50)).toEqual([450, 0])
     expect(frameAt(pieces, -300, 20)).toEqual([-300, 20])
   })
+  it('reads a scale model piece as the relief does: a map point at k times, plus its shift', () => {
+    const scan: Source = { id: 's', kind: 'scan', file: 'scans/s.png', frame: 'dem' }
+    const map = base([DEM, scan], [{ id: 'a', kind: 'relief.dem', source: 'dem', scale: 2, shift: { x: 0, z: -500 } }])
+    const pieces = scanPieces(map, cat, scan)
+    expect(pieces[0].place).toEqual({ x: 0, z: -500, k: 2 })
+    expect(frameAt(pieces, 100, 50)).toEqual([200, -400])
+  })
   it("shows nowhere outside its pieces, and over the whole map unmoved in the map's own frame", () => {
     const scan: Source = { id: 's', kind: 'scan', file: 'scans/s.png', frame: 'dem' }
     const map = base(
@@ -527,7 +534,7 @@ describe('the scan tool', () => {
     const base = ['http://localhost:1/', 'L', '49.12', '16.74', '1', '1', 'maps/scans/never.png', '--frame', 'cuzk']
     const off = run(...base, '--map', 'maps/austerlitz.map.json')
     expect(off.status).toBe(2)
-    expect(off.stderr).toMatch(/centred on 49\.118 N 16\.737 E/)
+    expect(off.stderr).toMatch(/centred on 49\.1325 N 16\.745 E/)
     const none = run(...base)
     expect(none.status).toBe(2)
     expect(none.stderr).toMatch(/needs --map/)

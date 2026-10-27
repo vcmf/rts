@@ -3,18 +3,21 @@
 // near limit is clipped by the GPU. Per frame only the matrix and a piece's shift change. The page composites what it
 // draws into each piece's area (./trace.ts).
 import type { ScanMesh } from './scan.ts'
+import type { DemPlace } from '../../map/dem.ts'
 
 const VERT = `#version 300 es
 in vec2 pos;
 in vec2 uv;
 uniform mat4 view;
 uniform vec2 shift;
+uniform float scale;
 out vec2 vUv;
 void main() {
   vUv = uv;
-  // the ground point (x, 0, z): the frame point less the piece's shift; depth 0, so only what lies behind the camera
-  // is clipped (w below 0), never the far ground
-  vec4 p = view * vec4(pos.x - shift.x, 0.0, pos.y - shift.y, 1.0);
+  // the ground point (x, 0, z): the frame point less the piece's shift, divided by its scale (decision 0070); depth 0,
+  // so only what lies behind the camera is clipped (w below 0), never the far ground
+  vec2 g = (pos - shift) / scale;
+  vec4 p = view * vec4(g.x, 0.0, g.y, 1.0);
   gl_Position = vec4(p.xy, 0.0, p.w);
 }`
 const FRAG = `#version 300 es
@@ -102,8 +105,8 @@ export class ScanGl {
     this.count = mesh.index.length
   }
 
-  /** Draws the scan through the view's matrix, moved by a piece's shift, onto a canvas of w × h device pixels. */
-  render(w: number, h: number, view: Float32Array, shift: { x: number; z: number }): void {
+  /** Draws the scan through the view's matrix, placed as a piece reads its file, onto a canvas of w × h device px. */
+  render(w: number, h: number, view: Float32Array, place: DemPlace): void {
     const gl = this.gl
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w
@@ -116,7 +119,8 @@ export class ScanGl {
     gl.useProgram(this.program)
     gl.bindVertexArray(this.vao)
     gl.uniformMatrix4fv(gl.getUniformLocation(this.program, 'view'), false, view)
-    gl.uniform2f(gl.getUniformLocation(this.program, 'shift'), shift.x, shift.z)
+    gl.uniform2f(gl.getUniformLocation(this.program, 'shift'), place.x, place.z)
+    gl.uniform1f(gl.getUniformLocation(this.program, 'scale'), place.k)
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, this.texture)
     gl.uniform1i(gl.getUniformLocation(this.program, 'image'), 0)
