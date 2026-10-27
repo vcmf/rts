@@ -1,6 +1,9 @@
 #extension GL_OES_standard_derivatives : enable
 precision highp float;uniform sampler2D uShapeTex,uUnitShade;uniform vec2 uShapeSize;uniform float uUnitFar,uShSoft,uShGain;uniform vec4 uShFoot;
 varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
+#ifdef SH_STEPS
+uniform vec2 uShFootK;
+#endif
 #ifdef SH_STEP_BLEND
 // the two step bins either side of the man's step, their facings each (unitdecal.vert), the second's share vS
 varying vec2 vUV2,vUV3;varying float vS;
@@ -54,6 +57,12 @@ void main(){
   // value a frame, so every shadow still darkens a sample alike and the darkest share wins)
   float ct=uShContact.y*(1.0-smoothstep(1.0,1.0+max(uShContact.z,1.0e-4),length(vCt)));
   dm=max(dm,uShContact.y);v=max(v,ct);
+  #endif
+  #ifdef SH_STEPS
+  // the per-step shape's feet darker and crisper (?ushfootk, footSharpen in src/look/shadow-look.ts): its share of the
+  // samples boosted at the soles (uShFootK.x), back to 1 by uShFootK.y m; capped at 1 below, so never past the look's
+  // darkest (decision 0071: no darker than the ground's painted cast shadow)
+  v*=mix(uShFootK.x,1.0,smoothstep(0.0,max(uShFootK.y,1.0e-3),vAlong));
   #endif
   float a=min(1.0,v/dm);
   #ifndef COVERAGE

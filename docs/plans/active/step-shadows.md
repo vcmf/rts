@@ -152,3 +152,33 @@ stills of whole frames; GIFs of the close march and run side by side.
 (`?ushcontact=0`): the boots keep their own small dark shadows, lighter than the oval's solid core, and the carpet
 under dense formations thins. If the owner wants the solid core back, keep the oval with it. `8` (16 facings) if 8
 facings shows a step when a man turns; `12` buys almost nothing over `8`.
+
+## Round 2 (2026-10-27): the owner's pick, the feet sharper and darker
+
+The owner picked the per-step shadow **without the oval**, and asked to "make the shadow at feet sharper and darker".
+
+**Shipping shape, behind the switch:** `?ushstep=8,8&ushcontact=0`. The per-step shape is read only by the near
+material, within the contact's band (60 to 100 m: `nearWeight`, `nearOn`). The far material keeps today's averaged
+shape, so there are two atlases: today's 1792 × 640 (2.9 MB with mips) and the per-step 1792 × 2560 (11.7 MB), **14.6 MB
+in all**. Both bakes together take 230 to 250 ms at load (Metal, loaded machine). Past 100 m the switch from the
+per-step shape to the averaged one is a hard switch, at a size where the two read alike.
+
+**The feet:** `?ushfootk=<boost 1..4>[,<reach m 0..1>]` (`footSharpen`; the per-step material only). It multiplies the
+shape's share of the samples at the soles and behind them by `boost`, back to 1 by `reach` m along the shadow. The
+share is capped at 1 as before. So the boots' and lower legs' shadows fill in (darker) and their blurred edges rise
+faster (crisper), and no sample goes past the ground's shade k: decision 0071's ceiling, the oval's core. The soft fade
+toward the tip is untouched. The cost is one `smoothstep` and a multiply a fragment in the near material: no bench.
+
+Variants (sheet `output/armies-review/24-step-feet/`):
+- **A, mild:** `ushfootk=2,0.4`. A little darker right at the boots than the shape as is.
+- **B, medium:** `ushfootk=3,0.6`. The lower legs' shadows solid near the boots.
+- **C, strong:** `ushfootk=4,0.8`. A solid dark stroke from each boot along the lower legs, crisp-edged; its core is k.
+
+Against a tree's cast shadow at the same zoom (the sheets' last column), even C's core is lighter than the tree's
+shadow. That is expected: the tree's shadow also hides sky, so it is darker than k (decision 0071, Consequences).
+On the default meadow up close the grass covers the feet in every variant. On bare ground at 40 m, C's feet read as
+dark strokes under the front rank; B's less so.
+
+**Facings:** with 8 facings the shadow blends the two nearest baked facings per pixel, so a turning man's shadow
+cross-fades rather than jumps. In the demo the men turn at once (column to run), so no slow turn could be shot; the
+running men's headings fall between baked facings, and 8 and 16 facings look the same there (sheet 13).

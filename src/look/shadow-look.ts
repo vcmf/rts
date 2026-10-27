@@ -477,3 +477,30 @@ export function applyStepParams(q: URLSearchParams): StepShadow | null {
   if (steps === 0) return null
   return { steps, facings, blend: mode === 'blend' }
 }
+
+/** The near material's weight at the camera's distance r (m): the contact's (contactWeight over its band) with a
+ *  contact, or with the per-step shape (steps) over the contact's default band, which it shares
+ *  (docs/plans/active/step-shadows.md); 0 with neither */
+export function nearWeight(c: ShadowContact | null, steps: boolean, r: number): number {
+  if (c && c.dark > 0) return contactWeight(r, c.band)
+  return steps ? contactWeight(r, SHADOW_CONTACT.band) : 0
+}
+/** Whether the decal draws with its near material this frame (weight w): the contact's oval (contactOvalOn) or the
+ *  per-step shape, within the band; else the far one (today's shape, decision 0062's material) */
+export function nearOn(c: ShadowContact | null, steps: boolean, w: number): boolean {
+  return contactOvalOn(c, w) || (steps && w > 0)
+}
+
+/** The per-step shape's foot sharpening at a fragment along m from the soles (unitdecal.frag under SH_STEPS,
+ *  mirrored here for its tests): its share of the samples multiplied by boost at the soles (and behind them), back to
+ *  1 by reach m along the shadow (a smoothstep). The share is capped at 1, so the feet go darker and crisper-edged,
+ *  never past the look's darkest (the ground's shade k at foot 1, gain 1): the trees' cast shadow, decision 0071 */
+export function footSharpen(along: number, boost: number, reach: number): number {
+  return boost + (1 - boost) * sstep(0, Math.max(reach, 1e-3), along)
+}
+/** ?ushfootk=<boost 1..4>[,<reach m 0..1>]: the per-step shape's foot sharpening (footSharpen); [1, 0] (none) when
+ *  absent, the reach 0.4 m by default */
+export function applyFootSharpParams(q: URLSearchParams): [number, number] {
+  const n = parseNumbers(q, 'ushfootk', [1, 2], [1, 4], [0, 1])
+  return n ? [n[0], n[1] ?? 0.4] : [1, 0]
+}

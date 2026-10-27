@@ -3,7 +3,14 @@
 // size (stepAtlasLayout, shadowShape's steps), the page's switch (applyStepParams), and the feet on the shape.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { applyStepParams } from '../src/look/shadow-look.ts'
+import {
+  SHADOW_CONTACT,
+  applyFootSharpParams,
+  applyStepParams,
+  footSharpen,
+  nearOn,
+  nearWeight,
+} from '../src/look/shadow-look.ts'
 import {
   binSteps,
   decodeUnits,
@@ -207,5 +214,46 @@ describe('unitdecal.vert picks the bin as stepBin and stepBlend do (the source)'
     once(v, 'floatja=mod(sf+kb,kb),jb=mod(sf+1.0,kb);')
     once(v, 'floatbl=floor((rw+0.5)/uStepRPB);')
     once(v, 'return(vec2(bl*FACINGS+k,rw-bl*uStepRPB)*uShapeCell.xy+c)*uShapeCell.zw;')
+  })
+  it('unitdecal.frag: the feet sharpened as footSharpen does, before the share is capped at 1', () => {
+    once(
+      src('unitdecal.frag'),
+      'v*=mix(uShFootK.x,1.0,smoothstep(0.0,max(uShFootK.y,1.0e-3),vAlong));#endiffloata=min(1.0,v/dm);',
+    )
+  })
+})
+
+describe('the near material with the per-step shape (nearWeight, nearOn)', () => {
+  const c = { ...SHADOW_CONTACT }
+  it("takes the contact's band with a contact, the default band with the per-step shape alone, none with neither", () => {
+    expect(nearWeight(null, false, 20)).toBe(0)
+    expect(nearWeight(null, true, 20)).toBe(1)
+    expect(nearWeight(null, true, SHADOW_CONTACT.band[1] + 1)).toBe(0)
+    expect(nearWeight({ ...c, band: [10, 20] }, true, 30)).toBe(0)
+    expect(nearWeight({ ...c, dark: 0 }, false, 20)).toBe(0)
+  })
+  it('draws the near material within the band for the oval or the per-step shape', () => {
+    expect(nearOn(null, true, 0.5)).toBe(true)
+    expect(nearOn(null, true, 0)).toBe(false)
+    expect(nearOn(null, false, 1)).toBe(false)
+    expect(nearOn(c, false, 1)).toBe(true)
+  })
+})
+
+describe("the per-step shape's feet sharpened (footSharpen, ?ushfootk)", () => {
+  it('boosts the share at and behind the soles, back to 1 by its reach; 1 is none', () => {
+    expect(footSharpen(0, 2, 0.4)).toBe(2)
+    expect(footSharpen(-0.3, 2, 0.4)).toBe(2)
+    expect(footSharpen(0.4, 2, 0.4)).toBe(1)
+    expect(footSharpen(1, 3, 0.4)).toBe(1)
+    expect(footSharpen(0.2, 2, 0.4)).toBeCloseTo(1.5, 9)
+    for (const a of [-1, 0, 0.1, 0.5, 2]) expect(footSharpen(a, 1, 0.4)).toBe(1)
+  })
+  it('reads the switch: none when absent, the reach 0.4 m by default, refusing values outside 1..4 and 0..1 m', () => {
+    const q = (v: string) => applyFootSharpParams(new URLSearchParams(v))
+    expect(q('')).toEqual([1, 0])
+    expect(q('ushfootk=2')).toEqual([2, 0.4])
+    expect(q('ushfootk=3,0.5')).toEqual([3, 0.5])
+    for (const v of ['0.5', '5', '2,2', 'x']) expect(() => q(`ushfootk=${v}`), v).toThrow(/ushfootk/)
   })
 })

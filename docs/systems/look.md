@@ -697,7 +697,11 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   bakes the shape per clip step bin (k = min(n, steps) bins a clip, each the average of its own steps) and facing,
   the cells stacked in an atlas of as many blocks as keep it within 4096 texels a side (`stepAtlasLayout`,
   `shadowShape`'s `steps`); the decal's vertex shader picks his bin from his step (`stepBin`; `blend`: the two bins
-  either side, `stepBlend`, four reads) under `SH_STEPS`, so his shadow steps with his pose at 12 fps.
+  either side, `stepBlend`, four reads) under `SH_STEPS`, so his shadow steps with his pose at 12 fps. Only the near
+  material reads it (within the contact's band, 60 to 100 m: `nearWeight`, `nearOn`; with or without the oval); the far
+  one keeps today's averaged shape, a second, small atlas. `?ushfootk=<boost>[,<reach m>]` (`footSharpen`) multiplies
+  the per-step shape's share of the samples at the soles, back to 1 by the reach, so the feet go darker and
+  crisper-edged; the share is capped at 1, so never past the ground's shade k (decision 0071's ceiling).
   The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so

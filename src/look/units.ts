@@ -40,10 +40,10 @@ import {
   SHADOW_CONTACT,
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
-  contactOvalOn,
   contactReachOf,
   contactUniform,
-  contactWeight,
+  nearOn,
+  nearWeight,
   decalDefinesChanged,
   decalStep,
   decalStrip,
@@ -349,8 +349,10 @@ export class Units {
   /** the shape baked per animation step (?ushstep: applyStepParams, docs/plans/active/step-shadows.md), or null:
    *  today's, averaged over each clip. Read once, when the shadows' material is made */
   stepShadow: StepShadow | null = null
-  /** the shape atlas's size (texels, RG8 with mips), once made */
-  shapeSize: [number, number] = [0, 0]
+  /** the shape atlases' sizes (texels, RG8 with mips: today's, then the per-step one with ?ushstep), once made */
+  shapeSizes: [number, number][] = []
+  /** the per-step shape's foot sharpening ([boost, reach m]: footSharpen, ?ushfootk), [1, 0]: none */
+  footSharp: [number, number] = [1, 0]
   private contactReach = 0 // m: how far the contact reaches from a man's root (the strip holds it: decalStrip)
   private contactW = 0 // the contact's weight this frame (contactWeight, by the camera's distance)
   private contactWSet = NaN // and the one last given to the material (setDecalLook)
@@ -362,7 +364,7 @@ export class Units {
   private lookT = 1 // the far look's share this frame (lookAt), the strip's too (setDecalLook)
   private lookTSet = NaN
   // the shape's boxes (useDecals): what it alone fills (the far strip's), with the soft bake's reach (the close one's)
-  private shapeBoxes: { base: ShapeBox; full: ShapeBox } | null = null
+  private readonly shapeBoxes = new Map<ShaderMaterial, { base: ShapeBox; full: ShapeBox }>()
   private softPad = 0 // m: the soft bake's reach past the shape's own (the decal's bounds)
   private readonly stripV = new Vector4()
   private readonly rowsV = new Vector4()
@@ -1156,7 +1158,7 @@ export class Units {
     this.depthMat.setFloat('uVATStep', step)
     this.depthVatMat.setFloat('uVATStep', step)
     this.depthProxyMat.setFloat('uVATStep', step)
-    if (this.decal === this.decalNear || this.stepShadow) this.decal?.setFloat('uVATStep', step)
+    if (this.decal === this.decalNear) this.decal?.setFloat('uVATStep', step)
     // (stepped with the figures under ?smoothmove=0)
     if (decalOn) {
       this.decal?.setFloat('uStepFrac', this.smooth ? this.stepFrac : 0)
@@ -1616,29 +1618,36 @@ export class Units {
     const t0 = performance.now()
     const d = this.data
     const ss = this.stepShadow
-    const shape = shadowShape(d, d.lods[this.farLod].name, [SUN.x, SUN.y, SUN.z], ROLES, {
-      facings: ss?.facings ?? SHAPE_FACINGS,
-      soft: SOFT_BLUR,
-      posed: this.posedFar,
-      steps: ss?.steps ?? 0,
-      maxSize: Math.min(4096, this.scene.getEngine().getCaps().maxTextureSize),
-    })
+    // today's shape (averaged over each clip) for the far material; with ?ushstep a second, per step, for the near one
+    // (within the contact's band: docs/plans/active/step-shadows.md)
+    const bake = (steps: number, facings: number) => {
+      const shape = shadowShape(d, d.lods[this.farLod].name, [SUN.x, SUN.y, SUN.z], ROLES, {
+        facings,
+        soft: SOFT_BLUR,
+        posed: this.posedFar,
+        steps,
+        maxSize: Math.min(4096, this.scene.getEngine().getCaps().maxTextureSize),
+      })
+      const tex = new RawTexture(
+        shape.data,
+        shape.width,
+        shape.height,
+        Constants.TEXTUREFORMAT_RG,
+        this.scene,
+        true,
+        false,
+        Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
+        Constants.TEXTURETYPE_UNSIGNED_BYTE,
+      )
+      tex.name = steps > 0 ? 'figureShadowShapeSteps' : 'figureShadowShape'
+      tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
+      return { shape, tex }
+    }
+    const farBake = bake(0, SHAPE_FACINGS)
+    const nearBake = ss ? bake(ss.steps, ss.facings) : null
     this.shapeMs = performance.now() - t0
-    this.shapeSize = [shape.width, shape.height]
-    const tex = new RawTexture(
-      shape.data,
-      shape.width,
-      shape.height,
-      Constants.TEXTUREFORMAT_RG,
-      this.scene,
-      true,
-      false,
-      Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
-      Constants.TEXTURETYPE_UNSIGNED_BYTE,
-    )
-    tex.name = 'figureShadowShape'
-    this.shapeTexMs = performance.now() - t0
-    tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
+    this.shapeTexMs = this.shapeMs
+    this.shapeSizes = [farBake, nearBake].flatMap(b => (b ? [[b.shape.width, b.shape.height] as [number, number]] : []))
     // the ground's height under each vertex: the meadow map's (bound to every painted material, src/look/meadow.ts), or
     // without one the heightfield's, sampled here over the tile (GROUND_N² texels)
     let ht: RawTexture | null = null
@@ -1663,8 +1672,10 @@ export class Units {
       ht.name = 'figureShadowGround'
       ht.wrapU = ht.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
     }
-    const make = (oval: boolean): ShaderMaterial => {
-      const m = this.mats0.make(oval ? 'unitShadow2DContact' : 'unitShadow2D', DECAL_VS, DECAL_FS, {
+    const make = (oval: boolean, steps: boolean): ShaderMaterial => {
+      const { shape, tex } = steps && nearBake ? nearBake : farBake
+      const name = `unitShadow2D${oval ? 'Contact' : ''}${steps ? 'Steps' : ''}`
+      const m = this.mats0.make(name, DECAL_VS, DECAL_FS, {
         attributes: ['position', 'aVAT', 'aNext'],
         uniforms: [
           'uRoleStart',
@@ -1688,12 +1699,13 @@ export class Units {
           'uStepBins',
           'uStepRow',
           'uStepRPB',
+          'uShFootK',
         ],
         samplers: ['uShapeTex', 'uUnitShade', 'uContactTex'],
         alpha: true,
         defines: [
           `#define FACINGS ${shape.facings.toFixed(1)}`,
-          ...(ss ? ['#define SH_STEPS', ...(ss.blend ? ['#define SH_STEP_BLEND'] : [])] : []),
+          ...(steps && ss ? ['#define SH_STEPS', ...(ss.blend ? ['#define SH_STEP_BLEND'] : [])] : []),
           `#define DECAL_ALONG ${DECAL_ALONG.toFixed(1)}`,
           `#define LIFT_RAMP ${LIFT_RAMP.toFixed(2)}`,
           `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`,
@@ -1722,12 +1734,16 @@ export class Units {
       m.setVector2('uShapeSize', new Vector2(shape.width, shape.height))
       m.setVector2('uShapeTexel', new Vector2(1 / shape.texel, shape.margin))
       m.setVector2('uShDir', new Vector2(...shape.dir))
-      if (ss) {
+      if (steps && ss) {
         m.setVector4('uStepBins', new Vector4(...shape.bins))
         m.setVector4('uStepRow', new Vector4(...shape.binRow))
         m.setFloat('uStepRPB', shape.rowsPerBlock)
         m.setFloat('uVATStep', 0)
+        m.setVector2('uShFootK', new Vector2(...this.footSharp))
       }
+      this.shapeBoxes.set(m, { base: shape.base, full: { across: shape.across, along: shape.along } })
+      // (the soft bake's reach past the shape's own, on the decal's bounds: place)
+      this.softPad = Math.max(this.softPad, shape.base.across[0] - shape.across[0])
       m.setFloat('uStepFrac', 0)
       m.setVector2('uFarScale', this.farScaleV)
       m.setFloat('uDecalLift', this.lift)
@@ -1751,15 +1767,14 @@ export class Units {
       if (a2c) m.onUnBindObservable.add(() => engine.setAlphaToCoverage(false))
       return m
     }
-    this.shapeBoxes = { base: shape.base, full: { across: shape.across, along: shape.along } }
-    // (the soft bake's reach past the shape's own, on the decal's bounds: place)
-    this.softPad = shape.base.across[0] - shape.across[0]
     // within the contact's zoom band the material with the oval; past it, and without a contact, decision 0062's own
     // (no oval's read, varying or cell test: main's cost). The one not drawn is compiled in the background
     // (useDecalFor), so the switch at the band's edge never waits on a shader
+    // (with ?ushstep the near material reads the per-step shape, with the oval or without)
     const c = this.contact
-    const far = make(false)
-    const near = c !== null && c.dark > 0 ? make(true) : null
+    const oval = c !== null && c.dark > 0
+    const far = make(false, false)
+    const near = oval || ss ? make(oval, ss !== null) : null
     this.decalFar = far
     this.decalNear = near
     this.decal = near ?? far
@@ -1785,7 +1800,7 @@ export class Units {
     // nothing; decalStep)
     const mat = (side: DecalSide) => (side === 'near' ? near : far)
     const step = decalStep(
-      contactOvalOn(this.contact, this.contactW) ? 'near' : 'far',
+      nearOn(this.contact, this.stepShadow !== null, this.contactW) ? 'near' : 'far',
       this.decal === near ? 'near' : 'far',
       this.decalPoll,
       side => mat(side).isReady(mesh, true),
@@ -1830,7 +1845,7 @@ export class Units {
    *  contact */
   private contactAt(): void {
     const c = this.contact
-    this.contactW = c && c.dark > 0 ? contactWeight(this.camera.radius, c.band) : 0
+    this.contactW = nearWeight(c, this.stepShadow !== null, this.camera.radius)
   }
 
   /** the figures' cast shadows on or off: off, the receivers compile without them (the bench's baseline arm). On, the
@@ -1865,7 +1880,7 @@ export class Units {
    *  look's share (uStrip, uRows: decalStrip) */
   private setDecalLook(l: ShadowLook): void {
     const m = this.decal
-    const b = this.shapeBoxes
+    const b = m && this.shapeBoxes.get(m)
     const p = this.lookSet
     const same =
       l.soft === p.soft &&

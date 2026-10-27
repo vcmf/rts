@@ -58,6 +58,7 @@ import {
   SHADOW_LOOK,
   applyContactParams,
   applyStepParams,
+  applyFootSharpParams,
   applyLookParams,
   shadeDesat,
   shadowModes,
@@ -582,6 +583,8 @@ const ushContact = applyContactParams(params)
 // the shape baked per animation step (a test, docs/plans/active/step-shadows.md): ?ushstep=<steps a clip>[,<facings>
 // [,hold|blend]] (0 or absent: the shape averaged over each clip, as before)
 const ushStep = applyStepParams(params)
+// ?ushfootk=<boost>[,<reach m>]: the per-step shape's feet darker and crisper, never past the ground's shade
+const ushFootK = applyFootSharpParams(params)
 const ushDesat = shadeDesat(params)
 const uShadowSwitch = params.get('ushadowswitch')
 const smoothMove = bit('smoothmove')
@@ -715,6 +718,7 @@ if (armiesParam !== null) {
   units.look = shadowLook
   units.contact = ushContact
   units.stepShadow = ushStep
+  units.footSharp = ushFootK
   if (ushBand) units.lookBand = ushBand
   if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   units.groundMap = meadow !== null
