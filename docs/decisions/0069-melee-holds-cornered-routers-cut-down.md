@@ -16,7 +16,8 @@ and the owner dropped the concept (Total War has none; Ultimate General has).
 
 ## Decision
 
-- **A battalion in melee cannot step back or retreat.** It leaves melee only by breaking; nobody gives ground.
+- **A battalion in melee cannot step back or retreat;** nobody gives ground. The melee ends when one side breaks, or
+  as before when a charger turns away from a square or the two fall out of contact.
 - **A broken battalion runs as a block**, faced about, in the direction fixed at its break (its side's rear, else away
   from the nearest enemy, else straight back), and tries a fan of other directions when held
   (docs/systems/fire-morale.md). Wavering and shattered battalions keep their block.
@@ -27,13 +28,14 @@ and the owner dropped the concept (Total War has none; Ultimate General has).
   toggle (skirmishers firearm only, some militia melee only), and a battalion an enemy reaches in melee fights in
   melee as a whole; a retreat out of a firefight within enemy range turns its back (no fire, struck as from the rear)
   and costs a one-off morale hit; a charge into the flank or rear of a battalion already in melee gives a one-off
-  morale shock; a battalion in melee may be fired on where no friend of the shooter stands across the line of fire.
+  morale shock. A battalion in melee may be fired on where no friend of the shooter stands across the line of fire:
+  that is the code already.
 
 ## Consequences
 
 Good: no geometry for giving ground, the hardest part of the collision work; a melee reads as two blocks locked until
 one breaks; a trapped router does not stand forever. Bad: no pushing back, which history had; the later items above
-are design, not code yet (the unit model, U1).
+are design, not code yet (the unit model, U1), but for the fire into a melee.
 
 ## Alternatives considered
 
