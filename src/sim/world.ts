@@ -246,6 +246,7 @@ export interface World {
     menNow?: Int32Array
     melee?: Melee
     fireGeoTick?: number
+    drain?: Float64Array // each battalion's drain this tick, the back exposed (morale.ts, threatPass)
   }
 }
 

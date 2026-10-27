@@ -83,6 +83,9 @@ export interface MoraleDef {
   // S1c-2 (docs/plans/active/s1c2-morale-machine.md)
   // a friend's break: the morale lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
   contagion: { shock: number; front: number; back: number }
+  // the back exposed (decision 0070): the target's drain per weight of flank and of rear of the worst enemy that can
+  // hurt it (docs/proposals/sectors-model.md § 5)
+  drain: { flank: number; rear: number }
   // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
   support: { bonus: number; reach: number; arc: number }
   // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
@@ -603,6 +606,9 @@ export function compileRuleset(rs: Ruleset): Compiled {
     throw new Error(
       `ruleset ${rs.name}: melee.second must be ≥ 0 and at most 0.6 of the gap from the quality to the rout`,
     )
+  }
+  if (!(M.drain.flank >= 0 && M.drain.rear >= 0 && M.drain.flank + M.drain.rear < Infinity)) {
+    throw new Error(`ruleset ${rs.name}: morale.drain must be finite and ≥ 0`)
   }
   if (!(M.rally.max >= 0 && M.rally.max < 255)) {
     throw new Error(`ruleset ${rs.name}: morale.rally.max must be 0..254 (the break count is a byte)`)

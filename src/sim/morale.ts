@@ -35,6 +35,7 @@ import {
   RP_HALTED,
   RP_FLED,
   outOfFight,
+  typeOf,
 } from './world.ts'
 import {
   allocOrder,
@@ -49,6 +50,8 @@ import {
   cutChange,
 } from './formation.ts'
 import { formedFits, freeSpot } from './claims.ts'
+import { blockGeometry, inArc, sees, screenShare, reachOf, type FireGeo } from './fire.ts'
+import { buildFaces, threatWeights, REACH } from './sectors.ts'
 import { sin, cos, PI } from './num.ts'
 import { TICK_HZ } from './time.ts'
 
@@ -101,11 +104,13 @@ export function moraleStep(w: World, i: number, lost: number): void {
   }
   survey(w, i, now)
   // the losses term counts from baseMen (written off at a rally); recent losses are a share of the spawn strength
-  const target =
+  const tau =
     f.quality[i] -
     (M.losses * (base - men)) / base -
     (M.recent * f.recent[i]) / start +
     M.support.bonus * (near.left + near.right)
+  // the back exposed (decision 0070): down to the wavering threshold at most, nothing for a target already below it
+  const target = tau - Math.min(w.scratch.drain?.[i] ?? 0, Math.max(0, tau - M.wavering[0]))
   f.morale[i] += (target - f.morale[i]) * w.cr.relax
   if (s !== MS_ROUTING) f.morale[i] -= near.shock + owedShock // routing and shattered (returned above) are not shocked
   const m = f.morale[i]
@@ -171,6 +176,97 @@ export function moraleStep(w: World, i: number, lost: number): void {
   if (next === s && s === MS_WAVERING && m >= M.wavering[1]) next = MS_SHAKEN
   if (next === s && s === MS_SHAKEN && m >= M.shaken[1]) next = MS_STEADY
   f.mstate[i] = next
+}
+
+const wt = new Float64Array(3)
+/**
+ * The drain enemy e presses on battalion j's morale target (docs/proposals/sectors-model.md § 6): flank × drain.flank
+ * + rear × drain.rear, the weights (front, flank, rear) of e's company nearest j on j's face, if e can hurt j; else 0.
+ * It can when it is in the fight, not in melee and not changing shape, its company and j's nearest (centre to
+ * centre; ties to the lower) are within REACH metres, and either it fires from its shape and that company has j's in
+ * its arc and range, in sight, unscreened (a ray of three clear of j's friends for musketry, all three for a
+ * battery), or it can charge now (from its shape, not blown) within melee.refuge.alert metres, its centre ray clear.
+ * G must be this tick's geometry and faces.
+ */
+export function drainBy(w: World, G: FireGeo, e: number, j: number): number {
+  const f = w.f
+  const CS = w.cr.maxC
+  if (!f.alive[e] || f.side[e] === f.side[j] || outOfFight(f.mstate[e]) || f.foe[e] || f.trans[e]) return 0
+  // the blocks of each reach G.reach from its anchor
+  const ax = f.x[e] - f.x[j]
+  const az = f.z[e] - f.z[j]
+  if (Math.sqrt(ax * ax + az * az) - G.reach[e] - G.reach[j] > REACH) return 0
+  let ke = -1
+  let kj = -1
+  let d2 = Infinity
+  for (let p = 0, Ce = typeOf(w, e).C; p < Ce; p++) {
+    const k = e * CS + p
+    if (f.men[k] <= 0) continue
+    for (let q = 0, Cj = typeOf(w, j).C; q < Cj; q++) {
+      const m = j * CS + q
+      if (f.men[m] <= 0) continue
+      const dd = (G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])
+      if (dd < d2) {
+        d2 = dd
+        ke = k
+        kj = m
+      }
+    }
+  }
+  if (ke < 0 || d2 > REACH * REACH) return 0
+  threatWeights(w, G, j, e, ke, wt)
+  const D = w.cr.rs.morale.drain
+  const press = wt[1] * D.flank + wt[2] * D.rear
+  if (press <= 0) return 0
+  const U = typeOf(w, e)
+  const shape = f.shape[e]
+  if (U.def.fires || U.artillery?.from[shape]) {
+    const share = () => screenShare(w, G, ke, kj, f.side[j])
+    if (
+      inArc(G, ke, G.cx[kj], G.cz[kj], reachOf(w, e)) &&
+      sees(w, G, ke, kj) &&
+      (U.artillery ? share() === 1 : share() > 0)
+    ) {
+      return press
+    }
+  }
+  if (
+    U.charge?.from[shape] &&
+    f.blownUntil[e] <= w.meta[M_TICK] + 1 &&
+    d2 <= w.cr.rs.melee.refuge.alert * w.cr.rs.melee.refuge.alert &&
+    screenShare(w, G, ke, kj, f.side[j], true) === 1
+  ) {
+    return press
+  }
+  return 0
+}
+/**
+ * Step 12's threats (docs/proposals/sectors-model.md § 6): each battalion's drain, the worst of the enemies that can
+ * hurt it (`drainBy`), into the world's scratch, from the state as the casualties left it and before any battalion's
+ * morale changes, so the order they are visited in changes nothing. A battalion out of the fight has none. The
+ * geometry is the tick's when the fire step built one (its faces rebuilt for the men now standing), else built here.
+ */
+export function threatPass(w: World): void {
+  const f = w.f
+  const N = MAX_FORMATIONS
+  const D = w.scratch.drain ?? (w.scratch.drain = new Float64Array(N))
+  D.fill(0)
+  let any = false
+  for (let j = 0; j < N && !any; j++) if (f.alive[j] && !outOfFight(f.mstate[j]) && enemyNear(w, j)) any = true
+  if (!any) return
+  const tick = w.meta[M_TICK] + 1
+  let G: FireGeo
+  if (w.scratch.fireGeoTick === tick) {
+    G = w.scratch.fireGeo!
+    buildFaces(w, G)
+  } else {
+    G = blockGeometry(w)
+    w.scratch.fireGeoTick = tick
+  }
+  for (let j = 0; j < N; j++) {
+    if (!f.alive[j] || outOfFight(f.mstate[j])) continue
+    for (let e = 0; e < N; e++) D[j] = Math.max(D[j], drainBy(w, G, e, j))
+  }
 }
 
 // what battalion i reads of the others, all from before this step's morale: the contagion shock of friends

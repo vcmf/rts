@@ -364,6 +364,8 @@ export const napoleonic: Ruleset = {
     // the reaches scale with the frontage (S1c-4): 2.8 times S1c-2's, set for 100-man lines 40 m apart in a
     // brigade, so a 400-man line 113 m from its neighbour feels the same shock and support
     contagion: { shock: 0.15, front: 560, back: 280 },
+    // an enemy on its flank presses a steady line (0.75 → 0.65, still steady); one behind it makes it shaken (0.55)
+    drain: { flank: 0.1, rear: 0.2 },
     support: { bonus: 0.04, reach: 280, arc: 0.7853981633974483 },
     rally: { safe: 250, calm: 20, time: 30, cost: 0.1, max: 2 },
     shatter: 0.5,

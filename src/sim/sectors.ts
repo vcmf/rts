@@ -23,6 +23,8 @@ export const BLEND_H = 0.088
 export const CORNER = 1
 /** The slices a threat's block is cut into across the face (§ 4). */
 export const SLICES = 8
+/** The farthest an enemy can press on a battalion's morale, metres between their nearest companies (§ 6). */
+export const REACH = 300
 
 /**
  * Each formation's face: its kind, and two frames, 0 for the front and 1 for the rear (the same frame for kinds one and
