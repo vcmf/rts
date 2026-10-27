@@ -2,6 +2,7 @@
 // a church's ground beside its street, where it goes when its side is taken, and what it keeps clear of.
 import { describe, it, expect } from 'vitest'
 import type { Feature, Pt } from '../src/map/schema.ts'
+import { ringArea2 } from '../src/map/geometry.ts'
 import { churchAt, churchClear, nearestWay, placeChurch } from '../tools/villages.ts'
 
 const street: Pt[] = [
@@ -26,8 +27,7 @@ describe("a map's villages", () => {
     const xs = left.map(p => p[0])
     expect(Math.min(...xs)).toBeCloseTo(88, 6)
     expect(Math.max(...xs)).toBeCloseTo(112, 6)
-    const area2 = left.reduce((s, p, k) => s + p[0] * left[(k + 1) % 4][1] - left[(k + 1) % 4][0] * p[1], 0)
-    expect(area2).toBeGreaterThan(0)
+    expect(ringArea2(left)).toBeGreaterThan(0)
     expect(Math.max(...churchAt(street, 100, false, 2.5).map(p => p[1]))).toBeCloseTo(-8.5, 6)
   })
   it("puts a church on the survey's side if it may, else across the street, else along it", () => {

@@ -14,8 +14,8 @@ import { demPlace, toMap } from '../src/map/dem.ts'
 import { nearLine } from '../src/map/apply.ts'
 import { distanceToPolygon } from '../src/map/reach.ts'
 import { resolve } from '../src/map/resolve.ts'
-import { num } from '../src/map/util.ts'
-import { lineLength, pointAt } from '../src/map/geometry.ts'
+import { cm, num } from '../src/map/util.ts'
+import { lineLength, pointAt, ringArea2 } from '../src/map/geometry.ts'
 import { writeMap } from '../src/map/write.ts'
 import { scanFitOf } from './water.ts'
 
@@ -64,16 +64,9 @@ export function churchAt(
   const [nx, nz] = left ? [-tz, tx] : [tz, -tx]
   const [l, w] = [size[0] / 2, size[1]]
   const d0 = half + off
-  const c = (s: number, d: number): Pt => [
-    Math.round((px + tx * s + nx * d) * 100) / 100,
-    Math.round((pz + tz * s + nz * d) * 100) / 100,
-  ]
+  const c = (s: number, d: number): Pt => [cm(px + tx * s + nx * d), cm(pz + tz * s + nz * d)]
   const ring = [c(-l, d0), c(l, d0), c(l, d0 + w), c(-l, d0 + w)]
-  const area2 = ring.reduce((s, p, k) => {
-    const q = ring[(k + 1) % ring.length]
-    return s + p[0] * q[1] - q[0] * p[1]
-  }, 0)
-  return area2 < 0 ? ring.reverse() : ring
+  return ringArea2(ring) < 0 ? ring.reverse() : ring
 }
 
 /**
@@ -134,7 +127,8 @@ function main(): void {
   const place = demPlace(piece as unknown as Record<string, unknown>)
   const fit = scanFitOf(map, place, scan, path.dirname(mapFile))
   const toPoint = ([u, v]: Pt): Pt => {
-    const [fx, fz] = fit.toFrame(u, v)
+    // the pixel's centre, as the ways were traced (the fit reads the image as continuous, pixel u spanning u to u + 1)
+    const [fx, fz] = fit.toFrame(u + 0.5, v + 0.5)
     return toMap(place, fx, fz)
   }
   const cat = JSON.parse(fs.readFileSync(path.join(path.dirname(import.meta.filename), '../maps/kinds.json'), 'utf8'))
@@ -146,12 +140,15 @@ function main(): void {
   const NOTE = ': read off the survey'
   const mine = (f: Feature) =>
     (f.kind === 'built.village' || f.kind === 'built.church') && f.source === ins.scan && (f.note ?? '').endsWith(NOTE)
-  // what a church keeps CLEAR m from: water (streams and ponds), every way, other buildings; and its own street by
+  // what a church keeps CLEAR m from: what a house keeps clear of (water, streams and ponds; ways; buildings, the
+  // churches placed before it too; barriers; no-go zones); and its own street by
   // its setback, so a bend cannot bring the street under it (the same distances the generators keep:
   // src/map/reach.ts, a crossing or an end inside the church 0)
   const CLEAR = 3
   const obstacles = map.features
-    .filter(f => /^(water|way|built)\./.test(f.kind ?? '') && !mine(f) && f.kind !== 'built.village')
+    .filter(
+      f => /^(water|way|built|barrier)\.|^zone\.nogo/.test(f.kind ?? '') && !mine(f) && f.kind !== 'built.village',
+    )
     .map(f => ({ f, attrs: attrsOf(f) }))
   const clear = (ring: Pt[], street: string) => churchClear(ring, obstacles, street, CLEAR)
   const features: Record<string, unknown>[] = []
@@ -178,7 +175,8 @@ function main(): void {
       source: ins.scan,
       along: { id: near.id, from, to },
       houses: v.houses,
-      gen: { 'street-village': { min: Math.ceil(v.houses / 2) } },
+      // every house the survey shows, or the expansion says why not
+      gen: { 'street-village': { min: v.houses } },
       note: `${v.note}${NOTE}`,
     })
     let church = ''
@@ -200,6 +198,9 @@ function main(): void {
         area: [ring],
         note: `the church of ${v.note}${NOTE}`,
       })
+      // the next church keeps clear of this one
+      const placed = { id: `${v.id}-church`, kind: 'built.church', area: [ring] } as Feature
+      obstacles.push({ f: placed, attrs: {} })
       church = ', its church'
     }
     report.push(`${v.id}: ${v.houses} houses along ${near.id} from ${from.toFixed(0)} to ${to.toFixed(0)} m${church}`)

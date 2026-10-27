@@ -307,7 +307,7 @@ into the epic; this plan details each as it starts.
 - **Villages read off the survey** (`tools/villages.ts`, its inputs committed in `maps/austerlitz-villages.json`, pure
   parts tested in `test/map-villages.test.ts`): each village given as the stretch of its street where the survey draws
   its houses (two pixels on the scan) and their number, written as a `built.village` along the way nearest that
-  stretch (or the one named) with the street-village generator (at least half its houses); its church, where the
+  stretch (or the one named) with the street-village generator (all its houses, `min`); its church, where the
   survey draws one, a `built.church` of 24 × 11 m (real size: decision 0070) along the way nearest the survey's
   church, 6 m past its edge, on the survey's side, else across it, else slid along it by 5 m up to 60 m, until it
   lies 3 m clear of water (streams and ponds), every other way and every building, and its own way by its setback (the
@@ -338,6 +338,14 @@ into the epic; this plan details each as it starts.
   its survey point; the lead-in dropped. Tests: the pond, the stream, the bend (each fails without the shared
   distance). On the map: every church 5 m or more from water and ways, 6 m from its own way; Telnitz's 67 m from the
   survey's point (the crossroads leaves no closer ground).
+- **Round 2**: moderate and light only, so the review stops here. Fixed: a church keeps clear of barriers and no-go
+  zones too (what a house keeps clear of), and of the churches placed before it in the run; scan pixels read at their
+  centre, as the ways were traced (half a pixel, about 1 m); every village asks the generator for all the houses the
+  survey shows (`min`), so a later change that leaves one short is an expansion problem, not a quiet loss; the shared
+  `cm` and `ringArea2`. Not taken: a village's stretch is in metres along a way the ways tool can retrace; rerunning
+  `tools/villages.ts` after `tools/ways.ts` puts it back (recorded in Open questions); a crossroads' road taken as a
+  village's street when both its ends are nearest it (the inputs name the street where it matters); a prefilter of
+  the obstacles by box (the tool runs in seconds).
 
 ## Open questions
 
@@ -358,6 +366,8 @@ into the epic; this plan details each as it starts.
   read at first as a quarry and left as it is: the owner's check, against the survey, says whether quarries cut it.
 - Pratze's street is drawn as two roads a few metres apart where the survey draws its two edges (the forks keep
   stretches over 4 m apart): the owner's check says whether one is to go.
+- A village's stretch is in metres along its street: after `tools/ways.ts` retraces the ways, `tools/villages.ts` is
+  to run again (a check that each stretch still covers its survey pixels would catch a missed rerun).
 - Sokolnitz castle and pheasantry, the mills and the manor farms are not drawn yet (built.farm areas, with M8f's
   fields).
 - What is left of modern ground: Slatina's and Brno's built-up edge in the north-west corner, the airport's flat
