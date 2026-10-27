@@ -61,8 +61,9 @@ the battle map, drawn with about 400 figures (decision 0018), stands for a **div
 for about 15–20 men (decision 0076, proposed). Only the meaning changes: about 20 units a side, as the
 vision already has.
 
-A standard corps is **5–6 units**:
-- 3 infantry divisions (4 in a big corps);
+A standard corps is **6 units**:
+- 1 skirmisher (light infantry) division;
+- 3 line infantry divisions;
 - 1 cavalry division;
 - 1 artillery unit, the corps' guns.
 
@@ -72,17 +73,9 @@ The composition is ruleset data (decision 0015), so an era, a nation or a year c
   scouting radius (§ Knowledge);
 - the engine names a "formation unit"; "division" is the Napoleonic ruleset's word.
 
-### Skirmishers are a screen, not a unit
-
-There is no skirmisher unit to steer: a separate one is too much to micromanage. Each infantry division
-carries its own **skirmish screen**, as French corps did, every line battalion with its voltigeurs:
-- the screen goes out by itself in front of a division in line or column;
-- it falls back by itself when the division forms square or enemy cavalry comes near;
-- its strength is ruleset data, by nation and year (strong French voltigeurs, Austrians weaker early on,
-  British light companies and riflemen).
-
-The British Light Division of the Peninsula, a whole division of light troops, is a ruleset's choice, not the
-standard.
+A whole division of skirmishers is a game simplification: French corps spread their light infantry through
+every division, each line battalion with its own voltigeurs. The British Light Division of the Peninsula is
+the nearest real one.
 
 ### Armies are corps
 
@@ -256,8 +249,8 @@ has to write the same contract.
    time (decision 0009). How campaign hours map to battle minutes, and whether long waits for arrivals are
    played fast.
 9. **Fog on the campaign map**: how wide the estimates are, and how fast they age.
-10. ~~**Skirmishers**: a division of their own, or a screen?~~ A screen in every infantry division
-    (§ Skirmishers are a screen), decided by the owner: a separate unit is too much to micromanage.
+10. **Skirmishers**: a skirmisher division of its own (proposed), or a screen every infantry division can throw
+    out, as each French battalion did with its voltigeurs?
 11. **Drill at a division's scale**: a division forms square as one block, where a real one formed a square per
     battalion. Does it still read as drill?
 
