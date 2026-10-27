@@ -200,6 +200,15 @@ export interface Uniform {
   far?: 'coat' | 'own'
 }
 
+// where a threat stands to a formation (docs/proposals/sectors-model.md § 8): the blend's centre T and half-width H on
+// the angle measure (45°, 35° to 55°), the corner's length (metres), the slices a threat's block is cut into, and the
+// farthest an enemy presses on a battalion's morale (metres between their nearest companies)
+export interface SectorsDef {
+  blend: { T: number; H: number }
+  corner: number
+  slices: number
+  reach: number
+}
 export interface Ruleset {
   name: string
   types: Record<string, UnitType> // the first is the default
@@ -217,6 +226,7 @@ export interface Ruleset {
   fire: FireDef
   morale: MoraleDef
   melee: MeleeDef
+  sectors: SectorsDef
   // S1e-2: a side is broken at this share of its spawned men in the fight; at a time limit, shares within margin draw
   end: { broken: number; margin: number }
 }
@@ -606,6 +616,13 @@ export function compileRuleset(rs: Ruleset): Compiled {
     throw new Error(
       `ruleset ${rs.name}: melee.second must be ≥ 0 and at most 0.6 of the gap from the quality to the rout`,
     )
+  }
+  const SC = rs.sectors
+  if (!(SC.blend.H > 0 && SC.blend.T - SC.blend.H > 0 && SC.blend.T + SC.blend.H < 1)) {
+    throw new Error(`ruleset ${rs.name}: sectors.blend must lie inside the angle measure's 0..1 (0 < T − H, T + H < 1)`)
+  }
+  if (!(SC.corner > 0 && Number.isInteger(SC.slices) && SC.slices >= 1 && SC.reach > 0 && SC.reach < Infinity)) {
+    throw new Error(`ruleset ${rs.name}: sectors needs corner > 0, a whole number of slices ≥ 1 and a finite reach > 0`)
   }
   if (!(M.drain.flank >= 0 && M.drain.rear >= 0 && M.drain.flank + M.drain.rear < Infinity)) {
     throw new Error(`ruleset ${rs.name}: morale.drain must be finite and ≥ 0`)

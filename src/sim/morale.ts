@@ -51,7 +51,7 @@ import {
 } from './formation.ts'
 import { formedFits, freeSpot } from './claims.ts'
 import { blockGeometry, inArc, sees, screenShare, reachOf, type FireGeo } from './fire.ts'
-import { buildFaces, threatWeights, REACH } from './sectors.ts'
+import { buildFaces, threatWeights } from './sectors.ts'
 import { sin, cos, PI } from './num.ts'
 import { TICK_HZ } from './time.ts'
 
@@ -183,9 +183,9 @@ const wt = new Float64Array(3)
  * The drain enemy e presses on battalion j's morale target (docs/proposals/sectors-model.md § 6): flank × drain.flank
  * + rear × drain.rear, the weights (front, flank, rear) of e's company nearest j on j's face, if e can hurt j; else 0.
  * It can when it is in the fight, not in melee and not changing shape, its company and j's nearest (centre to
- * centre; ties to the lower) are within REACH metres, and either it fires from its shape and that company has j's in
- * its arc and range, in sight, unscreened (a ray of three clear of j's friends for musketry, all three for a
- * battery), or it can charge now (from its shape, not blown) within melee.refuge.alert metres, its centre ray clear.
+ * centre; ties to the lower) are within sectors.reach metres, and either it fires from its shape and that company
+ * has j's in its arc and range, in sight, unscreened (a ray of three clear of j's friends for musketry, all three for
+ * a battery), or it can charge now (from its shape, not blown) within melee.refuge.alert metres, its centre ray clear.
  * G must be this tick's geometry and faces.
  */
 export function drainBy(w: World, G: FireGeo, e: number, j: number): number {
@@ -195,7 +195,8 @@ export function drainBy(w: World, G: FireGeo, e: number, j: number): number {
   // the blocks of each reach G.reach from its anchor
   const ax = f.x[e] - f.x[j]
   const az = f.z[e] - f.z[j]
-  if (Math.sqrt(ax * ax + az * az) - G.reach[e] - G.reach[j] > REACH) return 0
+  const reach = w.cr.rs.sectors.reach
+  if (Math.sqrt(ax * ax + az * az) - G.reach[e] - G.reach[j] > reach) return 0
   let ke = -1
   let kj = -1
   let d2 = Infinity
@@ -213,7 +214,7 @@ export function drainBy(w: World, G: FireGeo, e: number, j: number): number {
       }
     }
   }
-  if (ke < 0 || d2 > REACH * REACH) return 0
+  if (ke < 0 || d2 > reach * reach) return 0
   threatWeights(w, G, j, e, ke, wt)
   const D = w.cr.rs.morale.drain
   const press = wt[1] * D.flank + wt[2] * D.rear

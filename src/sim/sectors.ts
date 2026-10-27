@@ -3,10 +3,10 @@
 // placed blocks (the fire step's geometry); a point's weights come from an angle measure without trigonometry; a
 // threat's are the mean over slices of its block. Scratch, not state: rebuilt from positions.
 //
-// Step 2 of docs/plans/active/u1-sectors.md: the module and its tests alone. Its numbers are constants here until
-// step 3 moves them into the ruleset (ruleset data is hashed into saves; this step moves no golden).
+// Its numbers are the ruleset's `sectors` (SectorsDef).
 import { type World, MAX_FORMATIONS, typeOf } from './world.ts'
 import type { FireGeo } from './fire.ts'
+import type { SectorsDef } from './ruleset.ts'
 import { layoutOf } from './formation.ts'
 import { sin, cos } from './num.ts'
 
@@ -15,16 +15,6 @@ export const FACE_NONE = 0
 export const FACE_ONE = 1
 export const FACE_ALL = 2
 export const FACE_TRAIL = 3
-
-/** The blend's centre, 45° (`T`), and its half-width, 35° to 55° (`H`), on the angle measure t (§ 3). */
-export const BLEND_T = 0.5
-export const BLEND_H = 0.088
-/** The corner's length `c`, metres: keeps the weights continuous at the face's corner (§ 3). */
-export const CORNER = 1
-/** The slices a threat's block is cut into across the face (§ 4). */
-export const SLICES = 8
-/** The farthest an enemy can press on a battalion's morale, metres between their nearest companies (§ 6). */
-export const REACH = 300
 
 /**
  * Each formation's face: its kind, and two frames, 0 for the front and 1 for the rear (the same frame for kinds one and
@@ -154,18 +144,16 @@ function copyFrame(F: Faces, from: number, to: number): void {
 }
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v)
-/** The angle measure (§ 3): o metres beyond the face's nearer end, d metres ahead of its edge; 0 ahead, 1 aside. */
-const angle = (d: number, o: number): number => o / (Math.max(d, 0) + o + CORNER)
-/** The blend (§ 3): 1 within 35° of straight ahead from the nearer end, 0 past 55°, linear between. */
-const blend = (t: number): number => clamp01((BLEND_T + BLEND_H - t) / (2 * BLEND_H))
-/** The corner ramp (§ 3): 1 ahead of the edge, 0 a corner's length behind it. */
-const ramp = (d: number): number => clamp01(1 + d / CORNER)
 
-// the weight toward frame q's front (side 1) or rear (side −1) of the point (x, y) in that frame
-function sideWeight(F: Faces, q: number, x: number, y: number, side: number): number {
+// the weight toward frame q's front (side 1) or rear (side −1) of the point (x, y) in that frame (§ 3): the blend on
+// the angle measure t = o / (max(d, 0) + o + c), o metres beyond the face's nearer end and d ahead of its edge (1
+// within 35° of straight ahead from the nearer end, 0 past 55°), times the corner ramp (1 ahead of the edge, 0 a
+// corner's length c behind it)
+function sideWeight(S: SectorsDef, F: Faces, q: number, x: number, y: number, side: number): number {
   const o = Math.max(F.L[q] - x, x - F.R[q], 0)
   const d = side > 0 ? y - F.F[q] : F.B[q] - y
-  return blend(angle(d, o)) * ramp(d)
+  const t = o / (Math.max(d, 0) + o + S.corner)
+  return clamp01((S.blend.T + S.blend.H - t) / (2 * S.blend.H)) * clamp01(1 + d / S.corner)
 }
 
 // (x, y) in frame q of the world point (px, pz)
@@ -197,18 +185,19 @@ const xy = new Float64Array(2)
  */
 export function pointWeights(w: World, j: number, x: number, z: number, out: Float64Array): Float64Array {
   const F = facesOf(w)
+  const S = w.cr.rs.sectors
   const kind = F.kind[j]
   if (kind === FACE_ALL) return finish(1, 0, out)
   toFrame(F, 2 * j, x, z, xy)
-  const front = kind === FACE_NONE ? 0 : sideWeight(F, 2 * j, xy[0], xy[1], 1)
+  const front = kind === FACE_NONE ? 0 : sideWeight(S, F, 2 * j, xy[0], xy[1], 1)
   toFrame(F, 2 * j + 1, x, z, xy)
-  const rear = sideWeight(F, 2 * j + 1, xy[0], xy[1], -1)
+  const rear = sideWeight(S, F, 2 * j + 1, xy[0], xy[1], -1)
   return finish(front, rear, out)
 }
 
-// the mean over SLICES of the weight toward frame q's front (side 1) or rear (−1) of the block of company k of
+// the mean over sectors.slices of the weight toward frame q's front (side 1) or rear (−1) of the block of company k of
 // formation i, each slice read at its nearest point to the frame's box (§ 4)
-function blockSide(F: Faces, q: number, G: FireGeo, i: number, k: number, side: number): number {
+function blockSide(S: SectorsDef, F: Faces, q: number, G: FireGeo, i: number, k: number, side: number): number {
   cornersOf(G, i, k)
   const px = [0, 0, 0, 0]
   const py = [0, 0, 0, 0]
@@ -224,7 +213,7 @@ function blockSide(F: Faces, q: number, G: FireGeo, i: number, k: number, side: 
   // the corners in order round the rectangle: (−,0) (+,0) (+,1) (−,1)
   const ring = [0, 1, 3, 2]
   const mid = (F.F[q] + F.B[q]) / 2
-  const N = x1 > x0 ? SLICES : 1
+  const N = x1 > x0 ? S.slices : 1
   let sum = 0
   for (let s = 0; s < N; s++) {
     const x = N === 1 ? x0 : x0 + ((s + 0.5) * (x1 - x0)) / N
@@ -242,7 +231,7 @@ function blockSide(F: Faces, q: number, G: FireGeo, i: number, k: number, side: 
       ymax = Math.max(ymax, y, y2)
     }
     const y = ymin > F.F[q] ? ymin : ymax < F.B[q] ? ymax : Math.min(Math.max(mid, ymin), ymax)
-    sum += sideWeight(F, q, x, y, side)
+    sum += sideWeight(S, F, q, x, y, side)
   }
   return sum / N
 }
@@ -255,8 +244,9 @@ export function threatWeights(w: World, G: FireGeo, j: number, i: number, k: num
   const F = facesOf(w)
   const kind = F.kind[j]
   if (kind === FACE_ALL) return finish(1, 0, out)
-  const front = kind === FACE_NONE ? 0 : blockSide(F, 2 * j, G, i, k, 1)
-  const rear = blockSide(F, 2 * j + 1, G, i, k, -1)
+  const S = w.cr.rs.sectors
+  const front = kind === FACE_NONE ? 0 : blockSide(S, F, 2 * j, G, i, k, 1)
+  const rear = blockSide(S, F, 2 * j + 1, G, i, k, -1)
   return finish(front, rear, out)
 }
 

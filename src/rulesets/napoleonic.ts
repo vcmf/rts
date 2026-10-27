@@ -387,6 +387,9 @@ export const napoleonic: Ruleset = {
     breach: 0.3,
     refuge: { alert: 200, closing: 1, react: 2, hold: 30 }, // the square against cavalry
   },
+  // where a threat stands (docs/proposals/sectors-model.md § 8): 45°, blended 35° to 55°; a metre's corner; eight
+  // slices; no threat farther than the canister's range
+  sectors: { blend: { T: 0.5, H: 0.088 }, corner: 1, slices: 8, reach: 300 },
   // the end of a battle (S1e-2): a side with 35% of its men out of the fight is broken (S1e-3: at half,
   // a side whose first line had routed fought on; its rallied battalions stood at the map's edge for the rest);
   // at a time limit, shares in the fight within 5 points are a draw. It is every Napoleonic scenario's, and makes up

@@ -222,7 +222,8 @@ describe('with claims: a melee holds', () => {
   for (const [id, watch] of [
     ['x15-melee-holds-claims', [0, 1]],
     ['x16-friend-behind-claims', [0, 1]],
-    ['x17-enemy-behind-claims', [0, 1]],
+    // not X-17: an enemy just behind the raw regiment drains it to shaken (decision 0070), and the impact breaks it at
+    // contact, with no melee to hold (its router's cases are below)
     ['x19-offset-lines-claims', [0, 1]],
     ['x20-brigade-lines-claims', [0, 1, 2, 3]],
   ] as const) {
