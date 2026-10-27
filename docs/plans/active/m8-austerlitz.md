@@ -24,10 +24,11 @@ into the epic; this plan details each as it starts.
 |---|---|---|
 | **M8a** | The relief as a scale model (`scale` on `relief.dem`); the heightfield re-imported over the whole field (15 × 15 km); the First Military Survey fetched over it and placed at dated landmarks | The map validates and compiles; a scale model's slopes are its file's; the scan placed at its landmarks, its own error stated |
 | **M8b** | Water: the Goldbach, the Littawa and their brooks, from the relief where the survey shows water; the ponds of 1805 | Each stream in its valley, each pond on its stream; the map compiles in seconds |
-| **M8c** | Ways: the highway, the period roads and tracks; modern works levelled (the motorway, railway embankments, quarries) | Each road where the period map has it, against the relief |
-| **M8d** | Villages: Pratze, Sokolnitz, Telnitz, Kobelnitz, Puntowitz, Blasowitz, Šlapanice, Aujezd, Satschan and the rest, as street villages along their roads, a church each | Each village on its site; houses clear of water and roads |
-| **M8e** | Woods, fields, marsh, vineyards, as the survey shows them | The ground's kinds as the period map shows them, checked by the owner |
-| **M8f** | Zones for the scenario, and the owner's check of the whole | The map validates and reads as the field (the proposal's acceptance) |
+| **M8c** | Ways: the highway, the period roads between the villages, traced off the survey | Each road where the period map has it, on the survey's line |
+| **M8d** | Modern works levelled: the D1 motorway and its interchanges, the railway's embankments and cuts, the quarries | The ground of 1805 under each, no modern work left in the relief |
+| **M8e** | Villages: Pratze, Sokolnitz, Telnitz, Kobelnitz, Puntowitz, Blasowitz, Šlapanice, Aujezd, Satschan and the rest, as street villages along their roads, a church each | Each village on its site; houses clear of water and roads |
+| **M8f** | Woods, fields, marsh, vineyards, as the survey shows them | The ground's kinds as the period map shows them, checked by the owner |
+| **M8g** | Zones for the scenario, and the owner's check of the whole | The map validates and reads as the field (the proposal's acceptance) |
 
 ## M8a in detail
 
@@ -142,17 +143,45 @@ into the epic; this plan details each as it starts.
   sampled every 4 m (a thin pond could cross a long one between samples); a pond's axes come through the fit's local
   map (its singular values), so its long axis stays long; names matched as strings; one comparison in the scan's hot
   loop. Not taken: a far point's search made cheap inside `nearIndexed` itself (every caller in apply passes its
-  cutoff; the generators' and the scatter's distance checks are a question for when M8d places villages). Tests for
+  cutoff; the generators' and the scatter's distance checks are a question for when M8e places villages). Tests for
   each (the thin crossing, the nearest mouth, a vanished id, the framed axes, a map that is not square).
+
+## M8c in detail
+
+- **Ways traced off the survey** (`tools/ways.ts`, its inputs committed in `maps/austerlitz-ways.json`, pure parts
+  tested in `test/map-ways.test.ts`): each road given as a few waypoints in the scan's pixels (its ends and the
+  junctions it is sure of; a waypoint off the road's line makes a spur), and between each two the cheapest path over
+  the scan, eight neighbours, searched in their box padded by 80 px. A pixel costs 1 on ink, up to 31 on paper: ink is
+  darker than the mean of the 15 px box around it, by 25 levels for the full discount, so the sheets' paper (0.65 to
+  0.95 of white) does not matter. The pixel path steps between a road's two drawn edges, so it is evened by a moving
+  mean over 8 px each side (narrowed near its ends), placed through the scan's fit and the relief piece, simplified to
+  3 m of field and cut at the map's edge (no piece under 20 m). Only the tool's own features (way kinds with the scan
+  as their source) are written again; a way drawn by hand stays.
+- The ways: the Brünn–Olmütz highway (the Kaiserstraße) along the north, the post road from Brünn to Satschan by
+  Sokolnitz and Telnitz (6 m), and the roads between the villages: Kobelnitz–Pratze, Puntowitz–Pratze,
+  Blasowitz–Pratze, Pratze–Hostieradek–Krenowitz, the Goldbach road from Kobelnitz to Telnitz, the road by
+  St Anthony's chapel to Aujezd, Satschan–Aujezd–Krenowitz. 12 ways. The survey's field tracks are not drawn: the
+  generators' fields bring their own (M8f).
+- The survey, not the relief, gives their line: unlike a stream, a road leaves no mark in a 5 m relief the tool can
+  follow, and the survey's error (562 m RMS between landmarks, M8a) is the price; the villages of M8e are placed on the
+  same scan, so a road and its village keep together.
+
+## Acceptance (M8c)
+
+- `test/map-ways.test.ts`: ink cheap against its own paper whatever its shade, the path along a drawn line rather
+  than across paper, the search box, the evening (a zigzag onto its middle, a straight path unchanged).
+- The map validates and compiles (4.3 s apply in Node); screenshots of the ways, and of the traced lines over the
+  survey, for the owner.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
 
 ## Open questions
 
 - A long line's far point still searches the whole bucket grid where a caller passes no cutoff (`reach.ts`'s
-  distances, the scatter's edge); M8d's villages keep clear of the streams through them, so it is measured there.
+  distances, the scatter's edge); M8e's villages keep clear of the streams through them, so it is measured there.
 - Some streams still run straight for a few hundred metres across filled flats (former pond basins, the backwater of
   modern embankments) and along today's straightened channels; the brooks of 1805 bent. The language's meander
   generator could bend them, once the joins of tributaries and the ponds on them follow a meandered line.
 
 - Bosenitz (49.191 N) lies just past the map's north edge, the Menitz pond just past its south edge: the window could
   move or the factor grow a little if the scenario needs either.
-- Modern works in the relief (the D1 motorway, railway embankments, quarries) are levelled in M8c with relief edits.
+- Modern works in the relief (the D1 motorway, railway embankments, quarries) are levelled in M8d with relief edits.
