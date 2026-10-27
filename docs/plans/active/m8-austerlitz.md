@@ -228,6 +228,34 @@ into the epic; this plan details each as it starts.
   earlier rounds came from: tracing the network incrementally (pixels already on a road nearly free, a road reaching
   one sharing it) makes it a graph from the start. Recorded as #227, for when the tracer is next used (M8e's streets).
 
+## M8d in detail
+
+- **`relief.mend`** (decision 0073): a new relief edit that rebuilds the ground under a modern work from the ground
+  around it. Along a line, each node takes the blend across the line of the ground just past the edit's reach on each
+  side, at its nearest point; over an area, a circle or an ellipse, the plane through the ground on its rim (least
+  squares); blended in over `edge`. Mends apply first among the edits, so the 1805 edits land on the mended ground.
+- **The works traced off the relief** (`tools/works.ts`, its inputs committed in `maps/austerlitz-works.json`, pure
+  parts tested in `test/map-works.test.ts`): each line given as a few waypoints in the map's metres, and between each
+  two the cheapest path over the relief file, a node costing 1 where it stands 1.5 m or more off the mean of the 105 m
+  box around it (an embankment's crest, a cutting's floor) and up to 31 on plain ground; M8c's snap and spur cut; the
+  path evened, simplified to 1 m and any loop it makes cut out. Only the tool's mends (known by their note) are written
+  again.
+- The works: the D1 west of Šlapanice with its interchange's ramp and loop, the D1 north of Jirschikowitz and
+  Blasowitz to the Holubice interchange, the Brno–Přerov railway from Šlapanice east, the railway from Křenovice
+  south and west to Újezd, the railway embankment past Sokolnice, the Brno–Veselí railway's low embankment across the
+  south; the pits and heaps north of Šlapanice, a walled basin beside them, a tank farm's bunds, a pit and stepped
+  ground west of Újezd. 12 mends, found from the relief less its local mean, before and after compared the same way.
+
+## Acceptance (M8d)
+
+- `test/map-apply.test.ts`: an embankment and a pit in the landforms mended to within 15 cm of the ground without
+  them, the ground past the mend's reach unchanged, a cut listed before a mend landing on the mended ground.
+- `test/map-works.test.ts`: the file read over a box, the work's cost, a line's loops (a crossing, a spur back to a
+  point) cut out.
+- The map validates and compiles; the mends add about 1 s to its 5.5 s apply in Node (measured). The relief less its
+  local mean, before and after, for the owner's check.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
 ## Open questions
 
 - The road tracer reconciles roads traced one by one (#227); tracing the network incrementally would make the forks
@@ -241,4 +269,7 @@ into the epic; this plan details each as it starts.
 
 - Bosenitz (49.191 N) lies just past the map's north edge, the Menitz pond just past its south edge: the window could
   move or the factor grow a little if the scenario needs either.
-- Modern works in the relief (the D1 motorway, railway embankments, quarries) are levelled in M8d with relief edits.
+- Mended ground is smooth (decision 0073): a long mend reads as a faintly smoother band; where an embankment crosses
+  a valley, the valley floor is to be drawn back with a landform if the scenario needs it.
+- What is left of modern ground: Slatina's and Brno's built-up edge in the north-west corner, the airport's flat
+  apron, Holubice's interchange slip roads, the low banks of today's roads. Light; the owner's check decides.

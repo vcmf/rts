@@ -1,0 +1,20 @@
+{
+  "note": "tools/works.ts's inputs for maps/austerlitz.map.json (docs/plans/active/m8-austerlitz.md M8d): the modern works in the relief of 2020s (DMR 4G), mended out of it; lines as waypoints in the map's metres, traced along the work, widths in the map's metres (half the field's)",
+  "piece": "field",
+  "lines": [
+    {"id": "d1-west", "width": 35, "edge": 12, "note": "the D1 motorway west of Šlapanice, past its interchange", "pts": [[-3000, 1975], [-2125, 2062], [-2025, 2175], [-1600, 2762], [-1162, 3000]]},
+    {"id": "d1-north", "width": 35, "edge": 12, "note": "the D1 motorway north of Jirschikowitz and Blasowitz, to the Holubice interchange", "pts": [[1075, 2995], [1800, 2920], [2450, 2937], [2725, 2850], [3000, 2540]]},
+    {"id": "rail-slapanice", "width": 20, "edge": 10, "note": "the Brno–Přerov railway from Šlapanice past Ponětovice and Blažovice", "pts": [[-750, 1975], [-525, 1400], [-275, 1225], [0, 1425], [500, 1575], [1200, 1725], [1850, 1975], [2475, 2200]]},
+    {"id": "rail-krenovice", "width": 20, "edge": 10, "note": "the railway from Křenovice south and west to Újezd", "pts": [[2550, 2175], [2625, 1800], [2675, 1550], [2850, 1250], [2900, 1100], [2900, 750], [2750, 475], [2200, 175], [1850, 0], [1500, -350], [1350, -500], [1300, -700], [1175, -937], [1000, -1000]]},
+    {"id": "rail-sokolnice", "width": 20, "edge": 10, "note": "the railway embankment from the west past Sokolnice to Újezd", "pts": [[-3000, -200], [-2575, -400], [-2000, -525], [-1500, -612], [-1250, -750], [-875, -1025], [0, -1150], [350, -1137], [850, -1050], [1000, -1000]]},
+    {"id": "rail-veseli", "width": 24, "edge": 8, "note": "the Brno–Veselí railway's low embankment, straight across the south past Telnice and Újezd", "pts": [[-1680, -3000], [-1000, -2280], [-200, -1800], [760, -1240], [1960, -600], [3000, 40]]},
+    {"id": "d1-ramp", "width": 25, "edge": 10, "note": "the D1 interchange's ramp south of its loop", "pts": [[-1960, 2050], [-1800, 1960], [-1720, 1800], [-1690, 1640]]}
+  ],
+  "areas": [
+    {"id": "quarry-slapanice", "edge": 40, "note": "the pits and heaps north of Šlapanice", "area": [[[-960, 2790], [-760, 2790], [-680, 2560], [-720, 2180], [-830, 2160], [-960, 2420]]]},
+    {"id": "basin-slapanice", "edge": 30, "note": "the walled basin north-east of Šlapanice", "area": [[[-500, 2660], [-200, 2660], [-200, 2290], [-500, 2290]]]},
+    {"id": "tanks-slatina", "edge": 10, "note": "the tank farm's bunds south of Slatina", "area": [[[-2440, 1660], [-2260, 1660], [-2260, 1490], [-2440, 1490]]]},
+    {"id": "pit-ujezd", "edge": 10, "note": "the rectangular pit west of Újezd and the stepped ground beside it", "area": [[[-450, -480], [310, -480], [310, -640], [-450, -640]]]},
+    {"id": "d1-loop", "edge": 20, "note": "the D1 interchange's loop", "circle": [[-2080, 2160], 60]}
+  ]
+}

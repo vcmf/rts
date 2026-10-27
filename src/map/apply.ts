@@ -2,7 +2,8 @@
 // laid into the five layers on the 2 m grid over the map's extent, in the engine's fixed order:
 //   1. relief: the base ground (seeded noise) and the landforms (hill, ridge, valley, plateau, scarp), summed, and
 //      real relief (dem), which sets the height in its area;
-//   2. relief edits, now that every shape exists: raise, lower, level, cut, ditch, and a way's cut or raise;
+//   2. relief edits, now that every shape exists: mend first, then raise, lower, level, cut, ditch, and a way's cut
+//      or raise;
 //   3. water: the cells under streams, rivers and ponds (levels and carving: M2);
 //   4. areas: ground and vegetation;
 //   5. ways and barriers (barriers by the cell rule of §3.6);
@@ -478,9 +479,95 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
   const H0 = Float64Array.from(H)
   const hAt = (x: number, z: number) => heightOf(L, x, z, H0)
 
-  // 2. relief edits, in painting order
-  for (const { f, r } of order) {
-    if (!isEdit(r)) continue
+  // a mend (decision 0073): the ground under a modern work rebuilt from the ground around it, as it stands before the
+  // mend changes anything. Along a line, each node takes the blend across the line of the ground just past its edge on
+  // each side, at its nearest point (past an end, their mean); over an area, the plane through the ground on its rim
+  // (least squares). Returns each node's height and the edit's weight there (a line's from the search that found its
+  // height, so a node is searched once), or null where there is none to give.
+  const mendTargets = (
+    f: Feature,
+    a: Record<string, AttrValue>,
+    field: ReturnType<typeof areaField> | null,
+    box: [number, number, number, number],
+    pad: number,
+    edge: number,
+  ): ((k: number, x: number, z: number) => [number, number] | null) => {
+    if (f.line) {
+      const line = f.line
+      const R = num(a.width, EDIT_WIDTH) / 2 + edge + 2 * c // past the edit's reach, so no rim node is mended itself
+      const t = new Map<number, number>()
+      const wt = new Map<number, number>()
+      // each vertex's distance along the line, summed as pointAt sums them, so the point found is pointAt's
+      const cum = [0]
+      for (let k = 0; k + 1 < line.length; k++) {
+        const [dx, dz] = [line[k + 1][0] - line[k][0], line[k + 1][1] - line[k][1]]
+        cum.push(cum[k] + Math.sqrt(dx * dx + dz * dz))
+      }
+      const at = (s: number): [number, number, number, number] => {
+        // the first segment reaching s (pointAt's), by halving
+        let [lo, hi] = [0, line.length - 2]
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1
+          if (cum[mid + 1] >= s) hi = mid
+          else lo = mid + 1
+        }
+        const [a, b] = [line[lo], line[lo + 1]]
+        const [dx, dz] = [b[0] - a[0], b[1] - a[1]]
+        const L = cum[lo + 1] - cum[lo]
+        const u = Math.min(1, Math.max(0, (s - cum[lo]) / L))
+        return [a[0] + u * dx, a[1] + u * dz, dx / L, dz / L]
+      }
+      nodes(box, pad, (k, x, z) => {
+        const near = nearLine(line, x, z, R)
+        if (near.d >= R) return
+        const [px, pz, tx, tz] = at(near.along)
+        // the line's left (its normal (−tz, tx)) and right, R from its nearest point
+        const hl = heightOf(L, px - tz * R, pz + tx * R, H)
+        const hr = heightOf(L, px + tz * R, pz - tx * R, H)
+        const s = near.over > 0 ? 0 : near.side * near.d
+        t.set(k, hr + ((hl - hr) * (s + R)) / (2 * R))
+        // its weight, as `weight` gives it (the search within R answers as the one within the edit's reach)
+        wt.set(k, editWeight(near.d, num(a.width, EDIT_WIDTH) / 2, edge))
+      })
+      return k => (t.has(k) ? [t.get(k)!, wt.get(k)!] : null)
+    }
+    if (!field) return () => null
+    const inside = (x: number, z: number) => {
+      const e = field.edge(x, z)
+      return e >= 0 ? 1 : edge > 0 ? smooth(1 + e / edge) : 0
+    }
+    // the rim: the nodes within two cells past the edge's blend, which the mend leaves as they are
+    const [cx, cz] = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2]
+    let [n1, sx, sz, sxx, sxz, szz, sh, sxh, szh] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    nodes(box, edge + 2 * c, (k, x, z) => {
+      const e = field.edge(x, z)
+      if (e >= -edge || e < -edge - 2 * c) return
+      const [u, v, h] = [x - cx, z - cz, H[k]]
+      n1 += 1
+      sx += u
+      sz += v
+      sxx += u * u
+      sxz += u * v
+      szz += v * v
+      sh += h
+      sxh += u * h
+      szh += v * h
+    })
+    if (n1 === 0) return () => null
+    // the normal equations by Cramer's rule; a rim in a line (or too few nodes) takes its mean
+    const det = n1 * (sxx * szz - sxz * sxz) - sx * (sx * szz - sxz * sz) + sz * (sx * sxz - sxx * sz)
+    if (Math.abs(det) < 1e-9 * (n1 * sxx * szz + 1)) return (_k, x, z) => [sh / n1, inside(x, z)]
+    const p0 = (sh * (sxx * szz - sxz * sxz) - sx * (sxh * szz - sxz * szh) + sz * (sxh * sxz - sxx * szh)) / det
+    const px = (n1 * (sxh * szz - sxz * szh) - sh * (sx * szz - sxz * sz) + sz * (sx * szh - sxh * sz)) / det
+    const pz = (n1 * (sxx * szh - sxh * sxz) - sx * (sx * szh - sxh * sz) + sh * (sx * sxz - sxx * sz)) / det
+    return (_k, x, z) => [p0 + px * (x - cx) + pz * (z - cz), inside(x, z)]
+  }
+
+  // 2. relief edits: the mends first (they take out what the real relief holds, so the other edits land on the ground
+  // they rebuild), then the rest, each in painting order
+  const edits = order.filter(({ r }) => isEdit(r))
+  const mendFirst = [...edits.filter(e => e.r.kind === 'relief.mend'), ...edits.filter(e => e.r.kind !== 'relief.mend')]
+  for (const { f, r } of mendFirst) {
     const a = r.attrs
     const k1 = index.get(f.id)!
     const kind = r.kind
@@ -497,7 +584,13 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
     const box = f.line ? lineBox(f.line) : field!.box
     const pad = (f.line ? num(a.width, EDIT_WIDTH) / 2 : 0) + edge + c
     const op = categoryOf(kind) === 'way' ? (num(a.cut) > 0 ? 'cut-way' : 'raise-way') : kind.split('.')[1]
+    const mend = op === 'mend' ? mendTargets(f, a, field, box, pad, edge) : null
     nodes(box, pad, (k, x, z) => {
+      if (mend) {
+        const tw = mend(k, x, z)
+        if (tw && tw[1] > 0) H[k] += (tw[0] - H[k]) * tw[1]
+        return
+      }
       const w = weight(x, z)
       if (w <= 0) return
       if (op === 'raise') H[k] += num(a.height) * w

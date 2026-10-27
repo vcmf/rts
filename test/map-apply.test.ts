@@ -288,6 +288,91 @@ describe('M1b: applying features into the layers', () => {
     expect(hAt(L, 120, 50)).toBeCloseTo(-1.5, 9)
     expect(at(L, 'edit', 121, 51)).toBe('ditch')
   })
+  it('a mend rebuilds the ground under an embankment and in a pit from the ground around them (decision 0073)', () => {
+    // sloping ground: the flank of a broad hill far to the north-east
+    const slope = { id: 'hill', kind: 'relief.hill', point: [900, 700] as Pt, height: 60, width: 2400 }
+    const bank = {
+      id: 'bank',
+      kind: 'relief.ridge',
+      line: [
+        [-200, 0],
+        [200, 0],
+      ] as Pt[],
+      height: 5,
+      width: 30,
+    }
+    // a pit in the landforms (as a quarry is in the real relief): a sunken plateau
+    const pit = {
+      id: 'pit',
+      kind: 'relief.plateau',
+      circle: [[-100, -120] as Pt, 25] as [Pt, number],
+      height: -6,
+      edge: 8,
+    }
+    const ground = apply(mini([slope]), cat)
+    const works = apply(mini([slope, bank, pit]), cat)
+    const mended = apply(
+      mini([
+        slope,
+        bank,
+        pit,
+        {
+          id: 'mend-bank',
+          kind: 'relief.mend',
+          line: [
+            [-150, 0],
+            [150, 0],
+          ],
+          width: 40,
+          edge: 10,
+        },
+        { id: 'mend-pit', kind: 'relief.mend', circle: [[-100, -120], 35], edge: 10 },
+      ]),
+      cat,
+    )
+    for (const [x, z] of [
+      [0, 0],
+      [60, 5],
+      [-90, -8],
+      [-100, -120],
+      [-90, -110],
+    ] as Pt[]) {
+      // the work stood a metre or more off the ground; mended, within 15 cm of it
+      expect(Math.abs(hAt(works, x, z) - hAt(ground, x, z))).toBeGreaterThan(1)
+      expect(Math.abs(hAt(mended, x, z) - hAt(ground, x, z))).toBeLessThan(0.15)
+    }
+    // past its reach the ground is as it was
+    expect(hAt(mended, 0, 60)).toBe(hAt(works, 0, 60))
+    // the mends first: an 1805 cut painted before the mend by id still lands on the mended ground
+    const cut = apply(
+      mini([
+        slope,
+        bank,
+        {
+          id: 'a-cut',
+          kind: 'relief.cut',
+          line: [
+            [-50, 0],
+            [50, 0],
+          ],
+          depth: 1,
+          width: 6,
+        },
+        {
+          id: 'z-mend',
+          kind: 'relief.mend',
+          line: [
+            [-150, 0],
+            [150, 0],
+          ],
+          width: 40,
+          edge: 10,
+        },
+      ]),
+      cat,
+    )
+    expect(Math.abs(hAt(cut, 0, 0) - hAt(ground, 0, 0) + 1)).toBeLessThan(0.15)
+  })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(
       mini([
