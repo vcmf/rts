@@ -671,7 +671,7 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       const [fx, fz] = pointAt(st.line, at)
       const reach = half + st.hw + c
       nodes([fx - reach, fz - reach, fx + reach, fz + reach], 0, (k, x, z) => {
-        const q = nearLine(st.line, x, z)
+        const q = nearLine(st.line, x, z, st.hw)
         if (q.over > 0 || q.d > st.hw || Math.abs(q.along - at) > half) return
         const t = q.d / st.hw
         const bed = st.levelAt(q.along) - fd * (1 - 0.5 * t * t)
@@ -776,7 +776,7 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
           const [bx, bz] = pointAt(road.line!, at + span)
           const deck = Math.max(heightOf(L, ax, az), heightOf(L, bx, bz))
           const on = (x: number, z: number) =>
-            nearLine(road.line!, x, z).d < rw + 1 &&
+            nearLine(road.line!, x, z, rw + 1).d < rw + 1 &&
             Math.sqrt((x - hit[0]) * (x - hit[0]) + (z - hit[1]) * (z - hit[1])) < span
           cells([hit[0], hit[1], hit[0], hit[1]], span + rw + c, (i, j, x, z) => {
             if (on(x, z)) L.built[j * nx + i] = k1

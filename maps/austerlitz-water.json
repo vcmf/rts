@@ -8,8 +8,8 @@
   "named": [
     { "at": [-1100, 1345], "id": "goldbach", "width": 4, "depth": 0.8, "note": "the Goldbach, from Jirschikowitz past Puntowitz, Kobelnitz, Sokolnitz and Telnitz to Menitz" },
     { "at": [3120, -2500], "id": "littawa", "width": 8, "depth": 1.2, "note": "the Littawa, from Krenowitz past Klein Hostieradek and Aujezd to Satschan" },
-    { "at": [-700, 3600], "id": "slapanitz-brook", "width": 2, "depth": 0.5, "note": "the brook from Šlapanice to the Goldbach" },
-    { "at": [900, 600], "id": "pratze-brook", "width": 1.5, "depth": 0.4, "note": "the brook from the Pratzen past its ponds to the Goldbach" }
+    { "at": [-1385, 4015], "id": "slapanitz-brook", "width": 2, "depth": 0.5, "note": "the brook from Šlapanice to the Goldbach" },
+    { "at": [840, 1115], "id": "pratze-brook", "width": 1.5, "depth": 0.4, "note": "the brook from the Pratzen past its ponds to the Goldbach" }
   ],
   "ponds": [
     ["kobelnitz-pond", 1610, 1960, 110, 55, 90], ["kobelnitz-pond2", 1670, 1780, 52, 42, 0], ["pratze-pond", 1985, 1825, 22, 20, 0],
