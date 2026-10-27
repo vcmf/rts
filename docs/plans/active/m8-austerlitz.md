@@ -150,20 +150,25 @@ into the epic; this plan details each as it starts.
 
 - **Ways traced off the survey** (`tools/ways.ts`, its inputs committed in `maps/austerlitz-ways.json`, pure parts
   tested in `test/map-ways.test.ts`): each road given as a few waypoints in the scan's pixels, a junction other roads
-  meet at by its name (`junctions`: one pixel, so every road through it has the same point). Each waypoint and junction
-  is moved onto the cheapest pixel within 4 px (one clicked beside the drawn line), and between each two the tool
+  meet at by its name (`junctions`: one pixel, so every road through it has the same point). A waypoint or junction off
+  the ink is moved onto the nearest pixel within 4 px costing no more than the cheapest there by 2 (one clicked beside
+  the drawn line; one on it stays, though darker lettering lies near), and between each two the tool
   takes the cheapest path over the scan, eight neighbours, searched in their box padded by 80 px. A pixel costs 1 on
   ink, up to 31 on paper: ink is darker than the mean of the 15 px box around it, by 25 levels for the full discount,
   so the sheets' paper (0.65 to 0.95 of white) does not matter.
-- **Roads meet exactly.** Where two legs come back along each other within 12 px of a waypoint (a spur: the waypoint
-  beside the road), both are cut back to where they part. A road running along an earlier one at an end (within 3 px
-  for more than 8) is cut back to where it leaves it and joined to that road's pixel, the fork: the shared stretch
-  belongs to the first road listed, and both keep the fork. The pixel path, which steps between a road's two drawn
+- **Roads meet exactly.** Where two legs come back along each other within 12 px of a plain waypoint (a spur: the
+  waypoint beside the road), both are cut back to where they part, never past a junction (a turn sharper than about
+  20° at a plain waypoint is cut at its tip; one that is needed is given as a junction). A road with an end running
+  along another (within 3 px for more than 8) is cut back to where it leaves it and joined to that road's pixel, the
+  fork, which both keep; the roads are taken in turn against the others as they are left, so of two whose ends run
+  along each other the first listed is cut. A stretch left in two roads' middles (more than 32 px, 120 m of field) is
+  an error naming both: one of them is to be split at the fork. The pixel path, which steps between a road's two drawn
   edges, is evened by a moving mean over 8 px each side between the points it keeps (its ends, its junctions, its
   forks), placed through the scan's fit (`scanFitOf`, shared with `tools/water.ts`) and the relief piece, simplified
   to 3 m of field with those points kept, and cut at the map's edge (no piece under 20 m).
-- Only the tool's own features are written again: way kinds with the scan as their source and an id of the inputs (or
-  of one of their pieces); a way drawn by hand stays, whatever its source. A piece's id already taken is refused.
+- Only the tool's own features are written again: way kinds with the scan as their source and the tool's note (a way
+  drawn by hand stays, whatever its source; one dropped from the inputs goes). A piece's id already taken, an id listed
+  twice, a way of fewer than two points or of points all on one pixel are refused.
 - The ways: the Brünn–Olmütz highway (the Kaiserstraße) along the north, the post road from Turas past Sokolnitz to
   Telnitz (6 m), and the roads between the villages: Telnitz–Satschan–Aujezd, Kobelnitz–Pratze, Šlapanice–Blasowitz,
   Šlapanice–Puntowitz, Puntowitz–Pratze, Aujezd–Hostieradek–Krenowitz, the Goldbach road from Kobelnitz to Telnitz,
@@ -178,8 +183,9 @@ into the epic; this plan details each as it starts.
 ## Acceptance (M8c)
 
 - `test/map-ways.test.ts`: ink cheap against its own paper whatever its shade, the path along a drawn line rather
-  than across paper, the search box, a waypoint off the image refused, the snap, a spur cut and a junction kept, the
-  fork, the evening between kept points, the tool's own ids.
+  than across paper, the search box, a waypoint off the image refused, the snap (and a waypoint on its line kept beside
+  darker ink), a spur cut and a junction kept (and never cut past), the fork whichever road is listed first, a
+  stretch traced twice in two middles, the evening between kept points.
 - The map validates and compiles (4.3 to 4.8 s apply in Node); checked by script: every junction and fork meets the
   road it is on (0.00 m), no turn over 140°, no stretch of one way within 4 m of another; screenshots of the ways, and
   of the traced lines over the survey, for the owner.
@@ -197,6 +203,15 @@ into the epic; this plan details each as it starts.
   Pratze, Telnitz and Kobelnitz junctions off their crossings, Puntowitz's middle waypoint in a field, the road by
   St Anthony's chapel traced along its lettering (it now ends at the chapel; the survey shows no clear road on to
   Aujezd). Tests for each.
+- **Round 2**: severe. The spur cut could walk back past a junction kept before it (the junction dropped from the
+  road); forks were found only at a later road's ends, so an earlier road's end along a later one's middle stayed
+  doubled, depending on the inputs' order; a way dropped or renamed in the inputs stayed in the map; the snap moved a
+  waypoint already on its line onto darker ink beside it; inputs were not checked. Fixed as above: the cut stops at the
+  last kept point; every road's pixels are known from the start and each road's ends are cut against all the others,
+  forks pinned by their pixel; a stretch left in two middles is an error; the tool's ways are known by their note; the
+  snap keeps the nearest pixel near the cheapest. Not changed: the half-pixel between the two tools (a way's points
+  are pixel indices, their centres at u + 0.5; a pond's are read as coordinates on the image, which the fit takes as
+  continuous, as the page draws it); the ink's cost over the whole scan (about 300 MB for one run, estimated).
 
 ## Open questions
 

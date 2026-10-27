@@ -5,12 +5,12 @@ import { describe, it, expect } from 'vitest'
 import type { Pt } from '../src/map/schema.ts'
 import {
   cheapest,
+  doubled,
   evenKept,
   evenPath,
   forks,
   grey,
   inkCost,
-  isWayId,
   snapToInk,
   traceWay,
   type Grey,
@@ -117,33 +117,35 @@ describe("a map's ways", () => {
     expect(at).toBeGreaterThan(0)
     expect(fixed.keep.has(at)).toBe(true)
   })
-  it('cuts a way running along an earlier one back to their fork, which both keep', () => {
-    // the first along y = 0 from x = 0 to 40; the second along it from x = 0 to 20, then down x = 20
-    const first: Pt[] = Array.from({ length: 41 }, (_, x) => [x, 0])
-    const second: Pt[] = [
+  it('cuts a way with an end running along another back to their fork, which both keep, whichever is listed first', () => {
+    // the main road along y = 0 from x = -20 to 40; the branch along it from x = 0 to 20, then down x = 20
+    const main: Pt[] = Array.from({ length: 61 }, (_, x) => [x - 20, 0])
+    const branch: Pt[] = [
       ...Array.from({ length: 21 }, (_, x): Pt => [x, 1]),
       ...Array.from({ length: 20 }, (_, k): Pt => [20, k + 2]),
     ]
-    const [a, b] = forks(
-      [
-        { px: first, keep: new Set([0, 40]) },
-        { px: second, keep: new Set([0, second.length - 1]) },
-      ],
-      3,
-      8,
-    )
-    expect(a.px).toEqual(first)
-    // the second starts on a pixel of the first, which the first keeps
-    const fork = b.px[0]
-    expect(first.some(p => p[0] === fork[0] && p[1] === fork[1])).toBe(true)
-    expect(a.keep.has(first.findIndex(p => p[0] === fork[0] && p[1] === fork[1]))).toBe(true)
-    expect(b.px.at(-1)).toEqual([20, 21])
-    expect(b.keep.has(0) && b.keep.has(b.px.length - 1)).toBe(true)
+    const ways = [
+      { px: main, keep: new Set([0, 60]) },
+      { px: branch, keep: new Set([0, branch.length - 1]) },
+    ]
+    for (const order of [ways, [...ways].reverse()]) {
+      const out = forks(order, 3, 8)
+      const a = out[order.indexOf(ways[0])]
+      const b = out[order.indexOf(ways[1])]
+      expect(a.px).toEqual(main)
+      // the branch starts on a pixel of the main road, which the main road keeps
+      const at = main.findIndex(p => p[0] === b.px[0][0] && p[1] === b.px[0][1])
+      expect(at).toBeGreaterThan(0)
+      expect(a.keep.has(at)).toBe(true)
+      expect(b.px.at(-1)).toEqual([20, 21])
+      expect(b.px.length).toBeLessThan(25)
+      expect(b.keep.has(0) && b.keep.has(b.px.length - 1)).toBe(true)
+    }
     // a short touch at an end (a road leaving from another's side) is left as it is
     const leaving: Pt[] = Array.from({ length: 20 }, (_, k): Pt => [10, k + 1])
     const [, c] = forks(
       [
-        { px: first, keep: new Set([0, 40]) },
+        { px: main, keep: new Set([0, 60]) },
         { px: leaving, keep: new Set([0, 19]) },
       ],
       3,
@@ -153,8 +155,8 @@ describe("a map's ways", () => {
     // one wholly along it is left empty
     const [, d] = forks(
       [
-        { px: first, keep: new Set([0, 40]) },
-        { px: first.slice(5, 30), keep: new Set([0, 24]) },
+        { px: main, keep: new Set([0, 60]) },
+        { px: main.slice(25, 50), keep: new Set([0, 24]) },
       ],
       3,
       8,
@@ -168,10 +170,51 @@ describe("a map's ways", () => {
     expect(even[9]).toEqual([9, 2])
     expect(Math.abs(even[5][1] - 1)).toBeLessThanOrEqual(0.3)
   })
-  it("takes as the tool's own only the inputs' ids and their pieces'", () => {
-    expect(isWayId(['road'], 'road')).toBe(true)
-    expect(isWayId(['road'], 'road2')).toBe(true)
-    expect(isWayId(['road'], 'road-lane')).toBe(false)
-    expect(isWayId(['road'], 'lane')).toBe(false)
+  it('never cuts a spur back past a junction kept before it', () => {
+    // ink along y = 10; a junction at x = 30, then a plain waypoint 6 px on, then back to x = 20
+    const g = sheet(60, 30, 230, 150, (_x, y) => y === 10)
+    const t = traceWay(
+      inkCost(g),
+      60,
+      30,
+      [
+        [5, 10],
+        [30, 10],
+        [36, 10],
+        [20, 10],
+      ],
+      [false, true, false, false],
+    )
+    const at = t.px.findIndex(p => p[0] === 30 && p[1] === 10)
+    expect(at).toBeGreaterThan(0)
+    expect(t.keep.has(at)).toBe(true)
+    for (const k of t.keep) expect(k).toBeLessThan(t.px.length)
+  })
+  it("finds a stretch traced twice in two ways' middles", () => {
+    const a: Pt[] = [
+      ...Array.from({ length: 20 }, (_, k): Pt => [0, 40 - k]),
+      ...Array.from({ length: 50 }, (_, x): Pt => [x, 20]),
+    ]
+    const b: Pt[] = [
+      ...Array.from({ length: 20 }, (_, k): Pt => [10, k]),
+      ...Array.from({ length: 50 }, (_, x): Pt => [x + 5, 21]),
+      ...Array.from({ length: 20 }, (_, k): Pt => [54, 22 + k]),
+    ]
+    const ways = [
+      { px: a, keep: new Set([0, a.length - 1]) },
+      { px: b, keep: new Set([0, b.length - 1]) },
+    ]
+    expect(doubled(ways, 3, 32)?.slice(0, 2).sort()).toEqual([0, 1])
+    // a crossing is not
+    const across: Pt[] = Array.from({ length: 40 }, (_, k): Pt => [25, k])
+    expect(doubled([ways[0], { px: across, keep: new Set([0, 39]) }], 3, 32)).toBeNull()
+  })
+  it('leaves a waypoint on its line where it is, though darker ink lies near', () => {
+    // a line along y = 10 drawn lighter than a letter's stroke at y = 13
+    const l = new Float32Array(30 * 30).fill(230)
+    for (let x = 0; x < 30; x++) l[10 * 30 + x] = 160
+    for (let x = 12; x < 18; x++) l[13 * 30 + x] = 60
+    const c = inkCost({ w: 30, h: 30, l })
+    expect(snapToInk(c, 30, 30, [15, 10], 4)).toEqual([15, 10])
   })
 })

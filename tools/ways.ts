@@ -2,8 +2,8 @@
 // scan, and between each two a least-cost path over the scan that follows the line the surveyor drew (a pixel darker
 // than the paper around it is cheap, paper is dear), placed through the scan's fit and the relief piece into the map,
 // cut to the map and simplified. Roads meet exactly: a junction named once in the inputs is one pixel on every road
-// through it, and a road running along an earlier one is cut back to where it leaves it (the fork kept on both).
-// Only the ways the tool makes (way kinds with the scan as their source, the inputs' ids) are written again; every
+// through it, and a road with an end running along another is cut back to where it leaves it (the fork kept on both).
+// Only the ways the tool makes (way kinds with the scan as their source and the tool's note) are written again; every
 // other feature is kept (the stable save, src/map/write.ts).
 //   node tools/ways.ts <map.json> <ways inputs.json>
 // The inputs: { piece, scan, image (a PNG copy of the scan, which git ignores like the scan: sips -s format png),
@@ -144,21 +144,22 @@ export function evenPath(px: Pt[], r: number): Pt[] {
   })
 }
 
-/** The cheapest pixel within `r` of a waypoint (the nearest of equal cost): a waypoint clicked beside its line. */
-export function snapToInk(cost: Float32Array, w: number, h: number, p: Pt, r: number): Pt {
+/**
+ * A waypoint moved onto the ink within `r` of it, if it is not on it: the nearest pixel costing no more than the
+ * cheapest there by `slack` (a waypoint already on its line stays; one clicked beside it moves onto the line, not onto
+ * a darker letter or hatching beyond it).
+ */
+export function snapToInk(cost: Float32Array, w: number, h: number, p: Pt, r: number, slack = 2): Pt {
   const [u, v] = [Math.round(p[0]), Math.round(p[1])]
-  let best: Pt = [u, v]
-  let bc = Infinity
-  let bd = Infinity
+  const near: [Pt, number, number][] = []
   for (let y = Math.max(0, v - r); y <= Math.min(h - 1, v + r); y++) {
     for (let x = Math.max(0, u - r); x <= Math.min(w - 1, u + r); x++) {
       const d = (x - u) ** 2 + (y - v) ** 2
-      if (d > r * r) continue
-      const c = cost[y * w + x]
-      if (c < bc || (c === bc && d < bd)) [best, bc, bd] = [[x, y], c, d]
+      if (d <= r * r) near.push([[x, y], cost[y * w + x], d])
     }
   }
-  return best
+  const least = Math.min(...near.map(n => n[1]))
+  return near.filter(n => n[1] <= least + slack).sort((a, b) => a[2] - b[2])[0][0]
 }
 
 /** A traced way: its pixels, and the indices in them it must keep (its ends, its junctions, its forks). */
@@ -170,7 +171,9 @@ export interface Traced {
 /**
  * A way's pixels through its waypoints, leg by leg, keeping its ends and its fixed waypoints (the junctions other roads
  * meet at). Where a leg comes back along the one before within `spur` pixels of a waypoint not fixed (the waypoint
- * beside the road, a spur), both are cut back to where they part: a road does not turn back on itself in a few pixels.
+ * beside the road, a spur), both are cut back to where they part, never past a junction: a road does not turn back on
+ * itself in a few pixels (a turn sharper than about 20° at a plain waypoint is cut at its tip; one needed is given as a
+ * junction).
  */
 export function traceWay(cost: Float32Array, w: number, h: number, pts: Pt[], fixed: boolean[], spur = 12): Traced {
   const px: Pt[] = []
@@ -184,9 +187,11 @@ export function traceWay(cost: Float32Array, w: number, h: number, pts: Pt[], fi
     } else {
       // the pixel of the way so far and the one of the leg that meet (within 2: a road is drawn about 4 px wide)
       // farthest from the waypoint: cut there
+      // never back past a point kept (a junction: its pixel stays on the way)
       const end = px.length - 1
+      const last = Math.max(...keep)
       let cut: [number, number] = [end, 0]
-      for (let i = Math.max(1, end - spur); i <= end; i++) {
+      for (let i = Math.max(last, end - spur); i <= end; i++) {
         for (let j = Math.min(leg.length - 2, spur); j >= 0; j--) {
           if (near(px[i], leg[j], 2) && end - i + j > end - cut[0] + cut[1]) cut = [i, j]
         }
@@ -201,67 +206,106 @@ export function traceWay(cost: Float32Array, w: number, h: number, pts: Pt[], fi
 
 const near = (a: Pt, b: Pt, r: number) => Math.abs(a[0] - b[0]) <= r && Math.abs(a[1] - b[1]) <= r
 
-/**
- * Each way after the first with an end running along an earlier way (within `r` pixels for more than `run`) cut back
- * to where it leaves it, and joined to that way's nearest pixel, which the earlier way keeps: the shared stretch
- * belongs to one way, and the two meet exactly at the fork. A way wholly along earlier ones is left empty.
- */
-export function forks(ways: Traced[], r: number, run: number): Traced[] {
-  const owner = new Map<number, [number, number]>() // a pixel (y * 65536 + x) → [way, index]
-  const out: Traced[] = []
-  const nearest = (p: Pt): [number, number] | null => {
-    let best: [number, number] | null = null
-    let bd = Infinity
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        const o = owner.get((p[1] + dy) * 65536 + p[0] + dx)
-        if (o && dx * dx + dy * dy < bd) [best, bd] = [o, dx * dx + dy * dy]
+const key = (p: Pt) => p[1] * 65536 + p[0]
+
+/** The ways through each pixel of a set of ways. */
+function owners(ways: Traced[]): Map<number, Set<number>> {
+  const by = new Map<number, Set<number>>()
+  ways.forEach((t, n) =>
+    t.px.forEach(p => {
+      const o = by.get(key(p))
+      if (o) o.add(n)
+      else by.set(key(p), new Set([n]))
+    }),
+  )
+  return by
+}
+
+/** The nearest pixel within `r` of `p` on a way other than `n`, and that way, or null. */
+function nearOther(by: Map<number, Set<number>>, p: Pt, n: number, r: number): [number, Pt] | null {
+  let best: [number, Pt] | null = null
+  let bd = Infinity
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const q: Pt = [p[0] + dx, p[1] + dy]
+      const o = by.get(key(q))
+      if (!o || dx * dx + dy * dy >= bd) continue
+      for (const j of o) {
+        if (j !== n) {
+          ;[best, bd] = [[j, q], dx * dx + dy * dy]
+          break
+        }
       }
     }
-    return best
   }
-  ways.forEach((wy, n) => {
-    let { px, keep } = wy
-    const along = px.map(p => nearest(p))
-    // the run along an earlier way at each end
+  return best
+}
+
+/**
+ * Each way with an end running along another way (within `r` pixels for more than `run`) cut back to where it leaves
+ * it, and joined to that way's nearest pixel, which that way keeps: the shared stretch belongs to one way, and the two
+ * meet exactly at the fork. The ways are taken in turn, each against the others as they are left (so of two ways whose
+ * ends run along each other, the first is cut). A way wholly along others is left empty. A fork's pixel cut from its
+ * way later is an error.
+ */
+export function forks(ways: Traced[], r: number, run: number): Traced[] {
+  const by = owners(ways)
+  const pins = ways.map(() => new Set<number>()) // the pixels of the forks onto each way
+  const out = ways.map(t => ({ px: t.px, keep: new Set(t.keep) }))
+  const leave = (n: number, pts: Pt[]) => pts.forEach(p => by.get(key(p))?.delete(n))
+  out.forEach((t, n) => {
+    const { px, keep } = t
+    const along = px.map(p => nearOther(by, p, n, r))
     let a = 0
     while (a < px.length && along[a]) a++
-    let b = px.length
-    while (b > a && along[b - 1]) b--
     if (a === px.length) {
-      out.push({ px: [], keep: new Set() })
+      leave(n, px)
+      out[n] = { px: [], keep: new Set() }
       return
     }
-    const cut = (from: number, to: number) => {
-      const idx = new Set<number>()
-      for (const k of keep) if (k >= from && k < to) idx.add(k - from)
-      return idx
+    let b = px.length
+    while (b > a && along[b - 1]) b--
+    const s = a > run ? a : 0
+    const e = px.length - b > run ? b : px.length
+    const head = s ? [along[s - 1]!] : []
+    const tail = e < px.length ? [along[e]!] : []
+    for (const [j, q] of [...head, ...tail]) pins[j].add(key(q))
+    leave(n, [...px.slice(0, s), ...px.slice(e)])
+    const kept = new Set<number>()
+    for (const k of keep) if (k >= s && k < e) kept.add(k - s + head.length)
+    const cut = [...head.map(h => h[1]), ...px.slice(s, e), ...tail.map(h => h[1])]
+    kept.add(0)
+    kept.add(cut.length - 1)
+    out[n] = { px: cut, keep: kept }
+  })
+  out.forEach((t, n) => {
+    for (const k of pins[n]) {
+      const at = t.px.findIndex(p => key(p) === k)
+      if (at < 0) throw new Error(`a fork onto way ${n} lies on a stretch of it cut since`)
+      t.keep.add(at)
     }
-    let s = 0
-    let e = px.length
-    const head: Pt[] = []
-    const tail: Pt[] = []
-    if (a > run) {
-      const [j, m] = along[a - 1]!
-      out[j].keep.add(m)
-      head.push(out[j].px[m])
-      s = a
-    }
-    if (px.length - b > run) {
-      const [j, m] = along[b]!
-      out[j].keep.add(m)
-      tail.push(out[j].px[m])
-      e = b
-    }
-    const mid = cut(s, e)
-    px = [...head, ...px.slice(s, e), ...tail]
-    keep = new Set([...mid].map(k => k + head.length))
-    keep.add(0)
-    keep.add(px.length - 1)
-    px.forEach((p, k) => owner.set(p[1] * 65536 + p[0], [n, k]))
-    out.push({ px, keep })
   })
   return out
+}
+
+/**
+ * The longest stretch of a way within `r` pixels of another, over `run` pixels, as [way, other, pixels], or null: a
+ * stretch traced twice in both ways' middles, which `forks` cannot cut (the way is to be split at the fork).
+ */
+export function doubled(ways: Traced[], r: number, run: number): [number, number, number] | null {
+  const by = owners(ways)
+  let worst: [number, number, number] | null = null
+  ways.forEach((t, n) => {
+    let len = 0
+    let other = -1
+    for (const p of t.px) {
+      const o = nearOther(by, p, n, r)
+      len = o && (len === 0 || o[0] === other) ? len + 1 : o ? 1 : 0
+      other = o ? o[0] : -1
+      if (len > run && (!worst || len > worst[2])) worst = [n, other, len]
+    }
+  })
+  return worst
 }
 
 /** A path evened between the points it keeps, each stretch by `evenPath` (so the kept points stay where they are). */
@@ -273,10 +317,6 @@ export function evenKept({ px, keep }: Traced, r: number): Pt[] {
   for (let i = 1; i < marks.length; i++) out.push(...evenPath(px.slice(marks[i - 1], marks[i] + 1), r).slice(1))
   return out
 }
-
-/** A feature id is one of the tool's ways or of their pieces (the id and a number). */
-export const isWayId = (ids: string[], id: string) =>
-  ids.some(w => id === w || (id.startsWith(w) && /^\d+$/.test(id.slice(w.length))))
 
 function main(): void {
   const [mapFile, inputsFile] = process.argv.slice(2)
@@ -296,6 +336,12 @@ function main(): void {
   const [iw, ih] = fit.size
   const img = readPng(fs.readFileSync(path.join(dir, ins.image))) as { w: number; h: number; data: Uint8Array }
   if (img.w !== iw || img.h !== ih) throw new Error(`${ins.image} is ${img.w} × ${img.h}, the scan ${iw} × ${ih}`)
+  const ids = new Set<string>()
+  for (const way of ins.ways) {
+    if (ids.has(way.id)) throw new Error(`${way.id}: listed twice`)
+    ids.add(way.id)
+    if (way.pts.length < 2) throw new Error(`${way.id}: a way needs two points or more`)
+  }
   const g = grey(img)
   const cost = inkCost(g)
   // the waypoints onto the ink within 4 px (15 m of field); a junction once, so every road through it shares its pixel
@@ -318,11 +364,23 @@ function main(): void {
       way.pts.map(p => typeof p === 'string'),
     )
   })
-  // a shared stretch belongs to the first way listed: one along it within 3 px for more than 8 starts at the fork
+  ins.ways.forEach((way, n) => {
+    if (traced[n].px.length < 2) throw new Error(`${way.id}: its points are all on one pixel`)
+  })
+  // a shared stretch belongs to one way: one with an end along another within 3 px for more than 8 starts at the fork;
+  // one left in two ways' middles is an error (a way to split at the fork), more than 32 px (120 m of field)
   const joined = forks(traced, 3, 8)
+  const twice = doubled(joined, 3, 32)
+  if (twice) {
+    const [n, j, len] = twice
+    throw new Error(`${ins.ways[n].id} runs along ${ins.ways[j].id} for ${len} px: split one of them at the fork`)
+  }
   const half: Pt = [map.extent.w / 2, map.extent.h / 2]
-  const ids = ins.ways.map(w => w.id)
-  const mine = (f: Feature) => (f.kind ?? '').startsWith('way.') && f.source === ins.scan && isWayId(ids, f.id)
+  // the tool's ways: a way kind with the scan as its source and the tool's note (a way drawn by hand stays, whatever
+  // its source; one dropped from the inputs goes)
+  const TRACED = ': traced off the survey along its line'
+  const mine = (f: Feature) =>
+    (f.kind ?? '').startsWith('way.') && f.source === ins.scan && (f.note ?? '').endsWith(TRACED)
   const others = map.features.filter(f => !mine(f))
   const taken = new Set(others.map(f => f.id))
   const features: Record<string, unknown>[] = []
@@ -330,11 +388,12 @@ function main(): void {
   ins.ways.forEach((way, n) => {
     const t = joined[n]
     if (t.px.length < 2) {
-      report.push(`${way.id}: wholly along the ways before it, left out`)
+      report.push(`${way.id}: wholly along other ways, left out`)
       return
     }
     // evened between its kept points, in the file's frame, simplified to 3 m of field with its kept points, then into
     // the map and cut to it (no sliver under 20 m)
+    // (a pixel's centre: the fit reads the image as continuous, pixel u spanning u to u + 1, as the page draws it)
     const frame = evenKept(t, 8).map(([u, v]) => fit.toFrame(u + 0.5, v + 0.5))
     // evenKept keeps each pixel's index, so a kept pixel's point is the frame's at its index
     const kept = new Set([...t.keep].map(k => frame[k]))
@@ -354,7 +413,7 @@ function main(): void {
         source: ins.scan,
         line,
         ...(way.width !== undefined ? { width: way.width } : {}),
-        note: `${way.note}: traced off the survey along its line`,
+        note: `${way.note}${TRACED}`,
       })
     })
     report.push(`${way.id}: ${t.px.length} px traced, ${pieces.length} piece(s) in the map`)
