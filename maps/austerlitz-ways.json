@@ -3,19 +3,26 @@
   "piece": "field",
   "scan": "first-survey",
   "image": "scans/austerlitz-first-survey.png",
-  "junctions": {"pratze": [2359, 1850], "kobelnitz": [1733, 1988], "telnitz": [1663, 2974], "aujezd": [2202, 2875], "hostieradek": [2550, 2453], "blasowitz": [2572, 1126], "slapanice": [1837, 1250]},
+  "junctions": {"pratze": [2359, 1850], "kobelnitz": [1733, 1988], "telnitz": [1663, 2974], "aujezd": [2202, 2875], "hostieradek": [2550, 2453], "blasowitz": [2583, 1151], "slapanice": [1837, 1250], "puntowitz-w": [2000, 1588], "puntowitz-e": [2150, 1612], "jirschikowitz": [2322, 1152]},
   "ways": [
     {"id": "highway", "kind": "way.road.highway", "note": "the Brünn–Olmütz highway, its trees on both sides", "pts": [[450, 760], [700, 915], [1100, 837], [1500, 731], [2100, 600]]},
     {"id": "post-road", "kind": "way.road", "width": 6, "note": "the road from Turas past Sokolnitz to Telnitz", "pts": [[550, 1950], [825, 2112], [925, 2262], [1000, 2500], [1100, 2650], [1275, 2762], "telnitz"]},
     {"id": "satschan-road", "kind": "way.road", "note": "the road from Telnitz past Satschan and Sternhof to Aujezd", "pts": ["telnitz", [1625, 3212], [1650, 3450], [1900, 3362], [1987, 3250], [2075, 3175], [2075, 3025], "aujezd"]},
     {"id": "kobelnitz-road", "kind": "way.road", "note": "the road from Kobelnitz to Pratze", "pts": ["kobelnitz", "pratze"]},
-    {"id": "blasowitz-road", "kind": "way.road", "note": "the road from Šlapanice past Jirschikowitz to Blasowitz", "pts": ["slapanice", [2250, 1175], [2312, 1150], "blasowitz"]},
-    {"id": "puntowitz-road", "kind": "way.road", "note": "the road from Šlapanice to Puntowitz", "pts": [[1775, 1200], "slapanice", [2000, 1588]]},
-    {"id": "pratze-road", "kind": "way.road", "note": "the road from Puntowitz to Pratze", "pts": [[2150, 1612], "pratze"]},
+    {"id": "blasowitz-road", "kind": "way.road", "note": "the road from Šlapanice past Jirschikowitz to Blasowitz", "pts": ["slapanice", [2250, 1175], "jirschikowitz", "blasowitz"]},
+    {"id": "puntowitz-road", "kind": "way.road", "note": "the road from Šlapanice to Puntowitz", "pts": ["slapanice", "puntowitz-w"]},
+    {"id": "pratze-road", "kind": "way.road", "note": "the road from Puntowitz to Pratze", "pts": ["puntowitz-e", "pratze"]},
     {"id": "krenowitz-road", "kind": "way.road", "note": "the road from Aujezd past Klein Hostieradek and Zbeschau to Krenowitz", "pts": ["aujezd", "hostieradek", [2962, 2112], [3350, 2075]]},
     {"id": "goldbach-road", "kind": "way.road", "note": "the road down the Goldbach from Kobelnitz past Sokolnitz to Telnitz", "pts": ["kobelnitz", [1640, 2365], [1440, 2675], "telnitz"]},
     {"id": "antoni-road", "kind": "way.road", "note": "the road from Pratze to St Anthony's chapel", "pts": ["pratze", [2066, 2622]]},
     {"id": "north-road", "kind": "way.road", "note": "the road from Pratze north to Blasowitz", "pts": ["pratze", "blasowitz"]},
-    {"id": "hostieradek-road", "kind": "way.road", "note": "the road from Pratze south to Klein Hostieradek", "pts": ["pratze", "hostieradek"]}
+    {"id": "hostieradek-road", "kind": "way.road", "note": "the road from Pratze south to Klein Hostieradek", "pts": ["pratze", "hostieradek"]},
+    {"id": "kobelnitz-street", "kind": "way.road.lane", "note": "the village street of Kobelnitz, north-east to its church", "pts": ["kobelnitz", [1760, 1950], [1782, 1928]]},
+    {"id": "telnitz-street", "kind": "way.road.lane", "note": "the village street of Telnitz, south-west from the crossroads", "pts": ["telnitz", [1640, 3020], [1605, 3085]]},
+    {"id": "aujezd-street", "kind": "way.road.lane", "note": "the village street of Aujezd, north from the crossroads", "pts": ["aujezd", [2185, 2800], [2175, 2735]]},
+    {"id": "blasowitz-street", "kind": "way.road.lane", "note": "the village street of Blasowitz, north from the crossroads", "pts": ["blasowitz", [2590, 1070], [2598, 1012]]},
+    {"id": "slapanice-street", "kind": "way.road.lane", "note": "the main street of Šlapanice, north-west from the crossroads", "pts": ["slapanice", [1780, 1200], [1730, 1160], [1690, 1112]]},
+    {"id": "puntowitz-street", "kind": "way.road.lane", "note": "the village street of Puntowitz", "pts": ["puntowitz-w", [2060, 1612], "puntowitz-e"]},
+    {"id": "jirschikowitz-street", "kind": "way.road.lane", "note": "the village street of Jirschikowitz, north from the Blasowitz road", "pts": ["jirschikowitz", [2328, 1090], [2330, 1038]]}
   ]
 }
