@@ -125,6 +125,8 @@ export async function playSim(
     scenario: lookArmies,
     key: 'look-armies',
     ruleset: a.ruleset,
+    // (the renderer draws each man by his way and gait: the men worker keeps them)
+    orients: true,
     workers: own
       ? null
       : () => [

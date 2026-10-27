@@ -90,6 +90,9 @@ export class SoldierLayer {
   private walkOf: Float64Array
   private runOf: Float64Array
   alphaNow = 1
+  /** Whether the men's ways and gaits are kept (Men.yaw, Men.gait: the steering's and orient's; battle threads PR 4c):
+   *  for a reader that draws them (the look page), off for one that does not (the sim page: none of the work). */
+  orients = false
   // `step`'s groups: how many (0 before the first step), and the units in each
   private grouped = 0
   private byGroup: Unit[][] = []
@@ -572,6 +575,8 @@ export class SoldierLayer {
     const MZ = M.z
     const MVX = M.vx
     const MVZ = M.vz
+    const MY = M.yaw
+    const MG = M.gait
     const FL = M.flags
     const MS = M.s
     const MDX = M.dx
@@ -599,7 +604,7 @@ export class SoldierLayer {
       // (a man not skipped: the battalion's revision moves on)
       let touched = false
       // its men's ways and gaits current before this step (no sync changed it since): kept so by the step's (orient)
-      const fresh = u.oriented === u.menRev
+      const fresh = this.orients && u.oriented === u.menRev
       for (let j = 0, n = u.n; j < n; j++) {
         const m = ids[j]
         const fl = FL[m]
@@ -644,10 +649,10 @@ export class SoldierLayer {
         if (fl & MAN_SETTLED) {
           if (busy || Math.hypot(tx - MHX[m], tz - MHZ[m]) > 0.3) FL[m] = fl & ~MAN_SETTLED
           else {
-            if (wasV) {
-              touched = true
-              this.halted(i, m)
-            }
+            // (his place's way framed anew: it may have turned under him; the revision moves on if it did)
+            const y0 = MY[m]
+            if (this.orients) this.halted(i, m)
+            if (wasV || MY[m] !== y0) touched = true
             MVX[m] = 0
             MVZ[m] = 0
             continue
@@ -662,7 +667,7 @@ export class SoldierLayer {
           MHZ[m] = tz
           if (wasV) {
             touched = true
-            this.halted(i, m)
+            if (this.orients) this.halted(i, m)
           }
           MVX[m] = 0
           MVZ[m] = 0
@@ -762,11 +767,12 @@ export class SoldierLayer {
         // a trunk's push never takes him off the map
         MX[m] = Math.min(xMax, Math.max(t.x0, mx))
         MZ[m] = Math.min(zMax, Math.max(t.z0, mz))
-        // (his velocity too: his way and gait are drawn from it, SoldierLayer.orient, even held at the map's edge)
-        if (MX[m] !== wasX || MZ[m] !== wasZ || MVX[m] !== vx || MVZ[m] !== vz) touched = true
+        // (his gait too: a man held at the map's edge may change it standing)
+        const g0 = MG[m]
         MVX[m] = vx
         MVZ[m] = vz
-        this.moved(i, m, vx, vz)
+        if (this.orients) this.moved(i, m, vx, vz)
+        if (MX[m] !== wasX || MZ[m] !== wasZ || wasV !== (vx !== 0 || vz !== 0) || MG[m] !== g0) touched = true
       }
       if (touched) {
         u.rev++
@@ -793,7 +799,7 @@ export class SoldierLayer {
   }
   /** Man `m` of formation `i` (framed) steered to velocity (vx, vz): his way and gait (orient's rule). */
   private moved(i: number, m: number, vx: number, vz: number): void {
-    const v = Math.hypot(vx, vz)
+    const v = Math.sqrt(vx * vx + vz * vz)
     if (v > MARCH_FROM) {
       this.men.gait[m] = gaitAt(v)
       this.men.yaw[m] = Math.atan2(vx, vz)
@@ -805,20 +811,15 @@ export class SoldierLayer {
    *  readers of a published frame need not (call it before publishing). His velocity's way when he marches, at rest
    *  his place's (its heading after a Face about, a square's faces). */
   orient(): void {
+    if (!this.orients) return
     const M = this.men
-    const p = this.p
     for (const u of this.units.values()) {
       if (u.oriented === u.menRev) continue
       u.oriented = u.menRev
       this.frame(u.i, this.alphaNow)
       for (let j = 0; j < u.n; j++) {
         const m = u.ids[j]
-        if (!(M.flags[m] & MAN_ALIVE)) continue
-        const vx = M.vx[m]
-        const vz = M.vz[m]
-        const v = Math.hypot(vx, vz)
-        M.gait[m] = gaitAt(v)
-        M.yaw[m] = v > MARCH_FROM ? Math.atan2(vx, vz) : this.place(u.i, M.s[m], false, p)[2]
+        if (M.flags[m] & MAN_ALIVE) this.moved(u.i, m, M.vx[m], M.vz[m])
       }
     }
   }

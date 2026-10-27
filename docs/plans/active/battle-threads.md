@@ -323,7 +323,9 @@ tile) is no sim map. Two PRs, then PR 4.
   changed (new men, a Face about: `Unit.menRev`, its men's revision, which a volley does not move) by `orient()`
   before the frame is published, so the columns are never older than the revision the page reads. (Review round 1:
   orienting every moved battalion at publishing framed it a second time a step, 9 % on the men worker's turn at
-  32,000 men, 8×, over the stop below.) The
+  32,000 men, 8×, over the stop below; in the steering, 7 to 11 %: it runs every sub-step, 8 × the look page's 12 Hz
+  re-placing at 8×.) So only a reader that draws them asks for them (`SoldierLayer.orients`, `LinkStart.orients`:
+  the look page); the sim page's layer does none of the work. The
   published frame carries both (`src/app/battle-frame.ts`). The page's `SimMen.man` reads them instead of working them
   out (no `hypot`, `atan2` or `layer.place` a man; no `layer.frame` a battalion); a fresh volley still makes the fire
   role on the page (its age is the page's clock). The thresholds move with the work, from `src/look/sim-men.ts` to

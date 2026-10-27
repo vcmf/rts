@@ -14,7 +14,7 @@ import { rulesetOf } from '../rulesets/index.ts'
 
 /** What the page sends the men worker: the map's bytes and the tick ring, then requests. */
 export type ToMen =
-  | { type: 'init'; data: Uint8Array; version: number; ring: RingBuffers; ruleset?: string }
+  | { type: 'init'; data: Uint8Array; version: number; ring: RingBuffers; ruleset?: string; orients?: boolean }
   | { type: 'advance'; id: number; sec: number }
   | { type: 'record'; id: number; on: boolean }
 
@@ -147,6 +147,7 @@ export function serveMen(port: Port<ToMen>): void {
         false,
       )
       layer = new SoldierLayer(w, buildScene(w))
+      layer.orients = !!m.orients
       src.w = w
       src.layer = layer
       ring = new RingReader(w, m.ring)

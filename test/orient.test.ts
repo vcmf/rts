@@ -17,6 +17,7 @@ const stats = { tickMs: 0, stepMs: 0, pubMs: 0 }
 /** A charge advanced some ticks: men at rest and men on the move. */
 function battle(): Battle {
   const b = new Battle(data, PAGE_SCENARIOS['s1d-charge'])
+  b.layer.orients = true
   b.advanceBy(80)
   return b
 }
@@ -62,6 +63,14 @@ describe("the men's ways and gaits", () => {
     }
     // (both kinds seen)
     expect([moving > 0, moving < want.size]).toEqual([true, true])
+  })
+  it('are not kept by a layer whose reader does not draw them (the sim page): none of the work', () => {
+    const b = new Battle(data, PAGE_SCENARIOS['s1d-charge'])
+    b.advanceBy(80)
+    b.layer.orient()
+    const M = b.layer.men
+    expect([...M.yaw.subarray(0, M.n)].every(v => v === 0)).toBe(true)
+    expect([...M.gait.subarray(0, M.n)].every(v => v === GAIT_HALT)).toBe(true)
   })
   it('are kept current by the steering itself for a battalion stepped since its last change (no framing again)', () => {
     const b = battle()

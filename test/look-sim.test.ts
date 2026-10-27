@@ -38,7 +38,7 @@ function manAt(source: SimMen, k: number, i: number, out: SourceMan): SourceMan 
 
 /** The battle with the battalions spawned and one tick run, and the men source over it. */
 function start() {
-  const link = new MainLink(data, cr, lookArmies)
+  const link = new MainLink(data, cr, lookArmies, true)
   for (const c of spawns(BS, MEN, A)) link.command(c)
   link.frame(DT)
   const source = new SimMen(BS, MEN, () => {

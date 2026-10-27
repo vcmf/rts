@@ -58,7 +58,8 @@ still holds, the departures whole from the log), steps the men on their clock at
 time since its own world's tick), and publishes a frame at most 120
 times a second when something changed (`src/app/battle-frame.ts`): every column of the world's state, the men
 (position, velocity, slot, flags, and the way each faces and his gait: worked out by the steering as it sets his
-velocity, and by `SoldierLayer.orient` before the frame is written for a battalion a sync changed; battle threads PR 4c), each battalion's men, and the clock (the leftover game time, the speed, the
+velocity, and by `SoldierLayer.orient` before the frame is written for a battalion a sync changed, when the page asks
+for them, `LinkStart.orients`: the look page does, this page does not; battle threads PR 4c), each battalion's men, and the clock (the leftover game time, the speed, the
 publish time). Three slots in shared memory: the worker fills the one neither newest nor held, the page holds the
 newest for its frame; neither waits. The page
 reads a slot in place: a `World` whose columns are views on it and a `SoldierLayer` on that world that is never
