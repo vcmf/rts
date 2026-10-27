@@ -244,11 +244,10 @@ against cavalry under fire is the period's central dilemma (L-01).
 - turning costs time (Face about 3 s; a change front tens of seconds).
 
 A battalion that marches across an enemy's front, or turns its back to retire under fire, pays all four (A-10,
-F-06). **A retreat ordered within an enemy's fire range** costs more: a one-off morale shock when it starts, besides
-its back to the enemy (it cannot fire, and fire strikes it as in the rear). A retreat is any ordered move that turns
-its back on an enemy in the fight within fire range: a Retire, or a Face about and a move. The shock is for turning
-the back on the player's order: the wavering fall-back, the morale's own reaction, does not pay it. From a melee there is no retiring
-at all (§ Collision).
+F-06). **The back exposed** (decision 0070): a battalion whose flank or back is turned to an enemy that can hurt it
+(that could fire on it, in range with a clear line, or charge it) is drained for as long as it stays so, whatever
+orders turned it. A redeployment in the open within the enemy's reach costs nerve; behind a screen of friends, or beyond
+range, nothing. From a melee there is no retiring at all (§ Collision).
 
 ## Experience
 
@@ -657,11 +656,11 @@ units they order behave this way. U8 and U9 are Track S's pathfinding and group 
 
 | Phase | What | Scenarios |
 |---|---|---|
-| **U1** | Sectors: one reading for fire, charges and morale; exposure by shape and sector; the share that bears; flank and rear drains; the retreat's shock and the flank shock on a battalion in melee | A-01 to A-10, B-08, C-06, G-04 |
+| **U1** | Sectors: one reading for fire, charges and morale; exposure by shape and sector; flank and rear drains (the back exposed); the flank shock on a battalion in melee | A-01 to A-07, A-09, A-10, B-08, C-06, G-04, E-16 |
 | **U2** | Experience and the morale bar: six levels, their table, points and a level up; the bar replaces today's morale value; toughness | B-02, C-01, C-02, E-05, E-08, E-09, G-01, G-05, G-06, G-08, H-01, H-04, H-05 |
-| **U3** | Closing: engagement states, changes under fire, the wavering rule, fire discipline, the first volley, the assault; the firearm and melee modes | B-03, C-03 to C-05, E-15, F-01 to F-07, L-05 |
+| **U3** | Closing: engagement states, changes under fire, the wavering rule, fire discipline, the first volley, the assault; the firearm and melee modes; the share that bears and canister's exposure per formation | B-03, C-03 to C-05, E-15, F-01 to F-07, L-05 |
 | **U4** | Guns: the guns' drain, the last salvo, pieces apart from crews, guns taken, gunners sheltering | B-06, D-04 to D-08, G-09, L-03, L-04 |
-| **U5** | Categories: light infantry and skirmish order, heavy and light cavalry, horse artillery, the bonus table | B-07, C-07, D-10, E-06, E-07, E-10, E-11, E-12, K-01 to K-05, L-07 |
+| **U5** | Categories: light infantry and skirmish order, heavy and light cavalry, horse artillery, the bonus table | A-08, B-07, C-07, D-10, E-06, E-07, E-10, E-11, E-12, K-01 to K-05, L-07 |
 | **U6** | Collision, with the orders and their queue, by its own proposal: enemies, friends, loose bodies, the clash | I-06 to I-09, G-07 |
 | **U7** | Ground with Track M: walls, buildings, barriers' crossings, cover; the 2 m margin bug | C-10, C-11, E-13, E-14, I-13, I-14, M-06 |
 | **U8** | Pathfinding (S1f-3): A*, time-sliced, march column on turns | J-01 to J-04, J-06, J-07 |

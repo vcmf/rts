@@ -62,4 +62,6 @@ recorded here on 2026-10-08.
 | [0054](0054-readable-code.md) | Readable code: small functions, doc comments in new code, a test for every bug fix | accepted |
 | [0060](0060-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
 | [0062](0062-simple-shadows-at-every-zoom.md) | The simple shadow at every zoom, softer, lighter and shorter up close | accepted |
-| [0069](0069-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | accepted |
+| [0069](0069-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | superseded in part by 0070 |
+| [0070](0070-the-back-exposed.md) | The back exposed: a pressure while it lasts, not a retreat detected (supersedes 0069's retreat shock) | accepted |
+| [0071](0071-wavering-keeps-fighting.md) | A wavering battalion keeps fighting: no automatic fall-back | accepted |
