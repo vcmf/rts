@@ -458,7 +458,7 @@ export function decalDefinesChanged(): DecalPoll {
   return { idleReady: false, polls: 0 }
 }
 
-/** The shadow's shape baked per animation step (?ushstep, docs/plans/active/step-shadows.md, #229): steps, the bins a
+/** The shadow's shape baked per animation step (?ushstep, docs/plans/done/step-shadows.md, #229): steps, the bins a
  *  clip (at most; a clip of fewer steps gets one a step); facings, the shape's facings; blend, two bins mixed by the
  *  man's step between their centres (four reads), else the bin he is in held (two) */
 export interface StepShadow {

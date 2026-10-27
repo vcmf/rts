@@ -49,7 +49,7 @@ varying vec2 vCt,vCell;
 uniform float uVATStep;
 #endif
 #ifdef SH_STEPS
-// the shape baked per animation step (?ushstep, docs/plans/active/step-shadows.md): a role's clip in uStepBins.<role>
+// the shape baked per animation step (?ushstep, docs/plans/done/step-shadows.md): a role's clip in uStepBins.<role>
 // bins, its first cell row uStepRow.<role>; the rows in blocks of uStepRPB side by side, each FACINGS cells wide
 // (shadowShape, stepAtlasLayout in src/look/units-data.ts). His step as units.vert poses him (its int() of his clip's
 // first step plus the mod), the exact n a GPU's mod can return wrapped to 0 (stepIndex); the bin he is in in integers,

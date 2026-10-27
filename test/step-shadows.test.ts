@@ -1,4 +1,4 @@
-// The soldiers' simple shadows baked per animation step (?ushstep, docs/plans/active/step-shadows.md, #229): the bin a
+// The soldiers' simple shadows baked per animation step (?ushstep, docs/plans/done/step-shadows.md, #229): the bin a
 // man's step draws (stepBin, and unitdecal.vert's copy of it), the blend's two bins (stepBlend), the atlas's layout and
 // size (stepAtlasLayout, shadowShape's steps), the page's switch (applyStepParams), and the feet on the shape.
 import { readFileSync } from 'node:fs'

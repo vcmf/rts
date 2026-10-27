@@ -8,7 +8,7 @@ date: 2026-10-27
 Amends 0062 (the simple shadow at every zoom) and supersedes 0071's contact oval as the default. 0071's other parts
 stay: no part of a soldier's shadow darker than the ground's painted cast shadow (the shade k), the shade's hue turned
 toward its grey, the gain 1. Accepted by the owner on 2026-10-27: the per-step shadow without the oval, then variant B
-for the feet. The plan and its measurements: `docs/plans/active/step-shadows.md`; as built: `docs/systems/look.md`
+for the feet. The plan and its measurements: `docs/plans/done/step-shadows.md`; as built: `docs/systems/look.md`
 ("The armies"). #229.
 
 ## Context

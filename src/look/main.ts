@@ -582,7 +582,7 @@ const shadowMode = shadowModes(params)
 const shadowLook = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
 const ushBand = applyLookParams(params, shadowLook.close, shadowLook.far).band
 const ushContact = applyContactParams(params)
-// the shape baked per animation step up close (decision 0074, docs/plans/active/step-shadows.md): ?ushstep=<steps a
+// the shape baked per animation step up close (decision 0074, docs/plans/done/step-shadows.md): ?ushstep=<steps a
 // clip>[,<facings>[,hold|blend]] (absent: 8,8,hold; 0: the shape averaged over each clip at every zoom, as before)
 const ushStep = applyStepParams(params)
 // ?ushfootk=<boost>[,<reach m>]: the per-step shape's feet darker and crisper, never past the ground's shade (absent:

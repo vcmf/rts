@@ -695,7 +695,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   band. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none), `?ushcontactat=step|stride|root`, `?ushcontactband`,
   `?ushdesat`; `?ushstep=0&ushcontact=1` is decision 0071's look (main at 1093fdc3, tested to match),
   `?ushstep=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4` decision 0067's. **The shape per step** (decision 0074, the
-  default; `docs/plans/active/step-shadows.md`, #229): `?ushstep=<steps>[,<facings>[,hold|blend]]` (absent: `8,8`,
+  default; `docs/plans/done/step-shadows.md`, #229): `?ushstep=<steps>[,<facings>[,hold|blend]]` (absent: `8,8`,
   hold, `STEP_SHADOW`; 0: the averaged shape at every zoom) bakes the shape per clip step bin (k = min(n, steps) bins a clip, each the average of its own steps) and facing,
   the cells stacked in an atlas of as many blocks as keep it within 4096 texels a side (`stepAtlasLayout`,
   `shadowShape`'s `steps`); the decal's vertex shader picks his bin from his step (`stepBin`; `blend`: the two bins

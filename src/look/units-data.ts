@@ -632,7 +632,7 @@ export interface ShadowShape {
   // whole blocks of 8 texels): the far strip's (decalStrip, src/look/shadow-look.ts), decision 0049's own
   base: { across: [number, number]; along: [number, number] }
   dir: [number, number] // the shadow's direction on the ground (x, z): away from the sun
-  // the step bins (?ushstep, docs/plans/active/step-shadows.md): a role's bins (1 each: today's averaged shape) and
+  // the step bins (?ushstep, docs/plans/done/step-shadows.md): a role's bins (1 each: today's averaged shape) and
   // its first cell row; the rows stacked in blocks of rowsPerBlock, side by side (stepAtlasLayout)
   bins: number[]
   binRow: number[]
@@ -708,7 +708,7 @@ export function stepAtlasLayout(
  *  value in its cell (a softer edge, not a lighter shadow: the close zoom's, decision 0062). Every soldier
  *  of a figure casts it: no era names, the roles are the bake's (decision 0015). posed: the LOD's posedVertices, if
  *  already made. steps (0: the average above): the shape per animation step instead (?ushstep,
- *  docs/plans/active/step-shadows.md): a role's clip in min(n, steps) bins (stepBin), each the average of up to
+ *  docs/plans/done/step-shadows.md): a role's clip in min(n, steps) bins (stepBin), each the average of up to
  *  binSamples of its own steps, a row of facings a bin, the rows in blocks within maxSize texels a side
  *  (stepAtlasLayout) */
 export function shadowShape(
