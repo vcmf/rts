@@ -297,6 +297,33 @@ into the epic; this plan details each as it starts.
   #227); the mend marked as an edit and excluded from the edits loop by its kind (one check, in apply only). The
   slope's limit has no test of its own (it needs a far side with a step in it).
 
+## M8e in detail
+
+- **Village streets**: where a village's houses line a street the twelve ways do not draw (Kobelnitz, Telnitz,
+  Aujezd, Blasowitz, Šlapanice, Puntowitz, Jirschikowitz), the street is a `way.road.lane` traced by M8c's tool from
+  its junction (`maps/austerlitz-ways.json`, 19 ways, three junctions more: the two ends of Puntowitz and
+  Jirschikowitz's; Blasowitz's moved onto the crossing). Every end still meets its way at 0.00 m, no turn over 140°,
+  nothing doubled (checked by script).
+- **Villages read off the survey** (`tools/villages.ts`, its inputs committed in `maps/austerlitz-villages.json`, pure
+  parts tested in `test/map-villages.test.ts`): each village given as the stretch of its street where the survey draws
+  its houses (two pixels on the scan) and their number, written as a `built.village` along the way nearest that
+  stretch (or the one named) with the street-village generator (at least half its houses); its church, where the
+  survey draws one, a `built.church` of 24 × 11 m (real size: decision 0070) along its street 6 m past the street's
+  edge, on the survey's side, else across the street, else slid along it by 5 m up to 60 m, until it lies 3 m clear of
+  water and every other way. Only the tool's features (villages and churches with the scan as source and its note) are
+  written again.
+- The villages: Pratze, Kobelnitz (its street and the south end down the Goldbach road), Telnitz, Aujezd, Klein
+  Hostieradek, Blasowitz, Šlapanice's main street, Puntowitz, Sokolnitz, Satschan, Jirschikowitz: 12 villages, 140
+  houses (every village its full number), 5 churches (Pratze, Kobelnitz, Telnitz, Aujezd, Šlapanice).
+
+## Acceptance (M8e)
+
+- `test/map-villages.test.ts`: the nearest way and the stretch along it, a church's ground on either side, its place
+  across or along the street when its side is taken.
+- The map validates and expands (237 features: every village its houses, no two villages' zones meeting); the
+  churches clear of water and other ways; screenshots of the villages for the owner.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
 ## Open questions
 
 - The road tracer reconciles roads traced one by one (#227); tracing the network incrementally would make the forks
@@ -314,5 +341,9 @@ into the epic; this plan details each as it starts.
   a valley, the valley floor is to be drawn back with a landform if the scenario needs it.
 - North of Šlapanice the brook runs in an incised valley 15 to 20 m deep (map metres) with steep, bench-like sides,
   read at first as a quarry and left as it is: the owner's check, against the survey, says whether quarries cut it.
+- Pratze's street is drawn as two roads a few metres apart where the survey draws its two edges (the forks keep
+  stretches over 4 m apart): the owner's check says whether one is to go.
+- Sokolnitz castle and pheasantry, the mills and the manor farms are not drawn yet (built.farm areas, with M8f's
+  fields).
 - What is left of modern ground: Slatina's and Brno's built-up edge in the north-west corner, the airport's flat
   apron, Holubice's interchange slip roads, the low banks of today's roads. Light; the owner's check decides.
