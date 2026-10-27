@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-26
+last_reviewed: 2026-10-27
 ---
 
 # Plan: the battle's threads
@@ -363,7 +363,7 @@ tile) is no sim map. Two PRs, then PR 4.
   - **The measurement** (started 2026-10-27, the owner: "lets continue", after PR 4): the sim page's p99 already meets
     the goal (PR 5: 6.8 ms at 32,000 men, 8×), so the question is the look page at `?sim`. The bench's trace gains
     the page's sim tick (`simMs`: the battle's frame on the page, the newest frame taken, the orders) and long tasks
-    (`longTasks`, `longMs`: a `PerformanceObserver`, counted in the frame whose end sees them); with `placeMs` and
+    (each run's `longTasks`: a `PerformanceObserver`, counted by the run's measured window, `longIn`); with `placeMs` and
     `tiMs` they are the main thread's work outside rendering. The same bench as PR 4 (`?armies=40`, Metal, the
     preview build, script and `?sim` interleaved, two clean rounds).
   - **Decision**: PR 6 goes ahead if, at `?sim`, that work (`simMs` + `placeMs` + `tiMs`) is over 1 ms a frame at
@@ -380,7 +380,7 @@ tile) is no sim map. Two PRs, then PR 4.
     wide. Mean: the placing (`placeMs`) 0.51 to 0.60, the uploads (`tiMs`) 0.18 to 0.22, the page's sim tick (`simMs`)
     0.01 to 0.02. Long tasks: in 0.02 % of the frames (3 of about 12,500 in the clean round). The script's page:
     0.1 ms, no long task. Not measured: the page's handling of the workers' messages (their `onmessage`, its own task
-    between frames; a long one would show among the long tasks). **Why not PR 6**: what trips the rule is the placing,
+    between frames; the long-task observer sees only tasks over 50 ms). Decision 0072 records the call. **Why not PR 6**: what trips the rule is the placing,
     which neither of PR 6's options removes (rendering in a worker carries the placing with it; the layer already runs
     in the men worker, PR 5); the page's frame is its rendering (the script's alike; #215; decision 0050, Track E). The
     placing is PR 4c's next: the men worker works out each man's way and gait, so the page reads them.

@@ -15,7 +15,7 @@ import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { q, runBench, showBench } from './bench.ts'
-import { TR, TRACE, tr, trNow } from './trace.ts'
+import { TR, tr, trNow } from './trace.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
@@ -724,7 +724,7 @@ if (armiesParam !== null) {
       () => {
         const t = trNow()
         s.tick(Math.min(engine.getDeltaTime() / 1000, 0.1))
-        if (TRACE.on) tr(TR.simMs, performance.now() - t)
+        if (t) tr(TR.simMs, performance.now() - t)
       },
       undefined,
       true,

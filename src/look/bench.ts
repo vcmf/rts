@@ -18,7 +18,7 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import { EffectRenderer, type EffectWrapper } from '@babylonjs/core/Materials/effectRenderer.js'
 import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTargetTexture.js'
 import { GpuTimer } from './gputimer.ts'
-import { TR, TRACE, TRACE_FIELDS } from './trace.ts'
+import { TR, TRACE, TRACE_FIELDS, longIn } from './trace.ts'
 import { START, zoomOf } from './post.ts'
 import { D, TUNED_R } from './spec.ts'
 
@@ -54,6 +54,8 @@ export interface RunStats {
   triangles: number
   segments: Record<string, number>
   trace?: RunTrace
+  // long tasks begun in the run's measured window (null: the browser reports none: not Chromium)
+  longTasks: { n: number; ms: number } | null
 }
 /** a run's frames (?benchtrace=1): each frame's interval (ms), each trace field's value, the render targets drawn
  *  (a bit each, traceRT's order); lost: frames past TRACE_MAX, not kept */
@@ -298,7 +300,17 @@ export async function runBench(
   // per mesh is patched (the thin-instance uploads are counted where src/look/units.ts makes them), each render target
   // and effect keeps its bit on itself once named (no lookup a draw), the counters are indexed by number (trace.ts)
   const rtNames: string[] = []
-  const longHeld = { n: 0, ms: 0 } // long tasks heard of, not yet charged to a recorded frame
+  // long tasks (the browser's, over 50 ms; Chromium's alone): each one's start and duration, counted by each run's
+  // window once it ends (longIn: the observer hears of them late, whatever frame is drawing)
+  const longs: number[] = []
+  const longObserved = PerformanceObserver.supportedEntryTypes?.includes('longtask') ?? false
+  if (longObserved) {
+    const long = new PerformanceObserver(list => {
+      for (const e of list.getEntries()) longs.push(e.startTime, e.duration)
+    })
+    long.observe({ type: 'longtask' })
+    undo.push(() => long.disconnect())
+  }
   const recMs = new Float64Array(TRACE_MAX)
   const recC = new Float64Array(TRACE_MAX * NF)
   const recRt = new Int32Array(TRACE_MAX)
@@ -362,18 +374,6 @@ export async function runBench(
     undo.push(() => {
       eng._createShaderProgram = compile
     })
-    // long tasks (the browser's, over 50 ms): held until the next recorded frame (the observer hears of them after
-    // they end, maybe in a frame not recorded), so none is lost; charged to that frame
-    if (PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
-      const long = new PerformanceObserver(list => {
-        for (const e of list.getEntries()) {
-          longHeld.n++
-          longHeld.ms += e.duration
-        }
-      })
-      long.observe({ type: 'longtask' })
-      undo.push(() => long.disconnect())
-    }
   }
   const seg = (label: string | null) => {
     if (open === label) return
@@ -428,9 +428,6 @@ export async function runBench(
     // (the trace: the counters of the frame that just ended, recorded with its interval, then cleared)
     if (TRACING) {
       if (timing && lastT && !passFrame) {
-        TRACE.c[TR.longTasks] += longHeld.n
-        TRACE.c[TR.longMs] += longHeld.ms
-        longHeld.n = longHeld.ms = 0
         if (recN < TRACE_MAX) {
           recMs[recN] = t - lastT
           recC.set(TRACE.c, recN * NF)
@@ -520,6 +517,9 @@ export async function runBench(
       for (const arm of [...arms, ...[...arms].reverse()]) {
         await arm.apply()
         await scene.whenReadyAsync()
+        // the measured window (its long tasks: longIn)
+        let t0 = 0
+        let t1 = 0
         for (let tries = 0; ; tries++) {
           await frames(10)
           // (the closest zooms are held out over high ground, decision 0051: a camera
@@ -537,10 +537,12 @@ export async function runBench(
           passFrames = 0
           hidden = document.hidden
           // the hold, and at least MIN_FRAMES frames (a software renderer takes seconds a frame)
-          const t0 = performance.now()
+          t0 = performance.now()
+          longs.length = 0
           timing = true
           while (performance.now() - t0 < holdS * 1000 || frameMs.length < MIN_FRAMES) await frames(1)
           timing = false
+          t1 = performance.now()
           if (!hidden) break
           if (tries >= 3) {
             throw new Error(
@@ -548,7 +550,8 @@ export async function runBench(
             )
           }
         }
-        await frames(6) // late query results
+        await frames(6) // late query results (and the long tasks' late reports)
+        const longTasks = longObserved ? longIn(longs, t0, t1) : null
         const gpuMs: Record<string, Stat | null> = {}
         for (const k of ['frame', 'terrain', 'scatter', 'water', 'other', 'post']) {
           const a = timer.results.get(k)
@@ -573,6 +576,7 @@ export async function runBench(
           drawCalls: Math.round(q(draws, 0.5)),
           triangles: Math.round(q(tris, 0.5)),
           segments,
+          longTasks,
         })
       }
       if (pan) scene.onBeforeRenderObservable.remove(pan)
@@ -586,12 +590,12 @@ export async function runBench(
   const r = engine.getRenderingCanvas()
   return {
     tool: 'look-bench',
-    // 9: the trace's simMs, longTasks and longMs (battle threads PR 6's measurement); 8: trace (?benchtrace=1: each
-    // run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is
+    // 9: each run's longTasks (and longTasksObserved), the trace's simMs (battle threads PR 6's measurement); 8:
+    // trace (?benchtrace=1: each run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is
     // measured); 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under
     // the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render
-    // scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a
-    // version-2 file orbits the start
+    // scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits
+    // the start
     version: 9,
     build: __BUILD__,
     date: new Date().toISOString(),
@@ -601,6 +605,7 @@ export async function runBench(
     ...(TRACING ? { traceFields: TRACE_FIELDS, traceRT: rtNames, traceSummary: traceSummary(runs, rtNames) } : {}),
     gpuTimer: timer.available,
     wholeOnly: WHOLE_ONLY,
+    longTasksObserved: longObserved,
     holdS,
     focus,
     pan: PAN ? { metres: PAN_A, mPerS: PAN_V } : null,

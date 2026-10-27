@@ -24,8 +24,6 @@ export const TRACE_FIELDS = [
   'draws', // and draw calls
   'cpuMs', // the frame's JavaScript: from its start to its end (the GPU's time is the interval's rest)
   'simMs', // the page's sim tick (?sim: src/look/sim-armies.ts; the battle's frame, the frame taken, the orders)
-  'longTasks', // long tasks (over 50 ms: the bench's PerformanceObserver), charged to the next recorded frame
-  'longMs', // and their time
 ] as const
 export type TraceField = (typeof TRACE_FIELDS)[number]
 /** each field's index (TRACE.c[TR.sm]: a number, no lookup by name a call) */
@@ -37,3 +35,18 @@ export function tr(i: number, v = 1): void {
 }
 /** the clock for a timed counter: 0 when the trace is off (no call to performance.now()) */
 export const trNow = (): number => (TRACE.on ? performance.now() : 0)
+
+/** The long tasks (`tasks`: start and duration, ms, by pairs: the browser's PerformanceObserver, over 50 ms) that
+ *  began in [t0, t1): how many, and their time. A run counts its own by its window, whenever the browser reports
+ *  them. */
+export function longIn(tasks: readonly number[], t0: number, t1: number): { n: number; ms: number } {
+  let n = 0
+  let ms = 0
+  for (let k = 0; k < tasks.length; k += 2) {
+    if (tasks[k] >= t0 && tasks[k] < t1) {
+      n++
+      ms += tasks[k + 1]
+    }
+  }
+  return { n, ms }
+}
