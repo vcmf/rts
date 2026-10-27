@@ -24,8 +24,9 @@ already has, and uses the lag model the sim already has to bend them.
 **Goals:**
 - **Formed bodies never overlap,** in any shape, moving, turning or changing shape.
 - **Loose bodies pass through friends,** at a cost, and never through enemies.
-- **Nobody in melee gives ground:** a melee holds until one side breaks (decision 0069). The broken one runs as a
-  block, and every enemy that reaches it cuts it down.
+- **Nobody in melee gives ground** (decision 0069): a melee holds until one side breaks, or ends as today when a
+  charger turns away from a square or the two fall out of contact. The broken one runs as a block, and every enemy
+  that reaches it cuts it down.
 - **Nothing is pushed.** A formation is never moved by another's motion.
 - **Deterministic and order-independent:** the reversed visiting order gives the same state, with no ordering
   rule to tune.
@@ -89,7 +90,7 @@ own, and free to take orders after.
 | X-15 | A veteran regiment charges a raw one at the halt, open ground behind it | the melee holds, neither moves; the raw one breaks and runs clear |
 | X-16 | The same, a friendly regiment just behind the raw one | the same; the router passes through its friend, the pursuit stops at the friend |
 | X-17 | The same, an enemy regiment just behind the raw one | the router is held on every way out and cut down where it stands |
-| X-18 | A pair in melee, a second enemy charging the steadier one's flank | the melee holds; the broken one runs clear of the pursuit, never stuck on its foe's ground |
+| X-18 | A pair in melee, a second enemy charging the target's flank | the melee holds; the broken one runs clear of the pursuit, never stuck on its foe's ground |
 | X-19 | As X-15, the veteran 20 m to one side: the lines meet offset | the melee holds over a minute with few in contact, until one breaks |
 | X-20 | Two raw regiments abreast, each charged by a veteran | both melees hold side by side, the line kept, until each breaks |
 | Q-01 | Shift-chained: move, form line, face about, move | each runs in turn |
@@ -215,15 +216,17 @@ an indivisible one. Every other formation is **moving**.
   `docs/systems/melee.md` does with its target today: a charge that strikes a square it was not aimed at takes that
   square's test at the impact (X-03).
 - **A melee holds** (decision 0069; built and tried on C1's claim grid, its plan's step 4, on the C1 branch). A
-  battalion in melee cannot step back or retreat, and nobody gives ground: the melee ends only when one side breaks.
+  battalion in melee cannot step back or retreat, and nobody gives ground: the melee ends when one side breaks, or as
+  today when a charger turns away from a square or the two fall out of contact.
   The research found every game and rule set gives ground in discrete steps or not at all
   (`docs/research/melee-outcomes.md`); both kinds were built on the claim grid (§ Alternatives considered), and the
   owner chose not at all, as Total War does.
   - **A melee pair stands at each other's core:** between them the margin gives way, never the places. They cannot
     pass into each other, which left a router standing on its foe's ground, unable to move off it (X-18).
-  - **A charge reaches its target's core only;** any other enemy's margin stops it, so a pursuit does not ride
-    through the friend behind its router (X-16). A pursuit stops at the router's margin and rides it down from
-    there: the ride-down's reach is longer by the margin.
+  - **A pursuit stops at its router's margin** and rides it down from there, the ride-down's reach longer by the
+    margin; any other body's margin stops it, so it does not ride through the friend behind its router (X-16). A
+    charge strikes the first enemy it reaches (above). The claim grid's prototype lets a charge reach its target's
+    core only and stops it at any other enemy's margin, its order kept: C2 replaces that with the rule above.
   - **A broken battalion runs as a block,** faced about, in the direction fixed at its break, and tries its fan of
     directions when held (`docs/systems/fire-morale.md`). A run held by others for `HELD` seconds counts as halted,
     as at impassable ground; while an enemy is near it goes on trying the fan's directions in turn, since others
@@ -231,9 +234,9 @@ an indivisible one. Every other formation is **moving**.
   - **A router the enemy reaches is cut down:** every enemy in the fight within the ride-down's reach, not in melee
     with another, strikes it at the melee's rate, and it does not fight back, whether it runs, is held or has no
     way left (X-17). There is no surrender.
-  - **The flank shock and fire into a melee** are the unit model's (§ Charges and melee there): a charge into the
-    flank or rear of a battalion already in melee shakes it once; a battalion in melee can be fired on wherever no
-    friend of the shooter stands across the line.
+  - **The flank shock** is the unit model's (§ Charges and melee there): a charge into the flank or rear of a
+    battalion already in melee gives it a further one-off shock. **Fire into a melee** works as today: a battalion in
+    melee can be fired on wherever no friend of the shooter stands across the line, and does not fire back.
 
   The broken battalion is loose (§ Loose bodies), and the pursuit is today's, stopped at its margin.
 
@@ -382,13 +385,12 @@ interruption, so this part is to be playtested.
   own.
 - **Blocked formations wait** until U8; the player has to order them round.
 - **No ground is given in melee:** a line that history would have seen pushed back stands until it breaks. The
-  cut-down of routers is new, and changes the charge calibration (`tools/calibrate-charge.ts`).
+  cut-down of routers is new: on the claim grid only today, it changes the charge calibration
+  (`tools/calibrate-charge.ts`) once C2 makes it the rule everywhere.
 
 ## Open questions
 
 - **Cavalry through its own infantry's intervals:** historically it passed through a line's intervals. Loose for
   the passage, or a passage of lines ordered by the player?
-- **Long melees** come with the infantry assault (U3): whether a draw then needs a cap (both step apart after a
-  while, as Sharp Practice does) is decided there.
 - **The queue's resume timeout** and whether a resumed move should re-check the path (with U8, yes).
 - **Attack-move:** whether it is wanted beside charge and fire at will.
