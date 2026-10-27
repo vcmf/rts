@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-26
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts]
-decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker]
+last_reviewed: 2026-10-27
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts]
+decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step]
 ---
 
 # The look page (Track E, L0)
@@ -670,10 +670,49 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]`,
   `?ushband=<r0>,<r1>` and `?ushgain` (`<close>[,<far>]`, 1 to 3; decision 0067: the full darkening's strength,
   its luminance raised to that power and the channels scaled alike, then spread over the pixel by the coverage as
-  before; the hue kept where no channel is clamped at 0; `shadowShade`, `decalPixel`; by default 2 up close and 1.5
-  far, the owner's, 2026-10-26: `docs/plans/done/shadow-darker.md`; under `?ushadowclose=map` the cross-fade blends
+  before; the hue kept where no channel is clamped at 0; `shadowShade`, `decalPixel`; 0067's 2 up close and 1.5 far
+  (`docs/plans/done/shadow-darker.md`) are 1 since decision 0071, the switch kept; under `?ushadowclose=map` the cross-fade blends
   the map's shadow, which has no gain, against the gained decal) tune it live; `Units.lookNow` is
-  this frame's. The fragment reads the atlas and the ground's shade:
+  this frame's. **The contact** (decision 0071, `SHADOW_CONTACT`, `applyContactParams`; off by default since decision
+  0074, `?ushcontact=1` turns it on): a solid oval under
+  each man's feet, the oval holding his feet at the step he is posed at (`contactOvals` in `src/look/units-data.ts`, a
+  texel a VAT row; the vertex shader reads his step's, turns it with his facing and grows it by the pad, the fragment
+  adds a `length` and a `smoothstep`), whole up close and to the default zoom, fading out over `band` (60 to 100 m:
+  `contactWeight`). It is one more darkness in 0062's coverage rule (`contactFragment`), its core the shade k itself;
+  with the look's gain 1 and soles 1 no part of a soldier's shadow goes darker than the ground's painted cast shadow.
+  The shade is baked turned toward its own grey (`SHADE_DESAT`, `?ushdesat`; `unitshade.frag`), its luminance kept,
+  so the soldiers' shadows take the trees' hue on the grass, not a blue-grey. The oval's material draws its strip past
+  the shape's cell where the oval reaches (`contactReachOf`, `decalStrip`'s reach) and reads no shape outside the cell
+  (`vCell`); the strip's edges hold the oval's whole fade (tested on the figure's every step, 64 facings). Past the
+  band (`contactOvalOn`, `useDecalFor` in `src/look/units.ts`) the decal draws with 0062's own material. The material
+  not drawn is compiled in the background (polled until ready, again after any change of the defines or switch); the
+  switch waits until the wanted one is ready (`decalStep`), so a material not ready is never drawn. The oval's
+  material lifts the decal at least `CONTACT_FLOOR` (3 cm; `decalLift`): its half behind the soles, otherwise unlifted,
+  lay at the ground's sampled height and the terrain hid it there, cutting the oval along the soles. Without the
+  scene's coverage (`?msaa=1|2`) a fragment of the oval's rim fainter than 0.02 is discarded as the sun shadow's faint
+  edge is, so off the oval it draws as 0062's. Under `?ushadowclose=map` the cross-fade blends the map's shadow, which
+  darkens to the ground's own shadow colour, against the decal's desaturated shade: the hue shifts a little across the
+  band. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none), `?ushcontactat=step|stride|root`, `?ushcontactband`,
+  `?ushdesat`; `?ushstep=0&ushcontact=1` is decision 0071's look (main at 1093fdc3, tested to match),
+  `?ushstep=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4` decision 0067's. **The shape per step** (decision 0074, the
+  default; `docs/plans/done/step-shadows.md`, #229): `?ushstep=<steps>[,<facings>[,hold|blend]]` (absent: `8,8`,
+  hold, `STEP_SHADOW`; 0: the averaged shape at every zoom) bakes the shape per clip step bin (k = min(n, steps) bins a clip, each the average of its own steps) and facing,
+  the cells stacked in an atlas of as many blocks as keep it within 4096 texels a side (`stepAtlasLayout`,
+  `shadowShape`'s `steps`); the decal's vertex shader picks his bin from his step (`stepBin`; `blend`: the two bins
+  either side, `stepBlend`, four reads) under `SH_STEPS`, so his shadow steps with his pose at 12 fps. Only the near
+  material reads it (within its band, 60 to 100 m, `NEAR_BAND`, `?ushnearband=<r0>,<r1>`: `nearWeight`, `nearOn`; with
+  or without the oval, whose own band stays `?ushcontactband`); the far
+  one keeps today's averaged shape, a second, small atlas. `?ushfootk=<boost>[,<reach m>]` (`footSharpen`) multiplies
+  the per-step shape's share of the samples at the soles, back to 1 by the reach, so the feet go darker and
+  crisper-edged; the share is capped at 1, so never past the ground's shade k (decision 0071's ceiling). By default
+  3, 0.6 m (`FOOT_SHARP`, the owner's pick); 1 is none. At 100 m the near material gives way to the far one in one
+  frame (a scatter of foot pixels changes: the plan, "The 100 m edge"). A GPU whose texture size cannot hold the
+  per-step atlas (`AtlasTooLarge`) draws the averaged shape at every zoom, with a warning, and sets
+  `Units.stepFallback` (`window.__units.stepFallback`, for the benches and the guard); an explicit `?ushstep` is then
+  an error at load. The shader takes his step as `units.vert` poses him (its `int()` of the clip's first step plus the
+  `mod`), wraps the exact n a GPU's `mod` can return to 0, and takes the bin in integers, clamped (`stepIndex`,
+  `stepBin`): his shadow's step is his figure's on every GPU.
+  The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so
   a formation's overlapping shadows darken each sample once, at every distance (with fewer samples, `?msaa=1|2`, the
