@@ -213,8 +213,8 @@ export function demFileNames(map: unknown): string[] {
 // the attributes a dem source carries, beside id, kind, ref and note
 export const DEM_SOURCE_KEYS = ['file', 'hash', 'credit', 'licence'] as const
 
-/** A `relief.dem` piece's shift from map to file coordinates, from its resolved attributes. */
-export const demShift = (attrs: Record<string, unknown>): { x: number; z: number } => {
+/** A `relief.dem` piece's shift from map to file coordinates, from its resolved attributes (part of `demPlace`). */
+const demShift = (attrs: Record<string, unknown>): { x: number; z: number } => {
   const s = attrs.shift as { x?: number; z?: number } | undefined
   return { x: s?.x ?? 0, z: s?.z ?? 0 }
 }
@@ -228,10 +228,13 @@ export interface DemPlace {
   z: number
   k: number
 }
-/** A `relief.dem` piece's placement in its file, from its resolved attributes. */
+/**
+ * A `relief.dem` piece's placement in its file, from its resolved attributes: its scale 1 when it is none or no number
+ * of at least 1 (the validator names it; the page draws a copy being typed in before it validates).
+ */
 export const demPlace = (attrs: Record<string, unknown>): DemPlace => ({
   ...demShift(attrs),
-  k: typeof attrs.scale === 'number' ? attrs.scale : 1,
+  k: typeof attrs.scale === 'number' && Number.isFinite(attrs.scale) && attrs.scale >= 1 ? attrs.scale : 1,
 })
 /** The file point a map point reads through a placement. */
 export const toFile = (p: DemPlace, x: number, z: number): [number, number] => [p.k * x + p.x, p.k * z + p.z]

@@ -9,7 +9,7 @@
 // tools/dem-import.ts writes it): the points are in that file's frame. The image goes under maps/scans/, which git
 // ignores: a scan is committed only where its source says public domain.
 // Example (the Habsburg First Military Survey over Austerlitz, Chartae Antiquae, docs/research/period-maps.md):
-//   node tools/scan-wms.ts http://www.chartae-antiquae.cz/WMS/Military1/ Military1 49.118 16.737 6 6 \
+//   node tools/scan-wms.ts http://www.chartae-antiquae.cz/WMS/Military1/ Military1 49.1325 16.745 15 15 \
 //     maps/scans/austerlitz-first-survey.jpg --frame cuzk --map maps/austerlitz.map.json
 import fs from 'node:fs'
 import path from 'node:path'

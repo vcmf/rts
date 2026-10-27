@@ -338,14 +338,14 @@ maps/kinds.json ──► checkCatalogue ─┐
       `scan` source's image (under the git-ignored `maps/scans/`) drawn under the outlines at an opacity the panel's
       scan box sets (kept per map and scan in the browser), in each `relief.dem` piece cut from its `frame`'s file
       (clipped to its area, painted in the pieces' priority and id order; a piece of another file on top hides it and
-      takes no click), moved by the piece's `shift`; with no frame, over the map unmoved. Its placement from its control points `[u, v, x, z]`: none, over the extent; one, moved;
+      takes no click), read as the piece reads its file (its `shift`, its `scale`); with no frame, over the map unmoved. Its placement from its control points `[u, v, x, z]`: none, over the extent; one, moved;
       two, a similarity; three, the affine map through them; four or more, a thin-plate spline through every point,
       and back by Newton's method on it (a second spline the other way its first guess), each point's residual where
       the others alone put it, and their root mean square, shown in the panel; two points on one pixel or place keep
       the affine fit of them all, saying so (the page refuses a point where one is). The image is drawn on the GPU
       (`src/app/map/scan-gl.ts`): a 64 × 64 mesh of frame points over it (`scanMesh`), through the view's own matrix
       (`LitView.viewProjection`), so the tilted view's perspective is exact and the near limit is clipped there; each
-      piece is drawn with its shift and composited through its area's clip into an offscreen canvas at full opacity,
+      piece is drawn with its placement and composited through its area's clip into an offscreen canvas at full opacity,
       then onto the view. The image is decoded once into a bitmap; one larger than the GPU's texture limit is not
       shown, saying so. A point is added by two clicks (the editor's capture: Escape drops it, Backspace takes a click back),
       one edit of the map's sources: where a landmark shows on the scan, then where it is on the map; each listed

@@ -31,6 +31,12 @@ describe('a scan placed by its control points', () => {
     expect(f.residuals).toEqual([])
     expect(f.rms).toBeNull()
   })
+  it('lies over the extent as a scale model piece reads it: centred where it reads, k times as large', () => {
+    // a 6 km map read at 2×, 500 m south: the image over 12 km of the frame, centred 500 m south
+    const f = fitScan([], 400, 400, { w: 12000, h: 12000, x: 0, z: -500 })
+    expect(f.toFrame(200, 200)).toEqual([0, -500])
+    expect(f.toFrame(0, 0)).toEqual([-6000, 5500])
+  })
   it('is moved onto one point, at the same scale', () => {
     const f = fitScan([[200, 50, 300, -100]], 400, 100, EXTENT)
     expect(f.toFrame(200, 50)).toEqual([300, -100])

@@ -271,6 +271,12 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
     if (typeof f.source === 'string' && !sources.has(f.source)) {
       bad(id, `${path}.source`, `"${f.source}" is not one of the map's sources (or "invented")`)
     }
+    // a piece's placement in its file is a relief.dem piece's alone: on another kind nothing reads it
+    if (!isDemKind(kind)) {
+      for (const k of ['scale', 'shift']) {
+        if (f[k] !== undefined) bad(id, `${path}.${k}`, `belongs to relief.dem pieces (a ${kind} is not one)`)
+      }
+    }
     if (isDemKind(kind)) {
       if (typeof f.source !== 'string' || !demSources.has(f.source)) {
         bad(id, `${path}.source`, "a relief.dem piece reads its heights from one of the map's dem sources")

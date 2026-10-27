@@ -52,6 +52,17 @@ into the epic; this plan details each as it starts.
 - `test/map-scan.test.ts`: a scale model piece's frame point.
 - `npm test`, `check:data`, the build, the docs check and the page check pass.
 
+## Review rounds (M8a)
+
+- **Round 1** (`/code-review high`): moderate and light only, so the review stops here. Fixed: decision 0070 names
+  what it amends (0061's uniform squeeze, 0063's "scale 1"), and their rows say so; a scan with too few points lies
+  over the extent as its piece reads it (k times as large, centred where it reads), not over a quarter of the map; the
+  panel gives a scale model's residuals in metres of the field and of the map; `scale` and `shift` are refused on
+  kinds that do not read a file; a scale that is no number of at least 1 is read as 1 (the page draws a copy being
+  typed in); the catalogue's and the docs' notes, the scan tool's example; one reader of a piece's placement; the
+  shader's uniforms looked up once. Tests: the height check at scale, the placement's round trip, `scale` on another
+  relief kind, the scan over a scaled extent (each fails without its fix).
+
 ## Results (M8a)
 
 - The landmarks: the service's georeferencing is 260 to 920 m off at them; the spline through all seven puts each on

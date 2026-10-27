@@ -1,7 +1,7 @@
 // A scan drawn on the GPU (docs/plans/done/m7-editor.md M7e, decision 0069): its image as a texture over a mesh of
 // frame points (./scan.ts scanMesh), through the view's own matrix, so the tilted view's perspective is exact and the
-// near limit is clipped by the GPU. Per frame only the matrix and a piece's shift change. The page composites what it
-// draws into each piece's area (./trace.ts).
+// near limit is clipped by the GPU. Per frame only the matrix and a piece's placement (shift, scale) change. The page
+// composites what it draws into each piece's area (./trace.ts).
 import type { ScanMesh } from './scan.ts'
 import type { DemPlace } from '../../map/dem.ts'
 
@@ -38,6 +38,13 @@ export class ScanGl {
   private buffers: { pos: WebGLBuffer; uv: WebGLBuffer; index: WebGLBuffer }
   private image: ImageBitmap | null = null
   private mesh: ScanMesh | null = null
+  /** The program's uniforms, looked up once. */
+  private at: {
+    view: WebGLUniformLocation | null
+    shift: WebGLUniformLocation | null
+    scale: WebGLUniformLocation | null
+    image: WebGLUniformLocation | null
+  }
   /** The largest texture side the GPU takes: a larger scan is shrunk to it when read. */
   readonly maxSide: number
 
@@ -59,6 +66,8 @@ export class ScanGl {
     gl.linkProgram(p)
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) ?? 'program')
     this.program = p
+    const u = (name: string) => gl.getUniformLocation(p, name)
+    this.at = { view: u('view'), shift: u('shift'), scale: u('scale'), image: u('image') }
     this.texture = gl.createTexture()
     this.maxSide = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number
     // one vertex array and its buffers, refilled for each placement (never a new set: they would pile up on the GPU)
@@ -118,12 +127,12 @@ export class ScanGl {
     if (!this.count || !this.image) return
     gl.useProgram(this.program)
     gl.bindVertexArray(this.vao)
-    gl.uniformMatrix4fv(gl.getUniformLocation(this.program, 'view'), false, view)
-    gl.uniform2f(gl.getUniformLocation(this.program, 'shift'), place.x, place.z)
-    gl.uniform1f(gl.getUniformLocation(this.program, 'scale'), place.k)
+    gl.uniformMatrix4fv(this.at.view, false, view)
+    gl.uniform2f(this.at.shift, place.x, place.z)
+    gl.uniform1f(this.at.scale, place.k)
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, this.texture)
-    gl.uniform1i(gl.getUniformLocation(this.program, 'image'), 0)
+    gl.uniform1i(this.at.image, 0)
     gl.drawElements(gl.TRIANGLES, this.count, gl.UNSIGNED_INT, 0)
   }
 }

@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-27
 ---
 
-# 0070 A real field may be fitted to a map as a scale model: distances and heights scaled by one factor
+# 0070 A real field may be fitted to a map as a scale model: distances and heights scaled by one factor (amends 0061 and 0063)
 
 ## Context
 
@@ -19,7 +19,10 @@ the same map, smaller (2026-10-27).
 - A `relief.dem` piece may be read as a **scale model** (`scale`, 1 to 4): a map point (x, z) reads its file at
   (k x + shift.x, k z + shift.z), and its height above the datum is the file's divided by k. Distances and heights
   shrink together, so slopes and sight angles are the field's.
-- What 0061 rules out stays ruled out: distances scaled and heights kept.
+- What 0061 rules out stays ruled out: distances scaled and heights kept. This amends 0061's "what is never done is
+  squeezing a whole real field uniformly": a uniform scale is allowed when the heights scale with it. It amends 0063's
+  "placed at scale 1, never rotated or squeezed": a piece may be a scale model (still never rotated, never squeezed
+  in one direction only). Their other terms stand.
 - **Austerlitz** is one piece at 2×: 12 km of ČÚZK's relief in 6 km, its window 0.5 km south of the crop's centre
   (the owner chose it over 1.5× from side-by-side screenshots, 2026-10-27). The period map's scan follows the piece by
   the same factor (decision 0069).

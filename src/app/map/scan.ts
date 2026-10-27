@@ -237,10 +237,17 @@ export function nearPoint(points: ControlPoint[], p: ControlPoint): number {
  * spline through them (exact at each; a scan's local distortions bent out), each point's residual where the others
  * alone put it. Points in a line are placed by the first two.
  */
-export function fitScan(points: ControlPoint[], w: number, h: number, extent: { w: number; h: number }): ScanFit {
+export function fitScan(
+  points: ControlPoint[],
+  w: number,
+  h: number,
+  extent: { w: number; h: number; x?: number; z?: number },
+): ScanFit {
   const s = Math.min(extent.w / w, extent.h / h)
-  // over the extent, centred: the image's centre on the map's, north up
-  let t: Affine = [s, 0, (-w * s) / 2, 0, -s, (h * s) / 2]
+  // over the extent (in the frame: the map's as its piece reads it), centred on it, north up
+  const cx = extent.x ?? 0
+  const cz = extent.z ?? 0
+  let t: Affine = [s, 0, cx - (w * s) / 2, 0, -s, cz + (h * s) / 2]
   const exact = (how: ScanFit['how'], a: Affine, problem: string | null = null): ScanFit => ({
     ...affinePlacement(a),
     how,

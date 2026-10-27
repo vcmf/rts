@@ -71,7 +71,7 @@
   },
   "kinds": {
     "relief.base": { "shapes": ["none"], "refs": {}, "set": { "height": 0, "width": 400 }, "note": "the gentle ground between the landforms: seeded value noise over the whole extent, ± height at the scale of width (m); flat at the datum with no height" },
-    "relief.dem": { "shapes": ["none", "area"], "refs": {}, "priority": 1, "set": { "edge": 0 }, "note": "real relief (after relief.base, priority 0, so the base's noise never lands on it): a piece of a dem source's heightfield (its file, its credit), placed at true scale and setting the height in its area (the whole extent with no shape), blended into the ground under it over `edge` m; `shift` moves it within the file; the map's datum takes the file's heights above sea level back to the map's frame" },
+    "relief.dem": { "shapes": ["none", "area"], "refs": {}, "priority": 1, "set": { "edge": 0 }, "note": "real relief (after relief.base, priority 0, so the base's noise never lands on it): a piece of a dem source's heightfield (its file, its credit), placed at true scale or as a scale model (`scale`: its heights above the datum divided by it, decision 0070) and setting the height in its area (the whole extent with no shape), blended into the ground under it over `edge` m; `shift` moves it within the file; the map's datum takes the file's heights above sea level back to the map's frame" },
     "relief.hill": { "shapes": ["point", "circle", "ellipse"], "set": { "height": 10, "width": 120, "profile": "round" } },
     "relief.ridge": { "shapes": ["line"], "set": { "height": 15, "width": 200, "profile": "round", "steep": "none" } },
     "relief.valley": { "shapes": ["line"], "set": { "height": -8, "width": 200, "profile": "round", "steep": "none" } },

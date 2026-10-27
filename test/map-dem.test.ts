@@ -6,7 +6,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import type { Catalogue, MapFile } from '../src/map/schema.ts'
 import type { Dem, MapFiles } from '../src/map/dem.ts'
-import { decodeRdem, demHeight, demRange, encodeRdem, sha256 } from '../src/map/dem.ts'
+import { decodeRdem, demHeight, demRange, encodeRdem, sha256, demPlace, toFile, toMap } from '../src/map/dem.ts'
 import { checkFiles, validate } from '../src/map/validate.ts'
 import { apply, heightOf } from '../src/map/apply.ts'
 import { engineMap, layersOf } from '../maps/engine.ts'
@@ -143,6 +143,29 @@ describe('M5: relief.dem in apply', () => {
     const fileSlope = (fileHeight(d, 80, -15) - fileHeight(d, 50, -15)) / 30
     expect(mapSlope).toBeCloseTo(fileSlope, 6)
   })
+  it("checks a scale model's heights as the map has them: the file's above the datum, divided by the scale", () => {
+    // a flat file 200 m above sea level, a datum of -250: 450 m above it, past the height's 400 m at true size
+    const flat = rdem(81, 81, 5, () => 0)
+    const map = base()
+    map.sources![0].hash = sha256(flat)
+    map.datum = -250
+    expect(
+      checkFiles(map, cat, files(flat))
+        .issues.map(i => i.message)
+        .join('; '),
+    ).toMatch(/leave -100/)
+    // at 1.5×, 300 m above the datum: within
+    map.features[0].scale = 1.5
+    expect(checkFiles(map, cat, files(flat)).issues).toEqual([])
+  })
+  it('takes a map point to its file and back through a placement, scaled', () => {
+    const pl = demPlace({ scale: 2.5, shift: { x: 30, z: -40 } })
+    expect(pl).toEqual({ x: 30, z: -40, k: 2.5 })
+    expect(toFile(pl, 10, 4)).toEqual([55, -30])
+    expect(toMap(pl, ...toFile(pl, 10, 4))).toEqual([10, 4])
+    // a scale that is no number of at least 1 (a copy being typed): read as 1, never a division by 0
+    for (const scale of [0, -2, Number.NaN, 'x']) expect(demPlace({ scale }).k).toBe(1)
+  })
   it('an area piece sets its inside, blends over its edge, and leaves the ground beyond it', () => {
     const d = decodeRdem(FILE)
     const map = base()
@@ -239,6 +262,24 @@ describe('M5: what the validator and the file checks refuse', () => {
       /past its file/,
     ],
     ['a scale below 1', m => (m.features[0].scale = 0.5), /at least 1/],
+    [
+      'a scale on another kind of relief',
+      m =>
+        m.features.push({
+          id: 'flat',
+          kind: 'relief.level',
+          area: [
+            [
+              [0, 0],
+              [20, 0],
+              [20, 20],
+            ],
+          ],
+          to: 0,
+          scale: 2,
+        }),
+      /belongs to relief\.dem pieces/,
+    ],
     ['heights out of range above the datum', m => (m.datum = 700), /leave -100/],
   ]
   for (const [what, edit, msg, f] of cases) {
