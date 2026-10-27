@@ -24,10 +24,11 @@ into the epic; this plan details each as it starts.
 |---|---|---|
 | **M8a** | The relief as a scale model (`scale` on `relief.dem`); the heightfield re-imported over the whole field (15 × 15 km); the First Military Survey fetched over it and placed at dated landmarks | The map validates and compiles; a scale model's slopes are its file's; the scan placed at its landmarks, its own error stated |
 | **M8b** | Water: the Goldbach, the Littawa and their brooks, from the relief where the survey shows water; the ponds of 1805 | Each stream in its valley, each pond on its stream; the map compiles in seconds |
-| **M8c** | Ways: the highway, the period roads and tracks; modern works levelled (the motorway, railway embankments, quarries) | Each road where the period map has it, against the relief |
-| **M8d** | Villages: Pratze, Sokolnitz, Telnitz, Kobelnitz, Puntowitz, Blasowitz, Šlapanice, Aujezd, Satschan and the rest, as street villages along their roads, a church each | Each village on its site; houses clear of water and roads |
-| **M8e** | Woods, fields, marsh, vineyards, as the survey shows them | The ground's kinds as the period map shows them, checked by the owner |
-| **M8f** | Zones for the scenario, and the owner's check of the whole | The map validates and reads as the field (the proposal's acceptance) |
+| **M8c** | Ways: the highway, the period roads between the villages, traced off the survey | Each road where the period map has it, on the survey's line |
+| **M8d** | Modern works levelled: the D1 motorway and its interchanges, the railway's embankments and cuts, the quarries | The ground of 1805 under each, no modern work left in the relief |
+| **M8e** | Villages: Pratze, Sokolnitz, Telnitz, Kobelnitz, Puntowitz, Blasowitz, Šlapanice, Aujezd, Satschan and the rest, as street villages along their roads, a church each | Each village on its site; houses clear of water and roads |
+| **M8f** | Woods, fields, marsh, vineyards, as the survey shows them | The ground's kinds as the period map shows them, checked by the owner |
+| **M8g** | Zones for the scenario, and the owner's check of the whole | The map validates and reads as the field (the proposal's acceptance) |
 
 ## M8a in detail
 
@@ -142,17 +143,102 @@ into the epic; this plan details each as it starts.
   sampled every 4 m (a thin pond could cross a long one between samples); a pond's axes come through the fit's local
   map (its singular values), so its long axis stays long; names matched as strings; one comparison in the scan's hot
   loop. Not taken: a far point's search made cheap inside `nearIndexed` itself (every caller in apply passes its
-  cutoff; the generators' and the scatter's distance checks are a question for when M8d places villages). Tests for
+  cutoff; the generators' and the scatter's distance checks are a question for when M8e places villages). Tests for
   each (the thin crossing, the nearest mouth, a vanished id, the framed axes, a map that is not square).
+
+## M8c in detail
+
+- **Ways traced off the survey** (`tools/ways.ts`, its inputs committed in `maps/austerlitz-ways.json`, pure parts
+  tested in `test/map-ways.test.ts`): each road given as a few waypoints in the scan's pixels, a junction other roads
+  meet at by its name (`junctions`: one pixel, so every road through it has the same point). A waypoint or junction off
+  the ink is moved onto the nearest pixel within 4 px costing no more than the cheapest there by 2 (one clicked beside
+  the drawn line; one on ink stays, a faint line too, though darker lettering lies near; one off the image is refused),
+  and between each two the tool
+  takes the cheapest path over the scan, eight neighbours, searched in their box padded by 80 px. A pixel costs 1 on
+  ink, up to 31 on paper: ink is darker than the mean of the 15 px box around it, by 25 levels for the full discount,
+  so the sheets' paper (0.65 to 0.95 of white) does not matter.
+- **Roads meet exactly.** Where two legs come back along each other within 12 px of a plain waypoint (a spur: the
+  waypoint beside the road, 3 px deep or more), both are cut back to where they part, never past a junction (a straight
+  pass and a right-angled corner are left; a turn sharper than about 50° at a plain waypoint is cut at its tip, so one
+  that is needed is given as a junction). A road with an end running
+  along another (within 3 px for more than 8) is cut back to where it leaves it and joined to that road's pixel, the
+  fork, which both keep; the roads are taken in turn against the others as they are left, so of two whose ends run
+  along each other the first listed is cut. A junction on a cut end, and a stretch left in two roads' middles (more
+  than 32 px, 120 m of field, a third road crossing it or not), are errors naming the roads; an end within 4 px of
+  another road and not on it is reported, the junction to be named. The pixel path, which steps between a road's two drawn
+  edges, is evened by a moving mean over 8 px each side between the points it keeps (its ends, its junctions, its
+  forks), placed through the scan's fit (`scanFitOf`, shared with `tools/water.ts`) and the relief piece, simplified
+  to 3 m of field with those points kept, and cut at the map's edge (no piece under 20 m).
+- Only the tool's own features are written again: way kinds with the scan as their source and the tool's note (a way
+  drawn by hand stays, whatever its source; one dropped from the inputs goes). A piece's id already taken, an id listed
+  twice, a kind that is not a way's, a way of fewer than two points or of points all on one pixel are refused.
+- The ways: the Brünn–Olmütz highway (the Kaiserstraße) along the north, the post road from Turas past Sokolnitz to
+  Telnitz (6 m), and the roads between the villages: Telnitz–Satschan–Aujezd, Kobelnitz–Pratze, Šlapanice–Blasowitz,
+  Šlapanice–Puntowitz, Puntowitz–Pratze, Aujezd–Hostieradek–Krenowitz, the Goldbach road from Kobelnitz to Telnitz,
+  Pratze to St Anthony's chapel, Pratze north to Blasowitz and south to Hostieradek. 12 ways. The survey's field
+  tracks are not drawn: the generators' fields bring their own (M8f). Where a road forks off another just before the
+  village it is named for, it runs on into the village alone (30 to 52 m at Kobelnitz, Aujezd and Blasowitz): the
+  village's street, which M8e builds along.
+- The survey, not the relief, gives their line: unlike a stream, a road leaves no mark in a 5 m relief the tool can
+  follow, and the survey's error (562 m RMS between landmarks, M8a) is the price; the villages of M8e are placed on the
+  same scan, so a road and its village keep together.
+
+## Acceptance (M8c)
+
+- `test/map-ways.test.ts`: ink cheap against its own paper whatever its shade, the path along a drawn line rather
+  than across paper, the search box, a waypoint off the image refused, the snap (and a waypoint on its line kept beside
+  darker ink), a spur cut and a junction kept (and never cut past), the fork whichever road is listed first, a
+  stretch traced twice in two middles (and with a third road across it), the evening between kept points; a waypoint
+  off the image refused before it is moved, one on a faint line kept, a straight pass and a corner not cut, a junction
+  on a cut end refused.
+- The map validates and compiles (4.3 to 4.8 s apply in Node); checked by script: every junction and fork meets the
+  road it is on (0.00 m), no turn over 140°, no stretch of one way within 4 m of another; screenshots of the ways, and
+  of the traced lines over the survey, for the owner.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
+## Review rounds (M8c)
+
+- **Round 1** (`/code-review high`): severe. Junctions meant to be shared were typed as nearby pixels in each road,
+  so the roads stopped 9 to 21 m short of each other, and evening and simplifying moved the points they met at; a
+  waypoint on paper beside the line forced a spur into the field (up to 125 m at Kobelnitz); three pairs of roads
+  traced the same drawn stretch twice, 300 to 500 m each; the rerun would have deleted a hand-drawn way citing the
+  survey. Fixed as above (named junctions, the snap, the spur cut, the fork, the kept points, the inputs' ids), and the
+  waypoints are checked against the image, the search skips a node already settled, the scan's fit is one function
+  for both tools, a piece's id is checked against the map's. Three inputs were wrong on the survey and are moved: the
+  Pratze, Telnitz and Kobelnitz junctions off their crossings, Puntowitz's middle waypoint in a field, the road by
+  St Anthony's chapel traced along its lettering (it now ends at the chapel; the survey shows no clear road on to
+  Aujezd). Tests for each.
+- **Round 2**: severe. The spur cut could walk back past a junction kept before it (the junction dropped from the
+  road); forks were found only at a later road's ends, so an earlier road's end along a later one's middle stayed
+  doubled, depending on the inputs' order; a way dropped or renamed in the inputs stayed in the map; the snap moved a
+  waypoint already on its line onto darker ink beside it; inputs were not checked. Fixed as above: the cut stops at the
+  last kept point; every road's pixels are known from the start and each road's ends are cut against all the others,
+  forks pinned by their pixel; a stretch left in two middles is an error; the tool's ways are known by their note; the
+  snap keeps the nearest pixel near the cheapest. Not changed: the half-pixel between the two tools (a way's points
+  are pixel indices, their centres at u + 0.5; a pond's are read as coordinates on the image, which the fit takes as
+  continuous, as the page draws it); the ink's cost over the whole scan (about 300 MB for one run, estimated).
+- **Round 3**: moderate and light only, so the review stops here. Fixed: a waypoint off the image was moved onto it
+  before the check (or failed with a bare error); `forks` could drop a junction on the end it cut (now an error); a
+  T-junction given as a plain waypoint could stop a few pixels off the road it meets (now reported: the tool found one
+  at Šlapanice, named since); the spur cut also cut a straight pass through a plain waypoint (3 px jumps) and shaved
+  right-angled corners; the snap moved a waypoint on a faint line onto darker ink; a run traced twice was broken by a
+  third road crossing it, and the search was a square; a kind that is not a way's and inputs without junctions. Not
+  taken: the ink's cost per leg's box (an estimate, as above); and the review's design point, that the snap, the spur
+  cut, the forks and the doubled check reconcile roads traced one by one, which is where the severe findings of both
+  earlier rounds came from: tracing the network incrementally (pixels already on a road nearly free, a road reaching
+  one sharing it) makes it a graph from the start. Recorded as #227, for when the tracer is next used (M8e's streets).
 
 ## Open questions
 
+- The road tracer reconciles roads traced one by one (#227); tracing the network incrementally would make the forks
+  part of the tracing.
+
 - A long line's far point still searches the whole bucket grid where a caller passes no cutoff (`reach.ts`'s
-  distances, the scatter's edge); M8d's villages keep clear of the streams through them, so it is measured there.
+  distances, the scatter's edge); M8e's villages keep clear of the streams through them, so it is measured there.
 - Some streams still run straight for a few hundred metres across filled flats (former pond basins, the backwater of
   modern embankments) and along today's straightened channels; the brooks of 1805 bent. The language's meander
   generator could bend them, once the joins of tributaries and the ponds on them follow a meandered line.
 
 - Bosenitz (49.191 N) lies just past the map's north edge, the Menitz pond just past its south edge: the window could
   move or the factor grow a little if the scenario needs either.
-- Modern works in the relief (the D1 motorway, railway embankments, quarries) are levelled in M8c with relief edits.
+- Modern works in the relief (the D1 motorway, railway embankments, quarries) are levelled in M8d with relief edits.

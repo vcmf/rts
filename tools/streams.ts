@@ -34,7 +34,7 @@ const DJ = [0, 1, 1, 1, 0, -1, -1, -1]
 const DIST = DI.map((di, k) => Math.hypot(di, DJ[k]))
 
 /** A binary heap of node indices by a key (the priority flood's queue). */
-class Heap {
+export class Heap {
   private ids: number[] = []
   private keys: number[] = []
   get size(): number {
