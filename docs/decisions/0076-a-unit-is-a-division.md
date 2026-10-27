@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-27
 ---
 
-# 0076 A unit stands for a division; a corps is about 6 units
+# 0076 A unit stands for a division: 240 figures for line infantry; a corps is 8–10 units
 
 ## Context
 
@@ -13,21 +13,30 @@ as in Total War: a miniature of the war, not the war at full size.
 
 ## Decision
 
-We will let one unit on the battle map, drawn with about 400 figures (decision 0018), stand for a division, a
-figure a symbol for about 15–20 men. A standard Napoleonic corps is 6 units: 1 skirmisher division (about two
-thirds the size of a line division), 3 line infantry divisions, 1 cavalry division, 1 artillery unit. Corps compositions are ruleset data
-(decision 0015); the engine's word stays neutral. Decision 0018's numbers stand; what a unit means changes.
-The design is `docs/proposals/campaign.md` § The scale.
+We will let one unit on the battle map stand for a division, a figure a symbol for about 25 men, with unit sizes
+after Total War's:
+- line infantry 240 figures, 4–5 a corps;
+- light infantry (skirmishers) 160, 1–2 a corps;
+- light cavalry 80, 1–2 a corps;
+- artillery 4 guns, 1 a corps.
+
+Heavy cavalry is only in the reserve cavalry corps, which only the main army has. Corps compositions and unit
+sizes are ruleset data (decision 0015); the engine's word stays neutral. If accepted, this supersedes decision
+0018's battalion of about 400. The design is `docs/proposals/campaign.md` § The scale.
 
 ## Consequences
 
-Good: about 20 units a side, as now, so the sim, the formations and the figure budgets stay valid; the player
-commands divisions, with less micromanagement and more of the campaign's planning.
+Good: a corps is about 1,300–1,700 figures, so three corps a side fit the 32,000-soldier budget with room to
+spare; the player commands divisions, with more of the campaign's planning; heavy cavalry belongs to big
+battles and its march is a campaign decision.
 
 Bad: figures are symbols, not soldiers; a division forms square as one block; its front is far narrower than a
-real division's. Real strengths live in the data, not in the figures.
+real division's. The fire, morale and casualty values tuned for 400-figure battalions are tuned again. About
+30 units a side need orders to a whole corps.
 
 ## Alternatives considered
 
-Battalions of about 120 figures, one per soldier, and corps of about 1,000 men; the 400-figure battalion of
-decision 0018 with corps of 20 or more battalions, past the budget.
+- 400 figures a unit (decision 0018) and 6 units a corps: fewer, heavier units, less room in the budget.
+- Battalions of about 120 figures, one per soldier, and corps of about 1,000 men.
+- Heavy cavalry in every corps: a shock unit in every battle, but not historical, and it takes away a campaign
+  decision.

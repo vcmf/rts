@@ -56,36 +56,42 @@ where roads can be held and cut.
 
 ### The scale: a unit is a division
 
-The armies are small on purpose: the game is a miniature of the war, not the war at full size. One unit on
-the battle map, drawn with about 400 figures (decision 0018), stands for a **division**; a figure is a symbol
-for about 15–20 men (decision 0076, proposed). Only the meaning changes: about 20 units a side, as the
-vision already has.
+The armies are small on purpose: the game is a miniature of the war, not the war at full size, with unit sizes
+after Total War's. One unit on the battle map stands for a **division**; a figure is a symbol for about 25 men
+(decision 0076, proposed, which would supersede decision 0018's 400-figure battalion).
 
-A standard corps is **6 units**:
-- 1 skirmisher (light infantry) division;
-- 3 line infantry divisions;
-- 1 cavalry division;
-- 1 artillery unit, the corps' guns.
+| Unit | Figures | A corps has |
+|---|---|---|
+| Line infantry | 240 | 4–5 |
+| Light infantry (skirmishers) | 160 | 1–2 |
+| Light cavalry | 80 | 1–2 |
+| Artillery | 4 guns and their crews | 1 |
+
+A corps is **8–10 units, about 1,300–1,700 figures**. Three corps a side make about 25–30 units and
+4,000–5,000 figures a side, inside the 32,000-soldier budget (`docs/plans/active/armies-32k.md`). A line unit of
+240 in three ranks is about 50 m wide, so a corps holds about 500 m of front.
+
+- **Light infantry** is two thirds of a line unit: the British Light Division, the nearest real one, had about
+  3,000–4,000 men against 5,000–7,000 for a line division. Fewer men, but faster, in open order (harder to hit
+  at range, a front as wide as a line unit's), and fragile against cavalry and in melee. A skirmisher unit a
+  corps is a simplification: French corps spread their light infantry through every division, each battalion
+  with its voltigeurs, but a screen in every unit is too complex as game logic (the owner's choice).
+- **Cavalry** is about a tenth of a corps' figures, as in real corps.
+- **4 guns** match the scale: a real corps of about 25,000 men had about 50 guns, about 2 for every 1,000
+  men, and 4 guns for 1,700 figures keeps that ratio. Guns must hit hard; Napoleon's artillery decided battles.
+- **Heavy cavalry is not in a line corps.** As in history, cuirassiers and carabiniers are in the **reserve
+  cavalry corps** (Murat's), which only the main army has. So heavy cavalry is seen in big battles, where the
+  main army and its reserve fight, and bringing it to the right battle is a campaign decision.
 
 The composition is ruleset data (decision 0015), so an era, a nation or a year can change it:
-- **a cavalry corps** (Murat's reserve): cavalry divisions and horse artillery, no infantry;
+- **a reserve cavalry corps**: heavy and light cavalry and horse artillery, no infantry;
 - **a corps short of cavalry** (the French of 1813, after Russia): a weak cavalry unit or none, and so a short
   scouting radius (§ Knowledge);
 - the engine names a "formation unit"; "division" is the Napoleonic ruleset's word.
 
-A whole division of skirmishers is a game simplification: French corps spread their light infantry through
-every division, each line battalion with its own voltigeurs. The British Light Division of the Peninsula is
-the nearest real one. A screen in every division would be more historical, but it is one more behaviour inside
-every unit; one skirmisher unit a corps keeps the game simple (the owner's choice).
-
-The skirmisher division is **smaller than a line division, about two thirds** (about 250–300 figures against
-400): the Light Division had about 3,000–4,000 men against 5,000–7,000 for a line division. Fewer men, but
-faster, in open order (harder to hit at range, a front as wide as a line division's), and fragile against
-cavalry and in melee. Its size is ruleset data.
-
 ### Armies are corps
 
-- An army is a **corps** of a few units (§ The scale), with a maximum size.
+- An army is a **corps** of 8–10 units (§ The scale), with a maximum size.
 - **Speed falls with size**: a small corps marches at the full road speed, a big one slower.
 - **One column a road**: a corps cannot pass another on the same road, it follows its tail. Two corps on one
   road are slow, so an army spreads over parallel roads ("march divided, fight united").
@@ -255,10 +261,15 @@ has to write the same contract.
    time (decision 0009). How campaign hours map to battle minutes, and whether long waits for arrivals are
    played fast.
 9. **Fog on the campaign map**: how wide the estimates are, and how fast they age.
-10. ~~**Skirmishers**: a division of their own, or a screen in every division?~~ A skirmisher division a corps,
-    about two thirds of a line division (§ The scale), the owner's choice: a screen in every division is too complex.
+10. ~~**Skirmishers**: a unit of their own, or a screen in every unit?~~ A light infantry unit (1–2 a corps), the
+    owner's choice: a screen in every unit is too complex (§ The scale).
 11. **Drill at a division's scale**: a division forms square as one block, where a real one formed a square per
     battalion. Does it still read as drill?
+12. **About 30 units a side**: too many to steer one by one? Orders to a whole corps (spread by a simple rule,
+    the player takes back single units where it matters) and AI corps commanders for the corps not watched.
+13. **Retuning**: the fire, morale and casualty values of S1c were tuned for 400-figure battalions; with 240
+    they are tuned again.
+
 
 ## Review
 
