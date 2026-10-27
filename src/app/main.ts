@@ -3,6 +3,7 @@
 // a command through `issue`, and the external log is kept, so a session can be replayed.
 import fieldUrl from '../../data/formation-field.simdata?url'
 import battleUrl from '../../data/battlefield.simdata?url'
+import valleyUrl from '../../data/valley.simdata?url'
 import {
   loadSimData,
   compileRuleset,
@@ -54,7 +55,7 @@ async function main(): Promise<void> {
   const scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
   // the scenario's map, at the version it was placed for
   const mapName = scenario.map ?? DEFAULT_MAP
-  const urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl }
+  const urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl, valley: valleyUrl }
   if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) {
     throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
   }

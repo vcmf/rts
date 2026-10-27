@@ -1,0 +1,19 @@
+{
+  "note": "tools/villages.ts's inputs for maps/austerlitz.map.json (docs/plans/active/m8-austerlitz.md M8e): each village as the stretch of its street where the First Military Survey draws its houses (two pixels on the scan, v down), their number as the survey shows them (the generator places those that fit), and its church where the survey draws one",
+  "piece": "field",
+  "scan": "first-survey",
+  "villages": [
+    {"id": "pratze", "note": "the village of Pratze (Prace), on the plateau's western slope", "from": [2350, 1840], "to": [2385, 1955], "houses": 14, "church": [2378, 1925]},
+    {"id": "kobelnitz", "note": "the village of Kobelnitz (Kobylnice), by its pond on the Goldbach", "from": [1735, 1986], "to": [1782, 1928], "houses": 10, "way": "kobelnitz-street", "church": [1760, 1917]},
+    {"id": "kobelnitz-south", "note": "the south end of Kobelnitz, down the Goldbach road", "from": [1712, 2015], "to": [1680, 2050], "houses": 6, "way": "goldbach-road"},
+    {"id": "telnitz", "note": "the village of Telnitz (Telnice), on the Goldbach", "from": [1670, 2972], "to": [1606, 3083], "houses": 14, "way": "telnitz-street", "church": [1676, 2948]},
+    {"id": "aujezd", "note": "the village of Aujezd (Újezd u Brna), on the Littawa", "from": [2200, 2888], "to": [2176, 2738], "houses": 14, "way": "aujezd-street", "church": [2165, 2812]},
+    {"id": "hostieradek", "note": "the hamlet of Klein Hostieradek (Hostěrádky)", "from": [2455, 2410], "to": [2535, 2475], "houses": 8, "way": "hostieradek-road"},
+    {"id": "blasowitz", "note": "the village of Blasowitz (Blažovice)", "from": [2583, 1148], "to": [2598, 1015], "houses": 12, "way": "blasowitz-street"},
+    {"id": "slapanice", "note": "the town of Šlapanice (Schlapanitz), its main street", "from": [1835, 1248], "to": [1692, 1114], "houses": 18, "way": "slapanice-street", "church": [1760, 1170]},
+    {"id": "puntowitz", "note": "the village of Puntowitz (Ponětovice)", "from": [2005, 1590], "to": [2145, 1612], "houses": 12, "way": "puntowitz-street"},
+    {"id": "sokolnitz", "note": "the village of Sokolnitz (Sokolnice), below its castle", "from": [1405, 2670], "to": [1440, 2790], "houses": 12, "way": "goldbach-road"},
+    {"id": "satschan", "note": "the village of Satschan (Žatčany)", "from": [1960, 3260], "to": [2070, 3200], "houses": 10, "way": "satschan-road"},
+    {"id": "jirschikowitz", "note": "the village of Jirschikowitz (Jiříkovice)", "from": [2322, 1150], "to": [2330, 1038], "houses": 10, "way": "jirschikowitz-street"}
+  ]
+}

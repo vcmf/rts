@@ -1,0 +1,102 @@
+---
+status: active
+last_reviewed: 2026-10-23
+---
+
+# Plan: brigades in the staff map prototype
+
+## Problem
+
+The owner wants infantry to read as in the history channels' maps: a unit drawn as two small bars, one behind the
+other, that merge into one square when it forms square. The prototype draws one block per battalion, laid out as each
+corps' two lines.
+
+## Scope
+
+In `prototypes/staff-map.html` (both styles):
+1. **An infantry unit is a brigade of two battalions** (the owner's choice; historical brigades were mostly two
+   regiments, about four to six battalions, so the count belongs in era data once brigades reach the game, decision
+   0015). The prototype's infantry counts become brigades (two battalions each, rounded up).
+2. **Line and column: two bars**, the first battalion in front, the second behind it with a gap; the gap is a symbol
+   proportion at far zoom and the true distance (30 m in line, 15 m in column) up close, as the blocks' sizes already do.
+   The painted world's figures stand in the same two bodies.
+3. **Square: one hollow square** of both battalions (a regimental square), as now.
+4. Losses, morale hatching, routing, the wear bites and selection apply to the brigade; each bar gets its own bites.
+5. A corps of up to four units in one row (each brigade already two lines deep); more in two rows, as now.
+
+6. **Fire and losses by battalions**: a brigade fires with its two battalions and takes its men's losses over two
+   (morale as one battalion on another), so the battle's balance in men stays as it was.
+
+An odd number of battalions in a corps rounds up to whole brigades (I, II and IV columns each gain one).
+
+Out of scope: brigade counts per army, divisions as a level, battalions acting alone.
+
+## Acceptance
+
+- Screenshots at map, mid and close zoom: brigades as two bars, a formed square merged, the painted world's figures
+  in two bodies.
+- The game runs (orders, fire, squares against cavalry, routs) without errors.
+
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe: the bars' share of the depth followed only the new formation, so they
+  jumped as a brigade changed formation while its outline eased; and the wear bites on the thin bars became dark slabs
+  (a side bite covered a bar's whole depth). Fixed: the share eased from the old formation to the new, and one half
+  toward a square, so the two bars close up and merge into it; the bites on a bar only along its front and back, the
+  unit's count split between its bars. With: fire and losses scaled by battalions (a brigade fires with two and takes
+  its losses over two; cavalry and guns killed twice the men before); one battalion-size helper for the footprint,
+  the figures and the bars; the guns behind a one-row corps; `pathPoly` on the shared polygon helper, `mix3` for the
+  corners. Not taken: "the doc comments break the one-short-comment rule": the owner asked for doc comments; PR
+  #142 replaces that rule (its decision 0054, on the code; see also main's 0052), so this PR merges after #142.
+- **Round 2**: severe: the merge still jumped: the bars had closed only halfway when the hollow square took over at
+  halfway, and leaving a square it split at once into two touching bars. Fixed: into a square the bars close up by
+  halfway; out of one the hollow square holds to halfway, then opens into the bars. With: morale as one battalion on
+  another (only the men scale by battalions; morale had halved against guns and cavalry); a corps of guns alone keeps
+  its old layout; the bars' share blended as lengths, as the block is, so they match the figures while zooming; a
+  brigade's bites dealt out over its bars (the same total as a block); each battalion's volleys smoke; one constant
+  for the brigade's battalions. Left: the bars computed twice a frame (drawUnder and drawBlock; small, unmeasured).
+- **Round 3**: severe again: a brigade leaving a square was drawn as a square while the cavalry already met it as an
+  open target (and one forming square was protected while still drawn as bars); an interrupted change of formation
+  jumped (its progress thrown away). Three rounds, so **redesign**: the drawing and the fighting answered "is it in
+  square?" separately. Now one test, `formedSq` (from halfway through forming until it starts to leave), decides the
+  hollow drawing, the all-round fire, the smoke and the cavalry's charge and melee; leaving a square, the bars start
+  touching and open. A change back to the formation a unit was leaving runs back from where it was. With: the bars cut
+  in world metres and projected (they sat off the figures under perspective); the guards named for their own
+  regiments; the men per unit in one place (`TYPE.men`); the brigade size asserted at two, the geometry being for two.
+  Left: proximity measured to the brigade's front centre (37 to 44 m deep now), the bars computed twice a frame.
+  The round count restarts.
+- **Round 1 after the redesign**: moderate and light only, so the review stops. Fixed: the bars' share on one eased
+  curve both ways (into a square they close over its first half, out of one they open over its second), so a change
+  that runs back no longer jumps; the fire rate by the one in-square test; the figures dealt alternately to the two
+  battalions, so losses no longer move figures across the gap; the plan's scope stating the fire and losses by
+  battalions and the odd counts rounded up; a dead branch. Left: the bars lead the figures slightly while a square
+  forms (they close by halfway, the figures by the end); the bars computed twice a frame and the corner projection
+  written three times (small, unmeasured); proximity to the brigade's front centre.
+- **Sizes in column** (the owner: a column and its gun looked small): the infantry column symbol 80 × 84 m (from
+  62 × 64, each bar its share of that), and a battery's gun icon sized by one fixed length on the ground at the
+  battery (a line battery's symbol frontage far, 30 m close), so every gun is the same size at a zoom, in line or
+  column, whatever its guns or losses (it followed the drawn block, narrow in column).
+- **Arrows** (the owner: the white line down the middle looked odd): the order arrow's light spine removed; the body is
+  a plain fill with its outline.
+- **Review of the late commits** (the column and gun sizes, the arrows): moderate and light only. Fixed: the gun icon
+  sized from the zoom's metres per pixel, not measured on screen along the battery (the camera's tilt made it vary
+  with heading); the old sizing fallback in `drawGun` removed; the design doc's column size and the lit plan's arrow
+  spine brought up to date; the symbols' comment says the column is a little heavier. Open, for the owner: a
+  battery's losses no longer show (its icon no longer shrinks, and guns get no wear).
+- **Guns wear** (the owner: yes, a battery's losses should show): gaps chipped into the gun icon as strength falls (up
+  to six), in a light paper tone (dark bites vanished on a dark gun).
+  - **Round 1** (`/code-review high`): severe: the first version cut the gaps out of the shared ink canvas, which
+    erased whatever lay under the gun (a block, an arrow, a name). Fixed (painted light, not cut), with: the gaps after
+    the outline, so they break it; placed on the barrel, the wheel and the trail (a third had cut empty space); the
+    wear count and the unit's seed shared with the blocks' wear (`wearCount`, `unitRng`); both passes given the unit.
+  - **Round 2**: severe: the light gaps vanished on Austria's light beige guns (a hand-picked tint fails on light or
+    dark fills). Redone as real holes: the gun and its outline are drawn around the gaps (clipped out one at a time),
+    so the map shows through on any army's colour and nothing under the gun is erased; the outline breaks fully. With:
+    the gaps from above starting just over the barrel (most of their depth had been empty space); the gaps cached on
+    the unit per loss step; a routing battery's bites counted as on its gun (6, not the blocks' 10). The soft shadow
+    stays whole (noted).
+  - **Round 3**: moderate and light only, so the review stops. Fixed: the gaps from above cut through the barrel (a
+    shallow one had shown under a pixel at the smallest icon); one `WEAR_MAX` for the gun and a routing battery; the
+    gap cache dropped (render state on the sim's unit, for nothing measurable); one `clipOut` helper for the gun's
+    shadow pass and its gaps; the design doc and comments current. Left: the gun's soft shadow has no gaps; a battery
+    that routs shows its wear as block bites at new places (the count kept).

@@ -1,0 +1,257 @@
+---
+status: active
+last_reviewed: 2026-10-24
+---
+
+# Plan: 150 fps in the staff map prototype
+
+## Problem
+
+The owner asked for a steady 150 fps on an RTX 3080 test machine, that is a mean frame of 6.7 ms or less at every zoom,
+after seeing lag on the map. Two investigations measured where the frame goes.
+
+- **WebGL is cheap:** the terrain, relief and world take about 1 ms of GPU time at map zoom, and under 1 ms at 4K.
+- **The 2D ink canvas is the cost.** Its JavaScript is only about 2 ms, but Chrome then has to rasterise its shapes,
+  which holds back the next frame. Full-screen clips were the worst part (one per slab and per worn block). Smoke drawn
+  off screen came next.
+
+The measuring scripts and the patched copies are kept outside the repository, under the session's scratch folder.
+
+## Scope
+
+In `prototypes/staff-map.html`:
+1. **Slab sides without a clip:** only the sides wound on screen as the top is are drawn; they never overlap it.
+2. **Wear bites without a clip:** they start on the edge and stop before the far edge or a square's hole.
+3. **Small clips:** the gun and its gaps clipped to the icon's area; the arrow's clip limited to its bounds.
+4. **Smoke:** puffs off screen are skipped; each cloud's path is built once and placed by transform; at most 220 live
+   puffs.
+5. **The ink redrawn only when it can have changed:** the camera, the game clock, the pointer, a selection, or anything
+   still animating.
+
+6. **The ink at a pixel ratio of 1** on high-density screens, with WebGL at the screen's ratio. A **sharp ink** toggle (or
+   `?sharp=1`) brings back the full ratio, rounded to a whole number. This is a visible change on HiDPI screens: the
+   marks are a touch softer. It is the default because of the cost measured on the 4K test machine.
+7. **The figures** of each unit built only when the unit changes, into buffers sized once, and skipped when none of the
+   unit's ground can be on screen.
+
+Out of scope, for a next step if the spikes matter: drawing the blocks and the smoke in WebGL (instanced quads).
+
+The prototype's ground end (its painted stand-in world and figures) is a **placeholder**. The game's world is the demo
+map on `main` (the look page, `src/look/`, with real terrain and armies), and the map view is to hand over to it. The
+figure work here only keeps the prototype usable; it is not the world's renderer.
+
+## Acceptance
+
+Mean frame and p95 at map, mid and close zoom, idle and in a fight, against the page before, naming the test machine.
+The look is unchanged, except for the softer ink on HiDPI screens (item 6), which can be switched off.
+
+## Results
+
+Windows Chrome over CDP, D3D11, RTX 3080, 1920×1080, vsync and the frame cap off. Gap between frames, 5–6 s per run. The after
+column is the page after review round 1.
+
+| View | Before: mean / p95 | After: mean / p95 |
+|---|---|---|
+| map, paused | 8.2 / 41 ms | 0.6 / 1 ms |
+| mid, paused | 7.5 / 49 ms | 0.4 / 0.9 ms |
+| close, paused | 5.4 / 8 ms | 0.4 / 0.9 ms |
+| map, 30× (normal play) | — | 4.95 / 23 ms |
+| mid, 30× | — | 5.8 / 40 ms |
+| map, 90× fight | 13.0 / 31 ms | 8.0 / 16 ms |
+| mid, 90× fight | 13.1 / 36 ms | 9.6 / 21 ms |
+| close, 90× fight | 6.7 / 11 ms | 5.1 / 6 ms |
+
+- **Met:** a mean of 150 fps or better in normal play and whenever paused.
+- **Not met:**
+  - a heavy fight at 90× at map and mid zoom (105 to 125 fps);
+  - the spikes: about one frame in 20 over 20 ms while the battle runs.
+
+  Both come from the volume of shapes Chrome draws on the ink canvas. The next step would move the blocks and the
+  smoke into WebGL.
+
+## Test machines
+
+Every result names the machine it was measured on. Add a row when a new configuration is tested.
+
+| Machine | GPU | Screen | Browser | Notes |
+|---|---|---|---|---|
+| A | RTX 3080 | 4K, device pixel ratio 2 (about 45 fps mid, 90 fps close before the 4K fixes) | Chrome, Windows | The headless runs above are on A's GPU, emulating 1920×1080 at ratio 1, or at ratio 2 for the 4K checks. |
+
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe.
+  - Paused, a routing unit that was fading out stopped pulsing: the redraw test skipped units already going.
+  - Without the clip, wear bites could stick past a block's corners.
+  - Capping the smoke removed live puffs halfway through their fade.
+
+  Fixed:
+  - the redraw test takes fading units, and redraws once the web fonts arrive;
+  - bites stay inside their edge's ends and short of the far edge;
+  - when the smoke is full, a new puff is not added, and spent puffs are dropped first, so none vanishes mid-fade.
+
+  With:
+  - the slab shadows' clip bounded to the shadows (the last full-screen clip);
+  - the arrow's clip through `clipOut`;
+  - the dead clip in `damage` removed;
+  - the doc comments for `slabSides` and `signedArea` put back on their functions.
+
+  Measured again: 30×, map 4.95 / mid 5.8 ms mean; 90×, map 8.0 / mid 9.6 ms.
+- **Round 2**: severe. With the smoke full, a new volley showed nothing: no flash, no cloud.
+
+  Fixed: each puff ends on its own life (`smokeLife`), and when the smoke is still full the puff nearest the end of its
+  fade gives way, so new fire always shows.
+
+  With:
+  - wear bites placed between the edge and the opposite edge at the same point; they had assumed a parallelogram, so
+    they stuck out under perspective;
+  - the ink redrawn after any resize, since a resize clears it;
+  - only animations on screen keep the ink redrawing;
+  - late fonts caught on `loadingdone`;
+  - `clipOut`'s doc comment back on it;
+  - the table above corrected to the final measurement.
+  - Found in testing after round 2: the redraw test missed unit changes made while paused (an order, a change of
+    formation, a strength set by hand), so the ink stayed stale. Fixed: a cheap checksum of every unit's drawn state, plus
+    the number of orders, joins the key. Paused map still 0.52 ms, map 30× 4.87 ms.
+- **Round 3**: moderate and light only, so the review stops (three rounds). Fixed:
+  - **Animation flags.** The draw code now marks what is still moving on the frame clock: the routing pulse, a turning
+    block, an arrow's reveal, a fading trail and a live puff on screen. The redraw test checks that flag. It replaces a
+    hand-kept list that could drift from the draw code (square smoke at its drawn face, unseen orders and trails).
+  - **Key stored every frame,** so a return to an earlier state, such as the pointer leaving a unit, is still seen.
+  - **Unit state hashed, not summed,** so two changes cannot cancel out. It includes the previous formation.
+  - **Wear bites:** they start 2 px outside the edge again, so they break the outline, and some cut right through, as
+    before the change.
+
+  Left:
+  - a square's bite depth is measured across the drawn ring, which can differ slightly from the hole under
+    perspective;
+  - the redraw key is a string built each frame.
+
+  Measured again: 30× map 4.86 / mid 5.83 ms mean; 90× map 7.56 / mid 8.28 ms; paused 0.4–0.55 ms. The first run after
+  an edit reads high, at about 4.9 ms paused, while the caches warm up; repeats give 0.53 ms.
+
+## On a 4K test machine
+
+A test run on **machine A** (see Test machines, above) measured about 45 fps at mid zoom and 90 fps close. The measurements above were
+taken at 1920×1080 with a device pixel ratio of 1. The checks below emulate that screen: 1920×1080 CSS pixels at a ratio
+of 2, 30×.
+
+- **The ink at the full pixel ratio:** at 4 times the pixels, Chrome's rasterising of the ink took 14 to 23 ms a frame
+  at close and mid zoom, while the JavaScript stayed at 2.9 ms.
+
+  Fixed: the ink renders at a ratio of 1. A **sharp ink** toggle in the controls (remembered, or `?sharp=1`) brings
+  back the full ratio. WebGL stays at the screen's ratio (`GL_DPR`), since it costs about 1 ms at 4K; so the terrain
+  stays crisp and only the marks are a touch softer.
+
+  | View | Ink at ratio 2 | Ink at ratio 1 |
+  |---|---|---|
+  | close | 14–23 ms | 4.5–4.9 ms |
+  | mid | 14–23 ms | 5.6–5.9 ms |
+  | map | 13–14 ms | 4.6–4.9 ms |
+
+- **The figures:** each unit's soldiers are now built only when the unit changes (`unitFigures`, cached on the unit),
+  copied each frame, and skipped off screen. Before, every soldier of every unit was rebuilt every frame of game time:
+  `updateFigures` took 5.5 ms of JavaScript at R700 to R200.
+
+  | Zoom | Before | After |
+  |---|---|---|
+  | R700 | 10.5–23 ms | 6.7 ms (`updateFigures` 2.4) |
+  | R400 | — | 1.4 ms |
+  | R200 | — | 1.3 ms |
+- **Round 1 of the 4K changes**: severe. Soldiers vanished when a unit's front point was off screen but its wing or rear
+  battalion was still in view; the cull tested only that point. Fixed: a unit is culled only when its whole extent is
+  off screen.
+
+  With:
+  - the figures' key built from the units in view, not the camera matrix, so panning no longer recopies every soldier;
+  - each unit's buffers sized once and refilled in place;
+  - the facing compared to a thousandth, so a finished turn stops rebuilding;
+  - the sharp-ink ratio rounded to a whole number, so the hatching has no seams;
+  - one `inkRatio` rule;
+  - this plan's scope.
+
+  Measured again on machine A's GPU, ratio 2: mid 1.0 ms paused / 6.0 ms at 30×; R700 1.4 / 6.0 ms; R400 1.5 / 1.2 ms.
+  The culling uses the previous frame's camera, one frame late at the edges; the extent margin covers it.
+- **Round 2 of the 4K changes**: severe. Soldiers could still vanish while part of their unit showed: during a change of
+  formation the cull used only the new formation's size, and units near the camera in the tilted view were sized at
+  the target's scale.
+
+  Fixed: a unit is culled only when the four corners of the square holding both its formations all project off the
+  same side of the screen.
+
+  With:
+  - the turning-block redraw flag set only for blocks actually drawn;
+  - no figure work while the figures are hidden;
+  - the zoom's rise taken in steps of 1/50, so zooming does not rebuild every soldier each frame;
+  - the figures' key carrying the units' state, so a change made while paused updates them;
+  - sharp ink rounded up, never below the screen's ratio;
+  - the bite comments corrected;
+  - decision 0056 for the softer default ink;
+  - the 4K rounds moved under this heading.
+- **Round 3 of the 4K changes**: moderate and light only, so the review stops. Fixed:
+  - a routing or turning unit keeps the ink live only while its block is on screen;
+  - the figures' rise is taken in steps of 1/200, under 0.25 m off the ground on the highest hills while zooming;
+  - the redundant easing scan is dropped;
+  - the units' hash is computed once a frame;
+  - a bite through a square breaks its inner outline;
+  - the sharp-ink choice made with the toggle wins over `?sharp=1` on reload.
+
+  Left: the figure cull uses the previous frame's camera, so a fast zoom shows units entering one frame late.
+
+  Machine A's GPU, ratio 2, mean frame:
+
+  | View | Paused | 30× |
+  |---|---|---|
+  | Map | 1.3 ms (first run after an edit 4.9) | 5.05 ms |
+  | Mid | 1.0 ms | 6.1 ms |
+  | R700 | 1.5 ms | 2.9 ms |
+
+## The ink upscaled by EASU
+
+The owner asked for the real map's upscaler on the draft map, for a crisper picture on 4K. That upscaler is FSR 1's
+EASU, decision 0045, the source Babylon ships as `fsr1UpscalePixelShader`.
+
+On a high-density screen the ink, drawn at a ratio of 1 (decision 0056), is now uploaded as a texture each time it is
+redrawn. A last pass draws it over the scene through EASU at the screen's pixels (decision 0059). EASU runs once, on the
+alpha, which carries the marks' edges; the colour is read bilinearly, un-premultiplied, under that alpha. Lit style only. The pass is on only when the ink is smaller than
+the screen; `?upscale=bilinear` keeps the browser's stretch, for comparison. If the pass cannot compile, the canvas
+shows as before.
+
+Measured on machine A's GPU at ratio 2 (crops compared with Chrome's decoder; frame times at 30×):
+
+| Ink | Mean difference from sharp ink | Map / mid frame |
+|---|---|---|
+| EASU, on the alpha (final) | 0.285 | 5.0 / 6.0–6.1 ms |
+| EASU, colour and alpha apart (first try) | 0.27 | 4.8 / 5.8 ms |
+| Bilinear stretch | 0.33 | 4.9 / 6.1–6.2 ms |
+| Sharp (ratio 2) | — | 12.8 / 18–20 ms |
+
+So EASU is about 14 % closer to sharp ink, at no measurable cost (within 0.1 ms, run to run). The gain is modest: EASU sharpens edges, but it cannot
+restore detail drawn at half the pixels.
+- **The EASU pass: round 1** (`/code-review high`): severe. The marks could vanish: the texture was uploaded only on a
+  redrawn frame, and skipped while the pass compiled, so a later frame drew an empty texture. Fixed: a pending upload
+  that only the upload clears. Reproduced and checked: loaded with sharp ink, paused, sharp ink off; the picture matches
+  the normal EASU view to the pixel.
+
+  With:
+  - **EASU once, on the alpha,** with the colour bilinear under it. It had run on colour and on alpha apart: six times
+    the reads, and fringes where the two runs chose different edges.
+  - **Its own decision, 0059.** It had been written into the accepted 0056.
+  - **The woods darken the grained paper,** not the flat paper colour.
+  - The canvas's visibility is written only when it changes.
+  - Redundant lines removed.
+
+  Left: the woods no longer follow the season's crown colour (the owner chose one warm grey). The terrain shader's
+  `uCrown` is now unused in the lit style.
+- **The EASU pass: round 2**: moderate and light only, so the review stops. Fixed:
+  - a pixel EASU covers but the bilinear read does not takes the nearest texel's colour, not black;
+  - the green and blue gathers reuse the red one, so the pass reads 16 texels a pixel by itself, not 48 left for the
+    compiler to merge;
+  - the alpha rewrite checks its count (12 in Babylon 9.29) and keeps the canvas if the shader changed;
+  - the EASU constants in one function, `easuConstants` (Babylon's own is not exported by the CDN build, which the
+    review had assumed: using it turned the pass off, caught by the check below);
+  - a failed compile turns the pass off for good, with no uploads;
+  - `drawInk` marks the upload itself;
+  - decision 0059's cost of the rejected alternative is labelled an estimate;
+  - the woods plan's title and index line say grey.
+
+  Left: the terrain's `uCrown` is still sent every frame, though the lit woods no longer read it.
