@@ -14,7 +14,7 @@ import type { AttrValue, Catalogue, Feature, MapFile, Pt, Ramp } from './schema.
 import { categoryOf, kindChain, kindMeta } from './catalogue.ts'
 import type { Resolved } from './resolve.ts'
 import { resolve } from './resolve.ts'
-import { crossings, inRing, isClosedLine, lineLength, pointAt } from './geometry.ts'
+import { crossings, inRing, isClosedLine, lineLength, pointAt, ringRow } from './geometry.ts'
 import { cos, sin } from '../sim/num.ts'
 import { seedOf } from './seed.ts'
 import type { Clear } from './util.ts'
@@ -264,6 +264,8 @@ interface Field {
   box: [number, number, number, number]
   inside(px: number, pz: number): boolean
   edge(px: number, pz: number): number
+  // `inside` for a row of points (xs[k], z) at once, xs ascending (an area's: its rings' crossings with the row)
+  row?(z: number, xs: ArrayLike<number>): Uint8Array
 }
 function areaField(f: Feature): Field | null {
   if (f.area) {
@@ -279,6 +281,15 @@ function areaField(f: Feature): Field | null {
     return {
       box: [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)],
       inside,
+      row: (z, xs) => {
+        // even-odd over the rings, as `inside`
+        const out = ringRow(rings[0], z, xs)
+        for (let r = 1; r < rings.length; r++) {
+          const h = ringRow(rings[r], z, xs)
+          for (let k = 0; k < xs.length; k++) out[k] ^= h[k]
+        }
+        return out
+      },
       edge: (x, z) => {
         let d = Infinity
         for (const r of closed) d = Math.min(d, nearLine(r, x, z).d)
@@ -720,12 +731,30 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       }
       return e
     }
-    cells(field.box, 0, (i, j, x, z) => {
-      if (field.inside(x, z) && !kept?.masks.some(m => m[j * nx + i] === 1)) {
+    const paint = (i: number, j: number, x: number, z: number) => {
+      if (!kept?.masks.some(m => m[j * nx + i] === 1)) {
         layer[j * nx + i] = k1
         onCell?.(j * nx + i, needEdge ? edgeAt(x, z) : 0)
       }
-    })
+    }
+    if (field.row) {
+      // row by row: an area's inside found from its rings' crossings with the row, not cell by cell
+      const i0 = Math.max(0, Math.floor((field.box[0] - x0) / c))
+      const i1 = Math.min(nx - 1, Math.floor((field.box[2] - x0) / c))
+      const j0 = Math.max(0, Math.floor((field.box[1] - z0) / c))
+      const j1 = Math.min(nz - 1, Math.floor((field.box[3] - z0) / c))
+      // the cells' centres as `cells` gives them
+      const xs = Float64Array.from({ length: Math.max(0, i1 - i0 + 1) }, (_, k) => x0 + (i0 + k + 0.5) * c)
+      for (let j = j0; j <= j1; j++) {
+        const z = z0 + (j + 0.5) * c
+        const inRow = field.row(z, xs)
+        for (let i = i0; i <= i1; i++) if (inRow[i - i0]) paint(i, j, xs[i - i0], z)
+      }
+    } else {
+      cells(field.box, 0, (i, j, x, z) => {
+        if (field.inside(x, z)) paint(i, j, x, z)
+      })
+    }
   }
   // the cells a line takes, by the very rule that paints it (decision 0030), and `offset` m more: an area that keeps
   // off it paints none of them, so no cell is both and none between is left out. One mask per line and offset, made

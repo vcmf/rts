@@ -347,6 +347,62 @@ into the epic; this plan details each as it starts.
   village's street when both its ends are nearest it (the inputs name the street where it matters); a prefilter of
   the obstacles by box (the tool runs in seconds).
 
+## M8f in detail
+
+- **The survey's green** (`tools/ground.ts`, its inputs committed in `maps/austerlitz-ground.json`, pure parts tested
+  in `test/map-ground.test.ts`): a pixel is green where its saturation over a 13 px box exceeds 0.40 at a hue of 48°
+  or greener (the paper's is about 0.31 at 46°, the wash and the woods' about 0.45 at 50 to 60°), on the map only (its
+  centre 3 m inside the edge); corners where two green or two paper pixels meet only diagonally filled, so every ring
+  is simple; the green split into its four-connected regions; regions under 1500 m² of map dropped. At 3.85 m a pixel
+  the woods' stipple and the meadows' wash cannot be told apart by texture (measured: the same spread of value), so a
+  region is a meadow where an input seed falls within 10 px of it, an orchard where it lies inside an orchard drawn
+  round, a wood otherwise. Each region is traced round its pixels' edges (outer ring and holes), simplified by 1.5 px
+  (less where that would cross itself), placed through the scan's fit and the piece. The open land between is the
+  survey's arable: one `ground.field` over the whole map at priority 5, under the meadows (10) and the marsh. Only the
+  tool's features (with the scan as source and its note) are written again.
+- **66 woods, 6 meadows, the pheasantry's orchard, the arable.** The meadows: the brook from Kobelnitz north to
+  Puntowitz, the Pratzen brook's wash, the Goldbach's ribbon below Sokolnitz to Telnitz, the Littawa's meadows by
+  Zbeschau and Schaburnitz. Each named by its middle on the map to 10 m (`wood-e520-s1300`), so a rerun keeps its ids.
+- **Areas painted by rows** (`src/map/geometry.ts` `ringRow`, `src/map/apply.ts`): an area's cells were each tested
+  against every vertex of its rings, which made the 4700 vertices of the woods and meadows cost 17 s of a 22.5 s
+  compile. Each row's crossings with the rings now give its inside cells at once (each crossing's own edge tested for a
+  point on it), with the same sums and the same
+  exact test of a point on an edge as `inRing` (fuzzed against it, `test/map-ring-row.test.ts`): the same cells, every
+  committed hash unchanged; the compile 6.0 s.
+
+## Acceptance (M8f)
+
+- `test/map-ground.test.ts`: the box mean, green against paper, the regions, the corners filled, the rings (a block,
+  a hole, both simple). `test/map-ring-row.test.ts`: rows against `inRing` over random rings, on edges and vertices.
+- The map validates and expands; its compile 6.0 s in Node (measured); every determinism hash and `check:data`
+  unchanged by the painting by rows; the outlines over the survey and the lit view for the owner.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
+## Review rounds (M8f)
+
+- **Round 1** (`/code-review high`): one finding about what is painted, the rest latent (the committed map passed).
+  The arable over the whole map puts its crop under every way, stream and village: the ruleset reads water, ways and
+  buildings before the crop and the draft draws them over it, so play and the draft are unchanged; the note says so,
+  and the gardens between a village's houses are an open question. Fixed: a region's rings are simplified together
+  and kept only where none crosses itself or touches another (a region whose own pixel edges fail is an error, never
+  written); corner pinches removed until none is left, never filling a pixel off the map (clearing one of its ones
+  instead), after the map's edge is cleared; the box's hue a mean of angles weighted by saturation (a red line over
+  paper read as green, black lettering in a wood as paper); a region is an orchard's beds when most of its pixels lie
+  inside the orchard, not its centre; a ring that collapses at one tolerance tries the next; the exact test of a point
+  on an edge only against the edge that made the span. Not taken: one box-mean helper for the three tools and the
+  bake, and one cell-range helper for the cells and the rows (to share when the tracer is reworked, #227). Tests: the
+  pinch off the map, the red line (each fails without its fix).
+
+- **Round 2**: moderate and light only, so the review stops here. Fixed: the pinch removal could fill and clear the
+  same pixel for ever where what it may fill is not convex (none on Austerlitz; a 4 × 3 case found by fuzzing): past
+  64 passes it throws; the woods and meadows were numbered in the scan's order, so any change renumbered the rest:
+  each is named by its middle to 10 m (decision 0067); a meadow seed whose region was dropped (too small, an orchard's)
+  went silently: an error, and two seeds in one region a note (the check found the Pratzen brook's seed in a sliver
+  since the hue's change: moved onto the ribbon); `ringRow`'s doc says its points are on whole centimetres, as the
+  cells' are; the per-block arrays and the unused centre sums gone. Not taken: an active-edge table in `ringRow` and
+  the row path for the other per-cell area loops (the compile is 5 s), the shared box mean (#227). Tests: the cycle
+  (throws, not hangs).
+
 ## Open questions
 
 - The road tracer reconciles roads traced one by one (#227); tracing the network incrementally would make the forks
@@ -370,5 +426,8 @@ into the epic; this plan details each as it starts.
   to run again (a check that each stretch still covers its survey pixels would catch a missed rerun).
 - Sokolnitz castle and pheasantry, the mills and the manor farms are not drawn yet (built.farm areas, with M8f's
   fields).
+- The arable lies under every way, stream and village: a village's gardens and yards between its houses are a
+  crop in the layers (the ruleset and the draft let the buildings and ways win), to draw as yards when the scenario
+  needs it.
 - What is left of modern ground: Slatina's and Brno's built-up edge in the north-west corner, the airport's flat
   apron, Holubice's interchange slip roads, the low banks of today's roads. Light; the owner's check decides.
