@@ -246,6 +246,33 @@ describe('M3a: the line index answers as the scan', () => {
   })
 })
 
+describe('M8b: a search cut off at a distance', () => {
+  it('gives the full answer within it, and an answer beyond it farther, on both searches', () => {
+    const line = meander(
+      [
+        [-1000, 0],
+        [1000, 30],
+      ],
+      6,
+      { amplitude: 40 },
+      5,
+    )
+    const short = line.slice(0, 12) // the scan's path (24 points or fewer)
+    const r = random(7)
+    for (const l of [line, short]) {
+      for (let k = 0; k < 3000; k++) {
+        const x = -1300 + r() * 2600
+        const z = -400 + r() * 800
+        const maxD = [3, 20, 150][k % 3]
+        const full = nearScan(l, x, z)
+        const cut = nearLine(l, x, z, maxD)
+        if (full.d <= maxD) expect(cut).toEqual(full)
+        else expect(cut.d).toBeGreaterThan(maxD)
+      }
+    }
+  })
+})
+
 describe('M3a: crossings (review rounds 1, 2)', () => {
   it('a road vertex exactly on a river segment, in decimal centimetres: a touch is 0, a pass is 1 (2000 cases each)', () => {
     const r = random(11)

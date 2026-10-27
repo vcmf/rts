@@ -23,10 +23,11 @@ into the epic; this plan details each as it starts.
 | PR | What | Acceptance |
 |---|---|---|
 | **M8a** | The relief as a scale model (`scale` on `relief.dem`); the heightfield re-imported over the whole field (15 × 15 km); the First Military Survey fetched over it and placed at dated landmarks | The map validates and compiles; a scale model's slopes are its file's; the scan placed at its landmarks, its own error stated |
-| **M8b** | Water and ways: the Goldbach and its brooks, the ponds of 1805, the highway, the period roads and tracks; modern works levelled (the motorway, railway embankments, quarries) | Each stream in its valley, each road where the period map has it, against the relief |
-| **M8c** | Villages: Pratze, Sokolnitz, Telnitz, Kobelnitz, Puntowitz, Blasowitz, Šlapanice, Aujezd, Satschan and the rest, as street villages along their roads, a church each | Each village on its site; houses clear of water and roads |
-| **M8d** | Woods, fields, marsh, vineyards, as the survey shows them | The ground's kinds as the period map shows them, checked by the owner |
-| **M8e** | Zones for the scenario, and the owner's check of the whole | The map validates and reads as the field (the proposal's acceptance) |
+| **M8b** | Water: the Goldbach, the Littawa and their brooks, from the relief where the survey shows water; the ponds of 1805 | Each stream in its valley, each pond on its stream; the map compiles in seconds |
+| **M8c** | Ways: the highway, the period roads and tracks; modern works levelled (the motorway, railway embankments, quarries) | Each road where the period map has it, against the relief |
+| **M8d** | Villages: Pratze, Sokolnitz, Telnitz, Kobelnitz, Puntowitz, Blasowitz, Šlapanice, Aujezd, Satschan and the rest, as street villages along their roads, a church each | Each village on its site; houses clear of water and roads |
+| **M8e** | Woods, fields, marsh, vineyards, as the survey shows them | The ground's kinds as the period map shows them, checked by the owner |
+| **M8f** | Zones for the scenario, and the owner's check of the whole | The map validates and reads as the field (the proposal's acceptance) |
 
 ## M8a in detail
 
@@ -68,6 +69,35 @@ into the epic; this plan details each as it starts.
 - The landmarks: the service's georeferencing is 260 to 920 m off at them; the spline through all seven puts each on
   its place, and each where the other six put it, 140 to 810 m, 562 m RMS: the survey's own error at a few km between
   points, as on the first crop (M7e).
+
+## M8b in detail
+
+- **Streams from the relief** (`tools/streams.ts`, pure parts tested in `test/map-streams.test.ts`): the window's part
+  of the heightfield, its sinks filled (priority flood with an epsilon), each node draining to its steepest of eight
+  neighbours, the ground draining through each summed; the nodes draining over 0.5 km² traced from each head down,
+  the smaller stream ending where it joins the larger, simplified to 3 m. 85 streams in 2.7 s over the window (2401²
+  nodes). Those draining 2.5 km² or more, cut to the map, become `water.stream` features (`source` the relief):
+  the Goldbach (width 4 m, depth 0.8 m) and the Littawa (8 m, 1.2 m: the window cuts off most of its catchment, so
+  their widths are set, not derived), the brooks of Šlapanice and the Pratzen, and the rest by their catchment (1 to
+  3 m). The relief, not the survey, gives their courses: the survey is off by hundreds of metres, the relief is the
+  ground the map is.
+- **Ponds from the survey**: each read as an ellipse in the scan's pixels (its wash fades to paper inside, so colour
+  cannot find it), placed through the scan's fit, then moved onto the nearest stream of the relief within 400 m of
+  field (the ponds were dammed on them), at 2×. Two lie outside the map. `source` the survey.
+- **The compile of long lines** (`src/map/apply.ts`): `nearLine` takes a cutoff; a long line's box holds far more
+  ground than its reach, and a far point's indexed search crossed the whole grid ring by ring. Each caller that
+  discards what lies beyond its reach (a channel, a painted line, a cut, a ridge's and a scarp's profile) passes it.
+  The answer within the cutoff is the full one (tested on both searches); the layers' hashes are unchanged. The
+  Goldbach alone took 172 s to apply, 1.5 s with it; the whole map 3.4 s.
+
+## Acceptance (M8b)
+
+- `test/map-streams.test.ts`: a sink filled and drained, a valley traced from its head down along its floor, a
+  tributary ending on the stream it joins, the simplification.
+- `test/map-gen.test.ts`: the cut-off search answers as the full one within its cutoff, on both searches.
+- The map validates and compiles (3.4 s apply in Node); screenshots of each stream in its valley and each pond on its
+  stream, against the survey, for the owner.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
 
 ## Open questions
 
