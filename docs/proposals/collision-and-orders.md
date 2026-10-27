@@ -26,7 +26,7 @@ already has, and uses the lag model the sim already has to bend them.
 - **Loose bodies pass through friends,** at a cost, and never through enemies.
 - **Nobody in melee gives ground** (decision 0069): a melee holds until one side breaks, or ends as today when a
   charger turns away from a square or the two fall out of contact. The broken one runs as a block, and every enemy
-  that reaches it cuts it down.
+  that reaches it, but one in melee with another, cuts it down.
 - **Nothing is pushed.** A formation is never moved by another's motion.
 - **Deterministic and order-independent:** the reversed visiting order gives the same state, with no ordering
   rule to tune.
@@ -56,7 +56,7 @@ An overlay, toggled by a key and by layer:
 | **Contacts** | each pair of blocks within the margin, as a line between their nearest points: grey for friends, red for enemies, orange for a charge, a thick line for a melee pair |
 | **Clamps** | per strip, its wanted advance and its allowed one (two arrows), and what clamped it |
 | **Reserved paths** | the ground a change of shape will cross until it ends, hatched |
-| **Statuses** | each formation's status and engagement in a label ("blocked by a friend", "in melee", "blocked by a formation") |
+| **Statuses** | each formation's status and engagement in a label ("blocked by a friend", "an enemy ahead", "in melee") |
 | **Orders** | the queue: waypoint lines coloured by kind of order, an outline of the formation at each destination, a suspended queue greyed |
 
 ### Time
@@ -153,7 +153,8 @@ like that: each piece would get its own allowance. So C1 splits the movement of 
 
 1. **Propose.** After commands, the scenario's plan and the standing behaviour (steps 1–4 of the tick), every
    formation works out its whole motion for the tick from its start-of-tick state, without committing it: the turn,
-   the advance, the lags' catch-up, a wheel, a step back, a recoil, a router's run. The result is a proposed end pose and, for each bin, the displacement of its places from start to end.
+   the advance, the lags' catch-up, a wheel, a recoil, a router's run. The result is a proposed end pose and, for
+   each bin, the displacement of its places from start to end.
    A Face about, the start of a change of shape and a loose body's ask to form are proposals too, marked
    **indivisible**: they are granted whole or not at all.
 2. **Resolve.** Every proposal is checked against every other at once (§ The clamp, § Indivisible proposals).
@@ -225,7 +226,8 @@ an indivisible one. Every other formation is **moving**.
     pass into each other, which left a router standing on its foe's ground, unable to move off it (X-18).
   - **A pursuit stops at its router's margin** and rides it down from there, the ride-down's reach longer by the
     margin; any other body's margin stops it, so it does not ride through the friend behind its router (X-16). A
-    charge strikes the first enemy it reaches (above). The claim grid's prototype lets a charge reach its target's
+    pursuit is not a charge here: "the first enemy it reaches" (above) is the charge's and the assault's, never the
+    pursuit's. The claim grid's prototype lets a charge reach its target's
     core only and stops it at any other enemy's margin, its order kept: C2 replaces that with the rule above.
   - **A broken battalion runs as a block,** faced about, in the direction fixed at its break, and tries its fan of
     directions when held (`docs/systems/fire-morale.md`). A run held by others for `HELD` seconds counts as halted,
