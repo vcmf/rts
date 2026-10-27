@@ -228,6 +228,75 @@ into the epic; this plan details each as it starts.
   earlier rounds came from: tracing the network incrementally (pixels already on a road nearly free, a road reaching
   one sharing it) makes it a graph from the start. Recorded as #227, for when the tracer is next used (M8e's streets).
 
+## M8d in detail
+
+- **`relief.mend`** (decision 0073): a new relief kind that rebuilds the ground under a modern work from the ground
+  around it. Along a line, each node takes the blend across the line of the ground on each side, sampled along the
+  line's chord over its reach at the first ground no mend reaches (a side past the map's edge left out, the other's
+  slope carried across); over an area or a circle, the plane through the ground on its rim that no mend reaches
+  (least squares; its mean where under half the rim is free); blended in over `edge`. Mends are part of the
+  relief (step 1, before the water's levels and the edits read the ground); every mend reads the unmended ground and
+  overlapping ones take their mean, so neither order nor ids matter.
+- **The works traced off the relief** (`tools/works.ts`, its inputs committed in `maps/austerlitz-works.json`, pure
+  parts tested in `test/map-works.test.ts`): each line given as a few waypoints in the map's metres, and between each
+  two the cheapest path over the relief file, a node costing 1 where it stands 1.5 m or more off the mean of the 105 m
+  box around it (an embankment's crest, a cutting's floor) and up to 31 on plain ground; M8c's snap and spur cut; the
+  path evened, simplified to 1 m, any loop it makes cut out and cut at the map's edge. A waypoint is on its work where
+  it stands 0.75 m off its box's mean. Only the tool's mends (known by their note) are written again.
+- The works: the D1 west of Šlapanice with its interchange's ramp and loop, the D1 north of Jirschikowitz and
+  Blasowitz to the Holubice interchange, the Brno–Přerov railway from Šlapanice east, the railway from Křenovice
+  south and west to Újezd, the railway embankment past Sokolnice, the Brno–Veselí railway's low embankment across the
+  south; a walled basin north-east of Šlapanice, a tank farm's bunds, a pit and stepped ground west of Újezd. 11
+  mends, found from the relief less its local mean, before and after compared the same way.
+
+## Acceptance (M8d)
+
+- `test/map-apply.test.ts`: an embankment and a pit in the landforms mended to within 15 cm of the ground without
+  them, the ground past the mend's reach unchanged, a cut listed before a mend landing on the mended ground; a stream
+  across a mended pit levelled on the mended ground; an embankment with a bend mended through it; two overlapping
+  mends the same whichever id sorts first.
+- `test/map-works.test.ts`: the work's cost, a line's loops (a crossing, a spur back to a point) cut out.
+- The map validates and compiles; the mends add 1.0 to 1.6 s to its apply in Node (measured under load). The relief less its
+  local mean, before and after, for the owner's check.
+- `npm test`, `check:data`, the build, the docs check and the page check pass.
+
+## Review rounds (M8d)
+
+- **Round 1** (`/code-review high`): severe. The water's levels were read before the mends, so the Šlapanice brook
+  was carved 9.5 m through the mended "quarry"; at bends, a side sample of a line mend landed on the embankment itself
+  (a thousand nodes each on the D1 and the railways); a mend's rim could read a work another mend had not yet mended,
+  so renaming one changed the ground by up to 1.36 m; the blend's frame came from one segment, so the mended band
+  creased at the traced line's vertices. Fixed (decision 0073 as amended above): mends are part of the relief, before
+  anything reads the ground; every mend reads the unmended ground and never a node any mend reaches (a side walks out
+  to the first free ground), overlapping mends take their mean; the line's direction is the chord over its reach; one
+  sweep per mend keeps what it found. The "quarry" north of Šlapanice is the brook's own incised valley (its floor
+  22 m, the sides 15 to 20 m above, the brook along it): its mend filled a valley of 1805 and is dropped. The relief
+  piece's note says what the mends do; the tool reads the file through `tools/streams.ts`'s `gridOf`. Not taken:
+  `Near` carrying its segment (the chord needs points away from the nearest one anyway). Found on the way, on the epic
+  as it stands: a pond on sloping ground is carved up to 22.8 m into the hill (#230). Tests: the stream, the bend,
+  the order (each fails without its fix).
+- **Round 2**: severe. A line mend whose side met the map's edge took the height clamped at the edge, the
+  embankment's own (the D1 north of Blasowitz runs 5 m inside the north edge); the tool never cut its lines at the
+  map's edge. Fixed: a side that meets the edge, or finds no free ground within 400 m, is left out and the other side's
+  slope is carried across from a second sample; the lines are cut by `mapPieces`. Also: the tool's own "on the work"
+  threshold for the snap (the scan's was looser); ellipses dropped from the mend's shapes (their blend reaches past the
+  box the mend visits; no work needs one); an area whose rim is mostly reached by other mends takes the rim's mean;
+  mends found through the kind chain (a subkind mends); their sums in an order of their content, so a rename changes
+  no bit; the point along a line by halving over its vertices' distances; the free check unrolled. Tests: the edge, a
+  subkind, three overlapping mends renamed (bit for bit), the snap's threshold.
+- **Round 3**: moderate and light only, so the review stops here. Fixed: a slope carried across from one side is
+  carried only from free ground within twice the reach (farther, the side is level: a slope carried over hundreds of
+  metres drifts off the ground); an area's rim is counted on the map and off it, and under a quarter of it free takes
+  its mean (measured: a plane through a quarter of a circle's rim holds the ground's slope better than a mean, by
+  0.7 m; through a sliver it tilts by 1.7 m); the tool refuses two features of one id and a line that gives no piece
+  inside the map (its old mend would go silently). Tests: the sliver of rim (fails without it). Not taken, with why:
+  a node with no free ground on either side keeps the work, unreported (apply has no warnings; the before and after
+  images show it, and none is left on Austerlitz); a spur doubling back almost on itself survives `untangle` (none in
+  the committed lines; the trace's spur cut takes most); the side walks per node rather than per station along the
+  line, and the point along a line beside `pointAt` (measured cost acceptable; to share when the tracer is reworked,
+  #227); the mend marked as an edit and excluded from the edits loop by its kind (one check, in apply only). The
+  slope's limit has no test of its own (it needs a far side with a step in it).
+
 ## Open questions
 
 - The road tracer reconciles roads traced one by one (#227); tracing the network incrementally would make the forks
@@ -241,4 +310,9 @@ into the epic; this plan details each as it starts.
 
 - Bosenitz (49.191 N) lies just past the map's north edge, the Menitz pond just past its south edge: the window could
   move or the factor grow a little if the scenario needs either.
-- Modern works in the relief (the D1 motorway, railway embankments, quarries) are levelled in M8d with relief edits.
+- Mended ground is smooth (decision 0073): a long mend reads as a faintly smoother band; where an embankment crosses
+  a valley, the valley floor is to be drawn back with a landform if the scenario needs it.
+- North of Šlapanice the brook runs in an incised valley 15 to 20 m deep (map metres) with steep, bench-like sides,
+  read at first as a quarry and left as it is: the owner's check, against the survey, says whether quarries cut it.
+- What is left of modern ground: Slatina's and Brno's built-up edge in the north-west corner, the airport's flat
+  apron, Holubice's interchange slip roads, the low banks of today's roads. Light; the owner's check decides.

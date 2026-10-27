@@ -94,3 +94,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0067](0067-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |
 | [0069](0069-scans-placed-in-their-relief-frame.md) | A scan to trace from is a source placed in its relief file's frame, bent through control points, kept out of git | accepted |
 | [0070](0070-a-field-as-a-scale-model.md) | A real field may be fitted to a map as a scale model: distances and heights scaled by one factor (amends 0061 and 0063) | accepted |
+| [0073](0073-modern-works-mended-from-their-surroundings.md) | Modern works are mended out of real relief by rebuilding the ground from what lies around them | accepted |

@@ -81,6 +81,7 @@
     "relief.lower": { "shapes": ["area", "circle", "ellipse"], "edit": true, "set": { "height": 1, "edge": 10 } },
     "relief.level": { "shapes": ["area", "circle", "ellipse"], "edit": true, "set": { "to": 0, "edge": 15 }, "note": "flattens the ground to `to`, blending over `edge`" },
     "relief.cut": { "shapes": ["line", "area"], "edit": true, "set": { "depth": 2, "width": 6, "edge": 2 } },
+    "relief.mend": { "shapes": ["line", "area", "circle"], "edit": true, "set": { "width": 40, "edge": 15 }, "note": "the ground under a modern work (an embankment, a cutting, a pit) rebuilt from the ground around it (decision 0073), as part of the relief, before the water and the edits read it: along a line, `width` m wide, the blend across it of the ground on each side; over an area or a circle, the plane through the ground on its rim (its mean where under half the rim is free); each read from ground no mend reaches; a side of a line past the map's edge or no free ground within 400 m left out; blended in over `edge`" },
     "relief.ditch": { "shapes": ["line"], "edit": true, "set": { "depth": 1.5, "width": 4, "edge": 0.5 }, "note": "at least 2 cells wide (§3.3); its cells are marked for the ruleset's crossing rule" },
 
     "ground.meadow": { "shapes": ["area", "circle", "ellipse"], "priority": 10, "set": { "material": "loam", "moisture": 0.4, "stones": 0.05, "growth": "low", "height": 0.3, "density": 0.9 } },

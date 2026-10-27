@@ -2,6 +2,7 @@
 // laid into the five layers on the 2 m grid over the map's extent, in the engine's fixed order:
 //   1. relief: the base ground (seeded noise) and the landforms (hill, ridge, valley, plateau, scarp), summed, and
 //      real relief (dem), which sets the height in its area;
+//      then the mends of modern works out of real relief (decision 0073);
 //   2. relief edits, now that every shape exists: raise, lower, level, cut, ditch, and a way's cut or raise;
 //   3. water: the cells under streams, rivers and ponds (levels and carving: M2);
 //   4. areas: ground and vegetation;
@@ -473,14 +474,198 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
     }
   }
 
-  // the landforms' ground, before any edit or channel: what water levels are read from, so a cut, a ditch or
+  // 1b. mends (decision 0073): the ground under a modern work rebuilt from the ground around it. They belong to the
+  // relief: the water's levels and the edits read the mended ground. Every mend reads the same ground, the relief
+  // before any mend, and never a node within any mend's reach, so the mends are independent of their order and of
+  // each other; where two overlap, the ground takes their targets' mean by weight. Along a line, each node takes the
+  // blend across the line of the ground on each side, sampled out along the line's direction over its own reach (a
+  // chord, so it turns smoothly through a bend) at the first ground no mend reaches; over an area, the plane through
+  // the ground on its rim (least squares) that no mend reaches.
+  // the mends (a subkind of relief.mend too), summed in an order of their own content, not their ids, so a rename
+  // changes no bit where three or more overlap
+  const isMend = (r: Resolved) => kindChain(cat, r.kind)?.includes('relief.mend') ?? false
+  const content = ({ f, r }: { f: Feature; r: Resolved }) => JSON.stringify([r.kind, f.line, f.area, f.circle, r.attrs])
+  const mends = order
+    .filter(({ r }) => isMend(r))
+    .map(e => ({ ...e, key: content(e) }))
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+  if (mends.length) {
+    const reached = new Uint8Array(H.length)
+    const found = mends.map(({ f, r }) => {
+      const a = r.attrs
+      const edge = num(a.edge, 5)
+      const w2 = f.line ? num(a.width, EDIT_WIDTH) / 2 : 0
+      const field = f.line ? null : areaField(f)
+      const box = f.line ? lineBox(f.line) : field?.box
+      const ks: number[] = []
+      const ws: number[] = []
+      const near: Near[] = []
+      if (box) {
+        nodes(box, w2 + edge + c, (k, x, z) => {
+          let w: number
+          let n: Near | null = null
+          if (f.line) {
+            n = nearLine(f.line, x, z, w2 + edge)
+            w = editWeight(n.d, w2, edge)
+          } else {
+            const e = field!.edge(x, z)
+            w = e >= 0 ? 1 : edge > 0 ? smooth(1 + e / edge) : 0
+          }
+          if (w <= 0) return
+          ks.push(k)
+          ws.push(w)
+          if (n) near.push(n)
+          reached[k] = 1
+        })
+      }
+      return { f, edge, w2, field, box, ks, ws, near }
+    })
+    // a point whose four nodes no mend reaches (its height read from ground as it was)
+    // 1 where the point's four nodes are free, 0 where a mend reaches one of them, −1 off the map
+    const free = (x: number, z: number): number => {
+      const u = (x - x0) / c
+      const v = (z - z0) / c
+      if (u < 0 || v < 0 || u > nx || v > nz) return -1
+      const i = Math.floor(u)
+      const j = Math.floor(v)
+      const i1 = i < nx ? i + 1 : i
+      const j1 = j < nz ? j + 1 : j
+      const w = nx + 1
+      return reached[j * w + i] || reached[j * w + i1] || reached[j1 * w + i] || reached[j1 * w + i1] ? 0 : 1
+    }
+    const sumW = new Float64Array(H.length)
+    const sumWT = new Float64Array(H.length)
+    const maxW = new Float64Array(H.length)
+    for (const m of found) {
+      const target = new Float64Array(m.ks.length)
+      if (m.f.line) {
+        const line = m.f.line
+        const R = m.w2 + m.edge
+        // each vertex's distance along the line, and the point at a distance by halving over them
+        const cum = [0]
+        for (let k = 0; k + 1 < line.length; k++) {
+          const [dx, dz] = [line[k + 1][0] - line[k][0], line[k + 1][1] - line[k][1]]
+          cum.push(cum[k] + Math.sqrt(dx * dx + dz * dz))
+        }
+        const total = cum[cum.length - 1]
+        const at = (s: number): [number, number, number, number] => {
+          let [lo, hi] = [0, line.length - 2]
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1
+            if (cum[mid + 1] >= s) hi = mid
+            else lo = mid + 1
+          }
+          const [a, b] = [line[lo], line[lo + 1]]
+          const L1 = cum[lo + 1] - cum[lo]
+          const u = L1 > 0 ? Math.min(1, Math.max(0, (s - cum[lo]) / L1)) : 0
+          const [dx, dz] = [b[0] - a[0], b[1] - a[1]]
+          return [a[0] + u * dx, a[1] + u * dz, L1 > 0 ? dx / L1 : 1, L1 > 0 ? dz / L1 : 0]
+        }
+        const limit = R + 400 // the farthest a side is looked for, in m
+        // the height on one side: out from p along (ux, uz), from just past the reach to the first free ground; none
+        // when the map's edge or the limit comes first (the ground there is the work's or beyond the map)
+        const side = (px: number, pz: number, ux: number, uz: number): [number, number] | null => {
+          for (let s = R + c; s < limit; s += c) {
+            const fr = free(px + ux * s, pz + uz * s)
+            if (fr < 0) return null
+            if (fr > 0) return [s, heightOf(L, px + ux * s, pz + uz * s, H)]
+          }
+          return null
+        }
+        m.ks.forEach((_k, q) => {
+          const n = m.near[q]
+          const [px, pz, sx, sz] = at(n.along)
+          // the line's direction: the chord over its own reach each way
+          const [ax, az] = at(Math.max(0, n.along - R))
+          const [bx, bz] = at(Math.min(total, n.along + R))
+          const len = Math.sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az))
+          const [tx, tz] = len > 0 ? [(bx - ax) / len, (bz - az) / len] : [sx, sz]
+          // left (the normal (−tz, tx)) and right; one side alone where the other has no free ground, none: as it is
+          const l = side(px, pz, -tz, tx)
+          const r = side(px, pz, tz, -tx)
+          const o = n.over > 0 ? 0 : n.side * n.d
+          if (l && r) target[q] = r[1] + ((l[1] - r[1]) * (o + r[0])) / (l[0] + r[0])
+          else if (l || r) {
+            // one side: its slope across the line, from a second sample R farther out, carried in; level where the
+            // side's free ground lies past twice the reach (a slope carried farther drifts off the ground) or none
+            const [u, v] = l ? [-tz, tx] : [tz, -tx]
+            const [s1, h1] = (l ?? r)!
+            const s2 = s1 + R
+            const far =
+              s1 <= 2 * R && free(px + u * s2, pz + v * s2) > 0 ? heightOf(L, px + u * s2, pz + v * s2, H) : h1
+            // the node's distance out along that side, negative across the line
+            const t = l ? o : -o
+            target[q] = h1 + ((far - h1) * (t - s1)) / (s2 - s1)
+          } else target[q] = NaN
+        })
+      } else if (m.field && m.box) {
+        const field = m.field
+        // the rim: the nodes within two cells past the edge's blend that no mend reaches
+        const [cx, cz] = [(m.box[0] + m.box[2]) / 2, (m.box[1] + m.box[3]) / 2]
+        let [n1, sx, sz, sxx, sxz, szz, sh, sxh, szh] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+        // the whole rim's nodes, on the map or off it (the grid's spacing, unclipped), against which the free ones
+        // (n1) are counted
+        let ring = 0
+        const pad = m.edge + 2 * c
+        for (let gz = Math.floor((m.box[1] - pad - z0) / c); gz <= Math.ceil((m.box[3] + pad - z0) / c); gz++) {
+          for (let gx = Math.floor((m.box[0] - pad - x0) / c); gx <= Math.ceil((m.box[2] + pad - x0) / c); gx++) {
+            const e = field.edge(x0 + gx * c, z0 + gz * c)
+            if (e < -m.edge && e >= -m.edge - 2 * c) ring++
+          }
+        }
+        nodes(m.box, m.edge + 2 * c, (k, x, z) => {
+          const e = field.edge(x, z)
+          if (e >= -m.edge || e < -m.edge - 2 * c || reached[k]) return
+          const [u, v, h] = [x - cx, z - cz, H[k]]
+          n1 += 1
+          sx += u
+          sz += v
+          sxx += u * u
+          sxz += u * v
+          szz += v * v
+          sh += h
+          sxh += u * h
+          szh += v * h
+        })
+        if (n1 === 0) continue
+        // the normal equations by Cramer's rule; a rim in a line, or under a quarter of it free (reached by other
+        // mends or off the map: a plane from a shorter arc tilts on its noise; a quarter still holds the ground's
+        // slope, which a mean loses), takes its mean
+        const det = n1 * (sxx * szz - sxz * sxz) - sx * (sx * szz - sxz * sz) + sz * (sx * sxz - sxx * sz)
+        const flat = Math.abs(det) < 1e-9 * (n1 * sxx * szz + 1) || 4 * n1 < ring
+        const p0 = flat
+          ? sh / n1
+          : (sh * (sxx * szz - sxz * sxz) - sx * (sxh * szz - sxz * szh) + sz * (sxh * sxz - sxx * szh)) / det
+        const gx = flat
+          ? 0
+          : (n1 * (sxh * szz - sxz * szh) - sh * (sx * szz - sxz * sz) + sz * (sx * szh - sxh * sz)) / det
+        const gz = flat
+          ? 0
+          : (n1 * (sxx * szh - sxh * sxz) - sx * (sx * szh - sxh * sz) + sh * (sx * sxz - sxx * sz)) / det
+        m.ks.forEach((k, q) => {
+          const i = k % (nx + 1)
+          const j = (k - i) / (nx + 1)
+          target[q] = p0 + gx * (x0 + i * c - cx) + gz * (z0 + j * c - cz)
+        })
+      } else continue
+      m.ks.forEach((k, q) => {
+        if (Number.isNaN(target[q])) return
+        sumW[k] += m.ws[q]
+        sumWT[k] += m.ws[q] * target[q]
+        if (m.ws[q] > maxW[k]) maxW[k] = m.ws[q]
+      })
+    }
+    for (let k = 0; k < H.length; k++) if (sumW[k] > 0) H[k] += (sumWT[k] / sumW[k] - H[k]) * maxW[k]
+  }
+
+  // the landforms' ground, mended, before any edit or channel: what water levels are read from, so a cut, a ditch or
   // another body of water by a bank cannot pull a stream's level down, whatever the features' order
   const H0 = Float64Array.from(H)
   const hAt = (x: number, z: number) => heightOf(L, x, z, H0)
 
-  // 2. relief edits, in painting order
+  // 2. relief edits, in painting order (the mends are done)
   for (const { f, r } of order) {
-    if (!isEdit(r)) continue
+    if (!isEdit(r) || isMend(r)) continue
     const a = r.attrs
     const k1 = index.get(f.id)!
     const kind = r.kind
