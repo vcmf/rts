@@ -68,4 +68,10 @@ describe("a map's woods and meadows", () => {
     }
     expect(greenOf(rgba, w, h, 2).some(v => v === 1)).toBe(false)
   })
+  it('stops with an error, not a hang, where the fills and clears undo each other', () => {
+    // a 4 × 3 mask and a mask of where it may fill that is not convex: a fill makes a pinch only a clear can undo
+    const m = Uint8Array.from('011011000010'.split(''), Number)
+    const allowed = Uint8Array.from('011011001010'.split(''), Number)
+    expect(() => noPinches(m, 4, 3, allowed)).toThrow(/corner pinches remain/)
+  })
 })

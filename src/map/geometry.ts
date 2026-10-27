@@ -131,8 +131,9 @@ export function inRing(ring: Pt[], p: Pt): boolean {
 
 /**
  * `inRing` for a row of points at once: the points (xs[k], z), xs ascending, 1 where inside. The same answer as
- * `inRing` for each (the same crossings, by the same sums, and the same exact test of a point on an edge), in time for
- * the ring's edges and the row's points rather than their product.
+ * `inRing` for each point on whole centimetres, as the language's are and the cells' centres (the same crossings, by
+ * the same sums, and the same exact test of a point on an edge; `inRing` rounds a point to centimetres for that test),
+ * in time for the ring's edges and the row's points rather than their product.
  */
 export function ringRow(ring: Pt[], z: number, xs: ArrayLike<number>): Uint8Array {
   const n = xs.length

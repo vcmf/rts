@@ -360,9 +360,9 @@ into the epic; this plan details each as it starts.
   (less where that would cross itself), placed through the scan's fit and the piece. The open land between is the
   survey's arable: one `ground.field` over the whole map at priority 5, under the meadows (10) and the marsh. Only the
   tool's features (with the scan as source and its note) are written again.
-- **67 woods, 5 meadows, the pheasantry's orchard, the arable.** The meadows: the brook from Kobelnitz north to
-  Puntowitz, the Pratzen brook's wash, the Littawa's meadows by Zbeschau and Schaburnitz. The Goldbach's ribbon below
-  Sokolnitz the survey stipples like its woods: left a wood (the owner's check).
+- **66 woods, 6 meadows, the pheasantry's orchard, the arable.** The meadows: the brook from Kobelnitz north to
+  Puntowitz, the Pratzen brook's wash, the Goldbach's ribbon below Sokolnitz to Telnitz, the Littawa's meadows by
+  Zbeschau and Schaburnitz. Each named by its middle on the map to 10 m (`wood-e520-s1300`), so a rerun keeps its ids.
 - **Areas painted by rows** (`src/map/geometry.ts` `ringRow`, `src/map/apply.ts`): an area's cells were each tested
   against every vertex of its rings, which made the 4700 vertices of the woods and meadows cost 17 s of a 22.5 s
   compile. Each row's crossings with the rings now give its inside cells at once (each crossing's own edge tested for a
@@ -392,6 +392,16 @@ into the epic; this plan details each as it starts.
   on an edge only against the edge that made the span. Not taken: one box-mean helper for the three tools and the
   bake, and one cell-range helper for the cells and the rows (to share when the tracer is reworked, #227). Tests: the
   pinch off the map, the red line (each fails without its fix).
+
+- **Round 2**: moderate and light only, so the review stops here. Fixed: the pinch removal could fill and clear the
+  same pixel for ever where what it may fill is not convex (none on Austerlitz; a 4 × 3 case found by fuzzing): past
+  64 passes it throws; the woods and meadows were numbered in the scan's order, so any change renumbered the rest:
+  each is named by its middle to 10 m (decision 0067); a meadow seed whose region was dropped (too small, an orchard's)
+  went silently: an error, and two seeds in one region a note (the check found the Pratzen brook's seed in a sliver
+  since the hue's change: moved onto the ribbon); `ringRow`'s doc says its points are on whole centimetres, as the
+  cells' are; the per-block arrays and the unused centre sums gone. Not taken: an active-edge table in `ringRow` and
+  the row path for the other per-cell area loops (the compile is 5 s), the shared box mean (#227). Tests: the cycle
+  (throws, not hangs).
 
 ## Open questions
 

@@ -88,24 +88,28 @@ export function greenOf(rgba: Uint8Array, w: number, h: number, r = 6, sat = 0.4
 /**
  * A mask with no two of its ones (or of its zeros) touching only at a corner: in every 2 × 2 block of ones on one
  * diagonal and zeros on the other, a zero becomes a one where `allowed` lets it, else a one becomes a zero (each
- * change only removes pinches, so it ends). Such a corner is where a traced ring would meet itself.
+ * where `allowed` is convex, every change only removes pinches and it ends; else it may not, and past a number of
+ * passes it throws). Such a corner is where a traced ring would meet itself.
  */
+const PASSES = 64
+
 export function noPinches(mask: Uint8Array, w: number, h: number, allowed?: Uint8Array): Uint8Array {
   const m = mask.slice()
   const ok = (k: number) => !allowed || allowed[k] === 1
-  for (let changed = true; changed;) {
+  for (let pass = 0, changed = true; changed; pass++) {
+    // a fill and a clear can undo each other where `allowed` is not convex: past PASSES, an error, not a hang
+    if (pass === PASSES) throw new Error(`corner pinches remain after ${PASSES} passes`)
     changed = false
     for (let y = 0; y + 1 < h; y++) {
       for (let x = 0; x + 1 < w; x++) {
-        const k = [y * w + x, y * w + x + 1, (y + 1) * w + x, (y + 1) * w + x + 1]
-        const [a, b, c, d] = k.map(i => m[i])
+        const i = y * w + x
+        const [a, b, c, d] = [m[i], m[i + 1], m[i + w], m[i + w + 1]]
         if (a === d && b === c && a !== b) {
-          // the zeros of the block, and its ones
-          const zeros = a ? [k[1], k[2]] : [k[0], k[3]]
-          const ones = a ? [k[0], k[3]] : [k[1], k[2]]
-          const fill = zeros.find(ok)
-          if (fill !== undefined) m[fill] = 1
-          else m[ones[0]] = 0
+          // a zero of the block becomes a one where allowed, else a one becomes a zero
+          const [z0, z1, o0] = a ? [i + 1, i + w, i] : [i, i + w + 1, i + 1]
+          if (ok(z0)) m[z0] = 1
+          else if (ok(z1)) m[z1] = 1
+          else m[o0] = 0
           changed = true
         }
       }
@@ -219,18 +223,16 @@ function main(): void {
   }
   // no corner pinches, never filling a pixel off the map
   const { label, sizes } = regions(noPinches(green, w, h, onMap), w, h)
-  // each region's box and centre, in one pass
-  const box = sizes.map(() => [w, h, -1, -1, 0, 0])
+  // each region's box, in one pass
+  const box = sizes.map(() => [w, h, -1, -1])
   for (let k = 0; k < w * h; k++) {
     const n = label[k]
     if (!n) continue
     const [x, y] = [k % w, (k - (k % w)) / w]
     const b = box[n]
     ;[b[0], b[1], b[2], b[3]] = [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)]
-    b[4] += x
-    b[5] += y
   }
-  // each region's kind by the seeds in it; a region centred in an orchard drawn round is dropped
+  // each region's kind by the seeds near it
   const kindOf = new Map<number, string>()
   // a seed takes the region nearest it within 10 px (a ribbon of wash is a few pixels wide); one near none is an error
   const seed = ([u, v]: Pt): number => {
@@ -246,7 +248,13 @@ function main(): void {
     if (!best) throw new Error(`no green within 10 px of the meadow seed ${u}, ${v}`)
     return best
   }
-  for (const p of ins.meadows) kindOf.set(seed(p), 'ground.meadow')
+  const seeded = new Map<number, Pt>()
+  for (const p of ins.meadows) {
+    const n = seed(p)
+    if (seeded.has(n)) console.log(`note: meadow seeds ${p.join(', ')} and ${seeded.get(n)!.join(', ')} share a region`)
+    seeded.set(n, p)
+    kindOf.set(n, 'ground.meadow')
+  }
   // a region mostly (over half its pixels) inside an orchard drawn round is the orchard's beds
   const inOrchard = (n: number) => {
     if (!ins.orchards.length) return false
@@ -267,7 +275,12 @@ function main(): void {
   const features: Record<string, unknown>[] = []
   const count = new Map<string, number>()
   for (let n = 1; n < sizes.length; n++) {
-    if (sizes[n] * pxArea < ins.minArea || inOrchard(n)) continue
+    if (sizes[n] * pxArea < ins.minArea || inOrchard(n)) {
+      if (seeded.has(n)) {
+        throw new Error(`the meadow seeded at ${seeded.get(n)!.join(', ')} is too small or an orchard's`)
+      }
+      continue
+    }
     // its rings: the outer and its holes (holes under the size limit filled)
     const [x0, y0, x1, y1] = box[n]
     const bw = x1 - x0 + 1
@@ -296,9 +309,14 @@ function main(): void {
     const area = traced.map((r, i) => (ringArea2(r) > 0 === (i === 0) ? r : r.slice().reverse()))
     const kind = kindOf.get(n) ?? 'veg.wood'
     const stem = kind.split('.')[1]
-    const k = (count.get(stem) ?? 0) + 1
-    count.set(stem, k)
-    features.push({ id: `${stem}${k}`, kind, source: ins.scan, area, note: `the survey's ${stem}${NOTE}` })
+    count.set(stem, (count.get(stem) ?? 0) + 1)
+    // named by its outer ring's middle on the map, to 10 m: the same region keeps its id from run to run (decision
+    // 0067), whatever else changes
+    const [cx, cz] = area[0].reduce(([a, b], p) => [a + p[0] / area[0].length, b + p[1] / area[0].length], [0, 0])
+    const at = (v: number, pos: string, neg: string) => `${v < 0 ? neg : pos}${Math.abs(Math.round(v / 10) * 10)}`
+    let id = `${stem}-${at(cx, 'e', 'w')}-${at(cz, 'n', 's')}`
+    for (let k = 2; features.some(f => f.id === id); k++) id = `${stem}-${at(cx, 'e', 'w')}-${at(cz, 'n', 's')}-${k}`
+    features.push({ id, kind, source: ins.scan, area, note: `the survey's ${stem}${NOTE}` })
   }
   // the orchards, as drawn round
   for (const o of ins.orchards) {
