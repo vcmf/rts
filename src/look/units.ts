@@ -55,6 +55,7 @@ import {
   type ShadowContact,
   type ShadowLook,
   type ShapeBox,
+  type StepShadow,
 } from './shadow-look.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
 import {
@@ -345,6 +346,11 @@ export class Units {
   /** the contact shadow under each man's feet (decision 0071; SHADOW_CONTACT, ?ushcontact: applyContactParams), or
    *  null: none. Read once, when the shadows' material is made */
   contact: ShadowContact | null = { ...SHADOW_CONTACT }
+  /** the shape baked per animation step (?ushstep: applyStepParams, docs/plans/active/step-shadows.md), or null:
+   *  today's, averaged over each clip. Read once, when the shadows' material is made */
+  stepShadow: StepShadow | null = null
+  /** the shape atlas's size (texels, RG8 with mips), once made */
+  shapeSize: [number, number] = [0, 0]
   private contactReach = 0 // m: how far the contact reaches from a man's root (the strip holds it: decalStrip)
   private contactW = 0 // the contact's weight this frame (contactWeight, by the camera's distance)
   private contactWSet = NaN // and the one last given to the material (setDecalLook)
@@ -402,6 +408,8 @@ export class Units {
   private farScaleV = new Vector2(1, 1)
   /** ms the simple shadow's shape took to make (shadowShape, at load) */
   shapeMs = 0
+  /** ms the shape and its texture took (shadowShape, the upload and its mips asked for: the GPU may finish later) */
+  shapeTexMs = 0
 
   /** receivers: the painted materials the figures' shadows fall on (the ground and the grass); the page's clock */
   private readonly scene: Scene
@@ -1148,7 +1156,7 @@ export class Units {
     this.depthMat.setFloat('uVATStep', step)
     this.depthVatMat.setFloat('uVATStep', step)
     this.depthProxyMat.setFloat('uVATStep', step)
-    if (this.decal === this.decalNear) this.decal?.setFloat('uVATStep', step)
+    if (this.decal === this.decalNear || this.stepShadow) this.decal?.setFloat('uVATStep', step)
     // (stepped with the figures under ?smoothmove=0)
     if (decalOn) {
       this.decal?.setFloat('uStepFrac', this.smooth ? this.stepFrac : 0)
@@ -1607,12 +1615,16 @@ export class Units {
     }
     const t0 = performance.now()
     const d = this.data
+    const ss = this.stepShadow
     const shape = shadowShape(d, d.lods[this.farLod].name, [SUN.x, SUN.y, SUN.z], ROLES, {
-      facings: SHAPE_FACINGS,
+      facings: ss?.facings ?? SHAPE_FACINGS,
       soft: SOFT_BLUR,
       posed: this.posedFar,
+      steps: ss?.steps ?? 0,
+      maxSize: Math.min(4096, this.scene.getEngine().getCaps().maxTextureSize),
     })
     this.shapeMs = performance.now() - t0
+    this.shapeSize = [shape.width, shape.height]
     const tex = new RawTexture(
       shape.data,
       shape.width,
@@ -1625,6 +1637,7 @@ export class Units {
       Constants.TEXTURETYPE_UNSIGNED_BYTE,
     )
     tex.name = 'figureShadowShape'
+    this.shapeTexMs = performance.now() - t0
     tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
     // the ground's height under each vertex: the meadow map's (bound to every painted material, src/look/meadow.ts), or
     // without one the heightfield's, sampled here over the tile (GROUND_N² texels)
@@ -1672,11 +1685,15 @@ export class Units {
           'uRows',
           'uShContact',
           'uVATStep',
+          'uStepBins',
+          'uStepRow',
+          'uStepRPB',
         ],
         samplers: ['uShapeTex', 'uUnitShade', 'uContactTex'],
         alpha: true,
         defines: [
-          `#define FACINGS ${SHAPE_FACINGS.toFixed(1)}`,
+          `#define FACINGS ${shape.facings.toFixed(1)}`,
+          ...(ss ? ['#define SH_STEPS', ...(ss.blend ? ['#define SH_STEP_BLEND'] : [])] : []),
           `#define DECAL_ALONG ${DECAL_ALONG.toFixed(1)}`,
           `#define LIFT_RAMP ${LIFT_RAMP.toFixed(2)}`,
           `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`,
@@ -1705,6 +1722,12 @@ export class Units {
       m.setVector2('uShapeSize', new Vector2(shape.width, shape.height))
       m.setVector2('uShapeTexel', new Vector2(1 / shape.texel, shape.margin))
       m.setVector2('uShDir', new Vector2(...shape.dir))
+      if (ss) {
+        m.setVector4('uStepBins', new Vector4(...shape.bins))
+        m.setVector4('uStepRow', new Vector4(...shape.binRow))
+        m.setFloat('uStepRPB', shape.rowsPerBlock)
+        m.setFloat('uVATStep', 0)
+      }
       m.setFloat('uStepFrac', 0)
       m.setVector2('uFarScale', this.farScaleV)
       m.setFloat('uDecalLift', this.lift)

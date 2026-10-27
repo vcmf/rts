@@ -57,6 +57,7 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import {
   SHADOW_LOOK,
   applyContactParams,
+  applyStepParams,
   applyLookParams,
   shadeDesat,
   shadowModes,
@@ -578,6 +579,9 @@ const shadowMode = shadowModes(params)
 const shadowLook = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
 const ushBand = applyLookParams(params, shadowLook.close, shadowLook.far).band
 const ushContact = applyContactParams(params)
+// the shape baked per animation step (a test, docs/plans/active/step-shadows.md): ?ushstep=<steps a clip>[,<facings>
+// [,hold|blend]] (0 or absent: the shape averaged over each clip, as before)
+const ushStep = applyStepParams(params)
 const ushDesat = shadeDesat(params)
 const uShadowSwitch = params.get('ushadowswitch')
 const smoothMove = bit('smoothmove')
@@ -710,6 +714,7 @@ if (armiesParam !== null) {
   units.simpleClose = shadowMode.simpleClose
   units.look = shadowLook
   units.contact = ushContact
+  units.stepShadow = ushStep
   if (ushBand) units.lookBand = ushBand
   if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   units.groundMap = meadow !== null

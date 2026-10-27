@@ -1,0 +1,211 @@
+// The soldiers' simple shadows baked per animation step (?ushstep, docs/plans/active/step-shadows.md, #229): the bin a
+// man's step draws (stepBin, and unitdecal.vert's copy of it), the blend's two bins (stepBlend), the atlas's layout and
+// size (stepAtlasLayout, shadowShape's steps), the page's switch (applyStepParams), and the feet on the shape.
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import { applyStepParams } from '../src/look/shadow-look.ts'
+import {
+  binSteps,
+  decodeUnits,
+  posedVertices,
+  shadowShape,
+  stepAtlasLayout,
+  stepBin,
+  stepBlend,
+} from '../src/look/units-data.ts'
+
+const f32 = Math.fround
+
+describe('the bin a step draws (stepBin)', () => {
+  it('puts every step of a clip in the bin that holds it, every bin used, for every clip length and bin count', () => {
+    for (let n = 1; n <= 200; n++) {
+      for (let k = 1; k <= Math.min(n, 32); k++) {
+        const seen = new Set<number>()
+        for (let i = 0; i < n; i++) {
+          const j = stepBin(i, n, k)
+          expect(Math.floor((j * n) / k)).toBeLessThanOrEqual(i)
+          expect(i).toBeLessThan(Math.floor(((j + 1) * n) / k))
+          seen.add(j)
+        }
+        expect(seen.size).toBe(k)
+      }
+    }
+  })
+  it('gives the same bin in float32, as the shader computes it', () => {
+    for (let n = 1; n <= 200; n++) {
+      for (let k = 1; k <= Math.min(n, 32); k++) {
+        for (let i = 0; i < n; i++) {
+          expect(Math.ceil(f32(f32(f32(i + 1) * k) / n)) - 1).toBe(stepBin(i, n, k))
+        }
+      }
+    }
+  })
+  it('bakes each bin from its own steps, at most `samples` of them', () => {
+    expect(binSteps(49, 16, 8, 3, 4)).toEqual([55, 56])
+    expect(binSteps(75, 166, 8, 0, 4)).toEqual([75, 80, 85, 90])
+    for (let j = 0; j < 8; j++) for (const s of binSteps(75, 166, 8, j, 4)) expect(stepBin(s - 75, 166, 8)).toBe(j)
+  })
+})
+
+describe("the blend's two bins (stepBlend)", () => {
+  it('mixes two neighbouring bins round the loop, the share in [0, 1); a bin a step is that step alone', () => {
+    for (const [n, k] of [
+      [16, 8],
+      [166, 8],
+      [8, 8],
+      [48, 12],
+    ]) {
+      for (let i = 0; i < n; i++) {
+        const b = stepBlend(i, n, k)
+        expect(b.j1).toBe((b.j0 + 1) % k)
+        expect(b.s).toBeGreaterThanOrEqual(0)
+        expect(b.s).toBeLessThan(1)
+        if (n === k) expect([b.j0, b.s]).toEqual([i, 0])
+      }
+    }
+  })
+})
+
+describe("the step atlas's layout (stepAtlasLayout)", () => {
+  it('holds every row within the size limit, as near square as it can', () => {
+    const l = stepAtlasLayout(112, 160, 16, 32)
+    expect(l).toEqual({ blocks: 2, rowsPerBlock: 16, width: 3584, height: 2560 })
+    for (const [rows, f] of [
+      [1, 16],
+      [4, 16],
+      [32, 16],
+      [44, 16],
+      [32, 8],
+      [64, 8],
+      [100, 8],
+    ]) {
+      const m = stepAtlasLayout(112, 160, f, rows)
+      expect(m.blocks * m.rowsPerBlock).toBeGreaterThanOrEqual(rows)
+      expect(Math.max(m.width, m.height)).toBeLessThanOrEqual(4096)
+    }
+  })
+  it('refuses an atlas that cannot fit', () => {
+    expect(() => stepAtlasLayout(112, 160, 16, 200)).toThrow(/exceed/)
+    expect(() => stepAtlasLayout(112, 160, 16, 32, 2048)).toThrow(/exceed/)
+  })
+})
+
+describe('the page switch (?ushstep: applyStepParams)', () => {
+  const q = (s: string) => applyStepParams(new URLSearchParams(s))
+  it('reads steps, facings and the mode; 0 or absent is today', () => {
+    expect(q('')).toBeNull()
+    expect(q('ushstep=0')).toBeNull()
+    expect(q('ushstep=8')).toEqual({ steps: 8, facings: 16, blend: false })
+    expect(q('ushstep=4,8,blend')).toEqual({ steps: 4, facings: 8, blend: true })
+    expect(q('ushstep=12,16,hold')).toEqual({ steps: 12, facings: 16, blend: false })
+  })
+  it('refuses malformed values', () => {
+    for (const v of ['x', '8,', '8,2', '33', '8,16,mix', '-1', '8.5', '8,16,hold,1']) {
+      expect(() => q(`ushstep=${v}`), v).toThrow(/ushstep/)
+    }
+  })
+})
+
+describe('the shape baked per step (shadowShape steps)', () => {
+  const d = decodeUnits(
+    new Uint8Array(readFileSync(new URL('../data/figures/fr-line-infantry.unitdata', import.meta.url))).buffer,
+  )
+  const lod = d.lods[d.lods.length - 1].name
+  const l = Math.hypot(-0.7, 0.45, 0.55)
+  const sun = [-0.7 / l, 0.45 / l, 0.55 / l] as const
+  const roles = ['halt', 'march', 'run', 'fire']
+  const pv = posedVertices(d, lod)
+  const today = shadowShape(d, lod, sun, roles, { facings: 8, soft: 0.12, posed: pv })
+  const s = shadowShape(d, lod, sun, roles, { facings: 8, soft: 0.12, posed: pv, steps: 8 })
+  const cell = (row: number, k: number) => {
+    const bl = Math.floor(row / s.rowsPerBlock)
+    const y0 = (row % s.rowsPerBlock) * s.cellH
+    const x0 = (bl * s.facings + k) * s.cellW
+    const v: number[] = []
+    for (let y = 0; y < s.cellH; y++) {
+      for (let x = 0; x < s.cellW; x++) v.push(s.data[((y0 + y) * s.width + x0 + x) * 2])
+    }
+    return v
+  }
+  it('lays its bins out as stepAtlasLayout says, its cells as today', () => {
+    expect(s.bins).toEqual(roles.map(r => Math.min(8, d.ranges[r].end - d.ranges[r].start)))
+    expect(s.binRow).toEqual([0, 8, 16, 24])
+    expect([s.cellW, s.cellH, s.margin]).toEqual([today.cellW, today.cellH, today.margin])
+    const lay = stepAtlasLayout(s.cellW, s.cellH, 8, 32)
+    expect([s.width, s.height, s.rowsPerBlock, s.blocks]).toEqual([lay.width, lay.height, lay.rowsPerBlock, lay.blocks])
+    expect(s.data.length).toBe(s.width * s.height * 2)
+    // (today's: one bin a role, a block)
+    expect([today.bins, today.binRow, today.rowsPerBlock, today.blocks]).toEqual([[1, 1, 1, 1], [0, 1, 2, 3], 4, 1])
+  })
+  it('fills every cell inside its empty border, the run differing step to step', () => {
+    for (let row = 0; row < 32; row++) {
+      for (let k = 0; k < 8; k++) {
+        const v = cell(row, k)
+        let mass = 0
+        v.forEach((t, i) => {
+          const x = i % s.cellW
+          const y = Math.floor(i / s.cellW)
+          const inside = x >= s.margin && y >= s.margin && x < s.cellW - s.margin && y < s.cellH - s.margin
+          if (!inside) expect(t).toBe(0)
+          mass += t
+        })
+        expect(mass, `row ${row} facing ${k}`).toBeGreaterThan(0)
+      }
+    }
+    const a = cell(16, 0)
+    const b = cell(20, 0)
+    expect(a.some((t, i) => Math.abs(t - b[i]) > 64)).toBe(true)
+  })
+  it('keeps the marching feet on the shape more than the clip-averaged shape does', () => {
+    const A = s.dir
+    const C = [-A[1], A[0]]
+    const kx = sun[0] / sun[1]
+    const kz = sun[2] / sun[1]
+    const nv = pv.width / 2
+    const rg = d.ranges.march
+    const n = rg.end - rg.start
+    let floor = Infinity
+    for (let st = rg.start; st < rg.end; st++) {
+      for (let v = 0; v < nv; v++) floor = Math.min(floor, pv.data[(st * nv * 2 + v * 2) * 4 + 1])
+    }
+    // the shape's value under each foot vertex, every step, facing 0 (unturned): today's and per step
+    let sumToday = 0
+    let sumStep = 0
+    let cnt = 0
+    for (let st = rg.start; st < rg.end; st++) {
+      const row = s.binRow[1] + stepBin(st - rg.start, n, s.bins[1])
+      for (let v = 0; v < nv; v++) {
+        const o = (st * nv * 2 + v * 2) * 4
+        const [x, y, z] = [pv.data[o], pv.data[o + 1], pv.data[o + 2]]
+        if (y > floor + 0.12) continue
+        const wx = x - kx * y
+        const wz = z - kz * y
+        const i = Math.floor((wx * C[0] + wz * C[1] - s.across[0]) / s.texel) + s.margin
+        const j = Math.floor((wx * A[0] + wz * A[1] - s.along[0]) / s.texel) + s.margin
+        sumToday += today.data[((today.cellH + j) * today.width + i) * 2]
+        sumStep += cell(row, 0)[j * s.cellW + i]
+        cnt++
+      }
+    }
+    expect(cnt).toBeGreaterThan(0)
+    expect(sumStep / cnt).toBeGreaterThan(1.3 * (sumToday / cnt))
+  })
+})
+
+describe('unitdecal.vert picks the bin as stepBin and stepBlend do (the source)', () => {
+  const src = (f: string) =>
+    readFileSync(new URL(`../src/look/shaders/${f}`, import.meta.url), 'utf8')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\s+/g, '')
+  const once = (text: string, line: string) => expect(text.split(line).length - 1, line).toBe(1)
+  it("his step as units.vert counts it, his bin, the blend's bins, the cell's block", () => {
+    const v = src('unitdecal.vert')
+    once(src('units.vert'), 'intf=int(r.x+mod(uVATStep+r.z,r.y));')
+    once(v, 'floatn=aVAT.y,i=mod(uVATStep+aVAT.z,n);')
+    once(v, 'floatjb=ceil((i+1.0)*kb/n)-1.0;')
+    once(v, 'floatsp=(i+0.5)*kb/n-0.5,sf=floor(sp);vS=sp-sf;')
+    once(v, 'floatja=mod(sf+kb,kb),jb=mod(sf+1.0,kb);')
+    once(v, 'floatbl=floor((rw+0.5)/uStepRPB);')
+    once(v, 'return(vec2(bl*FACINGS+k,rw-bl*uStepRPB)*uShapeCell.xy+c)*uShapeCell.zw;')
+  })
+})

@@ -40,10 +40,28 @@ varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 // phase, aVAT.y the clip's length: units.vert's); vCt: the vertex in the oval's frame (1 at its edge), linear on the
 // ground so the fragment's is exact. Only in the material drawn within the contact's zoom band (units.ts: past it
 // decision 0062's material, without SH_CONTACT)
-uniform sampler2D uContactTex;uniform float uVATStep;uniform vec4 uShContact;
+uniform sampler2D uContactTex;uniform vec4 uShContact;
 // vCell: the vertex in his shape's cell (0 to 1 inside it): the strip reaches past the cell for the oval (decalStrip),
 // and the fragment reads no shape there
 varying vec2 vCt,vCell;
+#endif
+#if defined(SH_CONTACT)||defined(SH_STEPS)
+uniform float uVATStep;
+#endif
+#ifdef SH_STEPS
+// the shape baked per animation step (?ushstep, docs/plans/active/step-shadows.md): a role's clip in uStepBins.<role>
+// bins, its first cell row uStepRow.<role>; the rows in blocks of uStepRPB side by side, each FACINGS cells wide
+// (shadowShape, stepAtlasLayout in src/look/units-data.ts). His step his clip's (units.vert's rule); the bin he is in
+// ceil((i+1)k/n)-1 (stepBin), or with SH_STEP_BLEND the two either side of him, mixed by vS (stepBlend)
+uniform vec4 uStepBins,uStepRow;uniform float uStepRPB;
+#ifdef SH_STEP_BLEND
+varying vec2 vUV2,vUV3;varying float vS;
+#endif
+// the texel place of (texels c into) the cell of row rw (role's first plus bin) and facing k
+vec2 stepUV(float rw,float k,vec2 c){
+  float bl=floor((rw+0.5)/uStepRPB);
+  return (vec2(bl*FACINGS+k,rw-bl*uStepRPB)*uShapeCell.xy+c)*uShapeCell.zw;
+}
 #endif
 void main(){
   #include<instancesVertex>
@@ -79,7 +97,21 @@ void main(){
   vT=fk-k0;
   float row=abs(aVAT.x-uRoleStart.y)<0.5?1.0:abs(aVAT.x-uRoleStart.z)<0.5?2.0:abs(aVAT.x-uRoleStart.w)<0.5?3.0:0.0;
   vec2 c=(l0-uShapeAt)*uShapeTexel.x+uShapeTexel.y;
+  #ifdef SH_STEPS
+  float n=aVAT.y,i=mod(uVATStep+aVAT.z,n);
+  float kb=row<0.5?uStepBins.x:row<1.5?uStepBins.y:row<2.5?uStepBins.z:uStepBins.w;
+  float r0=row<0.5?uStepRow.x:row<1.5?uStepRow.y:row<2.5?uStepRow.z:uStepRow.w;
+  #ifdef SH_STEP_BLEND
+  float sp=(i+0.5)*kb/n-0.5,sf=floor(sp);vS=sp-sf;
+  float ja=mod(sf+kb,kb),jb=mod(sf+1.0,kb);
+  vUV0=stepUV(r0+ja,k0,c);vUV1=stepUV(r0+ja,k1,c);vUV2=stepUV(r0+jb,k0,c);vUV3=stepUV(r0+jb,k1,c);
+  #else
+  float jb=ceil((i+1.0)*kb/n)-1.0;
+  vUV0=stepUV(r0+jb,k0,c);vUV1=stepUV(r0+jb,k1,c);
+  #endif
+  #else
   vUV0=(vec2(k0,row)*uShapeCell.xy+c)*uShapeCell.zw;vUV1=(vec2(k1,row)*uShapeCell.xy+c)*uShapeCell.zw;
+  #endif
   #ifdef SH_CONTACT
   vCell=c/uShapeCell.xy;
   #endif

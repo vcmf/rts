@@ -447,3 +447,33 @@ export function decalStep(
 export function decalDefinesChanged(): DecalPoll {
   return { idleReady: false, polls: 0 }
 }
+
+/** The shadow's shape baked per animation step (?ushstep, docs/plans/active/step-shadows.md, #229): steps, the bins a
+ *  clip (at most; a clip of fewer steps gets one a step); facings, the shape's facings; blend, two bins mixed by the
+ *  man's step between their centres (four reads), else the bin he is in held (two) */
+export interface StepShadow {
+  steps: number
+  facings: number
+  blend: boolean
+}
+/** ?ushstep=<steps 1..32>[,<facings 4..32>[,hold|blend]] (0 alone or absent: today's shape, averaged over the clip,
+ *  null); the facings 16 and hold by default. A setting whose atlas cannot fit 4096 texels a side (at 16 facings, more
+ *  than 12 steps) is refused at load (stepAtlasLayout, src/look/units-data.ts) */
+export function applyStepParams(q: URLSearchParams): StepShadow | null {
+  const v = q.get('ushstep')
+  if (v === null) return null
+  const f = v.split(',')
+  const steps = Number(f[0])
+  const facings = f.length > 1 ? Number(f[1]) : 16
+  const mode = f[2] ?? 'hold'
+  const whole = (s: string | undefined) => s !== undefined && /^\d+$/.test(s)
+  const ok =
+    f.length <= 3 &&
+    whole(f[0]) &&
+    steps <= 32 &&
+    (f.length < 2 || (whole(f[1]) && facings >= 4 && facings <= 32)) &&
+    (mode === 'hold' || mode === 'blend')
+  if (!ok) throw new Error(`?ushstep must be <steps 0..32>[,<facings 4..32>[,hold|blend]], not ${v}`)
+  if (steps === 0) return null
+  return { steps, facings, blend: mode === 'blend' }
+}
