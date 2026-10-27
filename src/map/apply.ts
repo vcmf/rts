@@ -27,12 +27,14 @@ export const CELL = 2 // m (decision 0021)
 // widths where the catalogue gives none: a way's (every way kind sets one), and the bands of the line-shaped kinds
 // that take no width attribute (reeds along a bank, a flèche's earthwork), m
 // the water (§4 step 3): the level sits FREEBOARD m under the lower bank, read BANK_OUT m beyond each edge every
-// LEVEL_STEP m; a pond reaches its full depth SHORE_IN m in from its shore. A pond on sloping ground is dammed: its
-// level the median of its shore, at most DAM m above the shore's lowest point; its shore DAM_OUT m wide raised to the
-// level where lower (the dam), and ground inside more than the pond's depth above the level left dry (#230)
+// LEVEL_STEP m; a pond reaches its full depth SHORE_IN m in from its shore. A pond with no level of its own is dammed:
+// its level the median of its shore, at most DAM m above the shore's lowest point; the ground DAM_OUT m past its shore
+// raised to the level where lower, easing down over DAM_RAMP m (the dam), and ground inside more than the pond's depth
+// above the level left dry (#230)
 const FREEBOARD = 0.4
 const DAM = 2
 const DAM_OUT = 4
+const DAM_RAMP = 10
 const BANK_OUT = 3
 const LEVEL_STEP = 2
 const SHORE_IN = 10
@@ -721,6 +723,8 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
     k1: number,
     onCell?: (cell: number, edge: number) => void,
     needEdge = false,
+    // a cell of the area the caller leaves unpainted (a pond's ground left dry up a slope)
+    skip?: (i: number, j: number) => boolean,
   ) => {
     const field = areaField(f)
     if (!field) return
@@ -736,7 +740,7 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       return e
     }
     const paint = (i: number, j: number, x: number, z: number) => {
-      if (!kept?.masks.some(m => m[j * nx + i] === 1)) {
+      if (!kept?.masks.some(m => m[j * nx + i] === 1) && !skip?.(i, j)) {
         layer[j * nx + i] = k1
         onCell?.(j * nx + i, needEdge ? edgeAt(x, z) : 0)
       }
@@ -901,8 +905,9 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       // lowest, less the freeboard; deepest SHORE_IN m in
       const field = areaField(f)
       if (!field) continue
-      let lv = typeof a.level === 'number' ? a.level : Infinity
-      if (lv === Infinity) {
+      const given = typeof a.level === 'number'
+      let lv = given ? (a.level as number) : Infinity
+      if (!given) {
         const shore: number[] = []
         cells(field.box, c, (i, j, x, z) => {
           if (!field.inside(x, z)) return
@@ -910,27 +915,67 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
           if (e < c) shore.push(hAt(x, z))
         })
         shore.sort((p, q) => p - q)
-        if (shore.length) lv = Math.min(shore[0] + DAM, shore[(shore.length - 1) >> 1]) - FREEBOARD
+        // no shore on the map (a pond too small for a cell, or off the map): nothing to level it by, so no pond
+        if (!shore.length) continue
+        lv = Math.min(shore[0] + DAM, shore[(shore.length - 1) >> 1]) - FREEBOARD
       }
-      if (lv === Infinity) continue
       const D = num(a.depth, 1.5)
-      // the bed: never more than the depth below the ground, and only where that reaches under the level (ground the
-      // depth or more above the level, up a slope, stays dry)
+      // the bed. A level given: cut to it as given. A level from the shore: never more than the depth below the
+      // ground, and only where that reaches under the level; ground the depth or more above it, up a slope, stays dry
+      const dry = new Set<number>()
       nodes(field.box, 0, (k, x, z) => {
+        if (!given && H[k] - D >= lv) {
+          dry.add(k)
+          return
+        }
         const e = field.edge(x, z)
-        if (e <= 0 || H[k] - D >= lv) return
-        const bed = Math.max(lv - D * smooth(e / SHORE_IN), H[k] - D)
+        if (e <= 0) return
+        const bed = given ? lv - D * smooth(e / SHORE_IN) : Math.max(lv - D * smooth(e / SHORE_IN), H[k] - D)
         if (bed < H[k]) H[k] = bed
       })
-      // the dam: the ground just past the shore raised to the level and the freeboard where lower
-      nodes(field.box, DAM_OUT + c, (k, x, z) => {
-        const e = field.edge(x, z)
-        if (e > 0 || e < -DAM_OUT) return
-        if (H[k] < lv + FREEBOARD) H[k] = lv + FREEBOARD
-      })
-      paintArea(f, L.water, k1, cell => {
-        level[cell] = lv
-      })
+      if (!given) {
+        // the dam: the ground DAM_OUT past the shore raised to the level and the freeboard where lower, its outer
+        // side easing down to the ground over DAM_RAMP; never over other water (a stream through it keeps its
+        // channel, a neighbouring pond its cells). An ellipse's edge distance shrinks along its long axis: padded so
+        const stretch = f.ellipse ? Math.max(f.ellipse[1], f.ellipse[2]) / Math.min(f.ellipse[1], f.ellipse[2]) : 1
+        const top = lv + FREEBOARD
+        const wet = (k: number) => {
+          const i = k % (nx + 1)
+          const j = (k - i) / (nx + 1)
+          for (const [di, dj] of [
+            [0, 0],
+            [-1, 0],
+            [0, -1],
+            [-1, -1],
+          ]) {
+            const [ci, cj] = [i + di, j + dj]
+            if (ci >= 0 && cj >= 0 && ci < nx && cj < nz && L.water[cj * nx + ci]) return true
+          }
+          return false
+        }
+        nodes(field.box, (DAM_OUT + DAM_RAMP) * stretch + c, (k, x, z) => {
+          if (H[k] >= top) return
+          const e = field.edge(x, z)
+          if (e > 0 || e < -DAM_OUT - DAM_RAMP || wet(k)) return
+          const w = e >= -DAM_OUT ? 1 : smooth(1 + (e + DAM_OUT) / DAM_RAMP)
+          H[k] += (top - H[k]) * w
+        })
+      }
+      // a cell all of whose corners are dry ground up a slope is not the pond's
+      paintArea(
+        f,
+        L.water,
+        k1,
+        cell => {
+          level[cell] = lv
+        },
+        false,
+        (i, j) =>
+          dry.has(j * (nx + 1) + i) &&
+          dry.has(j * (nx + 1) + i + 1) &&
+          dry.has((j + 1) * (nx + 1) + i) &&
+          dry.has((j + 1) * (nx + 1) + i + 1),
+      )
     }
   }
   for (let j = 0; j < nz; j++) {
@@ -940,10 +985,6 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
       const W = nx + 1
       const g = (H[j * W + i] + H[j * W + i + 1] + H[(j + 1) * W + i] + H[(j + 1) * W + i + 1]) / 4
       L.depth[cell] = Math.max(0, Math.min(65535, Math.round((level[cell] - g) * 1000)))
-      // a pond's or a lake's cell left dry (its ground above the level, on a slope) is not water
-      if (!L.depth[cell] && L.water[cell] && /^water\.(pond|lake)/.test(L.table[L.water[cell] - 1].kind)) {
-        L.water[cell] = 0
-      }
     }
   }
   for (const { f, r } of order) {

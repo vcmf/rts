@@ -574,6 +574,52 @@ describe('M1b: applying features into the layers', () => {
     // the dam: the shore downhill stands at the water's level and its freeboard, above the ground that was there
     expect(hAt(wet, 0, -52)).toBeGreaterThan(hAt(dry, 0, -52))
   })
+  it('a pond with its own level is cut as given; a flat pond keeps its whole outline (#230 review)', () => {
+    const count = (L: Layers) => L.water.reduce((n, v) => n + (v ? 1 : 0), 0)
+    const sunk = apply(mini([{ id: 'pond', kind: 'water.pond', circle: [[0, 0], 30], level: -5 }]), cat)
+    expect(count(sunk)).toBeGreaterThan(700)
+    expect(hAt(sunk, 0, 0)).toBeCloseTo(-6.5, 6)
+    // on flat ground every cell whose centre lies inside is the pond's, its shallow shore ring too
+    const flat = apply(mini([{ id: 'pond', kind: 'water.pond', circle: [[0, 0], 30] }]), cat)
+    let inside = 0
+    for (let j = 0; j < flat.nz; j++) {
+      for (let i = 0; i < flat.nx; i++) {
+        const [x, z] = [flat.x0 + (i + 0.5) * flat.cell, flat.z0 + (j + 0.5) * flat.cell]
+        if (x * x + z * z < 900) inside++
+      }
+    }
+    expect(count(flat)).toBe(inside)
+  })
+  it('a dam lets a stream through and eases down to the ground outside (#230 review)', () => {
+    const slope = {
+      id: 'slope',
+      kind: 'relief.ridge',
+      line: [
+        [-200, 150],
+        [200, 150],
+      ] as Pt[],
+      height: 40,
+      width: 600,
+    }
+    const pond = { id: 'z-pond', kind: 'water.pond', circle: [[0, -20] as Pt, 30] as [Pt, number] }
+    const brook = {
+      id: 'brook',
+      kind: 'water.stream',
+      line: [
+        [0, 40],
+        [0, -150],
+      ] as Pt[],
+    }
+    const L = apply(mini([slope, pond, brook]), cat)
+    // the stream's cells below the dam still hold water
+    for (const z of [-53, -55, -57]) {
+      const cell = Math.floor((z - L.z0) / L.cell) * L.nx + Math.floor((0.5 - L.x0) / L.cell)
+      expect(L.depth[cell]).toBeGreaterThan(0)
+    }
+    // downhill, across the dam's outer side, no step between neighbouring nodes over 1.5 m
+    const without = apply(mini([slope, pond]), cat)
+    for (let z = -50; z > -80; z -= 2) expect(Math.abs(hAt(without, 20, z) - hAt(without, 20, z - 2))).toBeLessThan(1.5)
+  })
   it('water, ways, barriers and buildings land in their layers; a bridge decks the road over the water', () => {
     const L = apply(
       mini([

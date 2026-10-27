@@ -414,6 +414,14 @@ into the epic; this plan details each as it starts.
   Austerlitz every one of the 18 ponds holds water (1.4 to 2.3 m deep at most); the deepest the water cuts below the
   dry ground anywhere is 4.8 m, a stream at the map's west edge (an open question), no pond. Test: a pond across a
   slope, never cut deeper than its depth, dry uphill, dammed downhill (fails without the fix: 9.9 m).
+- **Review round 1** (`/code-review high`): severe, each run by the reviewer. A pond given its own `level` below the
+  ground was no longer cut and vanished; every flat pond lost its shore ring (its depth rounds to 0); the dam filled
+  the channel of a stream through it and ended in a 4 m cliff; the system doc's water step was the old rule. Fixed:
+  the dam and its limits apply only to a level from the shore (a given level cuts as before); only a cell whose four
+  corners are dry ground up the slope leaves the pond (`paintArea` takes a cell to skip), so a flat pond keeps its
+  outline; the dam never rises over other water and eases down over 10 m outside, padded for an ellipse's long axis;
+  a pond with no shore on the map is no pond (was painted at the deepest depth). Tests: the given level, the flat
+  outline, the stream through the dam, the dam's outer side (each fails without its fix).
 
 ## Open questions
 

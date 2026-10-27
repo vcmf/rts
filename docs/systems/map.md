@@ -211,7 +211,11 @@ maps/kinds.json ──► checkCatalogue ─┐
     0.4 m freeboard, taken every 2 m and never rising downstream (the line's order is the flow; `Layers.streams` keeps
     each profile). Its channel is carved from its depth (a ramp `along` gives pools), shallower toward the banks; a
     ford raises the bed to its depth over its width, where the stream passes nearest its point; a pond sits at its
-    `level` or the lowest point of its shore less the freeboard, deepest 10 m in. Each water cell's depth is its
+    `level` (cut to it as given), or is dammed (#230): the median of its shore, at most 2 m above its lowest point,
+    less the freeboard, cut only where the cut reaches under that level and never more than its depth below the
+    ground (ground up a slope stays dry and is not the pond's), the ground 4 m past its shore raised to the level
+    where lower and easing down over 10 m (never over other water: a stream through the dam keeps its channel);
+    deepest 10 m in. Each water cell's depth is its
     body's level less the cell's mean ground (`Layers.depth`, mm);
   - a bridge decks the road's cells over the water at the height of the higher of the road's two ends, 4 m past
     each bank (the sim classifies them `bridge`: level, dry);
