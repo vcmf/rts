@@ -99,7 +99,7 @@ into the epic; this plan details each as it starts.
   ground than its reach, and a far point's indexed search crossed the whole grid ring by ring. Each caller that
   discards what lies beyond its reach (a channel, a painted line, a cut, a ridge's and a scarp's profile) passes it.
   The answer within the cutoff is the full one (tested on both searches); the layers' hashes are unchanged. The
-  Goldbach alone took 172 s to apply, 1.5 s with it; the whole map 3.4 s.
+  Goldbach alone took 172 s to apply, 1.5 s with it; the whole map 3.7 s.
 
 ## Acceptance (M8b)
 
@@ -135,12 +135,24 @@ into the epic; this plan details each as it starts.
   hand-drawn ford and lake survive a run, a second run changes nothing. Tests: the corner, ids by mouth, a C9 frame
   past fill bytes, a pond left out rather than under its minimum.
 
+- **Round 3**: moderate and light only, so the review stops here. Fixed: a pond slid along its stream past the map's
+  edge is left out (checked again after sliding); streams are cut at the extent's own edge, each side its own
+  half-size (they stopped 10 m short, and a map that is not square lost its water along its longer side); a stream
+  takes the id of the nearest old mouth, and a vanished brook's id is not handed to another; the outlines are
+  sampled every 4 m (a thin pond could cross a long one between samples); a pond's axes come through the fit's local
+  map (its singular values), so its long axis stays long; names matched as strings; one comparison in the scan's hot
+  loop. Not taken: a far point's search made cheap inside `nearIndexed` itself (every caller in apply passes its
+  cutoff; the generators' and the scatter's distance checks are a question for when M8d places villages). Tests for
+  each (the thin crossing, the nearest mouth, a vanished id, the framed axes, a map that is not square).
+
 ## Open questions
 
+- A long line's far point still searches the whole bucket grid where a caller passes no cutoff (`reach.ts`'s
+  distances, the scatter's edge); M8d's villages keep clear of the streams through them, so it is measured there.
 - Some streams still run straight for a few hundred metres across filled flats (former pond basins, the backwater of
   modern embankments) and along today's straightened channels; the brooks of 1805 bent. The language's meander
   generator could bend them, once the joins of tributaries and the ponds on them follow a meandered line.
 
 - Bosenitz (49.191 N) lies just past the map's north edge, the Menitz pond just past its south edge: the window could
   move or the factor grow a little if the scenario needs either.
-- Modern works in the relief (the D1 motorway, railway embankments, quarries) are levelled in M8b with relief edits.
+- Modern works in the relief (the D1 motorway, railway embankments, quarries) are levelled in M8c with relief edits.

@@ -5,7 +5,16 @@ import type { Pt } from '../src/map/schema.ts'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { apart, ellipsesMeet, mapPieces, nearestOn, scanSize, streamIds, type Ellipse } from '../tools/water.ts'
+import {
+  apart,
+  ellipsesMeet,
+  framedEllipse,
+  mapPieces,
+  nearestOn,
+  scanSize,
+  streamIds,
+  type Ellipse,
+} from '../tools/water.ts'
 
 const ID = { x: 0, z: 0, k: 1 }
 
@@ -18,7 +27,7 @@ describe("a map's water", () => {
       [200, 50],
       [0, 50],
     ]
-    expect(mapPieces(line, ID, 100, 0)).toEqual([
+    expect(mapPieces(line, ID, [100, 100], 0)).toEqual([
       [
         [0, 0],
         [100, 0],
@@ -29,7 +38,7 @@ describe("a map's water", () => {
       ],
     ])
     // a piece shorter than its minimum length goes
-    expect(mapPieces(line, ID, 100, 150)).toEqual([])
+    expect(mapPieces(line, ID, [100, 100], 150)).toEqual([])
     // through the placement: the file's frame read at 2×, 500 m south
     expect(
       mapPieces(
@@ -38,7 +47,7 @@ describe("a map's water", () => {
           [100, -300],
         ],
         { x: 0, z: -500, k: 2 },
-        100,
+        [100, 100],
         0,
       ),
     ).toEqual([
@@ -54,7 +63,7 @@ describe("a map's water", () => {
       [100, 0],
       [150, 0],
     ]
-    expect(mapPieces(line, ID, 100, 0)).toEqual([
+    expect(mapPieces(line, ID, [100, 100], 0)).toEqual([
       [
         [0, 0],
         [100, 0],
@@ -136,7 +145,7 @@ describe("a map's water", () => {
           [50, 150],
         ],
         ID,
-        100,
+        [100, 100],
         0,
       ),
     ).toEqual([])
@@ -148,7 +157,7 @@ describe("a map's water", () => {
           [40, 140],
         ],
         ID,
-        100,
+        [100, 100],
         0,
       ),
     ).toEqual([
@@ -168,10 +177,63 @@ describe("a map's water", () => {
       [
         { id: 'brook7', mouth: [10, 20] },
         { id: 'brook3', mouth: [900, 30] },
+        { id: 'brook2', mouth: [3000, 0] }, // gone: its id is not handed to another stream
       ],
       new Set(['brook', 'goldbach']),
     )
-    expect(ids).toEqual(['brook7', 'brook2', 'brook3'])
+    expect(ids).toEqual(['brook7', 'brook4', 'brook3'])
+  })
+  it('gives each mouth the nearest of the old ones, not the first within reach', () => {
+    // two tributaries 30 m apart; the old ids listed in the other order
+    const ids = streamIds(
+      [
+        [0, 0],
+        [30, 0],
+      ],
+      [
+        { id: 'brook9', mouth: [29, 0] },
+        { id: 'brook4', mouth: [1, 0] },
+      ],
+      new Set(),
+    )
+    expect(ids).toEqual(['brook4', 'brook9'])
+  })
+  it("takes a pixel ellipse through the scan's local map: scaled, turned, its long axis kept long", () => {
+    // a fit 2 m a pixel, v down (z = -2 v): a pixel ellipse 10 × 5 along u becomes 20 × 10 along x
+    const fit = { toFrame: (u: number, v: number): Pt => [2 * u, -2 * v] }
+    const [a, b, ang] = framedEllipse(fit, 100, 100, 10, 5, 0)
+    expect(a).toBeCloseTo(20, 6)
+    expect(b).toBeCloseTo(10, 6)
+    expect(Math.abs(Math.sin(ang))).toBeCloseTo(0, 6)
+    // along v in the image (90°, down) it lies along z
+    const [a2, b2, ang2] = framedEllipse(fit, 100, 100, 10, 5, Math.PI / 2)
+    expect(a2).toBeCloseTo(20, 6)
+    expect(b2).toBeCloseTo(10, 6)
+    expect(Math.abs(Math.cos(ang2))).toBeCloseTo(0, 6)
+    // a fit stretched along v: a round pixel ellipse comes out long along z
+    const tall = { toFrame: (u: number, v: number): Pt => [u, -3 * v] }
+    const [a3, b3, ang3] = framedEllipse(tall, 0, 0, 10, 10, 0)
+    expect(a3).toBeCloseTo(30, 6)
+    expect(b3).toBeCloseTo(10, 6)
+    expect(Math.abs(Math.cos(ang3))).toBeCloseTo(0, 6)
+  })
+  it('cuts to a map that is not square by its own half-sides', () => {
+    expect(
+      mapPieces(
+        [
+          [0, 0],
+          [3500, 0],
+        ],
+        ID,
+        [4000, 3000],
+        0,
+      ),
+    ).toEqual([
+      [
+        [0, 0],
+        [3500, 0],
+      ],
+    ])
   })
   it("reads a JPEG's size at any start of frame, past fill bytes", () => {
     // SOI, an APP0 of 4 bytes, fill bytes, then an arithmetic-coded frame (C9): height 300, width 400
@@ -189,5 +251,7 @@ describe("a map's water", () => {
     expect(ellipsesMeet([[0, 0], 50, 20, 0], [[0, 60], 20, 20, 0])).toBe(false)
     // turned a quarter, the long axis reaches it
     expect(ellipsesMeet([[0, 0], 50, 20, Math.PI / 2], [[0, 60], 20, 20, 0])).toBe(true)
+    // a thin pond across a long one, between where 48 samples of the long one's outline would fall
+    expect(ellipsesMeet([[0, 0], 400, 8, 0], [[13, 200], 300, 3, Math.PI / 2])).toBe(true)
   })
 })

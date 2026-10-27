@@ -32,17 +32,17 @@ export interface WaterInputs {
 }
 
 /**
- * A segment cut to a square of half-side m (Liang–Barsky): the part inside, as the fractions of the segment where it
- * enters and leaves, or null when no part is inside.
+ * A segment cut to a box of half-sides h (centred; Liang–Barsky): the part inside, as the fractions of the segment
+ * where it enters and leaves, or null when no part is inside.
  */
-function clipSegment(a: Pt, b: Pt, m: number): [number, number] | null {
+function clipSegment(a: Pt, b: Pt, h: Pt): [number, number] | null {
   let t0 = 0
   let t1 = 1
   const d = [b[0] - a[0], b[1] - a[1]]
   for (const k of [0, 1]) {
     for (const [p, q] of [
-      [-d[k], a[k] + m],
-      [d[k], m - a[k]],
+      [-d[k], a[k] + h[k]],
+      [d[k], h[k] - a[k]],
     ]) {
       if (p === 0) {
         if (q < 0) return null
@@ -57,11 +57,12 @@ function clipSegment(a: Pt, b: Pt, m: number): [number, number] | null {
 }
 
 /**
- * A line of the file's frame in the map's, cut to a square of half-side `m`: its pieces inside, each cut exactly at
- * the square's edge where it leaves or enters (a stream runs off the map, not short of it; a segment across a corner,
- * both its ends outside, keeps the part inside). Pieces shorter than `minLen` m (a stream skimming the edge) left out.
+ * A line of the file's frame in the map's, cut to the map's extent (half-sides `h`): its pieces inside, each cut
+ * exactly at the edge where it leaves or enters (a stream runs off the map, not short of it; a segment across a
+ * corner, both its ends outside, keeps the part inside). Pieces shorter than `minLen` m (a stream skimming the edge)
+ * left out.
  */
-export function mapPieces(pts: Pt[], place: DemPlace, m: number, minLen = 50): Pt[][] {
+export function mapPieces(pts: Pt[], place: DemPlace, h: Pt, minLen = 50): Pt[][] {
   const map = pts.map(p => toMap(place, p[0], p[1]))
   const out: Pt[][] = []
   let cur: Pt[] = []
@@ -69,7 +70,7 @@ export function mapPieces(pts: Pt[], place: DemPlace, m: number, minLen = 50): P
   for (let k = 1; k < map.length; k++) {
     const a = map[k - 1]
     const b = map[k]
-    const c = clipSegment(a, b, m)
+    const c = clipSegment(a, b, h)
     if (!c) continue
     const p = at(a, b, c[0])
     const q = at(a, b, c[1])
@@ -114,14 +115,17 @@ const inEllipse = ([c, a, b, ang]: Ellipse, [x, z]: Pt, pad = 0) => {
 }
 /** Whether two ellipses meet (or come within `pad`): one's outline, sampled, in the other, or the other's in it. */
 export function ellipsesMeet(p: Ellipse, q: Ellipse, pad = 0): boolean {
-  const ring = (e: Ellipse) =>
-    Array.from({ length: 48 }, (_, k) => {
-      const t = (2 * Math.PI * k) / 48
+  // the outlines sampled every 4 m or closer (a long pond's samples must not let a narrow one slip between them)
+  const ring = (e: Ellipse) => {
+    const n = Math.max(48, Math.ceil((2 * Math.PI * Math.max(e[1], e[2])) / 4))
+    return Array.from({ length: n }, (_, k) => {
+      const t = (2 * Math.PI * k) / n
       const [c, a, b, ang] = e
       const x = a * Math.cos(t)
       const z = b * Math.sin(t)
       return [c[0] + x * Math.cos(ang) - z * Math.sin(ang), c[1] + x * Math.sin(ang) + z * Math.cos(ang)] as Pt
     })
+  }
   return (
     inEllipse(p, q[0], pad) ||
     inEllipse(q, p[0], pad) ||
@@ -169,18 +173,28 @@ export function apart(
 }
 
 /**
- * The ids for this run's unnamed streams: each keeps the id of a stream of the last run whose mouth (its last point)
- * lies within 50 m of its own, so a ford or a bridge naming a brook still names it; the rest take the next free
- * `brook<n>`, none of `taken`.
+ * The ids for this run's unnamed streams: each keeps the id of the stream of the last run whose mouth (its last point)
+ * lies nearest its own, within 50 m (the nearest pairs first), so a ford or a bridge naming a brook still names it;
+ * the rest take the next free `brook<n>`, never one of `taken` nor an id of the last run (a vanished brook's id is not
+ * handed to another stream).
  */
 export function streamIds(mouths: Pt[], before: { id: string; mouth: Pt }[], taken: Set<string>): string[] {
-  const used = new Set(taken)
-  const ids = mouths.map(m => {
-    const prev = before.find(b => !used.has(b.id) && Math.hypot(b.mouth[0] - m[0], b.mouth[1] - m[1]) <= 50)
-    if (!prev) return null
-    used.add(prev.id)
-    return prev.id
-  })
+  const pairs: { i: number; b: number; d: number }[] = []
+  mouths.forEach((m, i) =>
+    before.forEach((p, b) => {
+      const d = Math.hypot(p.mouth[0] - m[0], p.mouth[1] - m[1])
+      if (d <= 50) pairs.push({ i, b, d })
+    }),
+  )
+  pairs.sort((x, y) => x.d - y.d)
+  const ids: (string | null)[] = mouths.map(() => null)
+  const gone = new Set<number>()
+  for (const { i, b } of pairs) {
+    if (ids[i] !== null || gone.has(b)) continue
+    ids[i] = before[b].id
+    gone.add(b)
+  }
+  const used = new Set([...taken, ...before.map(p => p.id)])
   let n = 0
   const next = () => {
     let id: string
@@ -190,6 +204,45 @@ export function streamIds(mouths: Pt[], before: { id: string; mouth: Pt }[], tak
     return id
   }
   return ids.map(id => id ?? next())
+}
+
+/**
+ * A pixel ellipse (centre (u, v), semi-axes a and b, the first at `th` rad, v down) in the scan's frame: through the
+ * fit's local map (its derivative at the centre), its semi-axes and the angle of the longer, as the singular values
+ * and vectors of that map times the ellipse's own (a stretched or sheared fit turns and reshapes it).
+ */
+export function framedEllipse(
+  fit: Pick<ScanFit, 'toFrame'>,
+  u: number,
+  v: number,
+  a: number,
+  b: number,
+  th: number,
+): [number, number, number] {
+  const h = 2
+  const [x1, z1] = fit.toFrame(u + h, v)
+  const [x0, z0] = fit.toFrame(u - h, v)
+  const [x3, z3] = fit.toFrame(u, v + h)
+  const [x2, z2] = fit.toFrame(u, v - h)
+  // the derivative J (frame per pixel), then M = J R(th) diag(a, b)
+  const j = [(x1 - x0) / (2 * h), (x3 - x2) / (2 * h), (z1 - z0) / (2 * h), (z3 - z2) / (2 * h)]
+  const r = [Math.cos(th), -Math.sin(th), Math.sin(th), Math.cos(th)]
+  const m = [
+    (j[0] * r[0] + j[1] * r[2]) * a,
+    (j[0] * r[1] + j[1] * r[3]) * b,
+    (j[2] * r[0] + j[3] * r[2]) * a,
+    (j[2] * r[1] + j[3] * r[3]) * b,
+  ]
+  // M Mᵀ = [[p, q], [q, s]]: its eigenvalues are the squared semi-axes, the larger's eigenvector the angle
+  const p = m[0] * m[0] + m[1] * m[1]
+  const q = m[0] * m[2] + m[1] * m[3]
+  const s = m[2] * m[2] + m[3] * m[3]
+  const mid = (p + s) / 2
+  const dev = Math.sqrt(((p - s) / 2) ** 2 + q * q)
+  const big = mid + dev
+  const small = Math.max(0, mid - dev)
+  const ang = Math.atan2(big - p, q || 1e-12)
+  return [Math.sqrt(big), Math.sqrt(small), q === 0 ? (p >= s ? 0 : Math.PI / 2) : ang]
 }
 
 /** A JPEG's or a PNG's size in pixels, from its header (the scan is read in the page, not here). */
@@ -228,7 +281,7 @@ function main(): void {
   const d = decodeRdem(new Uint8Array(fs.readFileSync(path.join(path.dirname(mapFile), dem.file))))
   // traced over the whole file: a basin by the map's edge drains through its own outlet beyond it, not straight to
   // the edge of a box cut close around the map; then cut to the map
-  const M = Math.min(map.extent.w, map.extent.h) / 2 - 10
+  const half: Pt = [map.extent.w / 2, map.extent.h / 2]
   const { x: hx, z: hz } = demHalf(d)
   const all = streamsOf(gridOf(d, [-hx, -hz, hx, hz]), ins.traceKm2)
   // the scan's placement: its fit over the extent as the piece reads it (as the page draws it)
@@ -242,25 +295,18 @@ function main(): void {
   const MIN_R = 6 // m of map: the smallest pond's semi-axis written
   // the ponds in the file's frame, each onto the nearest traced stream within 400 m of field, its semi-axes as written
   const placed = ins.ponds.map(([id, u, v, a, b, deg]) => {
-    const th = (deg * Math.PI) / 180
     const c = fit.toFrame(u, v)
-    const pa = fit.toFrame(u + a * Math.cos(th), v + a * Math.sin(th))
-    const pb = fit.toFrame(u - b * Math.sin(th), v + b * Math.cos(th))
+    const [ra, rb, ang] = framedEllipse(fit, u, v, a, b, (deg * Math.PI) / 180)
     const near = nearestOn(all, c)
     const on = near.d <= 400 ? near : null
-    const e: Ellipse = [
-      on ? on.at : c,
-      Math.max(Math.hypot(pa[0] - c[0], pa[1] - c[1]), MIN_R * place.k),
-      Math.max(Math.hypot(pb[0] - c[0], pb[1] - c[1]), MIN_R * place.k),
-      Math.atan2(pa[1] - c[1], pa[0] - c[0]),
-    ]
+    const e: Ellipse = [on ? on.at : c, Math.max(ra, MIN_R * place.k), Math.max(rb, MIN_R * place.k), ang]
     return { id, e, on, line: on ? all.find(s => s.id === on.id)!.pts : null, along: on?.along ?? 0 }
   })
   // only the ponds inside the map (padded by their larger semi-axis) count, and bring their streams
   const inside = (e: Ellipse) => {
     const m = toMap(place, e[0][0], e[0][1])
     const r = Math.max(e[1], e[2]) / place.k
-    return Math.abs(m[0]) + r <= M && Math.abs(m[1]) + r <= M
+    return Math.abs(m[0]) + r <= half[0] && Math.abs(m[1]) + r <= half[1]
   }
   const report: string[] = []
   const kept = placed.filter(p => {
@@ -268,11 +314,18 @@ function main(): void {
     report.push(`${p.id}: outside the map, left out`)
     return false
   })
-  // apart from each other by 20 m of field, slid along their streams in 20 m steps up to 600 m
-  const sep = apart(kept, 20, 20, 600, MIN_R * place.k)
+  // apart from each other by 20 m of field, slid along their streams in 20 m steps up to 600 m; one slid past the
+  // map's edge goes
+  const sep = apart(kept, 20, 20, 600, MIN_R * place.k).map((r, i) => {
+    if (r && !inside(r.e)) {
+      report.push(`${kept[i].id}: slid past the map's edge clear of another, left out`)
+      return 'out' as const
+    }
+    return r
+  })
   const chosen = new Set(all.filter(s => s.km2 >= ins.minKm2).map(s => s.id))
   kept.forEach((p, i) => {
-    if (sep[i] && p.on) chosen.add(p.on.id)
+    if (sep[i] && sep[i] !== 'out' && p.on) chosen.add(p.on.id)
   })
   // a chosen stream brings the streams it flows into, down to one that leaves the map: its water goes somewhere
   for (const id of [...chosen]) {
@@ -296,13 +349,15 @@ function main(): void {
   // the features this tool made last time: replaced; every other feature kept
   const mine = (f: Feature) =>
     (f.kind === 'water.stream' && f.source === piece.source) || (f.kind === 'water.pond' && f.source === ins.scan)
-  const isNamed = (id: string) => ins.named.some(n => id === n.id || new RegExp(`^${n.id}\\d+$`).test(id))
+  // a named stream's id, or one of its pieces' (the id and a number)
+  const isNamed = (id: string) =>
+    ins.named.some(n => id === n.id || (id.startsWith(n.id) && /^\d+$/.test(id.slice(n.id.length))))
   const before = map.features
     .filter(f => mine(f) && f.line && !isNamed(f.id))
     .map(f => ({ id: f.id, mouth: f.line![f.line!.length - 1] }))
   const others = map.features.filter(f => !mine(f))
   const lines: { s: (typeof streams)[number]; line: Pt[]; k: number }[] = []
-  for (const s of streams) mapPieces(s.pts, place, M).forEach((line, k) => lines.push({ s, line, k }))
+  for (const s of streams) mapPieces(s.pts, place, half).forEach((line, k) => lines.push({ s, line, k }))
   const unnamed = lines.filter(l => !names.has(l.s.id))
   const ids = streamIds(
     unnamed.map(l => l.line[l.line.length - 1]),
@@ -325,6 +380,7 @@ function main(): void {
   }
   kept.forEach((p, i) => {
     const r = sep[i]
+    if (r === 'out') return
     if (!r) {
       report.push(`${p.id}: no room for it between its neighbours, left out`)
       return

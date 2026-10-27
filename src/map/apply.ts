@@ -140,7 +140,8 @@ export function nearScan(line: Pt[], px: number, pz: number, maxD = Infinity): N
       px < (ax < bx ? ax : bx) ? (ax < bx ? ax : bx) - px : px > (ax > bx ? ax : bx) ? px - (ax > bx ? ax : bx) : 0
     const oz =
       pz < (az < bz ? az : bz) ? (az < bz ? az : bz) - pz : pz > (az > bz ? az : bz) ? pz - (az > bz ? az : bz) : 0
-    if (ox * ox + oz * oz > bd2 || ox * ox + oz * oz > max2) {
+    const o2 = ox * ox + oz * oz
+    if (o2 > (bd2 < max2 ? bd2 : max2)) {
       acc += L
       continue
     }

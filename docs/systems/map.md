@@ -203,7 +203,7 @@ maps/kinds.json ──► checkCatalogue ─┐
   - a line's nearest point (`nearLine`: a scan, or for a long line a bucket grid searched in rings) takes a cutoff:
     a caller that discards what lies beyond its reach (a channel, a painted line, a cut, a ridge's or a scarp's
     profile) passes it, so the nodes of a long line's box far from it cost one ring, not the whole grid (M8b: the
-    Goldbach's apply from 172 s to 1.5 s); within the cutoff the answer is the full one;
+    Goldbach's apply from 172 s to 1.5 s, the whole map's 3.7 s); within the cutoff the answer is the full one;
   - painting order is priority, then id: the higher priority wins a cell and, at equal priority, the later id;
   - barriers by `barrierCells`, the one implementation of the cell rule (proposal §3.6), exact in integers;
   - water (step 3): a stream's level is the lower of its two banks (3 m beyond each edge, on the ground as the
