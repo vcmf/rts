@@ -25,7 +25,9 @@ import {
   type Drill,
   type ManState,
 } from '../src/look/world/armies.ts'
-import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
+import { UNIFORMS as DRESS } from '../src/rulesets/napoleonic-uniforms.ts'
+import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
+import { dressAll } from '../src/look/world/dyes.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
 import {
@@ -42,6 +44,9 @@ import {
   type Part,
   type UnitData,
 } from '../src/look/units-data.ts'
+
+// the era's uniforms as the page paints them (resolved from their dyes, decision 0068)
+const UNIFORMS = dressAll(DRESS, DYES)
 
 const g = napoleonic.types.infantry.geometry
 const drill: Drill = {
@@ -181,6 +186,8 @@ describe('armies: the layout', () => {
     const j = Math.floor((z + R) / S)
     return bit(i, j) || bit(i + 1, j) || bit(i, j + 1) || bit(i + 1, j + 1)
   }
+  // the uniforms' ids when the fixture was hashed (the layout does not depend on them; decision 0068 renamed them)
+  const FIXTURE_SIDES = ['fr-line-1808', 'at-line-white']
   it('lays out 20 a side and fewer exactly as before the close reserves (hashes of the layouts at 084d6e0)', () => {
     const want = JSON.parse(
       readFileSync(new URL('./fixtures/armies-layout-20.json', import.meta.url), 'utf8'),
@@ -194,7 +201,7 @@ describe('armies: the layout', () => {
       for (let n = 1; n <= 20; n++) {
         expect(
           createHash('sha256')
-            .update(JSON.stringify(layout(n, drill, b, ARMIES_DEMO.sides)))
+            .update(JSON.stringify(layout(n, drill, b, FIXTURE_SIDES)))
             .digest('hex')
             .slice(0, 16),
           `${k} ${n}`,

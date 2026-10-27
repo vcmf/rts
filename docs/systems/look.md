@@ -1,8 +1,8 @@
 ---
 status: current
 last_reviewed: 2026-10-26
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
-decisions: [0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts]
+decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker]
 ---
 
 # The look page (Track E, L0)
@@ -698,14 +698,24 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   the figures, their flags and the map's casters move by `aNext` × `uStepFrac` too (`SMOOTH`, `units.vert`,
   `flag.vert`), and the simple shadows with them, the poses still stepped at 12 fps; the map is then drawn every frame
   the clock moves while a caster's men move. Off, the figures and their simple shadows move at the steps.
-- **Uniforms** (the owner's call 2026-10-22): a battalion wears a uniform by id, whatever its side; a uniform
-  (`Uniform`, `src/sim/ruleset.ts`; the era's in `src/rulesets/napoleonic-uniforms.ts`; the demo's sides' in
-  `src/scenarios/armies-demo.ts`) is its colours by the figure's roles, its flag's, and its **far rule**: from above, a
+- **Uniforms** (the owner's calls 2026-10-22 and 2026-10-26, decision 0068, `docs/plans/active/dye-palette.md`): a
+  battalion wears a uniform by id, whatever its side. A uniform (`Dress`, `src/sim/ruleset.ts`; the era's in
+  `src/rulesets/napoleonic-uniforms.ts`; the demo's sides' in `src/scenarios/armies-demo.ts`) names a dye per cloth
+  part (coat, facings, trousers, waistcoat, headgear, greatcoat) from the era's dye set
+  (`src/rulesets/napoleonic-dyes.ts`: cloth dyes, the flags' own dyes, the materials, the boots' dye), and its flag's
+  bands by flag dye. The page resolves it onto the figure's roles (`src/look/world/dyes.ts`, `dressed`,
+  `FIGURE_PARTS`: the white role shows the trousers, the dark role the boots, the neutral roles the materials) into
+  a `Uniform`: its colours by role, its flag's, and its **far rule**: from above, a
   far figure shows its headgear, pack and leather more than its coat; under 'coat' those roles take the coat a value
   step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the near band (`FAR_FROM`), with the trees' and
   hills' shadow on it halved and a warm rim on what faces up (`FAR`); under 'own' the far figure keeps its own. Unset,
   a coat under luminance 0.18 (Rec. 709 on linear sRGB, a mid grey: `FAR_COAT_BELOW`) takes 'coat'. `?farpal=0|1`
-  forces the rule off or on for every uniform.
+  forces the rule off or on for every uniform. Test switches: `?uniforms=all` dresses each side's battalions in the
+  scenario's `reviewSides` in turn (`wearInTurn`: the era's eight uniforms on the demo map), `?uniforms=all-greatcoats`
+  the same with every man in his greatcoat (over the coat and facings; the share by the cold is the plan's later
+  step); `?dye=<dye>:<rrggbb>[;…]` (the hex bare or with its `#` as `%23`, e.g. `?dye=imperial-blue:1F2B52`) swaps cloth dyes' values for every uniform that names them (`dyeOverride`). A
+  malformed value, an unknown dye or uniform throws. The checks' blocks take four uniforms' coats from the same data
+  (`tools/army-blocks.mjs`, `BLOCK_UNIFORMS`; `ARMY_COATS=<name>=<rrggbb>,…`, four, the `#` optional, for other coats).
 - **The tiny LOD** (`docs/plans/active/armies-32k.md`, step 3, experimental; `?tinylod=0`: none, `?tinypx=<px>`: its
   switch): a man whose figure falls under 12 px tall draws the far LOD's parts as boxes instead, each man at his own
   height in the 9.6 to 15 px band (the LOD cross-fade, below; `?lodfade=0`: a battalion under 12 px, ±10 %; `tinyMesh`,
@@ -781,7 +791,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
 
 ### The readability guard (L2a)
 
-`node tools/guard.mjs <url> [--base <url>]`: six clusters of the four army coats (art bible §4) at battalion
+`node tools/guard.mjs <url> [--base <url>]`: six clusters of four uniforms' coats (`tools/army-blocks.mjs`) at battalion
 size, on the default view, summer and winter. Each block's luma against the ground's at the same pixels (from a
 render without blocks) must differ by 0.10; with `--base`, a block fails only if it separated on the base. The
 blocks are painted by the shared painter at unit crispness, without snow (`NOSNOW`), as units will be. Its
