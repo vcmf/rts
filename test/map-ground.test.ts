@@ -53,4 +53,19 @@ describe("a map's woods and meadows", () => {
     expect(Math.sign(areas[0])).not.toBe(Math.sign(areas[1]))
     for (const r of two) expect(ringCrossing(r)).toBeNull()
   })
+  it('fills a pinch only where allowed, else clears one of its ones; and ends', () => {
+    const { w, h, m } = mask(['#.', '.#'])
+    // neither zero may become a one (off the map): a one goes instead
+    const out = noPinches(m, w, h, Uint8Array.from([1, 0, 0, 1]))
+    expect(Array.from(out)).toEqual([0, 0, 0, 1])
+  })
+  it('does not read a red line over paper as green (hue as a weighted angle, not a plain mean)', () => {
+    // paper with every third column a red line (hue about 350°): a plain mean of the hues lifts the paper past 48°
+    const [w, h] = [30, 10]
+    const rgba = new Uint8Array(w * h * 4)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) rgba.set(x % 3 ? [213, 202, 148, 255] : [200, 40, 60, 255], 4 * (y * w + x))
+    }
+    expect(greenOf(rgba, w, h, 2).some(v => v === 1)).toBe(false)
+  })
 })

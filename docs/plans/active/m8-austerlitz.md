@@ -360,12 +360,13 @@ into the epic; this plan details each as it starts.
   (less where that would cross itself), placed through the scan's fit and the piece. The open land between is the
   survey's arable: one `ground.field` over the whole map at priority 5, under the meadows (10) and the marsh. Only the
   tool's features (with the scan as source and its note) are written again.
-- **66 woods, 5 meadows, the pheasantry's orchard, the arable.** The meadows: the brook from Kobelnitz north to
+- **67 woods, 5 meadows, the pheasantry's orchard, the arable.** The meadows: the brook from Kobelnitz north to
   Puntowitz, the Pratzen brook's wash, the Littawa's meadows by Zbeschau and Schaburnitz. The Goldbach's ribbon below
   Sokolnitz the survey stipples like its woods: left a wood (the owner's check).
 - **Areas painted by rows** (`src/map/geometry.ts` `ringRow`, `src/map/apply.ts`): an area's cells were each tested
   against every vertex of its rings, which made the 4700 vertices of the woods and meadows cost 17 s of a 22.5 s
-  compile. Each row's crossings with the rings now give its inside cells at once, with the same sums and the same
+  compile. Each row's crossings with the rings now give its inside cells at once (each crossing's own edge tested for a
+  point on it), with the same sums and the same
   exact test of a point on an edge as `inRing` (fuzzed against it, `test/map-ring-row.test.ts`): the same cells, every
   committed hash unchanged; the compile 6.0 s.
 
@@ -376,6 +377,21 @@ into the epic; this plan details each as it starts.
 - The map validates and expands; its compile 6.0 s in Node (measured); every determinism hash and `check:data`
   unchanged by the painting by rows; the outlines over the survey and the lit view for the owner.
 - `npm test`, `check:data`, the build, the docs check and the page check pass.
+
+## Review rounds (M8f)
+
+- **Round 1** (`/code-review high`): one finding about what is painted, the rest latent (the committed map passed).
+  The arable over the whole map puts its crop under every way, stream and village: the ruleset reads water, ways and
+  buildings before the crop and the draft draws them over it, so play and the draft are unchanged; the note says so,
+  and the gardens between a village's houses are an open question. Fixed: a region's rings are simplified together
+  and kept only where none crosses itself or touches another (a region whose own pixel edges fail is an error, never
+  written); corner pinches removed until none is left, never filling a pixel off the map (clearing one of its ones
+  instead), after the map's edge is cleared; the box's hue a mean of angles weighted by saturation (a red line over
+  paper read as green, black lettering in a wood as paper); a region is an orchard's beds when most of its pixels lie
+  inside the orchard, not its centre; a ring that collapses at one tolerance tries the next; the exact test of a point
+  on an edge only against the edge that made the span. Not taken: one box-mean helper for the three tools and the
+  bake, and one cell-range helper for the cells and the rows (to share when the tracer is reworked, #227). Tests: the
+  pinch off the map, the red line (each fails without its fix).
 
 ## Open questions
 
@@ -400,5 +416,8 @@ into the epic; this plan details each as it starts.
   to run again (a check that each stretch still covers its survey pixels would catch a missed rerun).
 - Sokolnitz castle and pheasantry, the mills and the manor farms are not drawn yet (built.farm areas, with M8f's
   fields).
+- The arable lies under every way, stream and village: a village's gardens and yards between its houses are a
+  crop in the layers (the ruleset and the draft let the buildings and ways win), to draw as yards when the scenario
+  needs it.
 - What is left of modern ground: Slatina's and Brno's built-up edge in the north-west corner, the airport's flat
   apron, Holubice's interchange slip roads, the low banks of today's roads. Light; the owner's check decides.

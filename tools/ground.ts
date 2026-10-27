@@ -13,7 +13,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { Feature, MapFile, Pt } from '../src/map/schema.ts'
 import { demPlace, toMap } from '../src/map/dem.ts'
-import { inRing, ringArea2, ringCrossing } from '../src/map/geometry.ts'
+import { inRing, ringArea2, ringCrossing, ringsTouch } from '../src/map/geometry.ts'
 import { cm } from '../src/map/util.ts'
 import { writeMap } from '../src/map/write.ts'
 import { read as readPng } from './png.mjs'
@@ -56,41 +56,56 @@ export function boxMean(a: Float64Array, w: number, h: number, r: number): Float
 /**
  * The survey's green: a pixel whose saturation over its box (`r` each way) exceeds `sat` and whose hue lies at
  * `hue`° or greener (the paper's is about 46°, its saturation about 0.31; the wash and the woods' about 0.45 at 50 to
- * 60°). 1 where green.
+ * 60°; the box's hue is the mean of its pixels' hues as angles weighted by their saturation). 1 where green.
  */
 export function greenOf(rgba: Uint8Array, w: number, h: number, r = 6, sat = 0.4, hue = 48): Uint8Array {
   const S = new Float64Array(w * h)
-  const H = new Float64Array(w * h)
+  // the hue as an angle weighted by its saturation (a grey pixel has none; 350° and 10° average to 0°, not 180°)
+  const HC = new Float64Array(w * h)
+  const HS = new Float64Array(w * h)
   for (let k = 0; k < w * h; k++) {
     const [R, G, B] = [rgba[4 * k], rgba[4 * k + 1], rgba[4 * k + 2]]
     const mx = Math.max(R, G, B)
     const d = mx - Math.min(R, G, B)
     let hh = 0
     if (d) hh = mx === R ? ((G - B) / d) % 6 : mx === G ? (B - R) / d + 2 : (R - G) / d + 4
-    H[k] = (hh * 60 + 360) % 360
+    const a = (hh * 60 * Math.PI) / 180
     S[k] = mx ? d / mx : 0
+    HC[k] = S[k] * Math.cos(a)
+    HS[k] = S[k] * Math.sin(a)
   }
   const s = boxMean(S, w, h, r)
-  const hb = boxMean(H, w, h, r)
+  const hc = boxMean(HC, w, h, r)
+  const hs = boxMean(HS, w, h, r)
   const out = new Uint8Array(w * h)
-  for (let k = 0; k < w * h; k++) out[k] = s[k] > sat && hb[k] >= hue && hb[k] <= 120 ? 1 : 0
+  for (let k = 0; k < w * h; k++) {
+    const hb = ((Math.atan2(hs[k], hc[k]) * 180) / Math.PI + 360) % 360
+    out[k] = s[k] > sat && hb >= hue && hb <= 120 ? 1 : 0
+  }
   return out
 }
 
 /**
  * A mask with no two of its ones (or of its zeros) touching only at a corner: in every 2 × 2 block of ones on one
- * diagonal and zeros on the other, a zero becomes a one. Such a corner is where a traced ring would meet itself.
+ * diagonal and zeros on the other, a zero becomes a one where `allowed` lets it, else a one becomes a zero (each
+ * change only removes pinches, so it ends). Such a corner is where a traced ring would meet itself.
  */
-export function noPinches(mask: Uint8Array, w: number, h: number): Uint8Array {
+export function noPinches(mask: Uint8Array, w: number, h: number, allowed?: Uint8Array): Uint8Array {
   const m = mask.slice()
-  for (let pass = 0, changed = true; changed && pass < 8; pass++) {
+  const ok = (k: number) => !allowed || allowed[k] === 1
+  for (let changed = true; changed;) {
     changed = false
     for (let y = 0; y + 1 < h; y++) {
       for (let x = 0; x + 1 < w; x++) {
-        const [a, b, c, d] = [m[y * w + x], m[y * w + x + 1], m[(y + 1) * w + x], m[(y + 1) * w + x + 1]]
+        const k = [y * w + x, y * w + x + 1, (y + 1) * w + x, (y + 1) * w + x + 1]
+        const [a, b, c, d] = k.map(i => m[i])
         if (a === d && b === c && a !== b) {
-          if (a) m[y * w + x + 1] = 1
-          else m[y * w + x] = 1
+          // the zeros of the block, and its ones
+          const zeros = a ? [k[1], k[2]] : [k[0], k[3]]
+          const ones = a ? [k[0], k[3]] : [k[1], k[2]]
+          const fill = zeros.find(ok)
+          if (fill !== undefined) m[fill] = 1
+          else m[ones[0]] = 0
           changed = true
         }
       }
@@ -193,15 +208,17 @@ function main(): void {
   // the green, only on the map: a pixel's centre 3 m inside its edge, so its corners (under 1.5 m from it) are too
   const green = greenOf(img.data, w, h)
   const [hw, hh] = [map.extent.w / 2, map.extent.h / 2]
+  const onMap = new Uint8Array(w * h)
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (!green[y * w + x]) continue
       const [fx, fz] = fit.toFrame(x + 0.5, y + 0.5)
       const [mx, mz] = toMap(place, fx, fz)
-      if (Math.abs(mx) > hw - 3 || Math.abs(mz) > hh - 3) green[y * w + x] = 0
+      onMap[y * w + x] = Math.abs(mx) <= hw - 3 && Math.abs(mz) <= hh - 3 ? 1 : 0
+      if (!onMap[y * w + x]) green[y * w + x] = 0
     }
   }
-  const { label, sizes } = regions(noPinches(green, w, h), w, h)
+  // no corner pinches, never filling a pixel off the map
+  const { label, sizes } = regions(noPinches(green, w, h, onMap), w, h)
   // each region's box and centre, in one pass
   const box = sizes.map(() => [w, h, -1, -1, 0, 0])
   for (let k = 0; k < w * h; k++) {
@@ -230,9 +247,17 @@ function main(): void {
     return best
   }
   for (const p of ins.meadows) kindOf.set(seed(p), 'ground.meadow')
+  // a region mostly (over half its pixels) inside an orchard drawn round is the orchard's beds
   const inOrchard = (n: number) => {
-    const [cx, cy] = [box[n][4] / sizes[n], box[n][5] / sizes[n]]
-    return ins.orchards.some(o => inRing(o.area, [cx, cy]))
+    if (!ins.orchards.length) return false
+    const [x0, y0, x1, y1] = box[n]
+    let inside = 0
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        if (label[y * w + x] === n && ins.orchards.some(o => inRing(o.area, [x + 0.5, y + 0.5]))) inside++
+      }
+    }
+    return 2 * inside > sizes[n]
   }
   const pxArea = (() => {
     const [a, b, c] = [toPoint([w / 2, h / 2]), toPoint([w / 2 + 1, h / 2]), toPoint([w / 2, h / 2 + 1])]
@@ -248,19 +273,23 @@ function main(): void {
     const bw = x1 - x0 + 1
     const bh = y1 - y0 + 1
     const pxRings = rings((x, y) => label[(y + y0) * w + x + x0] === n, bw, bh)
-    const traced: Pt[][] = []
-    for (const r of pxRings) {
-      // simplified by 1.5 px, less where that makes it cross itself (the pixels' own edges never do)
-      const px = r.map(([x, y]) => [x + x0, y + y0] as Pt)
-      let ring: Pt[] = []
-      for (const tol of [1.5, 0.75, 0]) {
-        const pts = tol ? simplify(px, tol) : px
-        if (pts.length < 3) break
-        ring = pts.map(toPoint)
-        if (!ringCrossing(ring)) break
+    // its rings simplified together by 1.5 px, less where any would cross itself or touch another (the pixels' own
+    // edges never do); a region whose own edges fail is an error, never written
+    const pxs = pxRings.map(r => r.map(([x, y]) => [x + x0, y + y0] as Pt))
+    let traced: Pt[][] | null = null
+    for (const tol of [1.5, 0.75, 0]) {
+      const rs = pxs
+        .map(px => (tol ? simplify(px, tol) : px))
+        .filter(pts => pts.length >= 3)
+        .map(pts => pts.map(toPoint))
+        .filter(ring => Math.abs(ringArea2(ring)) / 2 >= ins.minArea)
+      const bad = rs.some((r, i) => ringCrossing(r) || rs.some((q, j) => j > i && ringsTouch(r, q)))
+      if (!bad) {
+        traced = rs
+        break
       }
-      if (ring.length >= 3 && Math.abs(ringArea2(ring)) / 2 >= ins.minArea) traced.push(ring)
     }
+    if (!traced) throw new Error(`region ${n}: its rings cross or touch even on its pixels' edges`)
     if (!traced.length) continue
     // the largest ring is the outer one, counter-clockwise in the map (z up); the rest are holes, clockwise
     traced.sort((a, b) => Math.abs(ringArea2(b)) - Math.abs(ringArea2(a)))
@@ -297,7 +326,9 @@ function main(): void {
       ],
     ],
     priority: 5,
-    note: `the open fields, the survey's paper between its woods, meadows and villages${NOTE}`,
+    // (under every way, stream and village too: the ruleset reads water, ways and buildings before the crop, and the
+    // draft draws them over it)
+    note: `the open fields, the survey's paper between its woods and meadows${NOTE}`,
   })
   const mine = (f: Feature) =>
     f.source === ins.scan && (f.note ?? '').endsWith(NOTE) && /^(ground|veg)\./.test(f.kind ?? '')

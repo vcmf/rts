@@ -138,15 +138,15 @@ export function ringRow(ring: Pt[], z: number, xs: ArrayLike<number>): Uint8Arra
   const n = xs.length
   const out = new Uint8Array(n)
   const cross: number[] = []
-  const on: [number, number][] = [] // spans of x where a point may lie on an edge, tested exactly
+  const on: [number, number, number][] = [] // spans of x where a point may lie on edge i, tested exactly
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const a = ring[i]
     const b = ring[j]
     if (a[1] > z !== b[1] > z) {
       const xc = ((b[0] - a[0]) * (z - a[1])) / (b[1] - a[1]) + a[0]
       cross.push(xc)
-      on.push([xc, xc])
-    } else if (a[1] === z || b[1] === z) on.push([Math.min(a[0], b[0]), Math.max(a[0], b[0])])
+      on.push([xc, xc, i])
+    } else if (a[1] === z || b[1] === z) on.push([Math.min(a[0], b[0]), Math.max(a[0], b[0]), i])
   }
   // a point is inside when an odd number of crossings lie to its right (inRing's p.x < crossing)
   cross.sort((p, q) => p - q)
@@ -156,7 +156,8 @@ export function ringRow(ring: Pt[], z: number, xs: ArrayLike<number>): Uint8Arra
     out[k] = (cross.length - c) % 2
   }
   // a point on an edge counts as inside: the points from the one before each span to the one after it, tested exactly
-  for (const [lo, hi] of on) {
+  // (every edge that meets the row has its span, so each span tests its own edge alone)
+  for (const [lo, hi, e] of on) {
     let k = 0
     let hiK = n - 1
     // the last point before lo, and the first after hi, by halving
@@ -177,12 +178,8 @@ export function ringRow(ring: Pt[], z: number, xs: ArrayLike<number>): Uint8Arra
     for (; k <= hiK; k++) {
       if (out[k]) continue
       const p: Pt = [xs[k], z]
-      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        if (orient(ring[i], ring[j], p) === 0 && within(ring[i], ring[j], p)) {
-          out[k] = 1
-          break
-        }
-      }
+      const [a, b] = [ring[e], ring[e === 0 ? ring.length - 1 : e - 1]]
+      if (orient(a, b, p) === 0 && within(a, b, p)) out[k] = 1
     }
   }
   return out
