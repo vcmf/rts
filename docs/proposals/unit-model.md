@@ -244,9 +244,10 @@ against cavalry under fire is the period's central dilemma (L-01).
 - turning costs time (Face about 3 s; a change front tens of seconds).
 
 A battalion that marches across an enemy's front, or turns its back to retire under fire, pays all four (A-10,
-F-06). **A Retire ordered within an enemy's fire range** costs more: a one-off morale shock when it starts, besides
-its back to the enemy (it cannot fire, and fire strikes it as in the rear). The shock is for turning the back on the
-player's order: the wavering fall-back, the morale's own reaction, does not pay it. From a melee there is no retiring
+F-06). **A retreat ordered within an enemy's fire range** costs more: a one-off morale shock when it starts, besides
+its back to the enemy (it cannot fire, and fire strikes it as in the rear). A retreat is any ordered move that turns
+its back on an enemy in the fight within fire range: a Retire, or a Face about and a move. The shock is for turning
+the back on the player's order: the wavering fall-back, the morale's own reaction, does not pay it. From a melee there is no retiring
 at all (§ Collision).
 
 ## Experience
@@ -421,15 +422,15 @@ with their own numbers:
 
 ### Firearm and melee modes
 
-A type may have a **firearm** mode, a **melee** mode or both; artillery has neither. Where it has both, the player
-sets which:
-- **firearm:** it fires as § Fire says (its fire mode, and fire discipline, which may set it to at will; formed
-  bodies fire at the halt, skirmish order on the move);
-- **melee:** it holds its fire, whatever its fire mode or fire discipline says, and an order to attack an enemy is a
-  charge: cavalry's, or infantry's assault with the bayonet (§ The assault);
-- **by type:** line infantry has both; skirmishers the firearm mode only; some militia (the Russian opolchenie) the
-  melee mode only; cavalry the melee mode, and both where its type has carbines (pistols and carbines later,
-  § Formations);
+Every type but artillery has a **firearm** and a **melee** mode, and the player sets which (the owner's rule,
+decision 0069); a few have one only. Artillery has no mode: it fires as § Artillery says, and does not fight a melee.
+- **firearm:** it fires as § Fire says (its fire mode, and fire discipline; formed bodies fire at the halt, skirmish
+  order on the move);
+- **melee:** it holds its fire, and an order to attack an enemy is a charge: cavalry's, or infantry's assault with the
+  bayonet (§ The assault). Fire discipline still holds: a level that cannot hold its fire opens fire on its own, in
+  either mode, and its advance is dropped (§ Fire);
+- **by type:** skirmishers have the firearm mode only, and some militia (the Russian opolchenie) the melee mode only;
+  line infantry and cavalry have both (cavalry's firearm is its pistols and carbines, later, § Formations);
 - **in contact:** a battalion an enemy reaches in melee fights in melee as a whole, whatever its mode, until the
   melee ends; a firearm-only type fights at a heavy disadvantage. The sim fights battalions and companies, not single
   men: the soldiers on screen are drawn from them.
@@ -446,9 +447,9 @@ Charges and melee work as today, with these additions:
   caught; veterans rally after a short pursuit.
 - **Ground** (E-13, E-14): no gallop over woods, villages, marsh or a barrier its kind cannot jump; uphill takes
   momentum. The ground's speed already slows a charge; momentum should read the slope too.
-- **A second enemy in the flank or rear:** a charge that strikes a battalion already in melee from its flank or rear
-  gives it a further one-off morale shock, on top of the impact's own shock by sector: a new ruleset number, a
-  first guess the size of the impact's flank shock.
+- **A second enemy in the flank or rear** (U1): a charge that strikes a battalion already in melee from its flank or
+  rear gives it a further one-off morale shock, on top of the impact's own shock by sector: a new ruleset number, a
+  first guess the size of the impact's flank shock. Its case is to be added to the scenarios with U1.
 
 Fire into a melee needs nothing new: today a battalion in melee can be fired on from any side where no friend of the
 shooter stands across the line of fire, and cannot fire back. One battalion holding an enemy in melee while another
@@ -523,7 +524,8 @@ hard cases (`docs/plans/active/track-s.md`). The rules a player sees, which it k
   side breaks, or as today when a charger turns away from a square or the two fall out of contact (decision 0069, on
   the claim grid's branch).
 - **A broken battalion runs as a block:** it faces about and runs, wavering and shattered battalions keeping their
-  block. Every enemy that reaches it cuts it down, and it does not fight back; there is no surrender.
+  block. Every enemy that reaches it, but one in melee with another, cuts it down, and it does not fight back; there
+  is no surrender.
 - **Nothing is pushed.** A formation that meets a friend waits or goes round; until pathfinding (U8) it halts with
   the status "blocked by a friend".
 - **A router stopped by an enemy** is halted, as one stopped by impassable ground is today, so it tries the next
@@ -656,9 +658,9 @@ units they order behave this way. U8 and U9 are Track S's pathfinding and group 
 
 | Phase | What | Scenarios |
 |---|---|---|
-| **U1** | Sectors: one reading for fire, charges and morale; exposure by shape and sector; the share that bears; flank and rear drains | A-01 to A-10, B-08, C-06, G-04 |
+| **U1** | Sectors: one reading for fire, charges and morale; exposure by shape and sector; the share that bears; flank and rear drains; the retreat's shock and the flank shock on a battalion in melee | A-01 to A-10, B-08, C-06, G-04 |
 | **U2** | Experience and the morale bar: six levels, their table, points and a level up; the bar replaces today's morale value; toughness | B-02, C-01, C-02, E-05, E-08, E-09, G-01, G-05, G-06, G-08, H-01, H-04, H-05 |
-| **U3** | Closing: engagement states, changes under fire, the wavering rule, fire discipline, the first volley, the assault | B-03, C-03 to C-05, E-15, F-01 to F-07, L-05 |
+| **U3** | Closing: engagement states, changes under fire, the wavering rule, fire discipline, the first volley, the assault; the firearm and melee modes | B-03, C-03 to C-05, E-15, F-01 to F-07, L-05 |
 | **U4** | Guns: the guns' drain, the last salvo, pieces apart from crews, guns taken, gunners sheltering | B-06, D-04 to D-08, G-09, L-03, L-04 |
 | **U5** | Categories: light infantry and skirmish order, heavy and light cavalry, horse artillery, the bonus table | B-07, C-07, D-10, E-06, E-07, E-10, E-11, E-12, K-01 to K-05, L-07 |
 | **U6** | Collision, with the orders and their queue, by its own proposal: enemies, friends, loose bodies, the clash | I-06 to I-09, G-07 |
@@ -716,9 +718,10 @@ bar in U2. U6 must come before U8, since pathfinding hands moving formations to 
 - **Rallying, after Total War** (research, 2026-10-26: Napoleon's and Warhammer's morale tables): a router there rallies
   when its rout timer runs out, if no enemy within about 80 m is stronger than a third of it and it is not engaged;
   it shatters on its third rout, below a deep morale floor while running, or when its general dies; an army below
-  about a quarter of its strength takes a large morale penalty. Today's rally (no enemy within 250 m, no losses for
-  20 s, two rallies at most, shattered below half strength) has the first part; the army-wide collapse and the
-  general (his presence for a rally, his death for the routers) are left for when generals come.
+  about a quarter of its strength takes a large morale penalty. Today's rally (`morale.rally` and `morale.shatter` in
+  `src/rulesets/napoleonic.ts`) already waits for no enemy near and no recent losses, and shatters on the third rout
+  and below a share of its men. Left: the army-wide collapse and the general (his presence for a rally, his death for
+  the routers) for when generals come, and whether a deep morale floor should shatter a router too.
 - **The ceiling of the bar's recovery:** what share of the losses' cost stays for the battle (a half, as a first
   guess). Too little and a battered battalion comes back fresh; too much and nothing ever recovers.
 - **The level up's refill** is a lump of morale mid-battle, once per battle. If playtests find it swings fights,
