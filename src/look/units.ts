@@ -36,6 +36,7 @@ import DECAL_FS from './shaders/unitdecal.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
 import {
+  CONTACT_FLOOR,
   SHADOW_CONTACT,
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
@@ -43,10 +44,14 @@ import {
   contactReachOf,
   contactUniform,
   contactWeight,
+  decalDefinesChanged,
+  decalStep,
   decalStrip,
   farShare,
   footUniform,
   lookBetween,
+  type DecalPoll,
+  type DecalSide,
   type ShadowContact,
   type ShadowLook,
   type ShapeBox,
@@ -380,8 +385,8 @@ export class Units {
   private decal: ShaderMaterial | null = null // the simple shadows' material drawn now (useDecals, useDecalFor)
   private decalFar: ShaderMaterial | null = null // without the contact's oval (past its band; without a contact)
   private decalNear: ShaderMaterial | null = null // with it (within its band), null without a contact
-  private idleReady = false // the one of the two not drawn compiled (useDecalFor), false again when the defines change
-  private idlePolls = 0 // the frames it has been asked so far (useDecalFor: given up at IDLE_POLLS)
+  // the background compile (useDecalFor, decalStep): afresh after every switch and every change of the defines
+  private decalPoll: DecalPoll = decalDefinesChanged()
   /** their share of the samples (their soft edge and their gradient: decalFragment, src/look/shadow-look.ts) as
    *  alpha to coverage, with the scene's 4 samples: order-independent; with fewer (?msaa=1|2: two samples would make
    *  the gradient one hard step on drivers that do not dither it) their share darkens the pixel instead, the first
@@ -1678,7 +1683,13 @@ export class Units {
           ...(this.coverage ? ['#define COVERAGE'] : []),
           ...(this.farScaleOn ? ['#define FAR_SCALE'] : []),
           ...(this.fade ? [FADE_ON[1]] : []),
-          ...(oval ? ['#define SH_CONTACT', `#define CONTACT_ROWS ${d.vat.height.toFixed(1)}`] : []),
+          ...(oval
+            ? [
+                '#define SH_CONTACT',
+                `#define CONTACT_ROWS ${d.vat.height.toFixed(1)}`,
+                `#define CONTACT_FLOOR ${CONTACT_FLOOR.toFixed(3)}`,
+              ]
+            : []),
         ],
       })
       if (this.contact) this.useContact(m, this.contact, oval)
@@ -1729,8 +1740,7 @@ export class Units {
     this.decalFar = far
     this.decalNear = near
     this.decal = near ?? far
-    this.idleReady = false
-    this.idlePolls = 0
+    this.decalPoll = decalDefinesChanged()
     this.setDecalLook(this.lookNow)
     for (const h of this.hosts) h.lod[this.decalLod].material = this.decal
   }
@@ -1748,30 +1758,24 @@ export class Units {
     const mesh = this.decalMesh()
     if (!near || !far || !mesh) return
     // (the one not drawn compiled in the background until ready, after every change of the defines and every switch:
-    // never a hitch at the band's edge; the switch itself asks the wanted one, so until it is ready the one drawn
-    // stays: a material not ready draws nothing)
-    const want = contactOvalOn(this.contact, this.contactW) ? near : far
-    if (want !== this.decal) {
-      if (want.isReady(mesh, true)) this.switchDecal(want)
-      return
-    }
-    const idle = want === near ? far : near
-    if (this.idleReady || this.idlePolls >= IDLE_POLLS) return
-    this.idleReady = idle.isReady(mesh, true)
+    // never a hitch at the band's edge; the switch itself waits for the wanted one: a material not ready draws
+    // nothing; decalStep)
+    const mat = (side: DecalSide) => (side === 'near' ? near : far)
+    const step = decalStep(
+      contactOvalOn(this.contact, this.contactW) ? 'near' : 'far',
+      this.decal === near ? 'near' : 'far',
+      this.decalPoll,
+      side => mat(side).isReady(mesh, true),
+      IDLE_POLLS,
+    )
+    this.decalPoll = step.poll
     // (a shader that never compiles: stop asking, say so once, and stay on the one drawn)
-    if (!this.idleReady && ++this.idlePolls === IDLE_POLLS) {
-      console.warn(
-        `units: the ${idle.name} shadows' material is not ready after ${IDLE_POLLS} frames; not compiling it`,
-      )
-    }
-  }
-  /** The decal drawn with m from now on (useDecalFor), its look given afresh, the other one compiled again */
-  private switchDecal(m: ShaderMaterial): void {
+    if (step.gaveUp) console.warn(`units: the simple shadows' other material not ready after ${IDLE_POLLS} frames`)
+    if (!step.switchTo) return
+    const m = mat(step.switchTo)
     this.decal = m
     for (const h of this.hosts) h.lod[this.decalLod].material = m
     this.lookSet.soft = NaN
-    this.idleReady = false
-    this.idlePolls = 0
   }
 
   /** The contact shadow's ovals (contactOvals, a texel a baked step) and its uniform on the shadows' material m, and
@@ -1926,8 +1930,7 @@ export class Units {
     }
     // (their shadows grow with them)
     for (const m of [this.decalFar, this.decalNear]) m?.setDefine('#define FAR_FROM', on ? FAR_FROM.toFixed(4) : false)
-    this.idleReady = false
-    this.idlePolls = 0
+    this.decalPoll = decalDefinesChanged()
   }
   /** A figure material's draws told whether their battalion fades each man (uLodFade, set as each mesh binds it: the
    *  material is shared by the battalions of a uniform; one drawing a single LOD draws every man, no per-man work) */
@@ -1964,8 +1967,7 @@ export class Units {
     this.farScaleOn = on
     for (const m of [...this.farMats.values(), ...this.tinyMats.values()]) m.setDefine('#define FAR_SCALE', on)
     for (const m of [this.decalFar, this.decalNear]) m?.setDefine('#define FAR_SCALE', on) // (their simple shadows too)
-    this.idleReady = false
-    this.idlePolls = 0
+    this.decalPoll = decalDefinesChanged()
   }
   /** each side's uniforms' coat colours (the guard's ΔE to the coat) */
   coats(): string[][] {

@@ -6,7 +6,8 @@ date: 2026-10-27
 # 0071 A contact shadow under the soldiers' feet; their shadows no darker than the ground's painted shadow
 
 Amends 0062 (the simple shadow at every zoom) and supersedes 0067's values (its gain, 2 up close and 1.5 far, is now
-1; the gain switch stays). Accepted by the owner on 2026-10-27 from the test's sheets. The plan and its
+1; the gain switch stays). Accepted by the owner on 2026-10-27: the oval from the test's sheets; then, asked to
+match the trees, the darkness and hue measured here (contact 1, gain 1, soles 1, desat 0.65): "look good". The plan and its
 measurements: `docs/plans/done/shadow-contact.md`; as built: `docs/systems/look.md` ("The armies").
 
 0069 and 0070 are taken on other branches, so this is 0071.
@@ -43,6 +44,9 @@ Measured (the plan):
   - The oval's strip reaches past the shape's cell, which it reads nothing outside, so no strip edge cuts the fade
     (tested).
   - The contact is one more darkness in 0062's coverage rule (`contactFragment`), so the overlap rule holds unchanged.
+  - Its material lifts the decal at least 3 cm toward the camera (`CONTACT_FLOOR`). The oval's half behind the soles
+    is otherwise unlifted, and the terrain hid it there: the oval was cut along the soles (the owner: "cut in half").
+    8 cm darkened boots.
 - **No part darker than the ground's painted cast shadow:**
   - The contact's core is the shade k itself (darkness 1).
   - The sun's shadow's gain is 1 close and far (0067's 2 and 1.5 retired), and its soles' darkness 1 (0062's 1.05).
@@ -67,7 +71,7 @@ Measured (the plan):
 ## Consequences
 
 - **Lighter than 0067's.** The contact is k: 0.23 to 0.29 of the lit ground, against 0.07 to 0.16 on main and a
-  tree's 0.14 to 0.28. The tail (median) is 0.44 to 0.59, against 0.41 to 0.55.
+  tree's 0.14 to 0.28. The tail (median) is 0.44 to 0.59, against 0.31 to 0.55.
 - **The tree's hue.** The contact's ratio is about [0.21, 0.25, 0.37], against the trees' [0.14–0.26, 0.16–0.27,
   0.26–0.42].
 - **Slightly lighter than a tree's core.** Where a crown also hides sky, a tree's shadow is darker than k.

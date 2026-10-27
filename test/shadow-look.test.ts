@@ -4,6 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
+  CONTACT_FLOOR,
   SHADE_DESAT,
   SHADOW_CONTACT,
   SHADOW_LOOK,
@@ -19,7 +20,10 @@ import {
   contactUniform,
   contactWeight,
   decalFragment,
+  decalDefinesChanged,
+  decalLift,
   decalPixel,
+  decalStep,
   decalStrip,
   desaturated,
   farShare,
@@ -184,17 +188,18 @@ describe("the darkening's gain (shadowShade)", () => {
     for (const gain of [1, 2, 3]) expect(shadowShade([0, 0, 0], 1, gain).every(Number.isFinite)).toBe(true)
   })
   it('is what the shader does: the full darkness gained by its luminance, then the coverage or the share', () => {
-    const frag = readFileSync(new URL('../src/look/shaders/unitdecal.frag', import.meta.url), 'utf8').replace(
-      /\s+/g,
-      '',
-    )
+    const frag = readFileSync(new URL('../src/look/shaders/unitdecal.frag', import.meta.url), 'utf8')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\s+/g, '')
     const gainLine = `d*=pow(max(dot(d,vec3(${SHADE_LUMA.join(',')})),1.0e-3),uShGain-1.0);`
     const at = frag.indexOf(gainLine)
     expect(at).toBeGreaterThan(frag.indexOf('vec3d=max(mix(vec3(1.0),k,f),0.0);'))
     expect(frag.indexOf('vec3d=max(mix(vec3(1.0),k,f),0.0);')).toBeGreaterThan(0)
     expect(frag.indexOf('gl_FragColor=vec4(d,a);')).toBeGreaterThan(at)
     expect(frag.indexOf('gl_FragColor=vec4(mix(vec3(1.0),d,a),0.0);')).toBeGreaterThan(at)
-    expect(frag).toContain('#ifndefCOVERAGE#ifdefSH_CONTACTif(v<0.02)discard;#elseif(s<0.02)discard;#endif#endif')
+    expect(frag).toContain(
+      '#ifndefCOVERAGE#ifdefSH_CONTACTif(s<0.02&&ct<0.02)discard;#elseif(s<0.02)discard;#endif#endif',
+    )
     expect(frag).not.toContain('k,f*a')
   })
   it('never brightens a channel at any gain the switch takes (1 to 3)', () => {
@@ -490,6 +495,59 @@ describe('the contact shadow (decision 0071)', () => {
   })
 })
 
+describe("the decal's two materials (decalStep, units.ts useDecalFor)", () => {
+  const fresh = decalDefinesChanged()
+  it('never switches to a material that is not ready, but waits on it (a material not ready draws nothing)', () => {
+    const r = decalStep('near', 'far', fresh, side => side === 'far', 600)
+    expect(r.switchTo).toBeNull()
+    expect(r.poll.polls).toBe(1)
+    expect(decalStep('near', 'far', fresh, () => true, 600).switchTo).toBe('near')
+  })
+  it('asks the new idle material afresh after a switch (the bug: an idle "ready" kept from the other material)', () => {
+    // the far one was the idle one and ready; the page switched to it; then the near one's defines went stale
+    const afterSwitch = decalStep('far', 'near', { idleReady: true, polls: 0 }, () => true, 600)
+    expect(afterSwitch.switchTo).toBe('far')
+    expect(afterSwitch.poll).toEqual({ idleReady: false, polls: 0 })
+    // back to the near one, not ready: it stays on the far one (the old check, idleReady, switched and drew nothing)
+    const back = decalStep('near', 'far', { idleReady: true, polls: 0 }, side => side === 'far', 600)
+    expect(back.switchTo).toBeNull()
+  })
+  it('compiles the idle one in the background until ready, then stops asking', () => {
+    const asked: string[] = []
+    const ask = (side: string) => (asked.push(side), false)
+    const r = decalStep('near', 'near', fresh, ask, 600)
+    expect(asked).toEqual(['far'])
+    expect(r.poll).toEqual({ idleReady: false, polls: 1 })
+    const done = decalStep('near', 'near', { idleReady: false, polls: 1 }, () => true, 600)
+    expect(done.poll).toEqual({ idleReady: true, polls: 1 })
+    asked.length = 0
+    decalStep('near', 'near', done.poll, ask, 600)
+    expect(asked).toEqual([])
+  })
+  it("gives up after its budget, the wanted one's asks counted too, warning once, and starts over on new defines", () => {
+    let p = fresh
+    let warned = 0
+    for (let i = 0; i < 700; i++) {
+      const r = decalStep(i % 2 ? 'near' : 'far', 'far', p, () => false, 600)
+      p = r.poll
+      if (r.gaveUp) warned++
+      expect(r.switchTo).toBeNull()
+    }
+    expect(p.polls).toBe(600)
+    expect(warned).toBe(1)
+    expect(decalDefinesChanged()).toEqual({ idleReady: false, polls: 0 })
+  })
+})
+
+describe("the decal's lift (decalLift, unitdecal.vert)", () => {
+  it("lifts the oval's half behind the soles at least CONTACT_FLOOR (else the terrain cut it along the soles)", () => {
+    expect(CONTACT_FLOOR).toBe(0.03)
+    for (const along of [-0.6, -0.1, 0, 0.2]) expect(decalLift(along, 0.3, 1.5, true)).toBeGreaterThanOrEqual(0.03)
+    expect(decalLift(-0.3, 0.3, 1.5, false)).toBe(0) // (decision 0062's material: as before)
+    expect(decalLift(1.5, 0.3, 1.5, true)).toBeCloseTo(0.3, 12)
+  })
+})
+
 describe("the contact's ovals over the figure's feet (contactOvals)", () => {
   it('an oval holds every point it is made from, centred on their box', () => {
     const pts: [number, number][] = [
@@ -635,5 +693,6 @@ describe('the contact shaders match their mirrors (the source)', () => {
       'vCt=(vec2(dot(P,normalize(finalWorld[0].xz)),dot(P,normalize(finalWorld[2].xz)))-ov.xy)/max(ov.zw+uShContact.x,1.0e-3);',
     )
     once(v, 'vCell=c/uShapeCell.xy;')
+    once(v, 'floatlift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);#ifdefSH_CONTACTlift=max(lift,CONTACT_FLOOR);#endif')
   })
 })

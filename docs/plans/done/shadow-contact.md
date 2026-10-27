@@ -3,7 +3,7 @@ status: done
 last_reviewed: 2026-10-27
 ---
 
-# Plan: a contact shadow under the soldiers' feet, capped at a tree's shadow
+# Plan: a contact shadow under the soldiers' feet, the shadows matched to a tree's
 
 Asked by the owner (2026-10-26), of the simple shadows (decisions 0062 and 0067): "darker and more solid at the
 foot of the soldier". Shown `?ushfoot=1.5,0.6,1.5,0.6&ushdark=0.5,0.6`: "darker than the tree shadow so not good,
@@ -12,8 +12,15 @@ the foot even in movement … as it's a fixed shadow, the shadow can be detached
 with fast performance is always preferred". The owner's rule: **no part of a soldier's shadow darker than a tree's
 cast shadow.**
 
-It began as a test behind switches (the measurements below are the test's, made before the default changed); the
-owner picked on 2026-10-27 (the outcome, at the end) and the pick is now the default: decision 0071.
+Its history, in order below:
+- A test behind switches, with every shadow capped near a tree's core darkness (the measurements up to the outcome
+  are the test's).
+- The owner's pick on 2026-10-27 (the outcome), made the default, and three review rounds.
+- Then the owner found the shadows "darker and bluer than the tree shadow". The cap gave way to the ground's painted
+  shadow itself, its hue matched to the trees' ("Matching the trees").
+- Then a fix for the oval cut along the soles ("The oval cut in half").
+
+As built now: decision 0071.
 
 ## Why the foot is not solid today
 
@@ -436,7 +443,7 @@ Winter (snow; the trees bare, only one tree shadow in frame): the tree 0.25 [0.2
 - A k-dark contact is a little lighter than a tree's core where the crown also hides sky. That is the owner's
   "a bit lighter".
 
-**A bug found on the way** (also in `af16faa9`): after a switch between the two decal materials, the "idle is ready"
+**A bug found on the way** (introduced with the background compile in review round 1, `d9f9a78f`): after a switch between the two decal materials, the "idle is ready"
 flag still described the previous idle material. Switching back to one compiled before a define change then drew
 nothing until it recompiled: the first close view of a page had no soldier shadows. Now the switch asks the wanted
 material itself, and the idle poll restarts after every switch.
@@ -459,6 +466,51 @@ pixels: main | the branch before | now, the tree's and the soldiers' ratios and 
   | wide | 0 | 11,546 |
   | far-edge | 0 | 2,755 |
   | winter | 0 | 0 |
+
+## The oval cut in half (2026-10-27)
+
+The owner: "the oval is not really oval, it looks like the oval is cut in half". Close up on bare earth, the dark
+contact under each man ended in a straight edge.
+
+**Diagnosis:**
+- Reproduced at about 9 m on the Austrians at (181, 88) on a dirt road.
+- The edge runs along the soles, across the sun's direction.
+- The decal is lifted toward the camera by `uDecalLift`, growing from 0 at the soles over 1.5 m along the shadow, so
+  it never darkens the shins. The oval's half behind the soles therefore has no lift. It lies at the ground's
+  sampled height (the meadow map's, or the heightfield's), and the terrain mesh can stand a little higher there, so
+  it lost the depth test.
+- A minimum lift brought the half back: 3 cm fills it; 8 cm also darkens the boots.
+
+**Why round 1's real-data test missed it:** that test checks the strip's edges in the shape's frame, i.e. whether
+the strip holds the whole oval. It does; this was depth against the terrain, not a strip edge.
+
+**Fix:** the oval's material lifts the decal at least `CONTACT_FLOOR` (3 cm; `decalLift`, pinned by a source test).
+Decision 0062's material, past the band, is unchanged.
+- Tests: `decalLift` gives the half behind the soles at least the floor; that fails with the old lift, 0 there.
+- Sheet: `output/armies-review/22-shadow-contact/11-oval-cut-4x.jpg` (before and after, 4x).
+
+## Review round 3 (2026-10-27)
+
+No severe issue; the last round. Fixed:
+- The page's comments (the default gain 1, decision 0067's A/B recipe) and `docs/systems/look.md`'s (no `?ushcap`; the recipe).
+- **The switch between the decal's two materials** is now a pure function, `decalStep`, tested:
+  - it never switches to a material that is not ready, and asks the new idle one afresh after a switch (the round 1
+    bug's case: it fails with the old `idleReady` check);
+  - it stops asking once the idle one is ready;
+  - the wanted material's asks count against the same 600-frame budget, with one warning;
+  - the budget restarts on new defines.
+- Decision 0071: the tail figures, and the owner's acceptance of the matched darkness and hue ("look good").
+- Leftovers: the vertex shader's comment, `docs/INDEX.md`, this plan's title and opening (its history), the unused
+  fourth component of the contact's uniform (commented), the wording on the bug.
+- **Without coverage:** the oval's material discards where both the shape and the oval are under 0.02, so off the
+  oval it draws as decision 0062's.
+- `docs/systems/look.md`: under `?ushadowclose=map` the map's shadow, in the ground's own shadow colour, cross-fades against the
+  decal's desaturated shade (a small hue shift across the band).
+- `docs/decisions/README.md`: 0067's values superseded by 0071.
+
+**Goldens after these fixes and the floor** (main 5227ec6 against the branch):
+- The default page and decision 0067's recipe: a match at all 8 cameras.
+- `?armies=20`: as in "Matching the trees", but with 932 darker pixels at the close camera (930 before): the floor.
 
 **The cost:**
 

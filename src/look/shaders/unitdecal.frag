@@ -50,7 +50,8 @@ void main(){
   float a=min(1.0,v/dm);
   #ifndef COVERAGE
   #ifdef SH_CONTACT
-  if(v<0.02)discard;
+  // (as decision 0062's off the oval: its faint rim does not take the stencil from a darker core)
+  if(s<0.02&&ct<0.02)discard;
   #else
   if(s<0.02)discard;
   #endif

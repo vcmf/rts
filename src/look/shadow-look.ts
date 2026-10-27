@@ -268,6 +268,19 @@ export const SHADOW_CONTACT: Readonly<ShadowContact> = {
   soft: 1,
   band: [60, 100],
 }
+/** m: the least lift of the decal with the contact's oval (unitdecal.vert): its half behind the soles, where the
+ *  lift is otherwise 0, lies at the ground's sampled height, and the terrain can stand a little higher there and hide
+ *  it (the oval cut along the soles, the owner, 2026-10-27); 3 cm keeps it drawn, and darkens no boot (8 cm did) */
+export const CONTACT_FLOOR = 0.03
+
+/** The decal's lift toward the camera (m) a distance along (m from the soles, along the shadow) (unitdecal.vert,
+ *  mirrored here for its tests): lift, the decal's (Units.decalLift), grown over ramp m past the soles (none on his
+ *  shins), and with the contact's oval at least CONTACT_FLOOR */
+export function decalLift(along: number, lift: number, ramp: number, oval: boolean): number {
+  const l = lift * sstep(0, ramp, along)
+  return oval ? Math.max(l, CONTACT_FLOOR) : l
+}
+
 /** The share of the way the ground's shade is turned toward its own grey, its luminance kept, by default (bakes.ts
  *  unitShade, unitshade.frag): the shade of the ground's macro colour is bluer than a tree's painted shadow on the
  *  grass; measured in the plan ("Matching the trees") */
@@ -326,6 +339,7 @@ export function contactUniform(
   near: boolean,
 ): { uniform: [number, number, number, number] | null; reach: number } {
   if (!c) return { uniform: null, reach: 0 }
+  // (the fourth unused)
   return { uniform: [c.pad, c.dark * w, c.soft, 0], reach: near && w > 0 && c.dark > 0 ? reach : 0 }
 }
 
@@ -393,4 +407,43 @@ export function contactFragment(
 export function desaturated(k: readonly number[], desat: number): [number, number, number] {
   const l = luma(k)
   return [k[0] + (l - k[0]) * desat, k[1] + (l - k[1]) * desat, k[2] + (l - k[2]) * desat]
+}
+
+/** One of the decal's two materials (units.ts): with the contact's oval (near) or without (far) */
+export type DecalSide = 'near' | 'far'
+/** The background compile's state (units.ts useDecalFor): whether the material not drawn is ready, and the frames
+ *  asked so far (of the one wanted, or of the idle one) */
+export interface DecalPoll {
+  idleReady: boolean
+  polls: number
+}
+/** A frame's step of the decal's material (units.ts useDecalFor): switch to the wanted one only once it is ready (a
+ *  material not ready draws nothing), and after a switch ask the new idle one afresh; else ask the idle one until it is
+ *  ready. Every unanswered ask counts against limit, the wanted one's too; at limit, give up (gaveUp: the frame to warn
+ *  once) and stay on the one drawn. ready(side): asks that material (compiling it if needed) */
+export function decalStep(
+  want: DecalSide,
+  drawn: DecalSide,
+  poll: DecalPoll,
+  ready: (side: DecalSide) => boolean,
+  limit: number,
+): { switchTo: DecalSide | null; poll: DecalPoll; gaveUp: boolean } {
+  if (poll.polls >= limit) return { switchTo: null, poll, gaveUp: false }
+  if (want !== drawn) {
+    if (ready(want)) return { switchTo: want, poll: { idleReady: false, polls: 0 }, gaveUp: false }
+    const polls = poll.polls + 1
+    return { switchTo: null, poll: { idleReady: poll.idleReady, polls }, gaveUp: polls === limit }
+  }
+  if (poll.idleReady) return { switchTo: null, poll, gaveUp: false }
+  if (ready(drawn === 'near' ? 'far' : 'near')) {
+    return { switchTo: null, poll: { idleReady: true, polls: poll.polls }, gaveUp: false }
+  }
+  const polls = poll.polls + 1
+  return { switchTo: null, poll: { idleReady: false, polls }, gaveUp: polls === limit }
+}
+
+/** The background compile's state after the materials' defines change (units.ts setFarScale, setLodFade): both to be
+ *  compiled again, with a fresh budget */
+export function decalDefinesChanged(): DecalPoll {
+  return { idleReady: false, polls: 0 }
 }

@@ -38,8 +38,8 @@ varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 // frame (uContactTex: cx, cz, ax, az, m; CONTACT_ROWS of them, contactOvals in src/look/units-data.ts), grown by its
 // pad (uShContact.x, m); his step his clip's first (aVAT.x) plus the clock's steps since it began (uVATStep, aVAT.z his
 // phase, aVAT.y the clip's length: units.vert's); vCt: the vertex in the oval's frame (1 at its edge), linear on the
-// ground so the fragment's is exact. Only in the material drawn within the contact's zoom band (units.ts: past it a
-// material without SH_CONTACT, the cap alone)
+// ground so the fragment's is exact. Only in the material drawn within the contact's zoom band (units.ts: past it
+// decision 0062's material, without SH_CONTACT)
 uniform sampler2D uContactTex;uniform float uVATStep;uniform vec4 uShContact;
 // vCell: the vertex in his shape's cell (0 to 1 inside it): the strip reaches past the cell for the oval (decalStrip),
 // and the fragment reads no shape there
@@ -67,6 +67,12 @@ void main(){
   float gy=textureLod(uMeadow,(xz+TILE_HALF)/TILE_W,0.0).r;
   vec3 g=vec3(xz.x,gy,xz.y),toCam=normalize(uCamPos-g);
   float lift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);
+  #ifdef SH_CONTACT
+  // (the contact's sunward half lies behind his soles, where the lift is 0: at the ground's sampled height the terrain
+  // can stand a little higher and hide it, cutting the oval along his soles; a floor of CONTACT_FLOOR m keeps it
+  // drawn, too little to darken his boots: decision 0071, decalLift in src/look/shadow-look.ts)
+  lift=max(lift,CONTACT_FLOOR);
+  #endif
   gl_Position=viewProjection*vec4(g+toCam*(lift/max(0.2,toCam.y)),1.0);
   vec4 lp=uLMVP*vec4(g,1.0);vLM=lp.xy/lp.w*0.5+0.5;
   float a=atan(-finalWorld[0].z,finalWorld[0].x),fk=fract(a/6.2831853)*FACINGS,k0=floor(fk),k1=mod(k0+1.0,FACINGS);

@@ -685,10 +685,14 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (`vCell`); the strip's edges hold the oval's whole fade (tested on the figure's every step, 64 facings). Past the
   band (`contactOvalOn`, `useDecalFor` in `src/look/units.ts`) the decal draws with 0062's own material. The material
   not drawn is compiled in the background (polled until ready, again after any change of the defines or switch); the
-  switch waits until the wanted one is ready, so a material not ready is never drawn. Without the scene's coverage (`?msaa=1|2`) the first shadow at a pixel wins, so a neighbour's faint oval
-  rim (its fade, out to twice its size) drawn first can keep a darker core from a pixel there: order-dependent, as
-  the sun shadows' faint edges already were on that path. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none;
-  with no `?ushcap` the shadows as 0067 left them), `?ushcontactat=step|stride|root`, `?ushcontactband`, `?ushcap`. The fragment reads the atlas and the ground's shade:
+  switch waits until the wanted one is ready (`decalStep`), so a material not ready is never drawn. The oval's
+  material lifts the decal at least `CONTACT_FLOOR` (3 cm; `decalLift`): its half behind the soles, otherwise unlifted,
+  lay at the ground's sampled height and the terrain hid it there, cutting the oval along the soles. Without the
+  scene's coverage (`?msaa=1|2`) a fragment of the oval's rim fainter than 0.02 is discarded as the sun shadow's faint
+  edge is, so off the oval it draws as 0062's. Under `?ushadowclose=map` the cross-fade blends the map's shadow, which
+  darkens to the ground's own shadow colour, against the decal's desaturated shade: the hue shifts a little across the
+  band. `?ushcontact=<pad>,<dark>[,<soft>]` (0: none), `?ushcontactat=step|stride|root`, `?ushcontactband`,
+  `?ushdesat`; `?ushcontact=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4` is decision 0067's look. The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so
   a formation's overlapping shadows darken each sample once, at every distance (with fewer samples, `?msaa=1|2`, the
