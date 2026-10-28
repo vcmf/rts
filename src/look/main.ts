@@ -772,6 +772,29 @@ if (armiesParam !== null) {
   armiesFocus = facingAt(units.battalions)
   Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
   smoke = await buildSmoke(units, drill, era.smoke.volley, ARMIES_DEMO.figure)
+  lookAtFight(params.get('lookat'), armiesFocus, units.battalions)
+}
+
+/** ?lookat=fight|line[,<radius m>]: the camera starts on the fight's middle (the gap between the lines), or on the
+ *  first side's front battalion nearest it, where the smoke is, at that zoom (50 m by default): to judge the smoke by
+ *  eye without panning to it */
+function lookAtFight(
+  want: string | null,
+  fight: [number, number],
+  bs: readonly { side: number; x: number; z: number; reserve?: boolean }[],
+): void {
+  if (!want) return
+  const [name, r] = want.split(',')
+  const radius = r === undefined ? 50 : Number(r)
+  if ((name !== 'fight' && name !== 'line') || !(radius > 0)) {
+    throw new Error(`?lookat must be fight or line[,<radius m>], not ${want}`)
+  }
+  const dist = (b: { x: number; z: number }) => Math.hypot(b.x - fight[0], b.z - fight[1])
+  const front = bs.filter(b => b.side === 0 && !b.reserve).sort((a, b) => dist(a) - dist(b))[0]
+  const at = name === 'line' && front ? front : { x: fight[0], z: fight[1] }
+  camera.target.x = at.x
+  camera.target.z = at.z
+  zoomOf(camera).set(radius)
 }
 /** the musket smoke over the armies (src/look/smoke.ts), unless ?smoke=0: the era's volley smoke, the figure's fire
  *  clip (its shot from the clips' registry, its loop from the unit data), the script's fire phase */
