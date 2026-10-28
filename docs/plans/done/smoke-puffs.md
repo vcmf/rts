@@ -1,9 +1,13 @@
 ---
-status: active
-last_reviewed: 2026-10-27
+status: done
+last_reviewed: 2026-10-28
 ---
 
 # Plan: musket smoke as opaque painted puffs (the smoke track's first PR)
+
+**Superseded, 2026-10-28**: built on `look/smoke-puffs` and rejected by the owner ("too ugly": opaque, hard-edged grey
+boulders lying in front of the line). Replaced by soft translucent banks, `docs/plans/active/smoke-bank.md`; decision
+0080 rewritten before acceptance. Kept as the record of what was tried and measured.
 
 The owner's brief (2026-10-27): powder smoke "painterly 2D on 3D, like painting: simple, elegant yet beautiful", after
 the staff map's flat clouds (PR #49: merged circles, one paper-white fill, a hard scalloped edge, one offset shadow),

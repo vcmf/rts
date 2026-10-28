@@ -205,22 +205,26 @@ export interface DyeSet {
   materials: Readonly<Record<string, string>>
   boots: string
 }
-/** the smoke a unit's fire makes, as the renderer paints it (docs/plans/active/smoke-puffs.md, decision 0080): a puff
- *  for a group of files when a rank fires, born at the muzzles, carried ahead by the shot's blast, rising and drifting
- *  with the wind, growing, then eroded away. Era data (src/rulesets/<era>-smoke.ts); metres, seconds, sRGB. Not read
- *  by the simulation */
+/** the smoke a unit's fire makes, as the renderer paints it (docs/plans/active/smoke-bank.md, decision 0080): a soft
+ *  translucent card for a group of files when a rank fires, born at the muzzles as a plume jetting ahead, then grown
+ *  into its neighbours' (the volley's bank), rolling ahead, rising, drifting with the wind, thinning and broken into
+ *  holes as it dies. Era data (src/rulesets/<era>-smoke.ts); metres, seconds, sRGB. Not read by the simulation */
 export interface PuffDef {
   files: number // a puff for this many files of a firing rank
   life: readonly [number, number] // s: a puff's life, the shortest and the longest
-  erode: number // the share of its life after which its shape erodes away
+  erode: number // the share of its life after which it thins and breaks into holes
   radius: readonly [number, number] // m: at birth and grown
   grow: number // s: the growth's time constant
   ahead: number // m ahead of the front rank at birth (the muzzles)
   height: number // m above the ground at birth
   jet: readonly [number, number] // the blast: m/s ahead at birth, and the time constant it dies over (s)
+  plume: readonly [number, number] // the young plume: its length over its width at birth, the time it relaxes in (s)
+  roll: number // m/s: the bank's slow roll ahead once the blast has died
+  bank: number // the grown puff's width along the front over its depth: the volley's puffs run into one bank
   rise: readonly [number, number] // m/s up at birth, and the time constant it slows over (s)
   drift: number // m/s: the wind's carry
   jitter: number // s: the men's own spread about their rank's shot
+  opacity: number // a puff's densest (0 to 1): a few of them over each other make the bank's core
   colour: string // the smoke's own colour, lit by the scene's light
   flash: readonly [string, number] // the muzzle flash: its colour and how long the young puff shows it (s)
 }

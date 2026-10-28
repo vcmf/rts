@@ -1,7 +1,7 @@
 // The musket smoke's pure parts (src/look/world/smoke.ts, decision 0080): the shot's moment from the figure's clip
 // events, the script's shots and its fire hold (src/look/world/armies.ts), the puffs a volley leaves, a puff's motion,
-// life and erosion, the zoom's thinning, the clearance mask and the rule that cuts smoke over a formation, the puffs'
-// mesh and the page's switches
+// plume, opacity, life and erosion, the zoom's thinning, the formations' mask and the opacity cap over them, the ring
+// and the page's switches
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
@@ -21,8 +21,8 @@ import {
   SMOKE_DEFAULT,
   SMOKE_LOOKS,
   coverAt,
+  coverCap,
   drawClearance,
-  icosphere,
   keepScale,
   keepShare,
   maskAt,
@@ -178,6 +178,27 @@ describe("a puff's life", () => {
     }
     expect(last.radius).toBeLessThanOrEqual(DEF.radius[1])
   })
+  it('born a plume stretched along the shot, relaxing to a round puff', () => {
+    expect(puffAt(DEF, 0, life).stretch).toBeCloseTo(DEF.plume[0], 9)
+    let last = Infinity
+    for (let a = 0; a < 4; a += 0.1) {
+      const st = puffAt(DEF, a, life).stretch
+      expect(st).toBeLessThan(last)
+      expect(st).toBeGreaterThanOrEqual(1)
+      last = st
+    }
+    expect(puffAt(DEF, life, life).stretch).toBeCloseTo(1, 3)
+  })
+  it('densest at birth, thinning with age, never past its era opacity', () => {
+    expect(puffAt(DEF, 0, life).opacity).toBe(DEF.opacity)
+    expect(puffAt(DEF, life / 2, life).opacity).toBeLessThan(DEF.opacity)
+    expect(puffAt(DEF, life, life).opacity).toBeCloseTo(DEF.opacity * 0.35, 9)
+    expect(puffAt(DEF, 2 * life, life).opacity).toBeCloseTo(DEF.opacity * 0.35, 9)
+  })
+  it('keeps rolling ahead after the blast has died', () => {
+    const late = puffAt(DEF, 9, life).ahead - puffAt(DEF, 8, life).ahead
+    expect(late).toBeCloseTo(DEF.roll, 3)
+  })
   it('whole until its erosion starts, then eroded to nothing at its end', () => {
     expect(puffAt(DEF, DEF.erode * life * 0.99, life).erode).toBe(0)
     const mid = puffAt(DEF, (DEF.erode + (1 - DEF.erode) / 2) * life, life).erode
@@ -214,7 +235,7 @@ describe("the zoom's thinning", () => {
   })
 })
 
-describe('the clearance rule', () => {
+describe("the formations' mask and the opacity cap", () => {
   // a battalion's box: 40 m across, 3 m deep, at the origin; the mask over ±50 m at 0.5 m texels
   const N = 200
   const O: [number, number] = [-50, -50]
@@ -227,7 +248,7 @@ describe('the clearance rule', () => {
     expect(maskAt(mask, N, O, 0.5, 0, 4)).toBe(0)
     expect(maskAt(mask, N, O, 0.5, 30, 0)).toBe(0)
   })
-  it('cuts smoke between the camera and the men, not smoke beyond them or clear of them', () => {
+  it('covers smoke between the camera and the men, not smoke beyond them or clear of them', () => {
     const cam: [number, number, number] = [0, 30, -30] // (the camera to the south, looking north and down)
     // a puff 4 m in front of the line, 3 m up: its view ray comes down onto the box
     expect(coverAt(mask, N, O, 0.5, cam, [0, 3.9, -4], 0)).toBeGreaterThan(0.5)
@@ -247,24 +268,21 @@ describe('the clearance rule', () => {
     drawClearance(new Float32Array(0), 0, m, N, O, 0.5, 2)
     expect(m.every(v => v === 0)).toBe(true)
   })
+  it('caps the opacity over the men smoothly, whole clear of them', () => {
+    expect(coverCap(0, 0.4)).toBe(1)
+    expect(coverCap(0.15, 0.4)).toBe(1)
+    expect(coverCap(1, 0.4)).toBeCloseTo(0.4, 9)
+    expect(coverCap(0.65, 0.4)).toBeCloseTo(0.4, 9)
+    let last = 1
+    for (let c = 0; c <= 1; c += 0.05) {
+      expect(coverCap(c, 0.4)).toBeLessThanOrEqual(last)
+      last = coverCap(c, 0.4)
+    }
+    expect(coverCap(1, 1)).toBe(1)
+  })
 })
 
-describe("the puffs' mesh and ring", () => {
-  it('an icosphere of 162 unit vertices and 320 triangles, wound clockwise from outside', () => {
-    const { positions: p, indices: ix } = icosphere(2)
-    expect(p.length / 3).toBe(162)
-    expect(ix.length / 3).toBe(320)
-    for (let i = 0; i < p.length; i += 3) expect(Math.hypot(p[i], p[i + 1], p[i + 2])).toBeCloseTo(1, 6)
-    let vol = 0
-    for (let t = 0; t < ix.length; t += 3) {
-      const [a, b, c] = [ix[t] * 3, ix[t + 1] * 3, ix[t + 2] * 3]
-      vol +=
-        p[a] * (p[b + 1] * p[c + 2] - p[b + 2] * p[c + 1]) -
-        p[a + 1] * (p[b] * p[c + 2] - p[b + 2] * p[c]) +
-        p[a + 2] * (p[b] * p[c + 1] - p[b + 1] * p[c])
-    }
-    expect(vol).toBeLessThan(0)
-  })
+describe("the puffs' ring", () => {
   it("holds every line battalion's puffs alive at once", () => {
     const n = ringSize(14, muzzles(drill, DEF.files).length, timing(true), DEF)
     expect(n).toBeGreaterThanOrEqual(14 * drill.ranks * muzzles(drill, DEF.files).length)
@@ -278,20 +296,15 @@ describe('the switches', () => {
     expect(look('smoke=0')).toBeNull()
     expect(look('')).toEqual(SMOKE_LOOKS[SMOKE_DEFAULT])
     expect(look('smoke=1')).toEqual(SMOKE_LOOKS[SMOKE_DEFAULT])
-    expect(look('smoke=a')).toEqual(SMOKE_LOOKS.a)
+    expect(look('smoke=step')).toEqual(SMOKE_LOOKS.step)
   })
   it('the knobs over the variant', () => {
-    expect(look('smoke=a&smoketone=3&smokeedge=brush&smokestep=12&smokeshade=0&smokea2c=1&smokeclear=0')).toEqual({
-      tone: 3,
-      edge: 'brush',
-      step: 12,
-      shade: false,
-      a2c: true,
-      clear: false,
-    })
+    expect(look('smoke=soft&smokestep=12&smokecap=0.6')).toEqual({ step: 12, cap: 0.6 })
+    expect(look('smokecap=1')?.cap).toBe(1)
+    expect(look('smokecap=0')?.cap).toBe(0)
   })
   it('a bad value throws', () => {
-    for (const q of ['smoke=d', 'smoketone=2', 'smokeedge=soft', 'smokestep=x', 'smokestep=61', 'smokeshade=yes']) {
+    for (const q of ['smoke=a', 'smoke=d', 'smokestep=x', 'smokestep=61', 'smokecap=2', 'smokecap=-1', 'smokecap=x']) {
       expect(() => look(q)).toThrow()
     }
   })
