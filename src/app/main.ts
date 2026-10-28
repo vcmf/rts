@@ -4,6 +4,7 @@
 import fieldUrl from '../../data/formation-field.simdata?url'
 import battleUrl from '../../data/battlefield.simdata?url'
 import benchUrl from '../../data/bench.simdata?url'
+import valleyUrl from '../../data/valley.simdata?url'
 import {
   loadSimData,
   compileRuleset,
@@ -60,7 +61,12 @@ async function main(): Promise<void> {
   const scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
   // the scenario's map, at the version it was placed for
   const mapName = scenario.map ?? DEFAULT_MAP
-  const urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl, bench: benchUrl }
+  const urls: Record<string, string> = {
+    'formation-field': fieldUrl,
+    battlefield: battleUrl,
+    bench: benchUrl,
+    valley: valleyUrl,
+  }
   if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) {
     throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
   }
