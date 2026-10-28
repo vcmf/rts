@@ -107,7 +107,7 @@ today.
 | Paved yards (`PAVE`, the cover's yard mark) | the houses' footprints | Not a language gap, a look limit: **16 yards at most** (the cover's mark 240 to 255, the shapes as uniform arrays), and the cover's authoring throws when a yard comes near a road. Kobelnitz's tile holds 17 buildings and Šlapanice's 19, and a street village's houses stand 3 m from their road. Stage A moves the shapes to a texture (a byte's index, up to 239 a window) and clips a yard at its road instead of throwing, for map worlds |
 | Water: the river's samples, the water data, the bank normals, the far ring's river mask, the reflection mask (`river.ts`, `water-data.ts`, `water.ts`, `terrain.ts`) | `water.stream` lines (`width`, `depth`, ramps `along`), `Layers.streams` (each stream's level every 2 m), `water.pond` areas and levels, `Layers.depth` | Everything the look needs is there. **The look's water is built for one river** (`RIVER`, `riverQuery`: its ribbon, riffles, stones, reeds, cut banks and reflections). Stage A2 below |
 | Bridges and fords | `built.bridge`, `water.ford` | **None drawn**, over 26 crossings: an authoring follow-up for M8 (the sim needs them too); a bridge needs a model |
-| Season | the map's `season` (Austerlitz: winter) and the attributes' `seasons` | The look's season is the page's (`?season`, the slider); the compiler resolves the attributes for the map's season. Which season the page opens in is an owner question |
+| Season | the map's `season` (Austerlitz: winter) and the attributes' `seasons` | The look's season is the page's (`?season`, the slider); the compiler resolves the attributes for the map's season. The page opens in today's default season, any season switchable to test (decided, open question 1) |
 | Formation zones, floodplain (`inFormationZone`, `onFloodplain`) | none; `zone.go`, `zone.nogo` | The demo's rules (nothing on the floodplain or in the zones) are the demo's. A window has no formation zones; "no crops within reach of water" comes from the water layer |
 | Names (`zone.label`) | `zone.label` | Not drawn in 3D (the lit view writes them) |
 
@@ -278,8 +278,8 @@ Issue #240: the sim reads the look world through a legacy TypeScript map (`maps/
 
 ## Open questions for the owner
 
-1. **The season Austerlitz opens in:** winter as the map file says (snow), late autumn as on 2 December 1805 (frozen
-   ground, leaves down, little or no snow), or summer (the look as tuned)?
+1. **The season Austerlitz opens in.** Decided 2026-10-28: as the page does today (its default season), every season
+   switchable to test (`?season`, the slider); the map file's `season` only resolves its features' `seasons`.
 2. **The first windows:** Kobelnitz and Sokolnitz first (no camera work), the Pratzen after A1b. Or the Pratzen first?
 3. **Models:** a church, a bridge and a windmill or water mill from Tripo for the villages, or stand-ins for now?
 4. **Stage B's data** (about 50–100 MB for 6 km, an estimate): committed, as the `.rdem` is, or built locally and in
