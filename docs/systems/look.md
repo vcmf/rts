@@ -1,8 +1,8 @@
 ---
 status: current
 last_reviewed: 2026-10-27
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts]
-decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, src/look/world/arms.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/armies.test.ts, test/arms.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts]
+decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline]
 ---
 
 # The look page (Track E, L0)
@@ -585,6 +585,22 @@ The page names no era (decision 0015): the demo's scenario (`src/scenarios/armie
 type, figure and uniforms, resolved through `src/rulesets/index.ts` (`RULESETS`: a ruleset and its uniforms by name)
 and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glob in `src/look/main.ts`).
 
+- **The other arms** (decision 0075, `docs/plans/active/cavalry-artillery-demo.md`; `?cavalry=0`, `?artillery=0`: left
+  out, both: the page before them): the scenario's `ARMS_DEMO` (`src/scenarios/armies-demo.ts`), each a unit type and
+  formation of the ruleset, a figure, a script, each side's uniform and a man's weight in the trodden mask (`tread`):
+  a foot battery a side (the ruleset's 8 pieces 16 m apart, unlimbered 12 m before the lines, a piece one figure:
+  the gun and four of its detachment; `serveScript`: at rest 8 s, then each piece's firing cycle, Load, Ready, Fire
+  looped, 2.5 s after the one before, a 110 s cycle) and a cuirassier regiment a side (the ruleset's 4 squadrons of
+  32 × 2 in column of squadrons, riding along the front between the lines, the two passing each other; `rideScript`:
+  halt 4 s, walk 6, trot 20, gallop 6, halt 24, each at its role's root speed, then where it began). Placed after the
+  infantry's layout, which they leave as it was (`placeArm`: the nearest spot to the one wanted, a move ahead or back
+  counting three times one along the front, on the side's own half, off the blocked ground, clear of the battalions'
+  and the other arms' boxes; a side with no room is left out with a warning). Each arm is its own renderer
+  (`Units`), the infantry's the lead (it keeps the trodden mask, the shadow map behind its switches and the receivers'
+  bindings; `show` and `setMask` reach the others), the others its followers (their men in its mask, their simple
+  shadows at every zoom, no flag); the renderer asks the arm's script (`Script`, `src/look/world/arms.ts`; the
+  infantry's `drillScript` wraps `phaseAt` and `manAt` as before) for a unit's phase and each man's place and role.
+  `__armies.arms` holds them by name; `__armies.coats` stays the infantry's (the guard measures them).
 - **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
   `data/figures/<figure>.unitdata` (`src/look/units-data.ts` reads and checks it): its LODs nearest first (here
   three: the full figure, 9,274 triangles, then 1,197 and 243; the page reads two or three), each vertex's colour role (the reds told from the skin by hue, the face's shaded side kept skin, the coat's violet shade kept coat: #133's review, `texel_role`, `tri_role`) (coat, facings, white, dark, skin, leather, pack, wood, metal: from the
@@ -598,7 +614,18 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   and posed (`shadowProxy`, `posedMesh`: two crossed quads along each part a bone carries, 112 vertices, 56 triangles;
   a bone too small to be a part near the ground, a foot, lends its vertices to the first part up its chain of parents,
   the shin, whose quads then run down to the soles by at most 25 cm, so the shadow starts at the feet: `boneParts`,
-  #165).
+  #165). A figure kind's profile (clips.json's `unit`; none: the infantryman, his file unchanged) bakes a
+  multi-part figure from its one GLB: its LODs collapse-decimated on the rest mesh (the cuirassier 21,760, 2,000 and
+  450 triangles; the battery 30,000, 6,500 and 1,400: about the infantryman's triangles a pixel of their side on
+  screen at the switches, which fall at the same height in pixels for every figure, so a taller one switches farther
+  off: the cuirassier's at 93 m), each triangle's colour role read on the full mesh from its material, bone and texel and kept through the
+  decimation as a face attribute; a chain whose span is not a whole number of 1/12 s steps (the gallop's 13 frames)
+  resampled between frames, its root speed scaled to keep the feet planted; bones past the format's 255 (the crew's
+  fingers) folded into their hand. Its header names its roles in order (the cuirassier halt, walk, trot, gallop; the
+  battery halt, fire: Load, Ready, Fire), each colour role's part (`parts`: a cloth part, the boots or a material,
+  dressed by `dressed`'s `parts`; the infantryman's `FIGURE_PARTS` when none) and its height (the LOD switch's figure
+  height; 1.8 m when none, `FIGURE_HEIGHT`). New dyes and materials: the carriages' olive (the Austrian's the buff),
+  the horses' hide and mane, the gunners' belts, the barrels' bronze (first picks).
 - **The renderer** (`src/look/units.ts`): a thin-instanced host a battalion for each of the near LOD, the far LOD and
   the proxy; the near LOD skinned from the bones' texture (`texelFetch`), the far LOD and the proxy posed (`VAT_POS`;
   `?uvat=0`: the far LOD skinned); a man's step from his clip's first row, its length and his phase. Materials are
@@ -711,7 +738,16 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `Units.stepFallback` (`window.__units.stepFallback`, for the benches and the guard); an explicit `?ushstep` is then
   an error at load. The shader takes his step as `units.vert` poses him (its `int()` of the clip's first step plus the
   `mod`), wraps the exact n a GPU's `mod` can return to 0, and takes the bin in integers, clamped (`stepIndex`,
-  `stepBin`): his shadow's step is his figure's on every GPU.
+  `stepBin`): his shadow's step is his figure's on every GPU. **A figure on more than its root** (decision 0075; its
+  ground contacts reach past `SPREAD_FROM`, 1 m, from it: `contactReach`, the cuirassier 1.36 m, the battery 3.6 m,
+  the infantryman 0.63 m): its shape's bake keeps, per texel, the height of the lowest part casting it, averaged over
+  the bin's steps where covered (`shadowShape`'s `heights`, `cellHeights`: an R8 atlas at half the size, `uShapeH`,
+  only for the material that draws the close look), and the gradient and the feet's boost run on that height
+  (`SH_HEIGHTS`), so each hoof, wheel and gunner's foot is dark and crisp where it stands; drawn at its own length
+  (`SH_SPREAD`: no shortening about its root, the far growth across alone), its lift at least `SPREAD_FLOOR` (10 cm:
+  at the ground's sampled height a gun's footprint sank under the terrain) and its strip's close rows at its
+  contacts' reach (`decalStrip`'s `rowsAt`). A big figure's texel grows until its cells fit 192 texels a side
+  (`fitTexel`: the battery 7.8 cm). Its roles' starts and bins padded to the shader's four (`padTo4`).
   The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so

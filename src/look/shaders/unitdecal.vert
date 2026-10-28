@@ -17,7 +17,10 @@ precision highp float;attribute vec3 position;
 // far off decision 0049's strip, up close the full box with rows at his soles and at the lift ramp's end, blended by
 // the look's far share; past the soles it is drawn uShLen as long (the zoom's look, decision 0062: the shape's own texels stretched or shortened, his feet where they were).
 // vAlong: m along it from his soles at the shape's own size times uShLen (the far figures' growth leaves the
-// fragment's gradient where it lies on the shape)
+// fragment's gradient where it lies on the shape). SH_SPREAD (a figure on more than its root: a horse's hooves, a gun's
+// wheels; docs/plans/active/cavalry-artillery-demo.md): its shape drawn at its own length (a shortening about the root
+// would move the far hooves' shadow off them; the fragment's look runs from each contact instead), grown by the far
+// growth across alone, its lift at least SPREAD_FLOOR m
 uniform mat4 viewProjection;uniform vec3 uCamPos;
 attribute vec3 aVAT;attribute vec3 aNext;
 uniform vec4 uRoleStart,uShapeCell,uStrip,uRows;uniform vec2 uShDir,uShapeTexel,uShapeAt;uniform float uStepFrac,uDecalLift,uShLen;
@@ -74,9 +77,15 @@ void main(){
   vAlong=l.y*(l.y>0.0?uShLen:1.0);
   #ifdef FAR_SCALE
   float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fg=clamp((FAR_FROM*uFarK.y-fpx)/((FAR_FROM-0.25)*uFarK.y),0.0,1.0);
+  #ifdef SH_SPREAD
+  l*=mix(1.0,uFarScale.x,fg);
+  #else
   l*=vec2(mix(1.0,uFarScale.x,fg),mix(1.0,l.y>0.0?uFarScale.y:uFarScale.x,fg));
   #endif
+  #endif
+  #ifndef SH_SPREAD
   l.y*=l.y>0.0?uShLen:1.0;
+  #endif
   vec2 C=vec2(-uShDir.y,uShDir.x),xz=p.xz+C*l.x+uShDir*l.y;
   #ifdef SH_CONTACT
   float st=aVAT.x+mod(uVATStep+aVAT.z,aVAT.y);
@@ -86,7 +95,13 @@ void main(){
   #endif
   float gy=textureLod(uMeadow,(xz+TILE_HALF)/TILE_W,0.0).r;
   vec3 g=vec3(xz.x,gy,xz.y),toCam=normalize(uCamPos-g);
+  #ifdef SH_SPREAD
+  // (at least SPREAD_FLOOR m over its footprint: there it lies at the ground's sampled height, which the terrain can
+  // stand over and hide, as decision 0071's oval found; a few cm darken no more than the hooves' and wheels' feet)
+  float lift=max(uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y),SPREAD_FLOOR);
+  #else
   float lift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);
+  #endif
   #ifdef SH_CONTACT
   // (the contact's sunward half lies behind his soles, where the lift is 0: at the ground's sampled height the terrain
   // can stand a little higher and hide it, cutting the oval along his soles; a floor of CONTACT_FLOOR m keeps it

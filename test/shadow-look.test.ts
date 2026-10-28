@@ -696,6 +696,10 @@ describe('the contact shaders match their mirrors (the source)', () => {
       'vCt=(vec2(dot(P,normalize(finalWorld[0].xz)),dot(P,normalize(finalWorld[2].xz)))-ov.xy)/max(ov.zw+uShContact.x,1.0e-3);',
     )
     once(v, 'vCell=c/uShapeCell.xy;')
-    once(v, 'floatlift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);#ifdefSH_CONTACTlift=max(lift,CONTACT_FLOOR);#endif')
+    // (the soldier's ramp from his soles; a spread figure's floored, SH_SPREAD: test/arms.test.ts)
+    once(
+      v,
+      'floatlift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);#endif#ifdefSH_CONTACTlift=max(lift,CONTACT_FLOOR);#endif',
+    )
   })
 })

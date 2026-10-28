@@ -75,8 +75,21 @@ export interface Strip {
  *  linear between rows, is whole there and the grass and legs do not poke through near the feet. Between, the rows'
  *  places (m) and the box blended. reach (m, 0 by default: as before): the base and full boxes grown to hold a disc of
  *  that radius about the root (the contact shadow's, decision 0071), past the shape's cell where it must: the
- *  material with the oval reads no shape outside the cell (unitdecal.frag's vCell), so the strip may */
-export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: number, liftRamp: number, reach = 0): Strip {
+ *  material with the oval reads no shape outside the cell (unitdecal.frag's vCell), so the strip may. rowsAt (m, 0 by
+ *  default: as before): a figure on more than its root (SH_SPREAD, unitdecal.vert: drawn at its own length, its lift
+ *  floored), its close rows at its contacts' reach and liftRamp past it, each held inside the box: the lift, linear
+ *  between rows, rises across its footprint from the floor behind it to nearly whole at its contacts, so its shadow
+ *  stands over the meadow's grass (from the root's ramp alone the grass hid it; its own legs measured unharmed:
+ *  docs/plans/active/cavalry-artillery-demo.md) */
+export function decalStrip(
+  base: ShapeBox,
+  full: ShapeBox,
+  t: number,
+  len: number,
+  liftRamp: number,
+  reach = 0,
+  rowsAt = 0,
+): Strip {
   const boxOf = (b: ShapeBox): Strip['box'] => [
     b.across[0],
     b.along[0],
@@ -90,7 +103,15 @@ export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: numbe
   if (t >= 1) return { box: boxOf(base), rows: [0, 1 / 3, 2 / 3, 1] }
   if (!(full.along[0] < 0 && full.along[1] > 0)) throw new Error('decalStrip: the box must hold the soles (along 0)')
   const ramp = Math.min(liftRamp / Math.max(len, 1e-3), full.along[1] * 0.9)
-  const closeRows = [full.along[0], 0, ramp, full.along[1]]
+  const closeRows =
+    rowsAt > 0
+      ? [
+          full.along[0],
+          Math.min(rowsAt, full.along[1] * 0.8),
+          Math.min(rowsAt + liftRamp, full.along[1] * 0.9),
+          full.along[1],
+        ]
+      : [full.along[0], 0, ramp, full.along[1]]
   const bs = base.along[1] - base.along[0]
   const farRows = [0, 1 / 3, 2 / 3, 1].map(r => base.along[0] + r * bs)
   const fb = boxOf(full)

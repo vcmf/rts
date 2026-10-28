@@ -1,7 +1,8 @@
 // The unit data files (data/figures/<figure>.unitdata, written by tools/bake-figure.py;
 // docs/plans/active/armies-demo.md): their decoder and their checks. No Babylon: the tests read it in Node. A figure's
-// clips are named by ROLE (halt, march, run, fire: decision 0015, the page never names a clip), each a range of the
-// baked animation's 12 fps steps
+// clips are named by ROLE (decision 0015, the page never names a clip: the infantryman's halt, march, run, fire; a
+// figure names its own, docs/plans/active/cavalry-artillery-demo.md), each a range of the baked animation's 12 fps
+// steps
 export interface UnitRange {
   start: number
   end: number
@@ -19,6 +20,16 @@ export interface UnitLod {
 /** the unit data format this page reads: 3, the triangles wound for Babylon (clockwise fronts) and the bones' parents;
  *  2's were wound inside out (#164) */
 export const UNIT_VERSION = 3
+/** what a figure's colour role shows (src/look/world/dyes.ts): a cloth part of the dress, the boots, or a material of
+ *  the era's dye set by name */
+export type FigurePart = string | { material: string }
+/** the roles a file names none for (format 3 as first written, the line infantryman's): its clips' roles in the
+ *  page's order */
+export const LEGACY_ROLES: readonly string[] = ['halt', 'march', 'run', 'fire']
+/** m: a figure's height when its file names none (the line infantryman's: the LOD switch's figure height) */
+export const FIGURE_HEIGHT = 1.8
+/** the roles a figure may have: the simple shadow's shader holds four (unitdecal.vert's uRoleStart) */
+export const MAX_ROLES = 4
 export interface UnitData {
   version: number
   fps: number
@@ -30,6 +41,11 @@ export interface UnitData {
   lods: UnitLod[]
   ranges: Record<string, UnitRange>
   palette: string[] // the colour roles, in order: a vertex's role is an index into it (an army's colours paint it)
+  // the roles in the page's order (the shadow's rows; LEGACY_ROLES when the file names none), each colour role's part
+  // (null: the infantryman's, src/look/world/dyes.ts FIGURE_PARTS), the figure's height (m; FIGURE_HEIGHT when none)
+  roles: string[]
+  parts: Record<string, FigurePart> | null
+  height: number
   vat: { width: number; height: number; data: Uint16Array }
   mesh: Record<
     string,
@@ -70,6 +86,9 @@ export function decodeUnits(buf: ArrayBuffer): UnitData {
     lods: UnitLod[]
     ranges: Record<string, UnitRange>
     palette: string[]
+    roles?: string[]
+    parts?: Record<string, FigurePart>
+    height?: number
     vat: { width: number; height: number; halfFloat: boolean }
     buffers: { name: string; offset: number; bytes: number; type: keyof typeof TYPES }[]
   }
@@ -108,6 +127,9 @@ export function decodeUnits(buf: ArrayBuffer): UnitData {
     lods: h.lods,
     ranges: h.ranges,
     palette: h.palette,
+    roles: h.roles ?? [...LEGACY_ROLES],
+    parts: h.parts ?? null,
+    height: h.height ?? FIGURE_HEIGHT,
     mesh,
     vat: { width: h.vat.width, height: h.vat.height, data: get('vat', Uint16Array) },
   }
@@ -183,7 +205,21 @@ export function checkUnits(d: UnitData): void {
       bad.push(`range ${k} [${r.start}, ${r.end}] outside the ${d.vat.height} baked steps`)
     }
   }
+  bad.push(...checkFigure(d))
   if (bad.length) throw new Error('unit data:\n  ' + bad.join('\n  '))
+}
+
+/** The figure's own fields (its roles, its parts, its height): the problems found, none when whole. Its roles 1 to
+ *  MAX_ROLES, each with a clip range; a part for every colour role of the palette; a height over 0 */
+export function checkFigure(d: Pick<UnitData, 'roles' | 'ranges' | 'parts' | 'palette' | 'height'>): string[] {
+  const bad: string[] = []
+  if (!(d.roles.length >= 1 && d.roles.length <= MAX_ROLES)) {
+    bad.push(`${d.roles.length} roles: the shadow holds 1 to ${MAX_ROLES}`)
+  }
+  for (const r of d.roles) if (!d.ranges[r]) bad.push(`the role ${r} has no clip range`)
+  if (d.parts) for (const r of d.palette) if (!d.parts[r]) bad.push(`the colour role ${r} names no part`)
+  if (!(d.height > 0)) bad.push(`the figure's height ${d.height} is not over 0`)
+  return bad
 }
 
 // a half float (IEEE 754 binary16, as the bake writes the animation) as a number
@@ -618,6 +654,10 @@ export interface ShadowShape {
   height: number
   data: Uint8Array
   channels: 1 | 2 // 2 with a soft bake: R the shape, G the same blurred by `soft` (interleaved)
+  // with heights: the height of the lowest part casting each texel (heightTop m at 255), an R8 atlas at half the
+  // size (its texels' 2 × 2 means: the same places at the same UVs, smooth enough); else null
+  heights: Uint8Array | null
+  heightTop: number
   facings: number
   roles: string[]
   // a cell's texels across and along the shadow, its empty border (texels)
@@ -710,7 +750,11 @@ export function stepAtlasLayout(
  *  already made. steps (0: the average above): the shape per animation step instead (?ushstep,
  *  docs/plans/done/step-shadows.md): a role's clip in min(n, steps) bins (stepBin), each the average of up to
  *  binSamples of its own steps, a row of facings a bin, the rows in blocks within maxSize texels a side
- *  (stepAtlasLayout) */
+ *  (stepAtlasLayout). heights (docs/plans/active/cavalry-artillery-demo.md): a third channel, at each texel the height
+ *  over the ground of the lowest part casting it (averaged over the steps where covered, blurred with the shape's own
+ *  blur, its share of the figure's posed top: heightTop), so the decal measures its look from each contact (a horse's
+ *  hooves, a gun's wheels), not from the root. maxCell: a cell's texels a side at most; a bigger figure's texel grows
+ *  (by 1.25 at a time) until its cells fit (the infantryman's, 112 × 160 at 0.05 m, never grows) */
 export function shadowShape(
   d: UnitData,
   lod: string,
@@ -726,6 +770,8 @@ export function shadowShape(
     steps = 0,
     binSamples = 4,
     maxSize = 4096,
+    heights = false,
+    maxCell = 192,
   } = {},
 ): ShadowShape {
   if (!(soft >= 0)) throw new Error(`shadowShape: the soft blur must be 0 or more m, not ${soft}`)
@@ -763,6 +809,7 @@ export function shadowShape(
   const binRow = bins.map((_, r) => bins.slice(0, r).reduce((a, b) => a + b.length, 0))
   const rowsAll = bins.reduce((a, b) => a + b.length, 0)
   // the projections: [role][facing][step] → (across, along) a vertex, and the bounds over all of them
+  const hy = new Float64Array(nv) // (each vertex's height at the step projected last: the heights' channel)
   const proj = (f: number, a: number, out: Float64Array) => {
     const ca = Math.cos(a)
     const sa = Math.sin(a)
@@ -775,6 +822,7 @@ export function shadowShape(
       const wz = -sa * x + ca * z - kz * y
       out[v * 2] = wx * C[0] + wz * C[1]
       out[v * 2 + 1] = wx * A[0] + wz * A[1]
+      hy[v] = y
     }
   }
   const buf = new Float64Array(nv * 2)
@@ -782,6 +830,7 @@ export function shadowShape(
   let c1 = -Infinity
   let a0 = Infinity
   let a1 = -Infinity
+  let top = 0 // m: the figure's highest point posed (the heights' 1)
   for (const ss of bins.flat()) {
     for (const f of ss) {
       for (let k = 0; k < facings; k++) {
@@ -791,6 +840,7 @@ export function shadowShape(
           c1 = Math.max(c1, buf[v * 2])
           a0 = Math.min(a0, buf[v * 2 + 1])
           a1 = Math.max(a1, buf[v * 2 + 1])
+          top = Math.max(top, hy[v])
         }
       }
     }
@@ -802,6 +852,8 @@ export function shadowShape(
   // they fall without it, base the box it fills alone, so the far zooms' strip draws as before)
   const pad = 3 * blur
   const margin = 8
+  // (a big figure's texel grown until a cell fits maxCell: cellSize)
+  texel = fitTexel(texel, c1 - c0 + 2 * pad, a1 - a0 + 2 * pad, soft > 0 ? Math.max(0, 3 * soft - pad) : 0, maxCell)
   const ex = soft > 0 ? Math.ceil(Math.max(0, 3 * soft - pad) / texel / 8) * 8 : 0
   c0 -= pad
   c1 += pad
@@ -823,6 +875,8 @@ export function shadowShape(
   const W = lay.width
   const H = lay.height
   const ch = soft > 0 ? 2 : 1
+  // (the heights at the atlas's size, its empty texels the top: halved at the end)
+  const hfull = heights ? new Uint8Array(W * H).fill(255) : null
   const out = new Uint8Array(W * H * ch)
   const sw = iw
   const sh = ih
@@ -831,6 +885,9 @@ export function shadowShape(
   const acc = new Float32Array(iw * ih)
   const tmp = new Float32Array(iw * ih)
   const acc2 = new Float32Array(iw * ih)
+  // the heights (heights): the lowest caster's at each covered texel this step, and their sum over the steps
+  const hmin = heights ? new Float32Array(sw * sh) : null
+  const accH = heights ? new Float32Array(iw * ih) : null
   // the blurs' kernels (separable): the shape's, then the soft one's
   const kernel = (sigma: number) => {
     const sg = sigma / texel
@@ -847,9 +904,11 @@ export function shadowShape(
     const by = row % lay.rowsPerBlock
     for (let k = 0; k < facings; k++) {
       acc.fill(0)
+      accH?.fill(0)
       for (const f of ss) {
         proj(f, (2 * Math.PI * k) / facings, buf)
         cov.fill(0)
+        hmin?.fill(Infinity)
         // each triangle's projection, the texels whose centres it covers
         for (let v = 0; v < nv; v++) {
           sp[v * 2] = (buf[v * 2] - c0) / texel
@@ -887,9 +946,17 @@ export function shadowShape(
             const x0 = Math.max(0, Math.ceil(lo - 0.5))
             const x1 = Math.min(sw - 1, Math.floor(hi - 0.5))
             for (let x = x0; x <= x1; x++) cov[y * sw + x] = 1
+            if (hmin) {
+              const h = [hy[idx[t]], hy[idx[t + 1]], hy[idx[t + 2]]] as const
+              for (let x = x0; x <= x1; x++) {
+                const v = heightAt(ax, ay, bx, by, cx, cy, h, x + 0.5, py)
+                if (v < hmin[y * sw + x]) hmin[y * sw + x] = v
+              }
+            }
           }
         }
         for (let i = 0; i < cov.length; i++) acc[i] += cov[i]
+        if (hmin && accH) for (let i = 0; i < cov.length; i++) if (cov[i]) accH[i] += Math.max(0, hmin[i])
       }
       // (the blurs only over the texels the shape covers and their reach: the rest of the cell stays 0)
       let bx0 = iw
@@ -900,6 +967,8 @@ export function shadowShape(
         for (let x = 0; x < iw; x++) {
           if (acc[y * iw + x] === 0) continue
           acc[y * iw + x] /= ss.length
+          // (the heights' sum with it: their mean is the sum over the coverage, each per step)
+          if (accH) accH[y * iw + x] /= ss.length
           bx0 = Math.min(bx0, x)
           bx1 = Math.max(bx1, x)
           by0 = Math.min(by0, y)
@@ -946,6 +1015,11 @@ export function shadowShape(
           }
         }
       })
+      if (accH && hfull) {
+        cellHeights(acc, accH, kers[0], iw, ih, [bx0, bx1, by0, by1], top, (x, y, v) => {
+          hfull[(by * cellH + margin + y) * W + (bx + k) * cellW + margin + x] = v
+        })
+      }
     }
   }
   return {
@@ -953,6 +1027,8 @@ export function shadowShape(
     height: H,
     data: out,
     channels: ch,
+    heights: hfull ? halved(hfull, W, H) : null,
+    heightTop: top,
     facings,
     roles: [...roles],
     cellW,
@@ -967,6 +1043,109 @@ export function shadowShape(
     binRow,
     rowsPerBlock: lay.rowsPerBlock,
     blocks: lay.blocks,
+  }
+}
+
+/** An R8 image (w × h, both even) at half its size: each texel the mean of its 2 × 2, rounded */
+export function halved(src: Uint8Array, w: number, h: number): Uint8Array {
+  const hw = w >> 1
+  const hh = h >> 1
+  const out = new Uint8Array(hw * hh)
+  for (let y = 0; y < hh; y++) {
+    for (let x = 0; x < hw; x++) {
+      const o = 2 * y * w + 2 * x
+      out[y * hw + x] = Math.round((src[o] + src[o + 1] + src[o + w] + src[o + w + 1]) / 4)
+    }
+  }
+  return out
+}
+
+/** The texel (m) a cell of the shape's atlas fits maxCell texels a side at, for a cell holding acrossM × alongM m
+ *  (the blur's reach included) and the soft bake's reach softM m each way: the texel as it is when it fits, else grown
+ *  by 1.25 at a time (shadowShape's cell: its sides rounded up to 8 texels, then the soft reach in blocks of 8 either
+ *  way and the 8-texel border either way) */
+export function fitTexel(texel: number, acrossM: number, alongM: number, softM: number, maxCell: number): number {
+  const side = (m: number, t: number) => Math.ceil(m / t / 8) * 8 + 2 * Math.ceil(softM / t / 8) * 8 + 16
+  let t = texel
+  for (let i = 0; i < 64 && Math.max(side(acrossM, t), side(alongM, t)) > maxCell; i++) t *= 1.25
+  return t
+}
+
+/** The height (m) at the texel centre (px, py) of a triangle projected to (ax, ay), (bx, by), (cx, cy) whose corners
+ *  stand h high: linear across it (the sun's projection is affine), held within its corners' heights (a centre just
+ *  outside it, its span rounded); a triangle seen edge on: its lowest corner */
+export function heightAt(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  h: readonly [number, number, number],
+  px: number,
+  py: number,
+): number {
+  const lo = Math.min(h[0], h[1], h[2])
+  const hi = Math.max(h[0], h[1], h[2])
+  const det = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay)
+  if (Math.abs(det) < 1e-9) return lo
+  const w1 = ((px - ax) * (cy - ay) - (cx - ax) * (py - ay)) / det
+  const w2 = ((bx - ax) * (py - ay) - (px - ax) * (by - ay)) / det
+  return Math.min(hi, Math.max(lo, h[0] + w1 * (h[1] - h[0]) + w2 * (h[2] - h[0])))
+}
+
+/** A cell's heights' channel (shadowShape's heights): the summed heights (accH, m) over the summed coverage (acc) of
+ *  the steps, each blurred by the shape's own kernel (ker) over the covered box [x0, x1, y0, y1] and its reach, as a
+ *  share of top in 0..255 (set(x, y, value)); where nothing is covered, 255 (the top: the lightest of the look) */
+export function cellHeights(
+  acc: Float32Array,
+  accH: Float32Array,
+  ker: readonly number[],
+  iw: number,
+  ih: number,
+  box: readonly [number, number, number, number],
+  top: number,
+  set: (x: number, y: number, v: number) => void,
+): void {
+  const R = (ker.length - 1) / 2
+  const [bx0, bx1, by0, by1] = box
+  const x0 = Math.max(0, bx0 - R)
+  const x1 = Math.min(iw - 1, bx1 + R)
+  const y0 = Math.max(0, by0 - R)
+  const y1 = Math.min(ih - 1, by1 + R)
+  // (separable: across over the covered rows, then along over the reach)
+  const tc = new Float32Array(iw * ih)
+  const th = new Float32Array(iw * ih)
+  for (let y = by0; y <= by1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      let a = 0
+      let b = 0
+      for (let j = -R; j <= R; j++) {
+        const xx = x + j
+        if (xx >= 0 && xx < iw) {
+          a += acc[y * iw + xx] * ker[j + R]
+          b += accH[y * iw + xx] * ker[j + R]
+        }
+      }
+      tc[y * iw + x] = a
+      th[y * iw + x] = b
+    }
+  }
+  for (let y = 0; y < ih; y++) {
+    for (let x = 0; x < iw; x++) {
+      let a = 0
+      let b = 0
+      if (y >= y0 && y <= y1 && x >= x0 && x <= x1) {
+        for (let j = -R; j <= R; j++) {
+          const yy = y + j
+          if (yy >= by0 && yy <= by1) {
+            a += tc[yy * iw + x] * ker[j + R]
+            b += th[yy * iw + x] * ker[j + R]
+          }
+        }
+      }
+      set(x, y, a > 1e-6 && top > 0 ? Math.round(255 * Math.min(1, b / a / top)) : 255)
+    }
   }
 }
 
@@ -1064,4 +1243,21 @@ export function contactOvals(
     out.set(strides.get(c.start) ?? [0, 0, 0, 0], s * 4)
   }
   return out
+}
+
+/** m: a figure whose ground contacts reach farther than this from its root stands on more than its root (a horse's
+ *  four hooves reach 1.36 m, a gun's crew round it 3.6 m; the infantryman's stride and his musket's butt 0.63 m) */
+export const SPREAD_FROM = 1
+/** The farthest a figure's ground contacts reach across the ground from its root (m, docs/plans/active/cavalry-
+ *  artillery-demo.md): over every baked step, the posed LOD's vertices within FOOT_H of the ground (y 0 at the root),
+ *  their largest distance in x and z. Past SPREAD_FROM its shadow's look runs from each contact (shadowShape's heights)
+ *  and its lift starts past them (src/look/units.ts) */
+export function contactReach(posed: ReturnType<typeof posedVertices>): number {
+  let r = 0
+  const n = posed.data.length / 8
+  for (let v = 0; v < n; v++) {
+    const o = v * 8
+    if (posed.data[o + 1] <= FOOT_H) r = Math.max(r, Math.hypot(posed.data[o], posed.data[o + 2]))
+  }
+  return r
 }

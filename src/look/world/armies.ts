@@ -305,7 +305,7 @@ export interface ManState {
   x: number
   z: number
   face: number
-  role: 'halt' | 'march' | 'run' | 'fire'
+  role: string // (one of the figure's roles: the infantry's halt, march, run, fire)
   since: number
   moving: boolean
 }

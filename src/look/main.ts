@@ -516,8 +516,11 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dar
 // The uniforms are the era's, named by dye and resolved onto the figure's roles (world/dyes.ts, decision 0068). Test
 // switches (with ?armies): ?uniforms=all, each side's battalions wearing the scenario's reviewSides in turn;
 // ?uniforms=all-greatcoats, the same with every man in his greatcoat; ?dye=<dye>:<rrggbb>[;…] (bare, or '#' as
-// %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride)
+// %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride). The other arms
+// (docs/plans/active/cavalry-artillery-demo.md, the scenario's ARMS_DEMO): ?cavalry=0, ?artillery=0 leave them out
+// (with both, main's page before them)
 const armiesParam = params.get('armies')
+const armSwitch = (name: string) => bit(name) ?? true
 const unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
 // frame (else only when it would change); ?ushadowlod=1 casts from the LOD the view draws (else the far LOD always);
@@ -619,7 +622,6 @@ if (params.has('msaa')) {
   if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`)
   MSAA.samples = n
 }
-let units: Units | null = null
 // (the fight's middle: the bench's focus)
 let armiesFocus: [number, number] | null = null
 if (armiesParam !== null) {
@@ -632,7 +634,8 @@ if (armiesParam !== null) {
     { layout, facingAt },
     { dressAll, dyeOverride, wearInTurn },
     { RULESETS },
-    { ARMIES_DEMO },
+    { ARMIES_DEMO, ARMS_DEMO },
+    { armScript, battalionBoxes, drillScript, placeArmUnits },
   ] = await Promise.all([
     import('./units.ts'),
     import('./units-data.ts'),
@@ -640,6 +643,7 @@ if (armiesParam !== null) {
     import('./world/dyes.ts'),
     import('../rulesets/index.ts'),
     import('../scenarios/armies-demo.ts'),
+    import('./world/arms.ts'),
   ])
   if (tinyPxParam !== null && +tinyPxParam >= UnitsC.LOD_PX) {
     throw new Error(`?tinypx must be under the far LOD's switch (${UnitsC.LOD_PX} px), not ${tinyPxParam}`)
@@ -649,8 +653,14 @@ if (armiesParam !== null) {
   if (!era) throw new Error(`armies: no ruleset ${ARMIES_DEMO.ruleset} (src/rulesets/index.ts)`)
   const type = era.ruleset.types[ARMIES_DEMO.unitType]
   if (!type) throw new Error(`armies: the ruleset ${ARMIES_DEMO.ruleset} has no unit type ${ARMIES_DEMO.unitType}`)
-  const figureUrl = FIGURES[`../../data/figures/${ARMIES_DEMO.figure}.unitdata`]
-  if (!figureUrl) throw new Error(`armies: no figure ${ARMIES_DEMO.figure} in data/figures/`)
+  // a figure's unit data by name (data/figures/<figure>.unitdata)
+  const figureData = async (figure: string) => {
+    const url = FIGURES[`../../data/figures/${figure}.unitdata`]
+    if (!url) throw new Error(`armies: no figure ${figure} in data/figures/`)
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`unit data: ${res.status} ${res.statusText} for ${url}`)
+    return decodeUnits(await res.arrayBuffer())
+  }
   const g = type.geometry
   const drill = {
     companies: g.companies,
@@ -659,8 +669,6 @@ if (armiesParam !== null) {
     fileSpacing: g.fileSpacing,
     rankSpacing: g.rankSpacing,
   }
-  const r = await fetch(figureUrl)
-  if (!r.ok) throw new Error(`unit data: ${r.status} ${r.statusText} for ${figureUrl}`)
   // the ground a battalion keeps clear of: the river and its banks, the trees (a 10 m grid of them), the buildings'
   // yards, the tile's last 30 m
   const CELL = 10
@@ -698,43 +706,30 @@ if (armiesParam !== null) {
     throw new Error(`?uniforms must be all or all-greatcoats, not ${uniformsParam}`)
   }
   const greatcoat = uniformsParam === 'all-greatcoats'
-  const uniforms = dressAll(era.uniforms, dyeOverride(params.get('dye'), era.dyes), { greatcoat })
+  const dyes = dyeOverride(params.get('dye'), era.dyes)
+  const uniforms = dressAll(era.uniforms, dyes, { greatcoat })
   const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides)
+  const infantry = await figureData(ARMIES_DEMO.figure)
+  const speed = { march: infantry.ranges.march?.speed ?? 0, run: infantry.ranges.run?.speed ?? 0 }
+  if (!(speed.march > 0 && speed.run > 0)) throw new Error('units: the march and run roles have no root speed')
+  const tinyPx = tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
-  units = new UnitsC(
+  const lead = new UnitsC(
     scene,
     camera,
     mats,
     [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])],
-    decodeUnits(await r.arrayBuffer()),
-    drill,
+    infantry,
+    drillScript(drill, speed),
     uniformsParam === null ? placed : wearInTurn(placed, ARMIES_DEMO.reviewSides),
     uniforms,
     () => S.t,
-    { tinyPx: tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined },
+    { tinyPx },
   )
-  units.lazyShadows = uShadowRate ?? true
-  units.casterNear = uShadowLod ?? false
-  units.tightCull = uCull ?? true
-  units.holdShare = smHold !== 'fixed'
-  units.proxyCasters = shadowLod !== 'far'
-  if (nearestPx !== null) units.nearestPx = +nearestPx
-  units.simpleFar = shadowMode.simpleFar
-  units.simpleClose = shadowMode.simpleClose
-  units.look = shadowLook
-  units.contact = ushContact
-  units.stepShadow = ushStep
-  units.stepExplicit = params.has('ushstep')
-  units.stepBand = ushNearBand
-  units.footSharp = ushFootK
-  if (ushBand) units.lookBand = ushBand
-  if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
-  units.groundMap = meadow !== null
-  if (decalLift !== null) units.decalLift = +decalLift
   // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
   // after the bounce map (the season, the shadows' switch, the grain) and when the occlusion's switch changes
-  if (simpleShadowsDraw(params)) {
-    const shade = (units.shade = bakes.unitShade(ushDesat))
+  const shade = simpleShadowsDraw(params) ? bakes.unitShade(ushDesat) : null
+  if (shade) {
     let ao = S.ao
     scene.onBeforeRenderObservable.add(() => {
       if (S.ao !== ao) {
@@ -743,18 +738,74 @@ if (armiesParam !== null) {
       }
     })
   }
-  if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
-  units.setShadows(unitShadowParam !== '0')
-  units.setPosed(uVat ?? true)
-  units.setFarScale(farScale ?? true)
-  units.setLodFade(lodFade ?? true)
-  units.setTrample(trample ?? true)
-  units.setFlags(flags ?? true)
-  units.setFarRule(farPal) // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
-  // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
-  units.setSmooth(smoothMove ?? true)
-  armiesFocus = facingAt(units.battalions)
-  Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
+  // an arm's renderer given the page's switches (the lead first: a follower takes its lead's ground heights)
+  const configure = (units: Units) => {
+    units.lazyShadows = uShadowRate ?? true
+    units.casterNear = uShadowLod ?? false
+    units.tightCull = uCull ?? true
+    units.holdShare = smHold !== 'fixed'
+    units.proxyCasters = shadowLod !== 'far'
+    if (nearestPx !== null) units.nearestPx = +nearestPx
+    units.simpleFar = shadowMode.simpleFar
+    units.simpleClose = shadowMode.simpleClose
+    units.look = shadowLook
+    units.contact = ushContact
+    units.stepShadow = ushStep
+    units.stepExplicit = params.has('ushstep')
+    units.stepBand = ushNearBand
+    units.footSharp = ushFootK
+    if (ushBand) units.lookBand = ushBand
+    if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
+    units.groundMap = meadow !== null
+    if (decalLift !== null) units.decalLift = +decalLift
+    // (every arm darkens the ground to the one shade; the lead's receivers alone read the map, by blade on the meadow)
+    if (shade) units.shade = shade
+    if ((uShadowVs ?? true) && units === lead) {
+      units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
+    }
+    units.setShadows(unitShadowParam !== '0')
+    units.setPosed(uVat ?? true)
+    units.setFarScale(farScale ?? true)
+    units.setLodFade(lodFade ?? true)
+    units.setTrample(trample ?? true)
+    units.setFlags(flags ?? true)
+    units.setFarRule(farPal) // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
+    // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
+    units.setSmooth(smoothMove ?? true)
+  }
+  configure(lead)
+  // the other arms (ARMS_DEMO): each side's unit placed after the infantry, clear of it and of one another; its
+  // renderer the lead's follower (its trodden mask, its shadow map); its uniforms resolved for its figure's parts
+  const arms: Record<string, Units> = {}
+  const taken = battalionBoxes(placed, drill)
+  for (const spec of ARMS_DEMO) {
+    if (!armSwitch(spec.name)) continue
+    const data = await figureData(spec.figure)
+    const t = era.ruleset.types[spec.unitType]
+    const f = t?.formations[spec.formation]
+    if (!t || !f) throw new Error(`armies: the ruleset has no ${spec.unitType} in ${spec.formation} (${spec.name})`)
+    const speeds = Object.fromEntries(Object.entries(data.ranges).map(([k, r]) => [k, r.speed]))
+    const { script, foot } = armScript(spec, t.geometry, g => f.place(g), speeds)
+    // (from the layout's centre, the fronts 55 m either side of it: src/look/world/armies.ts layout)
+    const placedArm = placeArmUnits(spec, foot, [0, 0], 55, blocked, taken)
+    if (placedArm.length === 0) continue
+    // (its sides' dresses alone: another arm's lack this figure's parts, a carriage's paint)
+    const dress = Object.fromEntries(spec.sides.map(id => [id, era.uniforms[id]]))
+    for (const id of spec.sides) if (!era.uniforms[id]) throw new Error(`armies: no uniform ${id} (${spec.name})`)
+    const worn = dressAll(dress, dyes, { greatcoat, parts: data.parts ?? undefined })
+    const u = new UnitsC(scene, camera, mats, [], data, script, placedArm, worn, () => S.t, {
+      tinyPx,
+      flags: false,
+      lead,
+      tread: spec.tread,
+    })
+    configure(u)
+    arms[spec.name] = u
+  }
+  armiesFocus = facingAt(lead.battalions)
+  // (coats: the infantry's, whose readability the guard measures at the fight's middle, tools/guard.mjs; arms: the
+  // other arms' renderers by name, for the review's cameras)
+  Object.assign(window, { __units: lead, __armies: { blocked, focus: armiesFocus, coats: lead.coats(), arms } })
 }
 if (flag('rt16')) MSAA.byte = false
 // half floats: an 8-bit target stores a NaN as 0, which nothing can mark

@@ -8,6 +8,12 @@ uniform vec2 uShFootK;
 // the two step bins either side of the man's step, their facings each (unitdecal.vert), the second's share vS
 varying vec2 vUV2,vUV3;varying float vS;
 #endif
+#ifdef SH_HEIGHTS
+// a figure on more than its root (SH_SPREAD, unitdecal.vert): uShapeH, at half the shape's size, the same UVs, holds
+// the height of the lowest part casting each texel, a share of uShHeight m along the shadow; the look's gradient and
+// the feet's boost run on it, from each contact (a hoof, a wheel, a gunner's foot), not from the root
+uniform sampler2D uShapeH;uniform float uShHeight;
+#endif
 #ifdef SH_CONTACT
 // the contact shadow (docs/decisions/0071-soldier-contact-shadow.md): uShContact (its pad, m: the vertex's; its
 // darkness, a share of the ground's full shade, by its zoom weight; its fade past the oval); vCt: the fragment in the
@@ -40,11 +46,21 @@ uniform vec4 uShContact;varying vec2 vCt,vCell;
 // it only uShadowsOn is read)
 void main(){
   vec2 t=vUV0*uShapeSize;float lod=min(SHAPE_MIPS,max(0.0,0.5*log2(max(dot(dFdx(t),dFdx(t)),dot(dFdy(t),dFdy(t))))));
-  float g=smoothstep(uShFoot.z,uShFoot.w,vAlong);
   vec2 b=mix(textureLod(uShapeTex,vUV0,lod).rg,textureLod(uShapeTex,vUV1,lod).rg,vT);
   #ifdef SH_STEP_BLEND
   b=mix(b,mix(textureLod(uShapeTex,vUV2,lod).rg,textureLod(uShapeTex,vUV3,lod).rg,vT),vS);
   #endif
+  #ifdef SH_HEIGHTS
+  // (its half-size atlas a mip coarser)
+  float hl=max(lod-1.0,0.0),hh=mix(textureLod(uShapeH,vUV0,hl).r,textureLod(uShapeH,vUV1,hl).r,vT);
+  #ifdef SH_STEP_BLEND
+  hh=mix(hh,mix(textureLod(uShapeH,vUV2,hl).r,textureLod(uShapeH,vUV3,hl).r,vT),vS);
+  #endif
+  float al=hh*uShHeight;
+  #else
+  float al=vAlong;
+  #endif
+  float g=smoothstep(uShFoot.z,uShFoot.w,al);
   float s=mix(b.r,b.g,uShSoft*g);
   #ifdef SH_CONTACT
   // (no shape past his cell: the strip reaches past it for the oval, vCell from unitdecal.vert)
@@ -56,7 +72,7 @@ void main(){
   // samples boosted at the soles (uShFootK.x), back to 1 by uShFootK.y m; capped at 1 below, so never past the look's
   // darkest (decision 0071: no darker than the ground's painted cast shadow). The shape's alone, before the contact's
   // oval joins it (?ushcontact=1 keeps decision 0071's oval exactly)
-  v*=mix(uShFootK.x,1.0,smoothstep(0.0,max(uShFootK.y,1.0e-3),vAlong));
+  v*=mix(uShFootK.x,1.0,smoothstep(0.0,max(uShFootK.y,1.0e-3),al));
   #endif
   #ifdef SH_CONTACT
   // the contact (contactFragment in src/look/shadow-look.ts mirrors it): one more darkness in the same rule, its share

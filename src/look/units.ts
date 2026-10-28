@@ -4,8 +4,12 @@
 // shadows on the ground: one baked shape a man, each drawn on the ground in the main pass (decision 0049), at every
 // zoom, softer, lighter and shorter up close (decision 0062); the shadow map fitted to the view (decision 0047) only
 // behind its switches (?ushadowclose=map up close, ?ushadowfar=map everywhere). Ported from the crowd
-// bench (look/l1a-crowd-bench, L1a/L1b); moved by the demo's script (src/look/world/armies.ts), not by the sim yet.
-// The figure names its clips by role (halt, march, run, fire: decision 0015)
+// bench (look/l1a-crowd-bench, L1a/L1b); moved by the demo's scripts (src/look/world/arms.ts), not by the sim yet.
+// The figure names its clips by role (decision 0015: the infantryman's halt, march, run, fire; another figure's own,
+// at most four). One renderer an arm (decision 0075, docs/plans/active/cavalry-artillery-demo.md): the first, the lead,
+// keeps the page-wide parts (the trodden ground's mask, the figures' shadow map behind its switches, the receivers'
+// bindings); the others feed its mask and draw their simple shadows at every zoom. A figure whose ground contacts
+// spread past its root (contactReach) measures its shadow's look from each contact (SH_SPREAD)
 import type { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
@@ -84,24 +88,14 @@ import {
   shadowShape,
   AtlasTooLarge,
   tinyMesh,
+  contactReach,
+  type ShadowShape,
+  SPREAD_FROM,
+  MAX_ROLES,
   type UnitData,
 } from './units-data.ts'
-import {
-  CYCLE,
-  farPalette,
-  farRule,
-  manAt,
-  phaseAt,
-  slots,
-  type Battalion,
-  type Drill,
-  type ManState,
-  type Phase,
-  type Uniform,
-} from './world/armies.ts'
-
-const ROLES = ['halt', 'march', 'run', 'fire'] as const
-const RESERVE = { phase: 'halt', start: 0, deployEnd: 0 } as const // a reserve's phase: halted in column, always
+import { farPalette, farRule, type Battalion, type ManState, type Uniform } from './world/armies.ts'
+import type { Script, ScriptPhase } from './world/arms.ts'
 
 interface Host {
   b: Battalion
@@ -138,7 +132,7 @@ interface Host {
   lo: Vector3
   hi: Vector3
   step: number // the 1/fps step its matrices were written for (a moving battalion moves once a step)
-  phase: Phase | null // the script's phase its men were last written in (a halted one is written once a phase)
+  phase: string | null // the script's phase its men were last written in (a halted one is written once a phase)
   stale: boolean[] // per LOD: its GPU copy of the matrices is older than the matrices
   staleSet: boolean[] // per LOD: its GPU copy of the men's clip settings is older
   staleNext: boolean[] // per LOD: its GPU copy of the men's moves is older
@@ -150,7 +144,6 @@ const SM_SIZE = 2048 // the figures' shadow map, fitted to the ground in view ea
 const SM_REACH = 900 // m: a view ray that meets no ground is cut here (the widest zoom looks far)
 const SM_BIAS = 0.02 // m along the sun: no receiver is drawn into the map, so it only absorbs float rounding
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1] // the view's corners in clip space
-const FIGURE = 1.8 // m: a figure's height, for the LOD's pixel test
 // m: a man's bounding sphere round his middle (his musket at the present), for the nearest LOD's view test
 const MAN_R = 1.6
 const SM_HOLD = 6 // m: lazy, the held sun box must cover the view by this much
@@ -174,7 +167,7 @@ const TR_WEIGHT = 1 + TR_TRAIL.reduce((a, [, w]) => a + w, 0)
 // the far figure's growth at a quarter of the LOD switch's height
 const FAR_SCALE_XZ = 1.35
 const FAR_SCALE_Y = 1.15
-const SHADOW_H = 2.6 // m: the highest point of a figure (his bayonet up), whose shadow reaches farthest
+const SHADOW_H = 2.6 // m: the highest point of a figure (his bayonet up), whose shadow reaches farthest (at least)
 const SM_STEP_FINE = 2 // m: the box's half-size steps
 const SM_HOLD_SHARE = 0.1 // the held box's slack, a share of the view's half-size (the shadow fix: SM_HOLD at least)
 const SM_COARSE = 1.3 // and be at most this many times the size the view needs (its texels no coarser)
@@ -197,10 +190,10 @@ const IDLE_POLLS = 600
  *  shadows, from the map alone to the simple shadows alone (?ushadowswitch=<r0>,<r1>); near the LOD switch (48 px at
  *  1080 lines: 63 m) */
 export const SHADOW_SWITCH: readonly [number, number] = [60, 85]
-/** m: a man's shadow from his soles to its tip at the shape's length (his height over the sun's tangent), where the
- *  look's gradient ends */
-const SHADOW_TIP = (FIGURE * Math.hypot(SUN.x, SUN.z)) / SUN.y
 const SOFT_BLUR = 0.12 // m: the soft bake's sigma (shadowShape's soft)
+// m: a spread figure's shadow's least lift over its own footprint (unitdecal.vert's SH_SPREAD; decision 0071's floor
+// for its oval was 3 cm, a soldier's few cm of foot: a gun's footprint is metres of sampled ground)
+const SPREAD_FLOOR = 0.1
 // the LOD cross-fade's uniforms (units.vert: the bands, and a draw's men in order, set by bindFade)
 const FADE_UNIFORMS = ['uLodBand', 'uLodFade']
 
@@ -257,8 +250,24 @@ export class Units {
     c: new Vector3(),
     pts: Array.from({ length: 9 }, () => new Vector3()),
   }
-  private readonly slot: ReturnType<typeof slots>
-  private readonly speed: { march: number; run: number }
+  private readonly script: Script
+  // the figure's roles (its data's, in the shadow's row order), its height (m: the LOD switch's figure height), its
+  // highest point posed (m, SHADOW_H at least: the shadows' reach), a man's sphere for the nearest LOD's view test (m)
+  private readonly roles: readonly string[]
+  private readonly figH: number
+  private readonly topH: number
+  private readonly manR: number
+  // m: a man's shadow from his soles to its tip at the shape's length (his height over the sun's tangent), where the
+  // look's gradient ends
+  private readonly shadowTip: number
+  /** m: how far the figure's ground contacts reach from its root past SPREAD_FROM (a horse's hooves, a gun's wheels:
+   *  its shadow's look from each contact, SH_SPREAD), 0 for a figure on its root (the infantryman) */
+  readonly spread: number
+  /** the arm whose trodden mask and shadow map this one shares (null: this is the lead), and the lead's followers */
+  private readonly lead: Units | null
+  private readonly followers: Units[] = []
+  private readonly tread: number // a man's weight in the trodden mask (1: a soldier's; a horse treads more ground)
+  private trod = false // (a follower's men moved since the lead last drew its mask)
   private readonly man: ManState = { x: 0, z: 0, face: 0, role: 'halt', since: 0, moving: false }
   /** the far LOD's switch by default (main.ts checks ?tinypx under it) */
   static readonly LOD_PX = 48
@@ -315,7 +324,8 @@ export class Units {
   private flagM: Float32Array | null = null
   private flagN: Float32Array | null = null // the bearer's move to his next step's place (aNext)
   private flagStale = false
-  private readonly bearer: number // the colour bearer: the line's centre file, second rank
+  private readonly bearer: number // the colour bearer: the line's centre file, second rank (the script's)
+  private readonly withFlags: boolean // its units carry a flag (the constructor's opts.flags)
   private readonly mats0: Materials
   private trampleOn = false
   private trTex: RawTexture | null = null
@@ -420,31 +430,43 @@ export class Units {
   private farScaleV = new Vector2(1, 1)
   /** ms the simple shadow's shapes took to bake (shadowShape, at load: today's, and the per-step one) */
   shapeMs = 0
+  /** bytes the shapes' atlases take on the GPU, their mips included (atlasBytes) */
+  shapeBytes = 0
+  private groundTex: RawTexture | null = null // the simple shadows' ground heights without the meadow map
 
   /** receivers: the painted materials the figures' shadows fall on (the ground and the grass); the page's clock */
   private readonly scene: Scene
   private readonly camera: ArcRotateCamera
   private readonly receivers: ShaderMaterial[]
-  private readonly drill: Drill
   private readonly clock: () => number
-  /** uniforms: the era's, by id (each battalion names one) */
+  /** script: the arm's (src/look/world/arms.ts: its men, cycle, phases); battalions: its units; uniforms: the era's, by
+   *  id (each battalion names one), resolved for this figure's colour roles. opts: tinyPx, the tiny LOD's switch
+   *  (0: none); flags, whether its units carry a flag (by default); lead, the arm whose trodden mask and shadow map it
+   *  shares (its receivers then none: the lead's bind them); tread, a man's weight in the trodden mask (1) */
   constructor(
     scene: Scene,
     camera: ArcRotateCamera,
     mats: Materials,
     receivers: ShaderMaterial[],
     data: UnitData,
-    drill: Drill,
+    script: Script,
     battalions: Battalion[],
     uniforms: Readonly<Record<string, Uniform>>,
     clock: () => number,
-    opts: { tinyPx?: number } = {},
+    opts: { tinyPx?: number; flags?: boolean; lead?: Units | null; tread?: number } = {},
   ) {
     this.scene = scene
     this.camera = camera
-    this.receivers = receivers
-    this.drill = drill
+    this.receivers = opts.lead ? [] : receivers
+    this.script = script
     this.clock = clock
+    this.lead = opts.lead ?? null
+    this.lead?.followers.push(this)
+    this.tread = opts.tread ?? 1
+    this.withFlags = opts.flags ?? true
+    this.roles = data.roles
+    this.figH = data.height
+    this.shadowTip = (this.figH * Math.hypot(SUN.x, SUN.z)) / SUN.y
     this.uniforms = uniforms
     this.data = data
     if (data.lods.length !== 2 && data.lods.length !== 3) {
@@ -464,25 +486,17 @@ export class Units {
     }
     this.tinyPx = tinyPx
     this.tinyLod = tinyPx > 0 ? this.farLod + 3 : -1
-    for (const r of ROLES) {
+    if (this.roles.length > MAX_ROLES) {
+      throw new Error(`units: the figure has ${this.roles.length} roles, at most ${MAX_ROLES}`)
+    }
+    for (const r of new Set([...this.roles, ...script.roles])) {
       if (!data.ranges[r]) throw new Error(`units: the figure has no clips for the role ${r} (tools/bake-figure.py)`)
     }
-    this.slot = slots(drill)
-    this.mats0 = mats
-    let best = Infinity
-    let bi = 0
-    this.slot.line.forEach(([x, z], i) => {
-      const d = Math.hypot(x, z + drill.rankSpacing)
-      if (d < best) {
-        best = d
-        bi = i
-      }
-    })
-    this.bearer = bi
-    this.speed = { march: data.ranges.march.speed, run: data.ranges.run.speed }
-    if (!(this.speed.march > 0 && this.speed.run > 0)) {
-      throw new Error('units: the march and run roles have no root speed')
+    for (const r of script.roles) {
+      if (!this.roles.includes(r)) throw new Error(`units: the script gives the role ${r}, not one of the figure's`)
     }
+    this.mats0 = mats
+    this.bearer = script.bearer
     const vat = RawTexture.CreateRGBATexture(
       data.vat.data,
       data.vat.width,
@@ -499,14 +513,22 @@ export class Units {
     // the far figure's growth (setFarScale): across up to FAR_SCALE_XZ, but never wider than 95 % of a file
     // (farWidthScale), and FAR_SCALE_Y tall
     const fm = data.mesh[data.lods[this.farLod].name]
-    const farScale = new Vector2(farWidthScale(fm.positions, drill.fileSpacing, FAR_SCALE_XZ), FAR_SCALE_Y)
+    const farScale = new Vector2(farWidthScale(fm.positions, script.fileSpacing, FAR_SCALE_XZ), FAR_SCALE_Y)
     this.farScaleV = farScale
     // 1: the battalions' bounds' side pad, from the baked poses: the far LOD's farthest reach from a man's root across
-    // every step (his musket at the present), as wide as the far figures grow, a little to spare
+    // every step (his musket at the present), as wide as the far figures grow, a little to spare; and its top
     const pv = posedVertices(data, data.lods[this.farLod].name)
     let reach = 0
-    for (let i = 0; i < pv.data.length; i += 8) reach = Math.max(reach, Math.hypot(pv.data[i], pv.data[i + 2]))
+    let top = 0
+    for (let i = 0; i < pv.data.length; i += 8) {
+      reach = Math.max(reach, Math.hypot(pv.data[i], pv.data[i + 2]))
+      top = Math.max(top, pv.data[i + 1])
+    }
     this.sidePad = reach * farScale.x + 0.2
+    this.topH = Math.max(SHADOW_H, top)
+    this.manR = Math.max(MAN_R, reach)
+    const feet = contactReach(pv)
+    this.spread = feet > SPREAD_FROM ? feet : 0
     for (const id of new Set(battalions.map(b => b.uniform))) {
       const u = uniforms[id]
       if (!u) throw new Error(`units: no uniform ${id} (a battalion names it)`)
@@ -807,7 +829,7 @@ export class Units {
   }
 
   private add(b: Battalion): void {
-    const men = this.slot.line.length
+    const men = this.script.men
     // the nearest LOD's mesh is made at the battalion's first split (setSplit): until then its place holds the LOD's
     // own mesh, disabled and never drawn (a battalion never split costs no copy of the full figure: about 1 MB each)
     const lod = this.lods.map((src, li) =>
@@ -896,19 +918,20 @@ export class Units {
     let changed = false
     const ls = moving ? Math.max(0, local - back) : local
     const ln = ls + 1 / fps
+    const sc = this.script
     // (a reserve stands in column)
-    const p = h.b.reserve ? RESERVE : phaseAt(this.drill, ls, this.speed.march, this.speed.run)
+    const p = sc.phase(ls, h.b.reserve === true)
     // (the next step's phase; none past the cycle's end, where the script starts afresh)
-    const pn = moving && !h.b.reserve && ln < CYCLE ? phaseAt(this.drill, ln, this.speed.march, this.speed.run) : null
-    for (let i = 0; i < this.slot.line.length; i++) {
+    const pn: ScriptPhase | null = moving && !h.b.reserve && ln < sc.cycle ? sc.phase(ln, false) : null
+    for (let i = 0; i < sc.men; i++) {
       let nx = 0
       let nz = 0
       if (pn) {
-        manAt(this.drill, this.slot, i, ln, pn, this.speed.run, this.speed.march, jitter[i * 4 + 3], man)
+        sc.man(i, ln, pn, jitter[i * 4 + 3], man)
         nx = man.x
         nz = man.z
       }
-      manAt(this.drill, this.slot, i, ls, p, this.speed.run, this.speed.march, jitter[i * 4 + 3], man)
+      sc.man(i, ls, p, jitter[i * 4 + 3], man)
       const lx = man.x + jitter[i * 4]
       const lz = man.z + jitter[i * 4 + 1]
       const x = b.x + c * lx + s * lz
@@ -978,9 +1001,9 @@ export class Units {
     h.cx = (minX + maxX) / 2
     h.cz = (minZ + maxZ) / 2
     // thin-instance bounds do not follow the animation: padded by a figure's height (his bayonet up,
-    // SHADOW_H, as tall as the far figures grow, FAR_SCALE_Y) and his reach (sidePad: from the baked
+    // SHADOW_H at least: topH, as tall as the far figures grow, FAR_SCALE_Y) and his reach (sidePad: from the baked
     // poses); cull() stretches the same box
-    const top = SHADOW_H * FAR_SCALE_Y + 0.2
+    const top = this.topH * FAR_SCALE_Y + 0.2
     const pad = this.sidePad
     h.lo.set(minX - pad, minY - 0.3, minZ - pad)
     h.hi.set(maxX + pad, maxY + top, maxZ + pad)
@@ -1060,17 +1083,18 @@ export class Units {
     const sel = h.sel
     const on = this.nearestPx * 1.1
     const off = this.nearestPx * 0.9
-    const k = FIGURE * pxPerM
+    const k = this.figH * pxPerM
+    const manR = this.manR
     let changed = false
     for (let i = 0; i < sel.length; i++) {
       const o = i * 16
       const x = m[o + 12]
-      const y = m[o + 13] + FIGURE / 2
+      const y = m[o + 13] + this.figH / 2
       const z = m[o + 14]
       let want = k / Math.max(1, Math.hypot(cam.x - x, cam.y - y, cam.z - z)) >= (sel[i] ? off : on) ? 1 : 0
       if (want) {
         for (const p of this.camPlanes) {
-          if (p.normal.x * x + p.normal.y * y + p.normal.z * z + p.d <= -MAN_R) {
+          if (p.normal.x * x + p.normal.y * y + p.normal.z * z + p.d <= -manR) {
             want = 0
             break
           }
@@ -1122,7 +1146,8 @@ export class Units {
    *  without them), kept in far and given to the map's receivers: 1 at every zoom by default (decision 0062), else by
    *  the camera's distance to its focus over band (decision 0049's cross-fade) */
   private decalShare(decals: boolean): number {
-    const f = decals ? (this.simpleClose ? 1 : farShare(this.camera.radius, this.band)) : 0
+    // (a follower has no map: its simple shadows alone, at every zoom)
+    const f = decals ? (this.simpleClose || this.lead ? 1 : farShare(this.camera.radius, this.band)) : 0
     if (f !== this.far) {
       this.far = f
       if (this.shadowRT) for (const m of this.receivers) m.setFloat('uUnitFar', f)
@@ -1142,7 +1167,7 @@ export class Units {
     const step = Math.floor(T * fps)
     // the share of the step gone, in double precision as the step: the places between two steps (aNext)
     this.stepFrac = T * fps - step
-    const decals = this.shadows && this.simpleFar && this.decal !== null
+    const decals = this.shadows && (this.simpleFar || this.lead !== null) && this.decal !== null
     const f = this.decalShare(decals)
     const mapOn = this.shadows && f < 1 && this.shadowRT !== null
     const decalOn = decals && f > 0
@@ -1191,7 +1216,7 @@ export class Units {
     // pixels per metre at unit distance, from the projection itself
     const pxPerM = (cam.getProjectionMatrix().m[5] * engine.getRenderHeight()) / 2
     const camPos = cam.globalPosition
-    this.farK.set(FIGURE * pxPerM, this.lodPx)
+    this.farK.set(this.figH * pxPerM, this.lodPx)
     this.nearBand[0] = this.lodPx * NEAR_FADE[0]
     this.nearBand[1] = this.lodPx * NEAR_FADE[1]
     this.tinyBandV[0] = this.tinyPx * TINY_FADE[0]
@@ -1213,12 +1238,13 @@ export class Units {
     for (const h of this.hosts) {
       if (!this.shown) continue
       const t = T - h.b.offset
-      const cycle = Math.floor(t / CYCLE)
-      const local = t - cycle * CYCLE
+      const cycle = Math.floor(t / this.script.cycle)
+      const local = t - cycle * this.script.cycle
       const cycleStart = T - local
-      const p = h.b.reserve ? RESERVE.phase : phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
+      const sp = this.script.phase(local, h.b.reserve === true)
+      const p = sp.phase
       // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
-      const moving = p === 'column' || p === 'deploy'
+      const moving = this.script.moving(sp)
       if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) {
         const tp = trNow()
         this.place(
@@ -1241,7 +1267,8 @@ export class Units {
       }
       h.moving = moving
       const px =
-        (FIGURE * pxPerM) / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
+        (this.figH * pxPerM) /
+        Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
       // the nearest LOD: looked at only when the battalion's nearest point (its bounds) is within 90 % of its switch
       // and its bounds are in the view
       let split = false
@@ -1251,10 +1278,10 @@ export class Units {
         const dx = Math.max(lo.x - camPos.x, 0, camPos.x - hi.x)
         const dy = Math.max(lo.y - camPos.y, 0, camPos.y - hi.y)
         const dz = Math.max(lo.z - camPos.z, 0, camPos.z - hi.z)
-        split = (FIGURE * pxPerM) / Math.max(1, Math.hypot(dx, dy, dz)) >= this.nearestPx * (h.split ? 0.8 : 0.9)
+        split = (this.figH * pxPerM) / Math.max(1, Math.hypot(dx, dy, dz)) >= this.nearestPx * (h.split ? 0.8 : 0.9)
         if (split) split = !boxOutside(this.camPlanes, lo.x, lo.y, lo.z, hi.x, hi.y, hi.z)
       }
-      const d = this.drawsAt(h, px, split, camPos, FIGURE * pxPerM, tinyBand)
+      const d = this.drawsAt(h, px, split, camPos, this.figH * pxPerM, tinyBand)
       const near = d.near
       if (near !== h.near && this.casterNear) moved = true
       if (split !== h.split) {
@@ -1303,7 +1330,8 @@ export class Units {
         }
       }
     }
-    if (this.trampleOn) this.trample(T, anyMoved)
+    if (anyMoved) this.trod = true
+    if (this.trampleOn) this.trample(T, this.footsteps())
     if (this.flag?.isEnabled()) {
       this.flagMat?.setFloat('uFlagT', T)
       this.flagMat?.setVector2('uFlagK', this.flagK.set(pxPerM, FLAG_MIN_PX))
@@ -1608,7 +1636,7 @@ export class Units {
   // figure's height, top, down to the ground) cross the camera's frustum (camPlanes, set by the caller)
   private shadowInView(h: Host): boolean {
     const k = this.scratch
-    shadowBox(h, SHADOW_H, k.a, k.b)
+    shadowBox(h, this.topH, k.a, k.b)
     return !boxOutside(this.camPlanes, k.a.x, k.a.y, k.a.z, k.b.x, k.b.y, k.b.z)
   }
 
@@ -1628,14 +1656,16 @@ export class Units {
     // today's shape (averaged over each clip) for the far material; with ?ushstep a second, per step, for the near one
     // (within the per-step band, stepBand: decision 0074). shapeMs: the bakes alone (shadowShape), as main timed it
     let bakeMs = 0
-    const bake = (steps: number, facings: number) => {
+    // (heights: a spread figure's heights' atlas, SH_HEIGHTS, for the material that draws the close look)
+    const bake = (steps: number, facings: number, heights: boolean) => {
       const tb = performance.now()
-      const shape = shadowShape(d, d.lods[this.farLod].name, [SUN.x, SUN.y, SUN.z], ROLES, {
+      const shape = shadowShape(d, d.lods[this.farLod].name, [SUN.x, SUN.y, SUN.z], this.roles, {
         facings,
         soft: SOFT_BLUR,
         posed: this.posedFar,
         steps,
         maxSize: Math.min(4096, this.scene.getEngine().getCaps().maxTextureSize),
+        heights,
       })
       bakeMs += performance.now() - tb
       const tex = new RawTexture(
@@ -1651,28 +1681,28 @@ export class Units {
       )
       tex.name = steps > 0 ? 'figureShadowShapeSteps' : 'figureShadowShape'
       tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
-      return { shape, tex }
+      const htex = shape.heights ? heightsTexture(shape, this.scene) : null
+      return { shape, tex, htex }
     }
-    const farBake = bake(0, SHAPE_FACINGS)
     let nearBake: ReturnType<typeof bake> | null = null
     try {
-      nearBake = ss ? bake(ss.steps, ss.facings) : null
+      nearBake = ss ? bake(ss.steps, ss.facings, this.spread > 0) : null
     } catch (e) {
       // (a per-step atlas over this GPU's texture size: the averaged shape at every zoom, today's look, unless the
       // page asked for it by ?ushstep)
-      if (!(e instanceof AtlasTooLarge) || this.stepExplicit) {
-        farBake.tex.dispose()
-        throw e
-      }
+      if (!(e instanceof AtlasTooLarge) || this.stepExplicit) throw e
       console.warn(`units: ${e.message}: the soldiers' shadows fall back to the clip-averaged shape`)
       ss = this.stepShadow = null
       this.stepFallback = true
     }
+    // (the averaged shape, past the per-step band: its heights only when it draws the close look too, without one)
+    const farBake = bake(0, SHAPE_FACINGS, this.spread > 0 && nearBake === null)
     this.shapeMs = bakeMs
+    this.shapeBytes = [farBake, nearBake].reduce((a, b) => a + (b ? atlasBytes(b.shape) : 0), 0)
     // the ground's height under each vertex: the meadow map's (bound to every painted material, src/look/meadow.ts), or
-    // without one the heightfield's, sampled here over the tile (GROUND_N² texels)
-    let ht: RawTexture | null = null
-    if (!this.groundMap) {
+    // without one the heightfield's, sampled here over the tile (GROUND_N² texels; a follower takes its lead's)
+    let ht: RawTexture | null = this.lead?.groundTex ?? null
+    if (!this.groundMap && !ht) {
       const n = GROUND_N
       const w = D.spec.tile
       const hd = new Float32Array(n * n)
@@ -1693,8 +1723,9 @@ export class Units {
       ht.name = 'figureShadowGround'
       ht.wrapU = ht.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
     }
+    this.groundTex = ht
     const make = (oval: boolean, steps: boolean): ShaderMaterial => {
-      const { shape, tex } = steps && nearBake ? nearBake : farBake
+      const { shape, tex, htex } = steps && nearBake ? nearBake : farBake
       const name = `unitShadow2D${oval ? 'Contact' : ''}${steps ? 'Steps' : ''}`
       const m = this.mats0.make(name, DECAL_VS, DECAL_FS, {
         attributes: ['position', 'aVAT', 'aNext'],
@@ -1721,8 +1752,9 @@ export class Units {
           'uStepRow',
           'uStepRPB',
           'uShFootK',
+          'uShHeight',
         ],
-        samplers: ['uShapeTex', 'uUnitShade', 'uContactTex'],
+        samplers: ['uShapeTex', 'uUnitShade', 'uContactTex', 'uShapeH'],
         alpha: true,
         defines: [
           `#define FACINGS ${shape.facings.toFixed(1)}`,
@@ -1731,6 +1763,9 @@ export class Units {
           `#define LIFT_RAMP ${LIFT_RAMP.toFixed(2)}`,
           `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`,
           ...(this.coverage ? ['#define COVERAGE'] : []),
+          // (a figure on more than its root: drawn at its own length, its lift floored; its look by its heights)
+          ...(this.spread > 0 ? ['#define SH_SPREAD', `#define SPREAD_FLOOR ${SPREAD_FLOOR.toFixed(3)}`] : []),
+          ...(htex ? ['#define SH_HEIGHTS'] : []),
           ...(this.farScaleOn ? ['#define FAR_SCALE'] : []),
           ...(this.fade ? [FADE_ON[1]] : []),
           ...(oval
@@ -1746,9 +1781,21 @@ export class Units {
       m.backFaceCulling = false
       m.disableDepthWrite = true
       m.setTexture('uShapeTex', tex)
+      if (htex) m.setTexture('uShapeH', htex)
       m.setTexture('uUnitShade', shade)
       if (ht) m.setTexture('uMeadow', ht)
-      m.setVector4('uRoleStart', new Vector4(...ROLES.map(r => d.ranges[r].start)))
+      // (a figure with fewer than four roles: the rest never match a clip's first step)
+      m.setVector4(
+        'uRoleStart',
+        new Vector4(
+          ...padTo4(
+            this.roles.map(r => d.ranges[r].start),
+            -1,
+          ),
+        ),
+      )
+      // m: the heights' 1 along the ground (SH_SPREAD: the shape's B times it is m from the contact along the shadow)
+      m.setFloat('uShHeight', shape.heightTop * (Math.hypot(SUN.x, SUN.z) / SUN.y))
       // the atlas's anchor: where a cell's first texel lies from a man's root (m; the strip moves, this does not)
       m.setVector2('uShapeAt', new Vector2(shape.across[0], shape.along[0]))
       m.setVector4('uShapeCell', new Vector4(shape.cellW, shape.cellH, 1 / shape.width, 1 / shape.height))
@@ -1756,8 +1803,8 @@ export class Units {
       m.setVector2('uShapeTexel', new Vector2(1 / shape.texel, shape.margin))
       m.setVector2('uShDir', new Vector2(...shape.dir))
       if (steps && ss) {
-        m.setVector4('uStepBins', new Vector4(...shape.bins))
-        m.setVector4('uStepRow', new Vector4(...shape.binRow))
+        m.setVector4('uStepBins', new Vector4(...padTo4(shape.bins, 1)))
+        m.setVector4('uStepRow', new Vector4(...padTo4(shape.binRow, 0)))
         m.setFloat('uStepRPB', shape.rowsPerBlock)
         m.setFloat('uVATStep', 0)
         m.setVector2('uShFootK', new Vector2(...this.footSharp))
@@ -1877,7 +1924,8 @@ export class Units {
   setShadows(on: boolean): void {
     if (on === this.shadows) return
     this.shadows = on
-    const map = on && (!this.simpleFar || !this.simpleClose)
+    // (a follower draws no map: its simple shadows at every zoom, whatever the lead's switches)
+    const map = on && !this.lead && (!this.simpleFar || !this.simpleClose)
     if (map) this.useMap()
     if (!on && this.shadowRT) {
       this.target(this.shadowRT, false)
@@ -1889,7 +1937,7 @@ export class Units {
       this.smStep = -1
       this.smEmpty = false
     }
-    if (on && this.simpleFar) this.useDecals()
+    if (on && (this.simpleFar || this.lead)) this.useDecals()
     this.far = 0
     for (const m of this.receivers) {
       m.setDefine('#define UNIT_SHADOWS', map)
@@ -1921,8 +1969,8 @@ export class Units {
     m.setFloat('uShSoft', l.soft)
     m.setFloat('uShGain', l.gain)
     m.setFloat('uShLen', l.len)
-    m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
-    const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP, u.reach)
+    m.setVector4('uShFoot', this.footV.set(...footUniform(l, this.shadowTip)))
+    const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP, u.reach, this.spread)
     m.setVector4('uStrip', this.stripV.set(...strip.box))
     m.setVector4('uRows', this.rowsV.set(...strip.rows))
   }
@@ -1966,6 +2014,7 @@ export class Units {
   /** the guard's masks (tools/guard.mjs --figures): 'off' painted; 'white', 'black' every figure flat; 'side' the
    *  uniforms side 0's battalions wear white, the others black; 'coat' white where a coat shows */
   setMask(mode: 'off' | 'white' | 'black' | 'side' | 'coat'): void {
+    for (const f of this.followers) f.setMask(mode) // (every arm: the guard's masks)
     const first = new Set(this.hosts.filter(h => h.b.side === 0).map(h => h.b.uniform))
     const v = (id: string) =>
       mode === 'off' ? -1 : mode === 'white' ? 1 : mode === 'black' ? 0 : mode === 'coat' ? 2 : first.has(id) ? 1 : 0
@@ -2047,6 +2096,8 @@ export class Units {
   /** the ground trodden under the formations (?trample=0: none): the ground and the grass read a mask of where the men
    *  stand and just behind them (TRAMPLE) */
   setTrample(on: boolean): void {
+    // (a follower's men are trodden into its lead's mask: trample)
+    if (this.lead) return
     this.trampleOn = on
     if (on && !this.trTex) {
       this.trTex = new RawTexture(
@@ -2119,17 +2170,21 @@ export class Units {
       const j = Math.floor((z - b.z0) / tx)
       if (i >= 0 && j >= 0 && i < TR_N && j < TR_N) acc[j * TR_N + i] += w
     }
-    for (const h of this.hosts) {
-      if (!this.shown || h.hi.x < b.x0 || h.lo.x > b.x0 + b.size || h.hi.z < b.z0 || h.lo.z > b.z0 + b.size) continue
-      const m = h.matrices
-      for (let o = 0; o < m.length; o += 16) {
-        const x = m[o + 12]
-        const z = m[o + 14]
-        // (+z in the figure's frame: behind him)
-        const bx = m[o + 8]
-        const bz = m[o + 10]
-        splat(x, z, 1)
-        for (const [d, w] of TR_TRAIL) splat(x + bx * d, z + bz * d, w)
+    // (this arm's men and its followers', each by its tread)
+    for (const u of [this, ...this.followers]) {
+      const k = u.tread
+      for (const h of u.hosts) {
+        if (!u.shown || h.hi.x < b.x0 || h.lo.x > b.x0 + b.size || h.hi.z < b.z0 || h.lo.z > b.z0 + b.size) continue
+        const m = h.matrices
+        for (let o = 0; o < m.length; o += 16) {
+          const x = m[o + 12]
+          const z = m[o + 14]
+          // (+z in the figure's frame: behind him)
+          const bx = m[o + 8]
+          const bz = m[o + 10]
+          splat(x, z, k)
+          for (const [d, w] of TR_TRAIL) splat(x + bx * d, z + bz * d, w * k)
+        }
       }
     }
     // a formation's density: a man to 0.55 m² (0.65 m files, 0.85 m ranks), his splats' weight
@@ -2158,9 +2213,23 @@ export class Units {
     }
   }
 
+  /** Whether any arm's men moved since the lead last drew the trodden mask (its own this frame, its followers' since),
+   *  the followers' flags cleared */
+  private footsteps(): boolean {
+    let moved = this.trod
+    this.trod = false
+    for (const f of this.followers) {
+      moved ||= f.trod
+      f.trod = false
+    }
+    return moved
+  }
+
   /** the battalions' colours (?flags=0: none): one flag a battalion, in its uniform's flag colours, carried by the man
-   *  at the line's centre in its second rank (the colour party), its cloth flying downwind; a thin instance each */
+   *  at the line's centre in its second rank (the colour party), its cloth flying downwind; a thin instance each. An
+   *  arm without flags (the constructor's opts.flags) draws none */
   setFlags(on: boolean): void {
+    if (!this.withFlags) return
     this.flagsOn = on
     if (on && !this.flag) this.makeFlags()
     this.flag?.setEnabled(on && this.shown)
@@ -2265,6 +2334,7 @@ export class Units {
 
   /** the figures shown or not (the guard's ground alone), their shadows with them */
   show(on: boolean): void {
+    for (const f of this.followers) f.show(on) // (every arm: the guard's ground alone)
     this.shown = on
     for (const h of this.hosts) h.lod.forEach((m, li) => m.setEnabled(on && (!this.hasNearest || li !== 0 || h.split)))
     this.flag?.setEnabled(on && this.flagsOn) // (the flags with them)
@@ -2291,7 +2361,11 @@ export class Units {
     return out
   }
   get figures(): number {
-    return this.hosts.length * this.slot.line.length
+    return this.hosts.length * this.script.men
+  }
+  /** each unit's middle where its men stand now (m: x, z; the review's cameras follow a riding unit) */
+  centres(): [number, number][] {
+    return this.hosts.map(h => [h.cx, h.cz])
   }
   /** the battalions as placed (the tools aim their cameras at them) */
   get battalions(): Battalion[] {
@@ -2305,4 +2379,44 @@ function shadowBox(h: Host, top: number, lo: Vector3, hi: Vector3): void {
   const sz = (-SUN.z / SUN.y) * top
   lo.set(Math.min(h.lo.x, h.lo.x + sx), h.lo.y - top, Math.min(h.lo.z, h.lo.z + sz))
   hi.set(Math.max(h.hi.x, h.hi.x + sx), h.hi.y, Math.max(h.hi.z, h.hi.z + sz))
+}
+
+/** four values for a vec4 uniform: the first four of v, the rest pad */
+export function padTo4(v: readonly number[], pad: number): [number, number, number, number] {
+  return [0, 1, 2, 3].map(i => v[i] ?? pad) as [number, number, number, number]
+}
+
+/** bytes an image of w × h texels of `per` bytes takes with its full mip chain (about a third more) */
+export function mippedBytes(w: number, h: number, per: number): number {
+  let n = 0
+  for (;;) {
+    n += w * h * per
+    if (w === 1 && h === 1) return n
+    w = Math.max(1, w >> 1)
+    h = Math.max(1, h >> 1)
+  }
+}
+/** bytes a shape's atlases take on the GPU, their mips included: RG8 (or R8 without the soft bake), and the heights'
+ *  R8 at half the size */
+export function atlasBytes(s: { width: number; height: number; channels: number; heights: Uint8Array | null }): number {
+  const hb = s.heights ? mippedBytes(s.width >> 1, s.height >> 1, 1) : 0
+  return mippedBytes(s.width, s.height, s.channels) + hb
+}
+
+/** A shape's heights (shadowShape's, an R8 atlas at half its size) as a texture: mipmapped, read trilinear, clamped */
+function heightsTexture(shape: ShadowShape, scene: Scene): RawTexture {
+  const t = new RawTexture(
+    shape.heights,
+    shape.width >> 1,
+    shape.height >> 1,
+    Constants.TEXTUREFORMAT_R,
+    scene,
+    true,
+    false,
+    Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
+    Constants.TEXTURETYPE_UNSIGNED_BYTE,
+  )
+  t.name = 'figureShadowHeights'
+  t.wrapU = t.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
+  return t
 }

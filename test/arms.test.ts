@@ -1,0 +1,325 @@
+// The armies demo's other arms (docs/plans/active/cavalry-artillery-demo.md): their scripts (src/look/world/arms.ts:
+// the infantry's behind the same interface, unchanged; a ride; a service), their places on the demo map clear of the
+// infantry and of one another, their figures (data/figures/fr-cuirassier.unitdata, fr-foot-artillery.unitdata,
+// written by tools/bake-figure.py) whole, dressed from the dyes, and their shadows' pure parts: the contacts' spread,
+// the shape's heights (their mean, a regression), the texel fitted to a big figure
+import { readFileSync } from 'node:fs'
+import { gunzipSync } from 'node:zlib'
+import { describe, expect, it, vi } from 'vitest'
+import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
+import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
+import { CYCLE, layout, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
+import {
+  armScript,
+  battalionBoxes,
+  boxOf,
+  drillScript,
+  formationSlots,
+  placeArm,
+  placeArmUnits,
+  rideDistance,
+  rideScript,
+  serveScript,
+  type Box,
+} from '../src/look/world/arms.ts'
+import { dressAll, dressed, FIGURE_PARTS } from '../src/look/world/dyes.ts'
+import { ARMIES_DEMO, ARMS_DEMO } from '../src/scenarios/armies-demo.ts'
+import {
+  FIGURE_HEIGHT,
+  LEGACY_ROLES,
+  MAX_ROLES,
+  SPREAD_FROM,
+  cellHeights,
+  checkFigure,
+  contactReach,
+  decodeUnits,
+  fitTexel,
+  halved,
+  heightAt,
+  posedVertices,
+  shadowShape,
+  type UnitData,
+} from '../src/look/units-data.ts'
+import { decalStrip } from '../src/look/shadow-look.ts'
+
+const figure = (name: string): UnitData =>
+  decodeUnits(new Uint8Array(readFileSync(new URL(`../data/figures/${name}.unitdata`, import.meta.url))).buffer)
+const INFANTRY = figure('fr-line-infantry')
+const CAVALRY = figure('fr-cuirassier')
+const BATTERY = figure('fr-foot-artillery')
+const SUN = (() => {
+  const v = [-0.7, 0.45, 0.55]
+  const l = Math.hypot(...v)
+  return v.map(x => x / l) as [number, number, number]
+})()
+const man = (): ManState => ({ x: 0, z: 0, face: 0, role: '', since: 0, moving: false })
+const speedsOf = (d: UnitData) => Object.fromEntries(Object.entries(d.ranges).map(([k, r]) => [k, r.speed]))
+
+describe("the infantry's script behind the arms' interface (drillScript)", () => {
+  const g = napoleonic.types.infantry.geometry
+  const d: Drill = { ...g }
+  const sp = { march: 0.9, run: 3.2 }
+  const s = drillScript(d, sp)
+  it("gives phaseAt's phases, manAt's men, the line's bearer and the cycle as before", () => {
+    const sl = slots(d)
+    expect([s.men, s.cycle, s.fileSpacing]).toEqual([sl.line.length, CYCLE, d.fileSpacing])
+    for (const t of [0, 30, 46, 52, 70, 109]) {
+      const p = s.phase(t, false)
+      expect(p).toEqual(phaseAt(d, t, sp.march, sp.run))
+      for (const i of [0, 77, 413]) {
+        expect(s.man(i, t, p, 0.3, man())).toEqual(manAt(d, sl, i, t, p, sp.run, sp.march, 0.3, man()))
+      }
+      expect(s.moving(p)).toBe(p.phase === 'column' || p.phase === 'deploy')
+    }
+    expect(s.phase(30, true).phase).toBe('halt')
+    const [bx, bz] = sl.line[s.bearer]
+    expect(Math.abs(bx)).toBeLessThanOrEqual(d.fileSpacing + 1e-9) // (six companies: the gap between two at the middle)
+    expect(bz).toBeCloseTo(-d.rankSpacing, 9)
+  })
+})
+
+describe('a ride (rideScript)', () => {
+  const places: [number, number][] = [
+    [0, 0],
+    [1, 0],
+    [0, -3],
+  ]
+  const legs = [
+    { role: 'halt', seconds: 2 },
+    { role: 'walk', seconds: 4 },
+    { role: 'trot', seconds: 3 },
+    { role: 'halt', seconds: 1 },
+  ]
+  const speeds = { halt: 0, walk: 1.5, trot: 3 }
+  const s = rideScript(places, legs, speeds, 1)
+  it("goes leg by leg at each role's speed, halted where it ends, and starts again where it began", () => {
+    expect(s.cycle).toBe(10)
+    expect(s.roles).toEqual(['halt', 'walk', 'trot'])
+    const at = (t: number) => s.man(1, t, s.phase(t, false), 0, man())
+    expect(at(1)).toMatchObject({ x: 1, z: 0, role: 'halt', moving: false })
+    expect(at(4).z).toBeCloseTo(3, 9)
+    expect(at(4)).toMatchObject({ role: 'walk', moving: true })
+    expect(at(7.5).z).toBeCloseTo(6 + 4.5, 9)
+    expect(at(9.5).z).toBeCloseTo(15, 9)
+    expect(at(9.5).role).toBe('halt')
+    expect(rideDistance(legs, [0, 2, 6, 9], speeds, 10)).toBeCloseTo(15, 9)
+  })
+  it("names a new phase each leg, moving only while its role has a speed, each man's clip from the leg's start", () => {
+    expect([1, 3, 7, 9.5].map(t => s.phase(t, false).phase)).toEqual(['0:halt', '1:walk', '2:trot', '3:halt'])
+    expect([1, 3, 7, 9.5].map(t => s.moving(s.phase(t, false)))).toEqual([false, true, true, false])
+    expect(s.man(0, 7, s.phase(7, false), 0.5, man()).since).toBeCloseTo(6 + 0.5 * 0.4, 9)
+  })
+  it('refuses a leg whose role has no speed, or a leg of no time', () => {
+    expect(() => rideScript(places, [{ role: 'canter', seconds: 2 }], speeds, 1)).toThrow(/canter/)
+    expect(() => rideScript(places, [{ role: 'walk', seconds: 0 }], speeds, 1)).toThrow(/lasts/)
+  })
+})
+
+describe('a service (serveScript)', () => {
+  const places: [number, number][] = [0, 1, 2, 3].map(i => [i * 16, 0])
+  const s = serveScript(places, { rest: 'halt', work: 'fire' }, { rest: 5, lag: 2, cycle: 30 }, 16)
+  it('rests, then starts each piece lag s after the one before, a new phase at each, never moving', () => {
+    const roles = (t: number) => places.map((_, i) => s.man(i, t, s.phase(t, false), 0, man()).role)
+    expect(roles(4)).toEqual(['halt', 'halt', 'halt', 'halt'])
+    expect(roles(5.5)).toEqual(['fire', 'halt', 'halt', 'halt'])
+    expect(roles(9.5)).toEqual(['fire', 'fire', 'fire', 'halt'])
+    expect(roles(29)).toEqual(['fire', 'fire', 'fire', 'fire'])
+    expect(new Set([4, 5.5, 7.5, 9.5, 11.5].map(t => s.phase(t, false).phase)).size).toBe(5)
+    expect(s.moving(s.phase(20, false))).toBe(false)
+    expect(s.man(2, 20, s.phase(20, false), 0, man()).since).toBe(9)
+  })
+  it('refuses pieces that cannot all start within the cycle', () => {
+    expect(() => serveScript(places, { rest: 'h', work: 'f' }, { rest: 20, lag: 5, cycle: 30 }, 16)).toThrow(/cycle/)
+  })
+})
+
+describe("the arms' places (placeArm, formationSlots)", () => {
+  it("stands a regiment's squadrons as the ruleset's column, files across, ranks behind", () => {
+    const t = napoleonic.types.cavalry
+    const p = formationSlots(t.geometry, t.formations.column.place)
+    const g = t.geometry
+    expect(p.length).toBe(g.companies * g.files * g.ranks)
+    expect(Math.max(...p.map(q => q[0])) - Math.min(...p.map(q => q[0]))).toBeCloseTo((g.files - 1) * g.fileSpacing, 9)
+    expect(p[g.files]).toEqual([p[0][0], p[0][1] - g.rankSpacing])
+  })
+  const open = () => false
+  it('takes the wanted spot when it is clear, on its own half, clear of what is taken', () => {
+    const foot = { a0: -5, a1: 5, z0: -2, z1: 2 }
+    const taken: Box[] = []
+    const a = placeArm(foot, 0, { turn: 0, ahead: 10, across: 20 }, [0, 0], 55, open, taken)
+    expect(a).toEqual({ x: 20, z: -45, heading: 0 })
+    const b = placeArm(foot, 1, { turn: 0, ahead: 10, across: 20 }, [0, 0], 55, open, taken)
+    expect(b).toMatchObject({ x: 20, z: 45 })
+    expect(b?.heading).toBeCloseTo(Math.PI, 12)
+    // (a second unit at the same spot moves, along the front first)
+    const c = placeArm(foot, 0, { turn: 0, ahead: 10, across: 20 }, [0, 0], 55, open, taken)
+    expect(c?.z).toBe(-45)
+    expect(Math.abs((c?.x ?? 0) - 20)).toBeGreaterThanOrEqual(10)
+    expect(taken.length).toBe(3)
+  })
+  it("never crosses into the other side's half, and is null with no room", () => {
+    const foot = { a0: -5, a1: 5, z0: -2, z1: 60 }
+    const p = placeArm(foot, 0, { turn: 0, ahead: 40, across: 0 }, [0, 0], 55, open, [])
+    expect(p && boxOf(p.x, p.z, p.heading, -5, 5, -2, 60).z1).toBeLessThanOrEqual(0)
+    expect(placeArm(foot, 0, { turn: 0, ahead: 10, across: 0 }, [0, 0], 55, () => true, [])).toBeNull()
+  })
+  // the demo map's blocked ground (test/armies.test.ts reads it the same way)
+  const bits = gunzipSync(readFileSync(new URL('./fixtures/demo-map-blocked.bin.gz', import.meta.url)))
+  const N = 961
+  const bit = (i: number, j: number) =>
+    i < 0 || j < 0 || i >= N || j >= N || ((bits[(j * N + i) >> 3] >> ((j * N + i) & 7)) & 1) === 1
+  const demo = (x: number, z: number) => {
+    const i = Math.floor((x + 240) / 0.5)
+    const j = Math.floor((z + 240) / 0.5)
+    return bit(i, j) || bit(i + 1, j) || bit(i, j + 1) || bit(i + 1, j + 1)
+  }
+  const drill: Drill = { ...napoleonic.types.infantry.geometry }
+  it('fields each arm on both sides of the demo map at 1 to 40 battalions, clear of the infantry and of one another', () => {
+    for (const n of [1, 10, 20, 40]) {
+      const bs = layout(n, drill, demo, ARMIES_DEMO.sides)
+      const taken = battalionBoxes(bs, drill)
+      const inf = taken.length
+      for (const spec of ARMS_DEMO) {
+        const t = napoleonic.types[spec.unitType]
+        const d = spec.figure === 'fr-cuirassier' ? CAVALRY : BATTERY
+        const { foot } = armScript(spec, t.geometry, t.formations[spec.formation].place, speedsOf(d))
+        const units = placeArmUnits(spec, foot, [0, 0], 55, demo, taken)
+        expect(
+          units.map(u => u.side),
+          `${spec.name} at ${n}`,
+        ).toEqual([0, 1])
+      }
+      const arms = taken.slice(inf)
+      for (const [i, a] of arms.entries()) {
+        for (const b of taken.slice(0, inf + i)) {
+          expect(a.x0 >= b.x1 || b.x0 >= a.x1 || a.z0 >= b.z1 || b.z0 >= a.z1, `n ${n}`).toBe(true)
+        }
+        for (let x = a.x0; x <= a.x1; x += 2.5) for (let z = a.z0; z <= a.z1; z += 2.5) expect(demo(x, z)).toBe(false)
+      }
+    }
+  })
+  it('warns and leaves a side out when it has no room', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const spec = ARMS_DEMO[0]
+    const t = napoleonic.types[spec.unitType]
+    const { foot } = armScript(spec, t.geometry, t.formations[spec.formation].place, speedsOf(BATTERY))
+    expect(placeArmUnits(spec, foot, [0, 0], 55, () => true, [])).toEqual([])
+    expect(warn).toHaveBeenCalledTimes(2)
+    warn.mockRestore()
+  })
+})
+
+describe('the figures (fr-cuirassier, fr-foot-artillery)', () => {
+  it('decode whole: their roles in order, at most four, each with a clip; their parts; their height', () => {
+    expect(CAVALRY.roles).toEqual(['halt', 'walk', 'trot', 'gallop'])
+    expect(BATTERY.roles).toEqual(['halt', 'fire'])
+    for (const d of [CAVALRY, BATTERY]) {
+      expect(d.roles.length).toBeLessThanOrEqual(MAX_ROLES)
+      expect(Object.keys(d.parts ?? {}).sort()).toEqual([...d.palette].sort())
+      expect(d.lods.map(l => l.triangles)).toEqual([...d.lods.map(l => l.triangles)].sort((a, b) => b - a))
+      expect(d.bones.length).toBeLessThan(255)
+    }
+    expect(CAVALRY.height).toBeGreaterThan(2.4)
+    expect(BATTERY.height).toBeGreaterThan(1.6)
+    expect(CAVALRY.ranges.walk.speed).toBeCloseTo(1.7, 3)
+    expect(CAVALRY.ranges.gallop.speed).toBeGreaterThan(CAVALRY.ranges.trot.speed)
+  })
+  it("the infantryman's file (none of the fields): the legacy roles, his parts the page's own, 1.8 m", () => {
+    expect([INFANTRY.roles, INFANTRY.parts, INFANTRY.height]).toEqual([[...LEGACY_ROLES], null, FIGURE_HEIGHT])
+  })
+  it('checkFigure finds a role without clips, too many roles, a colour role without a part', () => {
+    const base = { roles: ['a'], ranges: { a: CAVALRY.ranges.halt }, parts: { x: 'coat' }, palette: ['x'], height: 2 }
+    expect(checkFigure(base)).toEqual([])
+    expect(checkFigure({ ...base, roles: ['a', 'b'] })[0]).toMatch(/b has no clip/)
+    expect(checkFigure({ ...base, roles: ['a', 'a', 'a', 'a', 'a'] })[0]).toMatch(/1 to 4/)
+    expect(checkFigure({ ...base, palette: ['x', 'y'] })[0]).toMatch(/y names no part/)
+  })
+  it('are dressed from the dyes for their own parts: every arm uniform, never a raw colour', () => {
+    for (const spec of ARMS_DEMO) {
+      const d = spec.figure === 'fr-cuirassier' ? CAVALRY : BATTERY
+      const dress = Object.fromEntries(spec.sides.map(id => [id, UNIFORMS[id]]))
+      const worn = dressAll(dress, DYES, { parts: d.parts ?? undefined })
+      for (const id of spec.sides) {
+        expect(Object.keys(worn[id].colours).sort()).toEqual([...d.palette].sort())
+        for (const c of Object.values(worn[id].colours)) {
+          expect([...Object.values(DYES.dyes), ...Object.values(DYES.materials)]).toContain(c)
+        }
+      }
+    }
+    expect(dressed(UNIFORMS['fr-foot-artillery'], DYES, { parts: BATTERY.parts ?? undefined }).colours.paint).toBe(
+      DYES.dyes['carriage-olive'],
+    )
+  })
+  it('refuses a part that is no cloth part, the boots or a material', () => {
+    expect(() => dressed(UNIFORMS['fr-line'], DYES, { parts: { ...FIGURE_PARTS, coat: 'hat' } })).toThrow(/hat/)
+  })
+})
+
+describe("the spread figures' shadows", () => {
+  it('spread past their root: a horse and a gun, not the infantryman', () => {
+    const reach = (d: UnitData) => contactReach(posedVertices(d, d.lods[d.lods.length - 1].name))
+    expect(reach(INFANTRY)).toBeLessThan(SPREAD_FROM)
+    expect(reach(CAVALRY)).toBeGreaterThan(SPREAD_FROM)
+    expect(reach(BATTERY)).toBeGreaterThan(SPREAD_FROM)
+  })
+  it("keeps the infantryman's texel, and grows a big figure's until its cells fit", () => {
+    expect(fitTexel(0.05, 4, 6, 0.2, 192)).toBe(0.05)
+    const t = fitTexel(0.05, 8, 12, 0.2, 192)
+    expect(t).toBeGreaterThan(0.05)
+    expect(Math.ceil(12 / t / 8) * 8 + 2 * Math.ceil(0.2 / t / 8) * 8 + 16).toBeLessThanOrEqual(192)
+  })
+  it('reads a height across a projected triangle, held within its corners; edge on, its lowest', () => {
+    expect(heightAt(0, 0, 10, 0, 0, 10, [0, 1, 2], 5, 0)).toBeCloseTo(0.5, 12)
+    expect(heightAt(0, 0, 10, 0, 0, 10, [0, 1, 2], 0, 5)).toBeCloseTo(1, 12)
+    expect(heightAt(0, 0, 10, 0, 0, 10, [0, 1, 2], -3, -3)).toBe(0)
+    expect(heightAt(0, 0, 1, 1, 2, 2, [3, 1, 2], 1, 1)).toBe(1)
+  })
+  it("averages a cell's heights over its coverage, the top where nothing is covered; halves an image by its means", () => {
+    const acc = new Float32Array(9)
+    const accH = new Float32Array(9)
+    acc[4] = 1
+    accH[4] = 0.5
+    const out = new Uint8Array(9)
+    cellHeights(acc, accH, [1], 3, 3, [1, 1, 1, 1], 2, (x, y, v) => (out[y * 3 + x] = v))
+    expect([...out]).toEqual([255, 255, 255, 255, 64, 255, 255, 255, 255])
+    expect([...halved(Uint8Array.from([0, 2, 9, 9, 4, 6, 9, 9]), 4, 2)]).toEqual([3, 9])
+  })
+  // the regression: the bin's coverage was divided by its steps before the blur and its heights' sum was not, so a
+  // bin of n steps read n times too high (the halt's six-step bins all at the top: a horse's whole shadow light)
+  it("reads the hooves low in every bin: each cell's median height under half the figure's", () => {
+    const d = CAVALRY
+    const far = d.lods[d.lods.length - 1].name
+    const s = shadowShape(d, far, SUN, d.roles, { facings: 8, soft: 0.12, steps: 8, heights: true })
+    const hw = s.width >> 1
+    const H = s.heights ?? new Uint8Array(0)
+    for (let row = 0; row < s.bins.reduce((a, b) => a + b, 0); row++) {
+      const bx = Math.floor(row / s.rowsPerBlock) * 8
+      const by = row % s.rowsPerBlock
+      const vals: number[] = []
+      for (let y = 0; y < s.cellH; y += 2) {
+        for (let x = 0; x < s.cellW; x += 2) {
+          const X = bx * s.cellW + x
+          const Y = by * s.cellH + y
+          if (s.data[(Y * s.width + X) * 2] > 128) vals.push(H[(Y >> 1) * hw + (X >> 1)])
+        }
+      }
+      vals.sort((a, b) => a - b)
+      expect(vals[vals.length >> 1], `row ${row}`).toBeLessThan(128)
+    }
+  }, 60000)
+  it("lays a spread figure's close rows at its contacts' reach and the ramp past it, the soldier's as before", () => {
+    const base = { across: [-1, 1], along: [-1, 6] } as const
+    const full = { across: [-1.5, 1.5], along: [-1.5, 6.5] } as const
+    expect(decalStrip(base, full, 0, 0.7, 1.5, 0, 0)).toEqual(decalStrip(base, full, 0, 0.7, 1.5))
+    const s = decalStrip(base, full, 0, 1, 1.5, 0, 1.3)
+    const at = (r: number) => s.box[1] + r * s.box[3]
+    expect(at(s.rows[1])).toBeCloseTo(1.3, 9)
+    expect(at(s.rows[2])).toBeCloseTo(2.8, 9)
+  })
+  it("floors a spread figure's lift over its footprint (unitdecal.vert, the source)", () => {
+    const v = readFileSync(new URL('../src/look/shaders/unitdecal.vert', import.meta.url), 'utf8').replace(/\s+/g, '')
+    expect(v).toContain('#ifdefSH_SPREAD')
+    expect(v).toContain('floatlift=max(uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y),SPREAD_FLOOR);')
+  })
+})
