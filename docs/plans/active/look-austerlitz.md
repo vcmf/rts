@@ -18,6 +18,12 @@ a ±235 m play area, written as formulas in `src/look/world/author.ts`, `cover.t
 `water-data.ts` and built into `data/painted-world.lookdata` by `tools/build-look-data.ts`. The owner wants the look
 page on Austerlitz.
 
+**The look page as the match's test bed** (the owner, 2026-10-28): the look page becomes a stand-in for how a map and
+a match will later look, built on the latest work on `main` (the map engine's maps, the editor, the sim's rules as
+they land), not on a world of its own. So each stage below prefers reading what `main` already compiles over writing
+look-only data, and what the look page shows (the ground, the armies on it, later their sight) should be what a
+match will show.
+
 Two things stand between them: nothing turns a map file into look data (the look compiler, M4, was never built), and
 the look page draws one world of one size (`SPEC` in `src/look/spec.ts`, one river, ±235 m of play), while Austerlitz
 is 6 km across.
@@ -195,6 +201,31 @@ the outline:
 seam between tiles (the far ring and the apron's contract, engine-design §4, carried to tile edges), each tile's
 pixels the same whichever way it was reached.
 
+**The light over 6 km: coarse everywhere, fine near the camera** (research 2026-10-28, the owner's "2.1 GB is too
+much"). The 2.1 GB is only the cost of holding near-zoom light for the whole map ahead of time; no game found does
+that. The widest 3D view sees about 16.5 ha (212 m wide at its foot, 598 m at its top, 409 m deep: 0.46 % of 6 km
+square, an estimate from the camera's limits), and 0.26 m texels matter only within about 150 m of the focus.
+Supreme Commander lights 10 km maps from a 1024² shadow map and a normal map baked from the heightmap; Total War
+draws runtime cascades and leaves the terrain out of them; Frostbite, Far Cry 4 and Unreal's runtime virtual texture
+bake or generate the fine levels near the camera into a cache and stream only the coarse ones. Recommended (to settle
+by the first test below):
+1. **A coarse bake of the whole map at build time** (2–4 m: the terrain's sun shadow, the sky's occlusion, the valley
+   mask, the macro colour; about 9–36 MB raw at 2 m, 4–9 MB compressed as KTX2 BC; estimates) **and the fine bake
+   around the camera at run time** (today's 0.26 m light: the trees' and buildings' shadows and contact, the bounce;
+   3 × 3 tiles of 400 m, or a two-level clipmap if tiles hitch): about 70–150 MB resident, against today's 280 MB,
+   no new work a frame, a tile's bake about 3.5 ms (scaled from today's 14 ms light map; estimate).
+2. The same with the fine level at the spec's 0.5 m: about 30–45 MB, the least work; the trunks' feet and the trees'
+   contact may soften at the closest zoom.
+3. Runtime shadows near the camera (Total War's way): least memory, about +1–3 ms a frame, the painted look at risk;
+   last, because our sun does not move.
+
+**First test:** on today's tile, the closest zoom with the light map at 0.26, 0.5 and 1 m texels, and the far half of
+the widest view at 2 m, side by side for the owner. Options 1 and 2 keep the invariant's spirit but not its letter
+(AGENTS.md, "static light is baked once per map"; decision 0061's "bakes per tile at build time"): proposed wording,
+"static light is never computed per frame: baked once per map and sun, coarse for the whole map, fine lazily around
+the camera, deterministically; only moving things get per-frame lighting", a decision for the owner with stage B's
+plan. Sources and arithmetic: the research note that stage B's plan writes up (`docs/research/`).
+
 ## Stage C: the zoom handover (a sketch)
 
 Past 260 m the lit map view (decision 0058, `src/render/lit/`, M6) takes over on the same camera, in the staff map's
@@ -202,6 +233,15 @@ stages (`docs/proposals/staff-map/design.md` §9): the painted world's far tiles
 figures into slabs, the light turns from the world's sun to the map's north-west (the one-map plan's open question 6).
 It needs B (the whole map in 3D) and the lit view on the look page's camera (M6d or M9). Both renderers draw at once
 across the blend, so the frame is both budgets at once there. Its own plan; about 4–6 PRs (estimate).
+
+## Later: fog of war as the paper map (an idea, not planned)
+
+The owner, 2026-10-28, for later: embrace the fog of war with a paper, lit-map version of the 3D world. Only the
+ground around one's own units, as far as each sees (the sim's vision, decision 0061's S-vision), is drawn in the
+painted world's colour and light; the rest is drawn like the lit map view (decision 0058): its simple shaded relief on
+paper, the trees, roads and buildings only, perhaps as outlines. The same staged blend as stage C, driven by sight
+instead of zoom. Its own plan once vision is a rule in the sim and stage C exists; it may also ease stage B's budget
+(only the seen ground needs the fine light).
 
 ## The branches in flight
 
