@@ -64,9 +64,23 @@ fill costs too much: see Results); soft-particle depth (a card's plane crossing 
 - **Main's look one switch away**: `?smoke=0` creates nothing.
 - `npm test`, `npm run check:data`, `node tools/check-docs.mjs` and the build pass.
 
-## Results
+## Results (2026-10-28, this machine: M1 Pro, ANGLE Metal, 1920 × 1080)
 
-To be measured.
+- **Cost** (the built page, `?armies=20&firehold=1&bench=smoke`, paired arms A B B A in one page, GPU frame p50, the
+  smoke arm's less the other's, averaged over the three yaws; each run started at a 1-min load ≤ 3, though other
+  agents' work rose during the runs, so single cameras are noisy: their arms spread about as much as the difference):
+  - On the fight's middle (`benchr=20,40,63,125,250`): 20 m +0.00 ms, 40 m +0.03, 63 m +0.37, 125 m +0.35, 250 m +0.17
+    (a first round was spoilt at 40 and 63 m by a load spike; its other radii agree within 0.1 ms).
+  - The worst views, on each side's front line (`benchat`, `benchr=25,40,90`): the first side (the camera behind it)
+    25 m +0.98 ms, 40 m +0.84, 90 m +0.95; the second side (facing the camera) 25 m +1.30, 40 m +0.67, 90 m +0.37. The
+    single worst camera +2.05 ms (first side, 90 m, yaw 0), with an arm spread of 3.9 ms: noise, not a measured cost.
+  - So about 1 ms at its worst views, within the 1 to 1.5 ms budget; up close (25 m, the bank filling the screen) is
+    the dearest. Not measured: rounds 2 and 3 at the lines, and a half-resolution target (not built; it would be the
+    next step if the owner's machine finds the fill dear).
+- **Memory**: the ring 1,512 puffs × 64 B (97 KB, on the GPU and the CPU), the mask 512² bytes (256 KB each), the quad
+  48 B: about 0.6 MB, less than the first look (one mesh, no icosphere, no shadow mesh).
+- **Looks**: stills, a volley's sequence and a sheet against the owner's references in
+  `output/armies-review/27-smoke-bank/` (not in git; `00-sheet-vs-refs.png` first).
 
 ## Risks
 
