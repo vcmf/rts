@@ -75,8 +75,9 @@ the same JSON; its numbers are labelled by renderer and pass no gate (track plan
 ### L2a: the readability guard
 
 `tools/guard.mjs` renders the look page with blocks added on the ground and checks them in greyscale:
-- **Blocks:** one per army coat (art bible §4: France `#2C4FA8`, Russia `#2F6B3C`, Austria `#E9E3D3`,
-  Britain `#B3302A`), at battalion size: a line of about 100 men in three ranks, 20 m × 3 m, 1.8 m
+- **Blocks:** one per army coat (as built then, the art bible's: France `#2C4FA8`, Russia `#2F6B3C`, Austria
+  `#E9E3D3`, Britain `#B3302A`; now four uniforms' coats from the era's dyes, `tools/army-blocks.mjs`, decision
+  0068), at battalion size: a line of about 100 men in three ranks, 20 m × 3 m, 1.8 m
   tall. Painted with the shared painter at unit crispness (`jitter` 0.3), so they take the same light,
   shadow and haze as the ground.
 - **Places:** spots on the default view chosen to cover the sunlit slope, the shadow side, the flat,

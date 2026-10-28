@@ -201,6 +201,46 @@ describe('the tick ring', () => {
     expect([t.tick, t.skipped, t.departed]).toEqual([4, 3, [{ id: 77, men: 12 }]])
     expect(reader.take(copy, 4)!.departed).toEqual([])
   })
+  // PR 7: going to a time writes a world that does not follow the last; ticks are stamps no longer in order
+  it('a jump is taken whatever its tick, its world whole and no departure from before it; the ticks after it in order', () => {
+    const { b, writer, copy, reader } = setup()
+    for (let k = 1; k <= 30; k++) {
+      b.advance(DT)
+      writer.write(b.w, k === 25 ? [{ id: 9, men: 3 }] : [])
+    }
+    // the reader at tick 20, then the battle back at tick 10
+    expect(reader.take(copy, 19)!.tick).toBe(23)
+    b.goTo(10)
+    writer.jump(b.w)
+    // (going to a time pauses the battle)
+    b.speed = 1
+    const j = reader.take(copy, 23)!
+    expect(j).toEqual({ tick: 10, departed: [], skipped: 0, jumped: true })
+    expect(hashWorld(copy)).toBe(hashWorld(b.w))
+    // no world from before the jump after it, however late its tick (24 to 30 are still in the ring's other slots)
+    expect(reader.take(copy, 10)).toBeNull()
+    b.advance(DT)
+    writer.write(b.w, [{ id: 4, men: 2 }])
+    expect(reader.take(copy, 10)).toEqual({ tick: 11, departed: [{ id: 4, men: 2 }], skipped: 0, jumped: false })
+    expect(hashWorld(copy)).toBe(hashWorld(b.w))
+  })
+  it("the writer fills the slots from before a jump first: the jump's world and its ticks stay in the ring", () => {
+    const { b, writer, copy, reader } = setup()
+    for (let k = 1; k <= RING; k++) {
+      b.advance(DT)
+      writer.write(b.w, [])
+    }
+    b.goTo(2)
+    writer.jump(b.w)
+    b.speed = 1
+    for (let k = 0; k < RING - 1; k++) {
+      b.advance(DT)
+      writer.write(b.w, [])
+    }
+    // every slot now since the jump: a reader that has taken nothing since takes the jump's world first
+    expect(reader.take(copy, -1)).toMatchObject({ tick: 2, jumped: true })
+    expect(reader.take(copy, 2)).toMatchObject({ tick: 3, jumped: false })
+  })
   // regression (PR 5 review): the men's alpha was the sim's leftover game time whatever tick the men's world was at, so
   // a men worker a tick behind (or ahead of the clock's last write) drew its anchors a tick off
   it("reads the game time since the men's own tick: a tick behind is a whole tick, ahead of the clock none", () => {
@@ -303,7 +343,7 @@ describe('the battle in a worker thread', () => {
       link.command({ type: 'form', id: makeHandle(KIND_FORMATION, 3, 1), shape: 'square' })
       link.command({ type: 'fire', id: makeHandle(KIND_FORMATION, 0, 1), mode: 'at will' })
       await link.advance(20)
-      const { replay, hashes } = await link.replay()
+      const { replay, hashes } = await link.session()
       expect(replay.log.length).toBe(5)
       // the 20 s advanced alone take 20 hash points (one every 20 ticks)
       expect(hashes.length).toBeGreaterThanOrEqual(20)
@@ -311,6 +351,40 @@ describe('the battle in a worker thread', () => {
       // the page's copies of the events, and its view of the newest frame, are that battle's
       expect([link.log.length, link.hashes.map(p => p.hash)]).toEqual([5, hashes.map(p => p.hash)])
       expect(hashWorld(link.see().w)).toBe(parseInt(await link.hash(), 16) >>> 0)
+    } finally {
+      await stop()
+    }
+  })
+  it("goes back and on in the worker (the bench's timeline, PR 7): the same tick gives the hash first seen, the frame and its men are that tick's, and an order there branches", async () => {
+    const { link, stop } = startLink('s1b-field')
+    try {
+      await link.ready()
+      link.command({ type: 'move', id: makeHandle(KIND_FORMATION, 0, 1), points: [[-40, 0]], append: false })
+      await link.advance(10)
+      const at = link.see().w.meta[M_TICK]
+      const first = await link.hash()
+      // back 100 ticks: a jump in the ring; the men laid out again on the world there, a frame of it published
+      const back = await link.goTo(at - 100)
+      expect(back).toEqual({ tick: at - 100, capped: false, error: '' })
+      const v = link.see()
+      expect(v.w.meta[M_TICK]).toBe(at - 100)
+      expect(hashWorld(v.w)).toBe(parseInt(await link.hash(), 16) >>> 0)
+      expect(v.layer.men.n).toBeGreaterThan(0)
+      // on again, ticks taken after the jump as before it: the hash first seen, the men with the battle
+      await link.goTo(at - 1)
+      await link.stepTick()
+      expect(link.see().w.meta[M_TICK]).toBe(at)
+      expect(await link.hash()).toBe(first)
+      expect(link.warnings).toBe(0)
+      // an order back there drops the log's later future: the page's copy of the log is cut with it
+      await link.goTo(at - 100)
+      const kept = link.log.filter(s => s.tick <= at - 100).length
+      link.command({ type: 'halt', id: makeHandle(KIND_FORMATION, 0, 1) })
+      await link.advance(1)
+      const { replay, hashes } = await link.session()
+      expect(link.log.length).toBe(kept + 1)
+      expect(replay.log).toEqual(link.log)
+      expect(play(replay, data, cr, scenario, hashes)).toBeNull()
     } finally {
       await stop()
     }

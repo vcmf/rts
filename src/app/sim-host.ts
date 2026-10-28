@@ -1,7 +1,7 @@
 // The sim worker (docs/plans/active/battle-threads.md, PR 5): the battle's sim on its own clock, without its men.
 // After every tick it writes the world to the tick ring (src/app/tick-ring.ts) for the men worker
-// (src/app/men-host.ts), and the game clock to the ring's header; commands and requests come from the page, the log,
-// the orders dropped and the hash points go back to it.
+// (src/app/men-host.ts), and the game clock to the ring's header; commands and requests come from the page (the
+// bench's too: going to a time, a tick on, a mark; PR 7), what changed of the battle's timeline goes back to it.
 import {
   loadSimData,
   compileRuleset,
@@ -12,7 +12,8 @@ import {
   type HashPoint,
 } from '../sim/index.ts'
 import { BATTLE_SCENARIOS } from '../scenarios/page.ts'
-import { Battle } from './battle.ts'
+import { Battle, tailOf, applyTail, type Tail, type GoneTo } from './battle.ts'
+import type { Mark } from './timeline.ts'
 import { RingWriter, type RingBuffers } from './tick-ring.ts'
 import { Host, type Port, type Failed } from './host.ts'
 import { rulesetOf } from '../rulesets/index.ts'
@@ -25,14 +26,28 @@ export type ToSim =
   | { type: 'command'; c: Command }
   | { type: 'speed'; speed: number }
   | { type: 'advance'; id: number; sec: number }
-  | { type: 'replay'; id: number }
+  | { type: 'goTo'; id: number; tick: number }
+  | { type: 'stepTick'; id: number }
+  | { type: 'mark'; note: string }
+  | { type: 'session'; id: number }
   | { type: 'hash'; id: number }
   | { type: 'record'; id: number; on: boolean }
+
+/** What changed of the battle's timeline since the last message: its lists' tails, and its divergences (how many, the
+ * last's words). */
+export interface TimelineNews {
+  log: Tail<Stamped>
+  dropped: Tail<Dropped>
+  hashes: Tail<HashPoint>
+  marks: Tail<Mark>
+  warnings: number
+  warning: string
+}
 
 /** What the sim worker sends: what happened since its last message, and answers. */
 export type FromSim =
   | { type: 'ready' } // the world before the first tick is in the ring
-  | { type: 'events'; log: Stamped[]; dropped: Dropped[]; hashes: HashPoint[] }
+  | ({ type: 'events' } & TimelineNews)
   | { type: 'reply'; id: number; value: unknown }
   | Failed
 
@@ -48,7 +63,9 @@ export interface SimRecording {
 export function serveSim(port: Port<ToSim>): void {
   let battle: Battle | null = null
   let ring: RingWriter | null = null
-  let sent = { log: 0, dropped: 0, hashes: 0 }
+  // the timeline's lists as last sent (their entries, in order), and its cuts then
+  const sent = { log: [] as Stamped[], dropped: [] as Dropped[], hashes: [] as HashPoint[], marks: [] as Mark[] }
+  let sentCuts = 0
   let rec: SimRecording | null = null
   // in the checks' advance: the men are held and read only its last world, so its ticks log their departures only
   let advancing = false
@@ -57,17 +74,34 @@ export function serveSim(port: Port<ToSim>): void {
   let ringMs = 0
   let last = performance.now()
 
-  // what happened since the last message, in order: the stamped log, orders dropped, hash points
+  // what changed of the timeline since the last message: only grown unless the battle cut it since (tailOf)
   const flush = () => {
     const b = battle!
-    if (b.log.length === sent.log && b.dropped.length === sent.dropped && b.hashes.length === sent.hashes) return
-    host.send({
-      type: 'events',
-      log: b.log.slice(sent.log),
-      dropped: b.dropped.slice(sent.dropped),
-      hashes: b.hashes.slice(sent.hashes),
-    })
-    sent = { log: b.log.length, dropped: b.dropped.length, hashes: b.hashes.length }
+    const tl = b.tl
+    const grown = b.cuts === sentCuts
+    if (
+      grown &&
+      tl.log.length === sent.log.length &&
+      tl.dropped.length === sent.dropped.length &&
+      tl.hashes.length === sent.hashes.length &&
+      tl.marks.length === sent.marks.length
+    ) {
+      return
+    }
+    const news: TimelineNews = {
+      log: tailOf(sent.log, tl.log, grown),
+      dropped: tailOf(sent.dropped, tl.dropped, grown),
+      hashes: tailOf(sent.hashes, tl.hashes, grown),
+      marks: tailOf(sent.marks, tl.marks, grown),
+      warnings: tl.warnings,
+      warning: tl.warning,
+    }
+    host.send({ type: 'events', ...news })
+    applyTail(sent.log, news.log)
+    applyTail(sent.dropped, news.dropped)
+    applyTail(sent.hashes, news.hashes)
+    applyTail(sent.marks, news.marks)
+    sentCuts = b.cuts
   }
   const clock = () => ring!.setClock(battle!.w.meta[M_TICK], battle!.acc, battle!.speed, tickMs)
   // one turn: the ticks owed since the last (none at speed 0: paused, or held after the checks' advance), the clock
@@ -139,7 +173,23 @@ export function serveSim(port: Port<ToSim>): void {
       clock()
       flush()
       host.send({ type: 'reply', id: m.id, value: null })
-    } else if (m.type === 'replay') host.send({ type: 'reply', id: m.id, value: b.replay() })
+    } else if (m.type === 'goTo' || m.type === 'stepTick') {
+      // the time owed first, then the battle's: it pauses, and its new world (going to a time) or its tick is written
+      // to the ring, a jump if the world does not follow the last
+      step(false)
+      let gone: GoneTo | null = null
+      if (m.type === 'goTo') {
+        const was = b.w
+        gone = b.goTo(m.tick)
+        if (b.w !== was) ring!.jump(b.w)
+      } else b.stepTick()
+      clock()
+      flush()
+      host.send({ type: 'reply', id: m.id, value: gone })
+    } else if (m.type === 'mark') {
+      b.mark(m.note)
+      flush()
+    } else if (m.type === 'session') host.send({ type: 'reply', id: m.id, value: b.session() })
     else if (m.type === 'hash') host.send({ type: 'reply', id: m.id, value: b.hash() })
     else if (m.type === 'record') {
       const done = rec

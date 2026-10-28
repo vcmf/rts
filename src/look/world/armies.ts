@@ -2,8 +2,9 @@
 // a few battalions that march up in column, halt, deploy into line and fire by ranks, on a loop. Scripted: the sim
 // drives them in a later step (decision 0037: the sim owns the timings, the renderer binds clips to its phases); here
 // the script is the stand-in, deterministic (a function of the clock alone). Era content (the battalion's companies,
-// files, ranks and spacings) comes from the ruleset the page hands in (decision 0015); the sides' colours are the art
-// bible's (docs/art-bible.md §4) and the tools' (tools/army-blocks.mjs). No Babylon: the tests read it in Node.
+// files, ranks and spacings) comes from the ruleset the page hands in (decision 0015); the uniforms' colours are the
+// era's dyes (decision 0068, src/look/world/dyes.ts), as the tools' blocks (tools/army-blocks.mjs). No Babylon: the
+// tests read it in Node.
 //
 // Frames: a battalion at (x, z) with heading h faces fwd = (sin h, cos h); its own frame has x across (right =
 // (cos h, −sin h)) and z ahead, as the figures' instance matrices turn them (src/look/units.ts)
@@ -51,7 +52,7 @@ export function luminance(hex: string): number {
   return 0.2126 * lin(1) + 0.7152 * lin(3) + 0.0722 * lin(5)
 }
 /** the coat's luminance under which a uniform's far figure takes its coat's colour (the 'coat' rule): 0.18, a mid
- *  grey (sRGB about #767676). The French blue is 0.09, the Austrian white 0.76 */
+ *  grey (sRGB about #767676). The French blue (imperial-blue #26386E) is 0.044, the Austrian white 0.76 */
 export const FAR_COAT_BELOW = 0.18
 export const farRule = (u: Uniform): 'coat' | 'own' =>
   u.far ?? (luminance(u.colours.coat) < FAR_COAT_BELOW ? 'coat' : 'own')

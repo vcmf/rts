@@ -352,6 +352,45 @@ tile) is no sim map. Two PRs, then PR 4.
     of the epic and this PR at `?sim` (close, split to the nearest LOD; wide; 30 s later, the lines deployed) the
     same men, ways and lines; `look-check` at `?armies=40&sim` (about 34,900 instances, none floating).
 
+## PR 7: main merged in; Track S's visual bench in the battle
+
+- **Why**: Track S's tracking PR #181 landed on `main` (2026-10-28) with two PRs this epic was cut before: the visual
+  bench (C0, #191: an overlay of what the sim tests, a tick on, a tick back, a time to go to, the bench field's 19
+  cases) and the claim grid (C1, #220: formations claim cells, off unless a scenario asks). C0 rewrote the sim page's
+  frame loop around the sim on the page's thread (`src/app/timeline.ts`: the log, the hash points, the dropped orders,
+  marks, saves to go back to), where this epic moved the battle into its workers and the page reads published frames.
+  Merging `main` into the epic is this port: the conflict in `src/app/main.ts` cannot be resolved by keeping either
+  side.
+- **Scope** (decision 0081): the timeline lives in the `Battle`, wherever it runs; the overlay is a view on the page.
+  - `Battle` (`src/app/battle.ts`) keeps its log, hash points and dropped orders in a `Timeline`: a command is
+    `order` (an order given after going back branches), a tick is `step` (checked against the hash it gave before; a
+    divergence pauses the battle and says so), and `goTo(tick)`, `stepTick()` and `mark(note)` are the battle's, so
+    the page's thread (`MainLink`) and the sim worker run the same code. Going to a time builds a new world (a save
+    loaded, played on); the battle's men, where it steps them, are laid out again on it.
+  - The sim worker answers `goTo` and `stepTick` and takes `mark`; what it sends the page of the timeline is the part
+    that changed since its last message (a branch or going back rewrites the tail; `src/app/sim-host.ts`).
+  - The tick ring (`src/app/tick-ring.ts`) carries **jumps**: a world that does not follow the last (going back, or
+    on by a time) is written with the ring's jump count raised, and the men worker, taking it, lays its men out again
+    on it instead of walking them there (C0's page did the same with a new soldier layer). The ring's slots and its
+    log of departures carry the jump count, so a reader never takes a world or a departure from before the jump
+    after it.
+  - A new soldier layer numbers its battalions' revisions on from the last's, so a reader that caches a battalion by
+    its revision (the published frame's readers) never takes a new one for an old.
+  - The overlay (`src/render/overlay.ts`) draws on the page from the world it reads (the published frame's, or the
+    battle's on this thread). The claim grid is scratch state, not in a published frame: on a frame's world the page
+    builds it again (`buildClaims`) when the cells layer is drawn; on this thread it reads the battle's own.
+  - The page (`src/app/main.ts`): C0's panel, keys (D, `.`, `,`, G), speeds (¼× and ½×), the bench case's title and
+    times, and `window.APP`'s `goTo`, `stepTick`, `overlay`, `overlaps`, through the link; the hooks the worker
+    answers return promises.
+  - The rest of `main` merged as is (the map engine, the look PRs; their overlaps with this epic are #240 and #241).
+- **Acceptance**: `npm test` (Track S's timeline and bench tests, and new tests: the timeline in a `Battle`, the ring's
+  jumps, the timeline's deltas, the revisions across layers), `check:data`, the build; `app-check` with the bench
+  case (going back and forward reaches the hash first seen, in the worker) and every session's replay reproduced; the
+  map page's check (`tools/map-page-check.mjs`) under the cross-origin isolation headers; `look-check` at
+  `?armies=40&sim`. The men worker's turn at 32,000 men, 8× (`tools/bench-sim.ts`) within 5 % of PR 4c's (the claim
+  grid is off there).
+- **Stop**: none of its own (a merge must land); a design finding past three review rounds goes back to this section.
+
 ## PR 5 and PR 6: only if measured
 
 - **PR 5**, a separate soldier worker fed by the per-tick mirror, if PR 3 shows over 1 % late sub-steps. Acceptance:
@@ -433,6 +472,9 @@ tile) is no sim map. Two PRs, then PR 4.
 - Whether Chrome's WebGL2 `bufferSubData` accepts `SharedArrayBuffer`-backed views (else a copy, about 0.05 ms).
 - Whether macOS puts the worker on efficiency cores under load.
 - The hash in the worker: amortised over 20 ticks or incremental.
+- The bench's saves (C0's timeline: up to 24 saves and the last 10 hash ticks' worlds, about 2.5 MB each at 40
+  battalions) are kept for every battle, now in the sim worker: at 32,000 men an estimated 170 MB (not measured).
+  Whether a battle that is not a bench case keeps fewer is Track S's call.
 - Who makes the sim drive the look page's armies (PR 4's dependency): this epic (the owner, 2026-10-26: PRs 4a, 4b).
 - A terrain class for buildings (impassable to all): the ruleset's, Track S's; the look map uses `denseWood` until then.
 - The look map's river: its crossings (the ford, 0.77–0.80 m, and the shallow reaches) are deeper than guns wade

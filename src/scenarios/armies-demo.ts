@@ -6,7 +6,13 @@ export const ARMIES_DEMO = {
   ruleset: 'napoleonic',
   unitType: 'infantry',
   figure: 'fr-line-infantry',
-  sides: ['fr-line-1808', 'at-line-white'],
+  sides: ['fr-line', 'at-line'],
+  // ?uniforms=all (the dye palette's review, docs/plans/active/dye-palette.md): each side's battalions wear these in
+  // turn
+  reviewSides: [
+    ['fr-line', 'fr-guard-grenadier', 'fr-dragoon'],
+    ['at-line', 'ru-line', 'br-line', 'at-grenzer', 'br-rifles'],
+  ],
   // played by the sim (?sim, src/look/sim-armies.ts): the shape each battalion approaches in, and the one it fights in
   sim: { approach: 'column', fight: 'line' },
 } as const

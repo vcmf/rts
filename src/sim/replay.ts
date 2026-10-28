@@ -69,6 +69,22 @@ export function record(
   }
 }
 
+/**
+ * Issues again the commands of `log` from entry `k` that are stamped for the world's next tick, as they were first
+ * issued; returns the index after them, or the mismatch when one does not take the sequence number it was logged with.
+ * The replay and the page's timeline (src/app/timeline.ts) both hand logged commands back to a world through it.
+ */
+export function reissue(w: World, log: readonly Stamped[], k: number): number | Mismatch {
+  while (k < log.length && log[k].tick === w.meta[M_TICK] + 1) {
+    const s = issue(w, log[k].cmd)
+    if (s.seq !== log[k].seq) {
+      return { tick: s.tick, expected: `command seq ${log[k].seq}`, got: `seq ${s.seq}`, section: 'command log' }
+    }
+    k++
+  }
+  return k
+}
+
 export interface Mismatch {
   tick: number
   expected: string
@@ -126,13 +142,9 @@ export function play(
   let e = 0
   while (w.meta[M_TICK] < r.ticks) {
     // re-issue the commands logged at this tick (stamped for the next one), checking their sequence
-    while (k < r.log.length && r.log[k].tick === w.meta[M_TICK] + 1) {
-      const s = issue(w, r.log[k].cmd)
-      if (s.seq !== r.log[k].seq) {
-        return { tick: s.tick, expected: `command seq ${r.log[k].seq}`, got: `seq ${s.seq}`, section: 'command log' }
-      }
-      k++
-    }
+    const next = reissue(w, r.log, k)
+    if (typeof next !== 'number') return next
+    k = next
     const res = advanceTick(w)
     observe?.tick?.(w, res)
     if (res.hash === null) continue

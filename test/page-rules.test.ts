@@ -1,7 +1,7 @@
 // The sim page's small rules (src/app/page-rules.ts).
 import { describe, it, expect } from 'vitest'
-import { pruneSelection, runSpeed } from '../src/app/page-rules.ts'
-import type { Formations } from '../src/sim/index.ts'
+import { pruneSelection, runSpeed, lastDropped } from '../src/app/page-rules.ts'
+import type { Formations, Dropped } from '../src/sim/index.ts'
 
 const table = (alive: number[], gen: number[]) =>
   ({ alive: Uint8Array.from(alive), gen: Int32Array.from(gen) }) as unknown as Formations
@@ -25,5 +25,14 @@ describe('the battle speed', () => {
   // regression (battle threads PR 3 review): in the worker the battle no longer stopped with the page's frames
   it('is the panel speed, held at 0 while paused or hidden', () => {
     expect([runSpeed(4, false, false), runSpeed(4, true, false), runSpeed(4, false, true)]).toEqual([4, 0, 0])
+  })
+})
+
+describe('the order dropped shown', () => {
+  const d = (tick: number, seq: number) => ({ tick, seq, id: 0, reason: `at ${tick}` }) as unknown as Dropped
+  // the bench (PR 7): after going back, an order dropped in a future the world has not reached again is not shown
+  it("is the player's last the world has reached; the plan's refusals never", () => {
+    const list = [d(10, 0), d(20, -1), d(30, 1)]
+    expect([lastDropped(list, 40), lastDropped(list, 25), lastDropped(list, 5)]).toEqual([list[2], list[0], undefined])
   })
 })

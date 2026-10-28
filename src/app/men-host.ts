@@ -1,10 +1,11 @@
 // The men worker (docs/plans/active/battle-threads.md, PR 5): the soldier layer on its own copy of the world, the
 // ticks taken from the tick ring (src/app/tick-ring.ts) in order and each followed by the layer's sync, its clock run
-// at the sim's speed, and the page's published frames (src/app/battle-frame.ts, as PR 3 published them).
+// at the sim's speed, and the page's published frames (src/app/battle-frame.ts, as PR 3 published them). A jump in
+// the ring (the battle went to a time: PR 7) lays the men out again on its world, with a new layer.
 import { loadSimData, compileRuleset, makeWorld, DT, type World } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { PAGE_SEED } from '../scenarios/page.ts'
-import { buildScene } from '../render/scene.ts'
+import { buildScene, type Scene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { MenClock } from '../render/men-clock.ts'
 import { layoutFor, writeFrame, capFor, Slots, type Layout } from './battle-frame.ts'
@@ -44,6 +45,7 @@ const TAKE = 16
 /** Serves the men of one battle on `port` until the worker ends. */
 export function serveMen(port: Port<ToMen>): void {
   let w: World
+  let scene: Scene
   let layer: SoldierLayer
   let ring: RingReader
   const clock = new MenClock()
@@ -82,6 +84,7 @@ export function serveMen(port: Port<ToMen>): void {
       if (!t) break
       lastTick = t.tick
       skipped += t.skipped
+      if (t.jumped) relayout()
       layer.sync(0, t.departed)
     }
     if (taken) {
@@ -89,6 +92,14 @@ export function serveMen(port: Port<ToMen>): void {
       changed = true
     }
     return { taken, skipped }
+  }
+  // a new layer on the world as it stands (its battalions' revisions on from the last's: a frame's readers cache by
+  // them), as the battle's own on the page's thread (Battle.goTo)
+  const relayout = () => {
+    const orients = layer.orients
+    layer = new SoldierLayer(w, scene, layer.revAfter())
+    layer.orients = orients
+    src.layer = layer
   }
   const makeSlots = (cap: number) => {
     L = layoutFor(w, cap)
@@ -146,7 +157,8 @@ export function serveMen(port: Port<ToMen>): void {
         PAGE_SEED,
         false,
       )
-      layer = new SoldierLayer(w, buildScene(w))
+      scene = buildScene(w)
+      layer = new SoldierLayer(w, scene)
       layer.orients = !!m.orients
       src.w = w
       src.layer = layer
@@ -164,10 +176,12 @@ export function serveMen(port: Port<ToMen>): void {
     if (!slots) throw new Error(`men worker: ${m.type} before init`)
     if (m.type === 'advance') {
       // after the sim's advance (the page asks it first): the ticks it can take, the newest at least, then its clock
-      // `sec` of game time at 1× in 1/30 s frames, so the men stand where the battle now has them
+      // `sec` of game time at 1× in frames of about 1/30 s, so the men stand where the battle now has them (a tick on:
+      // its 1/20 s; going to a time: none, the men laid out on its world)
       while (take(TAKE).taken);
       now()
-      for (let n = Math.round(m.sec * 30); n > 0; n--) clock.advance(1 / 30, 1, stepMen)
+      const frames = Math.round(m.sec * 30)
+      for (let n = frames; n > 0; n--) clock.advance(m.sec / frames, 1, stepMen)
       layer.alphaNow = src.acc / DT
       changed = true
       publish()

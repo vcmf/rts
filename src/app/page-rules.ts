@@ -1,5 +1,5 @@
 // The sim page's small rules, out of the page's glue so they are tested (test/page-rules.test.ts).
-import type { Formations } from '../sim/index.ts'
+import type { Formations, Dropped } from '../sim/index.ts'
 
 /** Drops from `selected` the formations gone since they were chosen: dead, or their slot reused by another (its
  * generation no longer the one `chosen` recorded). The page sees the battle a frame at a time, not each tick, so a
@@ -11,3 +11,10 @@ export function pruneSelection(selected: Set<number>, chosen: Map<number, number
 /** The speed the battle runs at: the panel's, or 0 while paused (P, the headless checks) or hidden (as the page's
  * animation frames stop, which ran the battle before it moved to a worker). */
 export const runSpeed = (speed: number, paused: boolean, hidden: boolean): number => (paused || hidden ? 0 : speed)
+
+/** The last order of the player's the sim dropped (the plan's refusals, seq < 0, are not shown) that the world at tick
+ * `now` has reached: after going back, the later ones wait for it to be played again. */
+export function lastDropped(dropped: readonly Dropped[], now: number): Dropped | undefined {
+  for (let k = dropped.length - 1; k >= 0; k--) if (dropped[k].seq >= 0 && dropped[k].tick <= now) return dropped[k]
+  return undefined
+}

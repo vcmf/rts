@@ -384,6 +384,16 @@ describe('morale', () => {
     expect(s.w.f.runs[s.i(h)]).toBeGreaterThan(1)
     expect(Math.hypot(s.w.f.x[s.i(h)] - halt![0], s.w.f.z[s.i(h)] - halt![1])).toBeGreaterThan(20)
   })
+  it('with the claim grid on, a router the ground alone halts on every way out stays pinned: no endless retries', () => {
+    // as above; only others' cells, which may move off its way, keep a router trying past the fan's last
+    const s = new W()
+    s.w.claims = true
+    const h = s.spawn(1, 40, -100, -E)
+    s.do({ type: 'side', side: 1, x: 1, z: 0 })
+    s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+    s.run(240)
+    expect(s.w.f.runs[s.i(h)]).toBeLessThanOrEqual(5)
+  })
   it('a router that gets where it was running stays there: fled, no more runs', () => {
     const s = new W()
     const h = s.spawn(0, -100, -65, E)

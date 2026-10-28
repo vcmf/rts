@@ -1,0 +1,25 @@
+{
+  "note": "tools/labels.ts's inputs for maps/austerlitz.map.json (docs/plans/active/m8-austerlitz.md M8g): the staff map's names, each at the feature it names or, for a height, at the highest ground in a box (the map's metres); the period's German names (lang de), today's Czech after them; a line's label `along` its length where its middle is crowded or on the map's edge",
+  "lang": "de",
+  "labels": [
+    {"id": "name-pratze", "text": "Pratze (Prace)", "of": "pratze"},
+    {"id": "name-kobelnitz", "text": "Kobelnitz (Kobylnice)", "of": "kobelnitz"},
+    {"id": "name-sokolnitz", "text": "Sokolnitz (Sokolnice)", "of": "sokolnitz"},
+    {"id": "name-telnitz", "text": "Telnitz (Telnice)", "of": "telnitz"},
+    {"id": "name-aujezd", "text": "Aujezd (Újezd)", "of": "aujezd"},
+    {"id": "name-hostieradek", "text": "Klein Hostieradek (Hostěrádky)", "of": "hostieradek"},
+    {"id": "name-blasowitz", "text": "Blasowitz (Blažovice)", "of": "blasowitz"},
+    {"id": "name-slapanice", "text": "Schlapanitz (Šlapanice)", "of": "slapanice"},
+    {"id": "name-puntowitz", "text": "Puntowitz (Ponětovice)", "of": "puntowitz"},
+    {"id": "name-satschan", "text": "Satschan (Žatčany)", "of": "satschan"},
+    {"id": "name-jirschikowitz", "text": "Jirschikowitz (Jiříkovice)", "of": "jirschikowitz"},
+    {"id": "name-goldbach", "text": "the Goldbach", "of": "goldbach", "along": 0.72},
+    {"id": "name-littawa", "text": "the Littawa", "at": [2600, 2000]},
+    {"id": "name-pratze-brook", "text": "the Pratzen brook", "of": "pratze-brook"},
+    {"id": "name-kobelnitz-pond", "text": "Kobelnitz pond", "of": "kobelnitz-pond"},
+    {"id": "name-satschan-pond", "text": "Satschan pond", "of": "satschan-pond"},
+    {"id": "name-pheasantry", "text": "the pheasantry", "of": "pheasantry"},
+    {"id": "name-highway", "text": "the Olmütz highway", "at": [-2050, 2780]},
+    {"id": "name-pratzen", "text": "the Pratzen heights", "peak": [500, -800, 2200, 1200]}
+  ]
+}

@@ -1,13 +1,13 @@
 // The coat check (docs/plans/done/lc1b-coats.md, Track E LC1): the army coats keep their colour under the light.
-// Blocks in the four coats (docs/art-bible.md §4) at the two spots of docs/research/colour-and-light-review.md, at
-// the default view, and at a far spot at the widest view (LC2: 135 m beyond its target in the frame's top band, a
-// column across the view, 60 pixels a block at least against 200), summer, with the gameplay depth of field off (its
-// band blurs the ground into the blocks): the middle of the frame (outside the valley mist) and the valley floor
-// (inside it). A block's pixels come from two mask renders (flat white, flat black), as the readability guard's; its
-// lit top face is the 40 % of them after the brightest 10 % (the rim along its edges). That face's mean colour must
-// keep the coat's hue within HUE degrees and HLS saturation at SAT of the painted one or more; a near-white coat
-// (painted lightness over 0.8) must not gain chroma (it would turn cream) nor fall under a lightness of WHITE_L (grey),
-// nor take another hue (60° off its own) over WHITE_TINT of saturation.
+// Blocks in four uniforms' coats (tools/army-blocks.mjs, the era's dyes) at the two spots of
+// docs/research/colour-and-light-review.md, at the default view, and at a far spot at the widest view (LC2: 135 m
+// beyond its target in the frame's top band, a column across the view, 60 pixels a block at least against 200), summer,
+// with the gameplay depth of field off (its band blurs the ground into the blocks): the middle of the frame (outside
+// the valley mist) and the valley floor (inside it). A block's pixels come from two mask renders (flat white, flat
+// black), as the readability guard's; its lit top face is the 40 % of them after the brightest 10 % (the rim along its
+// edges). That face's mean colour must keep the coat's hue within HUE degrees and HLS saturation at SAT of the painted
+// one or more; a near-white coat (painted lightness over 0.8) must not gain chroma (it would turn cream) nor fall under
+// a lightness of WHITE_L (grey), nor take another hue (60° off its own) over WHITE_TINT of saturation.
 //
 //   node tools/coat-check.mjs <look page URL> [outDir]
 //     a ?mood= in the URL checks that mood (src/look/mood.ts): run it for every mood (LC2's candidates, each); the

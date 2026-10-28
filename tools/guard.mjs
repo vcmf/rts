@@ -16,7 +16,8 @@
 // (interpolated from two greys), must not separate: else the check cannot tell a block that does not read from one
 // that does. It takes a second page load. What it proves is limited: the grey is fitted on the same pixels it is
 // then measured on, so it checks the masks, the renders and the measure end to end, not a different comparison.
-// Also reported, not gated: whether a block is more saturated than the 99th percentile of the ground's saturation.
+// Also reported, not gated, as information (the art bible's pillar 1 asks for colour or value, the latter gated
+// here): whether a block is more saturated than the 99th percentile of the ground's saturation.
 // Exit 1 on a failure. The page: the look page, built (`npm run build`, `npx vite preview`).
 //
 //   node tools/guard.mjs <look page URL?armies=n> --figures [--seasons …] [outDir]   the armies' real figures, measured
@@ -276,7 +277,7 @@ export function guard(url, outDir, baseUrl = null) {
     if (fails || negBad) ok = false
     const verdict = c.pass ? 'ok    ' : fails ? 'FAILS ' : 'fails*'
     console.log(
-      `${head}  ${c.yb.toFixed(3)}  ${c.yg.toFixed(3)}   ${c.sep.toFixed(3)}  ${verdict}${base ? `  ${b.hidden ? 'hidden' : b.sep.toFixed(3)}  ` : ''}  ${c.sat.toFixed(2)} / ${c.satP99.toFixed(2)}${c.sat > c.satP99 ? '' : ' (not the most saturated)'}${c.negSep != null ? `  neg ${c.negSep.toFixed(3)}` : ''}${negBad ? `  NEGATIVE SEPARATES (${c.negSep.toFixed(3)}): the check cannot tell ground from a block` : ''}`,
+      `${head}  ${c.yb.toFixed(3)}  ${c.yg.toFixed(3)}   ${c.sep.toFixed(3)}  ${verdict}${base ? `  ${b.hidden ? 'hidden' : b.sep.toFixed(3)}  ` : ''}  ${c.sat.toFixed(2)} / ${c.satP99.toFixed(2)}${c.sat > c.satP99 ? '' : ' (under the ground p99 sat)'}${c.negSep != null ? `  neg ${c.negSep.toFixed(3)}` : ''}${negBad ? `  NEGATIVE SEPARATES (${c.negSep.toFixed(3)}): the check cannot tell ground from a block` : ''}`,
     )
   }
   const negs = [...cand.values()].filter(c => c.negSep != null)
@@ -353,7 +354,13 @@ export function figures(url, outDir) {
   const said = shoot(url, outDir, steps, W, H)
   const cm = /^EVAL "COATS (.*)"$/m.exec(said)
   if (!cm) throw new Error("the page did not report its uniforms' coats (__armies.coats)")
-  const sideCoats = JSON.parse(JSON.parse(`"${cm[1]}"`)).map(c => c[0]) // each side's (first) uniform's coat
+  const reported = JSON.parse(JSON.parse(`"${cm[1]}"`))
+  if (reported.some(c => c.length !== 1)) {
+    throw new Error(
+      `--figures measures one uniform a side; drop ?uniforms (the sides wear ${JSON.stringify(reported)})`,
+    )
+  }
+  const sideCoats = reported.map(c => c[0]) // each side's uniform's coat
   const img = n => png.read(fs.readFileSync(path.join(outDir, `${n}.png`)))
   const out = []
   const coats = sideCoats.map(h => lab(...[1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))))
