@@ -64,6 +64,19 @@ export function gradientAlong(spread: boolean, along: number, cast: number, len:
   return spread ? cast * len : along * (along > 0 ? len : 1)
 }
 
+/** The contact oval a figure draws (decision 0071, ?ushcontact): the page's, or none for a figure on more than its
+ *  root (spread m: its contacts' reach; one oval round all its hooves or a gun and its crew would carpet them, and its
+ *  per-step shape already darkens each contact from its heights, decision 0075) */
+export function contactFor<C>(contact: C | null, spread: number): C | null {
+  return spread > 0 ? null : contact
+}
+
+/** m along the ground the shape's heights' 1 reads as (unitdecal.frag's uShHeight): the shape's own top (heightTop,
+ *  its highest point posed, the heights' share's 1) cast along the sun (sun: toward it, y up) */
+export function shadowHeightScale(heightTop: number, sun: { x: number; y: number; z: number }): number {
+  return heightTop * (Math.hypot(sun.x, sun.z) / sun.y)
+}
+
 /** The simple shadows' two bakes in order (src/look/units.ts useDecals): the per-step one (near; null: none), whose
  *  failure falls back to none when fallback says so (the error kept in fellBack; any other is thrown), then the
  *  averaged one (far); when the far one throws, the near one made before it is disposed and the error thrown on */

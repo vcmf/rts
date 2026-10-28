@@ -26,7 +26,8 @@ built: `docs/systems/look.md` ("The armies").
   trodden ground's mask is its own (`src/look/trodden.ts`, fed by every arm's men), the shade and the stencil the
   page's (as before), the ground's heights one a scene; the figures' shadow map behind its switches and its
   receivers belong to one arm, the infantry's (`ownsMap`); the others draw their simple shadows at every zoom, and
-  none under `?ushadowfar=map` (the map holding the infantry alone). The infantry's code path is as before.
+  none under `?ushadowfar=map` (the map holding the infantry alone), the close look by zoom under
+  `?ushadowclose=map`, no contact oval under `?ushcontact`. The infantry's code path is as before.
 - **The figure's data names its own.** The unit data's header names a figure's roles in order (at most four: the
   shadow's shader holds four), each colour role's cloth part or material (decision 0068: the dyes, never a colour), and
   its height (the LOD switch's); absent, the infantryman's. The bake (`tools/bake-figure.py`) has a profile a figure

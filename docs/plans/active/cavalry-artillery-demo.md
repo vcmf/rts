@@ -166,7 +166,9 @@ trot, gallop), `battery-20m.jpg`, `-40m`, `-63m` (loading, firing, the run-up), 
   firing cycle (8 bins over its 19 s: a gunner's shadow holds about 2.4 s of his motion, a blur while he loads).
   Lighter than the horses' (a gun is low and open). Reads at 20 and 40 m, a speck at 63.
 
-## Review round 1 (2026-10-28)
+## Review rounds
+
+### Round 1 (2026-10-28): severe, fixed
 
 - **Severe, fixed:** `?ushadowfar=map` baked no ground shade and an arm's simple shadows threw at load: the arms now
   follow the page's shadow mode (their simple shadows with the infantry's; none under `?ushadowfar=map`, the map
@@ -195,6 +197,25 @@ trot, gallop), `battery-20m.jpg`, `-40m`, `-63m` (loading, firing, the run-up), 
 - Before and after at 20 and 40 m: `output/armies-review/25-cavalry-artillery/review1-before-after-bare.jpg`,
   `-meadow.jpg` (the look as it was, the contacts a little crisper; the battery's firing order now from the right).
 
+### Round 2 (2026-10-28): moderate, fixed; the last round
+
+- `tools/guard.mjs --figures` masked every arm but scored the infantry's coats: `__units` is the infantry's renderer
+  again (as on main), every arm's `show` and `setMask` on `__armies`; the guard's numbers with the arms on match those
+  with `?cavalry=0&artillery=0` (the check batch below).
+- Under `?ushadowclose=map` an arm without the map took the far look up close: the close look by zoom (page check at
+  20 m: its look's far share 0, failing on the round-1 build with 1).
+- `?ushcontact=1` drew one oval round a whole horse or gun: no contact oval for a figure on more than its root
+  (`contactFor`, tested).
+- The nearest LOD's view sphere: its real radius, `hypot(reach, height / 2)`, 1.6 m at least (`manRadius`, tested;
+  the infantryman's grows from 1.6 to 1.95 m: which LOD a man at the screen's edge draws, no golden camera is that
+  close).
+- The gradient test through the real chain (the scale from the shape's top, the shader's expression evaluated; it
+  fails with `uShLen` dropped or with the figure's height for the shape's top).
+- The figures fetched and decoded together (`Promise.all`): the armies ready in 3.35 to 3.62 s before, 3.36 to
+  3.45 s after (four runs each; the load 1.6 before, 5.3 to 7 after): no measurable gain, the files are local.
+- One source for the cloth parts (`CLOTH_PARTS`, `ClothPart` from it); the view's corner rays cast once a frame
+  (`ViewRays`); the blades' root reads gated on the arm that owns the map; the map's receivers in the arm's options.
+
 ## Open questions (the owner's)
 
 - The arms' frame cost when in view (2.5 ms at 63 m for a regiment and a battery): the cuirassier's LODs could be
@@ -203,9 +224,10 @@ trot, gallop), `battery-20m.jpg`, `-40m`, `-63m` (loading, firing, the run-up), 
   close look). Bake the arms' per-step shape at the close length (a jump at 100 m), or keep them true?
 - The battery's firing cycle in 8 bins: more bins for long clips (a list a role) would step the gunners' shadows.
 - The battery's far LOD posed at its 264 steps (35 MB): skin it instead for an arm of few units?
-- Readability (`tools/guard.mjs --figures`, measured, not gated): at the widest view side 0's figures within ΔE 25
-  of its coat fall from 55 % (main) to 35 % with the arms: from above a regiment reads as its bay horses, not its
-  blue. A far rule for the hide (the coat's colour a step down, as the far palette's dark roles) would carry the
-  side's colour. At the default view side 0 is equal and side 1 has 8 % more figure pixels (a battery in view).
+- Readability: measured with round 1's hook, which masked every arm against the infantry's coats, the widest view's
+  side 0 figures within ΔE 25 of its coat fell from 55 % to 35 % with the arms: from above a regiment reads as its bay
+  horses, not its blue. The guard now scores the infantry alone (its numbers with the arms equal main's); the arms'
+  own readability is unmeasured. A far rule for the hide (the coat's colour a step down, as the far palette's dark
+  roles) would carry the side's colour.
 - The dyes (first picks): the cuirassiers', the gunners', the carriages' paint, the horses' hide; one hide for
   every horse.

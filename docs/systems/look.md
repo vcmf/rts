@@ -601,7 +601,12 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   moved flag kept until a draw takes it, `takeSteps`), the ground heights without the meadow map (one a scene), the
   shade and the stencil (the page's); the figures' shadow map behind its switches and its receivers belong to the
   infantry's arm (`ownsMap`), the others draw their simple shadows at every zoom (none under `?ushadowfar=map`) and no
-  flag. `__units` is the infantry's renderer, its `show` and `setMask` every arm's; the renderer asks the arm's script (`Script`, `src/look/world/arms.ts`; the
+  flag; the frame's corner rays are cast once for both (`ViewRays`). `__units` is the infantry's renderer, as before
+  (the guard masks and scores it alone, like for like with main), `__armies.show` and `__armies.setMask` every arm's.
+  Under `?ushadowclose=map` an arm without the map takes the close look by zoom (its simple shadows draw up close);
+  a figure on more than its root draws no contact oval under `?ushcontact` (`contactFor`: one oval would carpet a
+  whole horse or gun; its heights darken each contact); a figure's view sphere for the nearest LOD reaches its top and
+  its farthest point (`manRadius`: the infantryman's 1.95 m, 1.6 before); the renderer asks the arm's script (`Script`, `src/look/world/arms.ts`; the
   infantry's `drillScript` wraps `phaseAt` and `manAt` as before) for a unit's phase and each man's place and role.
   `__armies.arms` holds them by name; `__armies.coats` stays the infantry's (the guard measures them).
 - **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into

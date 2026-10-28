@@ -29,6 +29,8 @@ import { ARMIES_DEMO, ARMS_DEMO } from '../src/scenarios/armies-demo.ts'
 import {
   FIGURE_HEIGHT,
   LEGACY_ROLES,
+  MAN_R,
+  manRadius,
   MAX_ROLES,
   SPREAD_FROM,
   cellHeights,
@@ -45,7 +47,7 @@ import {
   shadowShape,
   type UnitData,
 } from '../src/look/units-data.ts'
-import { bakePair, decalStrip, gradientAlong } from '../src/look/shadow-look.ts'
+import { bakePair, contactFor, decalStrip, gradientAlong, shadowHeightScale } from '../src/look/shadow-look.ts'
 import { TR_EVERY, takeSteps, treadDue } from '../src/look/trodden.ts'
 
 const figure = (name: string): UnitData =>
@@ -368,17 +370,29 @@ describe("the spread figures' shadows", () => {
     expect(v).toContain('#ifdefSH_SPREAD')
     expect(v).toContain('floatlift=max(uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y),SPREAD_FLOOR);')
   })
-  it("reads a spread figure's gradient over its shape as a soldier's: its contact's cast times the look's length", () => {
-    // (a pole at the root: its shadow's point d m along it is cast by its height d/tan, so cast = along; a soldier's
-    // past his soles is drawn len as long, and the gradient's core and tip are the look's at its length)
+  // the review's finding (round 2): the scale chain end to end, the scale from the shape's own top (not the figure's
+  // height), the shader's al as written (its uShLen dropped, the spread gradient no longer a soldier's)
+  it("reads a spread figure's gradient over its shape as a soldier's: the real chain from the shape to the shader", () => {
+    const d = BATTERY
+    const far = d.lods[d.lods.length - 1].name
+    const shape = shadowShape(d, far, SUN, d.roles, { facings: 8, soft: 0.12, steps: 0, heights: true })
+    const sun = { x: SUN[0], y: SUN[1], z: SUN[2] }
+    const scale = shadowHeightScale(shape.heightTop, sun)
+    expect(Math.abs(shape.heightTop - d.height)).toBeGreaterThan(0.05) // (the figure's height would be another scale)
+    const src = (f: string) => readFileSync(new URL(`../src/look/${f}`, import.meta.url), 'utf8').replace(/\s+/g, '')
+    expect(src('units.ts')).toContain("m.setFloat('uShHeight',shadowHeightScale(shape.heightTop,SUN))")
+    const line = /floatal=(hh\*uShHeight[^;]*);/.exec(src('shaders/unitdecal.frag'))
+    expect(line, 'the heights path of unitdecal.frag').not.toBeNull()
+    const al = new Function('hh', 'uShHeight', 'uShLen', `return ${line?.[1]}`) as (...a: number[]) => number
+    // a texel's height h (its share of the top) casts h × top × tan along the ground: as far along as a soldier's sole
+    // would be from his shadow's point there
     for (const len of [0.7, 1]) {
-      for (const d of [0.1, 0.5, 2, 4]) {
-        expect(gradientAlong(true, 0, d, len)).toBeCloseTo(gradientAlong(false, d, 0, len))
+      for (const hh of [0.05, 0.3, 0.8]) {
+        const cast = hh * shape.heightTop * (Math.hypot(sun.x, sun.z) / sun.y)
+        expect(al(hh, scale, len)).toBeCloseTo(gradientAlong(false, cast, 0, len), 9)
+        expect(gradientAlong(true, 0, cast, len)).toBeCloseTo(gradientAlong(false, cast, 0, len), 9)
       }
     }
-    const f = readFileSync(new URL('../src/look/shaders/unitdecal.frag', import.meta.url), 'utf8').replace(/\s+/g, '')
-    expect(f).toContain('floatal=hh*uShHeight*uShLen;')
-    expect(f).toContain('uniformsampler2DuShapeH;uniformfloatuShHeight,uShLen;')
   })
 })
 
@@ -441,5 +455,29 @@ describe("the trodden mask's draws (takeSteps, treadDue)", () => {
     expect(frame(0.6, false)).toBe(false) // (nothing new)
     expect(TR_EVERY).toBe(0.25)
     expect(treadDue(false, 5, -1)).toBe(true)
+  })
+})
+
+describe("a spread figure's contact and view sphere (contactFor, manRadius)", () => {
+  // the review's finding (round 2): ?ushcontact=1 put one oval round a whole horse or a gun and its crew
+  it("draws no contact oval for a figure on more than its root, the page's for a soldier", () => {
+    const c = { pad: 0.1, dark: 1, soft: 0.5, mode: 'step' as const }
+    expect(contactFor(c, 0)).toBe(c)
+    expect(contactFor(c, 1.36)).toBeNull()
+    expect(contactFor(null, 0)).toBeNull()
+  })
+  // the review's finding (round 2): the sphere was its reach alone, a horse's 1.4 m, under its 2.66 m height
+  it("holds the whole figure: its reach across and half its height up and down, the infantryman's 1.6 m at least", () => {
+    expect(manRadius(1.2, 2.66)).toBeCloseTo(Math.hypot(1.2, 1.33), 12)
+    expect(manRadius(0.5, 1.8)).toBe(MAN_R)
+    const reach = (d: UnitData) => {
+      const pv = posedVertices(d, d.lods[d.lods.length - 1].name)
+      let r = 0
+      for (let i = 0; i < pv.data.length; i += 8) r = Math.max(r, Math.hypot(pv.data[i], pv.data[i + 2]))
+      return r
+    }
+    expect(manRadius(reach(CAVALRY), CAVALRY.height)).toBeGreaterThan(reach(CAVALRY))
+    // (the infantryman's too: his musket's 1.7 m reach and his height, 1.95 m, not the 1.6 m it was)
+    expect(manRadius(reach(INFANTRY), INFANTRY.height)).toBeCloseTo(Math.hypot(reach(INFANTRY), 0.9), 12)
   })
 })

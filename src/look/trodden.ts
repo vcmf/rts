@@ -91,6 +91,19 @@ export function castView(
   }
 }
 
+/** The view's corner rays and their ground quad (castView), cast once a frame for every reader (the trodden mask, the
+ *  figures' sun box): made before them, so its observer runs first */
+export class ViewRays {
+  /** 4 × (origin, direction) */
+  readonly rays = new Float64Array(24)
+  /** 4 × (x, z) where they meet the ground at the focus's height */
+  readonly quad = new Float64Array(8)
+  private readonly k = { inv: new Matrix(), a: new Vector3(), b: new Vector3(), d: new Vector3() }
+  constructor(scene: Scene, camera: ArcRotateCamera) {
+    scene.onBeforeRenderObservable.add(() => castView(camera, this.rays, this.quad, this.k))
+  }
+}
+
 /** The trodden ground's mask: TR_N² over an axis-aligned world box round the ground in view (where its corner rays meet
  *  the ground at the focus's height), a power of two metres wide (64 to 1,024), held while it covers the view and is
  *  under twice the size the view needs. Drawn again when the box moves, or at most TR_EVERY s apart while men move:
@@ -106,21 +119,19 @@ export class Trodden {
   private readonly boxV = new Vector4()
   private at = -1 // the clock when the mask was last drawn
   private wall = -Infinity // the wall's clock (ms) when its box was last fitted
-  private readonly quad = new Float64Array(8)
-  private readonly rays = new Float64Array(24)
-  private readonly k = { inv: new Matrix(), a: new Vector3(), b: new Vector3(), d: new Vector3() }
   /** the box's slack held in proportion (?smhold=fixed: refitted at once, false) */
   holdShare = true
 
   private readonly scene: Scene
-  private readonly camera: ArcRotateCamera
+  private readonly view: ViewRays
   private readonly receivers: readonly ShaderMaterial[]
   private readonly clock: () => number
-  /** receivers: the painted materials that read the mask (the ground and the grass); clock: the page's. Drawn before
-   *  each frame, after the observers made before it (main.ts makes it after the arms: their men placed this frame) */
-  constructor(scene: Scene, camera: ArcRotateCamera, receivers: readonly ShaderMaterial[], clock: () => number) {
+  /** view: the frame's corner rays (ViewRays); receivers: the painted materials that read the mask (the ground and
+   *  the grass); clock: the page's. Drawn before each frame, after the observers made before it (main.ts makes it
+   *  after the arms: their men placed this frame) */
+  constructor(scene: Scene, view: ViewRays, receivers: readonly ShaderMaterial[], clock: () => number) {
     this.scene = scene
-    this.camera = camera
+    this.view = view
     this.receivers = receivers
     this.clock = clock
     scene.onBeforeRenderObservable.add(() => this.frame())
@@ -158,14 +169,13 @@ export class Trodden {
 
   private frame(): void {
     if (!this.on) return
-    castView(this.camera, this.rays, this.quad, this.k)
     this.draw(this.clock())
   }
 
   /** the box refitted to the view when it must, the mask drawn when it is due (treadDue) or refitted */
   private draw(T: number): void {
     const b = this.box
-    const q = this.quad
+    const q = this.view.quad
     let x0 = Infinity
     let x1 = -Infinity
     let z0 = Infinity

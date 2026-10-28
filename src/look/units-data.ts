@@ -1358,3 +1358,12 @@ export function contactReach(posed: ReturnType<typeof posedVertices>): number {
   }
   return r
 }
+
+/** m: a man's bounding sphere round his middle at least (the infantryman's, his musket at the present), for the
+ *  nearest LOD's view test */
+export const MAN_R = 1.6
+/** m: a figure's bounding sphere round its middle (half its height up) for the nearest LOD's view test: reaching its
+ *  farthest point (reach m across from its root, its top and feet half its height from the middle), MAN_R at least */
+export function manRadius(reach: number, height: number): number {
+  return Math.max(MAN_R, Math.hypot(reach, height / 2))
+}

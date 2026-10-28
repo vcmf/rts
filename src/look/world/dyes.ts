@@ -2,22 +2,13 @@
 // (src/rulesets/<era>-uniforms.ts, <era>-dyes.ts), resolved here into the colours by the figure's roles that the
 // renderer paints (a Uniform, src/sim/ruleset.ts). No era named (decision 0015): the dyes and the dress are data;
 // the parts are garments any era's figure wears. No Babylon: the tests read it in Node.
-import type { ClothPart, Dress, DyeSet, Uniform } from '../../sim/ruleset.ts'
+import { CLOTH_PARTS, type ClothPart, type Dress, type DyeSet, type Uniform } from '../../sim/ruleset.ts'
+import type { FigurePart } from '../units-data.ts'
 import type { Battalion } from './armies.ts'
 
 /** what a figure's colour role shows: a cloth part of the dress, the boots, or a material of the dye set (a figure's
  *  unit data names them as strings: checked when dressed) */
 export type RolePart = ClothPart | 'boots' | { material: string }
-/** the parts a dress names a dye for (ClothPart's) */
-export const CLOTH_PARTS: readonly ClothPart[] = [
-  'coat',
-  'facings',
-  'trousers',
-  'waistcoat',
-  'headgear',
-  'greatcoat',
-  'paint',
-]
 
 /** what each of the figure's colour roles (tools/bake-figure.py's palette) shows: a cloth part, the boots, or a
  *  material (by name, the dye set's materials). The line infantryman's, the one baked figure: its 'white' role holds
@@ -48,7 +39,7 @@ export function dressed(
   {
     greatcoat = false,
     parts = FIGURE_PARTS,
-  }: { greatcoat?: boolean; parts?: Readonly<Record<string, string | { material: string }>> } = {},
+  }: { greatcoat?: boolean; parts?: Readonly<Record<string, FigurePart>> } = {},
 ): Uniform {
   const look = (table: Readonly<Record<string, string>>, name: string, what: string) => {
     if (!Object.hasOwn(table, name)) {
@@ -89,7 +80,7 @@ export function dressed(
 export const dressAll = (
   dress: Readonly<Record<string, Dress>>,
   set: DyeSet,
-  opts: { greatcoat?: boolean; parts?: Readonly<Record<string, string | { material: string }>> } = {},
+  opts: { greatcoat?: boolean; parts?: Readonly<Record<string, FigurePart>> } = {},
 ): Record<string, Uniform> => Object.fromEntries(Object.entries(dress).map(([id, d]) => [id, dressed(d, set, opts)]))
 
 /** ?dye=<dye>:<rrggbb>[;…], a test switch: the set with those cloth dyes' values swapped (every uniform that names

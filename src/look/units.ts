@@ -62,12 +62,14 @@ import {
   type DecalSide,
   type ShadowContact,
   bakePair,
+  contactFor,
+  shadowHeightScale,
   type ShadowLook,
   type ShapeBox,
   type StepShadow,
 } from './shadow-look.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
-import { castView, VIEW_REACH } from './trodden.ts'
+import { VIEW_REACH, type ViewRays } from './trodden.ts'
 import {
   FADE_WIDTH,
   FAR_FROM,
@@ -93,6 +95,7 @@ import {
   tinyMesh,
   contactReach,
   type ShadowShape,
+  manRadius,
   SPREAD_FROM,
   MAX_ROLES,
   type UnitData,
@@ -146,8 +149,6 @@ interface Host {
 const SM_SIZE = 2048 // the figures' shadow map, fitted to the ground in view each frame
 const SM_REACH = VIEW_REACH // m: a view ray that meets no ground is cut here (the widest zoom looks far)
 const SM_BIAS = 0.02 // m along the sun: no receiver is drawn into the map, so it only absorbs float rounding
-// m: a man's bounding sphere round his middle (his musket at the present), for the nearest LOD's view test
-const MAN_R = 1.6
 const SM_HOLD = 6 // m: lazy, the held sun box must cover the view by this much
 // m; rad; the cloth's least height on screen
 const FLAG_W = 1.4
@@ -322,8 +323,8 @@ export class Units {
   private readonly bearer: number // the colour bearer: the line's centre file, second rank (the script's)
   private readonly withFlags: boolean // its units carry a flag (the constructor's opts.flags)
   private readonly mats0: Materials
-  private quad = new Float64Array(8) // castView: the corner rays' ground points at the focus's height (x, z)
-  private rays = new Float64Array(24) // and the rays (origin, direction)
+  // the frame's corner rays and their ground quad (src/look/trodden.ts ViewRays, cast once a frame for every reader)
+  private readonly view: ViewRays
   /** the held sun box's slack in proportion to it (?smhold=fixed: batch B's, none) */
   holdShare = true
   /** the casters: the shadow proxy (shadowProxy, src/look/units-data.ts; ?shadowlod=far: the far LOD) */
@@ -355,6 +356,10 @@ export class Units {
   stepExplicit = false
   /** the per-step shape's foot sharpening ([boost, reach m]: footSharpen, ?ushfootk; FOOT_SHARP), [1, 0]: none */
   footSharp: [number, number] = [FOOT_SHARP[0], FOOT_SHARP[1]]
+  /** the contact oval this figure draws (contactFor: none for a figure on more than its root) */
+  private get contactOf(): ShadowContact | null {
+    return contactFor(this.contact, this.spread)
+  }
   private contactReach = 0 // m: how far the contact reaches from a man's root (the strip holds it: decalStrip)
   private contactW = 0 // the contact oval's weight this frame (ovalWeight, by the camera's distance)
   private nearW = 0 // the near material's weight this frame (nearWeight: the oval's or the per-step band's)
@@ -433,18 +438,19 @@ export class Units {
     scene: Scene,
     camera: ArcRotateCamera,
     mats: Materials,
-    receivers: ShaderMaterial[],
     data: UnitData,
     script: Script,
     battalions: Battalion[],
     uniforms: Readonly<Record<string, Uniform>>,
     clock: () => number,
-    opts: { tinyPx?: number; flags?: boolean; map?: boolean; tread?: number } = {},
+    view: ViewRays,
+    opts: { tinyPx?: number; flags?: boolean; map?: ShaderMaterial[] | null; tread?: number } = {},
   ) {
     this.scene = scene
     this.camera = camera
-    this.ownsMap = opts.map ?? true
-    this.receivers = this.ownsMap ? receivers : []
+    this.ownsMap = !!opts.map
+    this.receivers = opts.map ?? []
+    this.view = view
     this.script = script
     this.clock = clock
     this.tread = opts.tread ?? 1
@@ -511,7 +517,7 @@ export class Units {
     }
     this.sidePad = reach * farScale.x + 0.2
     this.topH = Math.max(SHADOW_H, top)
-    this.manR = Math.max(MAN_R, reach)
+    this.manR = manRadius(reach, this.figH)
     const feet = contactReach(pv)
     this.spread = feet > SPREAD_FROM ? feet : 0
     for (const id of new Set(battalions.map(b => b.uniform))) {
@@ -1143,7 +1149,9 @@ export class Units {
    *  into the far one over lookBand by the camera's distance to its focus; the far one alone with the map
    *  (?ushadowclose=map, ?ushadowfar=map) */
   private lookAt(): ShadowLook {
-    this.lookT = this.simpleClose && this.simpleFar ? farShare(this.camera.radius, this.lookBand) : 1
+    // (an arm without the map draws its simple shadows up close under ?ushadowclose=map too: the close look by zoom)
+    const close = (this.simpleClose || !this.ownsMap) && this.simpleFar
+    this.lookT = close ? farShare(this.camera.radius, this.lookBand) : 1
     return lookBetween(this.look.close, this.look.far, this.lookT, this.lookNow)
   }
   private frameBody(): void {
@@ -1167,7 +1175,6 @@ export class Units {
     }
     if (this.shadowRT) this.target(this.shadowRT, mapOn)
     this.mapOn = mapOn
-    if (mapOn) castView(this.camera, this.rays, this.quad, this.scratch) // (the sun's box reads it)
     // the clock's step, counted here in double precision (the same floor the men's phases and the shadow map's redraws
     // use), not by the shader from a float32 time: the figures and their shadows never disagree on a step
     for (const m of this.mats.values()) m.setFloat('uVATStep', step)
@@ -1411,7 +1418,7 @@ export class Units {
     const cam = this.camera
     const k = this.scratch
     const g = this.viewGround()
-    const R = this.rays
+    const R = this.view.rays
     let n = 0
     k.pts[n++].copyFrom(cam.target)
     for (let j = 0; j < 4; j++) {
@@ -1530,7 +1537,7 @@ export class Units {
   // the ground's range of heights in view: sampled on a 5 x 5 grid over where the corner rays meet the ground at the
   // focus's height (castView's quad), a metre to spare (the casters' own height is padded in fitSun)
   private viewGround(): { lo: number; hi: number } {
-    const q = this.quad
+    const q = this.view.quad
     let lo = Infinity
     let hi = -Infinity
     for (let u = 0; u <= 4; u++) {
@@ -1741,7 +1748,7 @@ export class Units {
             : []),
         ],
       })
-      if (this.contact) this.useContact(m, this.contact, oval)
+      if (this.contactOf) this.useContact(m, this.contactOf, oval)
       m.backFaceCulling = false
       m.disableDepthWrite = true
       m.setTexture('uShapeTex', tex)
@@ -1759,7 +1766,7 @@ export class Units {
         ),
       )
       // m: the heights' 1 along the ground (SH_SPREAD: the shape's B times it is m from the contact along the shadow)
-      m.setFloat('uShHeight', shape.heightTop * (Math.hypot(SUN.x, SUN.z) / SUN.y))
+      m.setFloat('uShHeight', shadowHeightScale(shape.heightTop, SUN))
       // the atlas's anchor: where a cell's first texel lies from a man's root (m; the strip moves, this does not)
       m.setVector2('uShapeAt', new Vector2(shape.across[0], shape.along[0]))
       m.setVector4('uShapeCell', new Vector4(shape.cellW, shape.cellH, 1 / shape.width, 1 / shape.height))
@@ -1803,7 +1810,7 @@ export class Units {
     // (no oval's read, varying or cell test: main's cost). The one not drawn is compiled in the background
     // (useDecalFor), so the switch at the band's edge never waits on a shader
     // (with ?ushstep the near material reads the per-step shape, with the oval or without)
-    const c = this.contact
+    const c = this.contactOf
     const oval = c !== null && c.dark > 0
     const far = make(false, false)
     const near = oval || ss ? make(oval, nearBake !== null) : null
@@ -1832,7 +1839,7 @@ export class Units {
     // nothing; decalStep)
     const mat = (side: DecalSide) => (side === 'near' ? near : far)
     const step = decalStep(
-      nearOn(this.contact, this.stepShadow !== null, this.nearW) ? 'near' : 'far',
+      nearOn(this.contactOf, this.stepShadow !== null, this.nearW) ? 'near' : 'far',
       this.decal === near ? 'near' : 'far',
       this.decalPoll,
       side => mat(side).isReady(mesh, true),
@@ -1877,8 +1884,8 @@ export class Units {
    *  material's (nearWeight), for useDecalFor */
   private contactAt(): void {
     const r = this.camera.radius
-    this.contactW = ovalWeight(this.contact, r)
-    this.nearW = nearWeight(this.contact, this.stepShadow !== null, r, this.stepBand)
+    this.contactW = ovalWeight(this.contactOf, r)
+    this.nearW = nearWeight(this.contactOf, this.stepShadow !== null, r, this.stepBand)
   }
 
   /** the figures' cast shadows on or off: off, the receivers compile without them (the bench's baseline arm). On, the
@@ -1907,7 +1914,8 @@ export class Units {
       m.setDefine('#define UNIT_SHADOWS', map)
       if (this.shadowRT) m.setFloat('uUnitFar', 0)
     }
-    for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', map)
+    // (the map's own blades alone: an arm without the map leaves them as they are)
+    if (this.ownsMap) for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', map)
   }
   /** The simple shadows' look (decision 0062) given to their material when it changed: the soft bake's share at the
    *  tip, the gain (uShGain), the length, the gradient from the soles (uShFoot, footUniform) and the strip by the far
@@ -1928,7 +1936,7 @@ export class Units {
     this.lookTSet = this.lookT
     this.contactWSet = this.contactW
     // (the contact's darkness by its weight, and its reach on the strip only while the material with the oval draws)
-    const u = contactUniform(this.contact, this.contactW, this.contactReach, m === this.decalNear)
+    const u = contactUniform(this.contactOf, this.contactW, this.contactReach, m === this.decalNear)
     if (u.uniform) m.setVector4('uShContact', this.contactV.set(...u.uniform))
     m.setFloat('uShSoft', l.soft)
     m.setFloat('uShGain', l.gain)
