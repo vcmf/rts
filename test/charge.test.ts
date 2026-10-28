@@ -470,27 +470,34 @@ describe('the square against cavalry (standing behaviour)', () => {
 
 describe('a second enemy (decision 0080, E-16)', () => {
   // a line of quality 1 charged in front by a regiment of quality 1; once they are in melee, a second regiment charges
-  // its rear (or, with `alone`, only the second charges). The line's morale on the tick the second strikes, and the
-  // state after
-  const e16 = (rs: Ruleset, alone = false, rev = false) => {
+  // its rear (or, with `alone`, only the second charges; with `forming`, the line forms square from the start and the
+  // second, nearer, strikes while it is still changing). The line's morale on the tick the second strikes, how far it
+  // was braced on the tick before, and the state after
+  const e16 = (rs: Ruleset, alone = false, rev = false, forming = false) => {
     const s = new S(2, rs)
     s.w.scratch.reverse = rev
     const t = s.inf(0, 0, 0, 1, 'line', 1)
+    if (forming) s.order({ type: 'form', id: t, shape: 'square' })
     const a = s.cav(0, 70, PI, 0, 'line', 1)
-    const b = s.cav(0, -110, 0)
+    const b = s.cav(0, forming ? -60 : -110, 0)
     if (!alone) {
       s.charge(a, t)
       s.until(() => !s.f(t, 'foe'), 60)
       expect(s.f(t, 'foe')).not.toBe(0)
     }
     s.charge(b, t)
-    s.until(() => !s.f(b, 'foe') && s.f(b, 'chPhase') !== 0, 60)
+    let braced = 0
+    s.until(() => {
+      if (s.f(b, 'foe')) return false
+      braced = bracedOf(s.w, s.slot(t))
+      return s.f(b, 'chPhase') !== 0
+    }, 60)
     if (!alone) expect(s.f(t, 'foe')).toBe(a)
     const morale = s.f(t, 'morale')
     expect(s.f(b, 'foe')).toBe(t)
     s.advance(20)
     const f = s.w.f
-    return { morale, state: JSON.stringify([f.x, f.z, f.men, f.morale, f.mstate, f.foe].map(v => [...v])) }
+    return { morale, braced, state: JSON.stringify([f.x, f.z, f.men, f.morale, f.mstate, f.foe].map(v => [...v])) }
   }
   // no threat at the test, which would break the line before the second strikes (the impact's shock alone)
   const quiet = withMelee({ ...noSquare.melee, threat: { front: 0, flank: 0, rear: 0 } })
@@ -503,6 +510,13 @@ describe('a second enemy (decision 0080, E-16)', () => {
     expect(-diff).toBeLessThanOrEqual(napoleonic.melee.second.rear + 1e-9)
     // not in melee when it struck: no second shock
     expect(e16(quiet, true).morale).toBe(e16(none, true).morale)
+  })
+  it('P-20: a battalion partly braced, forming square, takes the second shock cut by its bracing as the impact is', () => {
+    const q = e16(quiet, false, false, true)
+    const n = e16(none, false, false, true)
+    expect(q.braced).toBeGreaterThan(0.05)
+    expect(q.morale - n.morale).toBeLessThan(0)
+    expect(n.morale - q.morale).toBeLessThanOrEqual((1 - q.braced) * napoleonic.melee.second.rear + 1e-9)
   })
   it('P-20: the same in the reversed visiting order', () => {
     expect(e16(quiet, false, true)).toEqual(e16(quiet))

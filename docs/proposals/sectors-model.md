@@ -139,11 +139,13 @@ Each reader is a formula over `(front, flank, rear)` and ruleset numbers.
     (the squadron overhanging the end reads mostly flank); offset 30 m, 0.78 within 0.03.
 - **The second enemy (E-16, decision 0080):** an impact on a battalion that was in melee with another when the step
   began (`S.inMelee0`, its own copy of the melee pairs taken before the charges move; `S.foe0`, taken after them for
-  the melee pairs' strikes, stays as it is) adds `second = flank × sF + rear × sR` to its shock,
-  once, not scaled by momentum. The ruleset refuses `sF` or `sR` over 0.6 of the gap from the default quality to the
+  the melee pairs' strikes, stays as it is) adds `second = (flank × sF + rear × sR) × (1 − braced)` to
+  its shock, once, not scaled by momentum; cut by its bracing as the impact's shock is, so a battalion caught forming
+  square takes it in part. The ruleset refuses `sF` or `sR` over 0.6 of the gap from the default quality to the
   rout, as it refuses a contagion shock.
   - **P-20:** the second shock is the same in the reversed visiting order, including when the battalion's own charge
-    makes contact in the same tick; it is never alone a rout of a battalion at the default quality.
+    makes contact in the same tick; it is never alone a rout of a battalion at the default quality; a battalion partly
+    braced takes at most `(1 − braced)` of it.
 - **The drain (decision 0081):** for battalion j, `Δ = max over its threats e of (flank_e × dF + rear_e × dR)`, the
   weights from `threatWeights(face of j, e's nearest company)` (§ 6). Its morale target `τ` becomes
   `τ − min(Δ, max(0, τ − W))`, with `W = morale.wavering[0]`: the drain lowers the target at most to the wavering

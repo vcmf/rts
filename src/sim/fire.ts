@@ -164,7 +164,7 @@ export const reachOf = (w: World, i: number): Reach => {
     ? { range: typeOf(w, i).def.artillery!.ray.range, cos: A.cosArc }
     : { range: w.cr.rs.fire.maxRange, cos: w.cr.cosArc }
 }
-// company k sees point (x, z) inside its arc and range
+/** Company k sees point (x, z) inside its arc and range. */
 export function inArc(G: FireGeo, k: number, x: number, z: number, R: Reach): boolean {
   const dx = x - G.cx[k]
   const dz = z - G.cz[k]
@@ -227,8 +227,10 @@ function throughBlock(G: FireGeo, j: number, k: number, x0: number, z0: number, 
   }
   return slab(lx0, lx1, -hx, hx) && slab(lz0, lz1, zlo, zhi)
 }
-// the share of company k's rays (of battalion i: both ends of its front and its centre, or the centre alone) to
-// (x, z) that no block of side `side` stands across, company `skipK` and battalion `skipJ` aside (−1 none)
+/**
+ * The share of company k's rays (of battalion i: both ends of its front and its centre, or the centre alone) to (x, z)
+ * that no block of side `side` stands across, company `skipK` and battalion `skipJ` aside (−1 none).
+ */
 function rayShare(
   w: World,
   G: FireGeo,
@@ -264,8 +266,10 @@ function rayShare(
   }
   return clear / (1 - 2 * r0)
 }
-// the share of company c's three rays (both ends of its front and its centre) to (x, z) that no friendly
-// block, its own battalion's other companies included, stands across
+/**
+ * The share of company c's three rays (both ends of its front and its centre) to (x, z) that no friendly block, its own
+ * battalion's other companies included, stands across.
+ */
 export function clearShare(w: World, G: FireGeo, i: number, c: number, x: number, z: number): number {
   const k = i * w.cr.maxC + c
   return rayShare(w, G, i, k, x, z, w.f.side[i], k, -1, false)
@@ -308,7 +312,8 @@ export function sees(w: World, G: FireGeo, k: number, m: number): boolean {
   cache[key] = (epoch << 1) | (clear ? 1 : 0)
   return clear
 }
-const sqDist = (G: FireGeo, k: number, m: number): number =>
+/** The squared distance between companies k and m's block centres in `G`, square metres. */
+export const sqDist = (G: FireGeo, k: number, m: number): number =>
   (G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])
 
 // battalion j's nearest company in company k's arc and range with a clear sight line, or −1: the companies

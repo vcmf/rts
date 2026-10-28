@@ -50,7 +50,7 @@ import {
   cutChange,
 } from './formation.ts'
 import { formedFits, freeSpot } from './claims.ts'
-import { blockGeometry, inArc, sees, screenShare, reachOf, type FireGeo } from './fire.ts'
+import { blockGeometry, inArc, sees, screenShare, sqDist, reachOf, type FireGeo } from './fire.ts'
 import { buildFaces, threatWeights } from './sectors.ts'
 import { sin, cos, PI } from './num.ts'
 import { TICK_HZ } from './time.ts'
@@ -206,7 +206,7 @@ export function drainBy(w: World, G: FireGeo, e: number, j: number): number {
     for (let q = 0, Cj = typeOf(w, j).C; q < Cj; q++) {
       const m = j * CS + q
       if (f.men[m] <= 0) continue
-      const dd = (G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])
+      const dd = sqDist(G, k, m)
       if (dd < d2) {
         d2 = dd
         ke = k

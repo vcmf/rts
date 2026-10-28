@@ -35,9 +35,9 @@ const caseOf = (id: string): BenchCase => [...BENCH_CASES, ...CLAIM_CASES].find(
 // plays a case for `seconds` (its own length by default), calling `each` every `every` ticks
 function play(
   c: BenchCase,
-  opts: { seconds?: number; reverse?: boolean; every?: number; each?: (w: World) => void } = {},
+  opts: { seconds?: number; reverse?: boolean; every?: number; each?: (w: World) => void; rules?: typeof cr } = {},
 ) {
-  const w = makeWorld(data, cr, 1)
+  const w = makeWorld(data, opts.rules ?? cr, 1)
   if (opts.reverse) {
     w.scratch.reverse = true
     w.scratch.reverseMoves = true
@@ -200,9 +200,10 @@ const noWay = (w: World): boolean => w.f.mstate[0] >= MS_ROUTING && w.f.routPhas
 // with a friend (X-16) or an enemy (X-17) just behind the raw one. Played to its end: where the watched stood when
 // the raw one's (slot 0's) melee began and at its last tick in it (a break, or a fall-back after it, faces it about),
 // and when it broke
-function untilRout(id: string, watch = [0, 1]) {
+function untilRout(id: string, watch = [0, 1], rules = cr) {
   const out = { melee: -1, rout: -1, z: [] as number[][], at: [] as number[][] }
   play(caseOf(id), {
+    rules,
     every: 1,
     each: w => {
       if (out.melee < 0 && w.f.foe[0]) {
@@ -222,8 +223,6 @@ describe('with claims: a melee holds', () => {
   for (const [id, watch] of [
     ['x15-melee-holds-claims', [0, 1]],
     ['x16-friend-behind-claims', [0, 1]],
-    // not X-17: an enemy just behind the raw regiment drains it to shaken (decision 0081), and the impact breaks it at
-    // contact, with no melee to hold (its router's cases are below)
     ['x19-offset-lines-claims', [0, 1]],
     ['x20-brigade-lines-claims', [0, 1, 2, 3]],
   ] as const) {
@@ -234,6 +233,15 @@ describe('with claims: a melee holds', () => {
       watch.forEach((_, k) => a.at[k].forEach((v, d) => expect(v).toBeCloseTo(a.z[k][d], 6)))
     })
   }
+  it('x17-enemy-behind-claims, without the drain: nobody gives ground with an enemy just behind', () => {
+    // with it, the enemy behind drains the raw regiment to shaken (decision 0081) and the impact breaks it at contact,
+    // with no melee to hold (its router's cases are below); without it, the melee holds as decision 0080 says
+    const quiet = compileRuleset({ ...napoleonic, morale: { ...napoleonic.morale, drain: { flank: 0, rear: 0 } } })
+    const a = untilRout('x17-enemy-behind-claims', [0, 1], quiet)
+    expect(a.melee).toBeGreaterThan(0)
+    expect(a.rout).toBeGreaterThan(a.melee)
+    a.at.forEach((p, k) => p.forEach((v, d) => expect(v).toBeCloseTo(a.z[k][d], 6)))
+  })
   it('X-18: the broken regiment runs clear of the regiment it fought', () => {
     // the pair once stood in each other's cores, and the router, still on its foe's cells, could not move off them
     let broke = false

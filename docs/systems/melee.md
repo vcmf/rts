@@ -102,7 +102,7 @@ front.
 - **Shock:** the target loses `impact.shock[side] × momentum × (1 − braced)` of its morale.
 - **A second enemy** (E-16, decision 0080): a target already in melee with another when the step began loses
   besides flank × `second.flank` + rear × `second.rear` (0.15 and 0.2) of its morale, the weights of the side
-  struck, once per impact; a charge from its front adds nothing.
+  struck, × (1 − braced) as the impact's shock, once per impact; a charge from its front adds nothing.
 - **Then:** the charger recoils with chance `braced`, else both are in melee (`foe`). A target struck while
   not in melee takes on its lowest-slot attacker, and any charge of its own ends; its other orders are kept for
   after the melee (in melee it stands).
@@ -172,8 +172,8 @@ The step is skipped when no charging type is in the fight and no battalion is on
     the further out it strikes (P-19).
   - **A second enemy:** a charge into the rear of a battalion already in melee shakes it again, by between the
     flank's and the rear's numbers (the regiment's squadrons over the line's ends strike partly in the flank), and
-    adds nothing to one not in melee; the same in reversed visiting order; the ruleset refuses a second shock that
-    could rout (P-20).
+    adds nothing to one not in melee, and is cut by its bracing on one forming square; the same in reversed visiting
+    order; the ruleset refuses a second shock that could rout (P-20).
   - **Before contact:** a wavering line breaks at the test; the test is taken once; a formed square turns every
     charge away and the regiment is blown; a recoil rides away from the target.
   - **The impact:** losses scale with momentum, and a standing target costs nothing; a wavering square is

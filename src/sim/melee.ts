@@ -230,7 +230,13 @@ export function meleeStep(w: World): void {
   // the fire step's geometry when it built one this tick (positions do not change between steps 8 and 10; a step
   // between them that moves formations must rebuild it and stamp fireGeoTick again)
   const S = scratchOf(w)
-  const G = w.scratch.fireGeoTick === tick ? w.scratch.fireGeo! : blockGeometry(w)
+  let G: FireGeo
+  if (w.scratch.fireGeoTick === tick) G = w.scratch.fireGeo!
+  else {
+    // built here for this tick's positions, which nothing changes before the morale step's threats: they reuse it
+    G = blockGeometry(w)
+    w.scratch.fireGeoTick = tick
+  }
   S.shockTo.fill(-1)
   S.shockBy.fill(0)
   S.inMelee0.set(f.foe)
@@ -437,8 +443,8 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
   S.shockTo[i] = j
   S.shockBy[i] += byWeights(M.impact.shock, side) * mom * (1 - bb)
   // a second enemy (decision 0080): j was already in melee with another when the step began; once, whatever the
-  // momentum
-  if (S.inMelee0[j]) S.shockBy[i] += side[1] * M.second.flank + side[2] * M.second.rear
+  // momentum, cut by its bracing as the impact's shock is
+  if (S.inMelee0[j]) S.shockBy[i] += (side[1] * M.second.flank + side[2] * M.second.rear) * (1 - bb)
   if (nextUnit(keyedStream(ks, seed, tick, h, j, K_RECOIL)) < bb) {
     recoil(w, i, j, tick)
     return

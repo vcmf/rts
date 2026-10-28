@@ -28,7 +28,6 @@ import {
   SLOTS,
   MAX_FORMATIONS,
   blockGeometry,
-  buildFaces,
   pointWeights,
   FACE_ALL,
   FACE_TRAIL,
@@ -135,13 +134,15 @@ export class Overlay {
     }
   }
 
-  // each formation's sectors: a grid of points round its blocks, each coloured by its weights (front green, flank
-  // amber, rear red; the blends between), and each face's box outlined (a trail's head and tail boxes)
+  /**
+   * Each formation's sectors: a grid of points round its blocks, each coloured by its weights (front green, flank
+   * amber, rear red; the blends between), and each face's box outlined (a trail's head and tail boxes).
+   */
   private sectors(g: CanvasRenderingContext2D, v: View, w: World): void {
     const view = { ...w, scratch: this.shadow }
     if (!this.geo) {
-      const G = blockGeometry(view)
-      this.geo = { G, F: buildFaces(view, G) }
+      const G = blockGeometry(view) // builds the faces too
+      this.geo = { G, F: view.scratch.faces! }
     }
     const { G, F } = this.geo
     for (let j = 0; j < MAX_FORMATIONS; j++) {
@@ -341,7 +342,10 @@ function hullPath(g: CanvasRenderingContext2D, v: View, P: Placed, pts: number[]
   g.closePath()
 }
 
-// frame q's box (docs/proposals/sectors-model.md, § 2): its corners from the frame's across and along back to the world
+/**
+ * Frame q's box (docs/proposals/sectors-model.md, § 2): its corners from the frame's across and along back to the
+ * world.
+ */
 function faceBox(g: CanvasRenderingContext2D, v: View, F: Faces, q: number): void {
   const at = (x: number, y: number) => toS(v, F.ox[q] + x * F.c[q] + y * F.s[q], F.oz[q] - x * F.s[q] + y * F.c[q])
   g.beginPath()
