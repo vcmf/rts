@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-25
+last_reviewed: 2026-10-28
 ---
 
 # Plan: Track S, the sim engine to a battle worth playtesting
@@ -31,6 +31,7 @@ Track M's does.
 | **S1f-2** | The end of a battle: the side's share in the fight leaves out battalions rallied far behind, so `end.broken` goes back to one meaning for every scenario (#180); the battle stops going quiet after the result | The result is the playtest's verdict, and #180 makes it scenario-specific |
 | **S1f-3** | Pathfinding (`docs/proposals/sim-design.md` §7): A* on the cost grid dilated by the formation's width, time-sliced; a path with turns marches in column and re-forms on arrival | A formation today marches straight and halts at what it cannot cross: no flank march, no ford found. The AI needs it first (`docs/proposals/ai.md`, prerequisites) |
 | **S1f-4** | Group moves: a selection ordered as one keeps its line, its second line and its intervals, and wheels as a body; drag to set a line's front | Moving six battalions one offset at a time is the page's clumsiest control |
+| **Lit staff map** | The sim page draws its ground with the lit map view (`src/render/lit/`, decision 0058) and its armies and overlays on it; `src/render/map.ts` keeps only what the lit view lacks (#241). Needs the page on the map engine's maps, `epic/sim-engine` (#181) and `epic/battle-threads` on `main` first: both change the page's drawing | Decision 0058 makes the lit view the one map view; the page still draws its own flat staff map |
 | **S1e-3c** | The owner's playtest of the S1e battle at 2×, with marks and sessions, and tuning from them | After the phases above, so the playtest judges the battle and not its missing parts |
 
 Then S2 (`docs/proposals/sim-design.md` §17): the battle in a worker (`docs/plans/active/battle-threads.md`, decision
