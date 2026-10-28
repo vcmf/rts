@@ -820,6 +820,27 @@ if (armiesParam !== null) {
   const setMask = (m: Parameters<Units['setMask']>[0]) => all.forEach(u => u.setMask(m))
   const hooks = { blocked, focus: armiesFocus, coats: foot.coats(), arms, show, setMask }
   Object.assign(window, { __units: foot, __armies: hooks })
+  lookAtArm(params.get('lookat'), arms, armiesFocus)
+}
+
+/** ?lookat=<arm>[,<radius m>] (artillery, cavalry, or fight): the camera starts on that arm's first side's unit, or on
+ *  the fight's middle, at that zoom (30 m by default): to judge the arms by eye without panning to them */
+function lookAtArm(
+  want: string | null,
+  arms: Record<string, { battalions: readonly { x: number; z: number }[] }>,
+  fight: [number, number],
+): void {
+  if (!want) return
+  const [name, r] = want.split(',')
+  const radius = r === undefined ? 30 : Number(r)
+  const arm = arms[name]
+  if ((name !== 'fight' && !arm) || !(radius > 0)) {
+    throw new Error(`?lookat must be fight or one of ${Object.keys(arms).join(', ')}[,<radius m>], not ${want}`)
+  }
+  const at = arm ? arm.battalions[0] : { x: fight[0], z: fight[1] }
+  camera.target.x = at.x
+  camera.target.z = at.z
+  zoomOf(camera).set(radius)
 }
 if (flag('rt16')) MSAA.byte = false
 // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
