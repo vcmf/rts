@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-11
-code: [src/sim/melee.ts, src/sim/formation.ts, src/sim/claims.ts, src/sim/commands.ts, src/sim/morale.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-charge.ts, tools/calibrate-charge.ts, test/charge.test.ts]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0080-melee-holds-cornered-routers-cut-down]
+last_reviewed: 2026-10-28
+code: [src/sim/melee.ts, src/sim/formation.ts, src/sim/claims.ts, src/sim/commands.ts, src/sim/morale.ts, src/sim/sectors.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-charge.ts, tools/calibrate-charge.ts, test/charge.test.ts]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0080-melee-holds-cornered-routers-cut-down, 0081-the-back-exposed]
 ---
 
 # Charges, melee and the square (S1d-2)
@@ -80,12 +80,12 @@ exact face to face, a little short corner to corner, and 0 when they overlap.
 **Braced** (`bracedOf`), 0..1: how far a formation stands in a shape proof against a charge from any side
 (`braced`, the square). During a change into one it is the change's progress; out of one, 1 less it.
 
-**The side struck** (`sideStruck`): from the target's centre to the charger's, read in the target's facing:
-- within 45° of it, the front;
-- beyond 135°, the rear;
-- else a flank.
-
-A target changing shape has no front, and is struck as in the flank.
+**The side struck** (U1, `sideOf`, `docs/proposals/sectors-model.md` § 5): weights (front, flank, rear) that sum
+to 1, the charger's companies' threat weights on the target's face (`src/sim/sectors.ts`), each weighted by its
+men: at the test all of them, at the impact those in contact. A table's value for the side, `threat` or
+`impact.shock`, is front × its front value + flank × its flank value + rear × its rear value, so a charge that
+strikes the corner of a line takes part of each. A target changing shape has no front; a square's every side is its
+front.
 
 **The test** (step 10, when the gap first falls to `charge.test`, 60 m, once per charge):
 - **The target's test:** a morale shock of `threat[side] × (1 − braced) × (0.5 + u)`, `u` a keyed draw. A
@@ -100,6 +100,9 @@ A target changing shape has no front, and is struck as in the flank.
   A target that is itself charging inflicts the same on the charger by its own momentum; a standing one
   inflicts nothing.
 - **Shock:** the target loses `impact.shock[side] × momentum × (1 − braced)` of its morale.
+- **A second enemy** (E-16, decision 0080): a target already in melee with another when the step began loses
+  besides flank × `second.flank` + rear × `second.rear` (0.15 and 0.2) of its morale, the weights of the side
+  struck, once per impact; a charge from its front adds nothing.
 - **Then:** the charger recoils with chance `braced`, else both are in melee (`foe`). A target struck while
   not in melee takes on its lowest-slot attacker, and any charge of its own ends; its other orders are kept for
   after the melee (in melee it stands).
@@ -164,8 +167,13 @@ The step is skipped when no charging type is in the fight and no battalion is on
 
 - **`test/charge.test.ts`:**
   - **The command's refusals;** the trot, the gallop and momentum.
-  - **The geometry:** the gap face to face, overlapping and at an angle; the side struck, and a change's
-    missing front; braced, through changes both ways.
+  - **The geometry:** the gap face to face, overlapping and at an angle; the side struck as weights, and a
+    change's missing front; braced, through changes both ways; a charge at a line's end takes part flank, more
+    the further out it strikes (P-19).
+  - **A second enemy:** a charge into the rear of a battalion already in melee shakes it again, by between the
+    flank's and the rear's numbers (the regiment's squadrons over the line's ends strike partly in the flank), and
+    adds nothing to one not in melee; the same in reversed visiting order; the ruleset refuses a second shock that
+    could rout (P-20).
   - **Before contact:** a wavering line breaks at the test; the test is taken once; a formed square turns every
     charge away and the regiment is blown; a recoil rides away from the target.
   - **The impact:** losses scale with momentum, and a standing target costs nothing; a wavering square is

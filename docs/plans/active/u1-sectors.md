@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-28
 ---
 
 # Plan: U1, sectors
@@ -100,6 +100,28 @@ front, flank and rear wedges with the blend bands):
   its fall-backs are gone: `tools/calibrate-fire.ts` says whether its 6 to 10 minutes still hold.
 - **The screen's cost:** `screenShare` walks the battalion's friends for each enemy tested; only enemies in its flank or
   rear sectors within reach are tested. The cost tests say whether it needs a cache.
+
+## Results
+
+Run on 2026-10-28, U1 against `epic/sim-engine` at f343c53f, alone on one machine.
+
+- **`tools/calibrate-fire.ts`** (100 seeds): every target holds. The 100 m median time to break is 8.5 min (9.3
+  before), the 100 m row without the fall-back as it was; 50 m 4.0 min (4.3); losses at the break 20% as before;
+  the 3v3 brigade's first break 9.7 min (10.4).
+- **`tools/calibrate-charge.ts`** (50 seeds): every target holds. A line charged in front breaks in 92% (90%), with
+  contact in 66% (78%); a column breaks in 28% (12%); the flank and the
+  square unchanged.
+- **`tools/calibrate-artillery.ts`:** unchanged.
+- **The S1e battle with no orders** went to you at 12:41 (side 1's at 19:13 before): your battery, turned 25°
+  inwards on your line's eastern flank, took side 1's line in the flank, drained it, and broke two battalions by
+  9:24 on every seed. The battery stands 50 m behind your line now (z −330, not −280): side 1 wins at 16:11 at the
+  page's seed and in 15.6–16.4 min on seeds 1–6, the test's 15–22 again. Side 1 ends at about 86% in the fight (74%
+  before), a one-sided battle with no orders; S1e-3c's playtest judges it. Between −310 and −320 the battle turns
+  from yours to side 1's: the battery's flank fire decides it, not its range alone. Turning the battery less, or
+  side 1's veterans and its regiment's charge, did not turn it.
+- **The valley** (`m2-valley`) follows: side 1's at 15:51, and within 25 m of the battlefield's battle.
+- **The cost:** minutes 5–8 of the S1e battle, 0.57 ms a tick (0.47 before, best of three); the 40-battalion cost
+  tests pass alone.
 
 ## Review
 

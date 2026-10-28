@@ -1,15 +1,16 @@
 ---
 status: current
-last_reviewed: 2026-10-11
-code: [src/sim/fire.ts, src/sim/morale.ts, src/sim/rng.ts, src/sim/tick.ts, src/rulesets/napoleonic.ts, src/scenarios/s1c-firefight.ts, tools/calibrate-fire.ts, test/fire.test.ts, test/morale.test.ts]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0018-battalion-of-400, 0080-melee-holds-cornered-routers-cut-down]
+last_reviewed: 2026-10-28
+code: [src/sim/fire.ts, src/sim/morale.ts, src/sim/sectors.ts, src/sim/rng.ts, src/sim/tick.ts, src/rulesets/napoleonic.ts, src/scenarios/s1c-firefight.ts, tools/calibrate-fire.ts, test/fire.test.ts, test/morale.test.ts]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0018-battalion-of-400, 0080-melee-holds-cornered-routers-cut-down, 0081-the-back-exposed, 0082-wavering-keeps-fighting]
 ---
 
 # Fire and morale (S1c)
 
 Battalions fire by company on enemies in arc and range with a clear line, lose men, and break when the
 losses take their morale below the rout threshold. A break shocks nearby friends; friends on the flanks
-steady a line; a wavering line falls back; a router out of danger rallies, brittle, or shatters. Every number is ruleset data (`fire`, `morale`);
+steady a line; fire from a flank or the rear hits harder, and an enemy that can hurt a battalion's flank or back
+drains its morale (U1, `docs/proposals/sectors-model.md`); a router out of danger rallies, brittle, or shatters. Every number is ruleset data (`fire`, `morale`);
 the hit chances are calibrated on the time a firefight takes to break a line, not on historical hit
 rates.
 
@@ -17,9 +18,9 @@ rates.
 step 8 fire        geometry after movement → targets (every 0.5 s, a tenth of the battalions per tick)
                    → loaded, halted companies volley → hits owed to the target's companies (keyed draws)
 step 11 casualties the owed men fall (all battalions first)
-step 12 morale     then morale for all: relaxes toward quality − losses + flank support, less contagion
-                   shocks; states with hysteresis; a break starts the rout, a wavering line falls back, a
-                   router rallies or shatters (reading other battalions' states as they were before this step)
+step 12 morale     first every battalion's drain (the back exposed), then morale for all: relaxes toward
+                   quality − losses + flank support − the drain, less contagion shocks; states with hysteresis;
+                   a break starts the rout, a router rallies or shatters (reading other battalions' states as they were before this step)
 ```
 
 ## Goals / non-goals
@@ -30,7 +31,6 @@ step 12 morale     then morale for all: relaxes toward quality − losses + flan
   - the numbers live in the ruleset and are tuned by a sweep.
 - **Non-goals (later parts):**
   - smoke, vision and commanders, with their rally radius (S2);
-  - flank and rear threats from musketry (charges strike flanks and rears since S1d-2, `docs/systems/melee.md`);
   - the end condition (S1e-2);
   - artillery (`docs/systems/artillery.md`, S1d-3: its pieces use this targeting with their own arc and range).
 
@@ -73,8 +73,8 @@ The companies are tried nearest first, so one hidden in a wood does not hide the
 - **Rounds** = men in the firing ranks × the share of its three rays (both front ends and the centre)
   that no friendly block crosses × (1 − misfire). Its own battalion's other companies count as friends,
   so a column's rear companies do not fire.
-- **Expected hits** = rounds × p(range) × the state factor × (1 − `cohesion` × disorder) × the target
-  kind's depth factor.
+- **Expected hits** = rounds × p(range) × the state factor × (1 − `cohesion` × disorder) × the target's
+  exposure (below).
 - The integer part of the expected hits is certain, and one keyed draw settles the fraction.
 - Each hit goes to a target company in the shooter's arc and range **that it can see**, weighted by its
   men. A sight line is walked once per company pair for each build of the geometry (the cache is stamped
@@ -145,15 +145,26 @@ outside contagion's reach and its breaks spread over 35–135 s instead of one t
   one link per tick. The ruleset is refused if one shock could rout a steady battalion of default quality
   (more than 0.6 of the gap from it to the rout).
 
-**The wavering fall-back.** A wavering battalion Retires `fallback.metres` once, by the Retire drill
-(`RETIRE` in `formation.ts`), when all of these hold:
-- it has no orders, is not changing shape and is not in melee;
-- its morale has fallen by more than `fallback.rate` a second on every tick of the last `fallback.after`
-  seconds, so the relax's slow crawl onto a fixed target does not count;
-- the nearest enemy in the fight is within fire range and in front of it (within 90° of its heading). A
-  Retire goes back from its own facing; with the enemy behind it, it would march toward the enemy.
+**Exposure** (U1, `docs/proposals/sectors-model.md` § 5). A volley's expected hits, and canister's
+(`docs/systems/artillery.md`), are multiplied by the target's exposure to the firing company: its kind's depth
+factor × (front + flank × `exposure.flank` + rear × `exposure.rear`), the weights (front, flank, rear) of the
+firing company's block on the target's face (`src/sim/sectors.ts`). A shape's numbers are its formation's
+`exposure`: a line 1.8 and 1.2 (fire down its length), a column 1.2 and 1.1, a march column 1.5 and 1.0, cavalry
+1.2 and 1.1 (1.5 and 1.0 in march), a battery 1.5 and 1.0; a square has no flank. Fire from ahead is unchanged, so
+the line-on-line calibration's front is.
 
-The flag clears when it recovers to shaken. A player's order replaces the Retire.
+**The back exposed** (decision 0081, sectors-model § 6). Before the morale loop, `threatPass` gives each battalion
+its drain: the worst over the enemies that can hurt it (`drainBy`) of flank × `drain.flank` + rear × `drain.rear`
+(0.1 and 0.2), the weights of that enemy's nearest company on its face. An enemy can hurt it when it is in the
+fight, not in melee and not changing shape, its nearest company is within `sectors.reach` (300 m), and either it
+fires from its shape with the battalion in its arc, range and sight, unscreened by the battalion's friends (one ray
+of three clear for musketry, all three for a battery), or it can charge now (not blown) from within
+`melee.refuge.alert` (200 m), its centre ray clear. The drain lowers the morale's target, down to the wavering
+threshold at most: a pressure while it lasts, gone when the flank is covered or the enemy leaves; it breaks a
+battalion only with the losses.
+
+**No fall-back** (decision 0082). A wavering battalion keeps fighting, with the penalties it already has, until it
+recovers or routs; nothing moves it back by itself. A player may still order a Retire.
 
 **Rally** (`morale.rally`). A router rallies when all of these hold:
 - its run has ended: a run was made and it is no longer running (a full order pool can leave a router
@@ -207,7 +218,9 @@ scripted tests.
     - the woods limit;
     - friends' cover, by ray share;
     - hold fire;
-    - no fire while moving or changing shape.
+    - no fire while moving or changing shape;
+    - exposure: exact from the front, at most the line's 1.8 from a flank, 1.2 from the rear; a line fired on
+      from its flank loses more than from its front (P-18).
   - **Casualties:** only in the shooter's arc and range.
   - **Morale:**
     - p = 0 means no break;
@@ -229,10 +242,13 @@ scripted tests.
   - **Contagion:** the shock's size, one tick late; a wavering neighbour breaks and a steady one does not;
     front and back radii; a chain, one link per tick, the same in reverse visiting order.
   - **Support:** two flanks against none; no support from a friend ahead, behind or routing.
-  - **Fall-back:** once, 15 m, then fires again; not with orders, with no enemy in range, with the enemy
-    behind it, on the relax's crawl, or on a dip.
+  - **No fall-back:** a wavering battalion stays where it is and keeps firing (P-24).
+  - **The back exposed** (sectors-model P-21 to P-27): the drain's size, steady and shaken, and its floor at the
+    wavering threshold; an enemy across a march column's front within range drains it, a screen of friends, range,
+    300 m, an enemy facing away, a crest do not; a partial screen; a battery's three rays, a limbered battery,
+    blown or marching cavalry; the same in reversed visiting order.
   - **Determinism:** the brigade's replay, and a save taken with one battalion rallying, one routing and
-    one mid-fall-back.
+    one wavering.
   - **Determinism:**
     - the fire step in reversed visiting order gives the same hash (a per-world test switch);
     - the firefight golden, with its replay and save round trip;
@@ -241,8 +257,8 @@ scripted tests.
 - **`test/scale.test.ts`:** friendly cover by each battalion's extent, with a 400-man friend whose outer
   company stands more than 40 m from its anchor.
 - **`tools/calibrate-fire.ts`:** 100 seeds at 50, 100 and 200 m on levelled ground, checked against the
-  plan's targets; the 100 m row again without the fall-back; a 3v3 brigade's contagion (reported). Lines
-  of 400 (S1c-4): the 100 m median is 9.3 min, at 20% losses.
+  plan's targets; a 3v3 brigade's contagion (reported). Lines of 400 (S1c-4): the 100 m median is 8.5 min
+  since U1 (9.3 with the fall-back), at 20% losses.
 - **`npm run check:app`:** plays the firefight on the page to a rout, and the brigade until a break
   spreads, and replays both in Node.
 
@@ -257,7 +273,7 @@ scripted tests.
   later. A brigade worn evenly collapses together; whether that is too total is for S1e's playtests.
 - **Routers on the formation field never rally in the brigade.** They are pinned at the stream about 240 m
   from the enemy, inside `rally.safe`. The field is 360 m across; battle maps are 1–1.5 km.
-- **The order pool is served in visiting order.** Routs and fall-backs in the same tick take pool entries
+- **The order pool is served in visiting order.** Routs in the same tick take pool entries
   in slot order, so the reverse-visiting switch gives the same behaviour but different entries (and a
   different hash) when two happen in one tick. The chain test breaks one link per tick.
 - **One sight fix has no failing test.** Walking sight lines low to high is not exercised: the

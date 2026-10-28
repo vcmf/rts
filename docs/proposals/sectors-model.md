@@ -161,7 +161,7 @@ Each reader is a formula over `(front, flank, rear)` and ruleset numbers.
 
 ## 6. Who can hurt a battalion
 
-`canHurt(e, j)`, for the drain. **The nearest pair:** of e's companies with men and j's, the pair whose centres are
+`drainBy(w, G, e, j)`, for the drain: e's `Δ` on j if e can hurt j, else 0. **The nearest pair:** of e's companies with men and j's, the pair whose centres are
 nearest, ties to the lower company indices: `ke` and `kj`; `dist` their centres' distance. True if enemy `e` is in the
 fight, not in melee and not changing shape, `dist <= sectors.reach` (300 m), the weights `threatWeights(face of j, ke)`
 have flank or rear above 0 (else nothing to test: it costs no rays), and either:
@@ -170,12 +170,12 @@ have flank or rear above 0 (else nothing to test: it costs no rays), and either:
   fire in a moment); `kj` within `ke`'s range and arc (`inArc`); a clear sight line over the ground (fire's cached
   `sees(w, G, ke, kj)`); and **unscreened:** of the three rays from e's company to j's nearest company, at
   least one for musketry, all three for a battery, cross no block of j's side but j's own (`screenShare(w, G, k, m,
-  side)`, fire's ray test with the side and the target given; `clearShare` stays as it is);
+  side, centre)`, fire's ray test with the side and the target given; `clearShare` stays as it is);
 - **by a charge:** `e` can charge now (its type charges, its shape is in `charge.shapes`, not blown), `dist <=
   melee.refuge.alert` (200 m), and unscreened: the centre ray from `ke` to `kj` crosses no block of j's side but j's
   own.
 
-**Read once, before anything changes:** `threatPass(w, G)` runs in `tick.ts` before the morale loop (step 12), every
+**Read once, before anything changes:** `threatPass(w)` runs in `tick.ts` before the morale loop (step 12), every
 battalion's `Δ` from the state as steps 5 to 11 left it (positions, shapes, changes; the melee pairs as step 10 left
 them), into a scratch array; each battalion's `moraleStep` then reads its own `Δ`. Nothing a battalion's morale step
 changes (a rout, a cut change) reaches another's `Δ`.
@@ -194,12 +194,12 @@ changes (a rout, a cut change) reaches another's `Δ`.
 | Module | What | Signatures |
 |---|---|---|
 | `src/sim/sectors.ts` (new) | faces, point and threat weights, `byWeights` | `buildFaces(w, G)`; `pointWeights(w, j, x, z, out)`; `threatWeights(w, G, j, i, k, out)` (k a company of formation i); `byWeights(t, w)` |
-| `src/sim/fire.ts` | the faces built with the geometry; exposure; the screen test | `blockGeometry` calls `buildFaces`; `exposure(w, G, k, j)`; `screenShare(w, G, k, m, side)`; `inArc` and `sees` exported for `canHurt` |
+| `src/sim/fire.ts` | the faces built with the geometry; exposure; the screen test | `blockGeometry` calls `buildFaces`; `exposure(w, G, k, j)`; `screenShare(w, G, k, m, side)`; `inArc` and `sees` exported for `drainBy` |
 | `src/sim/artillery.ts` | canister's exposure | the cone's λ takes `exposure` for the aimed target |
-| `src/sim/melee.ts` | the side struck; the second enemy | `sideStruck(w, G, i, j, mask, out)` replaces `quarter`; `S.inMelee0` copied before the charges; the geometry it builds is stamped `fireGeoTick` |
-| `src/sim/morale.ts` | the threats, the drain; the fall-back removed | `threatPass(w, G)` into `scratch.drain`; `canHurt(w, G, e, j)`; the target's drain in `moraleStep`; `fallBack` and `enemyAhead` removed |
+| `src/sim/melee.ts` | the side struck; the second enemy | `sideOf(w, G, i, j, mask, out)` replaces `quarter` (`sideStruck(w, i, j)` exported for the tests); `S.inMelee0` copied before the charges; the geometry it builds is stamped `fireGeoTick` |
+| `src/sim/morale.ts` | the threats, the drain; the fall-back removed | `threatPass(w)` into `scratch.drain` (the geometry reused or built); `drainBy(w, G, e, j)`; the target's drain in `moraleStep`; `fallBack` and `enemyAhead` removed |
 | `src/sim/tick.ts` | the threat pass before the morale loop | `threatPass` called once, after casualties, before the battalions' morale |
-| `src/sim/ruleset.ts`, `src/rulesets/napoleonic.ts` | the numbers and their guards | `FormationDef.exposure`, `sectors`, `morale.drain`, `morale.fallback.loss`, `melee.second` |
+| `src/sim/ruleset.ts`, `src/rulesets/napoleonic.ts` | the numbers and their guards | `FormationDef.exposure`, `sectors`, `morale.drain`, `melee.second`; `morale.fallback` removed |
 
 **Style:** `docs/conventions.md` § Code: every function in the table gets a doc comment (`/** */`) with its parameters'
 units (metres, the weights' order front, flank, rear); small functions, one job each; Prettier and the determinism lint

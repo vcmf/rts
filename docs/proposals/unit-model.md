@@ -171,9 +171,9 @@ The same sector reading is used everywhere it matters:
 A square, all faces, is always struck in front (A-06). For charges and morale, a march column is struck as in the
 flank from either side and in the rear from behind: never in front but at its head. Its fire exposure follows its
 own row below. A formation changing shape has no
-front: it is struck as in the flank, or the rear from behind, as today (`quarter` in `src/sim/melee.ts`), and its
-morale drains read it the same way. Its fire exposure is that of the shape its change is nearer to, by progress,
-read as from its flank; a shape with no flank value (the square, skirmish order) uses its front.
+front: it is struck as in the flank, or the rear from behind (`src/sim/sectors.ts`), and its morale drains read it
+the same way. Its fire exposure is that of the shape it is changing from, read as from its flank or rear; a shape
+with no flank value (the square, skirmish order) uses its front.
 
 ### Exposure by shape
 
@@ -387,7 +387,7 @@ with the status "wavering: will not advance":
 - **toward an enemy:** the step's direction is within 60° of the direction to an enemy in the fight within fire
   range (`fire.maxRange`), so at least half the step closes on it. A march across an enemy's front is not dropped,
   and is punished by the sectors instead (A-10);
-- **then:** it fires if it may, and the wavering fall-back applies to it as today (it has no orders);
+- **then:** it fires if it may, and stays where it is: there is no fall-back (decision 0082);
 - **dropped, not held:** nothing resumes on its own; the player orders it forward again once it has recovered;
 - **charges and assaults:** a wavering formation cannot be ordered to charge (refused: "wavering"), and a charge it
   is making is dropped by this rule until it reaches its test distance. From the test on, the test decides
@@ -630,10 +630,10 @@ braced against missiles, cavalry and elephants as tags.
 
 | System | Today | The model |
 |---|---|---|
-| Sectors | charges only, read from the target's centre | one reading, from the face's nearest end, blended, used by fire, charges and morale |
-| Fire | in arc or not; depth by kind | the share that bears; exposure by shape and sector; cover; precision; first volley; fire discipline |
+| Sectors | since U1, one reading from the face's nearest end, blended, used by fire, charges and morale (`docs/proposals/sectors-model.md`) | one reading, from the face's nearest end, blended, used by fire, charges and morale |
+| Fire | in arc or not; exposure by shape and sector (U1) | the share that bears; exposure by shape and sector; cover; precision; first volley; fire discipline |
 | Quality | morale's base only | six levels with a table of effects; points and a level up during a battle |
-| Morale | a 0..1 value relaxing toward quality less losses | a bar per level, emptied by losses, shocks and drains, flees at 0 |
+| Morale | a 0..1 value relaxing toward quality less losses and the back exposed's drain (U1) | a bar per level, emptied by losses, shocks and drains, flees at 0 |
 | Infantry | one type | line and light categories, the Guard as levels 4–6; skirmish order; the assault |
 | Cavalry | one type | heavy and light; lancers; pursuit by level |
 | Artillery | pieces are companies of the battery | pieces apart from crews; guns taken; the last salvo; the guns' drain; horse artillery |
