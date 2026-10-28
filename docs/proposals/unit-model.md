@@ -423,7 +423,7 @@ with their own numbers:
 ### Firearm and melee modes
 
 Every type but artillery has a **firearm** and a **melee** mode, and the player sets which (the owner's rule,
-decision 0069); a few have one only. Artillery has no mode: it fires as § Artillery says, and does not fight a melee.
+decision 0080); a few have one only. Artillery has no mode: it fires as § Artillery says, and does not fight a melee.
 - **firearm:** it fires as § Fire says (its fire mode, and fire discipline; formed bodies fire at the halt, skirmish
   order on the move);
 - **melee:** it holds its fire, and an order to attack an enemy is a charge: cavalry's, or infantry's assault with the
@@ -520,7 +520,7 @@ hard cases (`docs/plans/active/track-s.md`). The rules a player sees, which it k
   formed again only on free ground, and never passes through an enemy.
 - **Enemies stand at contact and fire;** a charge or an assault that reaches any enemy strikes it, and the melee
   follows. **Nobody in melee gives ground:** a battalion in melee cannot step back or retreat; the melee ends when one
-  side breaks, or as today when a charger turns away from a square or the two fall out of contact (decision 0069, on
+  side breaks, or as today when a charger turns away from a square or the two fall out of contact (decision 0080, on
   the claim grid's branch).
 - **A broken battalion runs as a block:** it faces about and runs, wavering and shattered battalions keeping their
   block. Every enemy that reaches it, but one in melee with another, cuts it down, and it does not fight back; there
