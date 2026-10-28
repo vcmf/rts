@@ -802,6 +802,7 @@ if (armiesParam !== null) {
       tinyPx,
       flags: false,
       tread: spec.tread,
+      shadowDarken: spec.shadowDarken,
     })
     configure(u)
     arms[spec.name] = u

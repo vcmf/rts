@@ -188,6 +188,9 @@ const SOFT_BLUR = 0.12 // m: the soft bake's sigma (shadowShape's soft)
 // m: a spread figure's shadow's least lift over its own footprint (unitdecal.vert's SH_SPREAD; decision 0071's floor
 // for its oval was 3 cm, a soldier's few cm of foot: a gun's footprint is metres of sampled ground)
 const SPREAD_FLOOR = 0.1
+// the steepest ground a spread figure's bounds hold under its parts, rise over run (measured on the demo map: 0.29
+// under a gun and its crew, 1.04 m within its 3.6 m; 0.71 under a horse where the rides start, a bank)
+const SLOPE = 0.8
 // the LOD cross-fade's uniforms (units.vert: the bands, and a draw's men in order, set by bindFade)
 const FADE_UNIFORMS = ['uLodBand', 'uLodFade']
 
@@ -257,9 +260,15 @@ export class Units {
   /** m: how far the figure's ground contacts reach from its root past SPREAD_FROM (a horse's hooves, a gun's wheels:
    *  its shadow's look from each contact, SH_SPREAD), 0 for a figure on its root (the infantryman) */
   readonly spread: number
+  // m: a spread figure's bounds padded up and down for the ground under its parts (GROUND_FOLLOW; SLOPE of its reach)
+  private readonly slopePad: number
+  private groundBound = false // (its figures' ground heights bound: followGround)
   /** whether this arm's casters draw the figures' shadow map behind its switches and its receivers read it (one arm,
    *  the infantry's: the others keep their simple shadows, decision 0075) */
   private readonly ownsMap: boolean
+  // its simple shadows' share of the samples raised by this (1: none; unitdecal.frag's SH_DARKEN, capped at the look's
+  // darkest, so never past the ground's shade k), its arm's (a gun's open, low shadow read light)
+  private readonly shadowDarken: number
   /** a man's weight in the trodden mask (src/look/trodden.ts; 1: a soldier's, a horse treads more ground) */
   readonly tread: number
   /** its men moved since the trodden mask last took them (the mask clears it when it draws) */
@@ -444,7 +453,13 @@ export class Units {
     uniforms: Readonly<Record<string, Uniform>>,
     clock: () => number,
     view: ViewRays,
-    opts: { tinyPx?: number; flags?: boolean; map?: ShaderMaterial[] | null; tread?: number } = {},
+    opts: {
+      tinyPx?: number
+      flags?: boolean
+      map?: ShaderMaterial[] | null
+      tread?: number
+      shadowDarken?: number
+    } = {},
   ) {
     this.scene = scene
     this.camera = camera
@@ -454,6 +469,10 @@ export class Units {
     this.script = script
     this.clock = clock
     this.tread = opts.tread ?? 1
+    this.shadowDarken = opts.shadowDarken ?? 1
+    if (!(this.shadowDarken >= 1 && this.shadowDarken <= 1.5)) {
+      throw new Error(`units: a shadow's darkening must be 1 to 1.5, not ${this.shadowDarken}`)
+    }
     this.withFlags = opts.flags ?? true
     this.roles = data.roles
     this.figH = data.height
@@ -520,6 +539,9 @@ export class Units {
     this.manR = manRadius(reach, this.figH)
     const feet = contactReach(pv)
     this.spread = feet > SPREAD_FROM ? feet : 0
+    // (a spread figure's vertices on the ground under each: units.vert's GROUND_FOLLOW, its bounds padded for a slope)
+    const follow = this.spread > 0 ? ['#define GROUND_FOLLOW'] : []
+    this.slopePad = this.spread > 0 ? SLOPE * Math.max(reach, this.spread) : 0
     for (const id of new Set(battalions.map(b => b.uniform))) {
       const u = uniforms[id]
       if (!u) throw new Error(`units: no uniform ${id} (a battalion names it)`)
@@ -533,7 +555,14 @@ export class Units {
         attributes,
         uniforms: ['uVATStep', 'uStepFrac', 'uPal', 'uMask', 'uCoatRole', 'uFarK', ...FADE_UNIFORMS],
         samplers: ['uVAT'],
-        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, ...fadeDefines(0)],
+        defines: [
+          '#define NOSNOW',
+          '#define KEEP_HUE',
+          '#define BOUNCE',
+          `#define PAL_N ${n}`,
+          ...fadeDefines(0),
+          ...follow,
+        ],
       })
       m.setTexture('uVAT', vat)
       m.setColor3Array('uPal', pal)
@@ -557,7 +586,14 @@ export class Units {
           ...FADE_UNIFORMS,
         ],
         samplers: ['uVAT', 'uVATP'],
-        defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, ...fadeDefines(1)],
+        defines: [
+          '#define NOSNOW',
+          '#define KEEP_HUE',
+          '#define BOUNCE',
+          `#define PAL_N ${n}`,
+          ...fadeDefines(1),
+          ...follow,
+        ],
       })
       const far = farPalette(u.colours)
       f.setTexture('uVAT', vat)
@@ -594,6 +630,7 @@ export class Units {
           `#define PAL_N ${n}`,
           '#define TINY',
           ...fadeDefines(2),
+          ...follow,
         ],
       })
       t.setTexture('uVAT', vat)
@@ -996,8 +1033,8 @@ export class Units {
     // poses); cull() stretches the same box
     const top = this.topH * FAR_SCALE_Y + 0.2
     const pad = this.sidePad
-    h.lo.set(minX - pad, minY - 0.3, minZ - pad)
-    h.hi.set(maxX + pad, maxY + top, maxZ + pad)
+    h.lo.set(minX - pad, minY - 0.3 - this.slopePad, minZ - pad)
+    h.hi.set(maxX + pad, maxY + top + this.slopePad, maxZ + pad)
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
     // (the simple shadow's bounds: stretched away from the sun by the longest shadow, as tall as the far figures grow)
     const k = this.scratch
@@ -1155,6 +1192,7 @@ export class Units {
     return lookBetween(this.look.close, this.look.far, this.lookT, this.lookNow)
   }
   private frameBody(): void {
+    if (this.spread > 0 && !this.groundBound) this.followGround()
     const T = this.clock()
     const fps = this.data.fps
     const step = Math.floor(T * fps)
@@ -1672,29 +1710,7 @@ export class Units {
     this.shapeBytes = [farBake, nearBake].reduce((a, b) => a + (b ? atlasBytes(b.shape) : 0), 0)
     // the ground's height under each vertex: the meadow map's (bound to every painted material, src/look/meadow.ts), or
     // without one the heightfield's, sampled here over the tile (GROUND_N² texels; one a scene, GROUND_TEX)
-    let ht: RawTexture | null = this.groundMap ? null : (GROUND_TEX.get(this.scene) ?? null)
-    if (!this.groundMap && !ht) {
-      const n = GROUND_N
-      const w = D.spec.tile
-      const hd = new Float32Array(n * n)
-      for (let j = 0; j < n; j++) {
-        for (let i = 0; i < n; i++) hd[j * n + i] = groundAt(((i + 0.5) / n) * w - w / 2, ((j + 0.5) / n) * w - w / 2)
-      }
-      ht = new RawTexture(
-        hd,
-        n,
-        n,
-        Constants.TEXTUREFORMAT_R,
-        this.scene,
-        false,
-        false,
-        Constants.TEXTURE_BILINEAR_SAMPLINGMODE,
-        Constants.TEXTURETYPE_FLOAT,
-      )
-      ht.name = 'figureShadowGround'
-      ht.wrapU = ht.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
-    }
-    if (ht) GROUND_TEX.set(this.scene, ht)
+    const ht = this.groundMap ? null : this.groundHeights()
     const make = (oval: boolean, steps: boolean): ShaderMaterial => {
       const { shape, tex, htex } = steps && nearBake ? nearBake : farBake
       const name = `unitShadow2D${oval ? 'Contact' : ''}${steps ? 'Steps' : ''}`
@@ -1737,6 +1753,7 @@ export class Units {
           // (a figure on more than its root: drawn at its own length, its lift floored; its look by its heights)
           ...(this.spread > 0 ? ['#define SH_SPREAD', `#define SPREAD_FLOOR ${SPREAD_FLOOR.toFixed(3)}`] : []),
           ...(htex ? ['#define SH_HEIGHTS'] : []),
+          ...(this.shadowDarken !== 1 ? [`#define SH_DARKEN ${this.shadowDarken.toFixed(3)}`] : []),
           ...(this.farScaleOn ? ['#define FAR_SCALE'] : []),
           ...(this.fade ? [FADE_ON[1]] : []),
           ...(oval
@@ -1825,6 +1842,44 @@ export class Units {
    *  battalion yet */
   private decalMesh(): Mesh | null {
     return this.hosts[0]?.lod[this.decalLod] ?? null
+  }
+  /** The ground's heights without the meadow map: the heightfield sampled over the tile (GROUND_N² texels), one a
+   *  scene for every arm (GROUND_TEX), made by the first to need it (the simple shadows' grid, GROUND_FOLLOW) */
+  private groundHeights(): RawTexture {
+    const had = GROUND_TEX.get(this.scene)
+    if (had) return had
+    const n = GROUND_N
+    const w = D.spec.tile
+    const hd = new Float32Array(n * n)
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) hd[j * n + i] = groundAt(((i + 0.5) / n) * w - w / 2, ((j + 0.5) / n) * w - w / 2)
+    }
+    const ht = new RawTexture(
+      hd,
+      n,
+      n,
+      Constants.TEXTUREFORMAT_R,
+      this.scene,
+      false,
+      false,
+      Constants.TEXTURE_BILINEAR_SAMPLINGMODE,
+      Constants.TEXTURETYPE_FLOAT,
+    )
+    ht.name = 'figureShadowGround'
+    ht.wrapU = ht.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
+    GROUND_TEX.set(this.scene, ht)
+    return ht
+  }
+  /** A spread figure's materials given the ground's heights (GROUND_FOLLOW reads uMeadow: the meadow map, bound on
+   *  every painted material, or without one the heightfield's, groundHeights), at its first frame (groundMap is set
+   *  after the constructor) */
+  private followGround(): void {
+    this.groundBound = true
+    if (this.groundMap) return
+    const ht = this.groundHeights()
+    for (const map of [this.mats, this.farMats, this.tinyMats]) {
+      for (const m of map.values()) m.setTexture('uMeadow', ht)
+    }
   }
   /** The decal's material by the contact's weight this frame: with the oval within its band, without past it (no
    *  oval's read, varying or texture: decision 0062's). Switched only when it changes, once the one wanted is compiled

@@ -31,6 +31,7 @@ import {
   LEGACY_ROLES,
   MAN_R,
   manRadius,
+  groundFollowY,
   MAX_ROLES,
   SPREAD_FROM,
   cellHeights,
@@ -479,5 +480,59 @@ describe("a spread figure's contact and view sphere (contactFor, manRadius)", ()
     expect(manRadius(reach(CAVALRY), CAVALRY.height)).toBeGreaterThan(reach(CAVALRY))
     // (the infantryman's too: his musket's 1.7 m reach and his height, 1.95 m, not the 1.6 m it was)
     expect(manRadius(reach(INFANTRY), INFANTRY.height)).toBeCloseTo(Math.hypot(reach(INFANTRY), 0.9), 12)
+  })
+})
+
+describe('a spread figure on sloping ground (GROUND_FOLLOW)', () => {
+  // the owner's still, 2026-10-28 (output/armies-review/25-cavalry-artillery/owner/crew-legs-sunk.png): a gun and its
+  // four gunners are one rigid figure placed at its root's ground, so on a slope the men downhill of the root sank to
+  // the knees (1.04 m of drop within a piece's 3.6 m on the demo map) and those uphill floated
+  const d = BATTERY
+  const far = d.lods[d.lods.length - 1].name
+  const pv = posedVertices(d, far)
+  const slope = (x: number, z: number) => 0.3 * x + 0.1 * z
+  // the posed far LOD's feet (its lowest vertices within 5 cm) at one step, placed at (10, 4) on the slope
+  const feet = (follow: boolean) => {
+    const nv = pv.width / 2
+    const s = d.ranges.fire.start + 40
+    const err: number[] = []
+    const [rx, rz] = [10, 4]
+    for (let v = 0; v < nv; v++) {
+      const o = (s * nv * 2 + v * 2) * 4
+      const [x, y, z] = [pv.data[o] + rx, pv.data[o + 1] + slope(rx, rz), pv.data[o + 2] + rz]
+      if (pv.data[o + 1] > 0.05) continue
+      const yy = follow ? groundFollowY(y, x, z, rx, rz, slope) : y
+      err.push(Math.abs(yy - pv.data[o + 1] - slope(x, z)))
+    }
+    return Math.max(...err)
+  }
+  it("sets each foot, wheel and trail end on the ground under it, not at the root's height", () => {
+    expect(feet(false)).toBeGreaterThan(0.5)
+    expect(feet(true)).toBeLessThan(1e-9)
+  })
+  it('keeps what stands upright upright: a vertical line moves as one', () => {
+    expect(groundFollowY(1.7, 3, 2, 0, 0, slope) - groundFollowY(0, 3, 2, 0, 0, slope)).toBeCloseTo(1.7, 12)
+  })
+  it("is what units.vert does for a spread figure's every LOD, and units.ts turns it on for spread figures only", () => {
+    const src = (f: string) => readFileSync(new URL(`../src/look/${f}`, import.meta.url), 'utf8').replace(/\s+/g, '')
+    expect(src('shaders/units.vert')).toContain(
+      '#ifdefined(GROUND_FOLLOW)&&!defined(DEPTH)w.y+=groundH(w.xz)-groundH(finalWorld[3].xz);#endif',
+    )
+    const u = src('units.ts')
+    expect(u).toContain("constfollow=this.spread>0?['#defineGROUND_FOLLOW']:[]")
+    expect(u.split('...follow]').length - 1 + u.split('...follow,').length - 1).toBe(3) // (near, far, tiny)
+  })
+})
+
+describe("the guns' shadows a little darker (SH_DARKEN)", () => {
+  it("raises the battery's share by under a fifth, capped at the look's darkest, and leaves the others", () => {
+    const k = ARMS_DEMO.find(a => a.name === 'artillery')?.shadowDarken ?? 1
+    expect(k).toBeGreaterThan(1)
+    expect(k).toBeLessThanOrEqual(1.2)
+    expect(ARMS_DEMO.find(a => a.name === 'cavalry')?.shadowDarken ?? 1).toBe(1)
+    const f = readFileSync(new URL('../src/look/shaders/unitdecal.frag', import.meta.url), 'utf8').replace(/\s+/g, '')
+    // (applied to the share before its cap: never past the ground's shade k, the soldiers' core)
+    expect(f.indexOf('v*=SH_DARKEN;')).toBeLessThan(f.indexOf('floata=min(1.0,v/dm);'))
+    expect(f.indexOf('v*=SH_DARKEN;')).toBeGreaterThan(0)
   })
 })

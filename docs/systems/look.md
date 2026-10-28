@@ -757,7 +757,14 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   stands, with no soft halo round it; drawn at its own length
   (`SH_SPREAD`: no shortening about its root, the far growth across alone), its lift at least `SPREAD_FLOOR` (10 cm:
   at the ground's sampled height a gun's footprint sank under the terrain) and its strip's close rows at its
-  contacts' reach (`decalStrip`'s `rowsAt`). A big figure's texel grows until its cells fit 192 texels a side
+  contacts' reach (`decalStrip`'s `rowsAt`). On sloping ground its every vertex is moved up or down by the ground
+  under it against the ground under its root (`GROUND_FOLLOW` in `units.vert`, `groundFollowY`; the meadow map's
+  heights or the heightfield's sampled over the tile): a vertical shear, so a gunner stands upright on the ground under
+  his own feet and a gun's wheels and trail meet the slope (the owner, 2026-10-28: one rigid figure at its root's
+  height sank the men downhill to the knees; the demo map drops 1.04 m within a piece's 3.6 m and 0.97 m under a
+  horse where the rides start), its bounds padded for a slope of 0.8. An arm may darken its shadow a little
+  (`shadowDarken`, `SH_DARKEN`: its share of the samples raised, capped at the look's darkest; the guns' 1.18, the
+  owner's "a tiny bit darker"). A big figure's texel grows until its cells fit 192 texels a side
   (`fitTexel`: the battery 7.8 cm). Its roles' starts and bins padded to the shader's four (`padTo4`).
   The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first

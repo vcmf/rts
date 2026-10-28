@@ -345,6 +345,8 @@ export interface ArmSpec {
     | { kind: 'serve'; rest: string; work: string; restSeconds: number; lag: number; cycle: number }
   place: { turn: number; ahead: number; across: number }
   tread: number
+  /** its simple shadows' share of the samples raised by this (1 to 1.5; none: 1), never past the ground's shade */
+  shadowDarken?: number
 }
 
 /** An arm's script (rideScript, serveScript) from its spec, its type's geometry and formation, and its figure's roles'

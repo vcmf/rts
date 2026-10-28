@@ -216,6 +216,20 @@ trot, gallop), `battery-20m.jpg`, `-40m`, `-63m` (loading, firing, the run-up), 
 - One source for the cloth parts (`CLOTH_PARTS`, `ClothPart` from it); the view's corner rays cast once a frame
   (`ViewRays`); the blades' root reads gated on the arm that owns the map; the map's receivers in the arm's options.
 
+### The owner's feedback (2026-10-28)
+
+- **The gun crew sank into sloping ground** (`owner/crew-legs-sunk.png`): a piece is one rigid figure (the gun and
+  four gunners) placed at its root's ground; the demo map drops up to 1.04 m within a piece's 3.6 m (side 1's at x 4)
+  and 0.97 m under a horse where the rides start and end (a bank at x −54). Fixed in the figures' vertex shader for
+  a figure on more than its root: each vertex moved by the ground under it against the ground under the root
+  (`GROUND_FOLLOW`), so the men stay upright on their own feet and the carriage meets the slope; the horses' hooves
+  too. The infantry unchanged (golden against main). Tested (`groundFollowY`: the battery's feet on a 0.3 slope off
+  the ground by more than 0.5 m without it, on it with it). Stills: `output/armies-review/25-cavalry-artillery/
+  slope-fix/`.
+- **The guns' shadows "a tiny bit darker":** the battery's shadow share raised by 1.18 (`shadowDarken`), capped at
+  the look's darkest (never past the soldiers' core or the trees' shadow). Stills: `slope-fix/gun-shadow-20m.jpg`,
+  `-40m.jpg`.
+
 ## Open questions (the owner's)
 
 - The arms' frame cost when in view (2.5 ms at 63 m for a regiment and a battery): the cuirassier's LODs could be

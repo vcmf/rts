@@ -19,6 +19,8 @@ export const ARMS_DEMO: readonly ArmSpec[] = [
     // (12 m before the lines, west of the woods by the fight's middle: the demo map's open ground)
     place: { turn: 0, ahead: 12, across: 60 },
     tread: 6,
+    // (the owner, 2026-10-28: the guns' shadows "a tiny bit darker"; a gun's is open and low)
+    shadowDarken: 1.18,
   },
   {
     name: 'cavalry',

@@ -69,6 +69,11 @@ void main(){
   s*=step(0.0,vCell.x)*step(vCell.x,1.0)*step(0.0,vCell.y)*step(vCell.y,1.0);
   #endif
   float dm=max(max(uShFoot.x,uShFoot.y),1e-4),v=s*mix(uShFoot.x,uShFoot.y,g);
+  #ifdef SH_DARKEN
+  // a figure's shadow a little darker (its arm's, decision 0075: a gun's open, low shadow read light), its share of the
+  // samples raised by SH_DARKEN and capped below at the look's darkest, so never past the ground's shade k
+  v*=SH_DARKEN;
+  #endif
   #ifdef SH_STEPS
   // the per-step shape's feet darker and crisper (?ushfootk, footSharpen in src/look/shadow-look.ts): its share of the
   // samples boosted at the soles (uShFootK.x), back to 1 by uShFootK.y m; capped at 1 below, so never past the look's

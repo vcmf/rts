@@ -1367,3 +1367,17 @@ export const MAN_R = 1.6
 export function manRadius(reach: number, height: number): number {
   return Math.max(MAN_R, Math.hypot(reach, height / 2))
 }
+
+/** A vertex's height on the ground under a spread figure (units.vert's GROUND_FOLLOW, mirrored for its tests): its
+ *  height as placed at the root's ground (y, m), moved by the ground under it (at x, z) against the ground under the
+ *  root (rx, rz): a vertical shear, so what stands upright stays so and each foot meets the ground under it */
+export function groundFollowY(
+  y: number,
+  x: number,
+  z: number,
+  rx: number,
+  rz: number,
+  ground: (x: number, z: number) => number,
+): number {
+  return y + ground(x, z) - ground(rx, rz)
+}
