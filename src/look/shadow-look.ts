@@ -56,6 +56,39 @@ export function footUniform(l: ShadowLook, tipBase: number): [number, number, nu
   return [l.foot, l.dark, Math.min(l.core, tip * 0.9), tip]
 }
 
+/** m along a shadow at which the look's gradient (footUniform's core and tip, the look's length in them) reads a point
+ *  (unitdecal.frag's al): a soldier's, its distance from his soles as drawn (the shape's along it, times len past
+ *  them: vAlong); a figure on more than its root (SH_HEIGHTS), its caster's height's cast along the ground (the
+ *  shape's heights times uShHeight) times len, the same scale: the same gradient over the shape as his */
+export function gradientAlong(spread: boolean, along: number, cast: number, len: number): number {
+  return spread ? cast * len : along * (along > 0 ? len : 1)
+}
+
+/** The simple shadows' two bakes in order (src/look/units.ts useDecals): the per-step one (near; null: none), whose
+ *  failure falls back to none when fallback says so (the error kept in fellBack; any other is thrown), then the
+ *  averaged one (far); when the far one throws, the near one made before it is disposed and the error thrown on */
+export function bakePair<B>(
+  near: (() => B) | null,
+  far: () => B,
+  dispose: (b: B) => void,
+  fallback: (e: unknown) => boolean,
+): { near: B | null; far: B; fellBack: unknown } {
+  let n: B | null = null
+  let fellBack: unknown = null
+  try {
+    n = near ? near() : null
+  } catch (e) {
+    if (!fallback(e)) throw e
+    fellBack = e
+  }
+  try {
+    return { near: n, far: far(), fellBack }
+  } catch (e) {
+    if (n !== null) dispose(n)
+    throw e
+  }
+}
+
 /** The along and across extent (m from a man's root, in the shadow's frame) of a box the shape fills */
 export interface ShapeBox {
   across: readonly [number, number]

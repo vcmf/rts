@@ -888,6 +888,9 @@ export function shadowShape(
   // the heights (heights): the lowest caster's at each covered texel this step, and their sum over the steps
   const hmin = heights ? new Float32Array(sw * sh) : null
   const accH = heights ? new Float32Array(iw * ih) : null
+  // (the heights' scratch, made once: a triangle's plane, a cell's two blurs and its fill)
+  const plane = new Float64Array(PLANE)
+  const hScratch = heights ? cellScratch(iw, ih) : null
   // the blurs' kernels (separable): the shape's, then the soft one's
   const kernel = (sigma: number) => {
     const sg = sigma / texel
@@ -897,6 +900,7 @@ export function shadowShape(
     return ker.map(v => v / ks)
   }
   const kers = soft > 0 ? [kernel(blur), kernel(soft)] : [kernel(blur)]
+  const R2 = (kers[kers.length - 1].length - 1) / 2 // (the widest blur's reach, texels)
   // a cell (role r's bin j, facing k) at its block's column and its row in the block
   const cells = bins.flatMap((rb, r) => rb.map((ss, j) => ({ ss, row: binRow[r] + j })))
   for (const { ss, row } of cells) {
@@ -924,6 +928,7 @@ export function shadowShape(
           const by = sp[i1 + 1]
           const cx = sp[i2]
           const cy = sp[i2 + 1]
+          if (hmin) trianglePlane(ax, ay, bx, by, cx, cy, hy[idx[t]], hy[idx[t + 1]], hy[idx[t + 2]], plane)
           // (a convex triangle: each texel row's centre line meets its edges in one span)
           const y0 = Math.max(0, Math.ceil(Math.min(ay, by, cy) - 0.5))
           const y1 = Math.min(sh - 1, Math.floor(Math.max(ay, by, cy) - 0.5))
@@ -947,9 +952,8 @@ export function shadowShape(
             const x1 = Math.min(sw - 1, Math.floor(hi - 0.5))
             for (let x = x0; x <= x1; x++) cov[y * sw + x] = 1
             if (hmin) {
-              const h = [hy[idx[t]], hy[idx[t + 1]], hy[idx[t + 2]]] as const
               for (let x = x0; x <= x1; x++) {
-                const v = heightAt(ax, ay, bx, by, cx, cy, h, x + 0.5, py)
+                const v = planeAt(plane, x + 0.5, py)
                 if (v < hmin[y * sw + x]) hmin[y * sw + x] = v
               }
             }
@@ -1016,9 +1020,21 @@ export function shadowShape(
         }
       })
       if (accH && hfull) {
-        cellHeights(acc, accH, kers[0], iw, ih, [bx0, bx1, by0, by1], top, (x, y, v) => {
-          hfull[(by * cellH + margin + y) * W + (bx + k) * cellW + margin + x] = v
-        })
+        cellHeights(
+          acc,
+          accH,
+          kers[0],
+          iw,
+          ih,
+          [bx0, bx1, by0, by1],
+          top,
+          hfull,
+          (by * cellH + margin) * W + (bx + k) * cellW + margin,
+          W,
+          hScratch ?? undefined,
+          // (the soft bake's reach and the mips' border past the covered box)
+          R2 + ex + margin,
+        )
       }
     }
   }
@@ -1071,9 +1087,42 @@ export function fitTexel(texel: number, acrossM: number, alongM: number, softM: 
   return t
 }
 
+/** a triangle's height plane's length (trianglePlane): the first corner's place and height, the gradient across and
+ *  along, its corners' least and greatest heights */
+export const PLANE = 7
+/** The plane of heights over a triangle projected to (ax, ay), (bx, by), (cx, cy) whose corners stand h0, h1, h2 high,
+ *  written into out (PLANE values; the sun's projection is affine, so the height is linear across it); a triangle seen
+ *  edge on has none (its gradient 0: its lowest corner) */
+export function trianglePlane(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  h0: number,
+  h1: number,
+  h2: number,
+  out: Float64Array,
+): void {
+  const lo = Math.min(h0, h1, h2)
+  const det = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay)
+  const flat = Math.abs(det) < 1e-9
+  out[0] = ax
+  out[1] = ay
+  out[2] = flat ? lo : h0
+  out[3] = flat ? 0 : ((cy - ay) * (h1 - h0) - (by - ay) * (h2 - h0)) / det
+  out[4] = flat ? 0 : ((bx - ax) * (h2 - h0) - (cx - ax) * (h1 - h0)) / det
+  out[5] = lo
+  out[6] = Math.max(h0, h1, h2)
+}
+/** The height (m) a triangle's plane (trianglePlane) gives at (px, py), held within its corners' heights (a texel
+ *  centre just outside it, its span rounded) */
+export function planeAt(p: Float64Array, px: number, py: number): number {
+  return Math.min(p[6], Math.max(p[5], p[2] + (px - p[0]) * p[3] + (py - p[1]) * p[4]))
+}
 /** The height (m) at the texel centre (px, py) of a triangle projected to (ax, ay), (bx, by), (cx, cy) whose corners
- *  stand h high: linear across it (the sun's projection is affine), held within its corners' heights (a centre just
- *  outside it, its span rounded); a triangle seen edge on: its lowest corner */
+ *  stand h high: its plane's (trianglePlane, planeAt); edge on, its lowest corner */
 export function heightAt(
   ax: number,
   ay: number,
@@ -1085,18 +1134,25 @@ export function heightAt(
   px: number,
   py: number,
 ): number {
-  const lo = Math.min(h[0], h[1], h[2])
-  const hi = Math.max(h[0], h[1], h[2])
-  const det = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay)
-  if (Math.abs(det) < 1e-9) return lo
-  const w1 = ((px - ax) * (cy - ay) - (cx - ax) * (py - ay)) / det
-  const w2 = ((bx - ax) * (py - ay) - (px - ax) * (by - ay)) / det
-  return Math.min(hi, Math.max(lo, h[0] + w1 * (h[1] - h[0]) + w2 * (h[2] - h[0])))
+  const p = new Float64Array(PLANE)
+  trianglePlane(ax, ay, bx, by, cx, cy, h[0], h[1], h[2], p)
+  return planeAt(p, px, py)
+}
+
+/** cellHeights' scratch for cells of iw × ih texels: the two blurs' sums and the heights */
+export function cellScratch(iw: number, ih: number): { tc: Float32Array; th: Float32Array; v: Float32Array } {
+  const n = iw * ih
+  return { tc: new Float32Array(n), th: new Float32Array(n), v: new Float32Array(n) }
 }
 
 /** A cell's heights' channel (shadowShape's heights): the summed heights (accH, m) over the summed coverage (acc) of
- *  the steps, each blurred by the shape's own kernel (ker) over the covered box [x0, x1, y0, y1] and its reach, as a
- *  share of top in 0..255 (set(x, y, value)); where nothing is covered, 255 (the top: the lightest of the look) */
+ *  the steps, each blurred by the shape's own kernel (ker) over the covered box [x0, x1, y0, y1] and its reach; then
+ *  every texel the blur did not reach (the soft bake's wider reach, the empty border) takes its nearest reached
+ *  texel's height (a fill outward by 4-neighbours), so a contact's height holds across its soft halo and the halved
+ *  atlas's edge texels and mips mix no top into it. As a share of top in 0..255, texel (x, y) written to
+ *  out[at + y × stride + x]; a cell with nothing covered, 255 (the top: the lightest of the look). fill: how far past
+ *  the covered box the fill reaches, texels (the soft bake's reach and the mips' read; by default the whole cell),
+ *  255 beyond, where no shadow is drawn. scratch: cellScratch(iw, ih), made once by the caller */
 export function cellHeights(
   acc: Float32Array,
   accH: Float32Array,
@@ -1105,17 +1161,25 @@ export function cellHeights(
   ih: number,
   box: readonly [number, number, number, number],
   top: number,
-  set: (x: number, y: number, v: number) => void,
+  out: Uint8Array,
+  at: number,
+  stride: number,
+  scratch = cellScratch(iw, ih),
+  fill = Math.max(iw, ih),
 ): void {
   const R = (ker.length - 1) / 2
   const [bx0, bx1, by0, by1] = box
+  // (the region the heights fill, the blur's within it)
+  const fx0 = Math.max(0, bx0 - fill)
+  const fx1 = Math.min(iw - 1, bx1 + fill)
+  const fy0 = Math.max(0, by0 - fill)
+  const fy1 = Math.min(ih - 1, by1 + fill)
   const x0 = Math.max(0, bx0 - R)
   const x1 = Math.min(iw - 1, bx1 + R)
   const y0 = Math.max(0, by0 - R)
   const y1 = Math.min(ih - 1, by1 + R)
+  const { tc, th, v } = scratch
   // (separable: across over the covered rows, then along over the reach)
-  const tc = new Float32Array(iw * ih)
-  const th = new Float32Array(iw * ih)
   for (let y = by0; y <= by1; y++) {
     for (let x = x0; x <= x1; x++) {
       let a = 0
@@ -1131,8 +1195,10 @@ export function cellHeights(
       th[y * iw + x] = b
     }
   }
-  for (let y = 0; y < ih; y++) {
-    for (let x = 0; x < iw; x++) {
+  // (the reached texels' heights, −1 the rest of the fill's region, −2 outside it)
+  v.fill(-2)
+  for (let y = fy0; y <= fy1; y++) {
+    for (let x = fx0; x <= fx1; x++) {
       let a = 0
       let b = 0
       if (y >= y0 && y <= y1 && x >= x0 && x <= x1) {
@@ -1144,7 +1210,38 @@ export function cellHeights(
           }
         }
       }
-      set(x, y, a > 1e-6 && top > 0 ? Math.round(255 * Math.min(1, b / a / top)) : 255)
+      const i = y * iw + x
+      v[i] = a > 1e-6 && top > 0 ? Math.min(1, b / a / top) : -1
+    }
+  }
+  fillNearest(v, iw, fx0, fx1, fy0, fy1)
+  for (let y = 0; y < ih; y++) {
+    const o = at + y * stride
+    for (let x = 0; x < iw; x++) {
+      const h = v[y * iw + x]
+      out[o + x] = h >= 0 ? Math.round(255 * h) : 255 // (none reached, or outside the fill: the top)
+    }
+  }
+}
+/** Every texel of v (iw × ih) at −1 within [x0, x1] × [y0, y1] given a near non-negative one's value: a sweep
+ *  forward (from the left and above), then back (from the right and below), each texel taking its first filled
+ *  neighbour's; a texel below −1 is outside the fill. Two linear passes (a breadth-first fill cost 60 ms of a horse's
+ *  bake); a texel the sweeps reach takes a neighbour's, near enough for heights that change slowly round a contact */
+export function fillNearest(v: Float32Array, iw: number, x0: number, x1: number, y0: number, y1: number): void {
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const i = y * iw + x
+      if (v[i] !== -1) continue
+      if (x > x0 && v[i - 1] >= 0) v[i] = v[i - 1]
+      else if (y > y0 && v[i - iw] >= 0) v[i] = v[i - iw]
+    }
+  }
+  for (let y = y1; y >= y0; y--) {
+    for (let x = x1; x >= x0; x--) {
+      const i = y * iw + x
+      if (v[i] !== -1) continue
+      if (x < x1 && v[i + 1] >= 0) v[i] = v[i + 1]
+      else if (y < y1 && v[i + iw] >= 0) v[i] = v[i + iw]
     }
   }
 }

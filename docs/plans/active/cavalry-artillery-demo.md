@@ -63,7 +63,8 @@ colour varieties per man; a cavalry standard; the pistol and the sabre clips on 
    (`src/rulesets/napoleonic-dyes.ts`, `napoleonic-uniforms.ts`), a `paint` part for the gun's carriage.
 3. Scripts and layout: a `Script` the renderer asks for a phase and a man's place and role; the infantry's wraps
    `phaseAt` and `manAt` unchanged; the arms placed after the infantry's layout (which stays as hashed).
-4. Renderer: `Units` takes a script and a lead; the figure's roles, height and reach from its data; a facade for the
+4. Renderer: `Units` takes a script (and, after review round 1, whether it owns the shadow map; the trodden mask its
+   own class); the figure's roles, height and reach from its data; a facade for the
    page's hooks (`__units`, `__armies`: every arm's figures, masks, coats).
 5. Shadows: `shadowShape` with heights (B) and a texel that grows for big figures; `SH_SPREAD` in the decal's
    shaders, chosen when the figure's contacts spread (data: the posed far LOD's lowest vertices).
@@ -164,6 +165,35 @@ trot, gallop), `battery-20m.jpg`, `-40m`, `-63m` (loading, firing, the run-up), 
 - The battery: each gun's wheels, trail and barrel cast a crisp shadow with the crew's own beside it, through the
   firing cycle (8 bins over its 19 s: a gunner's shadow holds about 2.4 s of his motion, a blur while he loads).
   Lighter than the horses' (a gun is low and open). Reads at 20 and 40 m, a speck at 63.
+
+## Review round 1 (2026-10-28)
+
+- **Severe, fixed:** `?ushadowfar=map` baked no ground shade and an arm's simple shadows threw at load: the arms now
+  follow the page's shadow mode (their simple shadows with the infantry's; none under `?ushadowfar=map`, the map
+  holding the infantry alone), so the shade and the stencil are there whenever they draw. Smoke-tested on the page:
+  `?ushadowfar=map`, `?ushadowclose=map`, `?unitshadow=0`, `?ushstep=0`, `?trample=0`, each with the arms in view,
+  no error.
+- **Severe, fixed:** the heights' distance and the gradient's core and tip were in two scales (the tip times the
+  look's length, the heights not): the heights' cast is now times the length too (`gradientAlong`, tested against a
+  soldier's), and both materials carry the heights, so they agree either side of the per-step band's edge.
+- **Severe, fixed:** the heights stopped at the shape's own blur's reach, leaving the soft bake's reach at the top (a
+  soft, light halo round each hoof and wheel): they now fill outward from the nearest reached texel over the soft
+  reach and the mips' border (`fillNearest`; tested).
+- **Moderate, fixed:** a failed averaged bake frees the per-step one (`bakePair`, tested); the trodden mask keeps an
+  arm's moved flag until a draw takes it (`takeSteps`, tested: a column halting between two draws is trodden where
+  it halts); the heights bake hoists its scratch (a triangle's plane once, a cell's buffers once); a battery's pieces
+  start from the right of the line, as documented (`serveOrder`); the arms take the field's centre and gap from the
+  layout (`FIELD`); a ride's and a service's phase carry their leg and count.
+- **Altitude:** the page-wide parts are owned once (decision 0075, amended): the trodden mask is its own class fed by
+  every arm (`src/look/trodden.ts`), the ground heights one a scene, the shade the page's; the shadow map and its
+  receivers belong to one arm (`ownsMap`); no lead and followers. Contained: golden screenshots against main with the
+  arms off still identical.
+- The heights' bake time (`node`, the per-step shape, median of 4): before, the heights added 49 ms to the
+  cuirassier's 354 and 98 to the battery's 201; after (the fill included) 51 and 79. The far shapes now carry
+  heights too (two more reads a fragment in the arms' far shadows, an R8 atlas at half the size: about 0.4 MB):
+  not benched.
+- Before and after at 20 and 40 m: `output/armies-review/25-cavalry-artillery/review1-before-after-bare.jpg`,
+  `-meadow.jpg` (the look as it was, the contacts a little crisper; the battery's firing order now from the right).
 
 ## Open questions (the owner's)
 

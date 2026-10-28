@@ -92,6 +92,22 @@ export function companySlots(g: Geometry, place: (g: Geometry) => Placement[]): 
   return place(g).map(a => [a.x, a.z])
 }
 
+/** a ride's phase: its leg's index too */
+export interface RidePhase extends ScriptPhase {
+  leg: number
+}
+/** a service's phase: how many of its pieces have started work */
+export interface ServePhase extends ScriptPhase {
+  started: number
+}
+/** each piece's turn in a service (0 first): the right of the line first (+x, the unit's frame), then leftward */
+export function serveOrder(places: readonly [number, number][]): number[] {
+  const byRight = places.map((_, i) => i).sort((a, b) => places[b][0] - places[a][0] || a - b)
+  const turn = new Array<number>(places.length)
+  byRight.forEach((i, k) => (turn[i] = k))
+  return turn
+}
+
 /** a leg of a ride: the role its men take and for how long (s) */
 export interface Leg {
   role: string
@@ -108,7 +124,7 @@ export function rideScript(
   speeds: Readonly<Record<string, number>>,
   fileSpacing: number,
   lag = 0.4,
-): Script {
+): Script<RidePhase> {
   if (legs.length === 0) throw new Error('arms: a ride needs a leg')
   for (const l of legs) {
     if (!(l.role in speeds)) throw new Error(`arms: a ride's leg names the role ${l.role}, which has no speed`)
@@ -129,14 +145,14 @@ export function rideScript(
     roles: [...new Set(legs.map(l => l.role))],
     phase: t => {
       const k = legAt(t)
-      return { phase: `${k}:${legs[k].role}`, start: starts[k] }
+      return { phase: `${k}:${legs[k].role}`, start: starts[k], leg: k }
     },
-    moving: p => speeds[legs[legAt(p.start)].role] > 0,
+    moving: p => speeds[legs[p.leg].role] > 0,
     man: (i, t, p, jitter, out) => {
       out.x = places[i][0]
       out.z = places[i][1] + rideDistance(legs, starts, speeds, t)
       out.face = 0
-      out.role = legs[legAt(p.start)].role
+      out.role = legs[p.leg].role
       out.since = p.start + jitter * lag
       out.moving = speeds[out.role] > 0
       return out
@@ -169,13 +185,14 @@ export function serveScript(
   roles: { rest: string; work: string },
   times: { rest: number; lag: number; cycle: number },
   fileSpacing: number,
-): Script {
+): Script<ServePhase> {
   const n = places.length
   if (!(times.rest >= 0 && times.lag >= 0 && times.rest + (n - 1) * times.lag < times.cycle)) {
     throw new Error(`arms: a service's ${n} pieces cannot all start within its ${times.cycle} s cycle`)
   }
   const started = (t: number) =>
     t < times.rest ? 0 : Math.min(n, Math.floor((t - times.rest) / Math.max(times.lag, 1e-9)) + 1)
+  const turn = serveOrder(places)
   return {
     men: n,
     cycle: times.cycle,
@@ -184,17 +201,16 @@ export function serveScript(
     roles: [roles.rest, roles.work],
     phase: t => {
       const k = started(t)
-      return { phase: `work:${k}`, start: k === 0 ? 0 : times.rest + (k - 1) * times.lag }
+      return { phase: `work:${k}`, start: k === 0 ? 0 : times.rest + (k - 1) * times.lag, started: k }
     },
     moving: () => false,
     man: (i, t, p, jitter, out) => {
-      const k = Number(p.phase.slice(5))
       out.x = places[i][0]
       out.z = places[i][1]
       out.face = 0
-      const working = i < k
+      const working = turn[i] < p.started
       out.role = working ? roles.work : roles.rest
-      out.since = working ? times.rest + i * times.lag + jitter * 0.2 : 0
+      out.since = working ? times.rest + turn[i] * times.lag + jitter * 0.2 : 0
       out.moving = false
       return out
     },

@@ -21,6 +21,7 @@ import {
   rideDistance,
   rideScript,
   serveScript,
+  serveOrder,
   type Box,
 } from '../src/look/world/arms.ts'
 import { dressAll, dressed, FIGURE_PARTS } from '../src/look/world/dyes.ts'
@@ -37,11 +38,15 @@ import {
   fitTexel,
   halved,
   heightAt,
+  PLANE,
+  planeAt,
+  trianglePlane,
   posedVertices,
   shadowShape,
   type UnitData,
 } from '../src/look/units-data.ts'
-import { decalStrip } from '../src/look/shadow-look.ts'
+import { bakePair, decalStrip, gradientAlong } from '../src/look/shadow-look.ts'
+import { TR_EVERY, takeSteps, treadDue } from '../src/look/trodden.ts'
 
 const figure = (name: string): UnitData =>
   decodeUnits(new Uint8Array(readFileSync(new URL(`../data/figures/${name}.unitdata`, import.meta.url))).buffer)
@@ -114,20 +119,31 @@ describe('a ride (rideScript)', () => {
     expect(() => rideScript(places, [{ role: 'canter', seconds: 2 }], speeds, 1)).toThrow(/canter/)
     expect(() => rideScript(places, [{ role: 'walk', seconds: 0 }], speeds, 1)).toThrow(/lasts/)
   })
+  it('carries its leg on its phase', () => {
+    expect([1, 3, 7, 9.5].map(t => s.phase(t, false).leg)).toEqual([0, 1, 2, 3])
+  })
 })
 
 describe('a service (serveScript)', () => {
   const places: [number, number][] = [0, 1, 2, 3].map(i => [i * 16, 0])
   const s = serveScript(places, { rest: 'halt', work: 'fire' }, { rest: 5, lag: 2, cycle: 30 }, 16)
-  it('rests, then starts each piece lag s after the one before, a new phase at each, never moving', () => {
+  it('rests, then starts each piece lag s after the one before, the right of the line first, never moving', () => {
+    // (the places from left, x 0, to right, x 48: the rightmost starts first)
     const roles = (t: number) => places.map((_, i) => s.man(i, t, s.phase(t, false), 0, man()).role)
     expect(roles(4)).toEqual(['halt', 'halt', 'halt', 'halt'])
-    expect(roles(5.5)).toEqual(['fire', 'halt', 'halt', 'halt'])
-    expect(roles(9.5)).toEqual(['fire', 'fire', 'fire', 'halt'])
+    expect(roles(5.5)).toEqual(['halt', 'halt', 'halt', 'fire'])
+    expect(roles(9.5)).toEqual(['halt', 'fire', 'fire', 'fire'])
     expect(roles(29)).toEqual(['fire', 'fire', 'fire', 'fire'])
-    expect(new Set([4, 5.5, 7.5, 9.5, 11.5].map(t => s.phase(t, false).phase)).size).toBe(5)
+    expect([4, 5.5, 7.5, 9.5, 11.5].map(t => s.phase(t, false).started)).toEqual([0, 1, 2, 3, 4])
     expect(s.moving(s.phase(20, false))).toBe(false)
-    expect(s.man(2, 20, s.phase(20, false), 0, man()).since).toBe(9)
+    expect(s.man(1, 20, s.phase(20, false), 0, man()).since).toBe(9)
+    expect(
+      serveOrder([
+        [5, 0],
+        [-5, 0],
+        [20, 0],
+      ]),
+    ).toEqual([1, 2, 0])
   })
   it('refuses pieces that cannot all start within the cycle', () => {
     expect(() => serveScript(places, { rest: 'h', work: 'f' }, { rest: 20, lag: 5, cycle: 30 }, 16)).toThrow(/cycle/)
@@ -275,15 +291,45 @@ describe("the spread figures' shadows", () => {
     expect(heightAt(0, 0, 10, 0, 0, 10, [0, 1, 2], -3, -3)).toBe(0)
     expect(heightAt(0, 0, 1, 1, 2, 2, [3, 1, 2], 1, 1)).toBe(1)
   })
-  it("averages a cell's heights over its coverage, the top where nothing is covered; halves an image by its means", () => {
+  it('reads the same heights from its plane a triangle at a time as point by point', () => {
+    const p = new Float64Array(PLANE)
+    trianglePlane(0, 0, 10, 0, 0, 10, 0, 1, 2, p)
+    for (const [x, y] of [
+      [5, 0],
+      [0, 5],
+      [2, 3],
+      [-3, -3],
+      [9, 9],
+    ] as const) {
+      expect(planeAt(p, x, y)).toBeCloseTo(heightAt(0, 0, 10, 0, 0, 10, [0, 1, 2], x, y), 12)
+    }
+  })
+  it("averages a cell's heights over its coverage; halves an image by its means", () => {
     const acc = new Float32Array(9)
     const accH = new Float32Array(9)
     acc[4] = 1
     accH[4] = 0.5
     const out = new Uint8Array(9)
-    cellHeights(acc, accH, [1], 3, 3, [1, 1, 1, 1], 2, (x, y, v) => (out[y * 3 + x] = v))
-    expect([...out]).toEqual([255, 255, 255, 255, 64, 255, 255, 255, 255])
+    cellHeights(acc, accH, [1], 3, 3, [1, 1, 1, 1], 2, out, 0, 3)
+    expect(out[4]).toBe(64)
     expect([...halved(Uint8Array.from([0, 2, 9, 9, 4, 6, 9, 9]), 4, 2)]).toEqual([3, 9])
+  })
+  // the review's finding: the heights were blurred only over the shape's own blur's reach, the soft bake's wider reach
+  // left at the top, so a soft halo of 0.2 to 0.36 m round each hoof read as a shadow's tip, light and soft
+  it("holds a contact's height across the soft reach past the blur's, the top only past the fill", () => {
+    const iw = 40
+    const acc = new Float32Array(iw * iw)
+    const accH = new Float32Array(iw * iw)
+    acc[20 * iw + 20] = 1
+    accH[20 * iw + 20] = 0.1
+    const out = new Uint8Array(iw * iw)
+    cellHeights(acc, accH, [0.25, 0.5, 0.25], iw, iw, [20, 20, 20, 20], 2, out, 0, iw, undefined, 10)
+    const v = Math.round((255 * 0.1) / 2)
+    expect(out[20 * iw + 20]).toBe(v)
+    expect(out[20 * iw + 28]).toBe(v) // (8 texels out: past the blur's 1, within the fill's 10)
+    expect(out[28 * iw + 13]).toBe(v)
+    expect(out[20 * iw + 39]).toBe(255) // (19 out: past the fill)
+    expect(out[0]).toBe(255)
   })
   // the regression: the bin's coverage was divided by its steps before the blur and its heights' sum was not, so a
   // bin of n steps read n times too high (the halt's six-step bins all at the top: a horse's whole shadow light)
@@ -321,5 +367,79 @@ describe("the spread figures' shadows", () => {
     const v = readFileSync(new URL('../src/look/shaders/unitdecal.vert', import.meta.url), 'utf8').replace(/\s+/g, '')
     expect(v).toContain('#ifdefSH_SPREAD')
     expect(v).toContain('floatlift=max(uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y),SPREAD_FLOOR);')
+  })
+  it("reads a spread figure's gradient over its shape as a soldier's: its contact's cast times the look's length", () => {
+    // (a pole at the root: its shadow's point d m along it is cast by its height d/tan, so cast = along; a soldier's
+    // past his soles is drawn len as long, and the gradient's core and tip are the look's at its length)
+    for (const len of [0.7, 1]) {
+      for (const d of [0.1, 0.5, 2, 4]) {
+        expect(gradientAlong(true, 0, d, len)).toBeCloseTo(gradientAlong(false, d, 0, len))
+      }
+    }
+    const f = readFileSync(new URL('../src/look/shaders/unitdecal.frag', import.meta.url), 'utf8').replace(/\s+/g, '')
+    expect(f).toContain('floatal=hh*uShHeight*uShLen;')
+    expect(f).toContain('uniformsampler2DuShapeH;uniformfloatuShHeight,uShLen;')
+  })
+})
+
+describe('the shapes baked in order (bakePair)', () => {
+  const fake = () => ({ disposed: false })
+  it('frees the per-step shape when the averaged one fails after it', () => {
+    const near = fake()
+    expect(() =>
+      bakePair(
+        () => near,
+        () => {
+          throw new Error('far')
+        },
+        b => (b.disposed = true),
+        () => false,
+      ),
+    ).toThrow('far')
+    expect(near.disposed).toBe(true)
+  })
+  it('falls back to no per-step shape when its failure allows, throws any other', () => {
+    const big = new Error('too large')
+    const r = bakePair(
+      () => {
+        throw big
+      },
+      fake,
+      () => {},
+      e => e === big,
+    )
+    expect([r.near, r.fellBack]).toEqual([null, big])
+    expect(() =>
+      bakePair(
+        () => {
+          throw new Error('other')
+        },
+        fake,
+        () => {},
+        e => e === big,
+      ),
+    ).toThrow('other')
+  })
+})
+
+describe("the trodden mask's draws (takeSteps, treadDue)", () => {
+  // the review's finding: the arms' moved flags were cleared every frame, drawn or not, so a column that halted
+  // between two draws (TR_EVERY apart) was never trodden where it halted
+  it("keeps an arm's steps until a draw takes them: a column halting between two draws is trodden where it halts", () => {
+    const arm = { trod: false }
+    let at = -1
+    const frame = (T: number, moved: boolean) => {
+      if (moved) arm.trod = true
+      const drawn = takeSteps([arm], T, at)
+      if (drawn) at = T
+      return drawn
+    }
+    expect(frame(0, true)).toBe(true)
+    expect(frame(0.1, true)).toBe(false) // (moved, too soon)
+    expect(frame(0.2, false)).toBe(false) // (halted)
+    expect(frame(0.3, false)).toBe(true) // (its last steps drawn)
+    expect(frame(0.6, false)).toBe(false) // (nothing new)
+    expect(TR_EVERY).toBe(0.25)
+    expect(treadDue(false, 5, -1)).toBe(true)
   })
 })

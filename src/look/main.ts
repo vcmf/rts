@@ -631,11 +631,12 @@ if (armiesParam !== null) {
   const [
     { Units: UnitsC },
     { decodeUnits },
-    { layout, facingAt },
+    { layout, facingAt, FIELD },
     { dressAll, dyeOverride, wearInTurn },
     { RULESETS },
     { ARMIES_DEMO, ARMS_DEMO },
     { armScript, battalionBoxes, drillScript, placeArmUnits },
+    { Trodden },
   ] = await Promise.all([
     import('./units.ts'),
     import('./units-data.ts'),
@@ -644,6 +645,7 @@ if (armiesParam !== null) {
     import('../rulesets/index.ts'),
     import('../scenarios/armies-demo.ts'),
     import('./world/arms.ts'),
+    import('./trodden.ts'),
   ])
   if (tinyPxParam !== null && +tinyPxParam >= UnitsC.LOD_PX) {
     throw new Error(`?tinypx must be under the far LOD's switch (${UnitsC.LOD_PX} px), not ${tinyPxParam}`)
@@ -708,17 +710,19 @@ if (armiesParam !== null) {
   const greatcoat = uniformsParam === 'all-greatcoats'
   const dyes = dyeOverride(params.get('dye'), era.dyes)
   const uniforms = dressAll(era.uniforms, dyes, { greatcoat })
-  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides)
+  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides, FIELD.centre, FIELD.gap)
   const infantry = await figureData(ARMIES_DEMO.figure)
   const speed = { march: infantry.ranges.march?.speed ?? 0, run: infantry.ranges.run?.speed ?? 0 }
   if (!(speed.march > 0 && speed.run > 0)) throw new Error('units: the march and run roles have no root speed')
   const tinyPx = tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined
-  // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
-  const lead = new UnitsC(
+  // the ground and the grass: the figures' shadow map (with its switches) and the trodden mask fall on them
+  const receivers = [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])]
+  // (the infantry's arm owns the figures' shadow map behind its switches, decision 0075)
+  const foot = new UnitsC(
     scene,
     camera,
     mats,
-    [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])],
+    receivers,
     infantry,
     drillScript(drill, speed),
     uniformsParam === null ? placed : wearInTurn(placed, ARMIES_DEMO.reviewSides),
@@ -738,7 +742,7 @@ if (armiesParam !== null) {
       }
     })
   }
-  // an arm's renderer given the page's switches (the lead first: a follower takes its lead's ground heights)
+  // an arm's renderer given the page's switches
   const configure = (units: Units) => {
     units.lazyShadows = uShadowRate ?? true
     units.casterNear = uShadowLod ?? false
@@ -758,24 +762,23 @@ if (armiesParam !== null) {
     if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
     units.groundMap = meadow !== null
     if (decalLift !== null) units.decalLift = +decalLift
-    // (every arm darkens the ground to the one shade; the lead's receivers alone read the map, by blade on the meadow)
+    // (every arm darkens the ground to the one shade; the map's receivers read it by blade on the meadow)
     if (shade) units.shade = shade
-    if ((uShadowVs ?? true) && units === lead) {
+    if ((uShadowVs ?? true) && units === foot) {
       units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
     }
     units.setShadows(unitShadowParam !== '0')
     units.setPosed(uVat ?? true)
     units.setFarScale(farScale ?? true)
     units.setLodFade(lodFade ?? true)
-    units.setTrample(trample ?? true)
     units.setFlags(flags ?? true)
     units.setFarRule(farPal) // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
     // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
     units.setSmooth(smoothMove ?? true)
   }
-  configure(lead)
-  // the other arms (ARMS_DEMO): each side's unit placed after the infantry, clear of it and of one another; its
-  // renderer the lead's follower (its trodden mask, its shadow map); its uniforms resolved for its figure's parts
+  configure(foot)
+  // the other arms (ARMS_DEMO): each side's unit placed after the infantry, clear of it and of one another; no shadow
+  // map of its own (its simple shadows); its uniforms resolved for its figure's parts
   const arms: Record<string, Units> = {}
   const taken = battalionBoxes(placed, drill)
   for (const spec of ARMS_DEMO) {
@@ -785,9 +788,9 @@ if (armiesParam !== null) {
     const f = t?.formations[spec.formation]
     if (!t || !f) throw new Error(`armies: the ruleset has no ${spec.unitType} in ${spec.formation} (${spec.name})`)
     const speeds = Object.fromEntries(Object.entries(data.ranges).map(([k, r]) => [k, r.speed]))
-    const { script, foot } = armScript(spec, t.geometry, g => f.place(g), speeds)
-    // (from the layout's centre, the fronts 55 m either side of it: src/look/world/armies.ts layout)
-    const placedArm = placeArmUnits(spec, foot, [0, 0], 55, blocked, taken)
+    const { script, foot: footprint } = armScript(spec, t.geometry, g => f.place(g), speeds)
+    // (from the layout's centre, its fronts half its gap either side: src/look/world/armies.ts FIELD)
+    const placedArm = placeArmUnits(spec, footprint, FIELD.centre, FIELD.gap / 2, blocked, taken)
     if (placedArm.length === 0) continue
     // (its sides' dresses alone: another arm's lack this figure's parts, a carriage's paint)
     const dress = Object.fromEntries(spec.sides.map(id => [id, era.uniforms[id]]))
@@ -796,16 +799,27 @@ if (armiesParam !== null) {
     const u = new UnitsC(scene, camera, mats, [], data, script, placedArm, worn, () => S.t, {
       tinyPx,
       flags: false,
-      lead,
+      map: false,
       tread: spec.tread,
     })
     configure(u)
     arms[spec.name] = u
   }
-  armiesFocus = facingAt(lead.battalions)
-  // (coats: the infantry's, whose readability the guard measures at the fight's middle, tools/guard.mjs; arms: the
-  // other arms' renderers by name, for the review's cameras)
-  Object.assign(window, { __units: lead, __armies: { blocked, focus: armiesFocus, coats: lead.coats(), arms } })
+  // the trodden ground (src/look/trodden.ts): every arm's men, drawn after they are placed each frame (made after them)
+  const all = [foot, ...Object.values(arms)]
+  const trodden = new Trodden(scene, camera, receivers, () => S.t)
+  for (const u of all) trodden.add(u)
+  trodden.holdShare = smHold !== 'fixed'
+  trodden.setOn(trample ?? true)
+  armiesFocus = facingAt(foot.battalions)
+  // the tools' hooks: __units the infantry's renderer, its show and masks every arm's (the guard's ground alone and
+  // masks, tools/guard.mjs); __armies' coats the infantry's, whose readability the guard measures at the fight's
+  // middle; arms the other arms' renderers by name (the review's cameras)
+  const hook = Object.assign(Object.create(foot) as Units, {
+    show: (on: boolean) => all.forEach(u => u.show(on)),
+    setMask: (m: Parameters<Units['setMask']>[0]) => all.forEach(u => u.setMask(m)),
+  })
+  Object.assign(window, { __units: hook, __armies: { blocked, focus: armiesFocus, coats: foot.coats(), arms } })
 }
 if (flag('rt16')) MSAA.byte = false
 // half floats: an 8-bit target stores a NaN as 0, which nothing can mark

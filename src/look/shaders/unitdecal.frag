@@ -11,8 +11,10 @@ varying vec2 vUV2,vUV3;varying float vS;
 #ifdef SH_HEIGHTS
 // a figure on more than its root (SH_SPREAD, unitdecal.vert): uShapeH, at half the shape's size, the same UVs, holds
 // the height of the lowest part casting each texel, a share of uShHeight m along the shadow; the look's gradient and
-// the feet's boost run on it, from each contact (a hoof, a wheel, a gunner's foot), not from the root
-uniform sampler2D uShapeH;uniform float uShHeight;
+// the feet's boost run on it, from each contact (a hoof, a wheel, a gunner's foot), not from the root. Times uShLen,
+// as a soldier's vAlong is: the gradient's core and tip (uShFoot) are the look's at its length, so a spread figure's
+// shadow takes the same gradient over its shape as his (gradientAlong in src/look/shadow-look.ts)
+uniform sampler2D uShapeH;uniform float uShHeight,uShLen;
 #endif
 #ifdef SH_CONTACT
 // the contact shadow (docs/decisions/0071-soldier-contact-shadow.md): uShContact (its pad, m: the vertex's; its
@@ -56,7 +58,7 @@ void main(){
   #ifdef SH_STEP_BLEND
   hh=mix(hh,mix(textureLod(uShapeH,vUV2,hl).r,textureLod(uShapeH,vUV3,hl).r,vT),vS);
   #endif
-  float al=hh*uShHeight;
+  float al=hh*uShHeight*uShLen;
   #else
   float al=vAlong;
   #endif

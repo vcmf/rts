@@ -22,9 +22,11 @@ built: `docs/systems/look.md` ("The armies").
 
 ## Decision
 
-- **One renderer an arm.** Each arm (a figure, a script, its units) is a `Units`; the first, the lead, keeps the
-  page-wide parts (the trodden ground's mask, the figures' shadow map behind its switches, the receivers' bindings),
-  the others feed its mask and draw their simple shadows at every zoom. The infantry's code path is as before.
+- **One renderer an arm, the page-wide parts owned once.** Each arm (a figure, a script, its units) is a `Units`. The
+  trodden ground's mask is its own (`src/look/trodden.ts`, fed by every arm's men), the shade and the stencil the
+  page's (as before), the ground's heights one a scene; the figures' shadow map behind its switches and its
+  receivers belong to one arm, the infantry's (`ownsMap`); the others draw their simple shadows at every zoom, and
+  none under `?ushadowfar=map` (the map holding the infantry alone). The infantry's code path is as before.
 - **The figure's data names its own.** The unit data's header names a figure's roles in order (at most four: the
   shadow's shader holds four), each colour role's cloth part or material (decision 0068: the dyes, never a colour), and
   its height (the LOD switch's); absent, the infantryman's. The bake (`tools/bake-figure.py`) has a profile a figure
@@ -56,7 +58,8 @@ built: `docs/systems/look.md` ("The armies").
 ## Alternatives considered
 
 - **One renderer holding every figure:** the cleaner shape for the sim's many unit types, but a rewrite of the
-  renderer's every part for a demo; the lead and followers keep the infantry's path as it was.
+  renderer's every part for a demo; an arm a renderer keeps the infantry's path as it was. (First built as a lead
+  arm holding the mask and the map for its followers; review round 1 moved the mask out and left one flag.)
 - **Shortening a spread figure's shadow about its root:** moved the front hooves' shadow off them by 0.4 m at 0.7.
 - **Baking its per-step shape at the close look's length:** right up close, but a jump in length where the far
   material takes over at 100 m.

@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-27
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, src/look/world/arms.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/armies.test.ts, test/arms.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/trodden.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, src/look/world/arms.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/armies.test.ts, test/arms.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts]
 decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline]
 ---
 
@@ -595,10 +595,13 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   halt 4 s, walk 6, trot 20, gallop 6, halt 24, each at its role's root speed, then where it began). Placed after the
   infantry's layout, which they leave as it was (`placeArm`: the nearest spot to the one wanted, a move ahead or back
   counting three times one along the front, on the side's own half, off the blocked ground, clear of the battalions'
-  and the other arms' boxes; a side with no room is left out with a warning). Each arm is its own renderer
-  (`Units`), the infantry's the lead (it keeps the trodden mask, the shadow map behind its switches and the receivers'
-  bindings; `show` and `setMask` reach the others), the others its followers (their men in its mask, their simple
-  shadows at every zoom, no flag); the renderer asks the arm's script (`Script`, `src/look/world/arms.ts`; the
+  and the other arms' boxes; a side with no room is left out with a warning; the field's centre and gap layout's,
+  `FIELD`). Each arm is its own renderer (`Units`); the page-wide parts are owned once: the trodden mask
+  (`src/look/trodden.ts`, `Trodden`: every arm's men by its `tread`, drawn after they are placed each frame, an arm's
+  moved flag kept until a draw takes it, `takeSteps`), the ground heights without the meadow map (one a scene), the
+  shade and the stencil (the page's); the figures' shadow map behind its switches and its receivers belong to the
+  infantry's arm (`ownsMap`), the others draw their simple shadows at every zoom (none under `?ushadowfar=map`) and no
+  flag. `__units` is the infantry's renderer, its `show` and `setMask` every arm's; the renderer asks the arm's script (`Script`, `src/look/world/arms.ts`; the
   infantry's `drillScript` wraps `phaseAt` and `manAt` as before) for a unit's phase and each man's place and role.
   `__armies.arms` holds them by name; `__armies.coats` stays the infantry's (the guard measures them).
 - **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
@@ -741,9 +744,12 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `stepBin`): his shadow's step is his figure's on every GPU. **A figure on more than its root** (decision 0075; its
   ground contacts reach past `SPREAD_FROM`, 1 m, from it: `contactReach`, the cuirassier 1.36 m, the battery 3.6 m,
   the infantryman 0.63 m): its shape's bake keeps, per texel, the height of the lowest part casting it, averaged over
-  the bin's steps where covered (`shadowShape`'s `heights`, `cellHeights`: an R8 atlas at half the size, `uShapeH`,
-  only for the material that draws the close look), and the gradient and the feet's boost run on that height
-  (`SH_HEIGHTS`), so each hoof, wheel and gunner's foot is dark and crisp where it stands; drawn at its own length
+  the bin's steps where covered, blurred by the shape's own blur and then carried to every texel within the soft
+  bake's reach from the nearest reached one (`shadowShape`'s `heights`, `cellHeights`, `fillNearest`: an R8 atlas at
+  half the size, `uShapeH`, for both its materials, so they agree either side of the per-step band's edge), and the
+  gradient and the feet's boost run on that height's cast times the look's length, the scale of a soldier's distance
+  from his soles (`SH_HEIGHTS`, `gradientAlong`), so each hoof, wheel and gunner's foot is dark and crisp where it
+  stands, with no soft halo round it; drawn at its own length
   (`SH_SPREAD`: no shortening about its root, the far growth across alone), its lift at least `SPREAD_FLOOR` (10 cm:
   at the ground's sampled height a gun's footprint sank under the terrain) and its strip's close rows at its
   contacts' reach (`decalStrip`'s `rowsAt`). A big figure's texel grows until its cells fit 192 texels a side
