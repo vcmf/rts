@@ -6,7 +6,7 @@ last_reviewed: 2026-10-27
 # Model: sectors, and what reads them
 
 The math and code structure behind U1 (`docs/plans/active/u1-sectors.md`), from the unit model's § Facing and sectors
-and decisions 0069, 0070 and 0071. The unit model says what a player sees; this document says how the sim computes it,
+and decisions 0080, 0081 and 0082. The unit model says what a player sees; this document says how the sim computes it,
 exactly enough that the code can be written from it and checked against it.
 
 **How this document works.** Prose plans for U1 failed three rounds of review, each finding a case the words did not
@@ -137,14 +137,14 @@ Each reader is a formula over `(front, flank, rear)` and ruleset numbers.
   the impact's shock read it as `byWeights(table, side)`.
   - **P-19:** lines meeting square on read front 1; X-19 (four squadrons, offset 20 m) reads front 0.84 within 0.03
     (the squadron overhanging the end reads mostly flank); offset 30 m, 0.78 within 0.03.
-- **The second enemy (E-16, decision 0069):** an impact on a battalion that was in melee with another when the step
+- **The second enemy (E-16, decision 0080):** an impact on a battalion that was in melee with another when the step
   began (`S.inMelee0`, its own copy of the melee pairs taken before the charges move; `S.foe0`, taken after them for
   the melee pairs' strikes, stays as it is) adds `second = flank × sF + rear × sR` to its shock,
   once, not scaled by momentum. The ruleset refuses `sF` or `sR` over 0.6 of the gap from the default quality to the
   rout, as it refuses a contagion shock.
   - **P-20:** the second shock is the same in the reversed visiting order, including when the battalion's own charge
     makes contact in the same tick; it is never alone a rout of a battalion at the default quality.
-- **The drain (decision 0070):** for battalion j, `Δ = max over its threats e of (flank_e × dF + rear_e × dR)`, the
+- **The drain (decision 0081):** for battalion j, `Δ = max over its threats e of (flank_e × dF + rear_e × dR)`, the
   weights from `threatWeights(face of j, e's nearest company)` (§ 6). Its morale target `τ` becomes
   `τ − min(Δ, max(0, τ − W))`, with `W = morale.wavering[0]`: the drain lowers the target at most to the wavering
   threshold, and never touches a target already below it. With the numbers of § 8, a steady line (target 0.75) with
@@ -152,7 +152,7 @@ Each reader is a formula over `(front, flank, rear)` and ruleset numbers.
   - **P-21:** two threats on one flank drain no more than the worse of them.
   - **P-22:** the drain never routs a battalion by itself, and never raises a target.
   - **P-23:** a threat in front drains nothing; a square is never drained.
-- **No wavering fall-back** (decision 0071): a wavering battalion keeps fighting, with the penalties it already has,
+- **No wavering fall-back** (decision 0082): a wavering battalion keeps fighting, with the penalties it already has,
   until it recovers or routs, as in Total War. The automatic 15 m Retire (`fallBack`), its fields `falling` and
   `fellBack` and the ruleset's `morale.fallback` go. So nothing reads the morale's fall, and the drain needs no
   exception.

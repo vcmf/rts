@@ -74,7 +74,7 @@ in two stages:
 What changes while units wait:
 - **Readability guard.** The painted ground must still leave room for the armies (art bible pillar 1;
   research §c terrain 9: the ground under the battle stays mid-value and low-chroma). Each stage-1
-  screenshot set adds flat blocks in the army colours (art bible §4) at battalion size on the ground,
+  screenshot set adds flat blocks in the army colours (the era's dyes, `tools/army-blocks.mjs`) at battalion size on the ground,
   and a greyscale capture must separate every block from the ground under it. This is a cheap
   stand-in for L4, not a replacement.
 - **Budgets** are measured per pass for terrain, foliage, buildings and water; the units' share of

@@ -374,7 +374,7 @@ describe('flank support', () => {
   })
 })
 
-describe('a wavering battalion keeps fighting (decision 0071)', () => {
+describe('a wavering battalion keeps fighting (decision 0082)', () => {
   it('P-24: with no orders, losing men to an enemy in front of it, it stands and fires; it never Retires by itself', () => {
     // side 1 at x = −10 facing west, an enemy firing at it 100 m west; spawned at the default quality, its quality
     // then lowered, so its morale falls into wavering (the old fall-back's case)
@@ -401,7 +401,7 @@ describe('a wavering battalion keeps fighting (decision 0071)', () => {
   })
 })
 
-describe('the back exposed (decision 0070, sectors-model §§ 5–6)', () => {
+describe('the back exposed (decision 0081, sectors-model §§ 5–6)', () => {
   const PI = Math.PI
   const D = napoleonic.morale.drain
   // a battalion spawned on the open field with the shipped ruleset (a line of 400 holding its fire unless told)

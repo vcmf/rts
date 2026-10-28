@@ -244,7 +244,7 @@ against cavalry under fire is the period's central dilemma (L-01).
 - turning costs time (Face about 3 s; a change front tens of seconds).
 
 A battalion that marches across an enemy's front, or turns its back to retire under fire, pays all four (A-10,
-F-06). **The back exposed** (decision 0070): a battalion whose flank or back is turned to an enemy that can hurt it
+F-06). **The back exposed** (decision 0081): a battalion whose flank or back is turned to an enemy that can hurt it
 (that could fire on it, in range with a clear line, or charge it) is drained for as long as it stays so, whatever
 orders turned it. A redeployment in the open within the enemy's reach costs nerve; behind a screen of friends, or beyond
 range, nothing. From a melee there is no retiring at all (§ Collision).
@@ -422,7 +422,7 @@ with their own numbers:
 ### Firearm and melee modes
 
 Every type but artillery has a **firearm** and a **melee** mode, and the player sets which (the owner's rule,
-decision 0069); a few have one only. Artillery has no mode: it fires as § Artillery says, and does not fight a melee.
+decision 0080); a few have one only. Artillery has no mode: it fires as § Artillery says, and does not fight a melee.
 - **firearm:** it fires as § Fire says (its fire mode, and fire discipline; formed bodies fire at the halt, skirmish
   order on the move);
 - **melee:** it holds its fire, and an order to attack an enemy is a charge: cavalry's, or infantry's assault with the
@@ -519,7 +519,7 @@ hard cases (`docs/plans/active/track-s.md`). The rules a player sees, which it k
   formed again only on free ground, and never passes through an enemy.
 - **Enemies stand at contact and fire;** a charge or an assault that reaches any enemy strikes it, and the melee
   follows. **Nobody in melee gives ground:** a battalion in melee cannot step back or retreat; the melee ends when one
-  side breaks, or as today when a charger turns away from a square or the two fall out of contact (decision 0069, on
+  side breaks, or as today when a charger turns away from a square or the two fall out of contact (decision 0080, on
   the claim grid's branch).
 - **A broken battalion runs as a block:** it faces about and runs, wavering and shattered battalions keeping their
   block. Every enemy that reaches it, but one in melee with another, cuts it down, and it does not fight back; there

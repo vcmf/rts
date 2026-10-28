@@ -468,7 +468,7 @@ describe('the square against cavalry (standing behaviour)', () => {
   })
 })
 
-describe('a second enemy (decision 0069, E-16)', () => {
+describe('a second enemy (decision 0080, E-16)', () => {
   // a line of quality 1 charged in front by a regiment of quality 1; once they are in melee, a second regiment charges
   // its rear (or, with `alone`, only the second charges). The line's morale on the tick the second strikes, and the
   // state after

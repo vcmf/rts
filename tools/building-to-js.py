@@ -1,61 +1,79 @@
 # Export a building (a Tripo FBX with one baked colour texture, art bible §10) to the look page's data
-# (docs/plans/done/buildings.md): positions in metres, normals (sharp past 30°), UV0 and a per-vertex role, into
-# prototypes/buildings.data.js (window.BUILDINGS, one key a model), and the texture's value as fine detail into
-# data/buildings/<model>-detail.png. Pack colours are never used (AGENTS.md): each face takes a role (wall, roof,
-# timber, opening, accent) by the median colour of the texels under it, nearest in Lab to the model's reference colours
-# (MODELS, below); the page paints each role from the palette. The detail keeps the texture's value only, each texel
-# over its neighbourhood's mean (so it varies about 1: the fine courses and slates), stored as 128 = 1, with a neutral
-# block (value 1) the generated faces take. Each model is cut to about MODELS[...]['tris'] triangles (the flat regions
-# dissolved within a role and a UV island, then collapsed; the export fails if the cut smears the detail: SMEAR_MAX),
-# the windmill's lattice sails made again first as four solid blades on stocks (sails; MODELS['windmill']['sails']),
-# and centred on its base (the footprint: BASE_BAND).
+# (docs/plans/done/buildings.md, docs/plans/done/tripo-lowpoly-buildings.md): positions in metres, normals (sharp
+# past 30°), UV0, a light-bake UV and a per-vertex role, into prototypes/buildings.data.js (window.BUILDINGS, one key a
+# model), and data/buildings/<model>-detail.png. Pack colours are never used (AGENTS.md): each face takes a role (wall,
+# roof, timber, opening, accent) from the texels under it, each nearest in Lab to the model's reference colours
+# (MODELS, below); the page paints each role from the palette. The detail texture: R the texture's value over its
+# neighbourhood's mean (so it varies about 1: the fine courses and slates), stored as 128 = 1; G and B the openings and
+# the shutters painted inside wall and timber faces (inlays: a low-poly model paints its windows in the texture), which
+# the page paints in the opening's and the shutter's colours. The model is kept as Tripo made it (its own low-poly
+# export), centred on its base (the footprint: BASE_BAND). (The first models' cut to 2,300 triangles and the windmill's
+# rebuilt sails: git history, docs/plans/done/buildings.md.)
 #
 # Usage (from rts/; the zips are the owner's, in the git-ignored assets/buildings):
-#   blender -b --python tools/building-to-js.py -- windmill assets/buildings/windmill.zip
-#   blender -b --python tools/building-to-js.py -- house assets/buildings/house.zip
+#   blender -b --python tools/building-to-js.py -- windmill assets/buildings/windmill-low-poly.zip
+#   blender -b --python tools/building-to-js.py -- house assets/buildings/house-low-poly.zip
+#   blender -b --python tools/building-to-js.py -- farmhouse assets/buildings/building-low-poly.zip
+#   blender -b --python tools/building-to-js.py -- manor assets/buildings/building-2-low-poly.zip
 #   (a .fbx path works too; --analyse prints the texture's colour clusters instead; --render <png> saves three views
-#   of the model as cut, painted by role, flat, for checking the classification, and with --full the model before the
-#   cut; with --tex the views textured with its own texture, for checking the UVs)
+#   painted by role with the inlays in the opening's and shutter's colours, for checking the classification; with
+#   --tex the views textured with the model's own texture, for checking the UVs)
 import bpy, bmesh, json, math, os, sys, tempfile, zipfile
 import numpy as np
 
 ROLES = ['wall', 'roof', 'timber', 'opening', 'accent']   # the role ids are the indices (the page's building.frag)
+# the texels' classes: the roles and the shutter, which only an inlay takes (no face is a shutter)
+CLASSES = ROLES + ['shutter']
+HOSTS = [ROLES.index('wall'), ROLES.index('timber')]   # the roles whose faces take inlays (building.frag's host: the same)
+INLAYS = [CLASSES.index('opening'), CLASSES.index('shutter')]   # the inlays' classes, the detail's G and B
 # per model: its height or length in metres (the axis the model is fitted on), and reference colours (sRGB 0-255) per
-# role, picked from the texture's clusters (--analyse); a role may list several
+# class, picked from the texture's clusters (--analyse); a class may list several. The owner's low-poly regenerations
+# (2026-10-25: Tripo's own low-poly export, 1,454-1,794 triangles): the windmill (10-reference-windmill) with its
+# lattice sails, the stone cottage (01-stone-cottage), the farmhouse (02-village-farmhouse) and the small manor
+# (03-small-country-manor)
 MODELS = {
-    'windmill': {'fit': ('height', 15.0), 'tris': 2300, 'refs': {
-        'wall': [(191, 125, 65), (161, 105, 59), (212, 148, 87), (226, 170, 105)],
-        'roof': [(122, 49, 29), (150, 62, 36), (100, 40, 26)],
-        'timber': [(99, 64, 37), (114, 77, 47), (83, 51, 29), (66, 38, 21)],
-        'opening': [(36, 24, 16), (24, 18, 14)],
-    }, 'up': {'roof': (0.15, 1.01), 'wall': (-0.2, 0.75), 'opening': (-0.5, 0.5)},
-       # the lattice sails (sails(), the model's units): a loose part in the plane y `plane`, thinner across it than
-       # `thin`, and either longer than `long` or off the tower's front column (|x| over `column`, or its centre's height
-       # out of `window_z`: the tower's windows lie in that plane too); the new stock's width and depth, the blade's start
-       # along the arm (a share), its offset to the side, width and depth
-       'sails': {'plane': (-0.2, -0.155), 'thin': 0.03, 'long': 0.08, 'column': 0.12, 'window_z': (0.45, 0.72),
-                 'stock': (0.012, 0.010), 'blade': (0.22, 0.026, 0.048, 0.004)}},
-    'house': {'fit': ('length', 11.0), 'tris': 2300, 'refs': {
-        'wall': [(174, 154, 125), (188, 167, 138), (158, 139, 113), (201, 180, 151), (217, 197, 169)],
-        'roof': [(90, 85, 78), (68, 65, 60), (114, 103, 88)],
+    'windmill': {'fit': ('height', 15.0), 'refs': {
+        'wall': [(191, 125, 65), (161, 105, 59), (212, 148, 87), (226, 170, 105), (184, 122, 67), (210, 144, 79),
+                 (234, 182, 127), (150, 103, 65)],
+        'roof': [(122, 49, 29), (150, 62, 36), (100, 40, 26), (131, 56, 33)],
+        'timber': [(99, 64, 37), (114, 77, 47), (83, 51, 29), (66, 38, 21), (90, 56, 34), (67, 39, 22), (107, 70, 43)],
+        'opening': [(36, 24, 16), (24, 18, 14), (4, 1, 0)],
+    }, 'up': {'roof': (0.15, 1.01), 'wall': (-0.2, 0.75), 'opening': (-0.5, 0.5)}},
+    'house': {'fit': ('length', 11.0), 'refs': {
+        'wall': [(174, 154, 125), (188, 167, 138), (158, 139, 113), (201, 180, 151), (217, 197, 169), (183, 163, 136),
+                 (165, 147, 121), (226, 207, 180), (145, 130, 108)],
+        'roof': [(90, 85, 78), (68, 65, 60), (114, 103, 88), (97, 93, 86), (80, 78, 73)],
         'timber': [(166, 104, 66), (140, 86, 54), (112, 84, 58)],
-        'opening': [(39, 38, 35), (24, 24, 24)],
+        'opening': [(39, 38, 35), (24, 24, 24), (40, 38, 34)],
         'accent': [(166, 104, 66), (190, 128, 84), (140, 86, 54)],
     }, 'up': {'roof': (0.3, 1.01), 'wall': (-0.2, 0.55), 'opening': (-0.5, 0.5)},
        'zr': {'accent': (0.86, 1.01), 'timber': (-0.01, 0.86)}},
+    'farmhouse': {'fit': ('length', 13.0), 'refs': {
+        'wall': [(191, 169, 138), (170, 149, 121), (148, 130, 106), (212, 190, 160), (128, 108, 87)],
+        'roof': [(89, 63, 47), (114, 79, 58), (60, 43, 32)],
+        'opening': [(8, 3, 0), (30, 26, 22)],
+        'shutter': [(105, 110, 95), (90, 96, 82), (120, 125, 108)],   # the grey-green shutters
+    # (the farmhouse's walls any way up: its stone sills, which a roof's bound made tiles; the manor's slates are too
+    # near its shaded stone for that, its sills stay slate)
+    }, 'up': {'roof': (0.3, 1.01), 'opening': (-0.5, 0.5), 'shutter': (-0.3, 0.3)}},
+    'manor': {'fit': ('length', 15.0), 'refs': {
+        'wall': [(186, 163, 130), (170, 147, 116), (151, 130, 101), (204, 180, 147), (224, 201, 170), (131, 112, 87)],
+        'roof': [(87, 74, 58), (67, 57, 44), (110, 93, 72)],
+        'opening': [(38, 29, 19)],
+    }, 'up': {'roof': (0.3, 1.01), 'wall': (-0.2, 0.55), 'opening': (-0.5, 0.5)}},
 }
-# 'up': per role the range of a face's normal's upward component it may take (a roof faces up, a wall stands): the
+# 'up': per class the range of a face's normal's upward component it may take (a roof faces up, a wall stands): the
 # colours alone do not split a shaded wall from a slate or a lit beam from a wall stone; 'zr': the range of a face's
-# height, as a share of the model's, a role may take (the house's terracotta chimney pots: its frames are timber)
+# height, as a share of the model's, a class may take (the house's terracotta chimney pots: its frames are timber)
 LIGHT_MARGIN = 0.018   # the light UVs' islands apart, a share of the square (smart project's margin)
 # the light atlas's tile as the bake fills it (src/look/building-light.ts: TILE - 2 INSET texels a side) and the least
 # gap between two islands' texels there (its MIN_GAP: a read at its MAX_LOD stays in its island's half of the gap):
 # the export fails under it (the texels any part of a face touches, as the bake's points and lines draw them)
 LIGHT_TEXELS = 252; LIGHT_MIN_GAP = 5
-SMEAR_MAX = 0.02   # the share of the surface the cut may smear (smear) before the export fails
 BASE_BAND = 0.06   # the base band the model is centred on, a share of its height
-DISSOLVE_DEG = 4   # the planar dissolve's angle: faces flatter than this to each other merge (within a role)
 DETAIL_BOX, DETAIL_CLIP = 4, (0.6, 1.5)   # the detail's local mean: a 9-texel box at 512²; its range
+CLOSE = 2   # the inlays' closing, texels at DETAIL_PX (one left a mullioned window's panes ragged)
+DETAIL_PX = 512   # the detail texture's side (the source's mean over blocks: a value detail needs no more)
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 def srgb_to_lab(c):   # c: (..., 3) in 0..1
@@ -94,17 +112,19 @@ def clusters(px, k=10):
     n = np.bincount(l, minlength=k)
     for j in np.argsort(-n): print('  ', tuple(int(v * 255) for v in c[j]), f'{n[j] / len(a) * 100:.1f}%')
 
-def classify(cols, refs, up=None, nz=None, zr=None, hz=None):   # cols: (n, 3) 0..1 -> role ids; nz: each face's normal's up component, hz its height share
-    names = [r for r in ROLES if r in refs]
-    ref = np.array([c for r in names for c in refs[r]], dtype=np.float64) / 255; rid = np.array([ROLES.index(r) for r in names for _ in refs[r]])
+def classify(cols, refs, up=None, nz=None, zr=None, hz=None):
+    # cols: (n, 3) 0..1 -> class ids (CLASSES), each the nearest in Lab of the classes in refs; nz: each one's face's
+    # normal's up component, hz its height share (the up and zr bounds)
+    names = [r for r in CLASSES if r in refs]
+    ref = np.array([c for r in names for c in refs[r]], dtype=np.float64) / 255; rid = np.array([CLASSES.index(r) for r in names for _ in refs[r]])
     d = ((srgb_to_lab(cols)[:, None] - srgb_to_lab(ref)[None]) ** 2).sum(-1)
     if up and nz is not None:
         for j, r in enumerate(rid):
-            rng = up.get(ROLES[r])
+            rng = up.get(CLASSES[r])
             if rng: d[:, j] += np.where((nz < rng[0]) | (nz > rng[1]), 1e6, 0)
     if zr and hz is not None:
         for j, r in enumerate(rid):
-            rng = zr.get(ROLES[r])
+            rng = zr.get(CLASSES[r])
             if rng: d[:, j] += np.where((hz < rng[0]) | (hz > rng[1]), 1e6, 0)
     return rid[d.argmin(1)]
 
@@ -116,38 +136,27 @@ def main():
     h, w = px.shape[:2]
     me = obj.data; bm = bmesh.new(); bm.from_mesh(me); bmesh.ops.triangulate(bm, faces=bm.faces[:]); bm.to_mesh(me); bm.free()
     obj.data.transform(obj.matrix_world); obj.matrix_world.identity()
-    uvl = me.uv_layers.active.data
-    # the role per face: the median of 7 texels under its UV triangle (its centroid, its corners pulled in, its edges)
+    uvl = me.uv_layers.active.data   # (the texture's UVs: the one layer a Tripo export has, the detail's, UV0)
+    nz = np.array([f.normal.z for f in me.polygons]); fz = np.array([f.center.z for f in me.polygons])
+    hz = (fz - fz.min()) / max(fz.max() - fz.min(), 1e-6)
+    # a first role per face (the faces too small to hold four detail texels keep it): the median of 7 texels under its
+    # UV triangle (its centroid, its corners pulled in, its edges), of the roles only (no face is a shutter)
     bary = np.array([[1/3, 1/3, 1/3], [0.6, 0.2, 0.2], [0.2, 0.6, 0.2], [0.2, 0.2, 0.6], [0.45, 0.45, 0.1], [0.1, 0.45, 0.45], [0.45, 0.1, 0.45]])
     nf = len(me.polygons); cols = np.zeros((nf, 3))
     for f in me.polygons:
         uv = np.array([uvl[li].uv[:] for li in f.loop_indices]); s = bary @ uv
         xi = np.clip((s[:, 0] % 1) * w, 0, w - 1).astype(int); yi = np.clip((s[:, 1] % 1) * h, 0, h - 1).astype(int)
         cols[f.index] = np.median(px[yi, xi], 0)
-    nz = np.array([f.normal.z for f in me.polygons]); fz = np.array([f.center.z for f in me.polygons])
-    hz = (fz - fz.min()) / max(fz.max() - fz.min(), 1e-6)
-    role = classify(cols, cfg['refs'], cfg.get('up'), nz, cfg.get('zr'), hz)
-    print(name, 'faces', nf, {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()})
-    if '--render' in args and '--full' in args: render(obj, role, args[args.index('--render') + 1], img if '--tex' in args else None); return
-    # the triangles cut to about cfg['tris'] (about 26 cm a triangle at the source: two or three pixels at the default
-    # zoom, under one wide, so the GPU likely shaded each pixel several times: an estimate, the bench measures it): the
-    # roles as materials first, so no face of one
-    # role merges with another's; the windmill's lattice sails, which no cut keeps, made again as solid blades (sails)
-    before = {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()}
-    set_roles(obj, role)
-    smear0 = smear(obj)
-    # the windmill's lattice taken out and measured first (its arms), the cut, then the solid blades built on the cut
-    # mesh (a cut after them flattened their thin boxes: their faces checked once built, so built last)
-    plan = sails_find(obj, cfg['sails']) if cfg.get('sails') else None
-    decimate(obj, cfg['tris'] - (SAIL_TRIS if plan else 0))
-    if plan: sails_build(obj, cfg['sails'], *plan); triangulate(obj)
-    me = obj.data; uvl = me.uv_layers.active.data   # (the mesh's layers made again by the cut: read them anew)
-    role = np.array([f.material_index for f in me.polygons])
-    after = {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()}
-    print(name, 'tris', sum(before.values()), '->', len(me.polygons), 'by role', before, '->', after)
-    sm = smear(obj); print(name, f'smear (the surface share whose texel density strays 4x from the median): {smear0:.3f} -> {sm:.3f}')
-    if sm > SMEAR_MAX: raise SystemExit(f'{name}: the cut smeared {sm:.3f} of the surface\'s detail (over {SMEAR_MAX})')
-    if '--render' in args: render(obj, role, args[args.index('--render') + 1], img if '--tex' in args else None); return
+    face_refs = {k: v for k, v in cfg['refs'].items() if k in ROLES}
+    role = classify(cols, face_refs, cfg.get('up'), nz, cfg.get('zr'), hz)
+    small = detail_scale(px); sh_, sw_ = small.shape[:2]
+    fid, tx, ty = texels(me, uvl, sw_, sh_)
+    tcls = classify(small[ty, tx], cfg['refs'], cfg.get('up'), nz[fid], cfg.get('zr'), hz[fid])
+    role, inlay = vote(role, fid, tx, ty, tcls, (sh_, sw_))
+    print(name, 'tris', nf, 'by role', {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()},
+          'inlay texels', {CLASSES[c]: int(inlay[..., k].sum()) for k, c in enumerate(INLAYS)})
+    if '--render' in args:
+        render(obj, args[args.index('--render') + 1], img if '--tex' in args else role_image(role, fid, tx, ty, inlay)); return
     # the fit: Blender's Z up; the model to its height, or its length along x
     co = np.array([v.co[:] for v in me.vertices]); lo, hi = co.min(0), co.max(0)
     axis, size = cfg['fit']; k = size / ((hi[2] - lo[2]) if axis == 'height' else (hi[0] - lo[0]))
@@ -161,7 +170,7 @@ def main():
     bpy.context.view_layer.objects.active = obj; obj.select_set(True)
     if 'FINISHED' not in bpy.ops.object.shade_smooth_by_angle(angle=math.radians(30)): raise SystemExit('the sharp edges (shade smooth by angle) failed')
     cn = me.corner_normals
-    uv2 = me.uv_layers['light'].data; uvl = me.uv_layers[0].data   # (the light bake's UVs; the detail's the first layer)
+    uv2 = me.uv_layers['light'].data; uvl = me.uv_layers.active.data   # (light_uvs left the texture's layer active)
     pos, nrm, uvs, uv2s, rol, idx, key = [], [], [], [], [], [], {}
     for f in me.polygons:
         for li in f.loop_indices:
@@ -183,20 +192,11 @@ def main():
     if gap < LIGHT_MIN_GAP: raise SystemExit(f'{name}: two light-UV islands {gap} texels apart (under {LIGHT_MIN_GAP}: raise LIGHT_MARGIN)')
     data = {'pos': pos, 'nrm': nrm, 'uv': uvs, 'uv2': uv2s, 'role': rol, 'idx': idx, 'min': p3.min(0).round(3).tolist(), 'max': p3.max(0).round(3).tolist()}
     print(name, 'verts', len(rol), 'tris', len(idx) // 3, 'size m', (p3.max(0) - p3.min(0)).round(2).tolist())
-    # the detail: the texture's value over its local mean (a box of DETAIL_BOX texels round it), so only the fine
-    # value (stone courses, slates, planks) is kept, whatever the region: a texel's role guessed by its colour flipped
-    # between neighbours on the windmill's brown tower (mortar read as timber) and blotched it. Clipped to DETAIL_CLIP
-    # (512² is enough for a value detail: each texel the mean of its st × st block, no aliasing)
-    st = max(1, w // 512); hh, ww = h // st * st, w // st * st
-    small = px[:hh, :ww].reshape(hh // st, st, ww // st, st, 3).mean((1, 3)); sh_, sw_ = small.shape[:2]
-    val = small @ np.array([0.2126, 0.7152, 0.0722])
-    k_ = DETAIL_BOX; pad = np.pad(val, k_, mode='edge'); c_ = pad.cumsum(0).cumsum(1); c_ = np.pad(c_, ((1, 0), (1, 0)))
-    n_ = 2 * k_ + 1; loc = (c_[n_:, n_:] - c_[:-n_, n_:] - c_[n_:, :-n_] + c_[:-n_, :-n_]) / (n_ * n_)
-    det = np.clip(val / np.maximum(loc, 1e-3), *DETAIL_CLIP)
-    det8 = np.clip(det * 128, 0, 255).astype(np.uint8)
+    det = detail(small, inlay.max(-1) > 0)
     out_dir = os.path.join(REPO, 'data', 'buildings'); os.makedirs(out_dir, exist_ok=True)
-    im = bpy.data.images.new(name + '-detail', sw_, sh_, alpha=False); g = det8.astype(np.float32) / 255
-    im.pixels[:] = np.dstack([g, g, g, np.ones_like(g)]).ravel(); im.filepath_raw = os.path.join(out_dir, name + '-detail.png'); im.file_format = 'PNG'; im.save()
+    im = bpy.data.images.new(name + '-detail', sw_, sh_, alpha=False); g = np.clip(det * 128, 0, 255).astype(np.uint8).astype(np.float32) / 255
+    im.pixels[:] = np.dstack([g, inlay[..., 0], inlay[..., 1], np.ones_like(g)]).ravel()
+    im.filepath_raw = os.path.join(out_dir, name + '-detail.png'); im.file_format = 'PNG'; im.save()
     # the data file: one key a model, the others kept (the models are exported one by one)
     out = os.path.join(REPO, 'prototypes', 'buildings.data.js'); allm = {}
     if os.path.exists(out):
@@ -207,27 +207,160 @@ def main():
         f.write('window.BUILDINGS=' + json.dumps(allm, separators=(',', ':')) + ';\n')
     print('wrote', out, os.path.getsize(out), 'bytes;', im.filepath_raw)
 
-def set_roles(obj, role):   # each face's role as its material index (a material a role)
-    me = obj.data; me.materials.clear()
-    for r in ROLES: me.materials.append(bpy.data.materials.get('role_' + r) or bpy.data.materials.new('role_' + r))
-    for f in me.polygons: f.material_index = int(role[f.index])
+def detail_scale(px):   # the texture at the detail's scale (DETAIL_PX), each texel the mean of its st × st block
+    h, w = px.shape[:2]; st = max(1, w // DETAIL_PX); hh, ww = h // st * st, w // st * st
+    return px[:hh, :ww].reshape(hh // st, st, ww // st, st, 3).mean((1, 3))
 
-def decimate(obj, target):
-    # first the flat regions dissolved (walls, roof planes, the tower's courses: within DISSOLVE_DEG, never across a
-    # role or a UV seam), then collapsed to the target. Each face keeps its role (its material) through the collapse, so
-    # no triangle is of two roles; the borders and the UV seams are not held: Tripo's atlas puts 94-96 % of the vertices
-    # on a seam and its parts leave open edges everywhere, and held they kept the cut from cutting (the house 8,277 to
-    # 7,682 with the seams held, 6,478 with the role borders and open edges). What the collapse does to the detail is
-    # measured instead (smear, printed and bounded in main: the surface share whose texel density strays 4x) and seen
-    # (--render --tex). Triangles at the end. Deterministic (Blender's modifiers, no randomness)
-    bpy.context.view_layer.objects.active = obj; obj.select_set(True)
-    m = obj.modifiers.new('dissolve', 'DECIMATE'); m.decimate_type = 'DISSOLVE'; m.angle_limit = math.radians(DISSOLVE_DEG); m.delimit = {'MATERIAL', 'UV'}
-    bpy.ops.object.modifier_apply(modifier=m.name); triangulate(obj)
-    n = len(obj.data.polygons)
-    if n > target:
-        m = obj.modifiers.new('collapse', 'DECIMATE'); m.decimate_type = 'COLLAPSE'; m.ratio = target / n; m.use_collapse_triangulate = True
-        bpy.ops.object.modifier_apply(modifier=m.name)
-    triangulate(obj)
+def box_sum(a, k):   # the sum of a over the (2k+1)² box round each texel (edges repeated)
+    p = np.pad(a, k, mode='edge'); c = np.pad(p.cumsum(0).cumsum(1), ((1, 0), (1, 0))); n = 2 * k + 1
+    return c[n:, n:] - c[:-n, n:] - c[n:, :-n] + c[:-n, :-n]
+
+def detail(small, inl):
+    # the detail's value: each texel's value over its local mean (a box of DETAIL_BOX texels round it), so only the fine
+    # value (stone courses, slates, planks) is kept, whatever the region (a texel's role guessed by its colour flipped
+    # between neighbours on the windmill's brown tower and blotched it), clipped to DETAIL_CLIP. The inlays' texels are
+    # out of the mean (a painted window darkened it and left a pale rim round each window) and 1 themselves (the page
+    # paints them in their own colour)
+    val = small @ np.array([0.2126, 0.7152, 0.0722]); keep = (~inl).astype(np.float64)
+    ws = box_sum(keep, DETAIL_BOX); loc = np.where(ws > 0, box_sum(val * keep, DETAIL_BOX) / np.maximum(ws, 1e-9), val)
+    det = np.clip(val / np.maximum(loc, 1e-3), *DETAIL_CLIP)
+    det[inl] = 1.0
+    return det
+
+def texels(me, uvl, sw_, sh_):
+    # each face's texels at the detail's scale (their centres inside its UV triangle): the face ids and the texels'
+    # columns and rows (rows from the bottom, as Blender's pixels)
+    fid, tx, ty = [], [], []
+    for f in me.polygons:
+        uv = np.array([uvl[li].uv[:] for li in f.loop_indices]) * (sw_, sh_)
+        lo = np.floor(uv.min(0)).astype(int); hi = np.ceil(uv.max(0)).astype(int)
+        X, Y = np.meshgrid(np.arange(lo[0], hi[0] + 1) + 0.5, np.arange(lo[1], hi[1] + 1) + 0.5)
+        a, b, c = uv; d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(d) < 1e-12: continue
+        l1 = ((b[1] - c[1]) * (X - c[0]) + (c[0] - b[0]) * (Y - c[1])) / d
+        l2 = ((c[1] - a[1]) * (X - c[0]) + (a[0] - c[0]) * (Y - c[1])) / d
+        ins = (l1 >= 0) & (l2 >= 0) & (1 - l1 - l2 >= 0)
+        xs = np.floor(X[ins]).astype(int) % sw_; ys = np.floor(Y[ins]).astype(int) % sh_
+        fid += [f.index] * len(xs); tx += xs.tolist(); ty += ys.tolist()
+    return np.array(fid, int), np.array(tx, int), np.array(ty, int)
+
+def vote(role, fid, tx, ty, tcls, shape, min_share=0.25):
+    # the roles from the texels' classes (tcls): a face of at least 4 texels takes their most common role other than
+    # opening and the shutter if those other roles are at least min_share of its texels, else the most common class
+    # (a shutter's: its most common role). In a wall or timber face (HOSTS), the opening's and the shutter's
+    # texels become inlays: a mask each (G opening, B shutter; 0..1, rows from the bottom as the detail's), each texel
+    # kept only with 4 of its 3 x 3 neighbours the same (no speck of shadow read as a window), closed by CLOSE texels
+    # within its host island (two windows nearer than that on one island may join: the rectangle test then judges them), off every texel a face of another role also covers (an island's edge: building.frag gates the
+    # role too), in a part about a rectangle with its holes filled (boxy: a blotch of shade on a face Tripo textured
+    # with its roof's slates is not; a shutter's darker planks, a window's bars filled), the opening over the shutter
+    # where both are. Returns the roles and the masks
+    nf, nc = len(role), len(CLASSES)
+    cnt = np.zeros((nf, nc), int); np.add.at(cnt, (fid, tcls), 1)
+    tot = cnt.sum(1); base = cnt.copy(); base[:, INLAYS] = 0
+    pick = np.where(base.sum(1) >= min_share * tot, base.argmax(1), cnt.argmax(1))
+    # (a face mostly of the shutter's texels: its most common role of its own texels, a window's glass greyed like a
+    # shutter an opening; with none, wall: never the first, median role)
+    roles_only = cnt[:, :len(ROLES)]
+    pick = np.where(pick == CLASSES.index('shutter'), np.where(roles_only.sum(1) > 0, roles_only.argmax(1), HOSTS[0]), pick)
+    new = np.where(tot >= 4, pick, role)
+    print('vote: faces whose role changed', int((new != role).sum()), 'of', nf)
+    role = new; host = np.isin(role[fid], HOSTS)
+    other = np.zeros(shape, bool); other[ty[~host], tx[~host]] = True
+    hostcov = np.zeros(shape, bool); hostcov[ty[host], tx[host]] = True; hostcov &= ~other
+    islands = parts(hostcov, diag=False)
+    sh_, sw_ = shape; mask = np.zeros((sh_, sw_, len(INLAYS)), np.float32)
+    for k, c in enumerate(INLAYS):
+        m = np.zeros(shape, bool); sel = (tcls == c) & host; m[ty[sel], tx[sel]] = True; m &= hostcov
+        m &= near(m) >= 5   # (itself and 4 neighbours)
+        # closed by CLOSE texels within each host island (no bridge to another island), its parts kept if boxy, their
+        # holes filled, and again only on the host's texels (a filled hole never lands on another role's)
+        cm = np.zeros(shape, bool)
+        for ys, xs in islands:
+            y0, x0, y1, x1 = ys.min(), xs.min(), ys.max() + 1, xs.max() + 1
+            isl = np.zeros((y1 - y0 + 2 * CLOSE, x1 - x0 + 2 * CLOSE), bool); isl[ys - y0 + CLOSE, xs - x0 + CLOSE] = True
+            sub = np.zeros_like(isl); sub[CLOSE:-CLOSE, CLOSE:-CLOSE] = m[y0:y1, x0:x1]; sub &= isl
+            if sub.any(): cm[y0:y1, x0:x1] |= (closed(sub, CLOSE) & isl)[CLOSE:-CLOSE, CLOSE:-CLOSE]
+        mask[..., k] = boxy(cm) * hostcov
+    # (the opening wins where both are: a narrow window between two shutters stays a window)
+    mask[..., 1] *= 1 - mask[..., 0]
+    return role, mask
+
+def parts(m, diag=True):
+    # the connected parts of a mask (8-connected, or 4 with diag False), each as its rows and columns
+    seen = np.zeros(m.shape, bool); h, w = m.shape; out = []
+    nb = [(dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1) if (dy or dx) and (diag or not (dy and dx))]
+    for y0, x0 in zip(*np.nonzero(m)):
+        if seen[y0, x0]: continue
+        st = [(y0, x0)]; seen[y0, x0] = True; part = []
+        while st:
+            y, x = st.pop(); part.append((y, x))
+            for dy, dx in nb:
+                yy, xx = y + dy, x + dx
+                if 0 <= yy < h and 0 <= xx < w and m[yy, xx] and not seen[yy, xx]: seen[yy, xx] = True; st.append((yy, xx))
+        p = np.array(part); out.append((p[:, 0], p[:, 1]))
+    return out
+
+def near(m):   # the count of set texels in each texel's 3 x 3 box (itself included; outside the image unset)
+    h, w = m.shape; p = np.pad(m, 1).astype(int)
+    return sum(p[1 + dy:h + 1 + dy, 1 + dx:w + 1 + dx] for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+
+def closed(m, n):   # m closed by n texels: n dilations, then n erosions (3 x 3 each)
+    for _ in range(n): m = near(m) > 0
+    for _ in range(n): m = near(m) == 9
+    return m
+
+def boxy(m, fill=0.55):
+    # the mask's 8-connected parts kept where they fill at least `fill` of their bounding box (a window, a pane, a
+    # shutter is a rectangle), their holes filled, as 0..1 (boxy's 8 neighbours can join two diagonal-touching parts
+    # into one: the plan's open questions)
+    out = np.zeros(m.shape, np.float32)
+    for py, px_ in parts(m):
+        p = np.stack([py, px_], 1); box = (np.ptp(p[:, 0]) + 1) * (np.ptp(p[:, 1]) + 1)
+        if len(p) >= fill * box:
+            out[p[:, 0], p[:, 1]] = 1
+            # its holes filled (the texels of its box no path outside the part reaches from the box's edge: a door's
+            # or a shutter's lit planks)
+            y0_, x0_ = p.min(0); y1_, x1_ = p.max(0); sub = np.zeros((y1_ - y0_ + 1, x1_ - x0_ + 1), bool)
+            sub[p[:, 0] - y0_, p[:, 1] - x0_] = True; hh_, ww_ = sub.shape; ext = np.zeros_like(sub)
+            st = [(y, x) for y in range(hh_) for x in (0, ww_ - 1)] + [(y, x) for x in range(ww_) for y in (0, hh_ - 1)]
+            st = [(y, x) for y, x in st if not sub[y, x]]
+            for y, x in st: ext[y, x] = True
+            while st:
+                y, x = st.pop()
+                for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                    if 0 <= yy < hh_ and 0 <= xx < ww_ and not sub[yy, xx] and not ext[yy, xx]: ext[yy, xx] = True; st.append((yy, xx))
+            ys_, xs_ = np.nonzero(~sub & ~ext); out[ys_ + y0_, xs_ + x0_] = 1
+    return out
+
+# the --render colours: wall, roof, timber, opening, accent; then the shutter
+RENDER_COLS = np.array([(0.85, 0.75, 0.55), (0.75, 0.15, 0.1), (0.35, 0.2, 0.1), (0.05, 0.05, 0.05), (0.2, 0.6, 0.9),
+                        (0.2, 0.8, 0.3)])
+
+def role_image(role, fid, tx, ty, inlay):
+    # a texture for --render at the detail's scale: each texel its face's role colour, the inlays in the opening's and
+    # the shutter's (as the page paints them), grey where no face is
+    sh_, sw_ = inlay.shape[:2]; c = np.full((sh_, sw_, 3), 0.5); c[ty, tx] = RENDER_COLS[role[fid]]
+    for k, cl in enumerate(INLAYS): c = np.where(inlay[..., k:k + 1] > 0, RENDER_COLS[cl], c)
+    im = bpy.data.images.new('roles', sw_, sh_, alpha=False); im.pixels[:] = np.dstack([c, np.ones((sh_, sw_))]).ravel()
+    return im
+
+def render(obj, out, img):   # three views textured with img (role_image's, or with --tex the model's own)
+    me = obj.data
+    tm = bpy.data.materials.new('tex'); tm.use_nodes = True; n = tm.node_tree.nodes.new('ShaderNodeTexImage'); n.image = img
+    n.interpolation = 'Closest'; tm.node_tree.nodes.active = n
+    me.materials.clear(); me.materials.append(tm)
+    for f in me.polygons: f.material_index = 0
+    sc = bpy.context.scene; sc.render.engine = 'BLENDER_WORKBENCH'; sc.display.shading.light = 'STUDIO'; sc.display.shading.color_type = 'TEXTURE'
+    sc.render.resolution_x = 900; sc.render.resolution_y = 600
+    sc.world = bpy.data.worlds.new('w'); sc.world.color = (0.8, 0.8, 0.8)
+    import mathutils
+    cam = bpy.data.cameras.new('c'); co = bpy.data.objects.new('c', cam); sc.collection.objects.link(co); sc.camera = co
+    cam.type = 'ORTHO'; cam.ortho_scale = 1.6
+    for k, (az, el) in enumerate([(35, 25), (215, 25), (35, 70)]):
+        a, e = math.radians(az), math.radians(el); d = 3
+        co.location = (d * math.cos(e) * math.sin(a), -d * math.cos(e) * math.cos(a), 0.45 + d * math.sin(e))
+        co.rotation_euler = (mathutils.Vector((0, 0, 0.45)) - co.location).to_track_quat('-Z', 'Y').to_euler()
+        sc.render.filepath = out.replace('.png', f'-{k}.png'); bpy.ops.render.render(write_still=True)
 
 def light_uvs(obj):
     # the light bake's UVs (src/look/building-light.ts: a 256² tile an instance): Blender's smart UV project into a
@@ -287,120 +420,5 @@ def light_gap(uv, pos, idx, n=LIGHT_TEXELS, most=LIGHT_MIN_GAP + 3):
             a = img[max(0, dy):n + min(0, dy), max(0, dx):n + min(0, dx)]; b = img[max(0, -dy):n + min(0, -dy), max(0, -dx):n + min(0, -dx)]
             if ((a >= 0) & (b >= 0) & (a != b)).any(): gap = d
     return gap
-
-def smear(obj):
-    # the share of the surface whose texel density (UV area over area) strays more than 4x from the model's median: a
-    # cut that stretches a face over a UV seam smears the detail there (faces with no UV area, the generated sails on
-    # the neutral texel, left out)
-    me = obj.data; uvl = me.uv_layers.active.data; a3, au = [], []
-    for f in me.polygons:
-        if len(f.loop_indices) < 3: continue
-        uv = [uvl[li].uv for li in f.loop_indices]; u0 = uv[0]
-        au.append(sum(abs((uv[i][0] - u0[0]) * (uv[i + 1][1] - u0[1]) - (uv[i + 1][0] - u0[0]) * (uv[i][1] - u0[1])) for i in range(1, len(uv) - 1)) / 2); a3.append(f.area)
-    a3, au = np.array(a3), np.array(au); ok = (a3 > 1e-9) & (au > 1e-12); dens = au[ok] / a3[ok]; med = np.median(dens)
-    bad = (dens > med * 4) | (dens < med / 4)
-    return float(a3[ok][bad].sum() / a3[ok].sum())
-
-def triangulate(obj):
-    bm = bmesh.new(); bm.from_mesh(obj.data); bmesh.ops.triangulate(bm, faces=bm.faces[:]); bm.to_mesh(obj.data); bm.free()
-
-# the generated faces' UV (the windmill's sails): below 0, which building.frag reads as no detail (value 1), so they
-# show their palette colour as it is and no texel of the atlas is given up for them (Tripo packs it full)
-NEUTRAL_UV = (-1.0, -1.0)
-
-def sails_find(obj, cfg):
-    # the windmill's sails: its lattice (thin loose parts in the plane just before the cap: cfg, MODELS) taken out and
-    # made again as four arms in the same X: a stock (timber, a long thin box) and a solid blade on its trailing side
-    # (the canvas: the accent role), the hub and each arm's direction and length from the lattice's own vertices
-    me = obj.data; bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table(); bm.verts.ensure_lookup_table()
-    seen, parts = set(), []
-    for f in bm.faces:
-        if f.index in seen: continue
-        stack, comp = [f], []
-        seen.add(f.index)
-        while stack:
-            g = stack.pop(); comp.append(g)
-            for v in g.verts:
-                for h in v.link_faces:
-                    if h.index not in seen: seen.add(h.index); stack.append(h)
-        parts.append(comp)
-    sail, (y0, y1) = [], cfg['plane']
-    for comp in parts:
-        c = np.array([v.co[:] for g in comp for v in g.verts]); lo, hi = c.min(0), c.max(0)
-        mz = (lo[2] + hi[2]) / 2
-        if lo[1] > y0 and hi[1] < y1 and hi[1] - lo[1] < cfg['thin'] and (max(hi[0] - lo[0], hi[2] - lo[2]) > cfg['long'] or abs((lo[0] + hi[0]) / 2) > cfg['column'] or mz > cfg['window_z'][1] or mz < cfg['window_z'][0]):
-            sail += comp
-    if not sail: raise SystemExit('the windmill: no sails found in their plane')
-    sv = np.array([v.co[:] for g in sail for v in g.verts]); hub = np.array([np.median(sv[:, 0]), sv[:, 1].min(), np.median(sv[:, 2])])
-    # the arms: the lattice's vertices round the hub split into four by angle (from the quadrants, then each vertex to
-    # its nearest arm's angle, three times over), each arm along its farthest vertices' mean
-    d = sv[:, [0, 2]] - hub[[0, 2]]; ang = np.arctan2(d[:, 1], d[:, 0]); rr = np.hypot(d[:, 0], d[:, 1])
-    arm_ang = np.array([-0.75 * np.pi, -0.25 * np.pi, 0.25 * np.pi, 0.75 * np.pi])
-    for _ in range(3):
-        lab = np.abs(np.angle(np.exp(1j * (ang[:, None] - arm_ang[None])))).argmin(1)
-        for q in range(4):
-            m_ = lab == q
-            if m_.sum() >= 10: far = rr[m_] >= np.percentile(rr[m_], 90); u = d[m_][far].mean(0); arm_ang[q] = np.arctan2(u[1], u[0])
-    arms = []
-    for q in range(4):
-        m_ = lab == q
-        if m_.sum() < 10: continue
-        arms.append((np.array([np.cos(arm_ang[q]), np.sin(arm_ang[q])]), np.percentile(rr[m_], 99.5)))
-    print('the sails: hub', hub.round(3), 'arms', [(a[0].round(2).tolist(), round(float(a[1]), 3)) for a in arms], 'lattice faces', len(sail))
-    if len(arms) != 4: raise SystemExit(f'the windmill: {len(arms)} sail arms found, four expected')
-    bmesh.ops.delete(bm, geom=list({g for g in sail}), context='FACES')
-    bm.normal_update(); bm.to_mesh(me); bm.free()
-    return hub, arms
-
-# the triangles of the generated sails: four arms, a stock and a blade each, six quads a box
-SAIL_TRIS = 4 * 2 * 6 * 2
-
-def sails_build(obj, cfg, hub, arms):
-    # the stocks and blades (sails_find's hub and arms) built on the cut mesh, each box's faces outward (checked)
-    me = obj.data; bm = bmesh.new(); bm.from_mesh(me)
-    uvl = bm.loops.layers.uv.active; made = []
-    def box(c0, c1, wdt, dep, mat):   # a box from c0 to c1 (x, z in the plane, y the plane's depth), wdt across, dep deep
-        a = np.array([c0[0], hub[1], c0[1]]); b = np.array([c1[0], hub[1], c1[1]]); t = (b - a) / np.linalg.norm(b - a); n_ = np.array([0.0, 1.0, 0.0]); s_ = np.cross(t, n_)
-        vs = [bm.verts.new((p + s_ * sx * wdt / 2 + n_ * sy * dep / 2).tolist()) for p in (a, b) for sx in (-1, 1) for sy in (-1, 1)]
-        ctr = (a + b) / 2
-        for q_ in ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)):
-            f = bm.faces.new([vs[i] for i in q_]); f.material_index = mat; f.normal_update()
-            # (outward: each face's normal away from its box's centre)
-            if np.dot(np.array(f.normal[:]), np.array(f.calc_center_median()[:]) - ctr) < 0: f.normal_flip()
-            for l in f.loops: l[uvl].uv = NEUTRAL_UV
-            made.append((f, ctr))
-    for u, L in arms:
-        side = np.array([-u[1], u[0]])   # the blade on the arm's one side (the sails turn one way: the same side each)
-        h2 = hub[[0, 2]]; st, (b0, bo, bw, bd) = cfg['stock'], cfg['blade']
-        box(h2, h2 + u * L, st[0], st[1], ROLES.index('timber'))
-        box(h2 + u * L * b0 + side * bo, h2 + u * L + side * bo, bw, bd, ROLES.index('accent'))
-    out = sum(1 for f, ctr in made if np.dot(np.array(f.normal[:]), np.array(f.calc_center_median()[:]) - ctr) > 0)
-    print(f'the sails: {out} of {len(made)} new faces face out')
-    if out != len(made): raise SystemExit('the windmill: a sail face faces in')
-    bm.normal_update(); bm.to_mesh(me); bm.free()
-
-def render(obj, role, out, img=None):   # the faces by role, flat; or (img) the model's own texture, as a check of the UVs
-    cols = [(0.85, 0.75, 0.55, 1), (0.75, 0.15, 0.1, 1), (0.35, 0.2, 0.1, 1), (0.05, 0.05, 0.05, 1), (0.2, 0.6, 0.9, 1)]
-    mats = []
-    for r, c in enumerate(cols):
-        m = bpy.data.materials.new(ROLES[r]); m.diffuse_color = c; mats.append(m)
-    me = obj.data; me.materials.clear()
-    for m in mats: me.materials.append(m)
-    for f in me.polygons: f.material_index = int(role[f.index])
-    if img:
-        tm = bpy.data.materials.new('tex'); tm.use_nodes = True; n = tm.node_tree.nodes.new('ShaderNodeTexImage'); n.image = img; tm.node_tree.nodes.active = n
-        me.materials.clear(); me.materials.append(tm)
-        for f in me.polygons: f.material_index = 0
-    sc = bpy.context.scene; sc.render.engine = 'BLENDER_WORKBENCH'; sc.display.shading.light = 'STUDIO'; sc.display.shading.color_type = 'TEXTURE' if img else 'MATERIAL'
-    sc.render.resolution_x = 900; sc.render.resolution_y = 600
-    sc.world = bpy.data.worlds.new('w'); sc.world.color = (0.8, 0.8, 0.8)
-    import mathutils
-    cam = bpy.data.cameras.new('c'); co = bpy.data.objects.new('c', cam); sc.collection.objects.link(co); sc.camera = co
-    cam.type = 'ORTHO'; cam.ortho_scale = 1.6
-    for k, (az, el) in enumerate([(35, 25), (215, 25), (35, 70)]):
-        a, e = math.radians(az), math.radians(el); d = 3
-        co.location = (d * math.cos(e) * math.sin(a), -d * math.cos(e) * math.cos(a), 0.45 + d * math.sin(e))
-        co.rotation_euler = (mathutils.Vector((0, 0, 0.45)) - co.location).to_track_quat('-Z', 'Y').to_euler()
-        sc.render.filepath = out.replace('.png', f'-{k}.png'); bpy.ops.render.render(write_still=True)
 
 main()

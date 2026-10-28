@@ -436,7 +436,7 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
   sideOf(w, G, i, j, S.mi, side)
   S.shockTo[i] = j
   S.shockBy[i] += byWeights(M.impact.shock, side) * mom * (1 - bb)
-  // a second enemy (decision 0069): j was already in melee with another when the step began; once, whatever the
+  // a second enemy (decision 0080): j was already in melee with another when the step began; once, whatever the
   // momentum
   if (S.inMelee0[j]) S.shockBy[i] += side[1] * M.second.flank + side[2] * M.second.rear
   if (nextUnit(keyedStream(ks, seed, tick, h, j, K_RECOIL)) < bb) {

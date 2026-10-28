@@ -7,9 +7,9 @@ last_reviewed: 2026-10-27
 
 The first phase of the unit model (`docs/proposals/unit-model.md`, § Facing and sectors, § Phases). One reading of
 where a threat stands, front, flank or rear, used by fire, charges and morale alike, and the two rules the owner
-added that read it: a battalion's back exposed to an enemy that can hurt it presses on its morale (decision 0070,
-amending 0069's one-off retreat shock), and a second enemy charging a battalion already in melee shakes it again
-(decision 0069). It builds on C1 (`docs/plans/active/c1-claims.md`, #220): the charge and
+added that read it: a battalion's back exposed to an enemy that can hurt it presses on its morale (decision 0081,
+amending 0080's one-off retreat shock), and a second enemy charging a battalion already in melee shakes it again
+(decision 0080). It builds on C1 (`docs/plans/active/c1-claims.md`, #220): the charge and
 melee code it changes is C1's.
 
 Earlier drafts were reviewed and replaced (§ Review).
@@ -34,8 +34,8 @@ plan follows it, and where they differ the model holds. In short:
   a march column's head and tail, or no front (changing shape);
 - **the weight of a point** (front, flank, rear) by an angle measure without trigonometry, blended 35° to 55°, smooth at
   the face's corner; **of a threat**, the mean over its block's slices;
-- **what reads them:** fire's exposure, the side a charge strikes, the second enemy in melee (0069), and the drain of a
-  back exposed to an enemy that can hurt it (0070); the wavering fall-back is removed (0071): a wavering battalion keeps
+- **what reads them:** fire's exposure, the side a charge strikes, the second enemy in melee (0080), and the drain of a
+  back exposed to an enemy that can hurt it (0081); the wavering fall-back is removed (0082): a wavering battalion keeps
   fighting until it recovers or routs;
 - **who can hurt a battalion:** by fire (range, arc, sight, unscreened by its friends) or by a charge (a shape it charges
   from, not blown, within 200 m), found in one pass before the morale loop.
@@ -54,7 +54,7 @@ plan follows it, and where they differ the model holds. In short:
 
 - **Save format:** `falling` and `fellBack` removed, no field added. The state version moves, and the ruleset's hash
   with the new numbers (and without `morale.fallback`).
-- **Decision 0070** supersedes decision 0069's one-off retreat shock (0069's status: superseded in part by 0070): the
+- **Decision 0081** supersedes decision 0080's one-off retreat shock (0080's status: superseded in part by 0081): the
   back exposed, a pressure while it lasts. The unit model's § Facing and sectors and § Phases follow.
 - **The goldens move,** all of them where fire, charges or morale run: regenerated in one commit with the reason,
   after the tests below pass. `tools/calibrate-charge.ts` and `tools/calibrate-fire.ts` (its fights included
@@ -80,9 +80,9 @@ front, flank and rear wedges with the blend bands):
 
 ## Docs
 
-`docs/systems/fire-morale.md` (exposure, the back exposed, the fall-back removed), decision 0071,
+`docs/systems/fire-morale.md` (exposure, the back exposed, the fall-back removed), decision 0082,
 `docs/systems/melee.md` (the side struck, the second enemy), `docs/systems/artillery.md` (canister's exposure),
-`docs/systems/formations.md` (the face), `docs/proposals/unit-scenarios.md` (E-16), decision 0070, and the unit model's
+`docs/systems/formations.md` (the face), `docs/proposals/unit-scenarios.md` (E-16), decision 0081, and the unit model's
 § Facing and sectors, § What changes from today and § Phases (A-08 to U5, E-16 to U1).
 
 ## Non-goals
@@ -115,12 +115,12 @@ front, flank and rear wedges with the blend bands):
   retreat check that could be dodged (a Wheel, a shift-click, a change of shape first) or paid again on every re-issue.
 - **Draft 4:** the faces in the fire step's geometry after the move; a threat's span on the target's frame;
   a trail shape's front and rear as wide as its head and tail; the fall-back on a share of recent losses; and, by the
-  owner's rule (decision 0070), no retreat detected at all: the back exposed to an enemy that can hurt it, screened by
+  owner's rule (decision 0081), no retreat detected at all: the back exposed to an enemy that can hurt it, screened by
   friends and out of range, is a drain. Its review: fire's cover test looks for the shooter's friends, not the
   target's; the threats read mid-step; the fall-back's hold needed a counter; a column's turned blocks; forming square
-  drained; an enemy facing away counted; the blend a cliff at contact and off-centre; a range unused; `tan`; 0069's
+  drained; an enemy facing away counted; the blend a cliff at contact and off-centre; a range unused; `tan`; 0080's
   status.
 - **Draft 5** (this one): a screen test of its own; the threats found in one pass before the morale changes; `falling`
   kept as the losses' hold; a trail shape's edges from the column; forming square all front; the enemy's arc and a
-  battery's three rays; the blend centred, with a floor in metres; every threat within 300 m; literal numbers; 0069
+  battery's three rays; the blend centred, with a floor in metres; every threat within 300 m; literal numbers; 0080
   superseded in part.

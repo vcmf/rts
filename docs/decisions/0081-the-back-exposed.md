@@ -3,13 +3,13 @@ status: accepted
 date: 2026-10-27
 ---
 
-# 0070 The back exposed: a pressure while it lasts, not a retreat detected
+# 0081 The back exposed: a pressure while it lasts, not a retreat detected
 
-Supersedes decision 0069's one-off morale shock for a retreat ordered within enemy range; the rest of 0069 stands.
+Supersedes decision 0080's one-off morale shock for a retreat ordered within enemy range; the rest of 0080 stands.
 
 ## Context
 
-Decision 0069 recorded the owner's rule that a retreat within enemy range turns the back and costs a one-off morale
+Decision 0080 recorded the owner's rule that a retreat within enemy range turns the back and costs a one-off morale
 hit. Planning U1 (`docs/plans/active/u1-sectors.md`), every way of detecting a retreat failed review: judged when the
 command is given, it could be dodged (a Wheel, a point shift-clicked behind an idle battalion, a change of shape
 first) or paid again on every re-issue; judged every tick from the movement, it needed state and still misread an
@@ -38,6 +38,6 @@ an enemy battery behind it in range is drained (its back is turned to that batte
 
 ## Alternatives considered
 
-- A one-off shock when a retreat is ordered (0069): dodged or paid twice, as above.
+- A one-off shock when a retreat is ordered (0080): dodged or paid twice, as above.
 - A one-off shock when a battalion is seen moving away from an enemy behind it: state per battalion, and still an event
   where the owner's rule is a condition.

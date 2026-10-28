@@ -147,7 +147,7 @@ keeps:
   enemy is near (`enemyNear`: others may move off its way); with none near it stays pinned after the fifth, as before.
 - **A router the enemy reaches is cut down** (`cutDown`, `src/sim/melee.ts`): every enemy in the fight within the
   ride-down's reach, not in melee with another, strikes it at the melee's rate, and it does not fight back, whether it
-  runs, is held or has no way left. No surrender (decision 0069). Batteries cut down too, as they fight a melee
+  runs, is held or has no way left. No surrender (decision 0080). Batteries cut down too, as they fight a melee
   today; the unit model gives artillery no melee mode, with its modes (U3).
 - **The tuning** (`HELD`) is in the code while it is a prototype: ruleset data is hashed into saves.
 

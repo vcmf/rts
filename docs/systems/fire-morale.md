@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-11
 code: [src/sim/fire.ts, src/sim/morale.ts, src/sim/rng.ts, src/sim/tick.ts, src/rulesets/napoleonic.ts, src/scenarios/s1c-firefight.ts, tools/calibrate-fire.ts, test/fire.test.ts, test/morale.test.ts]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0018-battalion-of-400, 0069-melee-holds-cornered-routers-cut-down]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0018-battalion-of-400, 0080-melee-holds-cornered-routers-cut-down]
 ---
 
 # Fire and morale (S1c)
@@ -127,7 +127,7 @@ is later:
     grid on, while an enemy is near it goes on trying the fan's directions in turn, since others may move
     off its way.
 - **Cut down** (with the claim grid on): every enemy in the fight that reaches a router, running or not,
-  cuts it down as a pursuit does (decision 0069, docs/systems/melee.md).
+  cuts it down as a pursuit does (decision 0080, docs/systems/melee.md).
 - **The run counter** advances only when the run's order was made, so a full order pool delays a run but
   uses up no direction.
 

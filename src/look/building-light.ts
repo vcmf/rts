@@ -32,18 +32,19 @@ import BAKE_FS from './shaders/building-bake.frag?raw'
 import BOUNCE_VS from './shaders/building-bounce.vert?raw'
 import BOUNCE_FS from './shaders/building-bounce.frag?raw'
 
-// a tile's side, texels (the light UVs' islands cover a fifth to a ninth of it: about 20 cm a texel on a house, 27 on
-// the windmill, measured, the sun's shadow map's on the ground about 20). Mipmapped (minified without
-// mips, at the default zoom, its reads missed the texture cache: 1.1 ms over the runtime's taps, measured), read no
-// coarser than MAX_LOD: a read at level L reaches REACH texels past the texel it is in, and the islands' texels are at
-// least MIN_GAP apart (the export fails otherwise: tools/building-to-js.py), so the dilation's nearest-island fill
-// never brings a neighbour's light in (level 2 would need 9: the islands, 550 to 760 a model, cannot keep that apart).
-// At the widest zoom, 720p, 93 to 98 % of a building's pixels want a level under 2, 65 to 89 % level 0 (measured): the
-// clamp under-filters the rest. (A clamp in the shader, not the texture's TEXTURE_MAX_LEVEL, and the whole chain of
-// levels: Babylon sets that only on cube maps, and set by hand on its texture it would be lost on a context's restore.)
-// A tile's side divides by its level-MAX_LOD blocks and its islands keep INSET texels (one block) from its edge, so no
-// read reaches a neighbour's tile; DILATE covers the reach, and past it every texel is a neutral light (sunlit, open
-// sky, no mist), so nothing unwritten ever darkens an edge
+// a tile's side, texels (the light UVs' islands cover a tenth to a quarter of it: about 19 cm a texel on the cottage,
+// 21 on the farmhouse, 26 on the windmill, 27 on the manor, measured on the low-poly models; the sun's shadow map's on
+// the ground about 20). Mipmapped (minified without mips, at the default zoom, its reads missed the texture cache:
+// 1.1 ms over the runtime's taps, measured), read no coarser than MAX_LOD: a read at level L reaches REACH texels past
+// the texel it is in, and the islands' texels are at least MIN_GAP apart (the export fails otherwise:
+// tools/building-to-js.py), so the dilation's nearest-island fill never brings a neighbour's light in (level 2 would
+// need 9: the islands, 363 to 495 a model, cannot keep that apart). At the widest zoom, 720p, 93 to 98 % of a
+// building's pixels want a level under 2, 65 to 89 % level 0 (measured on the first, decimated models:
+// docs/plans/done/building-light.md): the clamp under-filters the rest. (A clamp in the shader, not the texture's
+// TEXTURE_MAX_LEVEL, and the whole chain of levels: Babylon sets that only on cube maps, and set by hand on its texture
+// it would be lost on a context's restore.) A tile's side divides by its level-MAX_LOD blocks and its islands keep
+// INSET texels (one block) from its edge, so no read reaches a neighbour's tile; DILATE covers the reach, and past it
+// every texel is a neutral light (sunlit, open sky, no mist), so nothing unwritten ever darkens an edge
 export const TILE = 256
 export const MAX_LOD = 1
 export const INSET = 1 << MAX_LOD

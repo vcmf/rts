@@ -83,7 +83,7 @@ export interface MoraleDef {
   // S1c-2 (docs/plans/active/s1c2-morale-machine.md)
   // a friend's break: the morale lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
   contagion: { shock: number; front: number; back: number }
-  // the back exposed (decision 0070): the target's drain per weight of flank and of rear of the worst enemy that can
+  // the back exposed (decision 0081): the target's drain per weight of flank and of rear of the worst enemy that can
   // hurt it (docs/proposals/sectors-model.md § 5)
   drain: { flank: number; rear: number }
   // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
@@ -124,7 +124,7 @@ export interface MeleeDef {
   hold: number
   threat: Quarters
   impact: { kill: number; shock: Quarters }
-  // the shock of a charge striking a battalion already in melee with another, by the side it strikes (decision 0069)
+  // the shock of a charge striking a battalion already in melee with another, by the side it strikes (decision 0080)
   second: { flank: number; rear: number }
   rate: number
   strength: Record<string, number>
@@ -188,14 +188,37 @@ export interface UnitType {
   refuge?: string // the shape it forms against a charging enemy (S1d-2, the standing behaviour)
   artillery?: ArtilleryDef // it fires shot (S1d-3)
 }
-/** how a unit looks (docs/plans/active/armies-demo.md): its colours by the figure's colour roles (tools/bake-figure.py:
+/** how a unit looks, as the renderer paints it (docs/plans/active/armies-demo.md): resolved from its Dress (decision
+ *  0068, src/look/world/dyes.ts). Its colours by the figure's colour roles (tools/bake-figure.py:
  *  coat, facings, white, dark, skin, leather, pack, wood, metal), its flag's (vertical bands from the staff out), and
  *  what its figure shows from above when far: 'coat' (the headgear, pack and leather in the coat's colour) or 'own'
- *  (its own); unset, by the coat's value (src/look/world/armies.ts, farRule). Era data names uniforms by id
- *  (src/rulesets/<era>-uniforms.ts); a battalion wears one by id, whatever its side. Not read by the simulation */
+ *  (its own); unset, by the coat's value (src/look/world/armies.ts, farRule). A battalion wears one by id, whatever
+ *  its side. Not read by the simulation */
 export interface Uniform {
   id: string
   colours: Record<string, string>
+  flag: readonly string[]
+  far?: 'coat' | 'own'
+}
+/** an era's dyes (docs/plans/active/dye-palette.md, decision 0068): a short list of named cloth colours, each one sRGB
+ *  value chosen once against the landscape; the flags' own dyes (brighter, cleaner: a side reads by its flag); the
+ *  materials that are not cloth (skin, leather, the pack, wood, metal: the figure's neutral roles), and the dye every
+ *  man's boots take. Era data (src/rulesets/<era>-dyes.ts) */
+export interface DyeSet {
+  dyes: Readonly<Record<string, string>>
+  flags: Readonly<Record<string, string>>
+  materials: Readonly<Record<string, string>>
+  boots: string
+}
+/** the cloth parts a dress names a dye for */
+export type ClothPart = 'coat' | 'facings' | 'trousers' | 'waistcoat' | 'headgear' | 'greatcoat'
+/** a uniform as its cloth parts' dyes, by name, never a colour (decision 0068): its coat, facings, trousers (or
+ *  breeches), waistcoat, headgear and greatcoat (worn over the coat: by a share of the men by the cold, a later step;
+ *  ?uniforms=all-greatcoats, all of them), and its flag's bands by flag dye. Era data (src/rulesets/<era>-uniforms.ts),
+ *  resolved into a Uniform by the figure's roles (src/look/world/dyes.ts). Not read by the simulation */
+export interface Dress {
+  id: string
+  parts: Readonly<Partial<Record<ClothPart, string>>> & { coat: string; facings: string; trousers: string }
   flag: readonly string[]
   far?: 'coat' | 'own'
 }
@@ -610,7 +633,7 @@ export function compileRuleset(rs: Ruleset): Compiled {
       `ruleset ${rs.name}: morale.contagion.shock over 0.6 of the gap from the default quality to the rout`,
     )
   }
-  // nor a second enemy's charge (decision 0069)
+  // nor a second enemy's charge (decision 0080)
   const sec = rs.melee.second
   if (!(sec.flank >= 0 && sec.rear >= 0 && Math.max(sec.flank, sec.rear) <= 0.6 * (M.quality - M.rout))) {
     throw new Error(

@@ -171,14 +171,24 @@ const closestParam = new URLSearchParams(location.search).get('benchclosest')
 if (closestParam !== null && closestParam !== '0' && closestParam !== '1') {
   throw new Error(`?benchclosest must be 0 or 1, not ${closestParam}`)
 }
+// ?benchr=<m>[,<m>…]: the zooms measured, at these radii and the start's pitch, instead of close, default and wide
+// (the LOD cross-fade's bench: a battalion inside a band and outside, docs/plans/done/lod-fade.md)
+const radiiParam = new URLSearchParams(location.search).get('benchr')
+const benchRadii = radiiParam === null ? null : radiiParam.split(',').map(Number)
+if (benchRadii?.some(r => !(r >= D.spec.camera.rMin && r <= D.spec.camera.rMax))) {
+  throw new Error(`?benchr must be radii within ${D.spec.camera.rMin} to ${D.spec.camera.rMax} m, not ${radiiParam}`)
+}
+/** The bench's cameras: each zoom (close, default and wide, or ?benchr's radii) at the three yaws */
 function cameras(): Cam[] {
   const c = D.spec.camera
   const out: Cam[] = []
-  const zooms: [string, number, number][] = [
-    ['close', START.beta, TUNED_R],
-    ['default', START.beta, START.radius],
-    ['wide', c.betaMax, c.rMax],
-  ]
+  const zooms: [string, number, number][] = benchRadii
+    ? benchRadii.map(r => [`r${r}`, START.beta, r])
+    : [
+        ['close', START.beta, TUNED_R],
+        ['default', START.beta, START.radius],
+        ['wide', c.betaMax, c.rMax],
+      ]
   if (closestParam === '1') zooms.unshift(['closest', START.beta, c.rMin])
   for (const [z, beta, radius] of zooms) {
     for (const [y, da] of [

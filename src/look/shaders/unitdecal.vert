@@ -28,8 +28,43 @@ uniform sampler2D uMeadow;
 // along the ground, uFarScale.y up): his shadow with him, its footprint about his feet by x, its cast length (what his
 // height throws along the sun, past his feet) by y
 uniform vec2 uFarK,uFarScale;
+#ifndef FAR_FROM
+#define FAR_FROM 0.9
+#endif
 #endif
 varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
+#ifdef SH_CONTACT
+// the contact shadow (docs/decisions/0071-soldier-contact-shadow.md): its oval at each of the figure's baked steps, in his own
+// frame (uContactTex: cx, cz, ax, az, m; CONTACT_ROWS of them, contactOvals in src/look/units-data.ts), grown by its
+// pad (uShContact.x, m); his step his clip's first (aVAT.x) plus the clock's steps since it began (uVATStep, aVAT.z his
+// phase, aVAT.y the clip's length: units.vert's); vCt: the vertex in the oval's frame (1 at its edge), linear on the
+// ground so the fragment's is exact. Only in the material drawn within the contact's zoom band (units.ts: past it
+// decision 0062's material, without SH_CONTACT)
+uniform sampler2D uContactTex;uniform vec4 uShContact;
+// vCell: the vertex in his shape's cell (0 to 1 inside it): the strip reaches past the cell for the oval (decalStrip),
+// and the fragment reads no shape there
+varying vec2 vCt,vCell;
+#endif
+#if defined(SH_CONTACT)||defined(SH_STEPS)
+uniform float uVATStep;
+#endif
+#ifdef SH_STEPS
+// the shape baked per animation step (?ushstep, docs/plans/done/step-shadows.md): a role's clip in uStepBins.<role>
+// bins, its first cell row uStepRow.<role>; the rows in blocks of uStepRPB side by side, each FACINGS cells wide
+// (shadowShape, stepAtlasLayout in src/look/units-data.ts). His step as units.vert poses him (its int() of his clip's
+// first step plus the mod), the exact n a GPU's mod can return wrapped to 0 (stepIndex); the bin he is in in integers,
+// ((i+1)k-1)/n (stepBin), or with SH_STEP_BLEND the two either side of him, mixed by vS (stepBlend); every bin
+// clamped into the clip's, so no rounding reads another clip's cell
+uniform vec4 uStepBins,uStepRow;uniform float uStepRPB;
+#ifdef SH_STEP_BLEND
+varying vec2 vUV2,vUV3;varying float vS;
+#endif
+// the texel place of (texels c into) the cell of row rw (role's first plus bin) and facing k
+vec2 stepUV(float rw,float k,vec2 c){
+  float bl=floor((rw+0.5)/uStepRPB);
+  return (vec2(bl*FACINGS+k,rw-bl*uStepRPB)*uShapeCell.xy+c)*uShapeCell.zw;
+}
+#endif
 void main(){
   #include<instancesVertex>
   vec3 p=finalWorld[3].xyz+aNext*uStepFrac;
@@ -38,18 +73,51 @@ void main(){
   vec2 l=uStrip.xy+q*uStrip.zw,l0=l;
   vAlong=l.y*(l.y>0.0?uShLen:1.0);
   #ifdef FAR_SCALE
-  float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fg=clamp((0.9*uFarK.y-fpx)/(0.65*uFarK.y),0.0,1.0);
+  float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fg=clamp((FAR_FROM*uFarK.y-fpx)/((FAR_FROM-0.25)*uFarK.y),0.0,1.0);
   l*=vec2(mix(1.0,uFarScale.x,fg),mix(1.0,l.y>0.0?uFarScale.y:uFarScale.x,fg));
   #endif
   l.y*=l.y>0.0?uShLen:1.0;
   vec2 C=vec2(-uShDir.y,uShDir.x),xz=p.xz+C*l.x+uShDir*l.y;
+  #ifdef SH_CONTACT
+  float st=aVAT.x+mod(uVATStep+aVAT.z,aVAT.y);
+  vec4 ov=textureLod(uContactTex,vec2((st+0.5)/CONTACT_ROWS,0.5),0.0);
+  vec2 P=C*l0.x+uShDir*vAlong;
+  vCt=(vec2(dot(P,normalize(finalWorld[0].xz)),dot(P,normalize(finalWorld[2].xz)))-ov.xy)/max(ov.zw+uShContact.x,1.0e-3);
+  #endif
   float gy=textureLod(uMeadow,(xz+TILE_HALF)/TILE_W,0.0).r;
   vec3 g=vec3(xz.x,gy,xz.y),toCam=normalize(uCamPos-g);
   float lift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);
+  #ifdef SH_CONTACT
+  // (the contact's sunward half lies behind his soles, where the lift is 0: at the ground's sampled height the terrain
+  // can stand a little higher and hide it, cutting the oval along his soles; a floor of CONTACT_FLOOR m keeps it
+  // drawn, too little to darken his boots: decision 0071, decalLift in src/look/shadow-look.ts)
+  lift=max(lift,CONTACT_FLOOR);
+  #endif
   gl_Position=viewProjection*vec4(g+toCam*(lift/max(0.2,toCam.y)),1.0);
   vec4 lp=uLMVP*vec4(g,1.0);vLM=lp.xy/lp.w*0.5+0.5;
   float a=atan(-finalWorld[0].z,finalWorld[0].x),fk=fract(a/6.2831853)*FACINGS,k0=floor(fk),k1=mod(k0+1.0,FACINGS);
   vT=fk-k0;
   float row=abs(aVAT.x-uRoleStart.y)<0.5?1.0:abs(aVAT.x-uRoleStart.z)<0.5?2.0:abs(aVAT.x-uRoleStart.w)<0.5?3.0:0.0;
   vec2 c=(l0-uShapeAt)*uShapeTexel.x+uShapeTexel.y;
-  vUV0=(vec2(k0,row)*uShapeCell.xy+c)*uShapeCell.zw;vUV1=(vec2(k1,row)*uShapeCell.xy+c)*uShapeCell.zw;}
+  #ifdef SH_STEPS
+  float kb=row<0.5?uStepBins.x:row<1.5?uStepBins.y:row<2.5?uStepBins.z:uStepBins.w;
+  float r0=row<0.5?uStepRow.x:row<1.5?uStepRow.y:row<2.5?uStepRow.z:uStepRow.w;
+  int ni=max(int(aVAT.y+0.5),1),ki=max(int(kb+0.5),1);
+  int ii=int(aVAT.x+mod(uVATStep+aVAT.z,aVAT.y))-int(aVAT.x+0.5);
+  ii=clamp(ii==ni?0:ii,0,ni-1);
+  #ifdef SH_STEP_BLEND
+  float sp=(float(ii)+0.5)*float(ki)/float(ni)-0.5,sf=floor(sp);vS=clamp(sp-sf,0.0,1.0);
+  int si=int(sf);
+  float ja=float(clamp((si+ki)%ki,0,ki-1)),jb=float(clamp((si+1)%ki,0,ki-1));
+  vUV0=stepUV(r0+ja,k0,c);vUV1=stepUV(r0+ja,k1,c);vUV2=stepUV(r0+jb,k0,c);vUV3=stepUV(r0+jb,k1,c);
+  #else
+  float jb=float(clamp(((ii+1)*ki-1)/ni,0,ki-1));
+  vUV0=stepUV(r0+jb,k0,c);vUV1=stepUV(r0+jb,k1,c);
+  #endif
+  #else
+  vUV0=(vec2(k0,row)*uShapeCell.xy+c)*uShapeCell.zw;vUV1=(vec2(k1,row)*uShapeCell.xy+c)*uShapeCell.zw;
+  #endif
+  #ifdef SH_CONTACT
+  vCell=c/uShapeCell.xy;
+  #endif
+}

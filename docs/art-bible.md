@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-13
+last_reviewed: 2026-10-26
 ---
 
 # Art Direction: "The Painted Campaign"
@@ -34,7 +34,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 | Target | For |
 |---|---|
 | `design/refs/north-star-painted-v1.png` | **Summer master.** Composition (one hill, few formations, negative space), battalions of about 100 (decision 0007), dry-brush ground, smoke puffs, the warm and cool split, figures without bases. Ignore its cypresses and its scrub, which fill the negative space; its terrain is louder than the armies should allow. |
-| `design/refs/austerlitz-pratzen-v2.png` | **Winter master.** Grey frosted ground with the armies as the most saturated objects, ploughed stripes, mist and smoke that hide no formation. Ignore the brief's 300 men a battalion. |
+| `design/refs/austerlitz-pratzen-v2.png` | **Winter master.** Grey frosted ground with the armies standing out by colour and value, ploughed stripes, mist and smoke that hide no formation. Ignore the brief's 300 men a battalion. |
 | `design/refs/austerlitz-goldbach-v1.png` | **Close zoom: river and village** (§6c): meander, gravel bars, stones, reeds, bare willows, bridge, red roofs. Ignore its saturated gold ground, which is late autumn, not December. |
 | `design/refs/wagram-grand-battery-v1.png` | **Pulled-back summer plain:** tan and olive fields, sculpted cannon smoke, Austrian white read on tan. Ignore the brief's 300 men a battalion, the oversized foreground staff and smoke over the Austrian line. |
 
@@ -42,6 +42,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 
 | Image | Take | Ignore |
 |---|---|---|
+| `design/refs/staff-map-epic-history-waterloo.source.txt` | **The map view**, the first reference of decision 0058 (which governs where it and §6d differ): a frame of Epic History TV's Waterloo at 17:00, kept out of git (third-party), its source in the `.source.txt`: relief under one light with cast shadows, thin roads, army blocks standing off the ground with a short shadow, serif place names | Its massed dark canopy and field strips (tried, rejected: decision 0058), its saturated red roofs and bright greens next to the armies, its blood and fire effects, its portraits on staffs |
 | `design/refs/style-painterly.png` | **Brushwork and colour:** tapered grass flicks, flower dabs, broken edges, teal hue-shifted shadows, cloud-shadow patches | Its sky, horizon and ground-level camera |
 | `design/refs/north-star.png` | Composition only (superseded by the painted version) | Toy bases, its heavy tilt-shift (ours is mild, §1.6), sky glow, glossy figurine finish |
 | `design/refs/mood-wide.png` | Warm light temperature, gold-lit valley mist | Everything else: sky, mountains, cypresses, crowding, toy figures |
@@ -67,7 +68,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 - **December painted as late autumn.** The v1 Austerlitz images use saturated gold-orange ground
   (§4b value 2). Winter is the v2 grey with pale gold light only on ridges and roofs.
 - **Busyness.** Many wide shots carry the same fine texture everywhere and fill the frame with units,
-  against §11 and "terrain never matches army saturation".
+  against §11 and "terrain never matches a coat's colour".
 - **Concept images have baked light** (warm side, cool side), so the Tripo output needs the clean-up
   pass in §10.
 
@@ -97,8 +98,8 @@ These are decisions, not preferences. Don't propose against them.
 
 ## 2. Pillars (priority order)
 
-1. **Readable.** Clear silhouettes, armies as the most saturated objects on
-   screen, negative space between formations.
+1. **Readable.** Clear silhouettes, armies standing out from the ground by
+   colour or by value (§4), negative space between formations.
 2. **Painted, not rendered.** Every surface shows the hand: brush marks,
    broken edges, chosen colours rather than computed ones.
 3. **Light as colour.** Light is expressed through temperature: warm where
@@ -161,15 +162,16 @@ default, `temperate`, keeps 60 % of their chroma, turned slightly warm-grey.
 - **20% accents, deliberately complementary** (muted by the earth as the field is, so they stay accents, never
   rivals of the coats): orange flowers against teal
   shadow, red roofs, army colours.
-- **Armies are always the most saturated objects on screen.** Terrain never
-  matches their saturation.
-
-| Army | Coat | Accent |
-|---|---|---|
-| France | `#2C4FA8` | white `#EDE6D6`, red `#B8322A` |
-| Russia | `#2F6B3C` | white, red |
-| Austria | `#E9E3D3` | grey-blue `#9FB0C4` |
-| Britain | `#B3302A` | white, black |
+- **Armies always stand out from the ground, by colour or by value** (the owner, 2026-10-26; decision 0068).
+  A bright coat by its colour; a dark coat (a navy, a dark green) by its value, which the readability guard
+  measures, even where its chroma is under the meadow's; a white coat by its value on green, by its colour and
+  its details on snow. Terrain never matches a coat's colour. Which side a battalion is on will be told by the
+  banner above it (a later step), not by its coat alone.
+- **Uniforms are painted from the era's dye palette** (decision 0068): a short list of named dyes, each one value
+  chosen against the landscape (`src/rulesets/napoleonic-dyes.ts`), and each uniform naming a dye per cloth part:
+  coat, facings, trousers, waistcoat, headgear, greatcoat; boots always black (`src/rulesets/napoleonic-uniforms.ts`). Colours belong to
+  a uniform, not a nation. Flags have their own dyes, brighter and cleaner, so a side reads by its flag. The plan,
+  with the dyes' values measured on the ground: `docs/plans/active/dye-palette.md`.
 
 **Crops stand under a soldier's chest** (decision 0026; `WHEAT_HEIGHT_MAX`): a
 standing field is drawn lower than history's, so a formation in it reads.
