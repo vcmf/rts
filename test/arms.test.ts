@@ -244,11 +244,38 @@ describe('the figures (fr-cuirassier, fr-foot-artillery)', () => {
     expect(CAVALRY.ranges.walk.speed).toBeCloseTo(1.7, 3)
     expect(CAVALRY.ranges.gallop.speed).toBeGreaterThan(CAVALRY.ranges.trot.speed)
   })
+  // the owner, 2026-10-28: lighter horses, under +1 ms with a regiment in view (the plan's horse bench)
+  it("switches the horse's LODs at a man's height, its own height kept for its shadow; the others at their own", () => {
+    expect([CAVALRY.lodHeight, CAVALRY.height > 2.4]).toEqual([1.8, true])
+    expect(BATTERY.lodHeight).toBe(BATTERY.height)
+    const u = readFileSync(new URL('../src/look/units.ts', import.meta.url), 'utf8').replace(/\s+/g, '')
+    expect(u).toContain('this.farK.set(this.lodH*pxPerM,this.lodPx)')
+    expect(u).toContain('this.drawsAt(h,px,split,camPos,this.lodH*pxPerM,tinyBand)')
+    expect(u).toContain('this.shadowTip=(this.figH*Math.hypot(SUN.x,SUN.z))/SUN.y')
+  })
+  it("bakes the horse's LODs light, the faces the RTS camera never sees culled: under the infantryman's per pixel", () => {
+    const tris = CAVALRY.lods.map(l => l.triangles)
+    expect(tris[0]).toBeLessThan(8000)
+    expect(tris[1]).toBeLessThan(1200)
+    expect(tris[2]).toBeLessThan(300)
+  })
   it("the infantryman's file (none of the fields): the legacy roles, his parts the page's own, 1.8 m", () => {
-    expect([INFANTRY.roles, INFANTRY.parts, INFANTRY.height]).toEqual([[...LEGACY_ROLES], null, FIGURE_HEIGHT])
+    expect([INFANTRY.roles, INFANTRY.parts, INFANTRY.height, INFANTRY.lodHeight]).toEqual([
+      [...LEGACY_ROLES],
+      null,
+      FIGURE_HEIGHT,
+      FIGURE_HEIGHT,
+    ])
   })
   it('checkFigure finds a role without clips, too many roles, a colour role without a part', () => {
-    const base = { roles: ['a'], ranges: { a: CAVALRY.ranges.halt }, parts: { x: 'coat' }, palette: ['x'], height: 2 }
+    const base = {
+      roles: ['a'],
+      ranges: { a: CAVALRY.ranges.halt },
+      parts: { x: 'coat' },
+      palette: ['x'],
+      height: 2,
+      lodHeight: 1.8,
+    }
     expect(checkFigure(base)).toEqual([])
     expect(checkFigure({ ...base, roles: ['a', 'b'] })[0]).toMatch(/b has no clip/)
     expect(checkFigure({ ...base, roles: ['a', 'a', 'a', 'a', 'a'] })[0]).toMatch(/1 to 4/)

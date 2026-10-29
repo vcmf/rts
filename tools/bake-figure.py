@@ -39,10 +39,11 @@ its bone, its texel) and carried through the decimation as a face attribute. Suc
 roles in order (the page's shadow holds four), each colour role's cloth part or material (src/look/world/dyes.ts),
 and its height; bones past the format's 255 (a crew's fingers) folded into their hand.
 """
-import bpy, json, re, struct, sys
+import bpy, json, math, re, struct, sys
 import numpy as np
 from pathlib import Path
-from mathutils import Matrix
+from mathutils import Matrix, Vector
+from mathutils.bvhtree import BVHTree
 
 args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 if not args: raise SystemExit('usage: blender -b -P tools/bake-figure.py -- <figure dir> [out.unitdata]')
@@ -163,13 +164,19 @@ def battery_role(mat, bone, rgb, co):
 # order; palette: the colour roles; parts: each colour role's cloth part (the dress's dye), 'boots', or a material of
 # the era's dye set (src/look/world/dyes.ts); classify(material, bone, texel, centre): a triangle's colour role; height:
 # the figure's bounds in m (a check); fold: deforming bones folded into their nearest kept ancestor (a crew's fingers:
-# the format's bone indices are bytes). The LOD targets keep about the infantryman's triangles a pixel of the figure's
+# the format's bone indices are bytes); cull: the faces never seen from the RTS camera's pitches (elevations, degrees
+# above the horizon, the sun's 27 among them so the shadow keeps its sides; yaws round the figure; frames sampled per
+# clip of its roles) removed from each LOD after decimating it (the targets are before the cull); lod_height: the height its LOD switches measure on screen (m; none: its
+# own). The LOD targets keep about the infantryman's triangles a pixel of the figure's
 # side on screen at each LOD's switch, which falls at the same height in pixels for every figure (his 1,197 and 243;
 # at its switch a horse and rider shows about twice his pixels: 2,000 and 450; 4,000 cost 3.5 ms of GPU at 63 m with
 # a regiment in view, docs/plans/active/cavalry-artillery-demo.md; a gun and its four gunners about five figures)
 PROFILES = {
     'infantry': dict(roles=ROLES_INFANTRY, palette=PALETTE_INFANTRY, height=(1.6, 2.6)),
-    'cavalry': dict(glb='cavalry.glb', targets={'lod0': None, 'lod1': 2000, 'lod2': 450},
+    'cavalry': dict(glb='cavalry.glb', targets={'lod0': 9000, 'lod1': 1200, 'lod2': 300},
+                    # (the faces the RTS camera never sees culled first; the LODs switched at a man's height, so a
+                    # horse hands over to its lighter LODs as soon as a man does: the owner, 2026-10-28)
+                    cull=dict(elevations=(25, 40, 60, 90), yaws=16, frames=4), lod_height=1.8,
                     roles={'halt': (['Idle'], True), 'walk': (['Walk'], True), 'trot': (['Trot'], True),
                            'gallop': (['Gallop'], True)},
                     palette=['coat', 'facings', 'white', 'dark', 'skin', 'leather', 'metal', 'hide', 'mane'],
@@ -317,6 +324,36 @@ def face_roles(mesh):
         rgb = texel(*pixels[p.material_index], uv) if p.material_index in pixels else (0, 0, 0)
         attr.data[p.index].value = ROLE_IDS[PROFILE['classify'](mesh.material_slots[p.material_index].material.name, bone, rgb, p.center)]
 
+def cull_unseen(mesh, cfg):
+    """the mesh's faces never seen from above (cfg: the elevations and yaws of the views, the frames sampled per clip of
+    its roles) deleted: a face is seen when, at some sampled pose, a ray from its centre toward a view it faces leaves
+    the posed mesh unhit. Returns the faces kept and the faces there were"""
+    me = mesh.data
+    seen = np.zeros(len(me.polygons), bool)
+    dirs = [Vector((math.cos(math.radians(e)) * math.sin(2 * math.pi * k / cfg['yaws']),
+                    math.cos(math.radians(e)) * math.cos(2 * math.pi * k / cfg['yaws']), math.sin(math.radians(e))))
+            for e in cfg['elevations'] for k in range(cfg['yaws'])]
+    deps = bpy.context.evaluated_depsgraph_get()
+    for clips, _ in ROLES.values():
+        for c in clips:
+            a = bpy.data.actions[c]; end = int(a.frame_range[1])
+            for i in range(cfg['frames']):
+                pose(a, 1 + round(i * (end - 1) / cfg['frames']))
+                ev = mesh.evaluated_get(deps); em = ev.to_mesh()
+                bvh = BVHTree.FromPolygons([v.co.copy() for v in em.vertices], [tuple(p.vertices) for p in em.polygons])
+                for p in em.polygons:
+                    if seen[p.index]: continue
+                    c0, n = p.center, p.normal
+                    for d in dirs:
+                        if n.dot(d) > 0 and bvh.ray_cast(c0 + d * 1e-4, d)[0] is None:
+                            seen[p.index] = True; break
+                ev.to_mesh_clear()
+    import bmesh
+    bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if not seen[f.index]], context='FACES')
+    bm.to_mesh(me); bm.free(); me.update()
+    return int(seen.sum()), len(seen)
+
 def decimated(mesh, target):
     """a copy of the mesh collapse-decimated on its rest pose to about `target` triangles (before the armature deforms
     it, as tools/unitpipe/infantry/lod.py: the decimator interpolates the skin weights), or the mesh itself (None)"""
@@ -339,6 +376,10 @@ if MULTI:
 for lod in LODS:
     if MULTI:
         mesh = decimated(multi_src, PROFILE['targets'][lod])
+        # (culled after decimating, on the LOD's own closed mesh: decimating an open shell tore holes at its edges)
+        if PROFILE.get('cull'):
+            kept, was = cull_unseen(mesh, PROFILE['cull'])
+            print(f'BAKE {lod} cull: {kept} of {was} faces seen from above, the rest removed')
     elif lod != ANIM:
         scene, rig2, mesh = load(lod)
         assert [b.name for b in rig2.data.bones if b.use_deform] == deform, f'{lod}: not the same skeleton as {ANIM}'
@@ -389,8 +430,16 @@ for lod in LODS:
     # the mesh's signed volume by the right hand, sum of p0 . (p1 x p2) / 6, in Babylon space: negative when its fronts
     # are clockwise from outside (Babylon's; inside out, positive)
     p64 = pos.astype(np.float64)
-    vol = float(np.einsum('ij,ij->i', p64[tris[:, 0]], np.cross(p64[tris[:, 1]], p64[tris[:, 2]])).sum() / 6)
-    assert vol < 0, f'{lod}: signed volume {vol:.4f} m^3 by the right hand: wound inside out for Babylon'
+    if PROFILE.get('cull'):
+        # (an open shell has no volume: its triangles' right-hand normals against their vertex normals instead, nearly
+        # all opposite for Babylon's clockwise fronts)
+        rh = np.cross(p64[tris[:, 1]] - p64[tris[:, 0]], p64[tris[:, 2]] - p64[tris[:, 0]])
+        vn = nor[tris[:, 0]] + nor[tris[:, 1]] + nor[tris[:, 2]]
+        out = float((np.einsum('ij,ij->i', rh, vn) < 0).mean())
+        assert out > 0.9, f'{lod}: only {out:.2f} of its triangles wound for Babylon (#164)'
+    else:
+        vol = float(np.einsum('ij,ij->i', p64[tris[:, 0]], np.cross(p64[tris[:, 1]], p64[tris[:, 2]])).sum() / 6)
+        assert vol < 0, f'{lod}: signed volume {vol:.4f} m^3 by the right hand: wound inside out for Babylon'
     h = float(pos[:, 1].max() - pos[:, 1].min())
     lo, hi = PROFILE['height']
     assert lo < h < hi, f'{lod}: the figure is {h:.2f} m tall, not within {lo} to {hi} m (its kind: {KIND})'
@@ -408,6 +457,7 @@ header = dict(version=VERSION, fps=FPS, mPerUnit=M_PER_UNIT, bones=bones, parent
 if MULTI:
     # (the roles in the page's order, each colour role's part, the figure's height over its root: src/look/units-data.ts)
     header.update(roles=list(ROLES), parts=PROFILE['parts'], height=round(height, 3))
+    if PROFILE.get('lod_height'): header.update(lodHeight=PROFILE['lod_height'])
 payload = b''; off = 0
 def add(arr, label):
     global payload, off

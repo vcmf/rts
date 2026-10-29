@@ -623,16 +623,17 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   a bone too small to be a part near the ground, a foot, lends its vertices to the first part up its chain of parents,
   the shin, whose quads then run down to the soles by at most 25 cm, so the shadow starts at the feet: `boneParts`,
   #165). A figure kind's profile (clips.json's `unit`; none: the infantryman, his file unchanged) bakes a
-  multi-part figure from its one GLB: its LODs collapse-decimated on the rest mesh (the cuirassier 21,760, 2,000 and
-  450 triangles; the battery 30,000, 6,500 and 1,400: about the infantryman's triangles a pixel of their side on
-  screen at the switches, which fall at the same height in pixels for every figure, so a taller one switches farther
-  off: the cuirassier's at 93 m), each triangle's colour role read on the full mesh from its material, bone and texel and kept through the
+  multi-part figure from its one GLB: its LODs collapse-decimated on the rest mesh (the battery 30,000, 6,500 and
+  1,400 triangles, about the infantryman's triangles a pixel of its side on screen at the switches; the cuirassier's
+  lighter, the owner's, 2026-10-28: 9,000, 1,200 and 300, then each LOD's faces never seen from the RTS camera's
+  pitches culled, `cull`: 7,630, 1,113 and 289; decimating after the cull tore holes), each triangle's colour role read on the full mesh from its material, bone and texel and kept through the
   decimation as a face attribute; a chain whose span is not a whole number of 1/12 s steps (the gallop's 13 frames)
   resampled between frames, its root speed scaled to keep the feet planted; bones past the format's 255 (the crew's
   fingers) folded into their hand. Its header names its roles in order (the cuirassier halt, walk, trot, gallop; the
   battery halt, fire: Load, Ready, Fire), each colour role's part (`parts`: a cloth part, the boots or a material,
-  dressed by `dressed`'s `parts`; the infantryman's `FIGURE_PARTS` when none) and its height (the LOD switch's figure
-  height; 1.8 m when none, `FIGURE_HEIGHT`). New dyes and materials: the carriages' olive (the Austrian's the buff),
+  dressed by `dressed`'s `parts`; the infantryman's `FIGURE_PARTS` when none), its height (its shadow's tip, its
+  view sphere; 1.8 m when none, `FIGURE_HEIGHT`) and the height its LOD switches measure on screen (`lodHeight`: the
+  cuirassier's 1.8 m, a man's, so a horse hands over as soon as its rider would; its own height when none). New dyes and materials: the carriages' olive (the Austrian's the buff),
   the horses' hide and mane, the gunners' belts, the barrels' bronze (first picks).
 - **The renderer** (`src/look/units.ts`): a thin-instanced host a battalion for each of the near LOD, the far LOD and
   the proxy; the near LOD skinned from the bones' texture (`texelFetch`), the far LOD and the proxy posed (`VAT_POS`;

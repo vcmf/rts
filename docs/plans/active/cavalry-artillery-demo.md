@@ -226,14 +226,35 @@ trot, gallop), `battery-20m.jpg`, `-40m`, `-63m` (loading, firing, the run-up), 
   too. The infantry unchanged (golden against main). Tested (`groundFollowY`: the battery's feet on a 0.3 slope off
   the ground by more than 0.5 m without it, on it with it). Stills: `output/armies-review/25-cavalry-artillery/
   slope-fix/`.
+- Its cost (Metal, aimed at the arms, `?benchat=50,-25`, before 53ba6164 against after, three rounds alternated, each
+  started at a load of 3 or less; round 1's "before" dropped: a load spike to 20 during it, its 40 and 63 m 0.2 and
+  0.35 ms over the others): +0.03, +0.05, +0.09 ms at 20, 40, 63 m (two texture reads a vertex of the arms' figures).
 - **The guns' shadows "a tiny bit darker":** the battery's shadow share raised by 1.18 (`shadowDarken`), capped at
   the look's darkest (never past the soldiers' core or the trees' shadow). Stills: `slope-fix/gun-shadow-20m.jpg`,
   `-40m.jpg`.
 
+### Lighter horses (the owner, 2026-10-28: under +1 ms with the cavalry in view)
+
+The production build, Metal, aimed at the ride (`?benchat=50,-25&artillery=0`: the cavalry alone in view), the GPU
+frame's median over three yaws and two tries, each run started under the bench lock at a load of 3 or less; runs
+that a load spike from another session spoiled (ending at 7 to 20) dropped and repeated. The cost is the cavalry on
+against `?cavalry=0`.
+
+- **The split** (the LODs then 21,760 / 2,000 / 450, switched at the figure's own 2.66 m): +1.97, +2.32, +1.67 ms at
+  20, 40, 63 m. A flat fragment shader takes 0.9, 1.1, 0.8 of it; no skinning 0.03, 0.28, 0.10; the cross-fade's
+  double draw (`?lodfade=0`) 0.5 at 63 m; the nearest LOD 0.75, 0.83 at 20 and 40 m. Without the dither's `discard`
+  in non-fading draws: 0.07 (not worth a second set of materials).
+- **Built:** the horse's LODs decimated to 9,000 / 1,200 / 300, then each LOD's faces never seen from the camera's
+  pitches culled (7,630 / 1,113 / 289; culling before decimating tore holes), and its LOD switches measured at a
+  man's height (`lodHeight` 1.8 m, figure data). Cost: +1.23 / +0.96 / +0.89 ms at 20 / 40 / 63 m (repeated: +1.24,
+  +0.96, +0.88). The owner approved the look (wide crops at 20, 40, 63 m: `horses-lighter/`).
+- **Sooner switches** (1.5 and 1.6 m) do not help at 20 m (+1.23, +1.62) and cost more at 40 and 63 m.
+- **20 m is still +1.2 ms**; with the nearest LOD off it is +0.99 (`horses-lighter/trot-20-c-nonearest.png`,
+  `halt-20-c-nonearest.png`, for the owner's call; the nearest LOD stays on until then).
+
 ## Open questions (the owner's)
 
-- The arms' frame cost when in view (2.5 ms at 63 m for a regiment and a battery): the cuirassier's LODs could be
-  lighter still, or its switch measured by a man's height, not the figure's.
+- The cavalry at 20 m (+1.2 ms with the nearest LOD, +0.99 without it): the nearest LOD off for the horses?
 - A spread figure's shadow is as long as the sun casts it; up close the infantryman's is shortened to 0.7 (0062's
   close look). Bake the arms' per-step shape at the close length (a jump at 100 m), or keep them true?
 - The battery's firing cycle in 8 bins: more bins for long clips (a list a role) would step the gunners' shadows.

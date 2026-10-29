@@ -252,6 +252,8 @@ export class Units {
   // highest point posed (m, SHADOW_H at least: the shadows' reach), a man's sphere for the nearest LOD's view test (m)
   private readonly roles: readonly string[]
   private readonly figH: number
+  // m: the height its LOD switches measure on screen (its data's lodHeight: a horse switches as its rider, a man)
+  private readonly lodH: number
   private readonly topH: number
   private readonly manR: number
   // m: a man's shadow from his soles to its tip at the shape's length (his height over the sun's tangent), where the
@@ -476,6 +478,7 @@ export class Units {
     this.withFlags = opts.flags ?? true
     this.roles = data.roles
     this.figH = data.height
+    this.lodH = data.lodHeight
     this.shadowTip = (this.figH * Math.hypot(SUN.x, SUN.z)) / SUN.y
     this.uniforms = uniforms
     this.data = data
@@ -1111,7 +1114,7 @@ export class Units {
     const sel = h.sel
     const on = this.nearestPx * 1.1
     const off = this.nearestPx * 0.9
-    const k = this.figH * pxPerM
+    const k = this.lodH * pxPerM
     const manR = this.manR
     let changed = false
     for (let i = 0; i < sel.length; i++) {
@@ -1246,7 +1249,7 @@ export class Units {
     // pixels per metre at unit distance, from the projection itself
     const pxPerM = (cam.getProjectionMatrix().m[5] * engine.getRenderHeight()) / 2
     const camPos = cam.globalPosition
-    this.farK.set(this.figH * pxPerM, this.lodPx)
+    this.farK.set(this.lodH * pxPerM, this.lodPx)
     this.nearBand[0] = this.lodPx * NEAR_FADE[0]
     this.nearBand[1] = this.lodPx * NEAR_FADE[1]
     this.tinyBandV[0] = this.tinyPx * TINY_FADE[0]
@@ -1297,7 +1300,7 @@ export class Units {
       }
       h.moving = moving
       const px =
-        (this.figH * pxPerM) /
+        (this.lodH * pxPerM) /
         Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
       // the nearest LOD: looked at only when the battalion's nearest point (its bounds) is within 90 % of its switch
       // and its bounds are in the view
@@ -1308,10 +1311,10 @@ export class Units {
         const dx = Math.max(lo.x - camPos.x, 0, camPos.x - hi.x)
         const dy = Math.max(lo.y - camPos.y, 0, camPos.y - hi.y)
         const dz = Math.max(lo.z - camPos.z, 0, camPos.z - hi.z)
-        split = (this.figH * pxPerM) / Math.max(1, Math.hypot(dx, dy, dz)) >= this.nearestPx * (h.split ? 0.8 : 0.9)
+        split = (this.lodH * pxPerM) / Math.max(1, Math.hypot(dx, dy, dz)) >= this.nearestPx * (h.split ? 0.8 : 0.9)
         if (split) split = !boxOutside(this.camPlanes, lo.x, lo.y, lo.z, hi.x, hi.y, hi.z)
       }
-      const d = this.drawsAt(h, px, split, camPos, this.figH * pxPerM, tinyBand)
+      const d = this.drawsAt(h, px, split, camPos, this.lodH * pxPerM, tinyBand)
       const near = d.near
       if (near !== h.near && this.casterNear) moved = true
       if (split !== h.split) {

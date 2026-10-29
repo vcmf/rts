@@ -46,6 +46,9 @@ export interface UnitData {
   roles: string[]
   parts: Record<string, FigurePart> | null
   height: number
+  // m: the height its LOD switches measure on screen (a horse's its rider's, so it hands over as a man does; its own
+  // height when the file names none)
+  lodHeight: number
   vat: { width: number; height: number; data: Uint16Array }
   mesh: Record<
     string,
@@ -89,6 +92,7 @@ export function decodeUnits(buf: ArrayBuffer): UnitData {
     roles?: string[]
     parts?: Record<string, FigurePart>
     height?: number
+    lodHeight?: number
     vat: { width: number; height: number; halfFloat: boolean }
     buffers: { name: string; offset: number; bytes: number; type: keyof typeof TYPES }[]
   }
@@ -130,6 +134,7 @@ export function decodeUnits(buf: ArrayBuffer): UnitData {
     roles: h.roles ?? [...LEGACY_ROLES],
     parts: h.parts ?? null,
     height: h.height ?? FIGURE_HEIGHT,
+    lodHeight: h.lodHeight ?? h.height ?? FIGURE_HEIGHT,
     mesh,
     vat: { width: h.vat.width, height: h.vat.height, data: get('vat', Uint16Array) },
   }
@@ -211,7 +216,9 @@ export function checkUnits(d: UnitData): void {
 
 /** The figure's own fields (its roles, its parts, its height): the problems found, none when whole. Its roles 1 to
  *  MAX_ROLES, each with a clip range; a part for every colour role of the palette; a height over 0 */
-export function checkFigure(d: Pick<UnitData, 'roles' | 'ranges' | 'parts' | 'palette' | 'height'>): string[] {
+export function checkFigure(
+  d: Pick<UnitData, 'roles' | 'ranges' | 'parts' | 'palette' | 'height' | 'lodHeight'>,
+): string[] {
   const bad: string[] = []
   if (!(d.roles.length >= 1 && d.roles.length <= MAX_ROLES)) {
     bad.push(`${d.roles.length} roles: the shadow holds 1 to ${MAX_ROLES}`)
@@ -219,6 +226,7 @@ export function checkFigure(d: Pick<UnitData, 'roles' | 'ranges' | 'parts' | 'pa
   for (const r of d.roles) if (!d.ranges[r]) bad.push(`the role ${r} has no clip range`)
   if (d.parts) for (const r of d.palette) if (!d.parts[r]) bad.push(`the colour role ${r} names no part`)
   if (!(d.height > 0)) bad.push(`the figure's height ${d.height} is not over 0`)
+  if (!(d.lodHeight > 0)) bad.push(`the LOD switches' height ${d.lodHeight} is not over 0`)
   return bad
 }
 
