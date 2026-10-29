@@ -13,6 +13,8 @@ export interface LookWindow {
 export const WINDOWS: readonly LookWindow[] = [
   // Kobelnitz, its pond and the Goldbach, the pheasantry's orchard south-west (the owner's first, 2026-10-29)
   { map: 'austerlitz', name: 'kobelnitz', x: -450, z: 350 },
+  // the Pratzen plateau's western slope and top, 36.6 m of relief in play (A1b: the camera's focus on the ground)
+  { map: 'austerlitz', name: 'pratzen', x: 700, z: 250 },
 ]
 
 /** The look data file of a window, from the repo's root. */
