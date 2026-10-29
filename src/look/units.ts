@@ -61,6 +61,7 @@ import {
   type StepShadow,
 } from './shadow-look.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
+import { FOOT_FLOATS } from './world/smoke.ts'
 import {
   FADE_WIDTH,
   FAR_FROM,
@@ -90,8 +91,10 @@ import {
   CYCLE,
   farPalette,
   farRule,
+  fireStart,
   manAt,
   phaseAt,
+  scriptClock,
   slots,
   type Battalion,
   type Drill,
@@ -137,6 +140,7 @@ interface Host {
   cz: number
   lo: Vector3
   hi: Vector3
+  foot: Float32Array // its men's roots in its own frame as placed: [x0, z0, x1, z1] m (footprints)
   step: number // the 1/fps step its matrices were written for (a moving battalion moves once a step)
   phase: Phase | null // the script's phase its men were last written in (a halted one is written once a phase)
   stale: boolean[] // per LOD: its GPU copy of the matrices is older than the matrices
@@ -158,7 +162,8 @@ const SM_HOLD = 6 // m: lazy, the held sun box must cover the view by this much
 const FLAG_W = 1.4
 const FLAG_H = 1.1
 const FLAG_TOP = 3.0
-const FLAG_WIND = 0.6
+/** the wind's way, rad from +x toward +z: the flags fly and the smoke drifts toward (cos, sin) of it */
+export const FLAG_WIND = 0.6
 const FLAG_MIN_PX = 12
 // the trodden ground's mask: texels a side; s between its redraws while men move
 const TR_N = 256
@@ -260,6 +265,11 @@ export class Units {
   private readonly slot: ReturnType<typeof slots>
   private readonly speed: { march: number; run: number }
   private readonly man: ManState = { x: 0, z: 0, face: 0, role: 'halt', since: 0, moving: false }
+  private readonly clockAt = { cycle: 0, local: 0 } // (scratch: scriptClock)
+  /** the script held in its fire phase (?firehold=1: every battalion in line firing, for the bench and the smoke's
+   *  stills; scriptClock), set before the first frame */
+  holdFire = false
+  private placed = 0 // battalions placed so far (placeCount)
   /** the far LOD's switch by default (main.ts checks ?tinypx under it) */
   static readonly LOD_PX = 48
   /** the figure height in pixels below which a battalion draws its far LOD (±10%, so it does not flicker) */
@@ -793,7 +803,8 @@ export class Units {
             null)
     // (the proxy: shown to the map alone; the simple shadows and the tiny LOD: shown by frame())
     if (li >= this.proxyLod) host.isVisible = false
-    if (li === this.decalLod) host.alphaIndex = 1000 // (after everything else)
+    // (after the opaque scene, before the smoke's 2000: src/look/smoke.ts)
+    if (li === this.decalLod) host.alphaIndex = 1000
     // (a clone of a disabled source is disabled: enabled while the figures show; the nearest LOD's by setSplit)
     host.isPickable = false
     host.alwaysSelectAsActiveMesh = false
@@ -852,6 +863,7 @@ export class Units {
       cz: b.z,
       lo: new Vector3(),
       hi: new Vector3(),
+      foot: new Float32Array(4),
       step: -1,
       phase: null,
       stale: all(),
@@ -893,6 +905,10 @@ export class Units {
     let maxX = -Infinity
     let maxY = -Infinity
     let maxZ = -Infinity
+    let fx0 = Infinity
+    let fz0 = Infinity
+    let fx1 = -Infinity
+    let fz1 = -Infinity
     let changed = false
     const ls = moving ? Math.max(0, local - back) : local
     const ln = ls + 1 / fps
@@ -911,6 +927,10 @@ export class Units {
       manAt(this.drill, this.slot, i, ls, p, this.speed.run, this.speed.march, jitter[i * 4 + 3], man)
       const lx = man.x + jitter[i * 4]
       const lz = man.z + jitter[i * 4 + 1]
+      fx0 = Math.min(fx0, lx)
+      fx1 = Math.max(fx1, lx)
+      fz0 = Math.min(fz0, lz)
+      fz1 = Math.max(fz1, lz)
       const x = b.x + c * lx + s * lz
       const z = b.z - s * lx + c * lz
       const y = reuse ? matrices[i * 16 + 13] + next[i * 3 + 1] : groundAt(x, z)
@@ -977,6 +997,10 @@ export class Units {
     }
     h.cx = (minX + maxX) / 2
     h.cz = (minZ + maxZ) / 2
+    h.foot[0] = fx0
+    h.foot[1] = fz0
+    h.foot[2] = fx1
+    h.foot[3] = fz1
     // thin-instance bounds do not follow the animation: padded by a figure's height (his bayonet up,
     // SHADOW_H, as tall as the far figures grow, FAR_SCALE_Y) and his reach (sidePad: from the baked
     // poses); cull() stretches the same box
@@ -984,6 +1008,7 @@ export class Units {
     const pad = this.sidePad
     h.lo.set(minX - pad, minY - 0.3, minZ - pad)
     h.hi.set(maxX + pad, maxY + top, maxZ + pad)
+    this.placed++
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
     // (the simple shadow's bounds: stretched away from the sun by the longest shadow, as tall as the far figures grow)
     const k = this.scratch
@@ -1210,11 +1235,11 @@ export class Units {
     if ((this.hasNearest && this.nearestPx > 0) || (mapOn && this.tightCull)) {
       Frustum.GetPlanesToRef(cam.getTransformationMatrix(), this.camPlanes)
     }
+    const hold = this.holdFire ? fireStart(this.drill, this.speed.march, this.speed.run) : null
     for (const h of this.hosts) {
       if (!this.shown) continue
-      const t = T - h.b.offset
-      const cycle = Math.floor(t / CYCLE)
-      const local = t - cycle * CYCLE
+      // (a reserve stands in column whatever the hold)
+      const { cycle, local } = scriptClock(T, h.b.offset, h.b.reserve ? null : hold, this.clockAt)
       const cycleStart = T - local
       const p = h.b.reserve ? RESERVE.phase : phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
       // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
@@ -2292,6 +2317,28 @@ export class Units {
   }
   get figures(): number {
     return this.hosts.length * this.slot.line.length
+  }
+  /** how many times a battalion's men have been placed: it changes whenever a formation's ground does (the smoke's
+   *  mask of the formations, src/look/smoke.ts) */
+  get placeCount(): number {
+    return this.placed
+  }
+  /** each battalion's footprint as it stands, in its own frame (the smoke's cap over the men, src/look/smoke.ts): its
+   *  place and heading and its men's roots' bounds there, [x, z, heading, x0, z0, x1, z1] (FOOT_FLOATS a battalion)
+   *  into out (at least FOOT_FLOATS × battalions); returns how many. A line askew to the world's axes keeps its own
+   *  narrow box (a world box round it would take in the ground before it) */
+  footprints(out: Float32Array): number {
+    let n = 0
+    for (const h of this.hosts) {
+      if (h.step < 0) continue // (not placed yet)
+      const o = n * FOOT_FLOATS
+      out[o] = h.b.x
+      out[o + 1] = h.b.z
+      out[o + 2] = h.b.heading
+      out.set(h.foot, o + 3)
+      n++
+    }
+    return n
   }
   /** the battalions as placed (the tools aim their cameras at them) */
   get battalions(): Battalion[] {

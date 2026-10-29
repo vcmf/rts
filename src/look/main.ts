@@ -34,12 +34,22 @@ import { buildTerrain, splitGround } from './terrain.ts'
 import { buildBuildings } from './buildings.ts'
 import { buildBuildingLight } from './building-light.ts'
 import type { Units } from './units.ts'
+import type { Smoke } from './smoke.ts'
+import type { ClipInfo } from './world/smoke.ts'
+import type { Drill } from './world/armies.ts'
+import type { PuffDef } from '../sim/ruleset.ts'
 // the figures' unit data by file (data/figures/<figure>.unitdata): a scenario names its figure, the page finds it here
 const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', {
   query: '?url',
   import: 'default',
   eager: true,
 })
+// and their clips' registry (data/figures/index.json): the smoke takes the fire clip's shot from its events
+const FIGURE_INDEX = import.meta.glob<string>('../../data/figures/index.json', {
+  query: '?url',
+  import: 'default',
+  eager: true,
+})['../../data/figures/index.json']
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
@@ -620,8 +630,19 @@ if (params.has('msaa')) {
   MSAA.samples = n
 }
 let units: Units | null = null
+// ?smoke (with ?armies; decision 0080, docs/plans/active/smoke-bank.md): the musket smoke, the default variant;
+// ?smoke=0 none (main's look), ?smoke=soft|step a variant, and the knobs over it (src/look/world/smoke.ts, smokeLook);
+// ?firehold=1: the script held in its fire phase (every battalion in line firing: the bench's and the stills')
+let smoke: Smoke | null = null
+const fireHold = bit('firehold')
 // (the fight's middle: the bench's focus)
 let armiesFocus: [number, number] | null = null
+// (the smoke's and the armies' switches do nothing without the armies: said, not ignored)
+if (armiesParam === null) {
+  const needs = ['smokecap', 'smokestep', 'lookat', 'firehold'].filter(k => params.has(k))
+  if (params.has('smoke') && params.get('smoke') !== '0') needs.unshift('smoke')
+  if (needs.length) throw new Error(`?${needs.join(', ?')} need ?armies=<n> (the armies and their smoke)`)
+}
 if (armiesParam !== null) {
   if (mats.webgl1) {
     throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
@@ -753,8 +774,71 @@ if (armiesParam !== null) {
   units.setFarRule(farPal) // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
   // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
   units.setSmooth(smoothMove ?? true)
+  units.holdFire = fireHold ?? false
   armiesFocus = facingAt(units.battalions)
   Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
+  smoke = await buildSmoke(units, drill, era.smoke.volley, ARMIES_DEMO.figure)
+  lookAtFight(params.get('lookat'), armiesFocus, units.battalions)
+}
+
+/** ?lookat=fight|line|line1[,<radius m>]: the camera starts on the fight's middle (the gap between the lines), or on
+ *  the first side's (line) or the second side's (line1) front battalion nearest it, where the smoke is, at that zoom
+ *  (50 m by default): to judge the smoke by eye, both sides alike, without panning to it */
+function lookAtFight(
+  want: string | null,
+  fight: [number, number],
+  bs: readonly { side: number; x: number; z: number; reserve?: boolean }[],
+): void {
+  if (!want) return
+  const [name, r] = want.split(',')
+  const radius = r === undefined ? 50 : Number(r)
+  if ((name !== 'fight' && name !== 'line' && name !== 'line1') || !(radius > 0)) {
+    throw new Error(`?lookat must be fight, line or line1[,<radius m>], not ${want}`)
+  }
+  const dist = (b: { x: number; z: number }) => Math.hypot(b.x - fight[0], b.z - fight[1])
+  const side = name === 'line1' ? 1 : 0
+  const front = bs.filter(b => b.side === side && !b.reserve).sort((a, b) => dist(a) - dist(b))[0]
+  const at = name !== 'fight' && front ? front : { x: fight[0], z: fight[1] }
+  camera.target.x = at.x
+  camera.target.z = at.z
+  zoomOf(camera).set(radius)
+}
+/** the musket smoke over the armies (src/look/smoke.ts), unless ?smoke=0: the era's volley smoke, the figure's fire
+ *  clip (its shot from the clips' registry, its loop from the unit data), the script's fire phase */
+async function buildSmoke(u: Units, drill: Drill, def: PuffDef, figure: string): Promise<Smoke | null> {
+  const [{ Smoke: SmokeC }, { smokeLook, shotAt }, { fireStart }] = await Promise.all([
+    import('./smoke.ts'),
+    import('./world/smoke.ts'),
+    import('./world/armies.ts'),
+  ])
+  const look = smokeLook(params)
+  if (!look) return null
+  const r = await fetch(FIGURE_INDEX)
+  if (!r.ok) throw new Error(`figure index: ${r.status} ${r.statusText} for ${FIGURE_INDEX}`)
+  const index = (await r.json()) as { figures: Record<string, { fps: number; clips: Record<string, ClipInfo> }> }
+  const f = index.figures[figure]
+  if (!f) throw new Error(`smoke: no figure ${figure} in data/figures/index.json`)
+  const fire = u.data.ranges.fire
+  const start = fireStart(drill, u.data.ranges.march.speed, u.data.ranges.run.speed)
+  const timing = {
+    start,
+    shot: shotAt(fire.clips, f.clips, f.fps),
+    period: (fire.end - fire.start) / u.data.fps,
+    ranks: drill.ranks,
+    hold: u.holdFire ? start : null,
+  }
+  const armies = {
+    battalions: u.battalions,
+    drill,
+    fire: timing,
+    footprints: (out: Float32Array) => u.footprints(out),
+    get placeCount() {
+      return u.placeCount
+    },
+  }
+  const s = new SmokeC(scene, camera, mats, armies, def, look, () => S.t, D.spec.play)
+  Object.assign(window, { __smoke: s })
+  return s
 }
 if (flag('rt16')) MSAA.byte = false
 // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
@@ -1426,6 +1510,8 @@ if (params.has('bench')) {
   // ?bench=macro: the macro colour's arms whose shaders differ instead (with the detail layer)
   // ?bench=earth: the bare earth's surface up close off and on (earthOn, docs/plans/done/bare-earth.md)
   // ?bench=dof: the gameplay depth of field off and on (decision 0024)
+  // ?bench=smoke (with ?armies): the musket smoke on and off (decision 0080; best with ?firehold=1)
+  if (params.get('bench') === 'smoke' && !smoke) throw new Error('?bench=smoke needs the smoke: ?armies, no ?smoke=0')
   // (each material set as it stands, no binder left behind, once the texture's load has set 1: else a late load would
   // turn the off arm on)
   const earthArm = (on: number) => async () => {
@@ -1525,15 +1611,20 @@ if (params.has('bench')) {
                       { name: 'earth', apply: earthArm(1) },
                       { name: 'noearth', apply: earthArm(0) },
                     ]
-                  : params.get('bench') === 'dof'
+                  : params.get('bench') === 'smoke' && smoke
                     ? [
-                        { name: 'nodof', apply: dofArm(0) },
-                        { name: 'dof', apply: dofArm(1) },
+                        { name: 'smoke', apply: () => smoke?.setOn(true) },
+                        { name: 'nosmoke', apply: () => smoke?.setOn(false) },
                       ]
-                    : [
-                        { name: 'l2', apply: () => setDetail([]) },
-                        { name: 'l0', apply: () => setDetail(['DETAIL_L0']) },
-                      ]
+                    : params.get('bench') === 'dof'
+                      ? [
+                          { name: 'nodof', apply: dofArm(0) },
+                          { name: 'dof', apply: dofArm(1) },
+                        ]
+                      : [
+                          { name: 'l2', apply: () => setDetail([]) },
+                          { name: 'l0', apply: () => setDetail(['DETAIL_L0']) },
+                        ]
   // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench:
   // docs/plans/done/forest-bench.md) inside the play area: the camera's focus is clamped to it every frame
   // (src/look/post.ts)

@@ -205,6 +205,38 @@ export interface DyeSet {
   materials: Readonly<Record<string, string>>
   boots: string
 }
+/** the smoke a unit's fire makes, as the renderer paints it (docs/plans/active/smoke-bank.md, decision 0080): a soft
+ *  translucent card for a group of files when a rank fires, born at the muzzles as a plume jetting ahead, then grown
+ *  into its neighbours' (the volley's bank), rolling ahead, rising, drifting with the wind, thinning and broken into
+ *  holes as it dies. Era data (src/rulesets/<era>-smoke.ts); metres, seconds, sRGB. Not read by the simulation */
+export interface PuffDef {
+  files: number // a puff for this many files of a firing rank
+  life: readonly [number, number] // s: a puff's life, the shortest and the longest
+  erode: number // the share of its life after which it thins and breaks into holes
+  radius: readonly [number, number] // m: at birth and grown
+  grow: number // s: the growth's time constant
+  ahead: number // m ahead of the front rank at birth (the muzzles)
+  height: number // m above the ground at birth
+  rankReach: number // m: how much nearer the front rank a rank behind's muzzles are (over the shoulders before it)
+  rankLift: number // m: how much higher a rank behind's muzzles are than the one before's
+  lateral: number // m: the spread of a puff's place along the front about its muzzle group's middle
+  section: number // m: the stretch of a line that goes off together (about a company), its moment its own
+  clumps: readonly [number, number, number] // m: the lengths of the three waves the volley's clumps are made of
+  body: number // m: the height over the ground a man is read at, for the smoke's cap over the men
+  jet: readonly [number, number] // the blast: m/s ahead at birth, and the time constant it dies over (s)
+  plume: readonly [number, number] // the young plume: its length over its width at birth, the time it relaxes in (s)
+  roll: number // m/s: the bank's slow roll ahead once the blast has died
+  bank: number // the grown puff's width along the front over its depth: the volley's puffs run into one bank
+  rise: readonly [number, number] // m/s up at birth, and the time constant it slows over (s)
+  drift: number // m/s: the wind's carry
+  jitter: number // s: the men's own spread about their rank's shot
+  stagger: number // s: the spread of the moments a line's sections (about a company each) go off at
+  vary: number // 0 to 1: how much each puff's size, reach, rise and density differ from the era's (0: all alike)
+  opacity: number // a puff's densest (0 to 1): a few of them over each other make the bank's core
+  colour: string // the smoke's own colour, lit by the scene's light
+  flash: readonly [string, number] // the muzzle flash: its colour and how long the young puff shows it (s)
+}
+
 /** the cloth parts a dress names a dye for */
 export type ClothPart = 'coat' | 'facings' | 'trousers' | 'waistcoat' | 'headgear' | 'greatcoat'
 /** a uniform as its cloth parts' dyes, by name, never a colour (decision 0068): its coat, facings, trousers (or

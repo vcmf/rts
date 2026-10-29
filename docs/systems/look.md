@@ -1,8 +1,8 @@
 ---
 status: current
 last_reviewed: 2026-10-27
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts]
-decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/smoke.ts, src/look/world/smoke.ts, src/look/shaders/smoke.vert, src/look/shaders/smoke.frag, src/rulesets/napoleonic-smoke.ts, test/smoke.test.ts]
+decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0080-smoke-as-soft-painted-banks]
 ---
 
 # The look page (Track E, L0)
@@ -827,6 +827,81 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `--print <json>` for a saved run). Timings come from untraced runs; the trace explains them. Off, nothing is hooked;
   on, it patches no prototype the render loop calls per mesh and looks nothing up by name a draw. Hooks: `__units`
   (`drawn()`, `figures`, `battalions`, `setMask`, `show`), `__armies` (`blocked`, `focus`, `coats`).
+
+### The musket smoke (`?smoke`, with `?armies`; decision 0080, proposed)
+
+The plan: `docs/plans/active/smoke-bank.md`; the research: `docs/research/smoke.md`. Soft translucent cards over the
+scripted infantry's volleys, a plume at each muzzle group grown into one bank along the front, on by default with
+`?armies` (`?smoke=0`: none, main's page).
+
+- **The shots** (`src/look/world/smoke.ts`, pure, tested in `test/smoke.test.ts`): a battalion in line fires by ranks
+  (`src/look/world/armies.ts`); a rank goes off at its fire's start (`fireStart`) + its rank's lag + the shot's moment
+  in the fire loop, then once a loop until its cycle ends (`shotsBetween`). The moment is the figure's own `fire` clip
+  event on the bake's timeline (`shotAt`, `data/figures/index.json`: 1.5 s for the infantry), the loop the unit
+  data's fire range. Each shot leaves a puff for every `files` files of the rank (`muzzles`, `volleyPuffs`), born at
+  the muzzles (the era's `ahead` before the front rank, a rank behind `RANK_REACH` nearer), its birth set by its
+  section's own moment (`SECTION` m of the front go off together, ±`stagger`/2) and the men's own lag, its seed, life
+  and own factors on the era's size, reach, rise and density its own (`puffVary`: by the era's `vary`, one puff in
+  seven thin; `hash`: the same at every load), its place spread along the front (`LATERAL`, most of a group's width,
+  so the groups' even spacing does not show), its density by the volley's clumps (`clump`: three waves of unrelated
+  lengths, thick in places, thin gaps elsewhere, never at the groups' spacing), the sections' grid shifted each volley.
+- **The ring** (`src/look/smoke.ts`): the puffs are thin instances of one quad, their birth place and clock, way
+  ahead, seed, life and own factors in the instance buffer's first three columns; written only when a shot falls between two frames'
+  clocks (a partial upload of the slots written), the oldest overwritten when full (`ringSize`: every line
+  battalion's puffs alive at once). A clock that runs back or jumps by more than a second (a load, `?frozen` tools)
+  rebuilds the ring from the shots of the longest life before it, so the smoke at a clock is the same however it was
+  reached.
+- **The card** (`smoke.vert`): young, a jet across the front's way, near the level, its back at the muzzle; grown, a
+  low streak hung at the muskets, a little above them: its height the eye's up (square to the front and the view ray),
+  its width along the front, wider than tall and flatter with age, so it reads at the chests of a line facing the
+  camera and just past the heads of one seen from behind, a streak along the line from above (a tall card facing the
+  camera read metres ahead of a line from behind; a card lying flat read as dust at the knees from the front). Moved
+  by its age (`puffAt`, mirrored: the
+  shot's blast ahead dying fast, then the slow roll, a rise slowing, the flags' wind, each puff's a little its own,
+  `FLAG_WIND`), grown, by its own factors. The jet is long along the shot, narrow at the muzzle and widening ahead
+  (`smoke.frag`); the streak is the era's `bank` times wider than its puff's size, and more with age, into its
+  neighbours. Not yet born, past its life or of no density it is put outside the view.
+- **The shape** (`smoke.frag`): a soft falloff from the card's middle, broken by the paint grain's blotches twice
+  (billows about a puff's size and smaller ones on them, in the card's own metres, so the smoke spreads through them,
+  churning slowly), its rim torn by the smaller billows and the paper's grain; the jet densest at the muzzle, the streak
+  low; young, softer; with age it thins
+  (to a third of the era's opacity at its end, `PUFF_THIN`) and its threshold climbs past the billows (holes, then
+  gone); faded out over its lowest 0.7 m at its ground (no hard line where a card meets it).
+- **The light**: two bands, the sun's side of the card against its middle with the billows drawing their edge: a warm
+  white (the era's `#F3EFE6` in the sun's warmth) and a pale cool grey in its shade (0.84 of it, turned a little to
+  the mood's shadow colour): light all over. The trees' baked shadow, the clouds' shade, the air, the grade. The young
+  jet's muzzle end shows the era's flash colour for its first 0.07 s (a small spark at the muzzle).
+- **The blend**: drawn after everything opaque, no depth written, both faces; colour by its opacity over what lies
+  behind, the alpha (the depth of field's lens term, decision 0040) kept: the smoke blurs as what lies behind it, a few
+  metres away at most, as the soldiers' simple shadows do; drawn after those shadows (alphaIndex 2000 against their
+  1000). Cards are not sorted (one colour family, the same up to blend order).
+- **The cap over the men** (`?smokecap=<0 to 1>`, 0.6 by default; 1 draws no mask): a 512² R8 mask over the play area
+  (about 0.93 m texels: 474 m over 512) of each battalion's footprint in its own frame (`Units.footprints`: its men's roots, so a line
+  askew to the world's axes covers only its own narrow ground; a world box round it took in the ground before it and
+  thinned the smoke at the muzzles) and a 1 m fall-off, about a texel: the bilinear read's soft step, no wider band
+  before the line (`drawClearance`), drawn again when a battalion is placed (`Units.placeCount`), at most at 12 Hz.
+  Each smoke pixel follows its view ray down to a man's body height (the era's `body`) over the puff's ground and reads
+  it (`coverAt`); over a formation that card's opacity takes the cap's factor (`coverCap`). A factor per card, not a
+  cap on the bank's total: overlapping cards add up (three grown puffs at 0.95 × 0.6 make about 0.92); the men read in
+  the stills from either side, and the smoke stays whole elsewhere (a true cap: the plan's open question).
+- **Zoom**: each puff a rank from its seed; the share kept is 1 up to 60 m from the focus, then 60 / r down to a
+  quarter (`keepShare`), the kept ones grown by 1/√share and those at the cut shrinking out (`keepScale`), so the
+  smoke's area holds while its puffs fall to a quarter at the widest zoom.
+- **The looks** (`smokeLook`, `SMOKE_LOOKS`): `?smoke=soft` (the default) and `?smoke=step` (its clock stepped at
+  12 fps, the art bible's stepped effects). Knobs over either: `?smokestep=<fps>` (0: smooth), `?smokecap=<0 to 1>`. A
+  bad value throws.
+- **The era's values** (`PuffDef` in `src/sim/ruleset.ts`; `src/rulesets/napoleonic-smoke.ts`, the ruleset's
+  `smoke.volley` in `src/rulesets/index.ts`): puffs a file group, life, thinning, radius, growth, the muzzles' place,
+  the blast, the plume, the roll, the bank's width, the rise, the drift, the men's spread, the sections' stagger, the
+  puffs' variety, the muzzles' places by rank (`rankReach`, `rankLift`), the spread along the front (`lateral`), the
+  sections' and the clumps' lengths (`section`, `clumps`), a man's body height for the cap (`body`), opacity, colour
+  and flash; checked once (`validateSmoke`: a bad value throws, naming it).
+- **The bench**: `?firehold=1` holds the script in its fire phase (`scriptClock`: each battalion in line fires all the
+  time, its volleys still its own); `?bench=smoke&firehold=1` measures the smoke on and off in one page. `__smoke`:
+  `written`, `capacity`. `?lookat=fight|line|line1[,<radius m>]` starts the camera on the fight, or the first or the
+  second side's front battalion.
+- **Memory**: the ring, 64 B a puff (1,512 puffs at 20 a side: 97 KB, on the GPU and the CPU; 12 of its 16 floats
+  used), and the mask, 256 KB.
 
 ### The readability guard (L2a)
 
