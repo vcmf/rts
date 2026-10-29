@@ -9,19 +9,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --paper: #f6f4ee;
+  --paper: #f1f2f4;
   --ink: #211f1c;
   --ink-2: #5f5a52;
   --ink-3: #8f877b;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   --serif: "Instrument Serif", Georgia, serif;
 }
-html, body { height: 100%; margin: 0; overflow: hidden; background: #d6cfbf; color: var(--ink); }
+html, body { height: 100%; margin: 0; overflow: hidden; background: #cbc9cf; color: var(--ink); }
 canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #ink { pointer-events: none; }
 #cart {
   position: fixed; left: 16px; top: 14px; width: 290px; padding: 12px 14px 12px; pointer-events: none;
-  background: radial-gradient(130% 120% at 30% 30%, var(--paper) 55%, rgba(246, 244, 238, 0) 100%);
+  background: radial-gradient(130% 120% at 30% 30%, var(--paper) 55%, rgba(241, 242, 244, 0) 100%);
 }
 #cart h1 { margin: 0; font: 400 26px/1.05 var(--serif); letter-spacing: 0.01em; }
 #cart .sub { font: italic 400 15px/1.3 var(--serif); color: var(--ink-2); }
@@ -78,17 +78,18 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 /*
  * The campaign map prototype (docs/plans/active/k1-theatre-look.md; the look: docs/proposals/campaign-map.md).
  * The 1805 theatre as a lit relief print: the heights baked into a relief at load (the battle map lit view bake,
- * prototypes/staff-map.html, at a thousand times the scale), on parchment, in a 3D view tilted 20 degrees off straight
- * down (decision 0055). Rivers, roads, towns and names are ink on a 2D canvas above, redrawn when the camera moves.
+ * prototypes/staff-map.html, at a thousand times the scale), on parchment, in a 3D view tilted 30 to 52 degrees off
+ * straight down (decision 0055). Rivers, roads, towns and names are ink on a 2D canvas above, redrawn when the camera moves.
  *
  * URL (defaults in brackets): ?rz= the heights exaggerated for the light (2); ?sun= the sun height in degrees (38);
  * ?floor= and ?top= the darkest and lightest relief tone against the paper (0.55, 1.3); ?base= flat ground's tone
  * (0.96); ?far= the shade's strength over the whole theatre (0.45, full up close); ?dark= how near the deepest
- * shade comes to a warm black (0.88); ?terrace= the terraces' height in metres (half the contour interval; 0 off);
+ * shade comes to the cool shadow ink (0.78);
+ * ?terrace= the terraces' height in metres (half the contour interval; 0 off);
  * ?detail= the real relief mixed back over them (0.3); ?smooth= the real relief's smoothing in cells (1); ?contour=
  * the contour interval in metres (200); ?view=x,z,km the target in km from the centre, east and north, and the
  * camera distance; ?theatre= the generated file; ?mount= the mountains' extra lift (4; 0 true heights); ?fine=
- * the relief's small detail kept (0.5); ?rise= the map's 3D rise per km of those heights (1.5; 0 flat);
+ * the relief's small detail kept (0.5); ?rise= the map's 3D rise per km of those heights (3; 0 flat);
  * ?mountlight= the milder lift the light reads (1.5).
  */
 'use strict';
@@ -174,7 +175,7 @@ const RELIEF_SUN = param('sun', 38, 2, 85);
 const SHADE_FLOOR = param('floor', 0.55, 0.3, 0.97);
 const SHADE_TOP = param('top', 1.3, 1.02, 1.8);
 // how far the deepest shade goes toward the warm black ink (1: all the way)
-const SHADE_DARK = param('dark', 0.88, 0, 1);
+const SHADE_DARK = param('dark', 0.78, 0, 1);
 // flat ground's tone against the paper: below 1, so the lit slopes have room to rise to near white above it
 const SHADE_BASE = param('base', 0.96, 0.5, 1);
 // the shade's strength at the theatre's zoom, rising to full as the camera closes in
@@ -274,8 +275,8 @@ const SHEET = param('sheet', 0, 0, 2000);
 const CAST_SMOOTH = 6;
 // the plate's thickness in km, and the camera's tilt off straight down, in degrees, far and at the closest zoom
 const THICK = 8;
-const TILT_FAR = 20;
-const TILT_NEAR = param('tilt', 40, 0, 55);
+const TILT_FAR = 30;
+const TILT_NEAR = param('tilt', 52, 0, 60);
 // the cloud shadows drifting over the map: how dark (0 off)
 const CLOUDS = param('clouds', 0.12, 0, 0.5);
 // how much of the real relief's detail the light gets back up close
@@ -294,8 +295,8 @@ const MOUNT_LIGHT = param('mountlight', 1.5, 0, 12);
 // the map raised in 3D by the same representative heights, RISE km of map for each km of them, smoothed over
 // DISP_SMOOTH cells (the mesh has a vertex about every km), fading to flat over the last RISE_EDGE km to the plate's
 // edge so the map still lies on its table
-const RISE = param('rise', 1.5, 0, 6);
-const DISP_SMOOTH = 2;
+const RISE = param('rise', 3, 0, 8);
+const DISP_SMOOTH = 1;
 const RISE_EDGE = 12;
 const MOUNT_R = 24;
 const MOUNT_FROM = 500;
@@ -494,7 +495,7 @@ const GL_DPR = Math.min(2, window.devicePixelRatio || 1);
 const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: false }, false);
 engine.setHardwareScalingLevel(1 / GL_DPR);
 const scene = new B.Scene(engine);
-scene.clearColor = new B.Color4(0.84, 0.81, 0.75, 1);
+scene.clearColor = new B.Color4(0.8, 0.79, 0.81, 1);
 scene.skipPointerMovePicking = true;
 
 const MAP_W = (2 * halfX) / 1000;
@@ -528,7 +529,7 @@ uniform vec4 uFineRect0, uFineRect1, uFineRect2;
 uniform vec3 uSun;
 uniform float uCellKm, uFineCellKm, uRZ, uFineK, uNearK, uDetailK, uSheetK, uContourK, uSheet;
 uniform float uTime, uCloudK, uHaze, uScreenH;
-uniform vec3 uPaper, uTable, uWater, uShadowInk, uHighlight;
+uniform vec3 uPaper, uTable, uWater, uShadowInk, uHighlight, uGlow, uContourInk;
 uniform float uFloor, uTop, uContour, uDark, uBase, uShadeK;
 
 float rectDist(vec2 p, vec2 extent) {
@@ -650,7 +651,7 @@ void main() {
 
   vec3 paper = uPaper * grain;
   /* a thin worn border inside the neatline */
-  paper *= mix(vec3(0.9, 0.85, 0.75), vec3(1.0), smoothstep(0.6, 3.0, -d));
+  paper *= mix(vec3(0.88, 0.88, 0.9), vec3(1.0), smoothstep(0.6, 3.0, -d));
 
   /* the light per pixel: the slope of the representative heights (a smooth cubic read, with the finer detail up
      close), the cast shadow of the large forms and the exposure baked */
@@ -675,7 +676,9 @@ void main() {
   vec3 base = paper * uBase;
   float shade = pow(clamp((1.0 - v) / (1.0 - uFloor), 0.0, 1.0), 1.15);
   float light = pow(clamp((v - 1.0) / (uTop - 1.0), 0.0, 1.0), 0.8);
-  vec3 col = v < 1.0 ? mix(base, uShadowInk, shade * uDark * uShadeK) : mix(base, uHighlight, light);
+  /* cold paper, cool shade, warm light: the lit slopes turn a warm yellow, the brightest faces glow orange */
+  vec3 lit = mix(mix(base, uHighlight, light), uGlow, 0.65 * pow(light, 2.5));
+  vec3 col = v < 1.0 ? mix(base, uShadowInk, shade * uDark * uShadeK) : lit;
 
   /* the contour sheets, per pixel at any zoom: a pixel whose ground toward the light lies on a lower sheet is on the
      lit rim of its own; one whose ground toward the light lies on a higher sheet is in that sheet's shadow */
@@ -700,7 +703,7 @@ void main() {
   l1 *= 1.0 - smoothstep(0.06, 0.16, w1);
   l5 *= 1.0 - smoothstep(0.08, 0.2, w5);
   /* far out only the index lines, fainter: half-faded lines on steep uplands read as crumbs */
-  col = mix(col, vec3(0.2, 0.16, 0.12), max(0.45 * l1 * uContourK, mix(0.3, 0.75, uContourK) * l5));
+  col = mix(col, uContourInk, max(0.55 * l1 * uContourK, mix(0.35, 0.85, uContourK) * l5));
 
   /* lakes: a flat wash sunk below the shore, the bank toward the light shading the water */
   vec2 luv = (vW + uHalf) / (2.0 * uHalf);
@@ -934,12 +937,13 @@ if (Math.max(NX, NZ) > maxTextureSize) throw new Error(`the theatre grid (${NX} 
 const lakes = bakeLakes(maxTextureSize);
 window.__bakeMs = Math.round(performance.now() - tBake);
 
-const PAPER = hex('#f4f1e8');
+// cold white paper, the light warm (the owner's Valdez print: design/campaign/refs/sources.txt)
+const PAPER = hex('#eceef1');
 const material = new B.ShaderMaterial('print', scene, 'print', {
   attributes: ['position'],
   uniforms: [
     'worldViewProjection', 'uHalf', 'uTexel', 'uLakeTexel', 'uCellKm', 'uLightXZ',
-    'uRise', 'uEdge', 'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uHighlight',
+    'uRise', 'uEdge', 'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uHighlight', 'uGlow', 'uContourInk',
     'uFloor', 'uTop', 'uContour', 'uDark', 'uBase', 'uShadeK',
     'uFineTexel0', 'uFineTexel1', 'uFineTexel2', 'uFineRect0', 'uFineRect1', 'uFineRect2',
     'uSun', 'uFineCellKm', 'uRZ', 'uFineK', 'uNearK',
@@ -963,13 +967,15 @@ material.setVector2('uLakeTexel', new B.Vector2(1 / lakes.w, 1 / lakes.h));
 material.setFloat('uCellKm', CELL / 1000);
 material.setVector2('uLightXZ', new B.Vector2(NW[0], NW[1]));
 material.setColor3('uPaper', B.Color3.FromArray(PAPER));
-material.setColor3('uTable', B.Color3.FromArray(hex('#d6cfbf')));
+material.setColor3('uTable', B.Color3.FromArray(hex('#cbc9cf')));
 material.setColor3('uWater', B.Color3.FromArray(hex('#3b78b0')));
-material.setColor3('uShadowInk', B.Color3.FromArray(hex('#2a2119')));
+material.setColor3('uShadowInk', B.Color3.FromArray(hex('#4a4656')));
+material.setColor3('uGlow', B.Color3.FromArray(hex('#f2a35e')));
+material.setColor3('uContourInk', B.Color3.FromArray(hex('#a4542a')));
 material.setFloat('uDark', SHADE_DARK);
 material.setFloat('uBase', SHADE_BASE);
 material.setFloat('uShadeK', 1);
-material.setColor3('uHighlight', B.Color3.FromArray(hex('#ffffff')));
+material.setColor3('uHighlight', B.Color3.FromArray(hex('#fff1d6')));
 material.setFloat('uFloor', SHADE_FLOOR);
 material.setFloat('uTop', SHADE_TOP);
 material.setFloat('uContour', CONTOUR);
@@ -1019,7 +1025,7 @@ const sideMaterial = new B.ShaderMaterial('side', scene, 'side', {
   attributes: ['position', 'normal'],
   uniforms: ['worldViewProjection', 'uPaper', 'uLightXZ', 'uThick'],
 });
-sideMaterial.setColor3('uPaper', B.Color3.FromArray(hex('#e9e4d6')));
+sideMaterial.setColor3('uPaper', B.Color3.FromArray(hex('#e2e3e7')));
 sideMaterial.setVector2('uLightXZ', new B.Vector2(NW[0], NW[1]));
 sideMaterial.setFloat('uThick', THICK);
 const sides = B.MeshBuilder.CreateBox('sides', { width: MAP_W, height: THICK - 0.02, depth: MAP_H }, scene);
@@ -1033,7 +1039,7 @@ plane.material = material;
 plane.alwaysSelectAsActiveMesh = true;
 
 /* =========================================================================
-   CAMERA: tilted 20 degrees off straight down, north up; pan by drag, zoom to the cursor
+   CAMERA: tilted 30 degrees off straight down far out, 52 up close (?tilt=), north up; pan by drag, zoom to the cursor
    ========================================================================= */
 /** The camera's tilt off straight down for a distance (km): TILT_FAR far out, TILT_NEAR at the closest zoom. */
 function tiltFor(dist) {

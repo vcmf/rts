@@ -130,7 +130,12 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   still, 9.9 ms with the ink. Then (the owner: "somewhere there's still this carreaux effect"): every smoothing at load (the large
   forms, the mountain lift's region, the cast shadow's forms, the exposure, the contour field, the displacement) a
   box mean, whose square, grid-aligned edges showed in the light: now three box means of a third of the width, which
-  approach a Gaussian. The bake at load went from 1.5 to 3.2 s on test machine A (an offline bake, K3). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  approach a Gaussian. The bake at load went from 1.5 to 3.2 s on test machine A (an offline bake, K3). Then the owner's Valdez print ("make the map white cold, the light warm yellow, and the contour line a big
+  orange brown"): a cold white paper (`#eceef1`) and table, lit slopes a pale warm yellow (`#fff1d6`) turning orange
+  (`#f2a35e`) on the brightest faces, a cool grey-violet shade (`#4a4656`, 0.78 of the way), contours in orange-brown
+  (`#a4542a`). And (the owner's grey relief model: "make the mountain steeper, exaggerate more its height, and look at
+  the map from an angle"): the 3D rise doubled (`?rise=3`), its shape smoothed over one cell instead of two, the camera
+  tilted 30° far out to 52° at the closest zoom (the top edge of the view about 66° off straight down: still no sky). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
