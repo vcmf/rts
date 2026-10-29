@@ -1,6 +1,7 @@
 // The look page (app/look.html): the painted world in the game's toolchain, ported from
 // prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
+import type { SimPlay } from './sim-armies.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Engine } from '@babylonjs/core/Engines/engine.js'
@@ -14,6 +15,7 @@ import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { q, runBench, showBench } from './bench.ts'
+import { TR, tr, trNow } from './trace.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
@@ -615,6 +617,9 @@ if (
 ) {
   throw new Error(`?ushadowswitch must be <r0>,<r1> m with r0 < r1, not ${uShadowSwitch}`)
 }
+// ?sim: the armies played by the sim, not the script (battle threads PR 4b; needs ?armies)
+const simParam = params.has('sim')
+if (simParam && armiesParam === null) throw new Error('?sim plays the armies: give ?armies=<battalions a side> too')
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 40)) {
   throw new Error(
     `?armies must be 1 to 40 battalions a side (the demo map holds 40: docs/plans/active/armies-32k.md), not ${armiesParam}`,
@@ -630,7 +635,7 @@ if (params.has('msaa')) {
   MSAA.samples = n
 }
 let units: Units | null = null
-// ?smoke (with ?armies; decision 0081, docs/plans/active/smoke-bank.md): the musket smoke, the default variant;
+// ?smoke (with ?armies; decision 0083, docs/plans/active/smoke-bank.md): the musket smoke, the default variant;
 // ?smoke=0 none (main's look), ?smoke=soft|step a variant, and the knobs over it (src/look/world/smoke.ts, smokeLook);
 // ?firehold=1: the script held in its fire phase (every battalion in line firing: the bench's and the stills')
 let smoke: Smoke | null = null
@@ -776,8 +781,38 @@ if (armiesParam !== null) {
   units.setSmooth(smoothMove ?? true)
   units.holdFire = fireHold ?? false
   armiesFocus = facingAt(units.battalions)
-  Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
-  smoke = await buildSmoke(units, drill, era.smoke.volley, ARMIES_DEMO.figure)
+  // ?sim: the sim plays the armies (src/look/sim-armies.ts, battle threads PR 4b) in place of the script
+  let sim: SimPlay | null = null
+  if (simParam) {
+    const { playSim } = await import('./sim-armies.ts')
+    sim = await playSim(units.battalions, drill.companies * drill.files * drill.ranks, armiesFocus, {
+      ruleset: ARMIES_DEMO.ruleset,
+      unitType: ARMIES_DEMO.unitType,
+      ...ARMIES_DEMO.sim,
+    })
+    units.source = sim.source
+    const s = sim
+    // (first: the renderer's frame reads what the tick took)
+    scene.onBeforeRenderObservable.add(
+      () => {
+        const t = trNow()
+        s.tick(Math.min(engine.getDeltaTime() / 1000, 0.1))
+        if (t) tr(TR.simMs, performance.now() - t)
+      },
+      undefined,
+      true,
+    )
+  }
+  Object.assign(window, {
+    __units: units,
+    __armies: { blocked, focus: armiesFocus, coats: units.coats(), sim: sim?.link },
+  })
+  // the smoke reads the script (its volleys' moments, its battalions' footprints): the sim's men (?sim) fire and stand
+  // by the sim, so no smoke with it yet; asked for by name with it, said
+  if (simParam && params.has('smoke') && params.get('smoke') !== '0') {
+    throw new Error('?smoke follows the script, not the sim yet: drop ?sim or ?smoke (src/look/smoke.ts)')
+  }
+  smoke = simParam ? null : await buildSmoke(units, drill, era.smoke.volley, ARMIES_DEMO.figure)
   lookAtFight(params.get('lookat'), armiesFocus, units.battalions)
 }
 
@@ -1510,7 +1545,7 @@ if (params.has('bench')) {
   // ?bench=macro: the macro colour's arms whose shaders differ instead (with the detail layer)
   // ?bench=earth: the bare earth's surface up close off and on (earthOn, docs/plans/done/bare-earth.md)
   // ?bench=dof: the gameplay depth of field off and on (decision 0024)
-  // ?bench=smoke (with ?armies): the musket smoke on and off (decision 0081; best with ?firehold=1)
+  // ?bench=smoke (with ?armies): the musket smoke on and off (decision 0083; best with ?firehold=1)
   if (params.get('bench') === 'smoke' && !smoke) throw new Error('?bench=smoke needs the smoke: ?armies, no ?smoke=0')
   // (each material set as it stands, no binder left behind, once the texture's load has set 1: else a late load would
   // turn the off arm on)

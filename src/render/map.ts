@@ -19,7 +19,8 @@ import {
   SHOT_CONE,
 } from '../sim/index.ts'
 import type { Scene } from './scene.ts'
-import type { SoldierLayer } from './soldiers.ts'
+import type { SoldierLayer, Unit } from './soldiers.ts'
+import { MAN_ALIVE, MAN_LEFT, MARCH_FROM } from './men.ts'
 import { CLASS_STYLE, INK, SIDE_INK, FIRE_INK, MORALE_INK } from './style.ts'
 
 // k: pixels per metre; north up
@@ -425,8 +426,9 @@ export class StaffMap {
       g.moveTo(sx + d, sy - d)
       g.lineTo(sx - d, sy + d)
     }
-    for (const m of layer.fallen) cross(m.x, m.z)
-    for (const u of layer.units.values()) for (const m of u.men) if (!m.alive) cross(m.x, m.z)
+    // every man fallen, of the battalions here or gone
+    const M = layer.men
+    for (let m = 0; m < M.n; m++) if (!(M.flags[m] & (MAN_ALIVE | MAN_LEFT))) cross(M.x[m], M.z[m])
     g.stroke()
     const p = [0, 0, 0]
     for (const u of layer.units.values()) {
@@ -441,30 +443,31 @@ export class StaffMap {
       // interpolated, as the men are
       const [fx, fz, fh] = layer.anchor(u.i, layer.alphaNow, 0)
       if (mounted) layer.frame(u.i, layer.alphaNow)
-      for (const m of u.men) {
-        if (m.alive) {
-          const [sx, sy] = toS(v, m.x, m.z)
+      for (let j = 0; j < u.n; j++) {
+        const m = u.ids[j]
+        if (M.flags[m] & MAN_ALIVE) {
+          const [sx, sy] = toS(v, M.x[m], M.z[m])
           if (!vis(sx, sy)) continue
           g.moveTo(sx + R, sy)
           g.arc(sx, sy, R, 0, Math.PI * 2)
           if (mounted) {
             // at rest, along his place's direction of travel (a column of route's bends)
-            const sp = Math.hypot(m.vx, m.vz)
-            let dx = m.vx / sp
-            let dz = m.vz / sp
-            if (!(sp > 0.3)) {
-              layer.place(u.i, m.s, false, p)
+            const sp = Math.hypot(M.vx[m], M.vz[m])
+            let dx = M.vx[m] / sp
+            let dz = M.vz[m] / sp
+            if (!(sp > MARCH_FROM)) {
+              layer.place(u.i, M.s[m], false, p)
               dx = Math.sin(p[2])
               dz = Math.cos(p[2])
             }
-            const [bx, by] = toS(v, m.x - dx * 2.4, m.z - dz * 2.4)
+            const [bx, by] = toS(v, M.x[m] - dx * 2.4, M.z[m] - dz * 2.4)
             g.moveTo(sx, sy)
             g.lineTo(bx, by)
           }
         }
       }
       g.stroke()
-      if (u.figure === 'crewed') this.drawPieces(g, v, layer, u.i, u.men, R, ink)
+      if (u.figure === 'crewed') this.drawPieces(g, v, layer, u, R, ink)
       // the colours: a small flag at the anchor, pointing the way the battalion faces
       const [ax, ay] = toS(v, fx, fz)
       g.save()
@@ -518,13 +521,14 @@ export class StaffMap {
         g.textBaseline = 'top'
         g.fillText(MORALE_STATES[st], bx, by + 4)
       }
-      this.drawVolleys(g, v, layer, u.i, u.men, R)
+      this.drawVolleys(g, v, layer, u, R)
       if (showSlots) {
         layer.frame(u.i, layer.alphaNow)
         g.fillStyle = '#c0392b'
-        for (const m of u.men) {
-          if (m.alive) {
-            layer.place(u.i, m.s, false, p)
+        for (let j = 0; j < u.n; j++) {
+          const m = u.ids[j]
+          if (M.flags[m] & MAN_ALIVE) {
+            layer.place(u.i, M.s[m], false, p)
             const [qx, qy] = toS(v, p[0], p[1])
             g.fillRect(qx - 1, qy - 1, 2, 2)
           }
@@ -534,19 +538,11 @@ export class StaffMap {
   }
   // a battery's pieces: for each detachment with men, a barrel ahead of its front rank along its facing and the
   // axle across it
-  private drawPieces(
-    g: CanvasRenderingContext2D,
-    v: View,
-    layer: SoldierLayer,
-    i: number,
-    men: { s: number; x: number; z: number; alive: boolean }[],
-    R: number,
-    ink: string,
-  ): void {
+  private drawPieces(g: CanvasRenderingContext2D, v: View, layer: SoldierLayer, u: Unit, R: number, ink: string): void {
     const w = this.w
+    const i = u.i
     const U = typeOf(w, i)
-    const g0 = U.geo
-    const RF = g0.ranks * g0.files
+    const mid = [0, 0]
     const [ax, az, ah] = layer.anchor(i, layer.alphaNow, 0)
     const t = (w.meta[M_TICK] - 1 + layer.alphaNow) * DT
     const pose = { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }
@@ -554,23 +550,12 @@ export class StaffMap {
     g.lineWidth = Math.max(1.5, R * 0.9)
     g.beginPath()
     for (let c = 0; c < U.C; c++) {
-      let x = 0
-      let z = 0
-      let n = 0
-      // the front rank
-      for (const m of men) {
-        if (m.alive && Math.floor(m.s / RF) === c && Math.floor((m.s % RF) / g0.files) === 0) {
-          x += m.x
-          z += m.z
-          n++
-        }
-      }
-      if (!n) continue
+      if (!layer.frontRank(u, c, mid)) continue
       const p = placeWorld(w, i, c, ax, az, ah, t, 0, pose)
       const fx = Math.sin(p.face)
       const fz = Math.cos(p.face)
-      const cx = x / n + fx * 1.5
-      const cz = z / n + fz * 1.5
+      const cx = mid[0] + fx * 1.5
+      const cz = mid[1] + fz * 1.5
       const [a0, a1] = toS(v, cx, cz)
       const [b0, b1] = toS(v, cx + fx * 2.5, cz + fz * 2.5)
       const [l0, l1] = toS(v, cx - fz * 0.9, cz + fx * 0.9)
@@ -584,20 +569,13 @@ export class StaffMap {
   }
   // each company that fired in the last 0.6 s: a flash at its front and a fading line toward its target. A
   // battery's piece (S1d-3) shows for a second: a roundshot as a line to where the ball stopped, canister as a fan
-  private drawVolleys(
-    g: CanvasRenderingContext2D,
-    v: View,
-    layer: SoldierLayer,
-    i: number,
-    men: { s: number; x: number; z: number; alive: boolean }[],
-    R: number,
-  ): void {
+  private drawVolleys(g: CanvasRenderingContext2D, v: View, layer: SoldierLayer, u: Unit, R: number): void {
     const w = this.w
     const f = w.f
+    const i = u.i
     const U = typeOf(w, i)
-    const g0 = U.geo
     const C = U.C
-    const RF = g0.ranks * g0.files
+    const mid = [0, 0]
     const now = w.meta[M_TICK] + layer.alphaNow
     for (let c = 0; c < C; c++) {
       const k = i * w.cr.maxC + c
@@ -605,19 +583,8 @@ export class StaffMap {
       const life = shot ? 1 : 0.6
       const age = (now - f.volleyTick[k]) * DT
       if (!f.volleyTick[k] || age > life || age < 0) continue
-      let x = 0
-      let z = 0
-      let n = 0
-      // the front rank
-      for (const m of men) {
-        if (m.alive && Math.floor(m.s / RF) === c && Math.floor((m.s % RF) / g0.files) === 0) {
-          x += m.x
-          z += m.z
-          n++
-        }
-      }
-      if (!n) continue
-      const [sx, sy] = toS(v, x / n, z / n)
+      if (!layer.frontRank(u, c, mid)) continue
+      const [sx, sy] = toS(v, mid[0], mid[1])
       const a = 1 - age / life
       const h = f.target[k]
       g.globalAlpha = a
@@ -639,8 +606,8 @@ export class StaffMap {
       } else if (shot === SHOT_CONE) {
         // the fan, out to the aim point
         const half = U.def.artillery?.cone.half ?? 0.1
-        const dx = f.shotX[k] - x / n
-        const dz = f.shotZ[k] - z / n
+        const dx = f.shotX[k] - mid[0]
+        const dz = f.shotZ[k] - mid[1]
         g.fillStyle = FIRE_INK
         g.globalAlpha = a * 0.25
         g.beginPath()
@@ -648,7 +615,7 @@ export class StaffMap {
         for (const t of [-half, half]) {
           const ct = Math.cos(t)
           const st = Math.sin(t)
-          const [px, py] = toS(v, x / n + dx * ct - dz * st, z / n + dx * st + dz * ct)
+          const [px, py] = toS(v, mid[0] + dx * ct - dz * st, mid[1] + dx * st + dz * ct)
           g.lineTo(px, py)
         }
         g.closePath()

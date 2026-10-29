@@ -7,7 +7,7 @@ import { VOLLEY_SMOKE as NAPOLEONIC_VOLLEY_SMOKE } from './napoleonic-smoke.ts'
 import { UNIFORMS as NAPOLEONIC_UNIFORMS } from './napoleonic-uniforms.ts'
 
 // uniforms: each names its cloth parts' dyes from the era's dye set (decision 0068; the look resolves them); smoke:
-// what its units' fire leaves in the air (decision 0081: the volley's)
+// what its units' fire leaves in the air (decision 0083: the volley's)
 export const RULESETS: Readonly<
   Record<
     string,
@@ -20,4 +20,11 @@ export const RULESETS: Readonly<
     dyes: NAPOLEONIC_DYES,
     smoke: { volley: NAPOLEONIC_VOLLEY_SMOKE },
   },
+}
+
+/** The ruleset named, or an error naming it. */
+export function rulesetOf(name: string): Ruleset {
+  const r = Object.hasOwn(RULESETS, name) ? RULESETS[name] : undefined
+  if (!r) throw new Error(`no ruleset ${name} (src/rulesets/index.ts)`)
+  return r.ruleset
 }

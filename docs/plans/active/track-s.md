@@ -33,9 +33,10 @@ Track M's does.
 | **S1f-4** | Group moves: a selection ordered as one keeps its line, its second line and its intervals, and wheels as a body; drag to set a line's front | Moving six battalions one offset at a time is the page's clumsiest control |
 | **S1e-3c** | The owner's playtest of the S1e battle at 2×, with marks and sessions, and tuning from them | After the phases above, so the playtest judges the battle and not its missing parts |
 
-Then S2 (`docs/proposals/sim-design.md` §17): the battle in a worker (`docs/plans/active/battle-threads.md`, decision
-0048), vision as a core rule (Track M's fog of war needs it), smoke, commanders, the compact 2 m grids (Track M's
+Then S2 (`docs/proposals/sim-design.md` §17): vision as a core rule (Track M's fog of war needs it), smoke, commanders, the compact 2 m grids (Track M's
 maps over about 2 km need them), and issues #35, #36 and #38. S3 brings the brigade AI (`docs/proposals/ai.md`).
+The battle in a worker (decision 0048) is not Track S's: it runs on its own epic stacked on this one
+(`docs/plans/done/battle-threads.md`, the owner, 2026-10-26).
 
 S1f-1 and S1f-2 come after U1–U7: the reacting plan is better written once the units it orders behave by the model. S1f-3 and S1f-4 are the model's U8 and U9. The order can change after each phase; each plan says why if it does.
 

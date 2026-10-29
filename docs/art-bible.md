@@ -437,7 +437,7 @@ scanned. The prototype accepts a dropped PNG to test a grain live.
 
 | Effect | Style |
 |---|---|
-| Musket smoke | A soft translucent bank at muzzle height: warm white lit, pale cool shade, feathered painted edges; thinned over formations, never cut (decision 0081, proposed) |
+| Musket smoke | A soft translucent bank at muzzle height: warm white lit, pale cool shade, feathered painted edges; thinned over formations, never cut (decision 0083, proposed) |
 | Volley | Brief graphic flash marks, not glowing particles |
 | Cannon | Bigger sculpted puff plus a ring of dust |
 | Dust | Warm beige dry-brush clouds |

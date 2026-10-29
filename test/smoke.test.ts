@@ -1,4 +1,4 @@
-// The musket smoke's pure parts (src/look/world/smoke.ts, decision 0081): the shot's moment from the figure's clip
+// The musket smoke's pure parts (src/look/world/smoke.ts, decision 0083): the shot's moment from the figure's clip
 // events, the script's shots and its fire hold (src/look/world/armies.ts), the puffs a volley leaves, a puff's motion,
 // plume, opacity, life and erosion, the zoom's thinning, the formations' mask and the opacity cap over them, the ring
 // and the page's switches

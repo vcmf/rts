@@ -12,6 +12,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { formationField, type MapDef } from '../maps/formation-field.ts'
 import { battlefield } from '../maps/battlefield.ts'
+import { paintedWorld } from '../maps/painted-world.ts'
 import { bench } from '../maps/bench.ts'
 import { engineMap } from '../maps/engine.ts'
 import { fnv1a } from '../src/sim/hash.ts'
@@ -124,8 +125,14 @@ export const dataFile = (name: string): string =>
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let ok = true
-  // the legacy maps (TypeScript definitions), then the map engine's (docs/plans/done/m2-sim.md)
-  for (const map of [await formationField(), battlefield(), bench(), engineMap('valley', 'maps/valley.map.json')]) {
+  // the legacy maps (TypeScript definitions), the look page's world, then the map engine's (docs/plans/done/m2-sim.md)
+  for (const map of [
+    await formationField(),
+    battlefield(),
+    bench(),
+    paintedWorld(),
+    engineMap('valley', 'maps/valley.map.json'),
+  ]) {
     const bytes = buildSimData(map)
     const file = dataFile(map.name)
     if (process.argv.includes('--check')) {

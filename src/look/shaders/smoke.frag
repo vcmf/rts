@@ -6,7 +6,7 @@ uniform vec3 uSmokeCol,uFlashCol;uniform float uFlashT,uOpacity,uCap,uSmokeT;
 uniform sampler2D uClearTex;uniform vec4 uClear;
 #endif
 #include<painter>
-// THE MUSKET SMOKE (src/look/smoke.ts, decision 0081): a soft card, blended over the scene (no depth written). Its
+// THE MUSKET SMOKE (src/look/smoke.ts, decision 0083): a soft card, blended over the scene (no depth written). Its
 // shape: a falloff from the middle (vQ, ±1 at the edge; a young jet narrow at the muzzle) broken by the paint grain,
 // large billows and smaller ones, in the card's own metres (vM: they keep their size as the puff grows, so the smoke
 // spreads through them), churning slowly, the rim torn by the smaller billows and the paper's grain; with age it thins

@@ -1,8 +1,8 @@
 ---
 status: current
 last_reviewed: 2026-10-27
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/smoke.ts, src/look/world/smoke.ts, src/look/shaders/smoke.vert, src/look/shaders/smoke.frag, src/rulesets/napoleonic-smoke.ts, test/smoke.test.ts]
-decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0081-smoke-as-soft-painted-banks]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/smoke.ts, src/look/world/smoke.ts, src/look/shaders/smoke.vert, src/look/shaders/smoke.frag, src/rulesets/napoleonic-smoke.ts, test/smoke.test.ts]
+decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0083-smoke-as-soft-painted-banks]
 ---
 
 # The look page (Track E, L0)
@@ -775,7 +775,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   them under `LODFADE`, `LOD_SLOT`; the cover snapped to the dither's 16 levels, `snapCover`, so interpolating it
   cannot flip a pixel: a flat varying cost 1.5 to 4 ms of GPU on ANGLE's Metal), so a man is never hidden and nothing
   is blended or sorted. The exact split also needs a man's share bit-identical in the three LODs' programs: the same
-  inputs (his root from the same instance matrix and move, the shared uniforms) and the same arithmetic; the snap
+  inputs (his root from the same pose and move, the shared uniforms) and the same arithmetic; the snap
   leaves 1/32 between a share and a threshold for any difference, and absorbs the CPU's float64 against the shader's
   float32 at a band's edges (`lodsDrawn` may draw a LOD whose men all drop). A LOD's men outside it are dropped in the
   vertex shader before their pose is fetched (off screen). A battalion draws a second LOD only
@@ -814,25 +814,55 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   width, its approach only as wide as its column) and the trapezoid its companies cross as they deploy (as wide as
   the line at the ranks' depth, as the column at its rear: four boxes), so they may stand behind a line's flanks,
   never ahead of a line nor in a deploying company's way (the test checks every man's path at 40 a side).
+- **The sim** (`?armies=<n>&sim`, battle threads PR 4b, `docs/plans/done/battle-threads.md`): the same layout, the
+  battle played by the sim in its workers (`src/look/sim-armies.ts`, on the look world's sim map
+  `maps/painted-world.ts`; on the page when it cannot share memory with them): each battalion spawned where it is laid
+  out by a command (so the session replays), in column, firing at will; it marches to 90 m short of the fight's middle,
+  then deploys into line. The renderer takes each man from the sim's men (`src/look/sim-men.ts`) in place of the
+  script: his place, his way and his gait, the frame's (the men worker works them out, `SoldierLayer.orient`, battle
+  threads PR 4c: his velocity's way, at rest his formation's heading; run over 2.2 m/s, march over 0.3, else halt),
+  his role from his gait (fire while his company's volley is under 0.6 s old) and when it began; the fallen are not drawn (at
+  no size, under the ground; the colours at the battalion's centre). A battalion is re-placed when the men worker's
+  revision of it moved on (it stepped its men, matched them again, or a company fired: `Unit.rev`, published in the
+  frame's battalion table) or its last volley went stale, at most once a 12 fps step of real time (stepped as
+  published: no moves between steps, the art bible's), the frame's share of them spread over the frames a step has
+  (every one once a step at any frame rate), looked at in turn. Its
+  battalions are matched to the sim's formations by side and spawn place (and their generation), its figures to the
+  formation's men in their order.
+- **The men's instance lists** (battle threads PR 4): a battalion's men are four lists (poses, clips, moves,
+  indices), each one instanced GPU buffer of the battalion's that all its LOD meshes read (`Lists`, `bindLists`), so a
+  battalion placed is one upload a list, not one a mesh; the nearest LOD's and, while split, the next's lists are
+  their own (`setSplit`, `share`; only the men each draws sent). The meshes have no Babylon thin instances: their count
+  is `forcedInstanceCount`. A man's place is a 16 B pose (x, y, z, his turn about y) in place of a 64 B matrix, read
+  as `world0`, the instance matrix's first column that Babylon's instanced materials declare (`world1..3` unread and
+  unbound; an attribute of its own put the tiny LOD's material over WebGL's 16 attributes); `units.vert` and
+  `unitdecal.vert` build his matrix from it (`#include<unitPose>`, `src/look/pose.ts`, tested against Babylon's
+  `Matrix.RotationY`; a man under −HIDDEN/2 m at no size), so the meshes stay at the identity. The moves (`aNext`) are sent only when a placing changes them: the
+  sim's men have none between steps, so theirs are sent once, as zeros. The page's checks read the men by `poses()`
+  (`tools/look-check.js`).
 - **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
 - **The bench**: `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions in
   line, `facingAt`). `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?benchtrace=1`
-  records every measured frame (version 8): its interval and what happened in it (`src/look/trace.ts`: the figures'
+  records every measured frame (version 9): its interval and what happened in it (`src/look/trace.ts`: the figures'
   shadow map drawn and its casters and triangles, the sun's box refit, the trodden mask drawn and its CPU ms,
   battalions placed and place()'s and frame()'s CPU ms, thin-instance uploads and their KB and ms, the flags' update,
   every render target drawn by name and every effect-renderer bake as `fx:<name>`, shader compiles, active meshes, draw
-  calls, the frame's JavaScript ms), and `traceSummary`: per zoom and arm, each event's share of the frames over their
-  run's 90th percentile against its share of all frames (the enrichment), printed by `tools/bench-look.mjs` (and
+  calls, the frame's JavaScript ms, the page's sim tick's ms at `?sim`), and `traceSummary`: per zoom and arm, each event's share of the frames over their
+  run's 90th percentile against its share of all frames (the enrichment), printed by `tools/bench-look.mjs` with each run's main-thread work outside rendering (the sim tick, the
+  placing, the uploads) and its long tasks (every run: those begun in its measured window, `longIn`; Chromium's) (and
   `--print <json>` for a saved run). Timings come from untraced runs; the trace explains them. Off, nothing is hooked;
   on, it patches no prototype the render loop calls per mesh and looks nothing up by name a draw. Hooks: `__units`
   (`drawn()`, `figures`, `battalions`, `setMask`, `show`), `__armies` (`blocked`, `focus`, `coats`).
 
-### The musket smoke (`?smoke`, with `?armies`; decision 0081, proposed)
+### The musket smoke (`?smoke`, with `?armies`; decision 0083, proposed)
 
 The plan: `docs/plans/active/smoke-bank.md`; the research: `docs/research/smoke.md`. Soft translucent cards over the
 scripted infantry's volleys, a plume at each muzzle group grown into one bank along the front, on by default with
 `?armies` (`?smoke=0`: none, main's page).
+
+The smoke follows the script (its volleys' moments, its battalions' footprints in their own frames): with `?sim` (the
+sim plays the armies, its men from the men worker) there is no smoke yet, and `?smoke=<a variant>` with `?sim` throws.
 
 - **The shots** (`src/look/world/smoke.ts`, pure, tested in `test/smoke.test.ts`): a battalion in line fires by ranks
   (`src/look/world/armies.ts`); a rank goes off at its fire's start (`fireStart`) + its rank's lag + the shot's moment

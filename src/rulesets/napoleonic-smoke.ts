@@ -1,4 +1,4 @@
-// Era data: the black powder's smoke (docs/plans/active/smoke-bank.md, decision 0081; docs/research/smoke.md §5): a
+// Era data: the black powder's smoke (docs/plans/active/smoke-bank.md, decision 0083; docs/research/smoke.md §5): a
 // thick white plume jetting from each muzzle, the volley's plumes merging at once into one bank along the front that
 // hangs in still air, rolls ahead a little, rises, and thins away in ten to fifteen seconds. Painted, not simulated:
 // the look's values (the owner judges them)
