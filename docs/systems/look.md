@@ -95,11 +95,12 @@ Kobelnitz on Austerlitz, (−450, 350)). `tools/build-look-data.ts` compiles the
   cells (the slow warp alone moves the steps whole; the demo's fields lie near the grid's axes). The per-frame
   shaders and the road split read it coarsened to the demo's 2 m (`coarsenCover` in `src/look/world/cover.ts`, each
   texel the least wear of its block, so the roads' gate holds): no cost a frame. The classes: wood under a wood,
-  meadow on a meadow, the water's cells and an orchard's floor, pasture on pasture and rough ground; the arable (one `ground.field` in Austerlitz) cut into strips by a hash of the map's
-  position (blocks round seeds 240 m apart, each turned its own way, bands 70 m long cut into strips 18–45 m wide, a
-  crop each by the field's stage: winter's ploughed land, green corn and stubble), temporary until the language's
-  field generator; the roads and tracks (lanes, tracks and paths) over them from the ways' lines; every built cell the
-  village's ground; the wear by the distance to them;
+  meadow on a meadow, the water's cells and an orchard's floor, pasture on pasture and rough ground; the arable (one
+  `ground.field` in Austerlitz) cut into strips by a hash of the map's position (blocks round seeds 240 m apart, each
+  turned its own way, bands 70 m long cut into strips 18–45 m wide, a crop each by the field's stage: winter's
+  ploughed land, green corn and stubble), temporary until the language's field generator; the roads and tracks
+  (lanes, tracks and paths) over them from the ways' lines; every built cell the village's ground; the wear by the
+  distance to them;
 - the roads' segments from the `way.*` lines, resampled every 8 m, their widths twice their painted reach (the
   catalogue's widths: a road 5 m, the highway 9, a lane 5); flagged dusty (8 in their flags), so the road paint lays a
   summer's dust over their earth and they read as ways against the ploughed land (`roadPaint`,
