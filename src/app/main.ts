@@ -585,7 +585,7 @@ async function main(): Promise<void> {
         const next = lv < L.length ? ` · ${pts} of ${L[lv].points} points` : ` · ${pts} points`
         const up = w.f.up[i] ? ' (up this battle)' : ''
         lines.push(
-          `   ${MORALE_STATES[w.f.mstate[i]]} · level ${lv} ${L[lv - 1].name}${up}${next} · bar ${effectiveBar(w, i, 0).toFixed(0)} of ${w.f.barMax[i].toFixed(0)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`,
+          `   ${MORALE_STATES[w.f.mstate[i]]} · level ${lv} ${L[lv - 1].name}${up}${next} · bar ${effectiveBar(w, i, w.scratch.flanks?.[i] ?? 0).toFixed(0)} of ${w.f.barMax[i].toFixed(0)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`,
         )
       }
     }

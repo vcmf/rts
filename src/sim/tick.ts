@@ -133,7 +133,7 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
       const i = rev ? MAX_FORMATIONS - 1 - k : k
       if (w.f.alive[i]) moraleStep(w, i, lost[i])
     }
-    // experience (morale-bar-model § 7): the seconds under fire, the enemies broken, the level ups
+    // experience (docs/proposals/morale-bar-model.md § 7): the seconds under fire, the enemies broken, the level ups
     experienceStep(w)
   })
   // 13: the end (S1e-2); smoke: S2

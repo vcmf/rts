@@ -176,8 +176,9 @@ and its men lost at once, and a smaller bar breaks on contact, with no melee to 
 
 ## 9. Guards (the ruleset is refused)
 
-- any single shock (contagion, the charge's threat or impact, the second enemy) above 0.6 of level 2's bar, as today
-  (0.6 of the margin);
+- a contagion shock or a second enemy's charge above 0.6 of level 2's bar, as before U2 (0.6 of the margin). A
+  charge's own threat and impact are not guarded, before U2 or after: a charge into a flank is meant to break a line
+  (its calibration target is 90%);
 - `rally.share` at or below `wavering.back`, so a rallied formation is never wavering at once;
 - `levels` not six rows, points not increasing from 0, a bar not above 0 or not increasing, a factor not above 0;
 - `wavering.enter < wavering.back ≤ shaken.enter < shaken.back ≤ 1`; `scar` outside 0..1; `regen` below 0.

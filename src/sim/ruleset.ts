@@ -426,7 +426,10 @@ function rulesetHash(rs: Ruleset): number {
     rs.dressTime,
     rs.fire,
     rs.morale,
+    rs.levels,
+    rs.points,
     rs.melee,
+    rs.sectors,
     rs.end,
   ])
   return fnv1a(new TextEncoder().encode(text))
@@ -666,7 +669,9 @@ export function compileRuleset(rs: Ruleset): Compiled {
   if (!(Number.isInteger(M.level) && M.level >= 1 && M.level <= 6)) {
     throw new Error(`ruleset ${rs.name}: morale.level must be a level, 1..6`)
   }
-  // one shock must not rout a steady battalion of level 2 on its own (s1c-plan-review L2; morale-bar-model § 9)
+  // one shock must not rout a steady battalion of level 2 on its own (s1c-plan-review L2;
+  // docs/proposals/morale-bar-model.md § 9): contagion and a second enemy's charge. A charge's own threat and impact
+  // are left out: a charge into a flank is meant to break a line
   const most = 0.6 * L[1].bar
   if (M.contagion.shock > most) {
     throw new Error(`ruleset ${rs.name}: morale.contagion.shock over 0.6 of level 2's bar`)

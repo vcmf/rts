@@ -278,3 +278,42 @@ describe('P-39: the level up', () => {
     expect(() => compileRuleset(napoleonic)).not.toThrow()
   })
 })
+
+describe('the ruleset hash', () => {
+  it('changes with a level’s factor, a credit, and the sectors', () => {
+    const h = compileRuleset(napoleonic).hash
+    expect(compileRuleset(only('toughness', 1.5)).hash).not.toBe(h)
+    expect(compileRuleset({ ...napoleonic, points: { ...P, broke: 30 } }).hash).not.toBe(h)
+    expect(compileRuleset({ ...napoleonic, sectors: { ...napoleonic.sectors, slices: 4 } }).hash).not.toBe(h)
+  })
+})
+
+describe('roundshot', () => {
+  it('a battery is credited for the enemies its balls strike, not for its friends', () => {
+    // a wide spread (0.3 rad), so balls aimed at the enemy line 600 m off, where they come down, graze a friendly line
+    // beside it; both are out of canister's range
+    const B = napoleonic.types.battery
+    const A = B.artillery!
+    const wide: Ruleset = {
+      ...napoleonic,
+      types: { ...napoleonic.types, battery: { ...B, artillery: { ...A, ray: { ...A.ray, spread: 0.3 } } } },
+    }
+    let friends = 0
+    let foes = 0
+    let credited = 0
+    for (let seed = 1; seed <= 8; seed++) {
+      const s = new S(seed, wide)
+      const b = s.put({ unit: 'battery', shape: 'unlimbered', men: menOf(s, 'battery'), fire: 'at will' })
+      const fr = s.put({ x: 110, z: 600, bar: 10000 })
+      const en = s.put({ side: 1, z: 600, heading: PI, bar: 10000 })
+      s.advance(120)
+      friends += 400 - s.men(fr)
+      foes += 400 - s.men(en)
+      credited += s.w.f.pts[s.slot(b)] - L[1].points
+    }
+    expect(friends).toBeGreaterThan(0)
+    // the credits are the enemy's expected losses: near the men it lost, nowhere near both sides'
+    expect(Math.abs(credited / P.man - foes)).toBeLessThan(Math.max(4, foes * 0.5))
+    expect(credited / P.man).toBeLessThan(foes + friends / 2)
+  })
+})

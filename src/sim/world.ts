@@ -251,6 +251,7 @@ export interface World {
     melee?: Melee
     fireGeoTick?: number
     drain?: Float64Array // each battalion's drain this tick, the back exposed (morale.ts, threatPass)
+    flanks?: Uint8Array // each battalion's secured flanks at its last morale step (morale.ts), for the page
   }
 }
 
@@ -402,6 +403,6 @@ export function formationSlot(w: World, h: Handle): number {
 }
 // formation i's unit type
 export const typeOf = (w: World, i: number): TypeTable => w.cr.types[w.f.type[i]]
-/** Formation i's level's row (morale-bar-model § 8): its bar and its factors, toughness to pursue. */
+/** Formation i's level's row (docs/proposals/morale-bar-model.md § 8): its bar and its factors, toughness to pursue. */
 export const levelOf = (w: World, i: number): LevelDef => w.cr.rs.levels[w.f.level[i] - 1]
 export const formationHandle = (w: World, i: number): Handle => makeHandle(KIND_FORMATION, i, w.f.gen[i])

@@ -305,7 +305,8 @@ function apply(w: World, c: Command, player = true): string {
       f.style[i] = p
       return ''
     }
-    case 'debug-morale': // its bar, points (scripted morale tests): 0 or less routs it on its next morale step
+    case 'debug-morale': // its bar, points (scripted morale tests): well below 0 (the tests' −100) routs it on its
+      // next morale step; near 0, that step's recovery and support may keep it
       if (!Number.isFinite(c.bar)) return 'no such bar'
       f.bar[i] = c.bar
       return ''

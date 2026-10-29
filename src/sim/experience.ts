@@ -4,7 +4,7 @@
 // broken in front, then the level ups.
 import { type World, MAX_FORMATIONS, M_TICK, levelOf, outOfFight } from './world.ts'
 import { blockGeometry, reachOf } from './fire.ts'
-import { pointWeights } from './sectors.ts'
+import { buildFaces, pointWeights } from './sectors.ts'
 import { DT, TICK_HZ } from './time.ts'
 
 /** `men` (expected, after the target's toughness) struck by formation `by`, credited when it is in the fight. */
@@ -30,10 +30,14 @@ export function experienceStep(w: World): void {
   const window = Math.round(P.window * TICK_HZ)
   let broke = false
   for (let j = 0; j < MAX_FORMATIONS; j++) if (f.alive[j] && f.brokeTick[j] === tick) broke = true
-  // the faces of this tick, for the front (built with the geometry)
-  if (broke && w.scratch.fireGeoTick !== tick) {
-    w.scratch.fireGeo = blockGeometry(w)
-    w.scratch.fireGeoTick = tick
+  // the faces as they stand now, for the front: rebuilt on this tick's geometry (steps 9–10 may have started a
+  // change since the fire step built them), as threatPass does
+  if (broke) {
+    if (w.scratch.fireGeoTick === tick) buildFaces(w, w.scratch.fireGeo!)
+    else {
+      blockGeometry(w)
+      w.scratch.fireGeoTick = tick
+    }
   }
   for (let i = 0; i < MAX_FORMATIONS; i++) {
     if (!f.alive[i] || outOfFight(f.mstate[i])) continue

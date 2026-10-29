@@ -57,7 +57,7 @@ const SOUTH: Row[] = [
 // column behind; its regiment on its eastern flank, facing your battery and your regiment; its battery on its
 // ridge west of its first line, turned 25° inwards, so that it fires past its own line while that comes down (once
 // the line has closed, it masks the battery's fire at your western battalions)
-// veterans (morale-bar-model § 8): a bar of 120, faster reload, better aim, tougher
+// veterans (docs/proposals/morale-bar-model.md § 8): a bar of 120, faster reload, better aim, tougher
 const VETERAN = 3
 const vet = (shape: string, x: number, z: number, part: 'first' | 'second', fight: number): Battalion => ({
   unit: 'infantry',

@@ -373,7 +373,7 @@ function ray(
         // the men owed after the target's toughness, credited to the gun as expected (experience.ts)
         const lambda =
           (len * R.width * (f.men[m] / area) * R.kill * Math.min(1, (2 * energy) / R.energy)) / levelOf(w, e).toughness
-        creditMen(w, i, lambda)
+        if (f.side[e] !== f.side[i]) creditMen(w, i, lambda) // a ball through friends earns nothing
         let hits = Math.floor(lambda)
         if (nextUnit(rs) < lambda - hits) hits++
         if (hits) {

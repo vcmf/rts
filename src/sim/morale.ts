@@ -84,9 +84,9 @@ export function enemyNear(w: World, i: number): boolean {
 const near = { shock: 0, left: 0, right: 0, enemy: Infinity, ax: 0, az: 0 }
 
 /**
- * Formation i's effective bar (morale-bar-model § 4), points: its bar, plus support.bonus for each secured flank, less
- * the back exposed's drain, which takes it down to the wavering threshold at most. `flanks` is its secured flanks
- * (0..2).
+ * Formation i's effective bar (docs/proposals/morale-bar-model.md § 4), points: its bar, plus support.bonus for each
+ * secured flank, less the back exposed's drain, which takes it down to the wavering threshold at most. `flanks` is
+ * its secured flanks (0..2).
  */
 export function effectiveBar(w: World, i: number, flanks: number): number {
   const f = w.f
@@ -94,9 +94,12 @@ export function effectiveBar(w: World, i: number, flanks: number): number {
   const e0 = f.bar[i] + M.support.bonus * flanks
   return e0 - Math.min(w.scratch.drain?.[i] ?? 0, Math.max(0, e0 - M.wavering[0] * f.barMax[i]))
 }
-/** Formation i's effective bar as a share of its maximum, for the page: 0 at the rout, 1 full. */
+/**
+ * Formation i's effective bar as a share of its maximum, for the page: 0 at the rout, 1 full; with the flanks its
+ * last morale step secured.
+ */
 export function moraleShare(w: World, i: number): number {
-  return effectiveBar(w, i, 0) / w.f.barMax[i]
+  return effectiveBar(w, i, w.scratch.flanks?.[i] ?? 0) / w.f.barMax[i]
 }
 
 // step 12 for battalion i, after its casualties (`lost`, step 11)
@@ -127,7 +130,9 @@ export function moraleStep(w: World, i: number, lost: number): void {
     if (f.bar[i] < ceiling) f.bar[i] = Math.min(ceiling, f.bar[i] + M.regen * DT)
   }
   if (s !== MS_ROUTING) f.bar[i] -= near.shock + owedShock // routing and shattered (returned above) are not shocked
-  const e = effectiveBar(w, i, near.left + near.right)
+  const flanks = w.scratch.flanks ?? (w.scratch.flanks = new Uint8Array(MAX_FORMATIONS))
+  flanks[i] = near.left + near.right
+  const e = effectiveBar(w, i, flanks[i])
   const m = e / f.barMax[i]
   if (s === MS_ROUTING) {
     if (men < M.shatter * f.startMen[i]) f.mstate[i] = MS_SHATTERED
@@ -415,9 +420,9 @@ function run(w: World, i: number): void {
   }
   appendOrder(w, i, n)
 }
-// a router rallies where it stands (morale-bar-model § 6): what its losses cost is written off, its maximum is cut by
-// rally.cut for the battle, so it comes back brittle, and its bar refills to rally.share of it; it re-forms for
-// rally.time before it takes orders again
+// a router rallies where it stands (docs/proposals/morale-bar-model.md § 6): what its losses cost is written off, its
+// maximum is cut by rally.cut for the battle, so it comes back brittle, and its bar refills to rally.share of it; it
+// re-forms for rally.time before it takes orders again
 function rally(w: World, i: number, now: number): void {
   const f = w.f
   const M = w.cr.rs.morale
@@ -432,8 +437,8 @@ function rally(w: World, i: number, now: number): void {
   f.since[i] = now
 }
 /**
- * A new formation (morale-bar-model § 2): at `level` (1..6), with its level's points; its bar full at `bar` points, or
- * its level's bar when `bar` is not given; steady.
+ * A new formation (docs/proposals/morale-bar-model.md § 2): at `level` (1..6), with its level's points; its bar full
+ * at `bar` points, or its level's bar when `bar` is not given; steady.
  */
 export function spawnMorale(w: World, i: number, level: number, bar?: number): void {
   const f = w.f

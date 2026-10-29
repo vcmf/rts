@@ -221,6 +221,8 @@ if (!isMainThread) {
       `${name} | ${rs.filter(r => r.first === 0).length} | ${rs.filter(r => r.first === 1).length} | ${rs.filter(r => r.first < 0).length} | ${min(q(t, 0.1))} / ${min(q(t, 0.5))} / ${min(q(t, 0.9))} | ${losses}`,
     )
   }
+  // medians of the time to break over the runs that broke; every case must break in at least 90% of its runs
+  const broke = (name: string) => lv(name).filter(r => r.first >= 0)
   const c02 = lv('C-02')
   const c02won = c02.filter(r => r.first === 1)
   const c02ratio = q(
@@ -230,11 +232,11 @@ if (!isMainThread) {
   const h04 = lv('H-04')
   const g06 =
     q(
-      lv('G-06 level 6').map(r => r.tick),
+      broke('G-06 level 6').map(r => r.tick),
       0.5,
     ) /
     q(
-      lv('G-06 level 2').map(r => r.tick),
+      broke('G-06 level 2').map(r => r.tick),
       0.5,
     )
   console.log(
@@ -264,7 +266,10 @@ if (!isMainThread) {
         1200 >=
         4 && h04.filter(r => r.first === 0).length >= 0.7 * h04.length,
     ],
-    ['G-06: level 6 stands 2–3 times the fire of level 2 (median time to break)', g06 >= 2 && g06 <= 3],
+    [
+      'G-06: level 6 stands 2–3 times the fire of level 2 (median time to break; each breaks in at least 90%)',
+      g06 >= 2 && g06 <= 3 && ['G-06 level 6', 'G-06 level 2'].every(n => broke(n).length >= 0.9 * lv(n).length),
+    ],
     ['100 m: median time to break 6–10 min', med >= 6 && med <= 10],
     ['100 m: weaker losses at break 12–25% (median)', lmed >= 12 && lmed <= 25],
     ['100 m: stronger breaks first in at most 15%', r100.filter(r => r.first === 0).length <= 0.15 * r100.length],

@@ -65,6 +65,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/c0-bench.md`](plans/active/c0-bench.md) (C0: the visual bench, its overlay, time controls and cases),
   [`plans/active/c1-claims.md`](plans/active/c1-claims.md) (C1: a prototype of the claim grid, experimental; its weak points and their order),
   [`plans/active/u1-sectors.md`](plans/active/u1-sectors.md) (U1: sectors, exposure by shape, the back exposed, the second enemy in melee),
+  [`plans/active/u2-morale-bar.md`](plans/active/u2-morale-bar.md) (U2: the morale bar, levels and experience),
   [`plans/active/battle-threads.md`](plans/active/battle-threads.md) (the battle's threads: a worker, soldiers stepped at 12 fps),
   [`plans/active/paper-layers.md`](plans/active/paper-layers.md) (paper layers: the relief as stacked lit sheets in the staff map prototype),
   [`plans/active/brigades-proto.md`](plans/active/brigades-proto.md) (brigades of two battalions in the staff map prototype),
