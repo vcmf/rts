@@ -9,19 +9,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --paper: #e9dab3;
+  --paper: #f1ede3;
   --ink: #211f1c;
   --ink-2: #5f5a52;
   --ink-3: #8f877b;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   --serif: "Instrument Serif", Georgia, serif;
 }
-html, body { height: 100%; margin: 0; overflow: hidden; background: #c9b78f; color: var(--ink); }
+html, body { height: 100%; margin: 0; overflow: hidden; background: #d6cfbf; color: var(--ink); }
 canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #ink { pointer-events: none; }
 #cart {
   position: fixed; left: 16px; top: 14px; width: 290px; padding: 12px 14px 12px; pointer-events: none;
-  background: radial-gradient(130% 120% at 30% 30%, var(--paper) 55%, rgba(233, 218, 179, 0) 100%);
+  background: radial-gradient(130% 120% at 30% 30%, var(--paper) 55%, rgba(241, 237, 227, 0) 100%);
 }
 #cart h1 { margin: 0; font: 400 26px/1.05 var(--serif); letter-spacing: 0.01em; }
 #cart .sub { font: italic 400 15px/1.3 var(--serif); color: var(--ink-2); }
@@ -80,8 +80,9 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * prototypes/staff-map.html, at a thousand times the scale), on parchment, in a 3D view tilted 20 degrees off straight
  * down (decision 0055). Rivers, roads, towns and names are ink on a 2D canvas above, redrawn when the camera moves.
  *
- * URL: ?rz= the heights exaggerated for the light (3), ?sun= the sun height in degrees (38), ?floor= and ?top= the
- * darkest and lightest relief tone against the paper (0.68, 1.16), ?view=x,z,km (the
+ * URL: ?rz= the heights exaggerated for the light (2), ?sun= the sun height in degrees (38), ?floor= and ?top= the
+ * darkest and lightest relief tone against the paper (0.55, 1.16), ?smooth= the slope light smoothing in cells (2),
+ * ?contour= the contour interval in metres (200), ?view=x,z,km (the
  * target in km from the centre, east and north, and the camera distance), ?theatre= the generated file.
  */
 'use strict';
@@ -159,11 +160,11 @@ function param(name, fallback, lo, hi) {
 }
 
 // the light's exaggeration of the heights (0 flattens the relief), and the sun's height in degrees
-const RELIEF_Z = param('rz', 3, 0, 20);
+const RELIEF_Z = param('rz', 2, 0, 20);
 const RELIEF_SUN = param('sun', 38, 2, 85);
 // the relief tone on the paper: no darker than SHADE_FLOOR, no lighter than SHADE_TOP; both kept off 1, which the
 // shader's soft knee divides by
-const SHADE_FLOOR = param('floor', 0.68, 0.3, 0.97);
+const SHADE_FLOOR = param('floor', 0.55, 0.3, 0.97);
 const SHADE_TOP = param('top', 1.16, 1.02, 1.6);
 // the light from the north-west, as on the battle map: x east, z north
 const NW = [-Math.SQRT1_2, Math.SQRT1_2];
@@ -208,6 +209,14 @@ function boxMean(h, nx, nz, r) {
 const LAMBERT_RANGE = [0.0, 1.8];
 // the cast shadow softens over this many metres of true height under the shadow line
 const RELIEF_SOFT = 120;
+// the slope light reads heights smoothed over a square of half-width SMOOTH cells (a first simplification: small
+// hills fade, large forms stay); the contours read heights smoothed over CONTOUR_SMOOTH cells, so they run as
+// generalised lines
+const SMOOTH = Math.round(param('smooth', 2, 0, 12));
+const CONTOUR_SMOOTH = 3;
+// the contours: one every CONTOUR m, an index line every CONTOUR_INDEX lines
+const CONTOUR = param('contour', 200, 25, 2000);
+const CONTOUR_INDEX = 5;
 
 /**
  * The shaded relief, baked once at load into RGBA bytes the size of the grid, the south row first: R the slope light
@@ -221,8 +230,8 @@ const RELIEF_SOFT = 120;
 function bakeRelief(h0) {
   const h = new Float32Array(h0.length);
   for (let k = 0; k < h.length; k++) h[k] = h0[k] * RELIEF_Z;
-  // the slope light from heights smoothed over about 750 m, so the 250 m grid does not crumple every hill
-  const soft = boxMean(h, NX, NZ, 1);
+  // the slope light from smoothed heights, so the 250 m grid does not crumple every hill
+  const soft = SMOOTH ? boxMean(h, NX, NZ, SMOOTH) : h;
   const el = (RELIEF_SUN * Math.PI) / 180;
   const drop = CELL * Math.SQRT2 * Math.tan(el);
   const L = [NW[0] * Math.cos(el), Math.sin(el), NW[1] * Math.cos(el)];
@@ -359,7 +368,7 @@ const GL_DPR = Math.min(2, window.devicePixelRatio || 1);
 const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: false }, false);
 engine.setHardwareScalingLevel(1 / GL_DPR);
 const scene = new B.Scene(engine);
-scene.clearColor = new B.Color4(0.79, 0.72, 0.56, 1);
+scene.clearColor = new B.Color4(0.84, 0.81, 0.75, 1);
 scene.skipPointerMovePicking = true;
 
 const MAP_W = (2 * halfX) / 1000;
@@ -380,11 +389,11 @@ void main() {
 B.Effect.ShadersStore.printFragmentShader = `
 precision highp float;
 varying vec2 vW;
-uniform sampler2D uRelief, uLakes, uPaperT;
+uniform sampler2D uRelief, uLakes, uPaperT, uHeight;
 uniform vec2 uHalf, uTexel, uLakeTexel, uLightXZ;
 uniform float uCellKm;
 uniform vec3 uPaper, uTable, uWater;
-uniform float uFloor, uTop;
+uniform float uFloor, uTop, uContour;
 
 float rectDist(vec2 p, vec2 extent) {
   vec2 d = abs(p) - extent;
@@ -425,7 +434,7 @@ void main() {
   float slopeLight = mix(${LAMBERT_RANGE[0].toFixed(3)}, ${LAMBERT_RANGE[1].toFixed(3)}, R.r);
   float sunlit = R.g;
   float exposed = R.b * 2.0 - 1.0;
-  float v = slopeLight * mix(0.7, 1.0, sunlit) * (1.0 + 0.3 * exposed);
+  float v = slopeLight * mix(0.6, 1.0, sunlit) * (1.0 + 0.3 * exposed);
   /* a soft knee toward the floor and the top: steep ground keeps its gradation instead of a flat tone */
   float dv = v - 1.0;
   v = dv < 0.0 ? 1.0 - (1.0 - uFloor) * (1.0 - exp(dv / (1.0 - uFloor)))
@@ -433,6 +442,20 @@ void main() {
   vec3 hue = v < 1.0 ? mix(vec3(0.93, 0.92, 0.93), vec3(1.0), (v - uFloor) / (1.0 - uFloor))
                      : mix(vec3(1.0), vec3(1.0, 0.985, 0.95), (v - 1.0) / (uTop - 1.0));
   vec3 col = min(paper * v * hue, vec3(1.0));
+
+  /* contours from the smoothed heights, as the draft map draws them: a thin warm line every uContour metres, a
+     stronger index line every fifth; each fades where its lines would crowd on screen */
+  float hm = texture2D(uHeight, uv).r;
+  float f1 = hm / uContour;
+  float f5 = f1 / ${CONTOUR_INDEX.toFixed(1)};
+  float w1 = fwidth(f1);
+  float w5 = fwidth(f5);
+  float l1 = 1.0 - smoothstep(0.5, 1.3, abs(fract(f1 + 0.5) - 0.5) / max(w1, 1e-5));
+  float l5 = 1.0 - smoothstep(0.6, 1.5, abs(fract(f5 + 0.5) - 0.5) / max(w5, 1e-5));
+  l1 *= 1.0 - smoothstep(0.12, 0.3, w1);
+  l5 *= 1.0 - smoothstep(0.12, 0.3, w5);
+  vec3 contourInk = vec3(0.42, 0.36, 0.3);
+  col = mix(col, contourInk, max(0.22 * l1, 0.42 * l5));
 
   /* lakes: a flat pale wash sunk below the shore, the bank toward the light shading the water */
   vec2 luv = (vW + uHalf) / (2.0 * uHalf);
@@ -451,6 +474,38 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
+// one float's bits, shared by every call of toHalf (allocating per value cost seconds over the grid)
+const HALF_F32 = new Float32Array(1);
+const HALF_U32 = new Uint32Array(HALF_F32.buffer);
+
+/** A number as the bits of a half float (IEEE 754 binary16), rounded to nearest; heights of a few km lose under 2 m. */
+function toHalf(v) {
+  HALF_F32[0] = v;
+  const x = HALF_U32[0];
+  const sign = (x >>> 16) & 0x8000;
+  const exp = ((x >>> 23) & 0xff) - 127 + 15;
+  const mant = x & 0x7fffff;
+  if (exp <= 0) return sign;
+  if (exp >= 31) return sign | 0x7c00;
+  return sign | (exp << 10) | ((mant + 0x1000) >> 13);
+}
+
+/**
+ * The heights smoothed over CONTOUR_SMOOTH cells, as a half-float single-channel texture for the contours: 8 bits
+ * would step every 16 m over the theatre's 4 km and draw the lines in stairs. Bilinear, no mips (half floats are not
+ * always renderable, which mip generation needs); the contour lines fade by their own screen density instead.
+ */
+function contourTexture(h0) {
+  const smooth = boxMean(h0, NX, NZ, CONTOUR_SMOOTH);
+  const half = new Uint16Array(smooth.length);
+  for (let k = 0; k < half.length; k++) half[k] = toHalf(smooth[k]);
+  const t = B.RawTexture.CreateRTexture(
+    half, NX, NZ, scene, false, false, B.Texture.BILINEAR_SAMPLINGMODE, B.Engine.TEXTURETYPE_HALF_FLOAT,
+  );
+  t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+  return t;
+}
+
 /** A raw RGBA or single-channel texture, clamped, mipmapped (trilinear), so it does not shimmer when minified. */
 function rawTexture(data, w, h, format) {
   const t = new B.RawTexture(data, w, h, format, scene, true, false, B.Texture.TRILINEAR_SAMPLINGMODE);
@@ -459,6 +514,7 @@ function rawTexture(data, w, h, format) {
 }
 
 const heights = decodeHeights();
+
 const tBake = performance.now();
 const reliefBytes = bakeRelief(heights);
 const maxTextureSize = engine.getCaps().maxTextureSize;
@@ -466,16 +522,17 @@ if (Math.max(NX, NZ) > maxTextureSize) throw new Error(`the theatre grid (${NX} 
 const lakes = bakeLakes(maxTextureSize);
 window.__bakeMs = Math.round(performance.now() - tBake);
 
-const PAPER = hex('#e6d8b4');
+const PAPER = hex('#eeeadf');
 const material = new B.ShaderMaterial('print', scene, 'print', {
   attributes: ['position'],
   uniforms: [
     'worldViewProjection', 'uHalf', 'uTexel', 'uLakeTexel', 'uCellKm', 'uLightXZ',
-    'uPaper', 'uTable', 'uWater', 'uFloor', 'uTop',
+    'uPaper', 'uTable', 'uWater', 'uFloor', 'uTop', 'uContour',
   ],
-  samplers: ['uRelief', 'uLakes', 'uPaperT'],
+  samplers: ['uRelief', 'uLakes', 'uPaperT', 'uHeight'],
 });
 material.setTexture('uRelief', rawTexture(reliefBytes, NX, NZ, B.Engine.TEXTUREFORMAT_RGBA));
+material.setTexture('uHeight', contourTexture(heights));
 material.setTexture('uLakes', rawTexture(lakes.data, lakes.w, lakes.h, B.Engine.TEXTUREFORMAT_LUMINANCE));
 const paperTex = new B.DynamicTexture('paper', paperCanvas(), scene, true);
 paperTex.update();
@@ -487,10 +544,11 @@ material.setVector2('uLakeTexel', new B.Vector2(1 / lakes.w, 1 / lakes.h));
 material.setFloat('uCellKm', CELL / 1000);
 material.setVector2('uLightXZ', new B.Vector2(NW[0], NW[1]));
 material.setColor3('uPaper', B.Color3.FromArray(PAPER));
-material.setColor3('uTable', B.Color3.FromArray(hex('#c9b78f')));
+material.setColor3('uTable', B.Color3.FromArray(hex('#d6cfbf')));
 material.setColor3('uWater', B.Color3.FromArray(hex('#9fbcc2')));
 material.setFloat('uFloor', SHADE_FLOOR);
 material.setFloat('uTop', SHADE_TOP);
+material.setFloat('uContour', CONTOUR);
 
 const plane = B.MeshBuilder.CreateGround('print', { width: MAP_W + 2 * TABLE, height: MAP_H + 2 * TABLE }, scene);
 plane.material = material;
@@ -723,7 +781,7 @@ function drawRoads(ppk) {
       traceRuns(lines[k]);
       if (pass === 'casing') {
         ink.setLineDash([]);
-        ink.strokeStyle = 'rgba(244, 233, 205, 0.55)';
+        ink.strokeStyle = 'rgba(250, 248, 242, 0.6)';
         ink.lineWidth = (high ? 3.6 : 2.6) * scale;
       } else {
         ink.setLineDash(high ? [] : [5 * scale, 3.5 * scale]);
@@ -792,7 +850,7 @@ function overlaps(a, b) {
 /** Text with a soft paper halo, so it reads over the relief and the ink. */
 function haloText(text, x, y, colour) {
   ink.lineJoin = 'round';
-  ink.strokeStyle = 'rgba(236, 224, 192, 0.8)';
+  ink.strokeStyle = 'rgba(246, 243, 235, 0.85)';
   ink.lineWidth = 3;
   ink.strokeText(text, x, y);
   ink.fillStyle = colour;

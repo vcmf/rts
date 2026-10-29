@@ -65,7 +65,12 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   slope light from heights smoothed over about 750 m, a soft knee toward the darkest and lightest tones (0.76 and
   1.08 of the paper) instead of a clamp, a cooler shade, a paler parchment (`#e6d8b4`). `?rz=`, `?sun=`, `?floor=`,
   `?top=` to try others. Then, after the owner's first look (2026-10-29: "sun higher and shadow deeper and brighter lit
-  slopes"): the sun at 38°, the tones 0.68 to 1.16 of the paper, the cast shadow down to 0.7. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  slopes"): the sun at 38°, the tones 0.68 to 1.16 of the paper, the cast shadow down to 0.7. Second look (2026-10-29: "less relief exaggeration … more white … the shadow must look more
+  contrasted (darker) … contour line will make it more cool"): heights ×2, the slope light from heights smoothed over
+  about 1.25 km (`?smooth=`), a warm off-white paper (`#eeeadf`), tones 0.55 to 1.16, the cast shadow down to 0.6, and
+  contours every 200 m with an index line every 1,000 m (`?contour=`), drawn from heights smoothed over about 1.75 km
+  in a half-float texture (8 bits drew them in 16 m stairs), each fading where its lines crowd on screen. How to
+  simplify further: `docs/research/relief-generalization.md` (in progress). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
