@@ -19,6 +19,9 @@ const build = (() => {
     return 'unknown'
   }
 })()
+// cross-origin isolation (COOP and COEP), so the sim page shares memory with its battle worker
+// (docs/plans/active/battle-threads.md, PR 3); every asset the pages load is same-origin, so COEP blocks none
+const isolated = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' }
 // the map draft page (app/map.html, docs/plans/done/m1-language.md M1b): a saved map file, the kinds catalogue or a
 // heightfield beside them is sent to the page as `map-changed` (with the time the server saw it), not a full reload;
 // a new one too (the editor's first save of a new map, M7b), which the page's list of maps would otherwise reload for
@@ -71,4 +74,7 @@ export default defineConfig({
   define: { __BUILD__: JSON.stringify(build) },
   plugins: [mapsHot, mapsSave],
   build: { outDir: 'dist', rollupOptions: { input: ['app/index.html', 'app/look.html', 'app/map.html'] } },
+  server: { headers: isolated },
+  preview: { headers: isolated },
+  worker: { format: 'es' },
 })
