@@ -64,12 +64,12 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   every hill at this scale (×8 read as crushed paper, the shade a muddy olive). Now: heights ×3 for the light, the
   slope light from heights smoothed over about 750 m, a soft knee toward the darkest and lightest tones (0.76 and
   1.08 of the paper) instead of a clamp, a cooler shade, a paler parchment (`#e6d8b4`). `?rz=`, `?sun=`, `?floor=`,
-  `?top=` to try others. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  `?top=` to try others. Then, after the owner's first look (2026-10-29: "sun higher and shadow deeper and brighter lit
+  slopes"): the sun at 38°, the tones 0.68 to 1.16 of the paper, the cast shadow down to 0.7. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
-  20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. **In the Alps up close the
-  cast shadow fills most valleys** at a 28° sun: an open tuning (the sun's height, or less exaggeration for the
-  shadow).
+  20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
+  shadow filled most valleys at a 28° sun; at 38° the ridges and valleys read.
 - Natural Earth's rivers and lakes are generalised: the Danube line sits up to a few km off its valley in the relief
   at the closest zoom, and Lake Constance's eastern shore is cut short of Bregenz. K4 traces the water (or uses
   HydroRIVERS).
@@ -107,7 +107,6 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
 
 ## Open questions
 
-- The Alps up close: a higher sun, a lower exaggeration for the cast shadow, or both.
 - The region names sometimes sit under a city's name; their placement joins the label collision in K3.
 - A road is routed out of the lakes, but simplified within 400 m and smoothed after: along a shore it can cross the
   lake's wash by a little. K4's roads are traced, not routed.

@@ -80,8 +80,8 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * prototypes/staff-map.html, at a thousand times the scale), on parchment, in a 3D view tilted 20 degrees off straight
  * down (decision 0055). Rivers, roads, towns and names are ink on a 2D canvas above, redrawn when the camera moves.
  *
- * URL: ?rz= the heights exaggerated for the light (3), ?sun= the sun height in degrees (28), ?floor= and ?top= the
- * darkest and lightest relief tone against the paper (0.76, 1.08), ?view=x,z,km (the
+ * URL: ?rz= the heights exaggerated for the light (3), ?sun= the sun height in degrees (38), ?floor= and ?top= the
+ * darkest and lightest relief tone against the paper (0.68, 1.16), ?view=x,z,km (the
  * target in km from the centre, east and north, and the camera distance), ?theatre= the generated file.
  */
 'use strict';
@@ -160,11 +160,11 @@ function param(name, fallback, lo, hi) {
 
 // the light's exaggeration of the heights (0 flattens the relief), and the sun's height in degrees
 const RELIEF_Z = param('rz', 3, 0, 20);
-const RELIEF_SUN = param('sun', 28, 2, 85);
+const RELIEF_SUN = param('sun', 38, 2, 85);
 // the relief tone on the paper: no darker than SHADE_FLOOR, no lighter than SHADE_TOP; both kept off 1, which the
 // shader's soft knee divides by
-const SHADE_FLOOR = param('floor', 0.76, 0.3, 0.97);
-const SHADE_TOP = param('top', 1.08, 1.02, 1.6);
+const SHADE_FLOOR = param('floor', 0.68, 0.3, 0.97);
+const SHADE_TOP = param('top', 1.16, 1.02, 1.6);
 // the light from the north-west, as on the battle map: x east, z north
 const NW = [-Math.SQRT1_2, Math.SQRT1_2];
 
@@ -425,7 +425,7 @@ void main() {
   float slopeLight = mix(${LAMBERT_RANGE[0].toFixed(3)}, ${LAMBERT_RANGE[1].toFixed(3)}, R.r);
   float sunlit = R.g;
   float exposed = R.b * 2.0 - 1.0;
-  float v = slopeLight * mix(0.78, 1.0, sunlit) * (1.0 + 0.3 * exposed);
+  float v = slopeLight * mix(0.7, 1.0, sunlit) * (1.0 + 0.3 * exposed);
   /* a soft knee toward the floor and the top: steep ground keeps its gradation instead of a flat tone */
   float dv = v - 1.0;
   v = dv < 0.0 ? 1.0 - (1.0 - uFloor) * (1.0 - exp(dv / (1.0 - uFloor)))
