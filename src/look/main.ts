@@ -630,7 +630,7 @@ if (params.has('msaa')) {
   MSAA.samples = n
 }
 let units: Units | null = null
-// ?smoke (with ?armies; decision 0080, docs/plans/active/smoke-bank.md): the musket smoke, the default variant;
+// ?smoke (with ?armies; decision 0081, docs/plans/active/smoke-bank.md): the musket smoke, the default variant;
 // ?smoke=0 none (main's look), ?smoke=soft|step a variant, and the knobs over it (src/look/world/smoke.ts, smokeLook);
 // ?firehold=1: the script held in its fire phase (every battalion in line firing: the bench's and the stills')
 let smoke: Smoke | null = null
@@ -1510,7 +1510,7 @@ if (params.has('bench')) {
   // ?bench=macro: the macro colour's arms whose shaders differ instead (with the detail layer)
   // ?bench=earth: the bare earth's surface up close off and on (earthOn, docs/plans/done/bare-earth.md)
   // ?bench=dof: the gameplay depth of field off and on (decision 0024)
-  // ?bench=smoke (with ?armies): the musket smoke on and off (decision 0080; best with ?firehold=1)
+  // ?bench=smoke (with ?armies): the musket smoke on and off (decision 0081; best with ?firehold=1)
   if (params.get('bench') === 'smoke' && !smoke) throw new Error('?bench=smoke needs the smoke: ?armies, no ?smoke=0')
   // (each material set as it stands, no binder left behind, once the texture's load has set 1: else a late load would
   // turn the off arm on)

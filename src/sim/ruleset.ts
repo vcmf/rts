@@ -205,7 +205,7 @@ export interface DyeSet {
   materials: Readonly<Record<string, string>>
   boots: string
 }
-/** the smoke a unit's fire makes, as the renderer paints it (docs/plans/active/smoke-bank.md, decision 0080): a soft
+/** the smoke a unit's fire makes, as the renderer paints it (docs/plans/active/smoke-bank.md, decision 0081): a soft
  *  translucent card for a group of files when a rank fires, born at the muzzles as a plume jetting ahead, then grown
  *  into its neighbours' (the volley's bank), rolling ahead, rising, drifting with the wind, thinning and broken into
  *  holes as it dies. Era data (src/rulesets/<era>-smoke.ts); metres, seconds, sRGB. Not read by the simulation */

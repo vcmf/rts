@@ -36,21 +36,22 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
 - Open a prototype: `prototypes/painted-cinematic.html` in Chrome (works from `file://`).
 - Headless screenshots and checks: `node tools/shot.mjs <page> <outDir> [w] [h] '<steps JSON>'`;
   river and render checks: see the headers of `tools/river-check.js` and `tools/render-check.js`.
-- Golden screenshots: `node tools/golden.mjs <base> <cand>` (a page, a URL or `<ref>:<page>`; `--selftest`);
-  negative tests of the page checks: `node tools/check-negatives.mjs`.
+- Golden screenshots: `node tools/golden.mjs <base> <cand>` (`--selftest`); negatives: `tools/check-negatives.mjs`.
 - Look page bench and readability guard (built page, `npx vite preview`): `node tools/bench-look.mjs <url>`
   (`?bench` in a browser), `node tools/guard.mjs <url> [--base <url>]`, the terrain detail checks
   `node tools/detail-check.mjs <url> --selftest`, the water data's `node tools/water-check.mjs [<url>] --selftest`,
   the painted water's `node tools/water-look-check.mjs <url> --selftest`; see their headers.
+- Maps (Track M): `node tools/map.ts check|expand|resolve|draft`, the page `app/map.html`: see `docs/systems/map.md`.
 - Browsers (decision 0060): checks are the scripts above; `SHOT_CDP=http://127.0.0.1:9222` attaches them to a running
   Chrome (from WSL, Windows Chrome: `tools/win-chrome.sh`, see its header). To explore (play the page, a trace), opt in:
   `claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@1.10.1 --isolated`.
 - Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
 - CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint, `format:check`,
-  typecheck, `check:data`, `check:docs`, Vitest, build. On PRs into `epic/**` and on all those pushes, Vitest with
-  coverage, uploaded to Codecov (informational only). Coverage makes the suite about six times slower, so that run skips
-  the tests marked `longIt` (they run in the check job) and gives each test a longer budget. The cost tests skip when
-  `CI` is set: run them locally. `npm run coverage` gives the same report locally (`coverage/`).
+  typecheck, `check:data`, `check:docs` and build in one job; Vitest in three shards side by side (a long test file is
+  split in several: Vitest runs a file's tests one after another). On PRs into `epic/**` and on all those pushes, Vitest
+  with coverage, in three shards too, uploaded to Codecov (informational only). Coverage makes the suite about six times
+  slower, so that run skips the tests marked `longIt` (they run in the test job) and gives each test a longer budget.
+  The cost tests skip when `CI` is set: run them locally. `npm run coverage` gives the same report locally (`coverage/`).
 - Regenerate model data: `node tools/obj-to-js.mjs`; `tools/blend-to-js.py` with Blender (see its header).
 
 ## Workflow (every PR)

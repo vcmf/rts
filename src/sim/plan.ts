@@ -38,6 +38,8 @@ export interface PlanStep {
 export interface ScenarioRules {
   plan?: PlanStep[]
   minutes?: number
+  // the claim grid's prototype (docs/plans/active/c1-claims.md): formations claim cells, off unless asked for
+  claims?: boolean
 }
 
 export const unitHandle = (unit: number): number => makeHandle(KIND_FORMATION, unit, 0)
@@ -48,14 +50,16 @@ export function attachScenario(w: World, s: ScenarioRules): void {
   const limit = s.minutes ? Math.round(s.minutes * 60 * TICK_HZ) : 0
   // no plan and no limit: nothing to record (a world without them hashes as one never attached), but one made with
   // a plan cannot be given none
-  if (!plan.length && !limit) {
+  w.claims = !!s.claims
+  if (!plan.length && !limit && !s.claims) {
     if (w.meta[M_PLAN]) throw new Error('this world was made with another plan or time limit')
     w.plan = []
     w.planHash = 0
     w.planDue = []
     return
   }
-  const h = fnv1a(new TextEncoder().encode(JSON.stringify([plan, limit]))) | 0 || 1
+  // the claims enter the hash only when on, so every world made without them hashes as before
+  const h = fnv1a(new TextEncoder().encode(JSON.stringify(s.claims ? [plan, limit, 'claims'] : [plan, limit]))) | 0 || 1
   if (!w.meta[M_PLAN]) {
     if (w.meta[M_TICK] !== 0) throw new Error('a plan is attached before the first tick')
     w.meta[M_PLAN] = h

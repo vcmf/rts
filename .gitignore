@@ -18,8 +18,12 @@ dist/
 coverage/
 *.log
 
+# Third-party reference frames: kept locally, never committed (their .source.txt is)
+design/refs/staff-map-epic-history-waterloo.png
+
 # Local renders and scratch
 renders/
+*.draft.png
 scratch/
 *.mp4
 
@@ -31,3 +35,6 @@ prototypes/.golden-selftest-*
 assets/tripo/
 output/
 __pycache__/
+
+# Scans to trace from (decision 0069): kept locally unless their source says public domain
+maps/scans/

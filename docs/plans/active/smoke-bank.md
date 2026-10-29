@@ -12,7 +12,7 @@ bank at muzzle height, swallowing the front of the line and rolling forward; den
 translucent at its edges; the men readable through and behind it), a single shot's plume jetting from the muzzle, and
 *Cossacks 2* from above (a soft translucent white streak along and just in front of the firing line). His standing
 brief: "painterly 2D on 3D… like painting, simple, elegant yet beautiful"; "above all performance must be good"
-(120 fps; the smoke's share about 1 to 1.5 ms at its worst views). Decision 0080 is rewritten for this look (still
+(120 fps; the smoke's share about 1 to 1.5 ms at its worst views). Decision 0081 is rewritten for this look (still
 proposed). Into `epic/smoke` (#239); the owner merges the track after a showcase.
 
 ## Scope
@@ -35,7 +35,7 @@ In:
   `?smokecap=<0 to 1>`, `?smokestep=<fps>`; kept: `?firehold=1`, `?lookat=fight|line[,r]` (now also `line1`, the second
   side), `?bench=smoke`. The first look's knobs (`?smoketone`, `?smokeedge`, `?smokeshade`, `?smokea2c`,
   `?smokeclear`) and its offset shadow go with it.
-- Tests for the pure parts (the plume, the opacity, the roll, the cap), decision 0080, `docs/systems/look.md`, the art
+- Tests for the pure parts (the plume, the opacity, the roll, the cap), decision 0081, `docs/systems/look.md`, the art
   bible's smoke row.
 
 Out: as the first plan (artillery smoke, the sim's sight, dust, fire); a half-resolution smoke target (only if the

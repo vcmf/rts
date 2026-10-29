@@ -7,7 +7,7 @@ import { VOLLEY_SMOKE as NAPOLEONIC_VOLLEY_SMOKE } from './napoleonic-smoke.ts'
 import { UNIFORMS as NAPOLEONIC_UNIFORMS } from './napoleonic-uniforms.ts'
 
 // uniforms: each names its cloth parts' dyes from the era's dye set (decision 0068; the look resolves them); smoke:
-// what its units' fire leaves in the air (decision 0080: the volley's)
+// what its units' fire leaves in the air (decision 0081: the volley's)
 export const RULESETS: Readonly<
   Record<
     string,

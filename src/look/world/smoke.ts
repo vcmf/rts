@@ -1,4 +1,4 @@
-// Musket smoke's pure parts (docs/plans/active/smoke-bank.md, decision 0080): when the scripted battalions' ranks go
+// Musket smoke's pure parts (docs/plans/active/smoke-bank.md, decision 0081): when the scripted battalions' ranks go
 // off, the puffs a volley leaves along the front, a puff's motion, growth, opacity and thinning with age (mirrored by
 // src/look/shaders/smoke.vert and smoke.frag), the formations' mask and the opacity cap it sets over them, the zoom's
 // thinning, and the page's switches. No Babylon: the tests read it in Node. The engine names no weapon: the smoke's
@@ -387,7 +387,7 @@ export function coverAt(
 
 /** The cap over the men (smoke.frag's): the factor on one card's opacity where it lies over a share `cover` (coverAt)
  *  of a formation: 1 clear of them, falling smoothly to cap over them. A factor per card, not a cap on the bank's
- *  total: cards over each other add up (three grown puffs at 0.95 × 0.6 make about 0.92); decision 0080 */
+ *  total: cards over each other add up (three grown puffs at 0.95 × 0.6 make about 0.92); decision 0081 */
 export function coverCap(cover: number, cap: number): number {
   const t = Math.min(1, Math.max(0, (cover - 0.15) / 0.5))
   return 1 - (1 - cap) * t * t * (3 - 2 * t)

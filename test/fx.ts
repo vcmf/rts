@@ -94,7 +94,7 @@ export const STREAM_X = (z: number): number => 70 + 6 * Math.sin(z * 0.03)
 export const DEG = Math.PI / 180
 // a long test (5 s or more locally): skipped in the coverage run (`npm run coverage` sets COVERAGE), where V8's
 // block counters make the sim's hot loops about six times slower. It repeats paths shorter tests cover, and it
-// still runs in `npm test` and in CI's check job. A long test that is a path's only one stays in the coverage run
+// still runs in `npm test` and in CI's test job. A long test that is a path's only one stays in the coverage run
 // (it is the coverage the run is for), under the coverage run's longer budget (vitest.config.ts).
 export const longIt = it.skipIf(!!process.env.COVERAGE)
 

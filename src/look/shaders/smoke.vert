@@ -1,6 +1,6 @@
 precision highp float;attribute vec3 position;
 #include<instancesDeclaration>
-// THE MUSKET SMOKE (src/look/smoke.ts, decision 0080): a puff an instance, its first three columns its birth place (m)
+// THE MUSKET SMOKE (src/look/smoke.ts, decision 0081): a puff an instance, its first three columns its birth place (m)
 // and clock (s), its way ahead (x, z), seed and life (s), its own factors on the era's size, reach, rise and density
 // (src/look/world/smoke.ts, volleyPuffs, puffVary). The mesh is one quad (corners ±1): a card, its y along the front,
 // its x the shot's way while young (a jet near the level, its back at the muzzle) turning to the eye's up as it grows
