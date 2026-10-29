@@ -14,6 +14,7 @@ import {
   formationHandle,
   STATUS,
   menOf,
+  effectiveBar,
   hashWorld,
   hex,
   SIM_VERSION,
@@ -578,7 +579,7 @@ async function main(): Promise<void> {
               ? ' · blown'
               : ''
         lines.push(
-          `   ${MORALE_STATES[w.f.mstate[i]]} · morale ${w.f.morale[i].toFixed(2)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`,
+          `   ${MORALE_STATES[w.f.mstate[i]]} · level ${w.f.level[i]} ${w.cr.rs.levels[w.f.level[i] - 1].name} · bar ${effectiveBar(w, i, 0).toFixed(0)} of ${w.f.barMax[i].toFixed(0)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`,
         )
       }
     }

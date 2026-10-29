@@ -110,20 +110,24 @@ export interface Formations {
   shotKind: Uint8Array
   shotX: Float64Array
   shotZ: Float64Array
-  // morale: quality, morale, the state (MS_*), the strength at spawn and the recent losses (decaying)
-  quality: Float64Array
-  morale: Float64Array
+  // morale (docs/proposals/morale-bar-model.md): the level (1..6), its points, whether it gained a level this battle;
+  // the bar, its maximum and the cost of the losses since the last write-off (points); the state (MS_*), the strength
+  // at spawn
+  level: Uint8Array
+  pts: Float64Array
+  up: Uint8Array
+  bar: Float64Array
+  barMax: Float64Array
+  cost: Float64Array
   mstate: Uint8Array
   startMen: Int32Array
-  recent: Float64Array
   // the rout (morale.ts): its direction, fixed at the break; its phase (RP_*); the runs made so far
   routX: Float64Array
   routZ: Float64Array
   routPhase: Uint8Array
   runs: Uint8Array
-  // the rest of the machine (S1c-2): the men the losses term counts from (the spawn strength until a rally),
-  // the ticks it last broke, last lost a man and started rallying, and how many times it has broken
-  baseMen: Int32Array
+  // the rest of the machine (S1c-2): the ticks it last broke, last lost a man and started rallying, and how many times
+  // it has broken
   brokeTick: Int32Array
   lastLoss: Int32Array
   since: Int32Array
@@ -311,17 +315,19 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     shotKind: u8(N * C),
     shotX: f64(N * C),
     shotZ: f64(N * C),
-    quality: f64(N),
-    morale: f64(N),
+    level: u8(N),
+    pts: f64(N),
+    up: u8(N),
+    bar: f64(N),
+    barMax: f64(N),
+    cost: f64(N),
     mstate: u8(N),
     startMen: i32(N),
-    recent: f64(N),
     routX: f64(N),
     routZ: f64(N),
     routPhase: u8(N),
     runs: u8(N),
     pressed: i32(N),
-    baseMen: i32(N),
     brokeTick: i32(N),
     lastLoss: i32(N),
     since: i32(N),

@@ -78,7 +78,7 @@ if (!isMainThread) {
   const min = (t: number) => (t / 1200).toFixed(1)
   console.log(`${seeds} seeds per range, ${n} workers, ${((Date.now() - t0) / 1000).toFixed(0)} s\n`)
   console.log(
-    'range | weaker broke | stronger first | none in 20 min | time to break, min (p10 / median / p90) | weaker losses at break (p10 / median / p90) | at the break: losses term / recent term',
+    'range | weaker broke | stronger first | none in 20 min | time to break, min (p10 / median / p90) | weaker losses at break (p10 / median / p90) | at the break: losses / shocks, points',
   )
   for (const [label, kind, range] of RANGES.map(r => [`${r} m`, 'fight', r] as const)) {
     const rs = out.filter(o => o.range === range && o.kind === kind).map(o => o.r)
@@ -91,7 +91,7 @@ if (!isMainThread) {
     const l = weak.map(r => (r.lossB * 100) / MEN)
     const avg = (a: number[]) => (a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2) : '-')
     console.log(
-      `${label} | ${weak.length} | ${strong.length} | ${none.length} | ${min(q(t, 0.1))} / ${min(q(t, 0.5))} / ${min(q(t, 0.9))} | ${q(l, 0.1)} / ${q(l, 0.5)} / ${q(l, 0.9)}% | ${avg(broke.map(r => r.termLosses))} / ${avg(broke.map(r => r.termRecent))}`,
+      `${label} | ${weak.length} | ${strong.length} | ${none.length} | ${min(q(t, 0.1))} / ${min(q(t, 0.5))} / ${min(q(t, 0.9))} | ${q(l, 0.1)} / ${q(l, 0.5)} / ${q(l, 0.9)}% | ${avg(broke.map(r => r.termLosses))} / ${avg(broke.map(r => r.termShocks))}`,
     )
   }
   // the brigade: who broke first, how many of the weaker side were out of the fight 3 minutes later, and the

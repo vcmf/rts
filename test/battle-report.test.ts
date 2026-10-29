@@ -91,7 +91,7 @@ describe('the battle report', () => {
     advanceTick(w)
     const runner = formationHandle(w, 1)
     const r = reporter(w)
-    w.f.morale[1] = 0.3 // breaks at the next tick
+    w.f.bar[1] = -100 // breaks at the next tick
     r.tick(advanceTick(w))
     issue(w, { type: 'debug-kill', id: runner, men: 51 })
     issue(w, { type: 'debug-kill', id: formationHandle(w, 2), men: 100 })

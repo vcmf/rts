@@ -1,16 +1,16 @@
-// Morale (docs/plans/active/s1c-fire-morale.md, docs/plans/active/s1c2-morale-machine.md; docs/proposals/
-// sim-design.md §10), loss-driven: each tick a battalion's morale closes part of the gap to its target, its
-// quality less the weighted share of men lost and of men lost recently, plus a bonus for each secured flank.
-// Being fired at does not move it, nor does disorder (a march through a wood would shake a battalion no
-// enemy can see); men falling do, and so does a friend breaking nearby (contagion, a shock in the next
-// tick), and so do a charge's threat and impact (the melee step's shocks, docs/systems/melee.md). The state
-// follows the morale with hysteresis.
+// Morale (docs/proposals/morale-bar-model.md; before it docs/plans/active/s1c-fire-morale.md and
+// docs/plans/active/s1c2-morale-machine.md), a bar in points with its level's maximum. Men lost empty it, and so do
+// shocks: a friend breaking nearby (contagion, in the next tick) and a charge's threat and impact (the melee step's,
+// docs/systems/melee.md). In the fight it recovers the shocks, never the losses. Being fired at does not move it, nor
+// does disorder (a march through a wood would shake a battalion no enemy can see). The states read its effective level,
+// the bar with each secured flank's support, less the back exposed, as a share of its maximum, with hysteresis; at 0
+// or less it routs.
 //
 // A battalion that routs drops its orders and runs; the run's direction is fixed at the break (its side's
 // rear, else away from the nearest enemy, else straight back), and its phase is kept: running, halted at
 // impassable ground (or, with claims, by others), or fled. Only a halted router tries again, the next direction of a
 // fan about the stored one. Enemies that reach a router cut it down (the melee step). A router
-// whose run has ended, safe and calm, rallies: its losses so far are written off and its quality drops. A
+// whose run has ended, safe and calm, rallies: its losses so far are written off and its maximum is cut. A
 // battalion that breaks too often, or routs below half strength, shatters and runs for good. A wavering
 // battalion keeps fighting until it recovers or routs (decision 0082): nothing moves it back by itself.
 //
@@ -53,7 +53,7 @@ import { formedFits, freeSpot } from './claims.ts'
 import { blockGeometry, inArc, sees, screenShare, sqDist, reachOf, type FireGeo } from './fire.ts'
 import { buildFaces, threatWeights } from './sectors.ts'
 import { sin, cos, PI } from './num.ts'
-import { TICK_HZ } from './time.ts'
+import { DT, TICK_HZ } from './time.ts'
 
 const RUN = 800 // how far a router is sent, metres (kept on the map)
 // the runs: the stored direction first, then turned from it by these angles, one every RETRY ticks while the
@@ -83,14 +83,32 @@ export function enemyNear(w: World, i: number): boolean {
 // nearest enemy in the fight (its distance, and the unit vector from it to the battalion)
 const near = { shock: 0, left: 0, right: 0, enemy: Infinity, ax: 0, az: 0 }
 
+/**
+ * Formation i's effective bar (morale-bar-model § 4), points: its bar, plus support.bonus for each secured flank, less
+ * the back exposed's drain, which takes it down to the wavering threshold at most. `flanks` is its secured flanks
+ * (0..2).
+ */
+export function effectiveBar(w: World, i: number, flanks: number): number {
+  const f = w.f
+  const M = w.cr.rs.morale
+  const e0 = f.bar[i] + M.support.bonus * flanks
+  return e0 - Math.min(w.scratch.drain?.[i] ?? 0, Math.max(0, e0 - M.wavering[0] * f.barMax[i]))
+}
+/** Formation i's effective bar as a share of its maximum, for the page: 0 at the rout, 1 full. */
+export function moraleShare(w: World, i: number): number {
+  return effectiveBar(w, i, 0) / w.f.barMax[i]
+}
+
 // step 12 for battalion i, after its casualties (`lost`, step 11)
 export function moraleStep(w: World, i: number, lost: number): void {
   const f = w.f
   const M = w.cr.rs.morale
   const now = w.meta[M_TICK] + 1
-  const base = Math.max(1, f.baseMen[i])
   const start = Math.max(1, f.startMen[i])
-  f.recent[i] = f.recent[i] * w.cr.recentDecay + lost
+  // losses (§ 3): each man costs loss / start points, never recovered
+  const c = (lost * M.loss) / start
+  f.bar[i] -= c
+  f.cost[i] += c
   // the melee step's shocks (a charge's threat and impact): taken with contagion
   const owedShock = f.shockIn[i]
   f.shockIn[i] = 0
@@ -103,17 +121,14 @@ export function moraleStep(w: World, i: number, lost: number): void {
     return
   }
   survey(w, i, now)
-  // the losses term counts from baseMen (written off at a rally); recent losses are a share of the spawn strength
-  const tau =
-    f.quality[i] -
-    (M.losses * (base - men)) / base -
-    (M.recent * f.recent[i]) / start +
-    M.support.bonus * (near.left + near.right)
-  // the back exposed (decision 0081): down to the wavering threshold at most, nothing for a target already below it
-  const target = tau - Math.min(w.scratch.drain?.[i] ?? 0, Math.max(0, tau - M.wavering[0]))
-  f.morale[i] += (target - f.morale[i]) * w.cr.relax
-  if (s !== MS_ROUTING) f.morale[i] -= near.shock + owedShock // routing and shattered (returned above) are not shocked
-  const m = f.morale[i]
+  // recovery (§ 3): in the fight, up to its maximum less what its losses cost (scar of it)
+  if (s !== MS_ROUTING && s !== MS_RALLYING) {
+    const ceiling = f.barMax[i] - M.scar * f.cost[i]
+    if (f.bar[i] < ceiling) f.bar[i] = Math.min(ceiling, f.bar[i] + M.regen * DT)
+  }
+  if (s !== MS_ROUTING) f.bar[i] -= near.shock + owedShock // routing and shattered (returned above) are not shocked
+  const e = effectiveBar(w, i, near.left + near.right)
+  const m = e / f.barMax[i]
   if (s === MS_ROUTING) {
     if (men < M.shatter * f.startMen[i]) f.mstate[i] = MS_SHATTERED
     // its run has ended (a run was made, and it is not running: a full order pool can leave a router
@@ -121,17 +136,16 @@ export function moraleStep(w: World, i: number, lost: number): void {
     else if (
       f.runs[i] > 0 &&
       f.routPhase[i] !== RP_RUNNING &&
-      f.quality[i] - M.rally.cost >= M.wavering[0] &&
       now - f.lastLoss[i] >= M.rally.calm * TICK_HZ &&
       near.enemy > M.rally.safe
     ) {
-      rally(w, i, now, men)
+      rally(w, i, now)
       return
     }
     routStep(w, i)
     return
   }
-  if (m < M.rout) {
+  if (e <= 0) {
     rout(w, i, now, men)
     return
   }
@@ -401,34 +415,37 @@ function run(w: World, i: number): void {
   }
   appendOrder(w, i, n)
 }
-// a router rallies where it stands: the losses so far are written off (the losses term counts from the men
-// it has now) and its quality drops, so it comes back brittle; it re-forms for rally.time before it takes
-// orders again. Only a battalion whose quality, less the cost, is still wavering or better may rally: one
-// below would break again at once
-function rally(w: World, i: number, now: number, men: number): void {
+// a router rallies where it stands (morale-bar-model § 6): what its losses cost is written off, its maximum is cut by
+// rally.cut for the battle, so it comes back brittle, and its bar refills to rally.share of it; it re-forms for
+// rally.time before it takes orders again
+function rally(w: World, i: number, now: number): void {
   const f = w.f
   const M = w.cr.rs.morale
   clearOrders(w, i)
   f.status[i] = 0
   f.blockedFor[i] = 0
   f.routPhase[i] = RP_NONE
-  f.quality[i] = Math.max(0, f.quality[i] - M.rally.cost)
-  f.baseMen[i] = men
-  f.recent[i] = 0
-  f.morale[i] = f.quality[i]
+  f.barMax[i] *= 1 - M.rally.cut
+  f.bar[i] = M.rally.share * f.barMax[i]
+  f.cost[i] = 0
   f.mstate[i] = MS_RALLYING
   f.since[i] = now
 }
-// a new battalion: morale at its quality, steady
-export function spawnMorale(w: World, i: number, quality: number): void {
+/**
+ * A new formation (morale-bar-model § 2): at `level` (1..6), with its level's points; its bar full at `bar` points, or
+ * its level's bar when `bar` is not given; steady.
+ */
+export function spawnMorale(w: World, i: number, level: number, bar?: number): void {
   const f = w.f
-  const men = menOf(w, i)
-  f.quality[i] = quality
-  f.morale[i] = quality
+  const L = w.cr.rs.levels[level - 1]
+  f.level[i] = level
+  f.pts[i] = L.points
+  f.up[i] = 0
+  f.barMax[i] = bar ?? L.bar
+  f.bar[i] = f.barMax[i]
+  f.cost[i] = 0
   f.mstate[i] = MS_STEADY
-  f.startMen[i] = men
-  f.baseMen[i] = men
-  f.recent[i] = 0
+  f.startMen[i] = menOf(w, i)
   f.brokeTick[i] = -1
   f.lastLoss[i] = 0
   f.since[i] = 0

@@ -101,7 +101,7 @@ describe('formedOverlaps', () => {
   })
   it('leaves out a formation out of the fight', () => {
     const w = two(0.4)
-    issue(w, { type: 'debug-morale', id: unitHandle(1), quality: 0 })
+    issue(w, { type: 'debug-morale', id: unitHandle(1), bar: -100 })
     for (let t = 0; t < 400 && w.f.mstate[1] < 3; t++) advanceTick(w)
     expect(w.f.mstate[1]).toBeGreaterThanOrEqual(3)
     const o = formedOverlaps(w, placeAll(w, mkPlaced(w)))

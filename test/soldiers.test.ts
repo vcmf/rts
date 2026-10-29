@@ -159,7 +159,7 @@ describe('who stands where', () => {
   })
   it("after casualties the living equal the sim's men, one per filled slot", () => {
     // it must not break: losses do not move its morale (shattered at 20 of 100, it would run off the field, S1e-1)
-    const p = new Play(new Sim(1, { ...small, morale: { ...small.morale, losses: 0, recent: 0 } }))
+    const p = new Play(new Sim(1, { ...small, morale: { ...small.morale, loss: 1e-9 } }))
     const h = p.sim.spawn(-20, -40, 0)
     p.frames(1)
     for (let n = 0; n < 5; n++) {

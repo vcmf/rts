@@ -350,36 +350,96 @@ export const napoleonic: Ruleset = {
     eye: 1.6,
     sight: { woods: 40, denseWood: 15 },
   },
+  // the morale bar (docs/proposals/morale-bar-model.md § 8), in points: today's numbers × 100 / 0.35, the margin of the
+  // old default quality (0.75) over the rout (0.4) being level 2's bar of 100
   morale: {
-    quality: 0.75,
-    losses: 1.25,
-    recent: 3,
-    recentTime: 10,
-    relaxTime: 20,
-    shaken: [0.6, 0.65],
-    wavering: [0.5, 0.55],
-    rout: 0.4,
+    level: 2,
+    loss: 357, // level 2 breaks at 28% losses, as the old average line did
+    regen: 2, // shocks wear off in the fight, under fire too: the old relax recovered a contagion shock at about 2 a
+    // second at first
+    scar: 1, // losses are never recovered
+    shaken: [0.6, 0.7],
+    wavering: [0.3, 0.45],
     routPace: 2,
     // the rest of the machine (docs/plans/active/s1c2-morale-machine.md)
     // the reaches scale with the frontage (S1c-4): 2.8 times S1c-2's, set for 100-man lines 40 m apart in a
     // brigade, so a 400-man line 113 m from its neighbour feels the same shock and support
-    contagion: { shock: 0.15, front: 560, back: 280 },
-    // an enemy on its flank presses a steady line (0.75 → 0.65, still steady); one behind it makes it shaken (0.55)
-    drain: { flank: 0.1, rear: 0.2 },
-    support: { bonus: 0.04, reach: 280, arc: 0.7853981633974483 },
-    rally: { safe: 250, calm: 20, time: 30, cost: 0.1, max: 2 },
+    contagion: { shock: 43, front: 560, back: 280 },
+    // an enemy on its flank presses a steady line (100 → 71, still steady); one behind it makes it shaken (43)
+    drain: { flank: 29, rear: 57 },
+    support: { bonus: 11, reach: 280, arc: 0.7853981633974483 },
+    rally: { safe: 250, calm: 20, time: 30, cut: 0.25, share: 0.5, max: 2 },
     shatter: 0.5,
     leave: 12, // S1e-1: shattered formations that reach the map's edge leave the field
   },
+  // experience (docs/proposals/morale-bar-model.md § 8): first guesses
+  levels: [
+    {
+      name: 'Recruits',
+      points: 0,
+      bar: 70,
+      toughness: 0.9,
+      reload: 1.12,
+      precision: 0.85,
+      drill: 1.3,
+      react: 2.5,
+      pursue: 2,
+    },
+    { name: 'Line', points: 100, bar: 100, toughness: 1, reload: 1, precision: 1, drill: 1, react: 1, pursue: 1 },
+    {
+      name: 'Veterans',
+      points: 300,
+      bar: 120,
+      toughness: 1.1,
+      reload: 0.92,
+      precision: 1.1,
+      drill: 0.85,
+      react: 1,
+      pursue: 0.8,
+    },
+    {
+      name: 'Young Guard',
+      points: 700,
+      bar: 140,
+      toughness: 1.2,
+      reload: 0.88,
+      precision: 1.15,
+      drill: 0.8,
+      react: 0.5,
+      pursue: 0.7,
+    },
+    {
+      name: 'Middle Guard',
+      points: 1500,
+      bar: 160,
+      toughness: 1.3,
+      reload: 0.84,
+      precision: 1.2,
+      drill: 0.75,
+      react: 0.5,
+      pursue: 0.7,
+    },
+    {
+      name: 'Old Guard',
+      points: 3100,
+      bar: 180,
+      toughness: 1.4,
+      reload: 0.8,
+      precision: 1.25,
+      drill: 0.7,
+      react: 0.5,
+      pursue: 0.7,
+    },
+  ],
   // charges and melee (docs/plans/active/s1d2-charges.md): first guesses, tuned by tools/calibrate-charge.ts.
   // A charge's threat shakes the target at the test, its impact costs men and morale by its momentum and the
   // side it comes from, both cut by how far the target is braced (a square); melee kills per man in contact
   melee: {
     contact: 2,
     hold: 3,
-    threat: { front: 0.12, flank: 0.25, rear: 0.3 },
-    impact: { kill: 0.12, shock: { front: 0.2, flank: 0.35, rear: 0.4 } },
-    second: { flank: 0.15, rear: 0.2 }, // under the guard: 0.6 × (0.75 − 0.4) = 0.21
+    threat: { front: 34, flank: 71, rear: 86 }, // points
+    impact: { kill: 0.06, shock: { front: 57, flank: 100, rear: 114 } },
+    second: { flank: 43, rear: 57 }, // under the guard: 0.6 × level 2's 100
     rate: 0.01,
     strength: { line: 1.0, column: 1.0, skirmish: 0.5, horse: 1.6, guns: 0.3 },
     cohesion: 0.5,

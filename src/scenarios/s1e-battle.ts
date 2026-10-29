@@ -19,7 +19,7 @@ interface Row {
   z: number
   a: number
   part: 'first' | 'second' | 'regiment' | 'battery'
-  quality?: number
+  bar?: number
 }
 // side 1's battalions are rows of their own type, which carries the x they fight at
 interface Battalion extends Row {
@@ -55,7 +55,8 @@ const SOUTH: Row[] = [
 // column behind; its regiment on its eastern flank, facing your battery and your regiment; its battery on its
 // ridge west of its first line, turned 25° inwards, so that it fires past its own line while that comes down (once
 // the line has closed, it masks the battery's fire at your western battalions)
-const VETERAN = 0.85 // the ruleset's quality is 0.75
+// a bar of points: the old quality 0.85 on the bar's scale (morale-bar-model § 8); level 3 in U2's step 5
+const VETERAN = 129
 const vet = (shape: string, x: number, z: number, part: 'first' | 'second', fight: number): Battalion => ({
   unit: 'infantry',
   shape,
@@ -65,7 +66,7 @@ const vet = (shape: string, x: number, z: number, part: 'first' | 'second', figh
   a: PI,
   part,
   fight,
-  quality: VETERAN,
+  bar: VETERAN,
 })
 // first in NORTH, so their unit numbers count from S1
 const BATTALIONS: Battalion[] = [
@@ -130,8 +131,8 @@ export const s1eBattle: Scenario = {
       [0, SOUTH],
       [1, NORTH],
     ] as const) {
-      for (const { unit, shape, men, x, z, a, quality } of rows) {
-        issue(w, { type: 'debug-spawn', side, unit, shape, men, x, z, heading: a, fire: 'at will', quality })
+      for (const { unit, shape, men, x, z, a, bar } of rows) {
+        issue(w, { type: 'debug-spawn', side, unit, shape, men, x, z, heading: a, fire: 'at will', bar })
       }
     }
   },

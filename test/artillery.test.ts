@@ -308,7 +308,7 @@ describe('determinism', () => {
       s.spawn(0, -60, -150, PI / 6, 'unlimbered', 'battery', 'at will')
       s.spawn(1, 100, 100, SW, 'column')
       s.run(120)
-      return JSON.stringify([s.w.f.men, s.w.f.morale, s.w.f.shotX, s.w.f.shotZ].map(a => [...a]))
+      return JSON.stringify([s.w.f.men, s.w.f.bar, s.w.f.shotX, s.w.f.shotZ].map(a => [...a]))
     }
     expect(go(true)).toBe(go(false))
   })
