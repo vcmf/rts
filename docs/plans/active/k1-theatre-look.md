@@ -189,6 +189,34 @@ one shape before the light: sunk 70 m (of the raised shape) below the shore, the
 blurred), as no lake bathymetry is loaded; the sun, its shadows and the sky's occlusion fall on the basins as on the
 land. The bake rose to about 5.4 s.
 
+### Performance (2026-10-29)
+
+The owner: "150 fps at 1080p and also for high resolution … the current upscaling … show me fps". Then:
+- **The 50 m windows' seam** (sharp inside, soft outside): their detail now fades over 20 km into the coarse ground
+  instead of 4.
+- **The light's slope:** up close one Catmull-Rom pass with its derivative (16 reads) instead of four (64); further
+  out, where a cell is under a pixel, four bilinear reads across the pixel, which also average what it covers.
+- **Rivers and roads on the GPU at every zoom** (no 2D strokes), and the 2D ink projects only the named rivers it
+  can label, every other point: projecting every river cost about 2 ms of the 3 ms ink while panning at 1080p.
+- **FSR 1 on high-resolution screens** (decisions 0045, 0059; Babylon's `FSR1RenderingPipeline`, EASU then RCAS):
+  when the canvas holds more than about 1080p's pixels, the map renders at a scale back to about that many
+  (×1.87 at 3840 × 2160). `?upscale=off` or a factor.
+- **An fps meter** at the top centre, as the staff map's (`?fps=0` hides it): the frame rate over half a second, the
+  CPU time of a frame, the upscale factor.
+
+Measured on test machine A (RTX 3080, D3D11, headless over CDP; frames waited for with a pixel read), still / with
+the ink redrawn (panning), the theatre's view and the Inn valley close up:
+
+| Screen | Theatre | Inn valley |
+|---|---|---|
+| 1920 × 1080, before | 2.98 / 9.73 ms | 1.42 / 3.58 ms |
+| 1920 × 1080, after | 3.01 / 3.45 ms (290 fps panning) | 1.03 / 1.84 ms |
+| 3840 × 2160, before | 5.69 / 12.77 ms | 3.79 / 6.07 ms |
+| 3840 × 2160, after (FSR ×1.87) | 2.74 / 4.20 ms (238 fps) | 1.60 / 2.39 ms |
+
+The 150 fps target at 1080p is met with room. The fps meter in a headless browser reads low (throttled frames); in a
+visible window it is capped by the display.
+
 ## Review rounds
 
 - **Round 1** (`/code-review high`): severe: every lake was simplified to two points (a closed ring's chord has no

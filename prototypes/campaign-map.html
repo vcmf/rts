@@ -33,6 +33,13 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   font: 400 10px/1 var(--mono); color: var(--ink-2);
 }
 #scale .bar { height: 5px; border: 1px solid var(--ink); border-top: 0; margin-bottom: 5px; }
+#fps {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%); pointer-events: none; padding: 6px 12px;
+  font: 500 11px/1 var(--mono); letter-spacing: 0.06em; white-space: nowrap; color: var(--ink);
+  background: rgba(241, 242, 244, 0.86); border: 1px solid rgba(40, 30, 20, 0.15);
+}
+#fps b { font-size: 15px; }
+#fps span { opacity: 0.6; margin-left: 10px; }
 #missing {
   position: fixed; inset: 0; display: none; place-items: center;
   font: 400 13px/1.7 var(--mono); color: var(--ink);
@@ -72,6 +79,7 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   <div class="m" id="meta"></div>
   <div class="n" id="credit"></div>
 </div>
+<div id="fps"><b id="fpsN">–</b> fps<span id="fpsD"></span></div>
 <div id="scale"><div class="bar" id="scaleBar"></div><span id="scaleText"></span></div>
 <div id="missing">No theatre: run <b>node tools/campaign-theatre.ts</b>, then reload.</div>
 <script>
@@ -89,7 +97,8 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * ?contour= the contour interval in metres (200); ?tilt= the camera's tilt at the closest zoom, in degrees (45);
  * ?clouds= the cloud shadows (0.15); ?view=x,z,km the target in km from the centre, east and north, and the camera
  * distance; ?theatre= the generated file; ?stepkm= the water's steps, km apart from the shore (0.7); ?steps= how
- * many (6; 0 a flat sunk level).
+ * many (6; 0 a flat sunk level); ?upscale=off|<factor> the FSR 1 upscale on high-resolution screens; ?fps=0 hides
+ * the frame rate.
  */
 'use strict';
 const t0 = performance.now();
@@ -675,13 +684,13 @@ void main() {
 B.Effect.ShadersStore.printFragmentShader = `
 precision highp float;
 varying vec2 vW;
-uniform sampler2D uShape, uLight, uLines, uRivers, uLakes, uLakeD, uPaperT, uContourH, uFine0, uFine1, uFine2;
+uniform sampler2D uShape, uShapeL, uLight, uLines, uRivers, uLakes, uLakeD, uPaperT, uContourH, uFine0, uFine1, uFine2;
 uniform sampler2D uClouds;
 uniform vec3 uShallow, uDeep;
 uniform vec2 uHalf, uTexel, uLightTexel, uLineTexel, uLakeTexel, uFineTexel0, uFineTexel1, uFineTexel2;
 uniform vec4 uFineRect0, uFineRect1, uFineRect2;
 uniform vec3 uSun, uPaper, uTable, uWater, uKey, uSky, uRoad, uRoad2, uRiver, uContourInk, uContourMinor;
-uniform float uCellKm, uFineCellKm, uFineK, uSkyK, uLamp, uContour, uContourK, uLineK, uTime, uCloudK, uHaze;
+uniform float uCellKm, uFineCellKm, uFineK, uSkyK, uLamp, uContour, uContourK, uTime, uCloudK, uHaze;
 uniform float uScreenH, uVert;
 
 /* a screen pixel's size in km: set first thing in main, read by the water's steps */
@@ -724,24 +733,29 @@ vec4 bicubic4(sampler2D t, vec2 uv, vec2 texel) {
        + g1.y * (g0.x * texture2D(t, vec2(a.x, b.y)) + g1.x * texture2D(t, vec2(b.x, b.y)));
 }
 
-/* a Catmull-Rom read of a single-channel texture: it passes through the texels, sixteen taps at texel centres */
-float catmullRom(sampler2D t, vec2 uv, vec2 texel) {
+/* a Catmull-Rom read with its slope: (value, d/du, d/dv) per texel, from the same sixteen taps */
+vec3 catmullRomGrad(sampler2D t, vec2 uv, vec2 texel) {
   vec2 p = uv / texel - 0.5;
   vec2 f = fract(p);
   vec2 base = (floor(p) + 0.5) * texel;
   vec2 f2 = f * f;
   vec2 f3 = f2 * f;
-  vec2 w0 = -0.5 * f3 + f2 - 0.5 * f;
-  vec2 w1 = 1.5 * f3 - 2.5 * f2 + 1.0;
-  vec2 w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f;
-  vec2 w3 = 0.5 * f3 - 0.5 * f2;
-  float sum = 0.0;
+  vec4 wx = vec4(-0.5 * f3.x + f2.x - 0.5 * f.x, 1.5 * f3.x - 2.5 * f2.x + 1.0,
+                 -1.5 * f3.x + 2.0 * f2.x + 0.5 * f.x, 0.5 * f3.x - 0.5 * f2.x);
+  vec4 wy = vec4(-0.5 * f3.y + f2.y - 0.5 * f.y, 1.5 * f3.y - 2.5 * f2.y + 1.0,
+                 -1.5 * f3.y + 2.0 * f2.y + 0.5 * f.y, 0.5 * f3.y - 0.5 * f2.y);
+  vec4 dx = vec4(-1.5 * f2.x + 2.0 * f.x - 0.5, 4.5 * f2.x - 5.0 * f.x,
+                 -4.5 * f2.x + 4.0 * f.x + 0.5, 1.5 * f2.x - f.x);
+  vec4 dy = vec4(-1.5 * f2.y + 2.0 * f.y - 0.5, 4.5 * f2.y - 5.0 * f.y,
+                 -4.5 * f2.y + 4.0 * f.y + 0.5, 1.5 * f2.y - f.y);
+  vec3 sum = vec3(0.0);
   for (int j = 0; j < 4; j++) {
-    float wy = j == 0 ? w0.y : j == 1 ? w1.y : j == 2 ? w2.y : w3.y;
     float y = base.y + float(j - 1) * texel.y;
-    float row = w0.x * texture2D(t, vec2(base.x - texel.x, y)).r + w1.x * texture2D(t, vec2(base.x, y)).r;
-    row += w2.x * texture2D(t, vec2(base.x + texel.x, y)).r + w3.x * texture2D(t, vec2(base.x + 2.0 * texel.x, y)).r;
-    sum += wy * row;
+    vec4 row = vec4(texture2D(t, vec2(base.x - texel.x, y)).r, texture2D(t, vec2(base.x, y)).r,
+                    texture2D(t, vec2(base.x + texel.x, y)).r, texture2D(t, vec2(base.x + 2.0 * texel.x, y)).r);
+    float a = j == 0 ? wy.x : j == 1 ? wy.y : j == 2 ? wy.z : wy.w;
+    float b = j == 0 ? dy.x : j == 1 ? dy.y : j == 2 ? dy.z : dy.w;
+    sum += vec3(a * dot(wx, row), a * dot(dx, row), b * dot(wx, row));
   }
   return sum;
 }
@@ -751,18 +765,49 @@ float fineIn(sampler2D t, vec4 rect, vec2 texel, vec2 w) {
   float edge = min(min(w.x - rect.x, rect.z - w.x), min(w.y - rect.y, rect.w - w.y));
   if (edge <= 0.0) return 0.0;
   vec2 uv = ((w - rect.xy) / uFineCellKm + 0.5) * texel;
-  return texture2D(t, uv).r * smoothstep(0.0, 4.0, edge);
+  /* faded over 20 km into the coarse ground, so the window's edge does not show as a seam */
+  return texture2D(t, uv).r * smoothstep(0.0, 20.0, edge);
 }
 
-/* the shape (metres of the raised map), with the finer windows' detail up close, raised as the shape is */
-float shapeH(vec2 w) {
-  float h = catmullRom(uShape, gridUv(w), uTexel) - waterSteps(texture2D(uLakeD, gridUv(w)).r);
-  if (uFineK > 0.0) {
-    float fine = fineIn(uFine0, uFineRect0, uFineTexel0, w) + fineIn(uFine1, uFineRect1, uFineTexel1, w) +
-                 fineIn(uFine2, uFineRect2, uFineTexel2, w);
-    h += fine * uVert * uFineK;
+/* the finer windows' detail at a point, raised as the shape is (metres) */
+float fineH(vec2 w) {
+  return (fineIn(uFine0, uFineRect0, uFineTexel0, w) + fineIn(uFine1, uFineRect1, uFineTexel1, w) +
+          fineIn(uFine2, uFineRect2, uFineTexel2, w)) * uVert * uFineK;
+}
+
+/* the lake floor's steps at a point (metres below the sunk surface) */
+float stepsH(vec2 w) {
+  return waterSteps(texture2D(uLakeD, gridUv(w)).r);
+}
+
+/* the slope of the shape the light falls on, in metres per km (x east, y north): the shape's own, up close from one
+   Catmull-Rom pass and its derivative, further out (a cell under a pixel) by differences of four bilinear reads
+   across the pixel, which average what the pixel covers; then the water's steps and the finer windows' detail, by
+   differences, only where they are */
+vec2 slopeAt(vec2 w, float px) {
+  float far = smoothstep(0.8, 1.4, px / uCellKm);
+  vec2 g = vec2(0.0);
+  if (far < 1.0) g = catmullRomGrad(uShape, gridUv(w), uTexel).yz / uCellKm * (1.0 - far);
+  if (far > 0.0) {
+    vec2 ex = vec2(px, 0.0);
+    vec2 ez = vec2(0.0, px);
+    float hx = texture2D(uShapeL, gridUv(w + ex)).r - texture2D(uShapeL, gridUv(w - ex)).r;
+    float hz = texture2D(uShapeL, gridUv(w + ez)).r - texture2D(uShapeL, gridUv(w - ez)).r;
+    g += vec2(hx, hz) / (2.0 * px) * far;
   }
-  return h;
+  float e = max(px, 0.5 * uCellKm);
+  vec2 ex = vec2(e, 0.0);
+  vec2 ez = vec2(0.0, e);
+  if (texture2D(uLakeD, gridUv(w)).r > -0.2) {
+    g -= vec2(stepsH(w + ex) - stepsH(w - ex), stepsH(w + ez) - stepsH(w - ez)) / (2.0 * e);
+  }
+  if (uFineK > 0.0) {
+    float ef = max(px, 0.5 * uFineCellKm);
+    vec2 fx = vec2(ef, 0.0);
+    vec2 fz = vec2(0.0, ef);
+    g += vec2(fineH(w + fx) - fineH(w - fx), fineH(w + fz) - fineH(w - fz)) / (2.0 * ef);
+  }
+  return g;
 }
 
 /* a line of a line texture (two channels: the offset to the nearest point of the line), drawn crisp: its half width
@@ -821,25 +866,21 @@ void main() {
   float depth = waterSteps(texture2D(uLakeD, uv).r) / ${Math.max(1, BANDS * STEP).toFixed(1)};
   print = mix(print, mix(uShallow, uDeep, sqrt(depth)), lake);
 
-  /* rivers and roads on the ground, from about 3 px a km (further out they are ink above the map) */
-  if (uLineK > 0.0) {
+  /* rivers and roads printed on the ground at every zoom */
+  {
     vec4 R = texture2D(uLines, luv);
     float river = lineMask(texture2D(uRivers, luv).rg, max(0.05, 0.9 * px), px);
     float road = lineMask(R.rg, max(0.035, 0.85 * px), px);
     float road2 = lineMask(R.ba, max(0.025, 0.6 * px), px);
-    print = mix(print, uRiver, 0.85 * river * uLineK);
-    print = mix(print, uRoad2, 0.8 * road2 * uLineK);
-    print = mix(print, uRoad, 0.95 * road * uLineK);
+    print = mix(print, uRiver, 0.85 * river);
+    print = mix(print, uRoad2, 0.8 * road2);
+    print = mix(print, uRoad, 0.95 * road);
   }
 
   /* the light, per pixel, from the shape the surface is raised by: the warm sun on the slope, in its baked shadow,
      with cloud shadows drifting from the west; and the cool sky, in the baked share of it each point sees */
-  float e = max(px, mix(0.5 * uCellKm, 0.5 * uFineCellKm, uFineK));
-  vec2 ex = vec2(e, 0.0);
-  vec2 ez = vec2(0.0, e);
-  float hx = shapeH(vW + ex) - shapeH(vW - ex);
-  float hz = shapeH(vW + ez) - shapeH(vW - ez);
-  vec3 n = normalize(vec3(-hx, 2000.0 * e, -hz));
+  vec2 slope = slopeAt(vW, px);
+  vec3 n = normalize(vec3(-slope.x, 1000.0, -slope.y));
   vec4 baked = bicubic4(uLight, (vW + uHalf) / (2.0 * uHalf) * (1.0 - uLightTexel) + 0.5 * uLightTexel, uLightTexel);
   float cloud = texture2D(uClouds, vW / 310.0 + uTime * vec2(0.0005, 0.00015)).r *
                 texture2D(uClouds, vW / 170.0 + vec2(0.37, 0.61) + uTime * vec2(0.0007, 0.0002)).r;
@@ -1021,15 +1062,18 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
     'worldViewProjection', 'uHalf', 'uTexel', 'uLightTexel', 'uLineTexel', 'uLakeTexel',
     'uFineTexel0', 'uFineTexel1', 'uFineTexel2', 'uFineRect0', 'uFineRect1', 'uFineRect2',
     'uSun', 'uPaper', 'uTable', 'uWater', 'uKey', 'uSky', 'uRoad', 'uRoad2', 'uRiver', 'uContourInk', 'uContourMinor',
-    'uCellKm', 'uFineCellKm', 'uFineK', 'uSkyK', 'uLamp', 'uContour', 'uContourK', 'uLineK', 'uTime', 'uCloudK',
+    'uCellKm', 'uFineCellKm', 'uFineK', 'uSkyK', 'uLamp', 'uContour', 'uContourK', 'uTime', 'uCloudK',
     'uHaze', 'uScreenH', 'uVert', 'uShallow', 'uDeep',
   ],
   samplers: [
-    'uShape', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uLakeD', 'uPaperT', 'uContourH', 'uFine0', 'uFine1', 'uFine2',
+    'uShape', 'uShapeL', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uLakeD', 'uPaperT', 'uContourH',
+    'uFine0', 'uFine1', 'uFine2',
     'uClouds',
   ],
 });
 material.setTexture('uShape', exact(floatTexture(SHAPE, NX, NZ)));
+// the same shape read bilinearly: the light's slope far out
+material.setTexture('uShapeL', floatTexture(SHAPE, NX, NZ));
 material.setTexture('uLight', byteTexture(lightBake.data, lightBake.nx, lightBake.nz, B.Engine.TEXTUREFORMAT_RGBA));
 material.setTexture('uLines', byteTexture(lines.roads, lines.w, lines.h, B.Engine.TEXTUREFORMAT_RGBA));
 material.setTexture(
@@ -1070,7 +1114,6 @@ material.setFloat('uSkyK', SKY);
 material.setFloat('uLamp', LAMP);
 material.setFloat('uContour', CONTOUR);
 material.setFloat('uContourK', 0);
-material.setFloat('uLineK', 0);
 material.setFloat('uCloudK', CLOUDS);
 material.setFloat('uHaze', 0);
 material.setFloat('uTime', 0);
@@ -1125,6 +1168,34 @@ const DIST_MAX = 1300;
   const v = (Q.get('view') || '').split(',').map(Number);
   if (v.length === 3 && v.every(Number.isFinite)) Object.assign(view, { x: v[0], z: v[1], dist: v[2] });
 })();
+
+/**
+ * The upscale on high-resolution screens (decisions 0045, 0059: FSR 1, as the look page and the draft map use it):
+ * when the canvas holds more than UPSCALE_FROM pixels (a 1080p screen and a little more), the map renders at a scale
+ * that brings it back to about that many and FSR 1 (EASU, then RCAS sharpening) upscales it to the screen.
+ * ?upscale=off renders every pixel; ?upscale=<factor> forces one (1.3 to 2).
+ */
+const UPSCALE_FROM = 1920 * 1080 * 1.15;
+let fsr = null;
+function setUpscale() {
+  const pixels = engine.getRenderWidth(true) * engine.getRenderHeight(true);
+  const asked = Q.get('upscale');
+  let factor = asked === 'off' ? 1 : Number(asked) || Math.sqrt(pixels / UPSCALE_FROM);
+  factor = factor < 1.15 ? 1 : clamp(factor, 1.3, 2);
+  if (factor === 1) {
+    if (fsr) fsr.scaleFactor = 1;
+    return;
+  }
+  if (!fsr) {
+    fsr = new B.FSR1RenderingPipeline('fsr', scene, [cam]);
+    if (!fsr.isSupported) {
+      fsr.dispose();
+      fsr = null;
+      return;
+    }
+  }
+  fsr.scaleFactor = factor;
+}
 
 /** Places the camera from the view. */
 function placeCamera() {
@@ -1190,6 +1261,7 @@ canvas.addEventListener(
 );
 addEventListener('resize', () => {
   engine.resize();
+  setUpscale();
   material.setFloat('uScreenH', engine.getRenderHeight());
   sizeInk();
   dirty = true;
@@ -1202,8 +1274,6 @@ const inkCanvas = document.getElementById('ink');
 const ink = inkCanvas.getContext('2d');
 const INK_DPR = Math.min(2, window.devicePixelRatio || 1);
 const INK = '#2b2824';
-const ROAD_RED = '#a3412c';
-const RIVER_INK = '#2f6aa3';
 let VP = null;
 
 /** Sizes the ink canvas to the screen. */
@@ -1286,12 +1356,6 @@ function tracePoints(pts) {
   pts.forEach(([sx, sy], k) => (k ? ink.lineTo(sx, sy) : ink.moveTo(sx, sy)));
 }
 
-/** Traces runs of screen points as one path of separate lines. */
-function traceRuns(runs) {
-  ink.beginPath();
-  for (const run of runs) run.forEach(([sx, sy], k) => (k ? ink.lineTo(sx, sy) : ink.moveTo(sx, sy)));
-}
-
 /** The frame, cut at the camera plane (Sutherland–Hodgman on w = W_NEAR), as screen points. */
 function frameOnScreen() {
   const corners = [
@@ -1319,55 +1383,22 @@ function riverWidth(rank, ppk) {
 }
 
 /**
- * Rivers as fine blue ink above the map, faded by `alpha` (up close they are printed on the ground instead);
- * `screen` holds each shown river's runs of screen points, for its name.
+ * The named rivers' lines on screen, for their names (the rivers themselves are printed on the ground by the GPU):
+ * only rivers that can carry a name at this zoom, every other point (the name's place needs no more). Projecting
+ * every river's every point cost about 2 ms a redraw at 1080p, most of the ink's time while panning.
  */
-function drawRivers(ppk, screen, alpha) {
-  ink.lineJoin = 'round';
-  ink.lineCap = 'round';
-  ink.strokeStyle = RIVER_INK;
+function riverLines(ppk) {
+  const screen = [];
+  const maxRank = ppk > 1.5 ? 8 : 4;
   T.rivers.forEach((r, k) => {
-    const w = riverWidth(r.rank, ppk);
-    if (!w) return;
-    screen[k] = screenLine(r.p);
-    if (alpha <= 0.01) return;
-    ink.lineWidth = w;
-    ink.globalAlpha = 0.85 * alpha;
-    traceRuns(screen[k]);
-    ink.stroke();
+    if (!r.name || r.rank > maxRank || !riverWidth(r.rank, ppk)) return;
+    const half = [];
+    for (let i = 0; i < r.p.length; i += 4) half.push(r.p[i], r.p[i + 1]);
+    const n = r.p.length;
+    if (n >= 2 && (n - 2) % 4 !== 0) half.push(r.p[n - 2], r.p[n - 1]);
+    screen[k] = screenLine(half);
   });
-  ink.globalAlpha = 1;
-}
-
-/**
- * Roads in red ink above the map, faded by `alpha` (up close they are printed on the ground instead): high roads
- * solid, country roads thinner and dashed; a pale casing so they sit on the relief.
- */
-function drawRoads(ppk, alpha) {
-  if (alpha <= 0.01) return;
-  ink.globalAlpha = alpha;
-  const scale = clamp(0.75 + ppk * 0.1, 0.75, 1.7);
-  ink.lineJoin = 'round';
-  ink.lineCap = 'round';
-  const lines = T.roads.map(r => screenLine(r.p));
-  for (const pass of ['casing', 'ink']) {
-    T.roads.forEach((r, k) => {
-      const high = r.kind === 'high';
-      traceRuns(lines[k]);
-      if (pass === 'casing') {
-        ink.setLineDash([]);
-        ink.strokeStyle = 'rgba(250, 248, 242, 0.6)';
-        ink.lineWidth = (high ? 3.6 : 2.6) * scale;
-      } else {
-        ink.setLineDash(high ? [] : [5 * scale, 3.5 * scale]);
-        ink.strokeStyle = ROAD_RED;
-        ink.lineWidth = (high ? 1.5 : 1.0) * scale;
-      }
-      ink.stroke();
-    });
-  }
-  ink.setLineDash([]);
-  ink.globalAlpha = 1;
+  return screen;
 }
 
 // the zoom (screen pixels per km) from which a town of each size is shown
@@ -1518,22 +1549,17 @@ function drawInk() {
   ink.setTransform(INK_DPR, 0, 0, INK_DPR, 0, 0);
   ink.clearRect(0, 0, innerWidth, innerHeight);
   const ppk = pxPerKm();
-  // by the zoom (screen pixels per km): the ordinary contours from about 1.2, the finer windows' detail from 2, the
-  // rivers and roads printed on the ground (draped over the relief) instead of inked above it from 3 to 5
+  // by the zoom (screen pixels per km): the ordinary contours from about 1.2, the finer windows' detail from 2
   material.setFloat('uContourK', sstep(1.2, 3, ppk));
   material.setFloat('uFineK', sstep(2, 6, ppk));
-  const onGround = sstep(3, 5, ppk);
-  material.setFloat('uLineK', onGround);
   const placed = [];
   // the ink stops at the neatline, as the print does
   ink.save();
   tracePoints(frameOnScreen());
   ink.clip();
-  // each shown river's screen points, projected once for its line and its name
-  const rivers = [];
   drawRegions(ppk);
-  drawRivers(ppk, rivers, 1 - onGround);
-  drawRoads(ppk, 1 - onGround);
+  // rivers and roads are printed on the ground by the GPU; the named rivers projected here to place their names
+  const rivers = riverLines(ppk);
   drawTowns(ppk, placed);
   drawRiverNames(ppk, placed, rivers);
   ink.restore();
@@ -1550,14 +1576,37 @@ document.getElementById('meta').innerHTML =
 document.getElementById('credit').textContent = T.credit;
 
 placeCamera();
+setUpscale();
+// the frame rate (as the staff map shows it; ?fps=0 hides it): frames a second over the last half second, and the
+// CPU time of a frame (the render's commands and the ink); the rate is capped by the display's refresh
+const FPS = { on: Q.get('fps') !== '0', frames: 0, since: performance.now(), cpu: 0 };
+if (!FPS.on) document.getElementById('fps').style.display = 'none';
+
+/** Counts a frame and its CPU time; twice a second, shows the rate and the mean time. */
+function countFrame(cpuMs) {
+  FPS.frames++;
+  FPS.cpu += cpuMs;
+  const now = performance.now();
+  if (!FPS.on || now - FPS.since < 500) return;
+  document.getElementById('fpsN').textContent = Math.round((FPS.frames * 1000) / (now - FPS.since));
+  const up = fsr && fsr.scaleFactor > 1 ? ` · FSR ×${fsr.scaleFactor.toFixed(2)}` : '';
+  document.getElementById('fpsD').textContent = `cpu ${(FPS.cpu / FPS.frames).toFixed(1)} ms${up}`;
+  FPS.frames = 0;
+  FPS.cpu = 0;
+  FPS.since = now;
+}
+
 // the print every frame (cheap on the GPU, and safe while its shader compiles in the background: drawing only on a
 // change left an empty frame in a visible Chrome); the ink only when the view changed
 engine.runRenderLoop(() => {
-  material.setFloat('uTime', performance.now() / 1000);
+  const t = performance.now();
+  material.setFloat('uTime', t / 1000);
   scene.render();
-  if (!dirty) return;
-  drawInk();
-  dirty = false;
+  if (dirty) {
+    drawInk();
+    dirty = false;
+  }
+  countFrame(performance.now() - t);
 });
 
 /**
@@ -1577,6 +1626,7 @@ function bench(n = 60, withInk = true) {
 }
 
 window.__proto = {
+  upscale: () => (fsr ? fsr.scaleFactor : 1),
   view: () => ({ ...view }),
   setView(x, z, dist) {
     Object.assign(view, { x, z, dist });
