@@ -80,7 +80,9 @@ type Pt = readonly [number, number]
 // segments that reach within their half width and SPEC.road.reach m of it (the shader finds the nearest exactly, with
 // no filtering: no ghost where two lines or two sides meet). Throws if a cell needs more than ROAD_SLOTS
 /** The roads' segments and grid over the tile, of `lines` (the demo's LINES, or a window's ways). */
-export function roadGrid(lines: readonly { pts: readonly Pt[]; w: number; cls: CoverClass }[] = LINES): RoadGrid {
+export function roadGrid(
+  lines: readonly { pts: readonly Pt[]; w: number; cls: CoverClass; dusty?: boolean }[] = LINES,
+): RoadGrid {
   const g = D.spec.road
   const n = D.roadN
   const cell = g.cell
@@ -117,7 +119,7 @@ export function roadGrid(lines: readonly { pts: readonly Pt[]; w: number; cls: C
         along,
         l.w / 2,
         li,
-        (k === 0 ? 1 : 0) + (k === last ? 2 : 0) + (l.cls === COVER.track ? 4 : 0),
+        (k === 0 ? 1 : 0) + (k === last ? 2 : 0) + (l.cls === COVER.track ? 4 : 0) + (l.dusty ? 8 : 0),
         m0[0],
         m0[1],
         m1[0],

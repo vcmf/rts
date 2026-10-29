@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-29
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts]
 decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step]
 ---
 
@@ -100,12 +100,23 @@ Kobelnitz on Austerlitz, (−450, 350)). `tools/build-look-data.ts` compiles the
   crop each by the field's stage: winter's ploughed land, green corn and stubble), temporary until the language's
   field generator; the roads and tracks (lanes, tracks and paths) over them from the ways' lines; every built cell the
   village's ground; the wear by the distance to them;
-- the roads' segments from the `way.*` lines, resampled every 8 m, their widths twice their painted reach;
+- the roads' segments from the `way.*` lines, resampled every 8 m, their widths twice their painted reach (the
+  catalogue's widths: a road 5 m, the highway 9, a lane 5); flagged dusty (8 in their flags), so the road paint lays a
+  summer's dust over their earth and they read as ways against the ploughed land (`roadPaint`,
+  `src/look/shaders/shore.glsl`; the demo's roads set no flag); a grass verge (4 m past a road's edge, 2.5 m past a
+  track's: `VERGE`) where the arable reached them;
 - the trees: a wood's on a 6 m lattice jittered 2.4 m, kept by its density, its species by its `leaf` (birches and
   hawthorns within 5 m of its edge), its size by its `height`; an orchard's apples in its rows (both against the 1 m
   areas); the free-standing trees. On the page the tile's are placed by the placement rule as the demo's scatter, but
   as placed on purpose (`onFields`: one beside a field stays drawn), the far ring's are far trees (none in the apron
   band).
+
+**The relief's painted tone** (`?relief=0|1|2`, `src/look/relief.ts`): a map's long, gentle slopes (Austerlitz at 2×)
+take the sun too evenly to read as hills, so the macro colour's bakes multiply in a soft hillshade (the heights over
+the far ring at 4 m, smoothed, their slopes as if four times steeper, lit from the sun) and a crest-and-valley tone
+(the ground against its mean over about 60 m: crests lighter, valleys darker and a little cooler), baked once with
+the colour (`RELIEF`, `reliefTone` in `src/look/macro.ts`; static light: no cost a frame). 1 on a map world by
+default, 2 stronger; off on the demo unless asked (`?relief=1` to judge it there).
 
 The page loads that window's data (`windowOf`; an unknown name throws, and so does a file holding another world).
 On a map world the demo's hand-placed copses, woods, hedgerows, extras, wheat lattice and formation zones are off;

@@ -137,8 +137,8 @@ float track1(float a,vec2 xz,float s,float c,float k){
 // end: a round cap); jn a junction weight (full within ROAD_PAINT m of another line's side, the paint's reach, gone by
 // ROAD_JUNCTION), past how far past a line's free end (its first or last segment's). hw 0: no road near. Only where
 // the cover's distance to a line says one is near (one read, most of the tile: src/look/spec.ts, road)
-vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT){
-  jn=0.0;dist=1e9;past=0.0;otherT=0.0;float bestT=0.0;
+vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT,out float dusty){
+  jn=0.0;dist=1e9;past=0.0;otherT=0.0;dusty=0.0;float bestT=0.0;
   if(coverAt(xz).w>ROAD_NEAR)return vec4(0.0);
   vec2 g=(xz+TILE_HALF)/ROAD_CELL;
   if(any(lessThan(g,vec2(0.0)))||any(greaterThanEqual(g,vec2(ROAD_N))))return vec4(0.0);
@@ -157,7 +157,8 @@ vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT)
       float tk=mod(floor(s1.w/4.0),2.0);   // (the line's earth: 1 a track's)
       if(s1.z!=bestLine&&bestLine>=0.0){if(score<best){if(best<other){other=best;otherT=bestT;}}else{if(score<other){other=score;otherT=tk;}continue;}}
       if(score<best){best=score;bestLine=s1.z;bestT=tk;dist=dd;past=max(mod(s1.w,2.0)>0.5?-t0:0.0,mod(floor(s1.w/2.0),2.0)>0.5?t0-len:0.0);
-        r=vec4(side,s1.x+len*clamp(d0/max(d0+d1,1e-3),0.0,1.0)+s1.z*10000.0,s1.y,mod(floor(s1.w/4.0),2.0));}}}
+        r=vec4(side,s1.x+len*clamp(d0/max(d0+d1,1e-3),0.0,1.0)+s1.z*10000.0,s1.y,mod(floor(s1.w/4.0),2.0));
+        dusty=mod(floor(s1.w/8.0),2.0);}}}
   jn=1.0-smoothstep(ROAD_PAINT,ROAD_JUNCTION,other);
   return r;}
 // THE PAVING (docs/plans/done/buildings.md): a paved yard round each building, the owner's cobbles (data/paving-v1.png,
@@ -228,7 +229,7 @@ vec3 roadPaint(vec3 c,vec2 xz){
   if(cv0.x>4.5&&cv0.x<5.5){float m=cv0.z*(255.0/3.14159265);if(m>YARD_ALL-0.5)c=pavePaint(c,xz,m>YARD_BASE-0.5?int(m-YARD_BASE+0.5):-1);}
   #endif
   if(cv0.w>ROAD_GATE)return c;   // (most of the tile, before the warp: ROAD_NEAR and the warp's reach, src/look/spec.ts)
-  float jn,dist,past,ot;vec4 r=roadAt(coverWarp(xz),jn,dist,past,ot);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
+  float jn,dist,past,ot,dusty;vec4 r=roadAt(coverWarp(xz),jn,dist,past,ot,dusty);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
   // the patterns laid along the road (by s) give way at a junction, where s jumps from one line to the other, to the
   // same patterns laid in the world (by xz)
   float wobS=(mValue(vec2(s/4.0,7.3))-0.5)*1.6+(mValue(vec2(s/1.1,2.1))-0.5)*0.7,wobW=(mValue(xz/4.0+7.3)-0.5)*1.6+(mValue(xz/1.1+2.1)-0.5)*0.7;
@@ -252,6 +253,9 @@ vec3 roadPaint(vec3 c,vec2 xz){
   // would step. A road meeting a road keeps its earth)
   vec3 col=mix(mix(ROAD_EARTH,TRACK_EARTH,r.w),mix(ROAD_EARTH,TRACK_EARTH,(r.w+ot)*0.5),jn)*mix(0.93,1.07,st)*mix(1.0,0.9,trod)*mix(1.0,1.1,dust)*(1.0+g*1.2);
   col=mix(col,vec3(0.74,0.66,0.52)*mix(0.95,1.05,st)*(1.0+g*0.6),tr*0.75);   // the tracks: pale beige dust
+  // a map's way across the arable (its segments' flag 8: tools/build-look-data.ts): the summer's dust over its earth,
+  // so it reads as a way against the ploughed land beside it, not as one more furrowed strip
+  col=mix(col,col*vec3(1.16,1.14,1.1)+vec3(0.03),dusty);
   return mix(c,col,inside);}
 #else
 vec3 roadPaint(vec3 c,vec2 xz){return c;}

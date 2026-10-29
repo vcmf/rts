@@ -51,9 +51,9 @@ export interface SpanGrid {
   tex: Uint8Array
 }
 // the roads (docs/plans/done/roads.md): their segments (12 floats each: ax, az, bx, bz, the distance along their line
-// at a, the line's half width, its index, its flags (1 its start is a free end, 2 its end, 4 a track's earth), and its
-// mitre tangents at a and b) and a grid over the tile of `cell` m cells, ROAD_SLOTS segment indices a cell (−1: none),
-// every segment that reaches within its half width and SPEC.road.reach m of the cell
+// at a, the line's half width, its index, its flags (1 its start is a free end, 2 its end, 4 a track's earth, 8 dusty:
+// a map's way), and its mitre tangents at a and b) and a grid over the tile of `cell` m cells, ROAD_SLOTS segment
+// indices a cell (−1: none), every segment that reaches within its half width and SPEC.road.reach m of the cell
 export { ROAD_SLOTS }
 export const ROAD_SEG = 12 // floats a segment (three RGBA texels)
 export interface RoadGrid {

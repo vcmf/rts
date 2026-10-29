@@ -208,6 +208,9 @@ describe('the cover classes', () => {
     expect(at(-20, 10)[0]).toBe(COVER.village)
     expect(at(-20, 10)[1]).toBe(0)
     expect(at(-40, -20)[0]).toBe(COVER.meadow)
+    // the road's grass verge (2.5 m past its edge) between it and the arable, the arable past it
+    expect(at(10.5, -44.5)[0]).toBe(COVER.pasture)
+    expect(isField(at(10.5, -48.5)[0]) || at(10.5, -48.5)[0] === COVER.meadow).toBe(true)
     // a field's texel names its furrow; a road's has no field id
     expect(at(10, -40)[1]).toBe(0)
     const field = at(30, -47)

@@ -58,8 +58,20 @@ const BAKE_FS = `#extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec2 vUV;uniform vec4 uRect;uniform float uTexel;
 #include<painter>
 #include<shore>
+#ifdef RELIEF
+// the relief's tone (src/look/relief.ts): R the hillshade, G the crest, 0.5 flat; lighter turned to the sun and on a
+// crest, darker turned away and in a valley, which is also a little cooler. uReliefK: its strength (?relief)
+uniform sampler2D uRelief;uniform float uReliefK;
+vec3 reliefTone(vec3 c,vec2 xz){vec2 r=(texture2D(uRelief,xz/FAR_W+0.5).rg-0.5)*2.0;
+  c*=1.0+uReliefK*(0.9*r.x+0.25*r.y);
+  return mix(c,c*vec3(0.9,0.96,1.06),uReliefK*0.6*max(0.0,-r.y));}
+#endif
 void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=bakeTexel(xz,uTexel);
-  if(uTexel<1.0)gl_FragColor.rgb=roadPaint(gl_FragColor.rgb,xz);}`
+  if(uTexel<1.0)gl_FragColor.rgb=roadPaint(gl_FragColor.rgb,xz);
+  #ifdef RELIEF
+  gl_FragColor.rgb=reliefTone(gl_FragColor.rgb,xz);
+  #endif
+}`
 // Arm 5's pass (L5b): a four-quadrant Kuwahara filter over a finished bake (uSrc, nearest, uN² texels) into the
 // bake's target, uR texels a side (at most KUWAHARA_MAX). Each texel takes the mean colour of the quadrant whose
 // colours vary least; the alpha (the snow's lie) stays its own, so off the fields the lie stays exactly 0 (macro.glsl).
@@ -132,6 +144,7 @@ export function buildMacro(
   meadowMap: BaseTexture | null = null,
   near: { reach: number; shows: () => boolean } = { reach: 25, shows: () => true },
   bakeCover: CoverGrid = cover,
+  relief: { tex: BaseTexture; k: number } | null = null,
 ): Macro {
   const engine = scene.getEngine() as AbstractEngine
   const s = D.spec.macro
@@ -239,8 +252,20 @@ export function buildMacro(
     if (brush) m.setTexture('uMeadowBrush', brush)
   })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN']
+  const UNIFORMS = [
+    'uRect',
+    'uTexel',
+    'uSeason',
+    'uRoadOn',
+    'uRoadSegN',
+    'uRoadFar',
+    'uPaveA',
+    'uPaveB',
+    'uPaveN',
+    ...(relief ? ['uReliefK'] : []),
+  ]
   const SAMPLERS = [
+    ...(relief ? ['uRelief'] : []),
     'uGrain',
     'uCover',
     'uMeadowBrush',
@@ -256,6 +281,8 @@ export function buildMacro(
     ...(meadow ? ['#define MEADOW', ...flow] : []),
     ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []),
     ...(roads ? ['#define ROADS', '#define PAVING_FAR', ...paveDefines()] : []),
+    // the relief's painted tone (src/look/relief.ts; ?relief, the page)
+    ...(relief ? ['#define RELIEF'] : []),
   ]
   const wrapper = new EffectWrapper({
     engine,
@@ -364,6 +391,10 @@ export function buildMacro(
         e.setFloat('uSeason', 0)
         e.setTexture('uGrain', mats.grain)
         e.setTexture('uCover', bakeCoverTex)
+        if (relief) {
+          e.setTexture('uRelief', relief.tex)
+          e.setFloat('uReliefK', relief.k)
+        }
         if (brush) e.setTexture('uMeadowBrush', brush)
         if (flowTex) {
           e.setTexture('uFlow', flowTex.flow)

@@ -17,7 +17,7 @@ import type { Resolved } from '../../map/resolve.ts'
 import type { Feature, Pt as MapPt } from '../../map/schema.ts'
 import type { Grid, Heightfield } from '../heightfield.ts'
 import type { Derived } from '../spec.ts'
-import { COVER, WEAR_STEP, resample, type CoverClass, type CoverGrid } from './cover.ts'
+import { COVER, WEAR_STEP, isField, resample, type CoverClass, type CoverGrid } from './cover.ts'
 import { TREE_SPECIES, type TreeSpecies } from './data.ts'
 import { segD } from './geom.ts'
 import type { LookWindow } from './windows.ts'
@@ -29,6 +29,7 @@ export interface MapLine {
   pts: Pt[]
   w: number
   cls: CoverClass
+  dusty?: boolean // its earth under the summer's dust (the road paint's flag 8: a map's ways across the arable)
 }
 
 /** A tree of the window: where it stands (window metres), its species (TREE_SPECIES) and its scale. */
@@ -132,7 +133,7 @@ export function wayLines(features: readonly Feature[], table: readonly Resolved[
       f.line.map(([x, z]) => [x - win.x, z - win.z] as Pt),
       RESAMPLE,
     )
-    for (const run of runsInside(local, far / 2 + LINE_PAD)) out.push({ pts: run, w, cls })
+    for (const run of runsInside(local, far / 2 + LINE_PAD)) out.push({ pts: run, w, cls, dusty: true })
   }
   return out
 }
@@ -509,7 +510,8 @@ export function mapCover(
   const tex = new Uint8Array(n * n * 4)
   const wear = new Float32Array(n * n).fill(Infinity)
   const lineCls = new Uint8Array(n * n).fill(255)
-  for (const l of lines) markLine(l, n, x0, cell, wear, lineCls)
+  const verge = new Uint8Array(n * n)
+  for (const l of lines) markLine(l, n, x0, cell, wear, lineCls, verge)
   const built = new Uint8Array(n * n)
   for (let c = 0; c < n * n; c++) if (A.built[c]) built[c] = 1
   markNear(built, n, cell, wear)
@@ -522,6 +524,8 @@ export function mapCover(
       const g = classOf(at(A.ground[c]), at(A.veg[c]), !!A.water[c], x, z)
       const dir = g.dir
       let { cls, id } = g
+      // a road's or a track's grass verge between it and the fields (it reads as a way, not a furrow)
+      if (verge[c] && (isField(cls) || cls === COVER.bare)) [cls, id] = [COVER.pasture, 0]
       if (lineCls[c] !== 255) [cls, id] = [lineCls[c] as CoverClass, 0]
       if (built[c]) [cls, id] = [COVER.village, 0]
       const o = c * 4
@@ -534,8 +538,22 @@ export function mapCover(
   return { n, cell, x0, z0: x0, tex }
 }
 
-/** A line's cells: its class where within its half width (a road over a track), and every cell's distance to it. */
-function markLine(l: MapLine, n: number, x0: number, cell: number, wear: Float32Array, cls: Uint8Array): void {
+// a way's grass verge past its edge, m, by its class: the margin the plough left (the verges, mapCover)
+const VERGE: Partial<Record<number, number>> = { [COVER.road]: 4, [COVER.track]: 2.5 }
+
+/**
+ * A line's cells: its class where within its half width (a road over a track), its verge's (VERGE) past its edge, and
+ * every cell's distance to it.
+ */
+function markLine(
+  l: MapLine,
+  n: number,
+  x0: number,
+  cell: number,
+  wear: Float32Array,
+  cls: Uint8Array,
+  verge: Uint8Array,
+): void {
   const hw = l.w / 2
   const r = hw + WEAR_REACH
   for (let k = 0; k + 1 < l.pts.length; k++) {
@@ -550,6 +568,7 @@ function markLine(l: MapLine, n: number, x0: number, cell: number, wear: Float32
         const d = segD(x0 + (i + 0.5) * cell, x0 + (j + 0.5) * cell, a, b) - hw
         const c = j * n + i
         if (d < 0 && (cls[c] === 255 || l.cls === COVER.road)) cls[c] = l.cls
+        if (d >= 0 && d < (VERGE[l.cls] ?? 0)) verge[c] = 1
         wear[c] = Math.min(wear[c], Math.max(0, d))
       }
     }

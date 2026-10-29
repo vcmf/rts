@@ -51,6 +51,7 @@ const WINDOW_DATA = import.meta.glob<string>('../../data/*-*.lookdata', {
   eager: true,
 })
 import { buildWater } from './water.ts'
+import { RELIEF_K, reliefField } from './relief.ts'
 import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
 import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
@@ -473,6 +474,20 @@ const meadowMap = meadowOn
 // twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
 // at the SPEC's lines). The marched depth, not the eased one (no lag as the camera zooms in), the last frame's (none
 // yet: it bakes)
+// ?relief=0|1|2: the relief's painted tone in the macro colour (src/look/relief.ts), baked with it: off, the map
+// worlds' default, stronger; off on the demo unless asked (its hill reads by its own slopes)
+const reliefParam = params.get('relief')
+if (reliefParam !== null && !['0', '1', '2'].includes(reliefParam)) {
+  throw new Error(`?relief must be 0, 1 or 2, not ${reliefParam}`)
+}
+const reliefK = RELIEF_K[reliefParam === null ? (onMap ? 1 : 0) : Number(reliefParam)]
+let relief: { tex: RawTexture; k: number } | null = null
+if (reliefK > 0) {
+  const f = reliefField(groundAt, D.spec.far, [SUN.x, SUN.y, SUN.z])
+  const tex = RawTexture.CreateRGBATexture(f.tex, f.n, f.n, scene, false, false, Texture.BILINEAR_SAMPLINGMODE)
+  tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE
+  relief = { tex, k: reliefK }
+}
 const macro = buildMacro(
   scene,
   mats,
@@ -487,6 +502,7 @@ const macro = buildMacro(
     shows: () => !focusDist || ((pixA * D.spec.detail.lines) / sceneH()) * focusDist < 2 * STROKE_FOOT,
   },
   look.cover,
+  relief,
 )
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
