@@ -64,6 +64,7 @@ import { MACRO_ARMS, SHADER_ARMS, buildMacro, isBakedArm, type MacroArm, type Ro
 import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
+import SIMPLE_LEAF_URL from '../../data/leaf-clumps-simple-v1.png?url'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import {
   SHADOW_LOOK,
@@ -363,30 +364,54 @@ if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has(
 // the generator (a plain script that sets window.TREEGEN), loaded only for the arm that draws its trees
 if (treeSet.has('gen')) await import('../../prototypes/tree-core.js')
 const cardsOn = treeSet.has('cards')
-const leavesParam = params.get('leaves') ?? 'oak'
-for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink', 'volume']) {
+// ?leaves: the leaf atlas (docs/plans/active/crown-leaves.md): layered (the default), the owner's sheet of simple
+// leaves read as the painter's layers; oak, the oak picture the crowns had before; procedural, L7a's drawn oak clumps
+const LEAVES = ['layered', 'oak', 'procedural'] as const
+const leavesParam = params.get('leaves') ?? 'layered'
+for (const k of ['leaves', 'leafpic', 'leafscale', 'cardsize', 'cardcover', 'cardsink', 'volume']) {
   if (params.has(k) && !cardsOn) throw new Error(`?${k} needs the leaf-card crowns (the default, or ?trees=cards)`)
 }
-if (leavesParam !== 'oak' && leavesParam !== 'procedural') {
-  throw new Error(`?leaves must be oak or procedural, not ${leavesParam}`)
+if (!(LEAVES as readonly string[]).includes(leavesParam)) {
+  throw new Error(`?leaves must be ${LEAVES.join(', ')}, not ${leavesParam}`)
 }
+// ?leafpic=<url>: a sheet of four leaf clumps on black (the oak sheet's layout, black transparent, three grey values:
+// dark, mid, light) read as the layered sheet is (LEAF_PAINT): the owner's sheets swapped in without a build
+const leafPic = params.get('leafpic')
+if (leafPic !== null && (!leafPic || params.has('leaves'))) {
+  throw new Error('?leafpic takes a picture URL, and replaces ?leaves')
+}
+const paintedLeaves = leavesParam !== 'oak' && leavesParam !== 'procedural'
 const cardOpt = (k: string, d: number) => {
   const v = Number(params.get(k) ?? d)
   if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`)
   return v
 }
+// ?leafscale=<x>: the layered leaves' size, 1 the sheet's clumps at 0.8 a cell (docs/plans/active/crown-leaves.md)
+if (params.has('leafscale') && !paintedLeaves) {
+  throw new Error('?leafscale needs the layered leaves (not oak or procedural)')
+}
+const leafScale = cardOpt('leafscale', CARD_DEFAULTS.leafScale)
+// (at least 0.25: smaller, a cell takes over 48 clumps and the leaves are a few texels)
+if (!(leafScale >= 0.25 && leafScale <= 1)) throw new Error(`?leafscale must be 0.25 to 1, not ${leafScale}`)
 const cardOpts: CardOptions = {
   size: cardOpt('cardsize', CARD_DEFAULTS.size),
   cover: cardOpt('cardcover', CARD_DEFAULTS.cover),
   sink: cardOpt('cardsink', CARD_DEFAULTS.sink),
   volume: params.get('volume') !== 'off',
+  paint: paintedLeaves,
+  leafScale,
 }
 if (params.has('volume') && params.get('volume') !== 'off') {
   throw new Error(`?volume must be off, not ${params.get('volume')}`)
 }
 let leafTex: DynamicTexture | null = null
 if (cardsOn) {
-  const atlas = leavesParam === 'procedural' ? atlasProcedural() : atlasFromPicture(await loadImage(LEAF_URL))
+  const atlas =
+    leafPic || leavesParam === 'layered'
+      ? atlasFromPicture(await loadImage(leafPic ?? SIMPLE_LEAF_URL), true, leafScale)
+      : leavesParam === 'procedural'
+        ? atlasProcedural()
+        : atlasFromPicture(await loadImage(LEAF_URL))
   leafTex = new DynamicTexture('leaves', atlas, scene, true, Texture.TRILINEAR_SAMPLINGMODE)
   leafTex.hasAlpha = true
   leafTex.wrapU = leafTex.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -1195,7 +1220,7 @@ addEventListener('drop', e => {
       URL.revokeObjectURL(url)
       let atlas: HTMLCanvasElement
       try {
-        atlas = atlasFromPicture(img)
+        atlas = atlasFromPicture(img, cardOpts.paint, cardOpts.leafScale) // read as the page reads its sheet
       } catch (err) {
         alert(String(err))
         return
