@@ -1,11 +1,11 @@
 // The pure parts of tools/campaign-theatre.ts (docs/plans/active/k1-theatre-look.md): the frame's projection and grid,
-// a PNG decoder for the terrain tiles, rings and lines in the map's metres, and the road router. No file or network
-// access here. Plain float64 in a tool, not the sim's. Tested in test/campaign-theatre.test.ts.
-import zlib from 'node:zlib'
+// lines in the map's metres, and the road router. No file or network access here. Plain float64 in a tool, not the
+// sim's. Tested in test/campaign-theatre.test.ts.
+import { inRing, lineLength } from '../src/map/geometry.ts'
+import type { Pt } from '../src/map/schema.ts'
 import { Heap, simplify } from './streams.ts'
 
-/** A point in the map's metres: x east, z north, from the frame's centre. */
-export type Pt = [number, number]
+export type { Pt }
 
 /** The theatre's frame: a projection centred on (lat0, lon0) and the map's half extents in metres. */
 export interface Frame {
@@ -64,92 +64,6 @@ export function frameGrid(frame: Frame, cell: number): { nx: number; nz: number 
   return { nx: sx + 1, nz: sz + 1 }
 }
 
-/** An 8-bit RGB or RGBA image, its pixels row by row. */
-export interface Image {
-  width: number
-  height: number
-  channels: number
-  pixels: Uint8Array
-}
-
-/** The Paeth predictor of the PNG filters. */
-function paeth(a: number, b: number, c: number): number {
-  const p = a + b - c
-  const pa = Math.abs(p - a)
-  const pb = Math.abs(p - b)
-  const pc = Math.abs(p - c)
-  if (pa <= pb && pa <= pc) return a
-  return pb <= pc ? b : c
-}
-
-/** Undoes one row's PNG filter in place in `pixels`, reading the filtered bytes from `raw` at `src`. */
-function unfilterRow(raw: Uint8Array, src: number, pixels: Uint8Array, row: number, stride: number, bpp: number) {
-  const filter = raw[src - 1]
-  const hasUp = row >= stride
-  for (let i = 0; i < stride; i++) {
-    const left = i >= bpp ? pixels[row + i - bpp] : 0
-    const up = hasUp ? pixels[row - stride + i] : 0
-    let predict = 0
-    if (filter === 1) predict = left
-    else if (filter === 2) predict = up
-    else if (filter === 3) predict = (left + up) >> 1
-    else if (filter === 4) predict = paeth(left, up, i >= bpp && hasUp ? pixels[row - stride + i - bpp] : 0)
-    else if (filter !== 0) throw new Error(`bad PNG filter ${filter}`)
-    pixels[row + i] = (raw[src + i] + predict) & 255
-  }
-}
-
-/** Decodes an 8-bit RGB or RGBA PNG, not interlaced (what the terrain tiles are). */
-export function decodePng(bytes: Uint8Array): Image {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  const text = (a: number, b: number) => String.fromCharCode(...bytes.subarray(a, b))
-  let pos = 8
-  let width = 0
-  let height = 0
-  let channels = 0
-  const idat: Uint8Array[] = []
-  while (pos < bytes.length) {
-    const length = view.getUint32(pos)
-    const type = text(pos + 4, pos + 8)
-    const body = bytes.subarray(pos + 8, pos + 8 + length)
-    if (type === 'IHDR') {
-      width = view.getUint32(pos + 8)
-      height = view.getUint32(pos + 12)
-      const [depth, colour, , , interlace] = body.subarray(8, 13)
-      channels = colour === 2 ? 3 : colour === 6 ? 4 : 0
-      if (depth !== 8 || !channels || interlace) throw new Error(`unsupported PNG: depth ${depth}, colour ${colour}`)
-    } else if (type === 'IDAT') {
-      idat.push(body)
-    }
-    pos += 12 + length
-  }
-  const raw = zlib.inflateSync(Buffer.concat(idat))
-  const stride = width * channels
-  const pixels = new Uint8Array(stride * height)
-  for (let y = 0; y < height; y++) unfilterRow(raw, y * (stride + 1) + 1, pixels, y * stride, stride, channels)
-  return { width, height, channels, pixels }
-}
-
-/** Whether a point lies inside a ring of points (even–odd rule). */
-export function inRing(ring: Pt[], x: number, z: number): boolean {
-  let inside = false
-  for (let a = 0, b = ring.length - 1; a < ring.length; b = a++) {
-    const [ax, az] = ring[a]
-    const [bx, bz] = ring[b]
-    if (az > z !== bz > z && x < ((bx - ax) * (z - az)) / (bz - az) + ax) inside = !inside
-  }
-  return inside
-}
-
-/** A line's length in metres. */
-export function lineLength(points: Pt[]): number {
-  let length = 0
-  for (let k = 1; k < points.length; k++) {
-    length += Math.hypot(points[k][0] - points[k - 1][0], points[k][1] - points[k - 1][1])
-  }
-  return length
-}
-
 /** Chaikin's corner cutting, `rounds` times, the ends kept. */
 export function smooth(points: Pt[], rounds: number): Pt[] {
   let P = points
@@ -196,7 +110,7 @@ export function routeGrid(frame: Frame, size: number, height: (x: number, z: num
     const j0 = Math.max(0, Math.ceil((Math.min(...zs) - z0) / size))
     const j1 = Math.min(gz - 1, Math.floor((Math.max(...zs) - z0) / size))
     for (let j = j0; j <= j1; j++) {
-      for (let i = i0; i <= i1; i++) if (inRing(ring, x0 + i * size, z0 + j * size)) closed[j * gx + i] = 1
+      for (let i = i0; i <= i1; i++) if (inRing(ring, [x0 + i * size, z0 + j * size])) closed[j * gx + i] = 1
     }
   }
   return { gx, gz, size, x0, z0, h, closed } satisfies RouteGrid
@@ -204,8 +118,9 @@ export function routeGrid(frame: Frame, size: number, height: (x: number, z: num
 
 /**
  * The cheapest path between two points over the router's grid (A*, eight neighbours). A step costs its length times
- * 1 + (slope / slopeAtDouble)², so a road climbs only where it must, and never enters a closed cell (unless it starts
- * or ends there). Returns the points in metres, from `from` to `to` exactly.
+ * 1 + (slope / slopeAtDouble)², so a road climbs only where it must. It never enters a closed cell (unless it starts
+ * or ends there), and a diagonal step never cuts past one (both cells it passes between must be open). Returns the
+ * points in metres, from `from` to `to` exactly; throws when `to` cannot be reached.
  */
 export function route(grid: RouteGrid, from: Pt, to: Pt, slopeAtDouble: number): Pt[] {
   const { gx, gz, size, x0, z0, h, closed } = grid
@@ -220,11 +135,15 @@ export function route(grid: RouteGrid, from: Pt, to: Pt, slopeAtDouble: number):
   const gj = Math.floor(goal / gx)
   const cost = new Float64Array(gx * gz).fill(Infinity)
   const prev = new Int32Array(gx * gz).fill(-1)
+  // a node is final once popped: later, staler entries for it in the heap are skipped
+  const done = new Uint8Array(gx * gz)
   const heap = new Heap()
   cost[start] = 0
   heap.push(start, 0)
   while (heap.size) {
     const k = heap.pop()
+    if (done[k]) continue
+    done[k] = 1
     if (k === goal) break
     const i = k % gx
     const j = Math.floor(k / gx)
@@ -235,6 +154,7 @@ export function route(grid: RouteGrid, from: Pt, to: Pt, slopeAtDouble: number):
         if ((!di && !dj) || ni < 0 || nj < 0 || ni >= gx || nj >= gz) continue
         const n = nj * gx + ni
         if (closed[n] && n !== goal) continue
+        if (di && dj && (closed[j * gx + ni] || closed[nj * gx + i])) continue
         const len = Math.hypot(di, dj) * size
         const slope = (h[n] - h[k]) / len
         const c = cost[k] + len * (1 + (slope / slopeAtDouble) ** 2)
@@ -261,4 +181,4 @@ export function shapeRoad(points: Pt[], tol: number): Pt[] {
   return smooth(simplify(points, tol), 2)
 }
 
-export { simplify }
+export { inRing, lineLength, simplify }

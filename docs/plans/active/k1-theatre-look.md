@@ -88,6 +88,15 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   towns and regions projected once by the tool (no second projection in the page); river and road lines projected
   once a redraw; a faster base64 decode; lines within 120 columns.
 
+- **Round 2**: severe: up close (the camera under about 80 km in mid-map), the frame's south corners fell behind the
+  camera and the perspective divide flipped them, so the ink's clip lay off the screen and every line vanished; lines
+  crossing behind the camera would have streaked across it. Fixed: lines and the frame are cut at the camera plane
+  before the divide. With: the router refuses a diagonal step past a closed (lake) cell, skips stale heap entries and
+  names the road it cannot route; the PNG decoder, `inRing` and `lineLength` reused from `tools/png.mjs` and
+  `src/map/geometry.ts`; the cell limited to 200–2,000 m (finer passes the page's texture and canvas limits); the URL
+  values clamped (a 0 kept, the shading's knee never divided by zero); a drag ended by a cancelled pointer too.
+  The closest zoom (about 25 km) shows the limit of the 250 m grid: the relief goes soft below about 60 km (K3).
+
 ## Open questions
 
 - The Alps up close: a higher sun, a lower exaggeration for the cast shadow, or both.

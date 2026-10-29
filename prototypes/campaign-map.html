@@ -95,7 +95,6 @@ const D = window.CAMPAIGN_1805;
    SMALL HELPERS
    ========================================================================= */
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-const lerp = (a, b, t) => a + (b - a) * t;
 
 /** Smoothstep from a to b. */
 function sstep(a, b, x) {
@@ -138,12 +137,22 @@ const { lat0, lon0, halfX, halfZ } = T.frame;
 const CELL = T.cell;
 const NX = T.nx;
 const NZ = T.nz;
-// the light's exaggeration of the heights, and the sun's height
-const RELIEF_Z = Number(Q.get('rz')) || 3;
-const RELIEF_SUN = Number(Q.get('sun')) || 28;
-// the relief tone on the paper: no darker than SHADE_FLOOR, no lighter than SHADE_TOP
-const SHADE_FLOOR = Number(Q.get('floor')) || 0.76;
-const SHADE_TOP = Number(Q.get('top')) || 1.08;
+/**
+ * A number from the URL, clamped to [lo, hi], or `fallback` when absent or not a number. A given 0 is kept (within
+ * the range), unlike `Number(q) || fallback`.
+ */
+function param(name, fallback, lo, hi) {
+  const v = Q.has(name) ? Number(Q.get(name)) : NaN;
+  return Number.isFinite(v) ? clamp(v, lo, hi) : fallback;
+}
+
+// the light's exaggeration of the heights (0 flattens the relief), and the sun's height in degrees
+const RELIEF_Z = param('rz', 3, 0, 20);
+const RELIEF_SUN = param('sun', 28, 2, 85);
+// the relief tone on the paper: no darker than SHADE_FLOOR, no lighter than SHADE_TOP; both kept off 1, which the
+// shader's soft knee divides by
+const SHADE_FLOOR = param('floor', 0.76, 0.3, 0.97);
+const SHADE_TOP = param('top', 1.08, 1.02, 1.6);
 // the light from the north-west, as on the battle map: x east, z north
 const NW = [-Math.SQRT1_2, Math.SQRT1_2];
 
@@ -213,7 +222,7 @@ function bakeRelief(h0) {
       const k = j * NX + i;
       const fromLight = i > 0 && j < NZ - 1 ? line[(j + 1) * NX + i - 1] - drop : -Infinity;
       line[k] = Math.max(h[k], fromLight);
-      lit[k] = 1 - sstep(0, 1, (fromLight - h[k]) / (RELIEF_SOFT * RELIEF_Z));
+      lit[k] = 1 - sstep(0, 1, (fromLight - h[k]) / (RELIEF_SOFT * Math.max(RELIEF_Z, 0.01)));
     }
   }
 
@@ -254,8 +263,8 @@ function bakeLakes() {
   c.height = LAKE_H;
   const g = c.getContext('2d', { willReadFrequently: true });
   // canvas row 0 is the south edge: world (x, z) to pixel ((x + halfX), (z + halfZ)) · LAKE_RES / CELL
-  const k = LAKE_RES / CELL;
-  g.setTransform(k, 0, 0, k, halfX * k, halfZ * k);
+  const scale = LAKE_RES / CELL;
+  g.setTransform(scale, 0, 0, scale, halfX * scale, halfZ * scale);
   g.fillStyle = '#fff';
   for (const ring of T.lakes) {
     g.beginPath();
@@ -525,9 +534,11 @@ canvas.addEventListener('pointermove', e => {
   view.z += drag[1] - now[1];
   placeCamera();
 });
-canvas.addEventListener('pointerup', () => {
-  drag = null;
-});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  canvas.addEventListener(type, () => {
+    drag = null;
+  });
+}
 canvas.addEventListener(
   'wheel',
   e => {
@@ -569,15 +580,33 @@ function sizeInk() {
 }
 sizeInk();
 
-/** Map metres to CSS pixels on screen, through the camera's view and projection. */
-function toScreen(x, z) {
+// clip space w (the depth along the view, km) below which a point counts as behind the camera: points are cut there
+// before the perspective divide, which would flip them
+const W_NEAR = 0.5;
+
+/** Map metres to clip space, as [cx, cy, cw], through the camera's view and projection. */
+function toClip(x, z) {
   const m = VP;
   const X = x / 1000;
   const Z = z / 1000;
-  const cx = X * m[0] + Z * m[8] + m[12];
-  const cy = X * m[1] + Z * m[9] + m[13];
-  const cw = X * m[3] + Z * m[11] + m[15];
+  return [X * m[0] + Z * m[8] + m[12], X * m[1] + Z * m[9] + m[13], X * m[3] + Z * m[11] + m[15]];
+}
+
+/** A clip-space point in front of the camera to CSS pixels on screen. */
+function clipToScreen([cx, cy, cw]) {
   return [((cx / cw) * 0.5 + 0.5) * innerWidth, (0.5 - (cy / cw) * 0.5) * innerHeight];
+}
+
+/** The clip-space point where the segment a–b crosses w = W_NEAR. */
+function nearCut(a, b) {
+  const t = (W_NEAR - a[2]) / (b[2] - a[2]);
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, W_NEAR];
+}
+
+/** Map metres to CSS pixels on screen, or null for a point behind the camera. */
+function toScreen(x, z) {
+  const c = toClip(x, z);
+  return c[2] < W_NEAR ? null : clipToScreen(c);
 }
 
 /** Screen pixels per km at the screen's centre. */
@@ -585,20 +614,62 @@ function pxPerKm() {
   const c = groundAt(innerWidth / 2, innerHeight / 2) || [view.x, view.z];
   const a = toScreen(c[0] * 1000, c[1] * 1000);
   const b = toScreen(c[0] * 1000 + 1000, c[1] * 1000);
-  return Math.hypot(b[0] - a[0], b[1] - a[1]);
+  return a && b ? Math.hypot(b[0] - a[0], b[1] - a[1]) : 1;
 }
 
-/** A flat [x, z, ...] line in metres, projected to screen points. */
+/**
+ * A flat [x, z, ...] line in metres, projected to screen: a list of runs of screen points, the line cut where it
+ * passes behind the camera.
+ */
 function screenLine(p) {
-  const pts = [];
-  for (let k = 0; k < p.length; k += 2) pts.push(toScreen(p[k], p[k + 1]));
-  return pts;
+  const runs = [];
+  let run = [];
+  let prev = null;
+  for (let k = 0; k < p.length; k += 2) {
+    const c = toClip(p[k], p[k + 1]);
+    const inFront = c[2] >= W_NEAR;
+    if (prev && inFront !== prev[2] >= W_NEAR) {
+      run.push(clipToScreen(nearCut(prev, c)));
+      if (!inFront) {
+        runs.push(run);
+        run = [];
+      }
+    }
+    if (inFront) run.push(clipToScreen(c));
+    prev = c;
+  }
+  if (run.length) runs.push(run);
+  return runs.filter(r => r.length >= 2);
 }
 
 /** Traces screen points as a path on the ink canvas. */
 function tracePoints(pts) {
   ink.beginPath();
   pts.forEach(([sx, sy], k) => (k ? ink.lineTo(sx, sy) : ink.moveTo(sx, sy)));
+}
+
+/** Traces runs of screen points as one path of separate lines. */
+function traceRuns(runs) {
+  ink.beginPath();
+  for (const run of runs) run.forEach(([sx, sy], k) => (k ? ink.lineTo(sx, sy) : ink.moveTo(sx, sy)));
+}
+
+/** The frame, cut at the camera plane (Sutherland–Hodgman on w = W_NEAR), as screen points. */
+function frameOnScreen() {
+  const corners = [
+    [-halfX, -halfZ],
+    [halfX, -halfZ],
+    [halfX, halfZ],
+    [-halfX, halfZ],
+  ].map(([x, z]) => toClip(x, z));
+  const out = [];
+  corners.forEach((c, k) => {
+    const prev = corners[(k + corners.length - 1) % corners.length];
+    const inFront = c[2] >= W_NEAR;
+    if (inFront !== prev[2] >= W_NEAR) out.push(clipToScreen(nearCut(prev, c)));
+    if (inFront) out.push(clipToScreen(c));
+  });
+  return out;
 }
 
 /** Width of a river line in CSS pixels, by its rank (lower is bigger) and the zoom; 0 when hidden. */
@@ -609,7 +680,7 @@ function riverWidth(rank, ppk) {
   return base * clamp(0.7 + ppk * 0.12, 0.7, 1.8);
 }
 
-/** Rivers as fine blue-grey ink, widening with their rank; `screen` holds each shown river's screen points. */
+/** Rivers as fine blue-grey ink, widening with their rank; `screen` holds each shown river's runs of screen points. */
 function drawRivers(ppk, screen) {
   ink.lineJoin = 'round';
   ink.lineCap = 'round';
@@ -620,7 +691,7 @@ function drawRivers(ppk, screen) {
     screen[k] = screenLine(r.p);
     ink.lineWidth = w;
     ink.globalAlpha = 0.85;
-    tracePoints(screen[k]);
+    traceRuns(screen[k]);
     ink.stroke();
   });
   ink.globalAlpha = 1;
@@ -635,7 +706,7 @@ function drawRoads(ppk) {
   for (const pass of ['casing', 'ink']) {
     T.roads.forEach((r, k) => {
       const high = r.kind === 'high';
-      tracePoints(lines[k]);
+      traceRuns(lines[k]);
       if (pass === 'casing') {
         ink.setLineDash([]);
         ink.strokeStyle = 'rgba(244, 233, 205, 0.55)';
@@ -658,7 +729,9 @@ const TOWN_SHOW = { 4: 0, 3: 0.75, 2: 1.3, 1: 2.2 };
 function drawTowns(ppk, placed) {
   const towns = D.towns.filter(t => ppk >= TOWN_SHOW[t.size]).sort((a, b) => b.size - a.size);
   for (const t of towns) {
-    const [sx, sy] = toScreen(...T.towns[t.id]);
+    const at = toScreen(...T.towns[t.id]);
+    if (!at) continue;
+    const [sx, sy] = at;
     const s = [0, 2.6, 3.4, 4.4, 5.6][t.size] * clamp(0.85 + ppk * 0.05, 0.85, 1.3);
     ink.fillStyle = INK;
     ink.fillRect(sx - s / 2, sy - s / 2, s, s);
@@ -713,20 +786,21 @@ function haloText(text, x, y, colour) {
 }
 
 /**
- * River names in serif italic, once per river, along the middle of its longest line on screen; `screen` holds the
- * screen points drawRivers projected.
+ * River names in serif italic, once per river, along the middle of its longest run on screen; `screen` holds the
+ * runs of screen points drawRivers projected.
  */
 function drawRiverNames(ppk, placed, screen) {
   const best = new Map();
   for (const [k, r] of T.rivers.entries()) {
-    const pts = screen[k];
-    if (!pts || !r.name || r.rank > (ppk > 1.5 ? 8 : 4)) continue;
-    let len = 0;
-    for (let i = 1; i < pts.length; i++) {
-      if (onScreen(pts[i])) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-    }
+    if (!screen[k] || !r.name || r.rank > (ppk > 1.5 ? 8 : 4)) continue;
     const name = r.name.replace(/^Rhein$|^Rhin$/, 'Rhine').replace(/^Donau$/, 'Danube');
-    if (len > 160 && len > (best.get(name)?.len ?? 0)) best.set(name, { pts, len });
+    for (const pts of screen[k]) {
+      let len = 0;
+      for (let i = 1; i < pts.length; i++) {
+        if (onScreen(pts[i])) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      }
+      if (len > 160 && len > (best.get(name)?.len ?? 0)) best.set(name, { pts, len });
+    }
   }
   ink.font = 'italic 400 16px "Instrument Serif", Georgia, serif';
   ink.letterSpacing = '0.08em';
@@ -768,7 +842,9 @@ function drawRegions(ppk) {
   ink.globalAlpha = alpha;
   ink.fillStyle = '#4a4238';
   D.regions.forEach((r, k) => {
-    const [sx, sy] = toScreen(...T.regions[k]);
+    const at = toScreen(...T.regions[k]);
+    if (!at) return;
+    const [sx, sy] = at;
     ink.save();
     ink.translate(sx, sy);
     ink.rotate((-r.angle * Math.PI) / 180);
@@ -797,14 +873,7 @@ function drawInk() {
   const placed = [];
   // the ink stops at the neatline, as the print does
   ink.save();
-  ink.beginPath();
-  const corners = [
-    [-halfX, -halfZ],
-    [halfX, -halfZ],
-    [halfX, halfZ],
-    [-halfX, halfZ],
-  ];
-  tracePoints(corners.map(([x, z]) => toScreen(x, z)));
+  tracePoints(frameOnScreen());
   ink.clip();
   // each shown river's screen points, projected once for its line and its name
   const rivers = [];
@@ -827,14 +896,12 @@ document.getElementById('meta').innerHTML =
 document.getElementById('credit').textContent = T.credit;
 
 placeCamera();
-let frames = 0;
 engine.runRenderLoop(() => {
   scene.render();
   if (dirty) {
     drawInk();
     dirty = false;
   }
-  frames++;
 });
 
 /**

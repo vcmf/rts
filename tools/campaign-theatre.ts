@@ -18,8 +18,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
+import { read as readPng } from './png.mjs'
 import {
-  decodePng,
   frameGrid,
   lineLength,
   projection,
@@ -59,8 +59,9 @@ interface Heights {
 
 const cell = Number(process.argv[2] ?? 250)
 const out = process.argv[3] ?? 'scratch/campaign-1805.js'
-if (!Number.isFinite(cell) || cell < 50 || cell > 2000) {
-  console.error('usage: node tools/campaign-theatre.ts [cell out] (a cell of 50 to 2000 metres)')
+// the page draws grids from about 200 m: finer, its lake canvas and textures pass the browser's limits
+if (!Number.isFinite(cell) || cell < 200 || cell > 2000) {
+  console.error('usage: node tools/campaign-theatre.ts [cell out] (a cell of 200 to 2000 metres)')
   process.exit(2)
 }
 
@@ -107,11 +108,11 @@ async function loadTiles(px0: number, py0: number, px1: number, py1: number): Pr
     while (next < keys.length) {
       const [tx, ty] = keys[next++]
       const rel = `${TILE_ZOOM}/${tx}/${ty}.png`
-      const png = decodePng(await cached(path.join(CACHE, 'terrarium', rel), `${TILE_URL}/${rel}`))
+      const png = readPng(await cached(path.join(CACHE, 'terrarium', rel), `${TILE_URL}/${rel}`))
       const h = new Float32Array(TILE_SIZE * TILE_SIZE)
       for (let k = 0; k < h.length; k++) {
-        const o = k * png.channels
-        h[k] = png.pixels[o] * 256 + png.pixels[o + 1] + png.pixels[o + 2] / 256 - 32768
+        const o = k * 4
+        h[k] = png.data[o] * 256 + png.data[o + 1] + png.data[o + 2] / 256 - 32768
       }
       tiles.set(`${tx},${ty}`, h)
     }
@@ -244,7 +245,13 @@ function buildRoads(data: Data, towns: Map<string, Pt>, heights: Heights, lakes:
     const from = towns.get(a)
     const to = towns.get(b)
     if (!from || !to) throw new Error(`road ${a}–${b}: unknown town`)
-    const shaped = shapeRoad(route(grid, from, to, ROUTE_SLOPE), ROUTE_CELL * 0.4)
+    let routed: Pt[]
+    try {
+      routed = route(grid, from, to, ROUTE_SLOPE)
+    } catch (e) {
+      throw new Error(`road ${a}–${b}: ${(e as Error).message}`, { cause: e })
+    }
+    const shaped = shapeRoad(routed, ROUTE_CELL * 0.4)
     return { a, b, kind, length: Math.round(lineLength(shaped)), p: flat(shaped) }
   })
 }
