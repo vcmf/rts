@@ -12,6 +12,7 @@ import { loadSimData, compileRuleset, play } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { PAGE_SCENARIOS } from '../src/scenarios/page.ts'
 import { DEFAULT_MAP } from '../src/scenarios/maps.ts'
+import { reportSession } from './battle-report.ts'
 
 const out = process.argv[2] || 'scratch/app-check'
 const PORT = 4178
@@ -153,6 +154,24 @@ const guns = [
 // column of route and marches over the western ford; every man stands on the map throughout
 const ONMAP =
   '[...APP.layer.units.values()].every(u => u.men.every(m => !m.alive || (Math.abs(m.x) <= 600 && Math.abs(m.z) <= 600)))'
+// the visual bench (docs/plans/active/c0-bench.md): X-09 with the overlay on and an order to the column at 40 s; back
+// to 30 s, before the order, and on tick by tick to a later tick: the log's order is taken again, the hash there is the
+// one first seen, and the session (the order in its log) replays in Node
+const benchCase = [
+  ['wait', 1500],
+  READY,
+  [
+    'eval',
+    'APP.overlay(true); APP.advance(40); APP.select([1]); APP.march(-60, -80, false); APP.advance(60); window.H = [APP.w.meta[0], APP.hash()]; APP.advance(60); APP.view(-40, -20, 4); `BENCH overlaps ${APP.overlaps()} at tick ${APP.w.meta[0]}, ${APP.log.length} orders`',
+  ],
+  ['shot', 'bench-x09-overlay'],
+  [
+    'eval',
+    'APP.goTo(600); while (APP.w.meta[0] < window.H[0]) APP.stepTick(); `GOTO same ${APP.hash() === window.H[1]}, orders ${APP.log.length}`',
+  ],
+  ['shot', 'bench-x09-back'],
+  REPLAY,
+]
 const battle = [
   ['wait', 1500],
   READY,
@@ -172,11 +191,14 @@ const battle = [
     `APP.advance(180); APP.view(-260, 0, 1.5); \`FORD column at z \${APP.w.f.z[3].toFixed(0)} on map \${${ONMAP}}\``,
   ],
   ['shot', 'battle-1-ford'],
-  // S1e-2: you command side 0 only; side 1 follows its plan (its first line has come down from its ridge at z 230)
+  // S1e-2: you command side 0 only; side 1 follows its plan (its first line, units 8–11, has come down from its ridge
+  // at z 230 to the stream's north bank, z 70–74 for all four)
   [
     'eval',
-    `APP.select([8, 0]); const sel = [...APP.selected].join(","); APP.select([]); \`SIDES selected \${sel}, enemy first line at z \${[8, 9, 10].map(i => APP.w.f.z[i].toFixed(0)).join(" ")}\``,
+    `APP.select([8, 0]); const sel = [...APP.selected].join(","); APP.select([]); \`SIDES selected \${sel}, enemy first line at z \${[8, 9, 10, 11].map(i => APP.w.f.z[i].toFixed(0)).join(" ")}\``,
   ],
+  // S1e-3: a moment marked for the playtest; the report of the session prints it (below)
+  ['eval', 'APP.mark("the enemy first line is down"); `MARKS ${APP.session().marks.length}`'],
   // on to the result (at most the scenario's 40 minutes), in 3-minute steps
   ...Array.from({ length: 12 }, () => [
     'eval',
@@ -184,6 +206,7 @@ const battle = [
   ]),
   ['eval', 'APP.view(0, -60, 0.8); const r = APP.result(); `RESULT ${r.winner} at ${(r.tick / 1200).toFixed(1)} min`'],
   ['shot', 'battle-2-result'],
+  ['eval', '"SESSION " + JSON.stringify(APP.session().marks)'],
   REPLAY,
 ]
 
@@ -232,13 +255,37 @@ async function run(scenario, steps) {
     return false
   }
   const { replay, hashes } = JSON.parse(JSON.parse(line.slice(5)).slice(7))
-  const bad = play(replay, dataOf(PAGE_SCENARIOS[scenario].map ?? DEFAULT_MAP), cr, PAGE_SCENARIOS[scenario], hashes)
+  const scen = PAGE_SCENARIOS[scenario]
+  const data = dataOf(scen.map ?? DEFAULT_MAP)
+  // the battle's session goes through the playtest's report (tools/battle-report.ts), which checks the hashes as it
+  // plays, in one pass; the other scenarios only replay
+  let lines = null
+  let bad = null
+  if (scenario === 's1e-battle') {
+    const sline = text.split('\n').find(l => l.startsWith('EVAL "SESSION '))
+    if (!sline) {
+      console.log('no session exported')
+      return false
+    }
+    const marks = JSON.parse(JSON.parse(sline.slice(5)).slice(8))
+    try {
+      lines = reportSession(data, cr, scen, { replay, hashes, marks })
+    } catch (e) {
+      bad = e instanceof Error ? e.message : String(e)
+    }
+  } else bad = play(replay, data, cr, scen, hashes)
   console.log(
     bad
-      ? `replay MISMATCH ${JSON.stringify(bad)}`
+      ? `replay MISMATCH ${typeof bad === 'string' ? bad : JSON.stringify(bad)}`
       : `replay: ${replay.log.length} commands, ${hashes.length} hashes reproduced in Node`,
   )
   if (bad) return false
+  // the report of the session, with its mark, reaches the result
+  if (lines) {
+    const ok = lines.some(l => /MARK the enemy first line is down$/.test(l)) && lines.some(l => /THE END: /.test(l))
+    console.log(`REPORT ${lines.length} lines, the mark ${ok ? 'and the end found' : 'or the end MISSING'}`)
+    if (!ok) return false
+  }
   const panel = text.match(/PANEL (\d+) (\d+)/)
   if (scenario === 's1c-firefight' && !/ROUT [12] /.test(text)) {
     console.log('the firefight did not end in a rout')
@@ -283,15 +330,22 @@ async function run(scenario, steps) {
   if (
     scenario === 's1e-battle' &&
     !(
-      /SIDES selected 0, enemy first line at z (-?\d+) (-?\d+) (-?\d+)/.test(text) &&
+      /SIDES selected 0, enemy first line at z (-?\d+) (-?\d+) (-?\d+) (-?\d+)/.test(text) &&
       text
-        .match(/enemy first line at z (-?\d+) (-?\d+) (-?\d+)/)
+        .match(/enemy first line at z (-?\d+) (-?\d+) (-?\d+) (-?\d+)/)
         .slice(1)
         .every(z => +z < 200) &&
       /RESULT (side \d wins|a draw) at/.test(text)
     )
   ) {
     console.log('the battle let you select an enemy, side 1 did not advance, or it reached no result')
+    return false
+  }
+  if (
+    scenario === 'bench-x09-square-forming' &&
+    !(/BENCH overlaps \d+ at tick/.test(text) && /GOTO same true, orders 1/.test(text))
+  ) {
+    console.log('the bench did not report its overlaps, or going back to a tick did not give the same world')
     return false
   }
   if (scenario === 's1b-field' && (!panel || panel[1] !== panel[2] || panel[1] === '0')) {
@@ -315,7 +369,8 @@ try {
     (await run('s1d-arms', arms)) &&
     (await run('s1d-charge', charge)) &&
     (await run('s1d-guns', guns)) &&
-    (await run('s1e-battle', battle))
+    (await run('s1e-battle', battle)) &&
+    (await run('bench-x09-square-forming', benchCase))
 } finally {
   preview.kill()
 }
