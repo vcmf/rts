@@ -31,7 +31,8 @@ void main(){
   #ifdef LEAF_PAINT
   // the painter's layers (docs/plans/active/crown-leaves.md): up close a leaf's layer (the atlas value: dark, mid,
   // light, highlight) picks its flat tone after the crown's light (below); farther, by the mip level, the old mass
-  float near=1.0-smoothstep(1.5,4.0,lod),jitter=mix(1.0,0.4,near);   // the brush's grain looser on a mass than on a drawn leaf
+  // (LEAF_LOD: smaller leaves, ?leafscale, reach the mass sooner, at the same leaf size on screen)
+  float near=1.0-smoothstep(1.5,4.0,lod+LEAF_LOD),jitter=mix(1.0,0.4,near);   // the brush's grain looser on a mass than on a drawn leaf
   #else
   float jitter=1.0;
   #endif

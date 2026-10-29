@@ -34,6 +34,10 @@ and the card shader:
   owner's `leaf-clumps-simple-greyscale-v1.png` in the git-ignored design references) read as layers: its three values
   the layer index (dark, mid, light), a share of the light leaves lifted to highlights, three of its clumps at 0.8 a
   cell (smaller leaves); no tilt. `?leafpic=<url>` swaps the sheet.
+- **Smaller leaves** (the owner: "now it's beautiful … but the leaves too big"): `?leafscale=<x>` paints each cell
+  from more, smaller clumps (about 3 / scale², `clumpCopies`); 1 is the first layered round, 0.6 the default (the
+  closest to Tiny Glade of 0.75, 0.6 and 0.5; at 0.5 the forest's shade turns to mush). The layers fade to the mass
+  sooner in proportion (`LEAF_LOD`); stills at 30 and 34 m, 50 and 55 m show no shimmer between them.
 - **The card shader, under `LEAF_PAINT`**: each layer one flat tone of the crown's colour (cool dark to pale warm);
   the crown's light decides how many upper layers show (the shade side its dark and mid, the lit side the highlights),
   then the crown's ordinary light over it, a little lighter in shade than before. One texture read as before, no pass;

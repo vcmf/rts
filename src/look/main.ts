@@ -325,7 +325,7 @@ const cardsOn = treeSet.has('cards')
 // leaves read as the painter's layers; oak, the oak picture the crowns had before; procedural, L7a's drawn oak clumps
 const LEAVES = ['layered', 'oak', 'procedural'] as const
 const leavesParam = params.get('leaves') ?? 'layered'
-for (const k of ['leaves', 'leafpic', 'cardsize', 'cardcover', 'cardsink', 'volume']) {
+for (const k of ['leaves', 'leafpic', 'leafscale', 'cardsize', 'cardcover', 'cardsink', 'volume']) {
   if (params.has(k) && !cardsOn) throw new Error(`?${k} needs the leaf-card crowns (the default, or ?trees=cards)`)
 }
 if (!(LEAVES as readonly string[]).includes(leavesParam)) {
@@ -343,12 +343,18 @@ const cardOpt = (k: string, d: number) => {
   if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`)
   return v
 }
+// ?leafscale=<x>: the layered leaves' size, 1 the sheet's clumps at 0.8 a cell (docs/plans/active/crown-leaves.md)
+if (params.has('leafscale') && !paintedLeaves)
+  {throw new Error('?leafscale needs the layered leaves (not oak or procedural)')}
+const leafScale = cardOpt('leafscale', CARD_DEFAULTS.leafScale)
+if (leafScale > 1) throw new Error(`?leafscale must be at most 1, not ${leafScale}`)
 const cardOpts: CardOptions = {
   size: cardOpt('cardsize', CARD_DEFAULTS.size),
   cover: cardOpt('cardcover', CARD_DEFAULTS.cover),
   sink: cardOpt('cardsink', CARD_DEFAULTS.sink),
   volume: params.get('volume') !== 'off',
   paint: paintedLeaves,
+  leafScale,
 }
 if (params.has('volume') && params.get('volume') !== 'off') {
   throw new Error(`?volume must be off, not ${params.get('volume')}`)
@@ -357,7 +363,7 @@ let leafTex: DynamicTexture | null = null
 if (cardsOn) {
   const atlas =
     leafPic || leavesParam === 'layered'
-      ? atlasFromPicture(await loadImage(leafPic ?? SIMPLE_LEAF_URL), true)
+      ? atlasFromPicture(await loadImage(leafPic ?? SIMPLE_LEAF_URL), true, leafScale)
       : leavesParam === 'procedural'
         ? atlasProcedural()
         : atlasFromPicture(await loadImage(LEAF_URL))
@@ -1051,7 +1057,7 @@ addEventListener('drop', e => {
       URL.revokeObjectURL(url)
       let atlas: HTMLCanvasElement
       try {
-        atlas = atlasFromPicture(img, cardOpts.paint) // read as the page reads its sheet
+        atlas = atlasFromPicture(img, cardOpts.paint, cardOpts.leafScale) // read as the page reads its sheet
       } catch (err) {
         alert(String(err))
         return

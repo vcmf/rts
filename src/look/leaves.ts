@@ -42,6 +42,7 @@ function gutter(empty: (k: number) => boolean, lo: number, hi: number): number {
 export function atlasFromPicture(
   img: CanvasImageSource & { width: number; height: number },
   painted = false,
+  leafScale = 1,
 ): HTMLCanvasElement {
   const { w, h, l } = brightnessOf(img)
   const rowEmpty = (y: number, x0: number, x1: number) => {
@@ -124,7 +125,7 @@ export function atlasFromPicture(
     }
   })
   og.putImageData(od, 0, 0)
-  return painted ? layered(out) : withTilt(out)
+  return painted ? layered(out, leafScale) : withTilt(out)
 }
 
 // the layered sheet (docs/plans/active/crown-leaves.md): the painter's layers, a dark base, mid leaves, light leaves
@@ -135,12 +136,38 @@ const HIGHLIGHT = 0.3 // the share of the light leaves (each a patch of one valu
 const SHRINK = 0.8 // a layered cell: three clumps at this scale over each other (smaller leaves, the cell still full)
 
 /**
- * A sheet's clumps as painted layers: each cell three of the sheet's clumps at SHRINK (two behind, offset and turned,
- * its own on top), so the leaves are smaller and the cell stays full; each pixel's value snapped to its layer (the
+ * The clumps a layered cell k is painted from, back to front: [sheet clump, x and y offset (cells), turn]. At
+ * leafScale 1 three (two behind, offset and turned, its own on top); smaller leaves take more, smaller clumps (about
+ * 3 / leafScale² of them) on a sunflower spiral within the cell, the outer ones first, the cell's own clump last in
+ * the middle, so the cell keeps its outline and stays full
+ */
+export function clumpCopies(k: number, leafScale: number): [number, number, number, number][] {
+  if (leafScale === 1) {
+    return [
+      [(k + 2) % 4, -0.1, 0.08, 2.4],
+      [(k + 1) % 4, 0.09, -0.09, -1.3],
+      [k, 0, 0, 0],
+    ]
+  }
+  const n = Math.ceil(3 / (leafScale * leafScale))
+  const reach = 0.47 * (1 - SHRINK * leafScale) + 0.04 // the copies' centres: their clumps' reach within the cell
+  const out: [number, number, number, number][] = []
+  for (let i = n - 1; i >= 1; i--) {
+    const r = reach * Math.sqrt(i / (n - 1))
+    const a = i * 2.39996 + k * 1.7
+    out.push([(k + i) % 4, Math.cos(a) * r, Math.sin(a) * r, (i * 1.37 + k) % (Math.PI * 2)])
+  }
+  out.push([k, 0, 0, 0])
+  return out
+}
+
+/**
+ * A sheet's clumps as painted layers: each cell the sheet's clumps at SHRINK × leafScale (clumpCopies), so the leaves
+ * are smaller and the cell stays full; each pixel's value snapped to its layer (the
  * sheet's dark, mid and light), a share of the light leaves lifted to highlights (a patch of one value at a time,
  * seeded); G and B flat (no tilt: the crown's own light shades it)
  */
-function layered(atlas: HTMLCanvasElement, seed = 5): HTMLCanvasElement {
+function layered(atlas: HTMLCanvasElement, leafScale: number, seed = 5): HTMLCanvasElement {
   const W = CELL * 2
   const out = document.createElement('canvas')
   out.width = out.height = W
@@ -152,15 +179,11 @@ function layered(atlas: HTMLCanvasElement, seed = 5): HTMLCanvasElement {
     g.beginPath()
     g.rect(ox + CELL * 0.03, oy + CELL * 0.03, CELL * 0.94, CELL * 0.94) // never into a neighbour's mips
     g.clip()
-    for (const [j, dx, dy, rot] of [
-      [(k + 2) % 4, -0.1, 0.08, 2.4],
-      [(k + 1) % 4, 0.09, -0.09, -1.3],
-      [k, 0, 0, 0],
-    ]) {
+    for (const [j, dx, dy, rot] of clumpCopies(k, leafScale)) {
       g.save()
       g.translate(ox + CELL * (0.5 + dx), oy + CELL * (0.5 + dy))
       g.rotate(rot)
-      g.scale(SHRINK, SHRINK)
+      g.scale(SHRINK * leafScale, SHRINK * leafScale)
       g.drawImage(atlas, (j >> 1) * CELL, (j & 1) * CELL, CELL, CELL, -CELL / 2, -CELL / 2, CELL, CELL)
       g.restore()
     }

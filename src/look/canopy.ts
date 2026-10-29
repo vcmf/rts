@@ -47,8 +47,17 @@ export interface CardOptions {
   volume: boolean // the crown lit as a volume (docs/plans/done/l7b-crown-volume.md); off: L7a's light, card by card
   // the layered sheet (src/look/leaves.ts, atlasFromPicture painted, or ?leafpic): LEAF_PAINT, the layers' tones
   paint: boolean
+  // the layered leaves' size (1: the sheet's clumps at 0.8 a cell); smaller leaves fade to the mass sooner (LEAF_LOD)
+  leafScale: number
 }
-export const CARD_DEFAULTS: CardOptions = { size: 0.32, cover: 2.6, sink: 0.8, volume: true, paint: true }
+export const CARD_DEFAULTS: CardOptions = {
+  size: 0.32,
+  cover: 2.6,
+  sink: 0.8,
+  volume: true,
+  paint: true,
+  leafScale: 0.6,
+}
 
 // one card mesh per model: four vertices per card (centre, corner, card data: half-size, rotation, atlas cell, the
 // sink in half-sizes; the role of the crown triangle it stands on) and the crown's sphere normals
@@ -208,7 +217,7 @@ export function cardMaterial(
   folB: string,
   rim: number,
   leaf: BaseTexture,
-  look: Pick<CardOptions, 'volume' | 'paint'>,
+  look: Pick<CardOptions, 'volume' | 'paint' | 'leafScale'>,
   thins = false,
   fade = false,
 ): ShaderMaterial {
@@ -229,7 +238,9 @@ export function cardMaterial(
     samplers: ['uLeaf'],
     defines: [
       ...(look.volume ? ['#define VOLUME', '#define SOFT_RAMP', '#define BOUNCE'] : []),
-      ...(look.paint ? ['#define LEAF_PAINT', ...LAYER_DEFINES] : []),
+      ...(look.paint
+        ? ['#define LEAF_PAINT', ...LAYER_DEFINES, `#define LEAF_LOD ${(-Math.log2(look.leafScale)).toFixed(3)}`]
+        : []),
       ...(thins ? ['#define LEAF_LOSS'] : []),
       ...(fade ? ['#define FAR_FADE'] : []),
     ],
