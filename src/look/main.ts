@@ -53,7 +53,7 @@ import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
 import { MACRO_ARMS, SHADER_ARMS, buildMacro, isBakedArm, type MacroArm, type RoadTextures } from './macro.ts'
 import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
-import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
+import { atlasFromPicture, atlasPainted, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import {
@@ -320,13 +320,23 @@ if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has(
 // the generator (a plain script that sets window.TREEGEN), loaded only for the arm that draws its trees
 if (treeSet.has('gen')) await import('../../prototypes/tree-core.js')
 const cardsOn = treeSet.has('cards')
-const leavesParam = params.get('leaves') ?? 'oak'
-for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink', 'volume']) {
+// ?leaves: the leaf atlas (docs/plans/active/crown-leaves.md): painted (the default) or sprays, the painted leaves
+// drawn on load; oak, the oak picture the crowns had before; procedural, L7a's drawn oak clumps
+const LEAVES = ['painted', 'sprays', 'oak', 'procedural'] as const
+const leavesParam = params.get('leaves') ?? 'painted'
+for (const k of ['leaves', 'leafpic', 'cardsize', 'cardcover', 'cardsink', 'volume']) {
   if (params.has(k) && !cardsOn) throw new Error(`?${k} needs the leaf-card crowns (the default, or ?trees=cards)`)
 }
-if (leavesParam !== 'oak' && leavesParam !== 'procedural') {
-  throw new Error(`?leaves must be oak or procedural, not ${leavesParam}`)
+if (!(LEAVES as readonly string[]).includes(leavesParam)) {
+  throw new Error(`?leaves must be ${LEAVES.join(', ')}, not ${leavesParam}`)
 }
+// ?leafpic=<url>: a sheet of four leaf clumps on black (the oak sheet's layout, black transparent, grey values the
+// shader tints) drawn as the painted leaves are (LEAF_PAINT): the owner's sheets swapped in without a build
+const leafPic = params.get('leafpic')
+if (leafPic !== null && (!leafPic || params.has('leaves'))) {
+  throw new Error('?leafpic takes a picture URL, and replaces ?leaves')
+}
+const paintedLeaves = leavesParam === 'painted' || leavesParam === 'sprays' || leafPic !== null
 const cardOpt = (k: string, d: number) => {
   const v = Number(params.get(k) ?? d)
   if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`)
@@ -337,13 +347,20 @@ const cardOpts: CardOptions = {
   cover: cardOpt('cardcover', CARD_DEFAULTS.cover),
   sink: cardOpt('cardsink', CARD_DEFAULTS.sink),
   volume: params.get('volume') !== 'off',
+  paint: paintedLeaves,
 }
 if (params.has('volume') && params.get('volume') !== 'off') {
   throw new Error(`?volume must be off, not ${params.get('volume')}`)
 }
 let leafTex: DynamicTexture | null = null
 if (cardsOn) {
-  const atlas = leavesParam === 'procedural' ? atlasProcedural() : atlasFromPicture(await loadImage(LEAF_URL))
+  const atlas = leafPic
+    ? atlasFromPicture(await loadImage(leafPic))
+    : leavesParam === 'painted' || leavesParam === 'sprays'
+      ? atlasPainted(leavesParam)
+      : leavesParam === 'procedural'
+        ? atlasProcedural()
+        : atlasFromPicture(await loadImage(LEAF_URL))
   leafTex = new DynamicTexture('leaves', atlas, scene, true, Texture.TRILINEAR_SAMPLINGMODE)
   leafTex.hasAlpha = true
   leafTex.wrapU = leafTex.wrapV = Texture.CLAMP_ADDRESSMODE

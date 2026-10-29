@@ -35,8 +35,10 @@ export interface CardOptions {
   cover: number // how many times the cards cover the crown's surface
   sink: number // how far a card's centre sits inside the surface, in card half-sizes (keeps the outline's size)
   volume: boolean // the crown lit as a volume (docs/plans/done/l7b-crown-volume.md); off: L7a's light, card by card
+  // painted leaves (src/look/leaves.ts, atlasPainted, or ?leafpic): LEAF_PAINT, their tone and tilt up close
+  paint: boolean
 }
-export const CARD_DEFAULTS: CardOptions = { size: 0.32, cover: 2.6, sink: 0.8, volume: true }
+export const CARD_DEFAULTS: CardOptions = { size: 0.32, cover: 2.6, sink: 0.8, volume: true, paint: true }
 
 // one card mesh per model: four vertices per card (centre, corner, card data: half-size, rotation, atlas cell, the
 // sink in half-sizes; the role of the crown triangle it stands on) and the crown's sphere normals
@@ -184,7 +186,8 @@ export function cardMesh(
 }
 
 // the card material: the default crowns' palette, rim and backlight, the leaf atlas's value and coverage
-// volume: the crown lit as a volume (L7b: a normal per pixel from its ellipsoid, the light through it, the soft ramp)
+// look.volume: the crown lit as a volume (L7b: a normal per pixel from its ellipsoid, the light through it, the soft
+// ramp); look.paint: the painted leaves' tone and tilt up close (docs/plans/active/crown-leaves.md)
 // thins: the crown thins with the season, card by card (src/look/shaders/cards.glsl; generated deciduous trees)
 // fade: a far tree's cards (src/look/nature.ts, farCuller), cut by a dither as the instance's
 // aFade gives way to its crown mesh
@@ -195,7 +198,7 @@ export function cardMaterial(
   folB: string,
   rim: number,
   leaf: BaseTexture,
-  volume: boolean,
+  look: Pick<CardOptions, 'volume' | 'paint'>,
   thins = false,
   fade = false,
 ): ShaderMaterial {
@@ -215,7 +218,8 @@ export function cardMaterial(
     uniforms: ['view', 'uFolA', 'uFolB', 'uRim', 'uKind', 'uLeafSize', 'uSeason'],
     samplers: ['uLeaf'],
     defines: [
-      ...(volume ? ['#define VOLUME', '#define SOFT_RAMP', '#define BOUNCE'] : []),
+      ...(look.volume ? ['#define VOLUME', '#define SOFT_RAMP', '#define BOUNCE'] : []),
+      ...(look.paint ? ['#define LEAF_PAINT'] : []),
       ...(thins ? ['#define LEAF_LOSS'] : []),
       ...(fade ? ['#define FAR_FADE'] : []),
     ],

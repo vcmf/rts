@@ -712,7 +712,7 @@ export function buildNature(
   const cardArgs = new Map<ShaderMaterial, [string, string, string, number, boolean, number]>()
   const cardMat = (name: string, a: string, b: string, rim: number, thins = false, kind = 0): ShaderMaterial | null => {
     if (!cards) return null
-    const m = cardMaterial(mats, name, a, b, rim, cards.leaf, cards.opts.volume, thins)
+    const m = cardMaterial(mats, name, a, b, rim, cards.leaf, cards.opts, thins)
     m.setFloat('uKind', kind)
     cardArgs.set(m, [name, a, b, rim, thins, kind])
     return m
@@ -732,7 +732,7 @@ export function buildNature(
     const args = cardArgs.get(m)
     if (!f && cards && args) {
       const [name, a, b, rim, thins, kind] = args
-      f = cardMaterial(mats, name + 'Far', a, b, rim, cards.leaf, cards.opts.volume, thins, true)
+      f = cardMaterial(mats, name + 'Far', a, b, rim, cards.leaf, cards.opts, thins, true)
       f.setFloat('uKind', kind)
       farCards.set(m, f)
     }
