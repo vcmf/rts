@@ -59,7 +59,9 @@ five files 150, 191, 190, 242 and 83 s, 243 s in all side by side.
 On CI, three shards each (run 40832173191, by hand, no results cache yet): check 1 min; the test shards 3.3, 3.3 and
 3.9 min (7–12 min before); the coverage shards 13.8, 16.3 and 20.1 min (33 min and more before). The runner is about
 2.4 times slower than the dev Mac under coverage (`bench-claim-2` 582 s against 242 s), and the slowest shard's longest
-file was under half of it: the shards were full, not held up by one file. So coverage went to five shards (below).
+file was under half of it: the shards were full, not held up by one file. So coverage went to five shards: 4.0, 13.2,
+14.3, 8.5 and 13.1 min (run 40834394504; the test shards 1.9, 3.6 and 3.8 min). The hash split is uneven (4 to 14
+min); the results cache, saved by the first push to main, only orders files within a shard.
 
 ## Open questions
 
