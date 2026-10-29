@@ -46,6 +46,32 @@ export interface RiverQuery {
 
 const WMAX = 11 // docs/art-bible.md §6c: 4–11 m
 
+/**
+ * No river: a world without the demo's (a map's window until its water is drawn,
+ * docs/plans/active/look-austerlitz-a1.md, PR c). No samples, so every query finds none; its parameters only name it.
+ */
+export function noRiver(): RiverSamples {
+  const P: RiverParams = {
+    id: 'none',
+    W0: 6,
+    D0: 1,
+    bankH: 1,
+    floodplainW: 0,
+    beltW: 0,
+    valleySlope: 0,
+    valleyFade: 0,
+    theta0: 0,
+    Js: 0,
+    Jf: 0,
+    v0: 0,
+    seed: 0,
+    z0: 0,
+    z1: 0,
+  }
+  const arrays = Object.fromEntries(SAMPLE_KEYS.map(k => [k, new Float32Array(0)])) as Record<SampleKey, Float32Array>
+  return { P, n: 0, ...arrays }
+}
+
 // the river every query reads; set once, from the look data (page) or from the authoring step (build tool)
 export let RIVER: River
 
