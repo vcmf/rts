@@ -32,8 +32,8 @@ and the card shader:
 - **The card shader, under `LEAF_PAINT`**: up close the leaf's value spans more of the albedo and its tilt turns the
   normal more; both fade with the mip level to today's flat mass, so the default and widest zooms keep their read.
 - **The owner's sheet** (2026-10-29, after the first stills): clumps of simple leaves, sparser than the oak sheet; the
-  owner generated `design/refs/leaf-clumps-simple-greyscale-v1.png` (four rosettes of plain pointed leaves, three flat
-  values), committed as `data/leaf-clumps-simple-v1.png` and the default (`?leaves=simple`); the sheet is a swappable
+  owner generated `leaf-clumps-simple-greyscale-v1.png` (in the git-ignored design references: four rosettes of plain
+  pointed leaves, three flat values), committed as `data/leaf-clumps-simple-v1.png` and the default (`?leaves=simple`); the sheet is a swappable
   input (`?leafpic=<url>`, or Shift-drop), read with a dome tilt per clump and a darker line between values.
 - **Variants for the owner to pick**: `?leaves=simple` (the owner's sheet), `?leaves=painted` (the interim: a rosette
   of 38 pointed leaves drawn on load) and `?leaves=sprays` (pinnate sprays, closer to Tiny Glade's); `?leaves=oak`
