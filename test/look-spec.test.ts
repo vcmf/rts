@@ -4,23 +4,35 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
+  FOLLOW,
+  FocusFollow,
   SPEC,
   TUNED_R,
   ZoomHold,
   bakeMB,
   bakesMB,
-  checkGround,
+  checkView,
   clearBelow,
   clearRadius,
   derive,
+  eyeReach,
   footprintOf,
+  groundOf,
+  groundUnder,
   holdView,
+  maxGrid,
+  nearFrameOf,
   nearReachOf,
   shadowMapSize,
+  spreadOf,
+  type HoldGround,
+  type NodeGrid,
   type Spec,
+  type WorldGround,
 } from '../src/look/spec.ts'
-import { heightAt, setHeightfield, type Heightfield } from '../src/look/heightfield.ts'
+import { groundAt, heightAt, setHeightfield, type Heightfield } from '../src/look/heightfield.ts'
 import { checkLookData, decodeLook, encodeLook } from '../src/look/world/data.ts'
+import { longIt } from './fx.ts'
 import { LOOK_FILE, buildLookData } from '../tools/build-look-data.ts'
 
 const with_ = (f: (s: Spec) => void): Spec => {
@@ -29,11 +41,14 @@ const with_ = (f: (s: Spec) => void): Spec => {
   return s
 }
 
+// the ground SPEC assumed before A1b: the tile 0..25 m, the focus on its 8 m plane
+const OLD: WorldGround = { lo: 0, hi: 25, farLo: 0, focus: [8, 8] }
+
 describe('world spec', () => {
   it('derives the real spec', () => {
     const d = derive(SPEC)
     expect(d.farCell / d.cell).toBeCloseTo(8, 12)
-    expect(SPEC.play + d.footprint).toBeLessThanOrEqual(SPEC.far / 2)
+    expect(SPEC.play + checkView(SPEC, OLD).footprint).toBeLessThanOrEqual(SPEC.far / 2)
   })
   const cases: [string, (s: Spec) => void, RegExp][] = [
     [
@@ -122,13 +137,6 @@ describe('world spec', () => {
         s.camera.rMax = 320
       },
       /beside the play edge/,
-    ],
-    [
-      'a camera held inside the highest ground even at the widest zoom',
-      s => {
-        s.ground.hi = 160
-      },
-      /horizon|inside/,
     ],
     [
       'no clearance over the ground',
@@ -420,37 +428,120 @@ describe('world spec', () => {
     cam = z.step(cam, hold)
     expect(cam).toBe(23)
   })
-  it('refuses ground outside its range', () => {
-    expect(() => checkGround(SPEC, 0.4, 20.3, 2.2)).not.toThrow()
-    expect(() => checkGround(SPEC, -3, 20.3, 2.2)).toThrow(/outside the spec/)
-    expect(() => checkGround(SPEC, 0.4, 30, 2.2)).toThrow(/outside the spec/)
-    expect(() => checkGround(SPEC, 0.4, 20.3, -1)).toThrow(/outside the spec/)
-  })
 })
 
-describe("the camera's reach (footprintOf, nearReachOf)", () => {
-  it('is what derive checks, the frame below the focus within the margin, the whole frame farther', () => {
-    const near = nearReachOf(SPEC)
-    expect(footprintOf(SPEC)).toBe(derive(SPEC).footprint)
+describe("the camera's reach (footprintOf, nearReachOf, checkView)", () => {
+  it('is what checkView checks, the frame below the focus within the margin on the old range, the whole frame farther', () => {
+    const near = nearReachOf(SPEC, OLD)
+    expect(footprintOf(SPEC, OLD)).toBe(checkView(SPEC, OLD).footprint)
     expect(near).toBeGreaterThan(0)
     expect(near).toBeLessThanOrEqual(SPEC.margin)
-    expect(near).toBeLessThan(footprintOf(SPEC))
+    expect(near).toBeLessThan(footprintOf(SPEC, OLD))
   })
-  it('reaches farther on a wider frame and at a longer zoom', () => {
-    const fp = footprintOf(SPEC)
-    expect(footprintOf(with_(s => (s.camera.aspectMax = 2.4)))).toBeGreaterThan(fp)
-    expect(footprintOf(with_(s => (s.camera.rMax = 300)))).toBeGreaterThan(fp)
-    expect(nearReachOf(with_(s => (s.camera.rMax = 300)))).toBeGreaterThan(nearReachOf(SPEC))
+  it('reaches farther on a wider frame, at a longer zoom and with the focus higher over the ground', () => {
+    const fp = footprintOf(SPEC, OLD)
+    expect(
+      footprintOf(
+        with_(s => (s.camera.aspectMax = 2.4)),
+        OLD,
+      ),
+    ).toBeGreaterThan(fp)
+    expect(
+      footprintOf(
+        with_(s => (s.camera.rMax = 300)),
+        OLD,
+      ),
+    ).toBeGreaterThan(fp)
+    expect(
+      nearReachOf(
+        with_(s => (s.camera.rMax = 300)),
+        OLD,
+      ),
+    ).toBeGreaterThan(nearReachOf(SPEC, OLD))
+    expect(footprintOf(SPEC, { ...OLD, focus: [8, 40] })).toBeGreaterThan(fp)
+    expect(nearReachOf(SPEC, { ...OLD, focus: [8, 40] })).toBeGreaterThan(nearReachOf(SPEC, OLD))
   })
   it("is Infinity when a frame corner nears the horizon, the frame's bottom still finite", () => {
     const low = with_(s => (s.camera.betaMax = 1.4))
-    expect(footprintOf(low)).toBe(Infinity)
-    expect(Number.isFinite(nearReachOf(low))).toBe(true)
+    expect(footprintOf(low, OLD)).toBe(Infinity)
+    expect(Number.isFinite(nearReachOf(low, OLD))).toBe(true)
   })
   it('is Infinity below the focus when the eye could not clear the highest tile ground within rMax', () => {
-    const high = with_(s => (s.ground.hi = 300))
-    expect(nearReachOf(high)).toBe(Infinity)
-    expect(footprintOf(high)).toBe(footprintOf(SPEC)) // (the whole frame reaches farthest on the lowest ground)
+    const high = { ...OLD, hi: 300 }
+    expect(nearReachOf(SPEC, high)).toBe(Infinity)
+    // (the whole frame reaches farthest on the lowest ground)
+    expect(footprintOf(SPEC, high)).toBe(footprintOf(SPEC, OLD))
+    expect(() => checkView(SPEC, high)).toThrow(/inside the highest tile ground/)
+  })
+  it('refuses a world whose frame would see past the far ring, or whose ranges are out of order', () => {
+    expect(() => checkView(SPEC, { ...OLD, farLo: -400 })).toThrow(/sees past the world/)
+    expect(() => checkView(SPEC, { ...OLD, focus: [9, 8] })).toThrow(/out of order/)
+  })
+})
+
+describe('the focus on the ground (FocusFollow, groundUnder)', () => {
+  const plane = (x: number, z: number) => 10 + 0.2 * x - 0.1 * z
+  it('reads a plane at the focus, and a narrow ditch at a fraction of its depth', () => {
+    expect(groundUnder(plane, 30, -20, 12)).toBeCloseTo(plane(30, -20), 9)
+    const ditch = (x: number) => (Math.abs(x) < 1 ? -2 : 0)
+    // (3 samples of 13 in a ditch through the focus, the most a ditch narrower than the rings' spacing takes)
+    expect(groundUnder(ditch, 0, 0, 12)).toBeCloseTo((3 * -2) / 13, 9)
+  })
+  it('spreads with the zoom, within its limits', () => {
+    expect(spreadOf(SPEC.camera.rMin)).toBe(FOLLOW.spreadMin)
+    expect(spreadOf(100)).toBeCloseTo(15, 9)
+    expect(spreadOf(SPEC.camera.rMax)).toBe(FOLLOW.spreadMax)
+  })
+  it('keeps a world of one height on it without reading the ground', () => {
+    const f = new FocusFollow([8, 8])
+    const no = () => {
+      throw new Error('read')
+    }
+    expect(f.step(0, 0, 125, 0, no)).toBe(8)
+    expect(f.step(3, 0, 125, 1 / 60, no)).toBe(8)
+  })
+  it('takes the first frame and a jump at once, eases up a slope, follows down it at once', () => {
+    const f = new FocusFollow([0, 100])
+    const step = (x: number) => f.step(x, 0, 20, 1 / 60, plane)
+    expect(step(0)).toBeCloseTo(10, 9)
+    // a pan up the slope (1.8 m a frame of 1/60 s: a fast pan at 20 m): below the ground, rising every frame
+    let y = 10
+    for (let x = 1.8; x < 60; x += 1.8) {
+      const v = step(x)
+      expect(v).toBeGreaterThan(y)
+      expect(v).toBeLessThan(plane(x, 0))
+      y = v
+    }
+    // held still, it settles on the ground within a few easing times
+    let v = 0
+    for (let i = 0; i < 240; i++) v = f.step(59.4, 0, 20, 1 / 60, plane)
+    expect(v).toBeCloseTo(plane(59.4, 0), 3)
+    // down the slope: on the ground every frame (never above it)
+    expect(step(50)).toBeCloseTo(plane(50, 0), 9)
+    // a jump (a tool's new view): at once
+    expect(step(-40)).toBeCloseTo(plane(-40, 0), 9)
+  })
+  it('eases the same at any frame rate, settles at once with dt Infinity (a frozen page), lags at most FOLLOW.lag', () => {
+    const at = (steps: number[]) => {
+      const f = new FocusFollow([0, 100])
+      f.step(0, 0, 20, 0, () => 0)
+      let y = 0
+      for (const dt of steps) y = f.step(0, 0, 20, dt, () => 3)
+      return y
+    }
+    expect(at([0.1])).toBeCloseTo(at([0.05, 0.05]), 12)
+    expect(at([0.1])).toBeGreaterThan(0)
+    expect(at([0.1])).toBeLessThan(3)
+    expect(at([Infinity])).toBe(3)
+    // a rise of 20 m in a frame (within a jump's reach): the focus held FOLLOW.lag under it
+    const f = new FocusFollow([0, 100])
+    f.step(0, 0, 20, 0, () => 0)
+    expect(f.step(0, 0, 20, 1 / 60, () => 20)).toBe(20 - FOLLOW.lag)
+  })
+  it("clamps to the world's focus range", () => {
+    const f = new FocusFollow([12, 20])
+    expect(f.step(-100, 0, 20, 0, plane)).toBe(12)
+    expect(f.step(100, 0, 20, 0, plane)).toBe(20)
   })
 })
 
@@ -466,32 +557,79 @@ describe("a bake's memory (bakeMB)", () => {
 describe("the camera's hold a frame (holdView, clearBelow in src/look/spec.ts, run by src/look/post.ts)", () => {
   const c = SPEC.camera
   const view = (radius: number, x = 0, z = 0) => ({ alpha: -2, beta: c.betaMax, radius, target: { x, y: c.focusY, z } })
+  // a world as the hold reads it: the ground, its highest within a reach (here: everywhere), the demo's 8 m plane
+  const world = (ground: (x: number, z: number) => number, top: number, focus: [number, number] = [8, 8]) =>
+    ({ ground, highest: () => top, follow: new FocusFollow(focus) }) satisfies HoldGround
   it('keeps the focus within the play area', () => {
-    const z = new ZoomHold()
     const v = view(100, 400, -300)
-    holdView(SPEC, z, v, () => 0, clearBelow(SPEC))
+    holdView(
+      SPEC,
+      new ZoomHold(),
+      v,
+      world(() => 0, 0),
+      0,
+    )
     expect([v.target.x, v.target.z]).toEqual([SPEC.play, -SPEC.play])
   })
-  it('never reads the ground from clearBelow out (the eye clears the highest ground there)', () => {
-    expect(clearBelow(SPEC)).toBeLessThan(TUNED_R) // (today's zooms, 45 m out, never read it)
+  it('never reads the ground from clearBelow out (the eye clears the highest ground within its reach there)', () => {
+    expect(clearBelow(SPEC, 25 - c.focusY)).toBeLessThan(TUNED_R) // (the demo's zooms, 45 m out, never read it)
+    expect(eyeReach(SPEC)).toBeCloseTo(c.rMax * Math.sin(c.betaMax), 9)
     const reads: number[] = []
     const ground = (x: number) => {
       reads.push(x)
-      return SPEC.ground.hi
+      return 25
     }
-    holdView(SPEC, new ZoomHold(), view(clearBelow(SPEC)), ground, clearBelow(SPEC))
+    const below = clearBelow(SPEC, 25 - c.focusY)
+    holdView(SPEC, new ZoomHold(), view(below), world(ground, 25), 0)
     expect(reads).toEqual([])
-    holdView(SPEC, new ZoomHold(), view(clearBelow(SPEC) - 1), ground, clearBelow(SPEC))
+    holdView(SPEC, new ZoomHold(), view(below - 1), world(ground, 25), 0)
     expect(reads.length).toBeGreaterThan(0)
+  })
+  it('reads the rise near the focus, not the world: on a high plateau with the focus on it, 20 m is not held', () => {
+    const v = view(20)
+    holdView(
+      SPEC,
+      new ZoomHold(),
+      v,
+      world(() => 67, 68, [30, 67]),
+      0,
+    )
+    expect(v.target.y).toBe(67)
+    expect(v.radius).toBe(20)
+  })
+  it("follows a map world's focus over a hill, settled with dt Infinity, the zoom held over the hill's top", () => {
+    const z = new ZoomHold()
+    const hill = (x: number) => Math.max(0, 30 - Math.abs(x) / 2) // a ridge 30 m high at x = 0
+    const w = world(hill, 30, [0, 30])
+    const v = view(c.rMin, -100)
+    holdView(SPEC, z, v, w, Infinity)
+    expect(v.target.y).toBeCloseTo(groundUnder(hill, -100, 0, spreadOf(c.rMin)), 9)
+    expect(v.radius).toBe(c.rMin)
+    v.target.x = -2
+    holdView(SPEC, z, v, w, Infinity)
+    expect(v.target.y).toBeGreaterThan(28) // (on the ridge's top, the ground under it a mean)
+    // the eye clears the ground under it by its clearance
+    const ex = v.target.x + v.radius * Math.cos(v.alpha) * Math.sin(v.beta)
+    expect(v.radius * Math.cos(v.beta) + v.target.y - hill(ex)).toBeGreaterThanOrEqual(c.clearance - 1e-6)
+  })
+  it("takes the wanted zoom it will hold for the focus's spread (ZoomHold.peek)", () => {
+    const z = new ZoomHold()
+    expect(z.peek(80)).toBeNaN()
+    z.step(80, r => r)
+    expect(z.peek(80)).toBe(80)
+    expect(z.peek(120)).toBe(120) // (Babylon's own input moved it: the new wanted one)
+    z.set(40)
+    expect(z.peek(80)).toBe(40)
   })
   it("holds the zoom out over a hill and brings the player's zoom back past it (#145)", () => {
     const z = new ZoomHold()
     const hill = (x: number) => (x > 50 && x < 150 ? 18 : 0)
+    const w = world(hill, 18)
     const v = view(c.rMin, -100)
     // (the eye about 5 m short of the focus in x: over the hill from a focus about 55 m on)
     const frames = (x: number) => {
       v.target.x = x
-      holdView(SPEC, z, v, hill, clearBelow(SPEC))
+      holdView(SPEC, z, v, w, 1 / 60)
       return v.radius
     }
     expect(frames(-100)).toBe(c.rMin)
@@ -578,4 +716,52 @@ describe('look data', () => {
   it('the committed file is what the authoring step builds (else run node tools/build-look-data.ts)', () => {
     expect(Buffer.compare(fs.readFileSync(LOOK_FILE), Buffer.from(buildLookData()))).toBe(0)
   })
+})
+
+// (these set the heightfield: after the heightfield's own tests)
+describe("a world's ground from its data (groundOf, maxGrid)", () => {
+  // a 5×5 grid of 100 m cells from −200 m: a ridge along x = 100, the far ring a flat 2 m
+  const n = 5
+  const h = new Float32Array(n * n).map((_, k) => (k % n === 3 ? 30 : 4 + (k % n)))
+  const hf: NodeGrid = { n, cell: 100, x0: -200, z0: -200, h }
+  const far: NodeGrid = { n: 2, cell: 2000, x0: -1000, z0: -1000, h: new Float32Array([2, 2, 2, 2]) }
+  it("takes the tile's range, the far ring's lowest, and the focus's range in play (or the world's plane)", () => {
+    const s = with_(v => (v.play = 150))
+    expect(groundOf(s, hf, far, null)).toEqual({ lo: 4, hi: 30, farLo: 2, focus: [5, 30] }) // (x −100 to 100 in play)
+    expect(groundOf(s, hf, far, 8).focus).toEqual([8, 8])
+  })
+  it('bounds the ground within a reach: never under a node it holds, never the far side of the grid', () => {
+    const top = maxGrid(hf, 2)
+    expect(top(-200, 0, 10)).toBe(6) // (blocks of 2 cells: x −200..0 holds the nodes at −200, −100 and 0)
+    expect(top(-200, 0, 250)).toBe(30)
+    expect(top(100, 100, 1)).toBe(30)
+    expect(top(5000, 0, 10)).toBe(-Infinity)
+  })
+  it('holds every point of the ground drawn (bilinear in a cell) under the bound at that point', () => {
+    setHeightfield({ ...hf, h, min: 4, max: 30 }, { ...hf, h }, 1e4)
+    const top = maxGrid(hf, 1)
+    for (let k = 0; k < 200; k++) {
+      const x = -200 + ((k * 37) % 400)
+      const z = -200 + ((k * 91) % 400)
+      expect(groundAt(x, z)).toBeLessThanOrEqual(top(x, z, 0) + 1e-9)
+    }
+  })
+})
+
+describe("each world's data against the camera (checkView, nearFrameOf)", () => {
+  for (const file of fs.readdirSync('data').filter(f => f.endsWith('.lookdata'))) {
+    longIt(`${file}: the whole frame inside the far ring, the frame below the focus row inside the tile`, () => {
+      const b = fs.readFileSync(`data/${file}`)
+      const d = decodeLook(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer)
+      setHeightfield(d.hf, d.far, SPEC.tile / 2)
+      const g = groundOf(SPEC, d.hf, d.far, d.world.kind === 'map' ? null : SPEC.camera.focusY)
+      expect(() => checkView(SPEC, g)).not.toThrow()
+      // the follow's want (it is never above it)
+      const [lo, hi] = g.focus
+      const focusY = (x: number, z: number, r: number) =>
+        lo === hi ? lo : Math.max(lo, Math.min(hi, groundUnder(groundAt, x, z, spreadOf(r))))
+      // (1 m of headroom: the Pratzen's is 1.6 m, docs/plans/active/look-austerlitz-a1b.md, open questions)
+      expect(nearFrameOf(SPEC, groundAt, focusY)).toBeLessThanOrEqual(SPEC.tile / 2 - 1)
+    })
+  }
 })

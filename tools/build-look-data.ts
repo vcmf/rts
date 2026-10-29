@@ -12,7 +12,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { D, ROAD_SLOTS, checkGround } from '../src/look/spec.ts'
+import { D, ROAD_SLOTS } from '../src/look/spec.ts'
 import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
 import { encodeLook, ROAD_SEG, type LookData, type RoadGrid, type SpanGrid } from '../src/look/world/data.ts'
 import { bakeWater, packWater } from '../src/look/world/water-data.ts'
@@ -232,12 +232,6 @@ export function buildWindowData(win: LookWindow, map: MapFile, L: Layers): Uint8
   const s = D.spec
   checkWindowInside(L, win, s.far)
   const { hf, far, base } = windowHeights((x, z) => heightOf(L, x, z), win, D)
-  checkGround(
-    s,
-    hf.min,
-    hf.max,
-    far.h.reduce((a, b) => Math.min(a, b), Infinity),
-  )
   const lines = wayLines(map.features, L.table, win, s.far)
   const areas = fineAreas(L, map.features, win, s.far, MAP_COVER_CELL)
   const data: LookData = {

@@ -2,15 +2,20 @@
 // (src/rulesets/<era>-uniforms.ts, <era>-dyes.ts), resolved here into the colours by the figure's roles that the
 // renderer paints (a Uniform, src/sim/ruleset.ts). No era named (decision 0015): the dyes and the dress are data;
 // the parts are garments any era's figure wears. No Babylon: the tests read it in Node.
-import type { ClothPart, Dress, DyeSet, Uniform } from '../../sim/ruleset.ts'
+import { CLOTH_PARTS, type ClothPart, type Dress, type DyeSet, type Uniform } from '../../sim/ruleset.ts'
+import type { FigurePart } from '../units-data.ts'
 import type { Battalion } from './armies.ts'
+
+/** what a figure's colour role shows: a cloth part of the dress, the boots, or a material of the dye set (a figure's
+ *  unit data names them as strings: checked when dressed) */
+export type RolePart = ClothPart | 'boots' | { material: string }
 
 /** what each of the figure's colour roles (tools/bake-figure.py's palette) shows: a cloth part, the boots, or a
  *  material (by name, the dye set's materials). The line infantryman's, the one baked figure: its 'white' role holds
  *  the breeches, the waistcoat, the lapels and the belts at once, and its 'dark' role the headgear with the boots and
  *  gaiters; so here the white role shows the trousers and the dark role the boots, and a dress's waistcoat and
  *  headgear show on no role of this figure (the plan's gaps). A stand-in until the bake writes each role's part */
-export const FIGURE_PARTS: Readonly<Record<string, ClothPart | 'boots' | { material: string }>> = {
+export const FIGURE_PARTS: Readonly<Record<string, RolePart>> = {
   coat: 'coat',
   facings: 'facings',
   white: 'trousers',
@@ -25,9 +30,17 @@ export const FIGURE_PARTS: Readonly<Record<string, ClothPart | 'boots' | { mater
 /** a dress resolved into a uniform for the figure's roles (FIGURE_PARTS): each part's dye looked up by name, the
  *  flag's bands among the flag dyes; the boots the set's. greatcoat: worn by every man (the all-greatcoat test; the
  *  share by the cold is a later step), over the coat and the facings (it has no coloured facings; the belts, the
- *  trousers below it and the headgear stay); a dress without one keeps its coat. An unknown dye, flag dye, material
- *  or part: a loud failure */
-export function dressed(d: Dress, set: DyeSet, { greatcoat = false } = {}): Uniform {
+ *  trousers below it and the headgear stay); a dress without one keeps its coat. parts: the figure's roles' parts (its
+ *  unit data's, docs/plans/active/cavalry-artillery-demo.md; FIGURE_PARTS, the infantryman's, by default). An unknown
+ *  dye, flag dye, material or part: a loud failure */
+export function dressed(
+  d: Dress,
+  set: DyeSet,
+  {
+    greatcoat = false,
+    parts = FIGURE_PARTS,
+  }: { greatcoat?: boolean; parts?: Readonly<Record<string, FigurePart>> } = {},
+): Uniform {
   const look = (table: Readonly<Record<string, string>>, name: string, what: string) => {
     if (!Object.hasOwn(table, name)) {
       throw new Error(`dyes: ${d.id}'s ${what} names no dye ${name} (${Object.keys(table).join(', ')})`)
@@ -39,7 +52,7 @@ export function dressed(d: Dress, set: DyeSet, { greatcoat = false } = {}): Unif
   for (const [part, name] of Object.entries(d.parts)) dye(name, part)
   const over = greatcoat ? d.parts.greatcoat : undefined
   const colours: Record<string, string> = {}
-  for (const [role, part] of Object.entries(FIGURE_PARTS)) {
+  for (const [role, part] of Object.entries(parts)) {
     if (typeof part === 'object') {
       if (!Object.hasOwn(set.materials, part.material)) {
         throw new Error(`dyes: the set has no material ${part.material} (the figure's ${role} role)`)
@@ -47,8 +60,10 @@ export function dressed(d: Dress, set: DyeSet, { greatcoat = false } = {}): Unif
       colours[role] = set.materials[part.material]
     } else if (part === 'boots') {
       colours[role] = dye(set.boots, 'boots')
+    } else if (!(CLOTH_PARTS as readonly string[]).includes(part)) {
+      throw new Error(`dyes: the figure's ${role} role shows ${part}, not a cloth part, the boots or a material`)
     } else {
-      const name = over !== undefined && (part === 'coat' || part === 'facings') ? over : d.parts[part]
+      const name = over !== undefined && (part === 'coat' || part === 'facings') ? over : d.parts[part as ClothPart]
       if (name === undefined) throw new Error(`dyes: ${d.id} names no dye for its ${part} (the figure's ${role} role)`)
       colours[role] = dye(name, part)
     }
@@ -61,11 +76,11 @@ export function dressed(d: Dress, set: DyeSet, { greatcoat = false } = {}): Unif
   }
 }
 
-/** every dress of an era resolved (dressed), by id */
+/** every dress of an era resolved (dressed) for a figure's parts (FIGURE_PARTS by default), by id */
 export const dressAll = (
   dress: Readonly<Record<string, Dress>>,
   set: DyeSet,
-  opts: { greatcoat?: boolean } = {},
+  opts: { greatcoat?: boolean; parts?: Readonly<Record<string, FigurePart>> } = {},
 ): Record<string, Uniform> => Object.fromEntries(Object.entries(dress).map(([id, d]) => [id, dressed(d, set, opts)]))
 
 /** ?dye=<dye>:<rrggbb>[;…], a test switch: the set with those cloth dyes' values swapped (every uniform that names

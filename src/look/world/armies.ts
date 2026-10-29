@@ -154,13 +154,16 @@ function fineGrid(play: number): [number, number][] {
   }
   return fine
 }
+/** the demo field: the centre between the two fronts and the gap between them, m (about a volley's range): layout's
+ *  defaults, and the other arms' (src/look/world/arms.ts placeArmUnits) */
+export const FIELD: { readonly centre: readonly [number, number]; readonly gap: number } = { centre: [0, 0], gap: 110 }
 export function layout(
   perSide: number,
   d: Drill,
   blocked: Blocked,
   uniforms: readonly string[],
-  centre: readonly [number, number] = [0, 0],
-  gap = 110,
+  centre: readonly [number, number] = FIELD.centre,
+  gap = FIELD.gap,
   play = 235,
 ): Battalion[] {
   const e = extents(d)
@@ -305,7 +308,7 @@ export interface ManState {
   x: number
   z: number
   face: number
-  role: 'halt' | 'march' | 'run' | 'fire'
+  role: string // (one of the figure's roles: the infantry's halt, march, run, fire)
   since: number
   moving: boolean
 }

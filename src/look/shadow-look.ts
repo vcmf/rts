@@ -56,6 +56,52 @@ export function footUniform(l: ShadowLook, tipBase: number): [number, number, nu
   return [l.foot, l.dark, Math.min(l.core, tip * 0.9), tip]
 }
 
+/** m along a shadow at which the look's gradient (footUniform's core and tip, the look's length in them) reads a point
+ *  (unitdecal.frag's al): a soldier's, its distance from his soles as drawn (the shape's along it, times len past
+ *  them: vAlong); a figure on more than its root (SH_HEIGHTS), its caster's height's cast along the ground (the
+ *  shape's heights times uShHeight) times len, the same scale: the same gradient over the shape as his */
+export function gradientAlong(spread: boolean, along: number, cast: number, len: number): number {
+  return spread ? cast * len : along * (along > 0 ? len : 1)
+}
+
+/** The contact oval a figure draws (decision 0071, ?ushcontact): the page's, or none for a figure on more than its
+ *  root (spread m: its contacts' reach; one oval round all its hooves or a gun and its crew would carpet them, and its
+ *  per-step shape already darkens each contact from its heights, decision 0075) */
+export function contactFor<C>(contact: C | null, spread: number): C | null {
+  return spread > 0 ? null : contact
+}
+
+/** m along the ground the shape's heights' 1 reads as (unitdecal.frag's uShHeight): the shape's own top (heightTop,
+ *  its highest point posed, the heights' share's 1) cast along the sun (sun: toward it, y up) */
+export function shadowHeightScale(heightTop: number, sun: { x: number; y: number; z: number }): number {
+  return heightTop * (Math.hypot(sun.x, sun.z) / sun.y)
+}
+
+/** The simple shadows' two bakes in order (src/look/units.ts useDecals): the per-step one (near; null: none), whose
+ *  failure falls back to none when fallback says so (the error kept in fellBack; any other is thrown), then the
+ *  averaged one (far); when the far one throws, the near one made before it is disposed and the error thrown on */
+export function bakePair<B>(
+  near: (() => B) | null,
+  far: () => B,
+  dispose: (b: B) => void,
+  fallback: (e: unknown) => boolean,
+): { near: B | null; far: B; fellBack: unknown } {
+  let n: B | null = null
+  let fellBack: unknown = null
+  try {
+    n = near ? near() : null
+  } catch (e) {
+    if (!fallback(e)) throw e
+    fellBack = e
+  }
+  try {
+    return { near: n, far: far(), fellBack }
+  } catch (e) {
+    if (n !== null) dispose(n)
+    throw e
+  }
+}
+
 /** The along and across extent (m from a man's root, in the shadow's frame) of a box the shape fills */
 export interface ShapeBox {
   across: readonly [number, number]
@@ -75,8 +121,21 @@ export interface Strip {
  *  linear between rows, is whole there and the grass and legs do not poke through near the feet. Between, the rows'
  *  places (m) and the box blended. reach (m, 0 by default: as before): the base and full boxes grown to hold a disc of
  *  that radius about the root (the contact shadow's, decision 0071), past the shape's cell where it must: the
- *  material with the oval reads no shape outside the cell (unitdecal.frag's vCell), so the strip may */
-export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: number, liftRamp: number, reach = 0): Strip {
+ *  material with the oval reads no shape outside the cell (unitdecal.frag's vCell), so the strip may. rowsAt (m, 0 by
+ *  default: as before): a figure on more than its root (SH_SPREAD, unitdecal.vert: drawn at its own length, its lift
+ *  floored), its close rows at its contacts' reach and liftRamp past it, each held inside the box: the lift, linear
+ *  between rows, rises across its footprint from the floor behind it to nearly whole at its contacts, so its shadow
+ *  stands over the meadow's grass (from the root's ramp alone the grass hid it; its own legs measured unharmed:
+ *  docs/plans/active/cavalry-artillery-demo.md) */
+export function decalStrip(
+  base: ShapeBox,
+  full: ShapeBox,
+  t: number,
+  len: number,
+  liftRamp: number,
+  reach = 0,
+  rowsAt = 0,
+): Strip {
   const boxOf = (b: ShapeBox): Strip['box'] => [
     b.across[0],
     b.along[0],
@@ -90,7 +149,15 @@ export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: numbe
   if (t >= 1) return { box: boxOf(base), rows: [0, 1 / 3, 2 / 3, 1] }
   if (!(full.along[0] < 0 && full.along[1] > 0)) throw new Error('decalStrip: the box must hold the soles (along 0)')
   const ramp = Math.min(liftRamp / Math.max(len, 1e-3), full.along[1] * 0.9)
-  const closeRows = [full.along[0], 0, ramp, full.along[1]]
+  const closeRows =
+    rowsAt > 0
+      ? [
+          full.along[0],
+          Math.min(rowsAt, full.along[1] * 0.8),
+          Math.min(rowsAt + liftRamp, full.along[1] * 0.9),
+          full.along[1],
+        ]
+      : [full.along[0], 0, ramp, full.along[1]]
   const bs = base.along[1] - base.along[0]
   const farRows = [0, 1 / 3, 2 / 3, 1].map(r => base.along[0] + r * bs)
   const fb = boxOf(full)
@@ -114,10 +181,18 @@ function grownBox(box: ShapeBox, r: number, len: number): ShapeBox {
  *  s at g along the gradient (0 at the core, 1 at the tip), the share of the samples it covers and the darkness every
  *  covered sample takes (the look's darkest, the same for every shadow: so where shadows overlap and the stencil lets
  *  the first through, the darkest share wins whatever their order). The gain is not part of it: one value a frame for
- *  every shadow, it makes that darkness stronger alike for all (shadowShade), so the rule holds at any gain */
-export function decalFragment(s: number, g: number, foot: number, dark: number): { cover: number; dark: number } {
+ *  every shadow, it makes that darkness stronger alike for all (shadowShade), so the rule holds at any gain. darken (an
+ *  arm's SH_DARKEN, decision 0075; 1: none) raises the share alone: the cover still caps at 1 and the darkness at the
+ *  look's darkest, so a darkened shadow is never darker than the ground's shade */
+export function decalFragment(
+  s: number,
+  g: number,
+  foot: number,
+  dark: number,
+  darken = 1,
+): { cover: number; dark: number } {
   const dm = Math.max(foot, dark, 1e-4)
-  return { cover: Math.min(1, (s * (foot + (dark - foot) * g)) / dm), dark: dm }
+  return { cover: Math.min(1, (s * (foot + (dark - foot) * g) * darken) / dm), dark: dm }
 }
 
 /** The luminance weights the gain measures the darkening by (Rec. 709, as the shader's) */
