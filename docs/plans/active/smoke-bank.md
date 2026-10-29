@@ -101,6 +101,9 @@ not in git: `output/smoke-refs/owner-2026-10-28/bank-too-far-too-big-a-line.png`
   the rise halved; the bank's width over its depth 1.5.
 - **The first half second**: a young puff is a jet, long along the shot, narrow at the muzzle and widening ahead; the
   flash is a small spark at the muzzle end for 0.07 s, not the plume's core.
+- **Cost** (one round, the same worst views as above, started at a 1-min load of 2.9): the first side 25 m +0.29 ms,
+  40 m +0.19, 90 m +0.09; the second side 25 m −0.10 (one camera's arms 1.7 ms apart: noise), 40 m +0.11, 90 m +0.05.
+  About a third of round 1's: the puffs are smaller.
 - Stills and a before/after sheet: `output/armies-review/27-smoke-bank/round2/` (`00-before-after.png` first).
 
 ## Risks
