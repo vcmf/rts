@@ -1,4 +1,4 @@
-precision highp float;varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl;
+precision highp float;varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl,vFar;
 // the smoke's own colour and its flash (the era's, PuffDef), a puff's densest (uOpacity), the factor on a card's
 // opacity over the men (uCap) and the formations' mask (uClear: its origin x, z, 1 / its side in m, a man's body m)
 uniform vec3 uSmokeCol,uFlashCol;uniform float uFlashT,uOpacity,uCap,uSmokeT;
@@ -27,11 +27,16 @@ void main(){
   if(d>=1.0)discard;
   vec2 s=vec2(vSeed*37.0,vSeed*19.0),drift=vec2(uSmokeT*0.02,0.0);
   // the billows (the grain's blotches, about a puff's size, and smaller ones on them) and the paper's fine grain
-  float bil=G((vM.yx+s)*0.15+drift).g,sub=G((vM+s.yx)*0.38-drift).g,fib=G((vM+s)*1.4).r;
-  float dens=(1.0-d)*1.3-0.05-vQ.x*(0.25+0.3*vPl)+(bil-0.5)*1.6+(sub-0.5)*(0.7+0.5*smoothstep(0.35,0.9,d))
-    +(fib-0.5)*(0.06+0.35*smoothstep(0.5,0.95,d))-vErode*1.5;
+  // (a big card far out, vFar: its grain in its own frame, a blotch or two across it whatever its size, each card's
+  // scale its own, so cards over each other share no holes and an old grown one is no even mottle; its billows
+  // gentler, its thinning a fade more than holes)
+  vec2 gm=mix(vM,vQ*(3.0+2.5*fract(vSeed*7.31)),vFar);
+  float bil=G((gm.yx+s)*0.15+drift).g,sub=G((gm+s.yx)*0.38-drift).g,fib=G((gm+s)*1.4).r;
+  float dens=(1.0-d)*1.3-0.05-vQ.x*(0.25+0.3*vPl)+(bil-0.5)*mix(1.6,1.0,vFar)
+    +(sub-0.5)*(0.7+0.5*smoothstep(0.35,0.9,d))*mix(1.0,0.6,vFar)
+    +(fib-0.5)*(0.06+0.35*smoothstep(0.5,0.95,d))-vErode*mix(1.5,0.4,vFar);
   float a=smoothstep(0.0,0.5+0.2*vPl,dens)*smoothstep(1.0,0.8,d);
-  a*=uOpacity*vOp*smoothstep(0.0,0.7,vW.y-vGround);
+  a*=uOpacity*vOp*smoothstep(0.0,0.7,vW.y-vGround)*(1.0-vFar*0.85*vErode);
   #ifdef CLEAR
   vec3 dv=vW-uCamPos;
   if(dv.y<-1e-3){vec2 p=uCamPos.xz+dv.xz*((vGround+uClear.w-uCamPos.y)/dv.y);

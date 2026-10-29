@@ -84,14 +84,15 @@ export interface SmokeFeet {
 }
 
 /** A source of puffs (a Smoke's): its ring's size, the most a puff is born past its shot's clock (s), whether its
- *  cards are lifted clear of the ground, and the puffs of
+ *  cards are big, and the puffs of
  *  the shots with clocks in (t0, t1], pushed onto out (PUFF_FLOATS each) */
 export interface PuffSource {
   readonly capacity: number
   readonly slack: number
-  /** its cards lifted clear of the ground along their way (cardLift, pathGround: the guns' big ones; the muskets'
-   *  small cards as approved, none) */
-  readonly lift: boolean
+  /** its cards big (the guns'): lifted clear of the ground along their way (cardLift, pathGround), and far out
+   *  painted as a few soft masses (smoke.frag: their grain in each card's own frame, thinning by fading, not holes);
+   *  the muskets' small cards as approved, neither */
+  readonly big: boolean
   spawn(t0: number, t1: number, out: number[]): void
 }
 
@@ -105,7 +106,7 @@ export function volleySource(armies: SmokeArmies, def: PuffDef): PuffSource {
   return {
     capacity: ringSize(lines.length, xs.length, armies.fire, def),
     slack: def.jitter + def.stagger / 2,
-    lift: false,
+    big: false,
     spawn(t0, t1, out) {
       for (const i of lines) {
         for (const s of shotsBetween(t0, t1, bs[i].offset, armies.fire, shots)) {
@@ -123,7 +124,7 @@ export function pieceSource(p: SmokePieces, def: PuffDef): PuffSource {
   return {
     capacity: pieceRingSize(p.units.length * p.places.length, timings[0] ?? { ...p.fire, starts: [] }, def),
     slack: def.jitter,
-    lift: true,
+    big: true,
     spawn(t0, t1, out) {
       p.units.forEach((b, u) => {
         for (const s of pieceShotsBetween(t0, t1, b.offset, timings[u], shots)) {
@@ -286,7 +287,7 @@ export class Smoke {
     m.setFloat('uRoll', d.roll)
     m.setFloat('uThin', PUFF_THIN)
     m.setFloat('uHeight', d.height)
-    m.setFloat('uRaise', this.source.lift ? 1 : 0)
+    m.setFloat('uBig', this.source.big ? 1 : 0)
     m.setFloat('uOpacity', d.opacity)
     m.setFloat('uCap', this.look.cap)
     m.setVector2('uKeep', this.keepV)
@@ -366,7 +367,7 @@ const UNIFORMS = [
   'uRoll',
   'uThin',
   'uHeight',
-  'uRaise',
+  'uBig',
   'uOpacity',
   'uCap',
   'uKeep',

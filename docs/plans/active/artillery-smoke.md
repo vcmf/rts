@@ -228,6 +228,15 @@ Built as the approach says, with what the stills taught:
   - Not measured: the far zoom (125, 250 m), a half-resolution smoke target (the fallback if the owner's machine
     finds the fill dear).
 - **Memory**: the guns' ring 192 puffs × 64 B (12 KB); the mask shared.
+- **Far out, a camouflage pattern** (the owner, 2026-10-29: the battery's merged clouds from far, a broad sheet of
+  even, similar holes and islands, read as camo or lichen): an old card grown by its age and by the zoom's thinning
+  read the grain's blotches in metres, many to a card, and its erosion cut them all as holes; cards over each other
+  each holed alike. Fixed for the big cards only, from 50 to 85 m out (up close as approved): the grain in each card's
+  own frame at its own scale, gentler billows and rim, the thinning a fade more than holes. Stills before and after
+  at 70 (the owner's framing), 90, 150 m and the widest (260 m), and 25 and 40 m after, in
+  `output/armies-review/28-gun-smoke/far/` and the compare page. The muskets' streaks at 150 m: no such pattern
+  (thin streaks along the lines), unchanged. Cost, one round (load 2.89 at the start; 25, 40, 90, 150 m on the
+  battery): +0.16, +0.28, +0.29, +0.20 ms, worst camera +0.39 (90 m): as before.
 - **The mask while the cavalry rides** (review round 1; #248): with the arms in the mask, the riding regiments change
   their footprints every step, so the mask is redrawn and uploaded whole about 10.6 times a second whenever the arms
   ride, where before only marching battalions did. One redraw with upload: 0.43 ms of the main thread with the arms,

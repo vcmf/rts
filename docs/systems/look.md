@@ -1082,12 +1082,17 @@ and `?lookat` without `?armies` throw, naming it.
   arms' smoke alone off (`noarmsmoke`) and all off in one page. `__smoke`: `parts` (each source's `Smoke`: `written`,
   `capacity`), `setOn`. `?lookat=fight|line|line1|<arm>[,<radius m>]` starts the camera on the fight, the first or the
   second side's front battalion, or an arm's first unit (`lookAtSpot`, `src/look/world/arms.ts`).
-- **The ground along a big card's way** (a source's `lift`, the uniform `uRaise`: the arms' smoke; the muskets' small
+- **The ground along a big card's way** (a source's `lift`, the uniform `uBig`: the arms' smoke; the muskets' small
   cards are drawn as approved, without it): each puff carries the ground's rise between its birth and where the blast
   and the roll leave it at its life's end (`pathGround`), and the vertex shader lifts it by that share of its way, its
   ground fade with it; and a card whose lower edge would pass under its ground (the depth test would cut it in a hard
   line) is lifted until it clears it by 0.15 m (`cardLift`, mirrored for the tests): up to a metre or two for a grown
   gun cloud, so it sits that much higher on screen, its light read where it is.
+- **Far out, a few soft masses** (the big cards only, `vFar`: from 50 to 85 m between the eye and the card; up close
+  as approved): the grain is read in each card's own frame (a blotch or two across it, whatever its size, each card's
+  scale its own), not in metres, so an old grown card, grown more by the zoom's thinning, is not an even mottle and
+  cards over each other share no holes; the billows and the torn rim gentler, and the thinning with age a fade more
+  than holes. (The owner, 2026-10-29: the battery's merged clouds from far read as a camouflage pattern.)
 - **The draw order**: the muskets' smoke first, then each arm's (one draw each, in that order; unsorted within, as
   the muskets': one colour family).
 - **Memory**: the rings, 64 B a puff (the muskets' 1,512 puffs at 20 a side: 97 KB; the guns' 192: 12 KB; on the GPU

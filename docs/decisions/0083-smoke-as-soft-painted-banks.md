@@ -75,6 +75,9 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
 - Big cards (the guns') meet rising ground and the depth test cuts them in a hard line: such a puff is lifted by the
   ground's rise along its way, and a card whose lower edge would pass under its ground is lifted until it clears it
   (it sits a little higher on screen). The muskets' small cards are drawn as approved, without either.
+- Far out (50 to 85 m and beyond), a big card's grain is read in its own frame, not in metres, its billows gentler and
+  its thinning a fade: an old grown card read the grain's blotches as an even mottle of holes, and the battery's
+  merged clouds as a camouflage pattern (the owner, 2026-10-29).
 - The muskets' smoke draws first, then each arm's (one draw each); within a draw the cards are unsorted, as above.
 - The sim's smoke (sight, `docs/proposals/sim-design.md` §11) will drive the puffs instead of the script; the cap then
   reads the sim's formations.
