@@ -114,6 +114,8 @@ little above, facing the eye's up, wider than tall and flatter with age (so it r
 puffs spread along the front by most of a group's width (`LATERAL`), the volley's density in clumps (`clump`), the
 sections' grid shifted each volley; rims torn by the grain; radius to 1.8 m, opacity 0.95, the cap 0.6. Stills and a
 round 1 | 2 | 3 | *Cossacks II* sheet: `output/armies-review/27-smoke-bank/round3/` (`00-sheet-r1-r2-r3-ref.png`).
+Cost (one round, the same worst views, started at a 1-min load of 2.85): the first side 25 m +0.30 ms, 40 m +0.20,
+90 m +0.10; the second side 25 m +0.19, 40 m +0.15, 90 m +0.07.
 
 ## Risks
 
