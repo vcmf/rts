@@ -193,6 +193,8 @@ export const nearReachOf = (s: Spec): number =>
 
 // the road segments a cell of the roads' grid lists (src/look/world/data.ts, the shader's roadAt)
 export const ROAD_SLOTS = 16
+// the fine warp's reach on a map world's finer cover, m (about ±0.9 m: the blotches span about ±0.3 of it)
+export const COVER_FINE = 3
 export function derive(s: Spec = SPEC): Derived {
   const bad: string[] = []
   const cell = s.tile / s.tileSub
@@ -343,6 +345,10 @@ export function derive(s: Spec = SPEC): Derived {
       `#define ROAD_GATE ${roadGate.toFixed(3)}`,
       `#define ROAD_EDGE ${s.road.edge.toFixed(3)}`,
       `#define COVER_WARP ${s.macro.warp.toFixed(3)}`,
+      // a map world's finer cover (src/look/world/from-map.ts, MAP_COVER_CELL) takes a fine warp too, so a slanted
+      // class edge wanders instead of stepping by its cells (macro.glsl, coverWarp); the demo's cover cells are these
+      `#define COVER_CELL ${s.macro.cover.toFixed(3)}`,
+      `#define COVER_FINE ${COVER_FINE.toFixed(3)}`,
       // amp: the grain's deviation, as a fraction of the texture's own; minCos: the incidence's floor (the pixel angle
       // is the uniform uPixA: it follows the camera's field of view)
       `#define DETAIL_MINCOS ${s.detail.minCos.toFixed(3)}`,

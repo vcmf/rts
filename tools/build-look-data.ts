@@ -2,20 +2,39 @@
 // tile plus its margin, the far ring's heights, the river's samples, the fine bank normals, the water data
 // and the cover, from the authoring formulas in src/look/world/author.ts, once, in Node. The page reads the
 // file and never evaluates the formulas.
-//   node tools/build-look-data.ts           writes data/painted-world.lookdata
-//   node tools/build-look-data.ts --check   rebuilds in memory and fails if it differs from the committed file
+// A map's window (docs/plans/active/look-austerlitz-a1.md) is compiled from the map's layers instead
+// (src/look/world/from-map.ts), into data/<map>-<window>.lookdata.
+//   node tools/build-look-data.ts                   writes the demo's and every window's (src/look/world/windows.ts)
+//   node tools/build-look-data.ts --window <name>   writes that window's alone
+//   node tools/build-look-data.ts --check           rebuilds in memory and fails if any differs from the committed file
 // Each node's x and z use the same expression as Babylon's CreateGround vertices, so the authored heights land on
 // the mesh exactly.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { D, ROAD_SLOTS } from '../src/look/spec.ts'
+import { D, ROAD_SLOTS, checkGround } from '../src/look/spec.ts'
 import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
 import { encodeLook, ROAD_SEG, type LookData, type RoadGrid, type SpanGrid } from '../src/look/world/data.ts'
 import { bakeWater, packWater } from '../src/look/world/water-data.ts'
 import { sstep } from '../src/look/noise.ts'
 import { riverQuery } from '../src/look/river.ts'
-import { authorCover, COVER, LINES, segD } from '../src/look/world/cover.ts'
+import { authorCover, COVER, LINES, segD, type CoverClass } from '../src/look/world/cover.ts'
+import { layersOf } from '../maps/engine.ts'
+import type { Layers } from '../src/map/apply.ts'
+import { heightOf } from '../src/map/apply.ts'
+import type { MapFile } from '../src/map/schema.ts'
+import { noRiver } from '../src/look/river.ts'
+import {
+  checkWindowInside,
+  fineAreas,
+  MAP_COVER_CELL,
+  mapCover,
+  mapTrees,
+  packTrees,
+  wayLines,
+  windowHeights,
+} from '../src/look/world/from-map.ts'
+import { WINDOWS, mapFile, windowFile, type LookWindow } from '../src/look/world/windows.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const LOOK_FILE = path.join(ROOT, 'data/painted-world.lookdata')
@@ -60,7 +79,10 @@ type Pt = readonly [number, number]
 // The roads (docs/plans/done/roads.md): every segment of every line, and a grid over the tile listing, per cell, the
 // segments that reach within their half width and SPEC.road.reach m of it (the shader finds the nearest exactly, with
 // no filtering: no ghost where two lines or two sides meet). Throws if a cell needs more than ROAD_SLOTS
-export function roadGrid(): RoadGrid {
+/** The roads' segments and grid over the tile, of `lines` (the demo's LINES, or a window's ways). */
+export function roadGrid(
+  lines: readonly { pts: readonly Pt[]; w: number; cls: CoverClass; dusty?: boolean }[] = LINES,
+): RoadGrid {
   const g = D.spec.road
   const n = D.roadN
   const cell = g.cell
@@ -69,7 +91,7 @@ export function roadGrid(): RoadGrid {
   const segs: number[] = []
   // the mitre tangents (the mean of the two segments' directions at a bend, the segment's own at a free end): the
   // shader reads the distance along between them, so it is continuous round a bend (no step at the bisector)
-  LINES.forEach((l, li) => {
+  lines.forEach((l, li) => {
     const p = l.pts
     const last = p.length - 2
     const dir = (k: number): Pt => {
@@ -97,7 +119,7 @@ export function roadGrid(): RoadGrid {
         along,
         l.w / 2,
         li,
-        (k === 0 ? 1 : 0) + (k === last ? 2 : 0) + (l.cls === COVER.track ? 4 : 0),
+        (k === 0 ? 1 : 0) + (k === last ? 2 : 0) + (l.cls === COVER.track ? 4 : 0) + (l.dusty ? 8 : 0),
         m0[0],
         m0[1],
         m1[0],
@@ -185,23 +207,110 @@ export function buildLookData(): Uint8Array {
     roads: roadGrid(),
     water: packWater(bakeWater(w.H)),
     cover: authorCover(s.far, s.macro.cover),
+    world: { kind: 'demo' },
+    trees: new Float32Array(0),
   }
   return encodeLook(data)
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const t0 = performance.now()
-  const bytes = buildLookData()
-  const ms = performance.now() - t0
-  if (process.argv.includes('--check')) {
-    const old = fs.existsSync(LOOK_FILE) ? fs.readFileSync(LOOK_FILE) : null
-    const same = !!old && Buffer.compare(old, Buffer.from(bytes)) === 0
-    console.log(
-      `look data: ${bytes.length} bytes built in ${ms.toFixed(0)} ms; ${same ? 'matches' : 'DIFFERS FROM'} ${path.relative(ROOT, LOOK_FILE)}`,
-    )
-    process.exit(same ? 0 : 1)
+/** A span grid over the tile with nothing in it (`n`² texels of `cell` m, `ch` bytes a texel): no water, no banks. */
+const emptySpans = (n: number, cell: number, ch: number): SpanGrid => ({
+  n,
+  cell,
+  x0: -D.spec.tile / 2,
+  z0: -D.spec.tile / 2,
+  ch,
+  spans: new Float32Array(0),
+  tex: new Uint8Array(0),
+})
+
+/**
+ * A map's window as look data (src/look/world/from-map.ts): its heights, cover, roads and trees from the map's layers;
+ * no river, water or bank normals yet (the plan's PR c). `map`: the expanded map; `L`: its layers.
+ */
+export function buildWindowData(win: LookWindow, map: MapFile, L: Layers): Uint8Array {
+  const s = D.spec
+  checkWindowInside(L, win, s.far)
+  const { hf, far, base } = windowHeights((x, z) => heightOf(L, x, z), win, D)
+  checkGround(
+    s,
+    hf.min,
+    hf.max,
+    far.h.reduce((a, b) => Math.min(a, b), Infinity),
+  )
+  const lines = wayLines(map.features, L.table, win, s.far)
+  const areas = fineAreas(L, map.features, win, s.far, MAP_COVER_CELL)
+  const data: LookData = {
+    hf,
+    far,
+    river: noRiver(),
+    bank: emptySpans(D.bankN, s.bank.texel, 3),
+    water: emptySpans(D.waterN, s.water.texel, 4),
+    roads: roadGrid(lines),
+    cover: mapCover(areas, L.table, win, lines),
+    world: { kind: 'map', map: win.map, window: win.name, x: win.x, z: win.z, base },
+    trees: packTrees(mapTrees(L, areas, win)),
   }
-  fs.mkdirSync(path.dirname(LOOK_FILE), { recursive: true })
-  fs.writeFileSync(LOOK_FILE, bytes)
-  console.log(`look data: wrote ${path.relative(ROOT, LOOK_FILE)}, ${bytes.length} bytes, built in ${ms.toFixed(0)} ms`)
+  return encodeLook(data)
+}
+
+/** Every look data file this run builds: the demo's (unless one window is asked for) and the windows'. */
+function* builds(only: string | null): Generator<{ file: string; build: () => Uint8Array }> {
+  if (only === null) yield { file: LOOK_FILE, build: buildLookData }
+  const wins = WINDOWS.filter(w => only === null || w.name === only)
+  if (only !== null && !wins.length) throw new Error(`--window ${only}: no such window (src/look/world/windows.ts)`)
+  // each map compiled once, for all its windows
+  const maps = new Map<string, ReturnType<typeof layersOf>>()
+  for (const w of wins) {
+    yield {
+      file: path.join(ROOT, windowFile(w)),
+      build: () => {
+        if (!maps.has(w.map)) {
+          maps.set(
+            w.map,
+            timed(`map ${w.map} compiled`, () => layersOf(mapFile(w))),
+          )
+        }
+        const { map, layers } = maps.get(w.map)!
+        return buildWindowData(w, map, layers)
+      },
+    }
+  }
+}
+
+/** f's result, its time and the process's resident memory printed after `what`. */
+function timed<T>(what: string, f: () => T): T {
+  const t0 = performance.now()
+  const v = f()
+  const rss = process.memoryUsage().rss / 2 ** 20
+  console.log(`${what} in ${(performance.now() - t0).toFixed(0)} ms (${rss.toFixed(0)} MiB resident)`)
+  return v
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const args = process.argv.slice(2)
+  const check = args.includes('--check')
+  const wi = args.indexOf('--window')
+  const only = wi >= 0 ? (args[wi + 1] ?? null) : null
+  if (wi >= 0 && only === null) throw new Error('--window takes a window name')
+  let bad = 0
+  for (const { file, build } of builds(only)) {
+    const rel = path.relative(ROOT, file)
+    const t0 = performance.now()
+    const bytes = build()
+    const ms = performance.now() - t0
+    if (check) {
+      const old = fs.existsSync(file) ? fs.readFileSync(file) : null
+      const same = !!old && Buffer.compare(old, Buffer.from(bytes)) === 0
+      console.log(
+        `look data: ${bytes.length} bytes built in ${ms.toFixed(0)} ms; ${same ? 'matches' : 'DIFFERS FROM'} ${rel}`,
+      )
+      if (!same) bad++
+      continue
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, bytes)
+    console.log(`look data: wrote ${rel}, ${bytes.length} bytes, built in ${ms.toFixed(0)} ms`)
+  }
+  process.exit(bad ? 1 : 0)
 }
