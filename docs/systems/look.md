@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-29
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/trodden.ts, src/look/world/arms.ts, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/arms.test.ts]
-decisions: [0084-a-soft-mid-tone-on-figures-and-buildings, 0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline]
+last_reviewed: 2026-10-30
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, data/leaf-clumps-simple-v1.png, test/leaves.test.ts, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/trodden.ts, src/look/world/arms.ts, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/arms.test.ts]
+decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline, 0084-a-soft-mid-tone-on-figures-and-buildings]
 ---
 
 # The look page (Track E, L0)
@@ -371,12 +371,53 @@ The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the ow
   and willow crown becomes quads sampled on its crown triangles, expanded in view space to face the camera and
   cut by a leaf-clump atlas; sphere normals, so a crown shades as one mass; each card takes its shadow at its
   point on the crown surface. The trunk is a mesh of the model's triangles off the crown (`trunks_<model>`).
-- **The atlas** (`src/look/leaves.ts`): four clumps in 2×2 cells of 512², value in R and coverage in A, from the
-  picture `data/leaf-clumps-oak-v1.png` (four clumps on black, any layout) or drawn (`?leaves=procedural`).
-  Shift-dropping a picture on the page replaces it and re-bakes the shadows.
+- **The atlas** (`src/look/leaves.ts`): four clumps in 2×2 cells of 512², value in R and coverage in A. By default
+  the painter's layers (`docs/plans/active/crown-leaves.md`, the owner's 2026-10-29 calls: leaves that read up close
+  as Tiny Glade's, painted in layers, not lit leaf by leaf). `?leaves=layered` (the default) reads the owner's sheet
+  `data/leaf-clumps-simple-v1.png` (1254², 1.15 MB; generated by the owner from the prompt kept beside its source,
+  `leaf-clumps-simple-greyscale-v1.png` in the design references, untracked: four rosettes of plain pointed leaves
+  on black, three flat grey values) with `atlasFromPicture(…, painted, leafScale)`: each cell the sheet's clumps at
+  0.8 × `?leafscale` (default 0.6, the owner's call for smaller leaves: about 3 / scale² clumps on a sunflower spiral,
+  `clumpCopies`, the outer first; at 1 three), so the leaves are smaller and the cell full; smaller leaves fade to
+  the mass sooner (`LEAF_LOD`, −log2 of the scale, added to the mip level), each pixel snapped to its layer (the sheet's dark, mid and light;
+  a 3×3 majority clears the strays), 30% of the light leaves lifted to highlights; R the layer (`LAYER`: 0.12, 0.42,
+  0.72, 1), G and B flat. `?leafpic=<url>` reads any sheet in that layout the same way; `?leaves=oak` the picture
+  `data/leaf-clumps-oak-v1.png` the crowns had before (its tilt the value's gradient, `withTilt`), `?leaves=procedural`
+  L7a's drawn oak clumps. The layered atlas turns on `LEAF_PAINT` in `canopy.frag`: up close (the mip level under
+  1.5, fading out by 4) each layer is one flat tone, a gain on the crown's colour (`LEAF_LAYERS` in `canopy.ts`: a cool
+  dark base, the mid, a warmer light, a pale warm highlight), and the crown's light at the pixel (its ellipsoid's
+  normal to the sun, wrapped (n·l + 0.7) / 1.7, its shadow) decides how many upper layers show, one value a card,
+  so each leaf is one layer (taken at the card's point on the crown's surface, `vS`: the clump's normal and chord
+  there and the card's shadow; read per pixel, the line of equal light cut leaves in two): each
+  leaf patch has its own draw (the atlas's G), and a leaf drops to the layer below where `0.6 + 2.9 · light + 1.1 ·
+  (0.5 − draw)` is under its layer, so toward the shade the light leaves thin into the mid and the mid into the dark
+  over a wide band; no leaf has a tilt of its own. `LEAF_RAMP` (in `paint()`, the owner's call for Tiny Glade's middle
+  tone): the light wraps farther, the ramp's bands are wider and overlap, the shade colour is lifted toward a cool mid
+  (a third of the way). Other trees' shadows on these crowns are read with `shadowAtWide` (eight reads on two rings, 3
+  and 1.5 texels, no grain jitter): read where the sun ray leaves the crown, at a grazing angle, the shadow map's
+  leaf-cut holes came out as streaks along the light (the owner's "line effect"); the rings average them away. The
+  map's coordinates do not change along the light, so every card a sun ray crosses read the same texels and a
+  caster's edge ran through the crown as straight lines along it: each card reads it at its surface point, shifted
+  across the sun ray by its own draw (`LEAF_SH_JIT` 1.5 m: at most about 1.06 m off the ray), each leaf by its own
+  up close (at most about 1.6 m), so the edge follows the leaves; the share a
+  thin caster shades (a trunk, a limb) is left out (`smoothstep(0.3, 0.95, …)`). **The grain on the cards**
+  (`CARD_GRAIN`, every card material): `paint()`'s brush grain is read in the crown's plane facing the camera, not
+  by `grainW`'s planar projection chosen by the normal, which ran along a card edge-on (the zy plane with the view
+  along x) and drew the grain as long horizontal streaks across whole crowns at some yaws (the owner's 2026-10-29
+  still; on main too, with the oak sheet). **Far crowns**: the layered leaves' alpha cut grows with their own mip level
+  too (`LEAF_LOD`), so a far crown is a solid mass with a steady edge. The layered atlas's coverage is whole or none
+  (a partial edge pixel's value over its coverage read brighter than its layer). Its
+  crowns are lighter in shade (the self-shade 0.5 of the light, not 0.7; the core 0.85, not 0.72; the inner leaves'
+  tint halved), at every distance; the brush's grain is looser up close (jitter 0.4). From the default zoom out the
+  layers fade to the old value range: a crown is the mass it was. The same 1024² texture (about 5.3 MB with its
+  mips), so no GPU memory is added (the sheet adds its 1.15 MB file to the page's download). Shift-dropping a
+  picture on the page replaces it and re-bakes the shadows.
 - **Shadows** (`src/look/bakes.ts`): the cards cast in the sun's pass, facing the sun and cut by the atlas two
   mips finer than the sun's view asks, so the gaps between leaves survive; the disabled pack models cast nothing.
-- **Switches**: `?cardsize`, `?cardcover`, `?cardsink` (`CARD_DEFAULTS`); `?bench=trees` benches the cards
+  The casters cut at coverage 0.5 with no growth by mip level, so a far crown (its leaves in the layered atlas
+  smaller) casts through the holes between them even where it draws as a solid mass.
+- **Switches**: `?leaves` (layered, oak, procedural), `?leafscale` (0.25 to 1, default 0.6), `?leafpic=<url>`;
+  `?cardsize`, `?cardcover`, `?cardsink` (`CARD_DEFAULTS`); `?bench=trees` benches the cards
   against the pack crowns, for the frame's cost only (the shadow map is baked once, with the cards); read its frame
   interval, not the GPU timer, which runs long on ANGLE Metal (`docs/plans/done/forest-bench.md`).
 

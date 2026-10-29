@@ -16,6 +16,7 @@ varying vec3 vW,vN,vS;varying float vTint,vOcc,vH,vRole;varying vec2 vRoot,vUV;
 varying vec3 vEllC,vEllR,vTU,vTV;   // L7b: the crown ellipsoid in the world, the card texture axes in the world
 varying float vDrop;                 // LEAF_LOSS: the card's draw (cards.glsl)
 varying float vFade;                 // FAR_FADE: 0 all cards, 1 all crown mesh
+varying vec3 vCamR,vCamU;            // the camera's right and up in the world (CARD_GRAIN: the grain's plane)
 void main(){
   #include<instancesVertex>
   vec4 c=finalWorld*vec4(position,1.0);
@@ -29,6 +30,7 @@ void main(){
   vUV=cardUV(aCard,aCorner);vDrop=cardDrop(aCard,c.xyz);
   vEllC=(finalWorld*vec4(aEllC,1.0)).xyz;vEllR=vec3(aEllR.x,aEllR.y,aEllR.x)*sc;
   cardAxes(aCard,view,vTU,vTV);
+  vCamR=vec3(view[0][0],view[1][0],view[2][0]);vCamU=vec3(view[0][1],view[1][1],view[2][1]);
   vOcc=clamp(0.62+(position.y-aCrown.y)*0.55+length(position.xz-aCrown.xz)*0.25,0.0,1.0);
   vN=normalize(mat3(finalWorld)*normal);vW=w;vH=w.y-finalWorld[3].y;vRoot=finalWorld[3].xz;vRole=aRole;
   vS=c.xyz+vN*(aCard.w+0.3)*aCard.x*sc;                         // the card on the crown surface: one shadow per card
