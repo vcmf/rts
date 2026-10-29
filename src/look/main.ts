@@ -731,14 +731,15 @@ interface SmokeSet {
   setOn(on: boolean): void
 }
 let smoke: SmokeSet | null = null
-// ?gunsmoke=0: the arms' smoke left out (the musket smoke alone: the owner's comparison, the bench's split)
-const gunSmoke = bit('gunsmoke')
+// ?armsmoke=0|1: the other arms' smoke (ArmSpec.smoke: the guns') left out (the musket smoke alone, as before them:
+// the owner's comparison, the bench's split) or on (the default); given where no arm smokes, an error
+const armSmoke = bit('armsmoke')
 const fireHold = bit('firehold')
 // (the fight's middle: the bench's focus)
 let armiesFocus: [number, number] | null = null
 // (the smoke's and the armies' switches do nothing without the armies: said, not ignored)
 if (armiesParam === null) {
-  const needs = ['smokecap', 'smokestep', 'lookat', 'firehold', 'gunsmoke'].filter(k => params.has(k))
+  const needs = ['smokecap', 'smokestep', 'lookat', 'firehold', 'armsmoke'].filter(k => params.has(k))
   if (params.has('smoke') && params.get('smoke') !== '0') needs.unshift('smoke')
   if (needs.length) throw new Error(`?${needs.join(', ?')} need ?armies=<n> (the armies and their smoke)`)
 }
@@ -980,8 +981,19 @@ if (armiesParam !== null) {
   if (simParam && params.has('smoke') && params.get('smoke') !== '0') {
     throw new Error('?smoke follows the script, not the sim yet: drop ?sim or ?smoke (src/look/smoke.ts)')
   }
-  const armSmoke = armSpecs.flatMap(spec => (arms[spec.name] ? [{ spec, units: arms[spec.name] }] : []))
-  smoke = simParam ? null : await buildSmoke(foot, drill, era.smoke, ARMIES_DEMO.figure, armSmoke)
+  // (?armsmoke where nothing would read it: said, not ignored)
+  if (armSmoke !== null) {
+    const none = simParam
+      ? '?sim has no smoke'
+      : params.get('smoke') === '0'
+        ? '?smoke=0 has none'
+        : armSpecs.some(a => a.smoke && arms[a.name])
+          ? null
+          : 'no arm on this page smokes'
+    if (none) throw new Error(`?armsmoke: ${none} (src/look/smoke.ts)`)
+  }
+  const armsOn = armSpecs.flatMap(spec => (arms[spec.name] ? [{ spec, units: arms[spec.name] }] : []))
+  smoke = simParam ? null : await buildSmoke(foot, drill, era.smoke, ARMIES_DEMO.figure, armsOn)
 }
 
 /** the front battalion of each side nearest the fight's middle (line: the first side's, line1: the second's), for
@@ -1003,8 +1015,9 @@ function frontLines(
 }
 /** the smoke over the armies (src/look/smoke.ts), unless ?smoke=0: the era's volley smoke on the infantry (the
  *  figure's fire clip: its shot from the clips' registry, its loop from the unit data; the script's fire phase), and
- *  each arm's that names one (ArmSpec.smoke: its pieces' shots on their work role's clip event; ?gunsmoke=0 leaves
- *  them out); the formations' mask over every arm's footprints, shared */
+ *  each arm's that names one (ArmSpec.smoke: its pieces' shots on their work role's clip event; ?armsmoke=0 leaves
+ *  them out); the formations' mask, shared: the infantry's footprints, and with the arms' smoke every arm's (their
+ *  pieces' crews, the cavalry riding through it) */
 async function buildSmoke(
   u: Units,
   drill: Drill,
@@ -1012,7 +1025,7 @@ async function buildSmoke(
   figure: string,
   arms: readonly { spec: ArmSpec; units: Units }[],
 ): Promise<SmokeSet | null> {
-  const [{ Smoke: SmokeC, SmokeMask, volleySource, pieceSource }, { smokeLook, shotAt }, { fireStart }] =
+  const [{ Smoke: SmokeC, SmokeMask, volleySource, pieceSource }, { smokeLook, shotAt, pieceStarts }, { fireStart }] =
     await Promise.all([import('./smoke.ts'), import('./world/smoke.ts'), import('./world/armies.ts')])
   const look = smokeLook(params)
   if (!look) return null
@@ -1034,10 +1047,11 @@ async function buildSmoke(
     ranks: drill.ranks,
     hold: u.holdFire ? start : null,
   }
-  const guns = gunSmoke === false ? [] : arms.filter(a => a.spec.smoke)
+  const guns = armSmoke === false ? [] : arms.filter(a => a.spec.smoke)
   for (const a of guns) a.units.footPad = a.spec.smoke?.crew ?? [0, 0, 0, 0]
-  // the formations' mask: every arm's footprints, one after another
-  const all = [u, ...arms.map(a => a.units)]
+  // the formations' mask: the infantry's footprints and, with the arms' smoke, every arm's, one after another (the
+  // musket smoke alone as it was before the arms)
+  const all = [u, ...(guns.length > 0 ? arms.map(a => a.units) : [])]
   const feet = {
     get count() {
       return all.reduce((n, x) => n + x.placeCount, 0)
@@ -1069,9 +1083,9 @@ async function buildSmoke(
   Object.assign(window, { __smoke: set })
   return set
 
-  /** an arm's pieces as the guns' smoke reads them: each piece's place and work start from its script at its cycle's
-   *  end (every piece at work then: its role and that role's start, its own lag in it), the role's clip loop and the
-   *  shot's moment in it (the clips' registry's event), the script's cycle and hold */
+  /** an arm's pieces as the guns' smoke reads them: each piece's place and work start from its script (pieceStarts:
+   *  every piece at work at its cycle's end, its own lag in it), the role's clip loop and the shot's moment in it (the
+   *  clips' registry's event), the script's cycle and hold */
   function piecesOf(
     a: Units,
     event: string,
@@ -1079,22 +1093,7 @@ async function buildSmoke(
     def: PuffDef,
   ): PuffSource {
     const sc = a.script
-    const local = sc.cycle - 1e-6
-    const ph = sc.phase(local, false)
-    const man = { x: 0, z: 0, face: 0, role: '', since: 0, moving: false }
-    const places: [number, number][] = []
-    let role = ''
-    const starts = a.battalions.map((_, bi) =>
-      Array.from({ length: sc.men }, (_, i) => {
-        sc.man(i, local, ph, a.lagOf(bi, i), man)
-        if (bi === 0) places.push([man.x, man.z])
-        if (role && man.role !== role) {
-          throw new Error(`smoke: an arm's pieces end its cycle in ${role} and ${man.role}`)
-        }
-        role = man.role
-        return man.since
-      }),
-    )
+    const { places, starts, role } = pieceStarts(sc, a.battalions.length, (bi, i) => a.lagOf(bi, i))
     const range = a.data.ranges[role]
     if (!range) throw new Error(`smoke: the figure has no clips for the role ${role}`)
     const fire = {
@@ -1883,11 +1882,11 @@ if (params.has('bench')) {
                   : params.get('bench') === 'smoke' && smoke
                     ? [
                         { name: 'smoke', apply: () => smoke?.setOn(true) },
-                        // (the arms' smoke off, the muskets' on: the guns' share, docs/plans/active/artillery-smoke.md)
+                        // (the arms' smoke off, the muskets' on: the arms' share, docs/plans/active/artillery-smoke.md)
                         ...(smoke.parts.length > 1
                           ? [
                               {
-                                name: 'nogunsmoke',
+                                name: 'noarmsmoke',
                                 apply: () => {
                                   smoke?.setOn(true)
                                   smoke?.parts.slice(1).forEach(p => p.setOn(false))

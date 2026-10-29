@@ -56,7 +56,7 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
   (decision 0015).
 - **A gun's shot is a string of the same cards** (2026-10-29, `docs/plans/active/artillery-smoke.md`): one big white
   blast from the muzzle, the era's `strung` puffs along its jet, the nearest a fat cloud round the muzzle, the
-  farthest some metres out, larger and fainter (the staff map's gun clouds), lingering about twice a volley's smoke;
+  farthest some metres out, larger and fainter (the staff map's gun clouds), lingering about half as long again as a volley's smoke;
   a battery firing in turn lays one low bank before its guns. A second source of puffs in the same system: the same
   shader, its own ring and draw, the same mask and cap (the arms' footprints joined to it, a piece's crew round its
   root). Which arms smoke, with which era smoke and on which clip event, is the scenario's (`ArmSpec.smoke`).
@@ -72,8 +72,9 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
 - Cards in one draw are not sorted: they blend in their slots' order (birth order as the clock runs; a rebuild writes
   battalion by battalion). The smoke is one colour family, the same up to blend order, so the order is not seen. It
   draws after the soldiers' simple shadows (alphaIndex 2000 against their 1000).
-- Big cards meet rising ground and the depth test cuts them in a hard line: a puff is lifted by the ground's rise
-  along its way, and a card whose lower edge would pass under the ground is drawn nearer the eye along the view ray
-  (the same place on screen) until it clears it.
+- Big cards (the guns') meet rising ground and the depth test cuts them in a hard line: such a puff is lifted by the
+  ground's rise along its way, and a card whose lower edge would pass under its ground is lifted until it clears it
+  (it sits a little higher on screen). The muskets' small cards are drawn as approved, without either.
+- The muskets' smoke draws first, then each arm's (one draw each); within a draw the cards are unsorted, as above.
 - The sim's smoke (sight, `docs/proposals/sim-design.md` §11) will drive the puffs instead of the script; the cap then
   reads the sim's formations.

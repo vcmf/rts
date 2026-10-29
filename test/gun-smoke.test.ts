@@ -6,9 +6,12 @@ import { describe, expect, it } from 'vitest'
 import { GUN_SMOKE as GUN, VOLLEY_SMOKE } from '../src/rulesets/napoleonic-smoke.ts'
 import { scriptClock, type Battalion } from '../src/look/world/armies.ts'
 import { serveScript } from '../src/look/world/arms.ts'
+import { decodeUnits } from '../src/look/units-data.ts'
 import {
   PUFF_FLOATS,
+  cardLift,
   pathGround,
+  pieceStarts,
   pieceRingSize,
   piecePuffs,
   pieceShotsBetween,
@@ -30,7 +33,11 @@ const places: [number, number][] = Array.from({ length: 8 }, (_, i) => [(i - 3.5
 const times = { rest: 8, lag: 2.5, cycle: 110 }
 const script = serveScript(places, { rest: 'halt', work: 'fire' }, times, 16)
 const SHOT = 12.5
-const PERIOD = 18.8
+// the fire role's loop from the baked figure (its clip range over its rate: about 18.8 s)
+const data = decodeUnits(
+  new Uint8Array(readFileSync(new URL('../data/figures/fr-foot-artillery.unitdata', import.meta.url))).buffer,
+)
+const PERIOD = (data.ranges.fire.end - data.ranges.fire.start) / data.fps
 /** each piece's work start as the page reads it: its man at the cycle's end (every piece at work), no lag of its own */
 const starts = places.map((_, i) => {
   const t = times.cycle - 1e-6
@@ -44,6 +51,28 @@ const timing = (hold: boolean): ServeTiming => ({
   starts,
 })
 const battery: Battalion = { side: 0, uniform: 'x', x: 60, z: -43, heading: 0, offset: 0 }
+
+describe("a battery's pieces read from its script", () => {
+  it("each piece at work at the cycle's end, its place, its start in turn, its own lag in it", () => {
+    const lag = (u: number, i: number) => ((u * 3 + i) % 5) / 2 - 1
+    const p = pieceStarts(script, 2, lag)
+    expect(p.role).toBe('fire')
+    expect(p.places).toEqual(places)
+    expect(p.starts).toHaveLength(2)
+    for (let u = 0; u < 2; u++) {
+      for (let i = 0; i < places.length; i++) {
+        // (the right of the line first: piece 7, then leftward, each lag s after; the man's own ±0.2 s)
+        const turn = places.length - 1 - i
+        expect(p.starts[u][i]).toBeCloseTo(times.rest + turn * times.lag + lag(u, i) * 0.2, 9)
+      }
+    }
+    expect(p.starts[0]).not.toEqual(p.starts[1])
+  })
+  it("the loop is the baked fire role's, about 18.8 s (Load, Ready, Fire)", () => {
+    expect(PERIOD).toBeGreaterThan(18)
+    expect(PERIOD).toBeLessThan(19.5)
+  })
+})
 
 describe("the gun's shot", () => {
   it("is the Fire clip's shot event on the fire role's chain (Load, Ready, Fire): 12.5 s into the loop", () => {
@@ -143,6 +172,17 @@ describe("a shot's string of puffs", () => {
         expect(out[11]).toBeGreaterThan(0.5)
       }
     }
+  })
+})
+
+describe("a big card's lift (smoke.vert's)", () => {
+  it('lifts a card whose lower edge would pass under its ground until it clears it by 0.15 m; none if clear', () => {
+    // (a card 3 m up its half height, its up rising 0.7 a metre, its middle 1.1 m over ground 2: its edge at 1.0)
+    const lift = cardLift(3.1, 0.7, 3, 2)
+    expect(lift).toBeCloseTo(2 + 0.15 - (3.1 - 2.1), 9)
+    expect(3.1 + lift - 0.7 * 3).toBeCloseTo(2.15, 9)
+    expect(cardLift(5, -0.7, 3, 2)).toBe(0)
+    expect(cardLift(4.25, 0.7, 3, 2)).toBeCloseTo(0, 9)
   })
 })
 

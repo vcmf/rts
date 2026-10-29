@@ -1079,15 +1079,19 @@ and `?lookat` without `?armies` throw, naming it.
 - **The bench**: `?firehold=1` holds every script in its fire (`scriptClock` over each script's own cycle from its
   `hold`: the infantry's fire phase, each battalion in line firing all the time, its volleys still its own; a
   battery's from its last piece's start, every piece at work); `?bench=smoke&firehold=1` measures the smoke on, the
-  arms' smoke alone off (`nogunsmoke`) and all off in one page. `__smoke`: `parts` (each source's `Smoke`: `written`,
+  arms' smoke alone off (`noarmsmoke`) and all off in one page. `__smoke`: `parts` (each source's `Smoke`: `written`,
   `capacity`), `setOn`. `?lookat=fight|line|line1|<arm>[,<radius m>]` starts the camera on the fight, the first or the
   second side's front battalion, or an arm's first unit (`lookAtSpot`, `src/look/world/arms.ts`).
-- **The ground along a puff's way**: each puff carries the ground's rise between its birth and where the blast and
-  the roll leave it at its life's end (`pathGround`), and the vertex shader lifts it by that share of its way, its
-  ground fade with it; and a card whose lower edge would pass under the ground (the depth test would cut it in a hard
-  line) is drawn nearer the eye along the view ray until it clears it (the same place on screen).
+- **The ground along a big card's way** (a source's `lift`, the uniform `uRaise`: the arms' smoke; the muskets' small
+  cards are drawn as approved, without it): each puff carries the ground's rise between its birth and where the blast
+  and the roll leave it at its life's end (`pathGround`), and the vertex shader lifts it by that share of its way, its
+  ground fade with it; and a card whose lower edge would pass under its ground (the depth test would cut it in a hard
+  line) is lifted until it clears it by 0.15 m (`cardLift`, mirrored for the tests): up to a metre or two for a grown
+  gun cloud, so it sits that much higher on screen, its light read where it is.
+- **The draw order**: the muskets' smoke first, then each arm's (one draw each, in that order; unsorted within, as
+  the muskets': one colour family).
 - **Memory**: the rings, 64 B a puff (the muskets' 1,512 puffs at 20 a side: 97 KB; the guns' 192: 12 KB; on the GPU
-  and the CPU; 14 of its 16 floats used), and the mask, 256 KB, one for both.
+  and the CPU; 14 of its 16 floats used), and the mask, 256 KB, one for all.
 
 ### The guns' smoke (with `?armies`; decision 0083, proposed)
 
@@ -1112,7 +1116,8 @@ shared (`SmokeMask`, drawn once a frame before the smokes).
   own size, reach, rise, life and drift (`puffVary`). The muskets' `strung` is `[1, 1]`: a lone puff, as before.
 - **The cap**: the arms' footprints join the mask (`?smokecap`): the battery's pieces with their crews, and the
   cavalry riding through the smoke before the guns; the guns' smoke thins over them as the muskets' over a line.
-- `?gunsmoke=0`: the arms' smoke left out (the musket smoke alone).
+- `?armsmoke=0`: the arms' smoke left out, and the arms out of the mask: the musket smoke alone, as before the arms
+  (`?armsmoke` with `?smoke=0`, `?sim` or no smoking arm on the page throws).
 - **Cost** (the plan's Results): about +0.2 to 0.4 ms GPU at 25, 40 and 90 m on the battery, both batteries firing
   without pause (`?firehold=1`); its fill is cut by leaving a card's corners before any texture is read.
 

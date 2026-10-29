@@ -95,8 +95,8 @@ In:
   (`VOLLEY_SMOKE`) unchanged in look; the ruleset's smoke gains a `gun` entry. The engine names no gun: the shot's
   moment is the figure's clip event, the muzzle's place the era's (`ahead`, `height`) for this figure.
 - **Switches**: `?firehold=1` holds the batteries in their firing too (every piece working); `?lookat=artillery[,r]`
-  (#256's) works with the smoke; `?bench=smoke` turns both smokes on and off; `?gunsmoke=0` leaves the guns' smoke
-  out (the musket smoke alone, for the owner's comparison and the bench's split).
+  (#256's) works with the smoke; `?bench=smoke` turns both smokes on and off; `?armsmoke=0` leaves the arms'
+  smoke out (the musket smoke alone, for the owner's comparison and the bench's split).
 - Tests for the pure parts; `docs/systems/look.md`; decision 0083's text extended (the same decision applied to a
   second source, if nothing new is decided; else a new record).
 
@@ -179,7 +179,7 @@ both), and this branch's commits rebased onto it.
 - **Cost**: the built page, `?armies=20&firehold=1&bench=smoke&benchat=artillery&benchr=25,40,90`, alternated rounds
   (smoke on and off) aimed at the battery, each started at a 1-min load ≤ 3 under the bench lock: the guns' smoke
   ≤ ~0.3 ms GPU at its worst view (on top of the musket smoke's).
-- **Main's look one switch away**: `?smoke=0` creates nothing; `?gunsmoke=0` the guns' smoke alone left out.
+- **Main's look one switch away**: `?smoke=0` creates nothing; `?armsmoke=0` the arms' smoke alone left out.
 - `npm test`, `npm run check:data`, `node tools/check-docs.mjs` and the build pass.
 
 ## Cost estimate **[E]**
@@ -198,8 +198,9 @@ zoom's thinning does not help there (it keeps all puffs up to 60 m). Measured, n
 Built as the approach says, with what the stills taught:
 
 - **Two sources, one system.** `src/look/smoke.ts`: `PuffSource` (`volleySource`, `pieceSource`), `SmokeMask` (one
-  mask for both), `Smoke` (a ring, a mesh, a material each). The muskets' look is unchanged (their `strung` is
-  [1, 1]; a puff's hashes are the same).
+  mask for both), `Smoke` (a ring, a mesh, a material each). The muskets' puffs are as before (their `strung` is
+  [1, 1]; a puff's hashes are the same) and drawn without the big cards' lift; their only change is that a card's
+  corners are left before any texture is read (the same pixels: past `d` 1 the card drew nothing).
 - **The shots** come from each piece's script at its cycle's end (its work role, its start with its own lag:
   `Units.lagOf`), the role's clip loop and the scenario's event (`ArmSpec.smoke`: `gun`, `shot`); measured 12.5 s into
   the loop, 18.8 s a loop; the smoke leaves each muzzle as the gun recoils.
@@ -207,16 +208,17 @@ Built as the approach says, with what the stills taught:
   `scriptClock` over each script's own cycle.
 - **Cut by the ground**: big cards carried 15 m over rising ground were cut in hard lines by the depth test. Each
   puff now carries the ground's rise along its way (`pathGround`, two more floats a puff) and the vertex shader lifts
-  it by it; and a card whose lower edge would pass under the ground is drawn nearer the eye along the view ray (the
-  same place on screen) until it clears it.
+  it by it; and a card whose lower edge would pass under its ground is lifted until it clears it (first built as a pull
+  toward the eye along the view ray, the same place on screen; the review found it moved a grown card up to 9 m nearer
+  the eye, over what stands between, and read its light metres off: replaced by the lift, the guns' cards only).
 - **The muzzle cloud**: one shot's first puff came out as one of the thin ones by chance and the gun fired with no
   smoke at its muzzle; the first puff of a string is never thin now.
 - **The crews and the cavalry** in the mask (`Units.footPad`: a piece's crew round its root; the cavalry's ride
   footprint): the guns' smoke thins over them as the muskets' over a line; the cuirassiers riding through the bank
   read through it in the sequence.
 - **Cost**, `?armies=20&firehold=1&bench=smoke&benchat=60,-43&benchr=25,40,90` (the first side's battery, both
-  batteries firing without pause, arms smoke · nogunsmoke · nosmoke paired in one page; the guns' share = smoke less
-  nogunsmoke, GPU frame p50; each round started at a 1-min load ≤ 3 under the bench lock):
+  batteries firing without pause, arms smoke · noarmsmoke (named nogunsmoke then) · nosmoke paired in one page; the guns' share = smoke less
+  noarmsmoke, GPU frame p50; each round started at a 1-min load ≤ 3 under the bench lock):
   - First def (life 20 to 30 s, 5 puffs a shot, radius to 5 m; two rounds): 25 m +0.52 / +0.60 ms, 40 m +0.69 /
     +0.69, 90 m +0.52 / +0.52; worst camera +1.01 (25 m, yaw −45°). Over the budget.
   - As built (life 14 to 22 s, 4 puffs, radius to 4.2 m, a card's corners left before the texture reads; two rounds):
@@ -226,6 +228,14 @@ Built as the approach says, with what the stills taught:
   - Not measured: the far zoom (125, 250 m), a half-resolution smoke target (the fallback if the owner's machine
     finds the fill dear).
 - **Memory**: the guns' ring 192 puffs × 64 B (12 KB); the mask shared.
+- **The mask while the cavalry rides** (review round 1; #248): with the arms in the mask, the riding regiments change
+  their footprints every step, so the mask is redrawn and uploaded whole about 10.6 times a second whenever the arms
+  ride, where before only marching battalions did. One redraw with upload: 0.43 ms of the main thread with the arms,
+  0.33 ms without (200 redraws timed in the page, the built page, Metal). One bench row with the armies running their
+  script (no `?firehold`: the cavalry riding, the battalions marching and firing), `?bench=smoke&benchat=60,-43&benchr=40`,
+  load 2.87 at the start: frame p50 smoke against nosmoke +0.01, +0.04, +0.08 ms at the three yaws, p95 no worse: not
+  seen. Kept: the cap over the cavalry riding through the bank reads (the sequence); a sub-rectangle redraw stays
+  #248's fix if a heavier battle finds it.
 - **Looks**: `output/armies-review/28-gun-smoke/` (not in git): stills at 25, 40 and 90 m on the first side and 40 m
   on the second (facing the camera), on and off (a compare page: space flips), a battery's volley over a minute
   (`volley-life.gif`, `seq-sheet.png`), and the tuning rounds (`it2` to `it6`).

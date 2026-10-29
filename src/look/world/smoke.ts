@@ -5,6 +5,7 @@
 // values are the era's (PuffDef, src/rulesets/<era>-smoke.ts), the shot's moment the figure's own clip event.
 import type { PuffDef } from '../../sim/ruleset.ts'
 import { CYCLE, RANK_LAG, slots, type Battalion, type Drill } from './armies.ts'
+import type { Script } from './arms.ts'
 
 /** a clip of the figure registry (data/figures/index.json): its length in source frames and its events' frames */
 export interface ClipInfo {
@@ -336,6 +337,39 @@ export function piecePuffs(
       ...pathGround(def, v.reach * st.reach, life, x, z, [s, c], ground),
     )
   }
+}
+
+/** A unit of pieces as its smoke reads it from its script (src/look/world/arms.ts serveScript): at its cycle's end
+ *  every piece is at work, so each piece's place (m, the unit's frame: the first unit's, the units alike), its work
+ *  role and that role's start (s, local) in each of `units` units, its man's own lag in it (lag: the renderer's,
+ *  Units.lagOf, -1 to 1). Throws if the pieces end the cycle in different roles */
+export function pieceStarts(
+  sc: Script,
+  units: number,
+  lag: (unit: number, man: number) => number,
+): { places: [number, number][]; starts: number[][]; role: string } {
+  const local = sc.cycle - 1e-6
+  const ph = sc.phase(local, false)
+  const man = { x: 0, z: 0, face: 0, role: '', since: 0, moving: false }
+  const places: [number, number][] = []
+  let role = ''
+  const starts = Array.from({ length: units }, (_, u) =>
+    Array.from({ length: sc.men }, (_, i) => {
+      sc.man(i, local, ph, lag(u, i), man)
+      if (u === 0) places.push([man.x, man.z])
+      if (role && man.role !== role) throw new Error(`smoke: a unit's pieces end its cycle in ${role} and ${man.role}`)
+      role = man.role
+      return man.since
+    }),
+  )
+  return { places, starts, role }
+}
+
+/** How far a big card is lifted (m; smoke.vert's, uLift 1): enough that its lower edge (its middle's height cy less
+ *  its half height rx along its up's rise uy) clears its ground (m) by 0.15 m, the depth test cutting it in a hard line
+ *  there otherwise; 0 for a card already clear */
+export function cardLift(cy: number, uy: number, rx: number, ground: number): number {
+  return Math.max(0, ground + 0.15 - (cy - Math.abs(uy) * rx))
 }
 
 /** the ring's size in puffs for units of pieces: every piece's puffs alive at once at the most (its shots within a
