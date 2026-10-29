@@ -50,9 +50,9 @@ layers; "rebased" is the tile's highest ground above the far ring's lowest, whic
 
 | Window | Centre | In play (±235 m) | In the tile (±400 m) | Relief in play | Rebased tile high |
 |---|---|---|---|---|---|
-| **Kobelnitz and its pond** | (−450, 350) | Kobelnitz (16 buildings), the Kobelnitz pond and the Goldbach (12 % of the play area water), the Goldbach road, meadows | 17 buildings, 4 waters, the pheasantry's orchard | 13.0 m | 22.4 m |
+| **Kobelnitz and its pond** | (−450, 350) | Kobelnitz (16 buildings), the Kobelnitz pond and the Goldbach (12 % of the play area water), the Goldbach road, meadows | 17 buildings, 3 waters (the Goldbach, the Kobelnitz pond, a brook), the pheasantry's orchard | 13.0 m | about 21–22 m |
 | **The Pratzen and Pratze** | (700, 250) | the plateau's top (to 71.5 m) and its north slope, open arable, roads; no water, no building | Pratze (14 buildings), the Pratze brook, a wood | 36.6 m | 68.2 m |
-| **Sokolnitz on the Goldbach** | (−1250, −1050) | Sokolnitz (12 buildings), a brook, the Goldbach road, meadows | the Goldbach, the Sokolnitz pond and two more waters, two woods | 9.5 m | 15.4 m |
+| **Sokolnitz on the Goldbach** | (−1250, −1050) | Sokolnitz (12 buildings), a brook, the Goldbach road, meadows | the Goldbach and the brook, no wood (the Sokolnitz pond lies 410–560 m east, just outside) | 9.5 m | 15.4 m |
 
 The centre of the field has almost no woods: the 66 woods lie mostly south (by Aujezd and the Littawa) and east (past
 Hostieradek). A window there (for example (400, −1600): a 12 ha wood, Aujezd, the Littawa) is the woods' showcase and
@@ -121,7 +121,8 @@ today.
 | **A3** | The demo world as a map file (open question 5 of the one-map plan, decided): `maps/painted-world.map.json`, its heights as an `.rdem` exported from `author.ts`, its river a pinned stream, its cover, trees and buildings as features; the look page then loads every world through the compiler, and `author.ts`, `cover.ts` and `buildings.ts` retire to a one-off exporter | The demo against today's, side by side for the owner (not pixel-equal: the language's noise and fields differ) |
 | **A4** | The armies demo on a window (below), the checks on windows (below) | `?map=austerlitz&window=pratzen&armies=20` |
 
-A4 can run beside A1b–A3 once A1 is in.
+A4 can run beside A2–A3 once A1 is in, on Kobelnitz or Sokolnitz; its Pratzen showcase waits for A1b. A4 also
+brings the window crop of `engineMap()` (below, #240), so the window's armies run on the sim.
 
 ### The armies on the new ground
 
@@ -145,8 +146,8 @@ faces the sides north and south only. On a window:
   points; Vitest); the goldens of each window from A1 on (its first PR has no base); the guard with its clusters on
   each window's open ground (positions from the window, not the demo's hard-coded ones) against the demo as `--base`;
   the bench (`?bench&map=…`) on the production build (`npx vite preview`), in a new section of the baselines file.
-- The river, water and detail checks (`tools/river-check.js`, `tools/water-check.mjs`, `tools/water-look-check.mjs`) read the
-  demo's river; they move to the general water in A2.
+- The river, water and detail checks (`tools/river-check.js`, `tools/water-check.mjs`,
+  `tools/water-look-check.mjs`) read the demo's river; they move to the general water in A2.
 
 ### Acceptance (stage A)
 
@@ -174,9 +175,9 @@ the outline:
   tile holds play ⊕ 165 m; the frame's lower half reaches 160 m); a ring of 5 × 5 is prepared ahead on the CPU.
 - **The far ring becomes the whole map** at 16 m (375 × 375 nodes, about 280,000 triangles), and past the edge the
   `.rdem`'s collar (500 to 1000 m for Austerlitz) or a skirt.
-- **The camera:** the focus clamped to the map's play area (Austerlitz: ±3000 m); the frame's top (434 m) stays inside
-  the collar. The zoom stays 15–260 m and the yaw ±45° until stage C. The focus follows the ground (A1b), so the hold
-  over high ground reads the rise near the focus, not the world's highest point.
+- **The camera:** the focus clamped to the map's play area (Austerlitz: ±3000 m); the frame's top (434 m) stays
+  inside the collar. The zoom stays 15–260 m and the yaw ±45° until stage C. The focus follows the ground (A1b), so
+  the hold over high ground reads the rise near the focus, not the world's highest point.
 - **Bakes: CPU data at build time, GPU bakes at run time, per tile.** The one-map plan says "bakes per tile at build
   time"; for the GPU bakes that is too large to ship: the light map over 6 km at today's 0.26 m is 23,000² texels,
   about 2.1 GB raw, and 576 MB at the 0.5 m target; the macro colour at 0.5 m another 576 MB (estimates from the
@@ -259,8 +260,9 @@ instead of zoom. Its own plan once vision is a rule in the sim and stage C exist
   conflicts are a few lines. Their goldens and benches run on the demo page, which A1–A2 keep.
 - **`look/dark-water`** (paused): it changes the water's paint; A2 rewrites the river's data path. A2 rebases on it if
   it lands first, and keeps its look.
-- **`epic/battle-threads`**: its `maps/painted-world.ts` reads `data/painted-world.lookdata`. A2 bumps the look data's
-  version (water bodies in place of the river's samples); its reader follows, or the epic lands first.
+- **`maps/painted-world.ts`** (on `main` since the battle threads, #203) reads `data/painted-world.lookdata`. A2 bumps
+  the look data's version (water bodies in place of the river's samples), and updates that reader on `main` until A3
+  removes it.
 
 ## #240
 
@@ -268,8 +270,10 @@ Issue #240: the sim reads the look world through a legacy TypeScript map (`maps/
 the battle threads epic, #203), not a map file. A3 fixes it: the demo world becomes a map file, the sim compiles it
 with `engineMap()` and the look with this compiler, and `maps/painted-world.ts` goes (`Fixes #240`). With the sim now
 able to play the look page's armies (`?sim`), a window's armies (A4) run on the sim from the start, as the look page
-becomes the match's test bed. A window's sim is `engineMap()` over the window's square (a crop option): format 2 is about 22 MB for 2 km
-(the proposal's figure), so a 470 m play area needs no compact format (S-data).
+becomes the match's test bed. A window's sim is `engineMap()` over the window's square (a crop option, A4): format 2
+is about 22 MB for 2 km (the proposal's figure), so a window needs no compact format (S-data). `engineMap()` wants the
+play area a whole number of 8 m cost cells (`maps/engine.ts`, `COST_CELL`): ±235 m is 58.75 cells, so a window's sim
+play area is 472 m (59 cells), its extra metre a side outside the camera's play.
 
 ## Risks
 
