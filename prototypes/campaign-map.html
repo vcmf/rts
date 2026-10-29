@@ -28,14 +28,20 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #cart .rule { height: 5px; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); margin-top: 10px; }
 #cart .m { font: 400 10.5px/1.6 var(--mono); color: var(--ink-2); margin-top: 8px; letter-spacing: 0.02em; }
 #cart .n { font: 400 9.5px/1.5 var(--mono); color: var(--ink-3); margin-top: 6px; }
-#scale { position: fixed; left: 18px; bottom: 16px; pointer-events: none; font: 400 10px/1 var(--mono); color: var(--ink-2); }
+#scale {
+  position: fixed; left: 18px; bottom: 16px; pointer-events: none;
+  font: 400 10px/1 var(--mono); color: var(--ink-2);
+}
 #scale .bar { height: 5px; border: 1px solid var(--ink); border-top: 0; margin-bottom: 5px; }
-#missing { position: fixed; inset: 0; display: none; place-items: center; font: 400 13px/1.7 var(--mono); color: var(--ink); }
+#missing {
+  position: fixed; inset: 0; display: none; place-items: center;
+  font: 400 13px/1.7 var(--mono); color: var(--ink);
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/babylonjs@9.29.0/babylon.js"></script>
 <script src="campaign-1805.data.js"></script>
 <script>
-// ?theatre=<path.js>: the generated theatre (heights, water, routed roads) from tools/campaign-theatre.mjs, by default
+// ?theatre=<path.js>: the generated theatre (heights, water, routed roads) from tools/campaign-theatre.ts, by default
 // its output under scratch/ at the repository root (git-ignored). Only a .js file of this page's own origin and
 // protocol, never a script from another host.
 (() => {
@@ -66,7 +72,7 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   <div class="n" id="credit"></div>
 </div>
 <div id="scale"><div class="bar" id="scaleBar"></div><span id="scaleText"></span></div>
-<div id="missing">No theatre: run <b>node tools/campaign-theatre.mjs</b>, then reload.</div>
+<div id="missing">No theatre: run <b>node tools/campaign-theatre.ts</b>, then reload.</div>
 <script>
 /*
  * The campaign map prototype (docs/plans/active/k1-theatre-look.md; the look: docs/proposals/campaign-map.md).
@@ -141,27 +147,15 @@ const SHADE_TOP = Number(Q.get('top')) || 1.08;
 // the light from the north-west, as on the battle map: x east, z north
 const NW = [-Math.SQRT1_2, Math.SQRT1_2];
 
-/**
- * Degrees to the map's metres, as [x, z]: Lambert azimuthal equal-area on a sphere, centred on the frame (the same
- * formula as tools/campaign-theatre.mjs).
- */
-function project(lat, lon) {
-  const rad = Math.PI / 180;
-  const R = 6371007.2;
-  const phi = lat * rad;
-  const dLon = (lon - lon0) * rad;
-  const sin0 = Math.sin(lat0 * rad);
-  const cos0 = Math.cos(lat0 * rad);
-  const cosC = sin0 * Math.sin(phi) + cos0 * Math.cos(phi) * Math.cos(dLon);
-  const k = Math.sqrt(2 / (1 + cosC));
-  return [R * k * Math.cos(phi) * Math.sin(dLon), R * k * (cos0 * Math.sin(phi) - sin0 * Math.cos(phi) * Math.cos(dLon))];
-}
-
 /** The heights in metres, the south row first, decoded from the generated file. */
 function decodeHeights() {
-  const bytes = Uint8Array.from(atob(T.h), c => c.charCodeAt(0));
+  const text = atob(T.h);
+  const bytes = new Uint8Array(text.length);
+  for (let k = 0; k < text.length; k++) bytes[k] = text.charCodeAt(k);
   const h16 = new Int16Array(bytes.buffer);
-  if (h16.length !== NX * NZ) throw new Error('theatre heights: ' + h16.length + ' values, expected ' + NX * NZ);
+  if (h16.length !== NX * NZ) {
+    throw new Error('theatre heights: ' + h16.length + ' values, expected ' + NX * NZ);
+  }
   return Float32Array.from(h16);
 }
 
@@ -247,17 +241,21 @@ function bakeRelief(h0) {
 }
 
 /**
- * The lakes as a mask the size of the height grid, the south row first: 255 in the water, softened over a cell at
- * the shore so the shader can find the bank.
+ * The lakes as a mask over the frame, LAKE_RES texels a cell (sharper shores than the heights), the south row first:
+ * 255 in the water, antialiased at the shore so the shader can find the bank. Its texels tile the frame
+ * from edge to edge.
  */
+const LAKE_RES = 2;
+const LAKE_W = (NX - 1) * LAKE_RES;
+const LAKE_H = (NZ - 1) * LAKE_RES;
 function bakeLakes() {
   const c = document.createElement('canvas');
-  c.width = NX;
-  c.height = NZ;
+  c.width = LAKE_W;
+  c.height = LAKE_H;
   const g = c.getContext('2d', { willReadFrequently: true });
-  // canvas row 0 is the south edge: world (x, z) to pixel ((x + halfX) / CELL, (z + halfZ) / CELL)
-  g.setTransform(1 / CELL, 0, 0, 1 / CELL, halfX / CELL + 0.5, halfZ / CELL + 0.5);
-  g.filter = 'blur(0.8px)';
+  // canvas row 0 is the south edge: world (x, z) to pixel ((x + halfX), (z + halfZ)) · LAKE_RES / CELL
+  const k = LAKE_RES / CELL;
+  g.setTransform(k, 0, 0, k, halfX * k, halfZ * k);
   g.fillStyle = '#fff';
   for (const ring of T.lakes) {
     g.beginPath();
@@ -265,8 +263,8 @@ function bakeLakes() {
     g.closePath();
     g.fill();
   }
-  const rgba = g.getImageData(0, 0, NX, NZ).data;
-  const out = new Uint8Array(NX * NZ);
+  const rgba = g.getImageData(0, 0, LAKE_W, LAKE_H).data;
+  const out = new Uint8Array(LAKE_W * LAKE_H);
   for (let k = 0; k < out.length; k++) out[k] = rgba[k * 4];
   return out;
 }
@@ -294,7 +292,9 @@ function paperCanvas() {
   };
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
-      const v = 0.55 * noise((x / N) * P, (y / N) * P) + 0.3 * (noise((x / N) * P * 2 + 0.5, (y / N) * P * 2) % 1) + 0.15 * hash(x, y);
+      const u = (x / N) * P;
+      const w = (y / N) * P;
+      const v = 0.55 * noise(u, w) + 0.3 * (noise(u * 2 + 0.5, w * 2) % 1) + 0.15 * hash(x, y);
       const i = (y * N + x) * 4;
       im.data[i] = im.data[i + 1] = im.data[i + 2] = 96 + v * 64;
       im.data[i + 3] = 255;
@@ -314,7 +314,9 @@ function paperCanvas() {
       for (const oy of [-N, 0, N]) {
         g.beginPath();
         g.moveTo(x + ox, y + oy);
-        g.quadraticCurveTo(x + ox + Math.cos(a + 0.6) * l * 0.5, y + oy + Math.sin(a + 0.6) * l * 0.5, x + ox + Math.cos(a) * l, y + oy + Math.sin(a) * l);
+        const cx = x + ox + Math.cos(a + 0.6) * l * 0.5;
+        const cy = y + oy + Math.sin(a + 0.6) * l * 0.5;
+        g.quadraticCurveTo(cx, cy, x + ox + Math.cos(a) * l, y + oy + Math.sin(a) * l);
         g.stroke();
       }
     }
@@ -358,7 +360,8 @@ B.Effect.ShadersStore.printFragmentShader = `
 precision highp float;
 varying vec2 vW;
 uniform sampler2D uRelief, uLakes, uPaperT;
-uniform vec2 uHalf, uTexel, uLightXZ;
+uniform vec2 uHalf, uTexel, uLakeTexel, uLightXZ;
+uniform float uCellKm;
 uniform vec3 uPaper, uTable, uWater;
 uniform float uFloor, uTop;
 
@@ -368,7 +371,8 @@ float rectDist(vec2 p, vec2 extent) {
 }
 
 void main() {
-  vec2 uv = (vW + uHalf) / (2.0 * uHalf);
+  /* node i of the grid sits on the frame at i cells from its edge, and at the centre of texel i */
+  vec2 uv = ((vW + uHalf) / uCellKm + 0.5) * uTexel;
   float g1 = texture2D(uPaperT, vW / 3.0).r;
   float g2 = texture2D(uPaperT, vW / 31.0 + 0.37).r;
   float g3 = texture2D(uPaperT, vW / 170.0 + 0.71).r;
@@ -410,10 +414,13 @@ void main() {
   vec3 col = min(paper * v * hue, vec3(1.0));
 
   /* lakes: a flat pale wash sunk below the shore, the bank toward the light shading the water */
-  float w = texture2D(uLakes, uv).r;
+  vec2 luv = (vW + uHalf) / (2.0 * uHalf);
+  vec2 lx = vec2(uLakeTexel.x, 0.0);
+  vec2 lz = vec2(0.0, uLakeTexel.y);
+  float w = texture2D(uLakes, luv).r;
   if (w > 0.01) {
-    vec2 gW = vec2(texture2D(uLakes, uv + vec2(uTexel.x, 0.0)).r - texture2D(uLakes, uv - vec2(uTexel.x, 0.0)).r,
-                   texture2D(uLakes, uv + vec2(0.0, uTexel.y)).r - texture2D(uLakes, uv - vec2(0.0, uTexel.y)).r);
+    vec2 gW = vec2(texture2D(uLakes, luv + lx).r - texture2D(uLakes, luv - lx).r,
+                   texture2D(uLakes, luv + lz).r - texture2D(uLakes, luv - lz).r);
     vec2 n = gW / max(length(gW), 1e-4);
     float bank = smoothstep(0.02, 0.3, length(gW));
     vec3 wash = mix(paper, uWater, 0.62);
@@ -439,17 +446,22 @@ window.__bakeMs = Math.round(performance.now() - tBake);
 const PAPER = hex('#e6d8b4');
 const material = new B.ShaderMaterial('print', scene, 'print', {
   attributes: ['position'],
-  uniforms: ['worldViewProjection', 'uHalf', 'uTexel', 'uLightXZ', 'uPaper', 'uTable', 'uWater', 'uFloor', 'uTop'],
+  uniforms: [
+    'worldViewProjection', 'uHalf', 'uTexel', 'uLakeTexel', 'uCellKm', 'uLightXZ',
+    'uPaper', 'uTable', 'uWater', 'uFloor', 'uTop',
+  ],
   samplers: ['uRelief', 'uLakes', 'uPaperT'],
 });
 material.setTexture('uRelief', rawTexture(reliefBytes, NX, NZ, B.Engine.TEXTUREFORMAT_RGBA));
-material.setTexture('uLakes', rawTexture(lakeBytes, NX, NZ, B.Engine.TEXTUREFORMAT_LUMINANCE));
+material.setTexture('uLakes', rawTexture(lakeBytes, LAKE_W, LAKE_H, B.Engine.TEXTUREFORMAT_LUMINANCE));
 const paperTex = new B.DynamicTexture('paper', paperCanvas(), scene, true);
 paperTex.update();
 paperTex.wrapU = paperTex.wrapV = B.Texture.WRAP_ADDRESSMODE;
 material.setTexture('uPaperT', paperTex);
 material.setVector2('uHalf', new B.Vector2(MAP_W / 2, MAP_H / 2));
 material.setVector2('uTexel', new B.Vector2(1 / NX, 1 / NZ));
+material.setVector2('uLakeTexel', new B.Vector2(1 / LAKE_W, 1 / LAKE_H));
+material.setFloat('uCellKm', CELL / 1000);
 material.setVector2('uLightXZ', new B.Vector2(NW[0], NW[1]));
 material.setColor3('uPaper', B.Color3.FromArray(PAPER));
 material.setColor3('uTable', B.Color3.FromArray(hex('#c9b78f')));
@@ -488,9 +500,12 @@ function placeCamera() {
   dirty = true;
 }
 
-/** The point of the map (km) under a screen position (CSS pixels), or null above the horizon. */
+/**
+ * The point of the map (km) under a screen position (CSS pixels), or null above the horizon. The picking ray takes
+ * CSS pixels: Babylon scales them by the hardware scaling level itself.
+ */
 function groundAt(sx, sy) {
-  const ray = scene.createPickingRay(sx * GL_DPR, sy * GL_DPR, B.Matrix.Identity(), cam);
+  const ray = scene.createPickingRay(sx, sy, B.Matrix.Identity(), cam);
   if (ray.direction.y >= -1e-6) return null;
   const t = -ray.origin.y / ray.direction.y;
   return [ray.origin.x + ray.direction.x * t, ray.origin.z + ray.direction.z * t];
@@ -573,14 +588,17 @@ function pxPerKm() {
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
 }
 
-/** Traces a flat [x, z, ...] line in metres as a path on the ink canvas. */
-function tracePath(p) {
+/** A flat [x, z, ...] line in metres, projected to screen points. */
+function screenLine(p) {
+  const pts = [];
+  for (let k = 0; k < p.length; k += 2) pts.push(toScreen(p[k], p[k + 1]));
+  return pts;
+}
+
+/** Traces screen points as a path on the ink canvas. */
+function tracePoints(pts) {
   ink.beginPath();
-  for (let k = 0; k < p.length; k += 2) {
-    const [sx, sy] = toScreen(p[k], p[k + 1]);
-    if (k === 0) ink.moveTo(sx, sy);
-    else ink.lineTo(sx, sy);
-  }
+  pts.forEach(([sx, sy], k) => (k ? ink.lineTo(sx, sy) : ink.moveTo(sx, sy)));
 }
 
 /** Width of a river line in CSS pixels, by its rank (lower is bigger) and the zoom; 0 when hidden. */
@@ -591,19 +609,20 @@ function riverWidth(rank, ppk) {
   return base * clamp(0.7 + ppk * 0.12, 0.7, 1.8);
 }
 
-/** Rivers as fine blue-grey ink, widening with their rank. */
-function drawRivers(ppk) {
+/** Rivers as fine blue-grey ink, widening with their rank; `screen` holds each shown river's screen points. */
+function drawRivers(ppk, screen) {
   ink.lineJoin = 'round';
   ink.lineCap = 'round';
   ink.strokeStyle = RIVER_INK;
-  for (const r of T.rivers) {
+  T.rivers.forEach((r, k) => {
     const w = riverWidth(r.rank, ppk);
-    if (!w) continue;
+    if (!w) return;
+    screen[k] = screenLine(r.p);
     ink.lineWidth = w;
     ink.globalAlpha = 0.85;
-    tracePath(r.p);
+    tracePoints(screen[k]);
     ink.stroke();
-  }
+  });
   ink.globalAlpha = 1;
 }
 
@@ -612,10 +631,11 @@ function drawRoads(ppk) {
   const scale = clamp(0.75 + ppk * 0.1, 0.75, 1.7);
   ink.lineJoin = 'round';
   ink.lineCap = 'round';
+  const lines = T.roads.map(r => screenLine(r.p));
   for (const pass of ['casing', 'ink']) {
-    for (const r of T.roads) {
+    T.roads.forEach((r, k) => {
       const high = r.kind === 'high';
-      tracePath(r.p);
+      tracePoints(lines[k]);
       if (pass === 'casing') {
         ink.setLineDash([]);
         ink.strokeStyle = 'rgba(244, 233, 205, 0.55)';
@@ -626,7 +646,7 @@ function drawRoads(ppk) {
         ink.lineWidth = (high ? 1.5 : 1.0) * scale;
       }
       ink.stroke();
-    }
+    });
   }
   ink.setLineDash([]);
 }
@@ -638,8 +658,7 @@ const TOWN_SHOW = { 4: 0, 3: 0.75, 2: 1.3, 1: 2.2 };
 function drawTowns(ppk, placed) {
   const towns = D.towns.filter(t => ppk >= TOWN_SHOW[t.size]).sort((a, b) => b.size - a.size);
   for (const t of towns) {
-    const [x, z] = project(t.lat, t.lon);
-    const [sx, sy] = toScreen(x, z);
+    const [sx, sy] = toScreen(...T.towns[t.id]);
     const s = [0, 2.6, 3.4, 4.4, 5.6][t.size] * clamp(0.85 + ppk * 0.05, 0.85, 1.3);
     ink.fillStyle = INK;
     ink.fillRect(sx - s / 2, sy - s / 2, s, s);
@@ -693,16 +712,18 @@ function haloText(text, x, y, colour) {
   ink.fillText(text, x, y);
 }
 
-/** River names in serif italic, once per river, along the middle of its longest line on screen. */
-function drawRiverNames(ppk, placed) {
+/**
+ * River names in serif italic, once per river, along the middle of its longest line on screen; `screen` holds the
+ * screen points drawRivers projected.
+ */
+function drawRiverNames(ppk, placed, screen) {
   const best = new Map();
-  for (const r of T.rivers) {
-    if (!r.name || riverWidth(r.rank, ppk) === 0 || r.rank > (ppk > 1.5 ? 8 : 4)) continue;
-    const pts = [];
-    for (let k = 0; k < r.p.length; k += 2) pts.push(toScreen(r.p[k], r.p[k + 1]));
+  for (const [k, r] of T.rivers.entries()) {
+    const pts = screen[k];
+    if (!pts || !r.name || r.rank > (ppk > 1.5 ? 8 : 4)) continue;
     let len = 0;
-    for (let k = 1; k < pts.length; k++) {
-      if (onScreen(pts[k])) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+    for (let i = 1; i < pts.length; i++) {
+      if (onScreen(pts[i])) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
     }
     const name = r.name.replace(/^Rhein$|^Rhin$/, 'Rhine').replace(/^Donau$/, 'Danube');
     if (len > 160 && len > (best.get(name)?.len ?? 0)) best.set(name, { pts, len });
@@ -746,16 +767,15 @@ function drawRegions(ppk) {
   ink.letterSpacing = `${(px * 0.55).toFixed(1)}px`;
   ink.globalAlpha = alpha;
   ink.fillStyle = '#4a4238';
-  for (const r of D.regions) {
-    const [x, z] = project(r.lat, r.lon);
-    const [sx, sy] = toScreen(x, z);
+  D.regions.forEach((r, k) => {
+    const [sx, sy] = toScreen(...T.regions[k]);
     ink.save();
     ink.translate(sx, sy);
     ink.rotate((-r.angle * Math.PI) / 180);
     ink.textAlign = 'center';
     ink.fillText(r.name, 0, px * 0.35);
     ink.restore();
-  }
+  });
   ink.globalAlpha = 1;
   ink.letterSpacing = '0px';
   ink.textAlign = 'left';
@@ -778,14 +798,21 @@ function drawInk() {
   // the ink stops at the neatline, as the print does
   ink.save();
   ink.beginPath();
-  const corners = [[-halfX, -halfZ], [halfX, -halfZ], [halfX, halfZ], [-halfX, halfZ]].map(([x, z]) => toScreen(x, z));
-  corners.forEach(([sx, sy], k) => (k ? ink.lineTo(sx, sy) : ink.moveTo(sx, sy)));
+  const corners = [
+    [-halfX, -halfZ],
+    [halfX, -halfZ],
+    [halfX, halfZ],
+    [-halfX, halfZ],
+  ];
+  tracePoints(corners.map(([x, z]) => toScreen(x, z)));
   ink.clip();
+  // each shown river's screen points, projected once for its line and its name
+  const rivers = [];
   drawRegions(ppk);
-  drawRivers(ppk);
+  drawRivers(ppk, rivers);
   drawRoads(ppk);
   drawTowns(ppk, placed);
-  drawRiverNames(ppk, placed);
+  drawRiverNames(ppk, placed, rivers);
   ink.restore();
   drawScale(ppk);
 }
