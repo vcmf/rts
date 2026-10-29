@@ -249,3 +249,25 @@ and its men lost at once, and a smaller bar breaks on contact, with no melee to 
 4. **Points and the level up**, with the panel.
 5. **The scenarios:** the S1e battle's veterans become level 3 and the battle is retuned; C-02, H-04 and G-06 measured;
    the docs (`docs/systems/fire-morale.md`, the unit model's § Morale), the goldens once, `/code-review high`, the PR.
+
+## 15. Results (U2, 2026-10-29)
+
+`node tools/calibrate-fire.ts`, 100 seeds; every check passes.
+
+| Case | Result | Target |
+|---|---|---|
+| C-01, 100 m (bars 114, 71) | the weaker breaks first in all 100, median 9.1 min (8.5 before U2), at 20% losses | 6–10 min, 12–25% |
+| C-01, 50 m / 200 m | median 4.3 min / no break in 20 min | under 5 min / none |
+| 3v3 brigade at 100 m | the weaker side's first break at a median 10.1 min; all three of its lines out together | reported |
+| C-02, level 3 against level 1 at 100 m | the veteran wins all 100, in a median 6.1 min, with 0.41 of the recruit's losses (33 men to 79) | wins clearly, about half the losses |
+| H-04, level 5 against two of level 2 | level 5 breaks first in all 100, after a median 13.7 min, at 180 men lost to their 63 and 65 | holds a while, then loses |
+| G-06, one-sided fire at 50 m | level 6 stands a median 13.1 min, level 2 5.3: 2.50 times | about 2.5 |
+
+`tools/calibrate-charge.ts`, 30 seeds (step 2, with `impact.kill` 0.06): every target passes.
+
+**The S1e battle.** Side 1's veterans are level 3 (their bar was set to 129 by hand in step 2), and both batteries
+are level 3 too: at level 2 your battery, charged by side 1's regiment, routed on the valley and not on the
+battlefield on a difference of three men, which breaks the test that the two maps play the same battle. Level 3
+veterans shoot faster, aim better and are tougher, so the battle was decided at about 15 minutes; side 1's first
+line now closes to about 70 m at 640 s (was 500), and the battle is side 1's at 17.1 minutes at the page's seed
+(15.9–17.3 over eight seeds; the playtest's 17–20).

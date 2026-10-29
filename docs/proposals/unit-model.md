@@ -456,22 +456,25 @@ fires into its flank is a tactic the rules already allow, and the AI may use it.
 
 ## Morale
 
-**The bar.** Each formation has a morale bar from 0 to its level's maximum. It replaces today's 0..1 value that
-relaxes toward a target (`docs/systems/fire-morale.md`). It is simpler to read and to tune, and the level's
-maximum is what makes a veteran stand longer.
+**The bar.** Each formation has a morale bar from 0 to its level's maximum. It replaced (U2) the 0..1 value that
+relaxed toward a target. It is simpler to read and to tune, and the level's maximum is what makes a veteran stand
+longer. The sim's exact model is `docs/proposals/morale-bar-model.md`, built in U2; where it departs from this
+section (its § 10, the owner's choices), the notes below say so.
 
 - **What empties it:**
-  - **losses:** each man lost costs points (`morale.perMan`, scaled by the formation's spawn strength, so a
-    battalion's bar measures a share of it), plus a burst term for many men lost in a few seconds;
+  - **losses:** each man lost costs points (`morale.loss` over the formation's spawn strength, so a battalion's
+    bar measures a share of it), at once (U2: no burst term; the bar works as hit points);
   - **shocks:** a charge's threat and impact, a friend's break nearby (contagion), as today, in points;
-  - **drains,** per second while their cause stands: a threat in the flank or rear (G-04; the rear's is larger),
-    fire it cannot answer (G-09), the guns (D-04).
-- **What fills it:** it recovers slowly, at `morale.regen` points a second, when it has lost no men for
-  `morale.calm` seconds. It recovers up to a ceiling: its maximum less a share of what its losses have cost, so a
-  battalion that has lost a third of its men does not come back to a full bar. Supports (secured flanks, today; a
-  commander near, S2) raise the recovery rate.
+  - **drains** while their cause stands: a threat in the flank or rear (G-04; the rear's is larger). U2 keeps
+    U1's drain as a pressure on the effective bar, down to the wavering threshold, not points a second; fire it
+    cannot answer (G-09) and the guns (D-04) act through their losses.
+- **What fills it:** it recovers at `morale.regen` points a second while in the fight, under fire too (U2: no
+  `calm` wait). It recovers up to a ceiling: its maximum less what its losses have cost, so losses never come back
+  and only shocks wear off. Supports (secured flanks; a commander near, S2) add to the effective bar (U2), not to the
+  rate.
 - **The states** come from the share of the bar left, with a little hysteresis: steady above 60%, shaken above
-  30%, wavering below it (fires worse, falls back, will not advance). **At 0 it flees:** it routs, as today.
+  30%, wavering below it (fires worse, will not advance; it does not fall back, decision 0082). **At 0 it flees:**
+  it routs.
 - **Rally:** a router out of danger rallies as today (no enemy within `rally.safe`, no loss for `rally.calm`).
   - Like today's rally (which counts losses from its men now, `baseMen`), it writes off what its losses so far have
     cost: its ceiling is its maximum again.
@@ -484,10 +487,10 @@ maximum is what makes a veteran stand longer.
     shaken (the upper edge of the hysteresis), so a rallied battalion is never wavering at once.
   - A battalion that routs more than `rally.max` times, or below half its spawn strength, shatters, as today
     (G-08).
-- **The guard:** the ruleset is refused if one contagion shock together with a minute of every drain at its largest
-  could empty a fresh bar of level 1. Today's guard does the same for a lone shock.
+- **The guard:** the ruleset is refused if one shock could take more than 0.6 of level 2's bar (U2: the drains
+  cannot empty a bar, so the guard is the lone shock's).
 
-The scale: at level 2, `perMan` is set so a battalion breaks at about the share of losses today's average line
+The scale: at level 2, `loss` is set so a battalion breaks at about the share of losses today's average line
 does. A level 6 battalion's bar is 1.8 times as big and its toughness 1.4, so it stands about 2.5 times the fire
 (G-06).
 
