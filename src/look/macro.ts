@@ -63,7 +63,7 @@ precision highp float;varying vec2 vUV;uniform vec4 uRect;uniform float uTexel;
 // crest, darker turned away and in a valley, which is also a little cooler. uReliefK: its strength (?relief)
 uniform sampler2D uRelief;uniform float uReliefK;
 vec3 reliefTone(vec3 c,vec2 xz){vec2 r=(texture2D(uRelief,xz/FAR_W+0.5).rg-0.5)*2.0;
-  c*=1.0+uReliefK*(0.9*r.x+0.25*r.y);
+  c*=clamp(1.0+uReliefK*(0.9*r.x+0.25*r.y),0.7,1.3);   // (never so dark a valley turns black)
   return mix(c,c*vec3(0.9,0.96,1.06),uReliefK*0.6*max(0.0,-r.y));}
 #endif
 void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=bakeTexel(xz,uTexel);
