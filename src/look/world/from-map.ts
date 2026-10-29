@@ -63,8 +63,8 @@ export function cellAt(L: Layers, x: number, z: number): number {
 
 /**
  * The window's heights: the tile's nodes and their margin (the demo's layout, tools/build-look-data.ts) and the far
- * ring's, read from `heightAt` (map metres to m above the datum), all moved so the lowest of them lies on the spec's
- * lowest ground (SPEC.ground.lo). `base`: the height taken off, m.
+ * ring's, read from `heightAt` (map metres to m above the datum), all taken down by the lowest of them, so the window's
+ * lowest ground is 0 (its range read at load: groundOf, src/look/spec.ts). `base`: the height taken off, m.
  */
 export function windowHeights(
   heightAt: (x: number, z: number) => number,
@@ -81,8 +81,8 @@ export function windowHeights(
   const fx = (col: number) => Math.fround((col * s.far) / s.farSub - s.far / 2)
   const fh = new Float32Array(fn * fn)
   for (let j = 0; j < fn; j++) for (let i = 0; i < fn; i++) fh[j * fn + i] = heightAt(fx(i) + win.x, fx(j) + win.z)
-  // (the lowest node lands on the spec's lowest ground)
-  const base = Math.min(minOf(h), minOf(fh)) - s.ground.lo
+  // (the lowest node lands on 0: a world's ground range comes from its data, groundOf in src/look/spec.ts)
+  const base = Math.min(minOf(h), minOf(fh))
   for (let k = 0; k < h.length; k++) h[k] -= base
   for (let k = 0; k < fh.length; k++) fh[k] -= base
   const x0 = (-m * s.tile) / s.tileSub - s.tile / 2

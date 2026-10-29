@@ -84,8 +84,8 @@ description of the ground) draws a window of a map file on the look page: a squa
 Kobelnitz on Austerlitz, (−450, 350); the Pratzen, (700, 250)). `tools/build-look-data.ts` compiles the map with the map engine
 (`layersOf`, `maps/engine.ts`) and `src/look/world/from-map.ts` reads the window's layers into today's inputs:
 
-- the heights from the layers' nodes (bilinear, `heightOf`), taken down by the window's lowest node so it meets
-  `SPEC.ground.lo`; the window's far ring must lie inside the map;
+- the heights from the layers' nodes (bilinear, `heightOf`), taken down by the window's lowest node so it meets 0;
+  the window's far ring must lie inside the map;
 - the cover at 1 m cells (`MAP_COVER_CELL`, half the demo's 2 m), its ground, vegetation and built areas rasterised
   from the map's own shapes by apply's rules (`fineAreas`: the painting order, a ground area clearing the vegetation
   under it, an area's `clear` keep-offs, the lines' reach), not read off the layers' 2 m cells (the water and a
