@@ -75,6 +75,12 @@ The frame interval (p50, the mean of the three yaws, ms), main (c2b90cd9) / the 
   shadows, cut by the new atlas); nothing else moves. **The guard** (`?armies=20`, base main): ok, no block newly
   failing (the 7 `fails*` fail on main too).
 
+**The layered leaves at `?leafscale` 0.6** (093f5713, one round, main first, the same setup): close 5.28 / 4.94,
+default 6.80 / 6.44, widest 7.11 / 7.00; the forest close 9.03 / 9.02, default 10.40 / 10.35, widest 7.75 / 7.72:
+branch − main −0.36 to −0.01 ms, no cost (main's close and default ran on the busier start). Goldens: the crowns and
+their shadows' edges differ on every camera with crowns (the crowns a little lighter in shade at every distance),
+nothing else. The guard (`?armies=20`, base main): ok, no block newly failing.
+
 ## Open questions
 
 - The layers' tones and how fast the light reveals them (`LEAF_LAYERS`, the 2.3 in `canopy.frag`): the owner's eye.

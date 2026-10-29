@@ -344,8 +344,9 @@ const cardOpt = (k: string, d: number) => {
   return v
 }
 // ?leafscale=<x>: the layered leaves' size, 1 the sheet's clumps at 0.8 a cell (docs/plans/active/crown-leaves.md)
-if (params.has('leafscale') && !paintedLeaves)
-  {throw new Error('?leafscale needs the layered leaves (not oak or procedural)')}
+if (params.has('leafscale') && !paintedLeaves) {
+  throw new Error('?leafscale needs the layered leaves (not oak or procedural)')
+}
 const leafScale = cardOpt('leafscale', CARD_DEFAULTS.leafScale)
 if (leafScale > 1) throw new Error(`?leafscale must be at most 1, not ${leafScale}`)
 const cardOpts: CardOptions = {
