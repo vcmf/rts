@@ -120,6 +120,15 @@ Stills (git-ignored, `output/austerlitz-a1/`): the window at 20 m, the default a
 of the window, north up (`kobelnitz-look-*`; before the 1 m cover and its warp: `kobelnitz-before-*`), the lit map
 view (`app/map.html`) at the same spots (`kobelnitz-map-*`), and the pheasantry's orchard on both.
 
+**The relief and the ways** (the owner, 2026-10-29: "no road, no hills"). The hills: a map's slopes at 2× are a few
+degrees, under the low sun's light they barely shade, so the macro colour's bakes now take a painted relief tone
+(`?relief=0|1|2`, 1 the map worlds' default, off on the demo). One bench round on Kobelnitz (Metal, preview build, load
+under 3 at the start): with it 9.0–10.0 ms at the nine cameras, without it 9.2–10.6: no cost a frame (it is baked),
+1.6 MB of texture. The ways: the catalogue's widths (a road 5 m, the highway 9), their paint dusty over the arable and
+a grass verge (4 m, a track's 2.5). Sheets in `output/austerlitz-a1/relief/` (Kobelnitz and the Pratzen, the latter on
+A1b rebased onto this branch) and `output/austerlitz-a1/kobelnitz-road-*` (before and after, default and 20 m, the
+focus on the ground).
+
 ### Open questions
 
 - **Kinds or attributes.** The compiler reads some things off a kind's name (`way.road.lane` as a track,
