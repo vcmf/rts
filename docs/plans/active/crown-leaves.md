@@ -31,7 +31,7 @@ and the card shader:
   dark base, lighter leaves on top, highlight leaves on those, a 2D texture that already has depth; then the crown's
   ordinary 3D shading over the whole.
 - **The layered sheet** (`?leaves=layered`, the default): the owner's sheet (`data/leaf-clumps-simple-v1.png`, the
-  owner's `leaf-clumps-simple-greyscale-v1.png` in the git-ignored design references) read as layers: its three values
+  owner's `leaf-clumps-simple-greyscale-v1.png` in the design references, untracked) read as layers: its three values
   the layer index (dark, mid, light), a share of the light leaves lifted to highlights, three of its clumps at 0.8 a
   cell (smaller leaves); no tilt. `?leafpic=<url>` swaps the sheet.
 - **Smaller leaves** (the owner: "now it's beautiful … but the leaves too big"): `?leafscale=<x>` paints each cell
@@ -50,6 +50,11 @@ and the card shader:
   the grain-jittered four reads) stretched into lines along the light; now eight reads on two rings, no jitter
   (`shadowAtWide`). The middle tone: `LEAF_RAMP` (a wider wrap, wider overlapping bands, the shade lifted toward a cool
   mid) and the layers dropping leaf by leaf toward the shade (a draw per leaf patch in the atlas's G).
+- **The review** (one round, nothing severe; the owner approved the crowns on 2026-10-30): the layer cap's light and
+  the other trees' shadow taken once a card (its point on the crown's surface), so a leaf is never cut into two
+  layers; each clump's radius measured from its pixels, so a turned square clump's corners stay inside the cell (a
+  `?leafpic` sheet); the per-pixel pass pure (`layerPixels`) and tested; the coverage whole or none; `?leafscale` at
+  least 0.25; `?leafpic` loaded with CORS.
 - **Streaks, speckle, straight shadow lines** (the owner, at some camera angles; an angle sweep over yaw ±45°, pitch
   0.6–0.98 and 15–25 m in the wood and by the river, and a pan, found them): (1) whole crowns in horizontal streaks
   when the camera looks along x: `paint()`'s grain is projected on a plane picked by the normal, and on a card seen
@@ -94,7 +99,8 @@ The frame interval (p50, the mean of the three yaws, ms), main (c2b90cd9) / the 
 
 **The layered leaves at `?leafscale` 0.6** (093f5713, one round, main first, the same setup): close 5.28 / 4.94,
 default 6.80 / 6.44, widest 7.11 / 7.00; the forest close 9.03 / 9.02, default 10.40 / 10.35, widest 7.75 / 7.72:
-branch − main −0.36 to −0.01 ms, no cost (main's close and default ran on the busier start). Goldens: the crowns and
+branch − main −0.36 to −0.01 ms, no cost (main's close and default ran on the busier start). Goldens: the crowns
+and
 their shadows' edges differ on every camera with crowns (the crowns a little lighter in shade at every distance),
 nothing else. The guard (`?armies=20`, base main): ok, no block newly failing.
 
@@ -105,4 +111,4 @@ else. The guard (`?armies=20`, base main): ok, no block newly failing (the 7 `fa
 
 ## Open questions
 
-- The layers' tones and how fast the light reveals them (`LEAF_LAYERS`, the 2.3 in `canopy.frag`): the owner's eye.
+- The layers' tones and how fast the light reveals them (`LEAF_LAYERS`, the 2.9 in `canopy.frag`): the owner's eye.

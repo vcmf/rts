@@ -30,8 +30,10 @@ const LOSS_DEFINES = `#define LOSS_FROM ${LEAF_LOSS.from.toFixed(3)}\n#define LO
 // the card expansion and atlas cell (src/look/shaders/cards.glsl) where a shader says #include<cards>
 export const withCards = (src: string): string => src.replace('#include<cards>', () => LOSS_DEFINES + CARDS)
 
-// the painter's layers' tones (docs/plans/active/crown-leaves.md; LEAF_PAINT in canopy.frag): each a gain on the
-// crown's foliage colour, the dark base cool, the mid as it is, the light warmer, the highlights pale and warm
+/**
+ * The painter's layers' tones (docs/plans/active/crown-leaves.md; LEAF_PAINT in canopy.frag): each a gain on the
+ * crown's foliage colour, the dark base cool, the mid as it is, the light warmer, the highlights pale and warm
+ */
 export const LEAF_LAYERS: [number, number, number][] = [
   [0.66, 0.76, 0.8],
   [1.02, 1.05, 1.0],

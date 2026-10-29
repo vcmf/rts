@@ -348,7 +348,8 @@ if (params.has('leafscale') && !paintedLeaves) {
   throw new Error('?leafscale needs the layered leaves (not oak or procedural)')
 }
 const leafScale = cardOpt('leafscale', CARD_DEFAULTS.leafScale)
-if (leafScale > 1) throw new Error(`?leafscale must be at most 1, not ${leafScale}`)
+// (at least 0.25: smaller, a cell takes over 48 clumps and the leaves are a few texels)
+if (!(leafScale >= 0.25 && leafScale <= 1)) throw new Error(`?leafscale must be 0.25 to 1, not ${leafScale}`)
 const cardOpts: CardOptions = {
   size: cardOpt('cardsize', CARD_DEFAULTS.size),
   cover: cardOpt('cardcover', CARD_DEFAULTS.cover),
