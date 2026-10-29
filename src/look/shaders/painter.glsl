@@ -194,7 +194,9 @@ vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
 // THE MID TONE (docs/plans/active/soft-midtone.md, decision 0084, proposed): how wide the ramp turns from light to
 // shade, by the material's class, set by the page (?midtone, src/look/midtone.ts: MIDn_U units, _B buildings,
 // _N the nature meshes, _G the ground). MID1: soft band edges, the mid a little lighter. MID2: a wide mid tone, the
-// light wrapped round the form. Neither on the crowns (SOFT_RAMP: their own ramp, decision 0022). Neither: main's bands
+// light wrapped round the form. MID3 (units only): the figure's turn, the mid spread over most of the side turned from
+// the sun (on a figure 30–50 px tall the others' edges span a pixel or two). None on the crowns (SOFT_RAMP: their own
+// ramp, decision 0022). None: main's bands
 #ifndef SOFT_RAMP
 #ifdef KEEP_HUE
 #ifdef MID1_U
@@ -202,6 +204,9 @@ vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
 #endif
 #ifdef MID2_U
 #define MID2
+#endif
+#ifdef MID3_U
+#define MID3
 #endif
 #else
 #ifdef DETAIL_ON
@@ -356,6 +361,16 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #else
   #ifdef SOFT_RAMP
   float t=smoothstep(-0.40,0.0,l)*0.55+smoothstep(0.06,0.40,l)*0.45;   // the crowns as volumes (L7b): the same three colours, blended
+  #elif defined(MID3)
+  // the figure's turn: shade to mid over the light -0.95..0.10, mid to lit over 0.15..0.55 (main's centre, 0.34). The
+  // sun is low (27°): the sides a top-down camera sees on a figure turn about -0.55 from it, deep in main's shadow
+  // band; here they pass through the mid, the back turned straight from the sun and a cast shadow (sh) still the
+  // shadow
+  float t=smoothstep(-0.95,0.10,l)*0.55+smoothstep(0.15,0.55,l)*0.45;
+  // a near-white coat (light and of little chroma: the Austrians' #E8E2D2 is about 0.76 and 0.17, linear) keeps main's
+  // bands: its shade is what parts it from the snow (the guard: a white coat on snow fell under its bar)
+  float wh=smoothstep(0.45,0.70,dot(alb,LUMA))*(1.0-smoothstep(0.20,0.35,max(alb.r,max(alb.g,alb.b))-min(alb.r,min(alb.g,alb.b))));
+  t=mix(t,smoothstep(-0.10,-0.02,l)*0.55+smoothstep(0.30,0.38,l)*0.45,wh);
   #elif defined(MID2)
   float t=smoothstep(-0.29,0.09,l)*0.55+smoothstep(0.11,0.49,l)*0.45;   // the wide mid tone: edges 0.38 wide, the shade's a little lower
   #elif defined(MID1)
@@ -388,6 +403,11 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   shc=mix(shc,mid,0.10);
   #endif
   mid=mix(mid,lt,0.22);
+  #elif defined(MID3)
+  // the figure's turn: the shadow's own colour a little deeper, so a coat keeps its value against the ground where its
+  // turned side lifts toward the mid (a dark coat on a lighter winter ground: tools/guard.mjs); a near-white coat
+  // keeps main's ramp and its shadow (above)
+  shc*=mix(0.80,1.0,wh);
   #elif defined(MID1)
   mid=mix(mid,lt,0.12);                          // soft band edges: the mid a little lighter
   #endif

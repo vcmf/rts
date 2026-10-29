@@ -20,7 +20,11 @@ describe('the mid tone switch', () => {
     expect(parseMidtone('u2,b1')).toEqual({ u: 2, b: 1, n: 0, g: 0 })
     expect(midtoneDefines(parseMidtone('u2,b1,g0'))).toEqual(['#define MID2_U', '#define MID1_B'])
   })
+  it('takes 3 for the units alone', () => {
+    expect(midtoneDefines(parseMidtone('u3,b2'))).toEqual(['#define MID3_U', '#define MID2_B'])
+    for (const bad of ['3', 'b3', 'g3']) expect(() => parseMidtone(bad)).toThrow()
+  })
   it('throws on a malformed value', () => {
-    for (const bad of ['3', 'x1', 'u3', 'u', 'u12', 'u1;b2']) expect(() => parseMidtone(bad)).toThrow()
+    for (const bad of ['4', 'x1', 'u4', 'u', 'u12', 'u1;b2']) expect(() => parseMidtone(bad)).toThrow()
   })
 })

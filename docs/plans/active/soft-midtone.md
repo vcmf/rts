@@ -52,6 +52,25 @@ shadow map's term pushes the light far below every band edge).
 - The owner picks a mode per class; the chosen one becomes the default in a follow-up (and decision 0084 is accepted
   or rejected).
 
+## The figures (round 3)
+
+At u2 the figures barely changed (the coordinator, the guns at 18 m). A debug view of the band (t) on the gunners
+showed why: with the sun 27° up and the camera looking down at 50°, the sides seen on a figure turn about −0.55 from
+the sun, deep in every mode's shadow band; the mid was a thin line on the faces near the terminator. The figures' own
+normals are smooth (the bake keeps the vertices' normals, tools/bake-figure.py), so the ramp, not the mesh, made the
+step on infantry and gunners. `u3` (units only) spreads shadow-to-mid over −0.95..0.10: a coat's shade side passes
+through the mid. Against the guard, the shadow colour is 20 % deeper (the British red on a winter meadow fell under the
+bar without it) and a near-white coat keeps main's bands. The cuirassiers' hard steps are the decimated mesh's facets
+(large flat triangles), which no ramp smooths: smoothed normals in the figure bake are a separate change.
+
+## Cost
+
+Three alternated rounds on the merged production build (Metal, 1080p, `?armies=20`, each run under the bench lock at
+a 1-minute load ≤ 3), main's shading (`?midtone=0`) against `?midtone=u3,b2,n2`, the GPU frame's p50 (ms) per round:
+close +0.05, +0.01, +0.02; default +0.09, +0.03, +0.04; wide +0.16, +0.05, +0.06. Every round a little slower, under
+0.1 ms but the wide zoom's first; a first single round (u2 at every class) had shown +0.4 to +0.8 ms, in the arm that
+had no mid tone too: not reproduced.
+
 ## Open questions
 
 - Whether the ground should take it at all. Measured: it changes the whole terrain's modelling, not only shadow

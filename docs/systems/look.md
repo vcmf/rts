@@ -336,7 +336,11 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
   meshes, the ground; `src/look/midtone.ts`, decision 0084, proposed, `docs/plans/active/soft-midtone.md`): 1 widens
   every band edge to 0.24 (the ground's floor to 0.24) and lightens the mid a little; 2 wraps the light a little round
   the form (`(ndl+0.2)/1.2`), widens the edges to 0.38 (the ground's floor to 0.36), lightens the mid more and lifts
-  the shadow band 10 % toward it (but on units: a white coat on snow fell under the guard's bar). Defines per class (`MIDn_U` …), so 0 compiles main's ramp; never on the crowns
+  the shadow band 10 % toward it (but on units: a white coat on snow fell under the guard's bar). 3, units only (`u3`), the figure's
+  turn: the low sun leaves the sides a top-down camera sees on a figure at a light of about −0.55, deep in the shadow band
+  of every other mode, so u3 spreads shadow-to-mid over −0.95..0.10 and mid-to-lit over 0.15..0.55, the shadow colour
+  20 % deeper to keep the coats' value against the ground, a near-white coat on main's bands (its shade parts it from
+  the snow). Defines per class (`MIDn_U` …), so 0 compiles main's ramp; never on the crowns
   (`SOFT_RAMP`).
 - **The band follows the light** (`docs/plans/done/ground-light.md`): on the ground the band is chosen from the sun's
   angle, the cast shadow and the occlusion, with only a small grain wobble (0.2 of the grain) at its edges; the
