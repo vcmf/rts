@@ -214,5 +214,6 @@ window.CAMPAIGN_1805 = {
   focus: [
     { name: 'ulm', lat: 48.45, lon: 10.4, halfX: 70000, halfZ: 50000 },
     { name: 'austerlitz', lat: 48.68, lon: 16.55, halfX: 80000, halfZ: 65000 },
+    { name: 'inn', lat: 47.3, lon: 11.3, halfX: 80000, halfZ: 50000 },
   ],
 }

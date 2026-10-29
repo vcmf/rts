@@ -112,7 +112,12 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   hidden it). Fixed (added; the round trip now within 2 m to 5,000 m), with: single-node spikes in the heights
   clamped to their neighbours (3,335 above and 476 below them by 15 m or more); the contours and sheets read the real
   heights only from about 10 px a km, the contours far out only the index lines, fainter; the plate's hidden top face
-  in paper, not black (it showed as specks along the edge); the clouds at two crossed scales, larger. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  in paper, not black (it showed as specks along the edge); the clouds at two crossed scales, larger. Then (the owner, on the Inn valley: "too soft … the sampling basically create some kind of contour lines
+  which make the contour lines with bizarre shadow"): one sheet per contour line (they were 100 m against 200 m
+  contours, so every other step was a lit rim and a shadow with no line); up close, the light gets back the real
+  relief's detail the simplification removed (0.6 of it, `?crisp=`, from about 3 px a km) and the finer windows'
+  detail, both lit at their true slope (with the ×2 exaggeration and the mountain lift they turned the Alps black and
+  white); a third window of 50 m heights over the Inn valley (Innsbruck, 160 × 100 km); the sheets' shadow lighter. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast

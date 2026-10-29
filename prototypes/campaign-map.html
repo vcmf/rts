@@ -257,9 +257,9 @@ const CONTOUR_INDEX = 5;
 // smoothed less than the contours', so the contour lines do not always sit on a terrace's bank; DETAIL of the
 // smoothed real heights is mixed back so a terrace is not a bare plateau. ?terrace=0 turns them off
 const TERRACE = param('terrace', 0, 0, 2000);
-// the contour sheets drawn per pixel, SHEET m apart, each with a lit rim toward the light and a shadow under the
-// sheet above (?sheet=0 off)
-const SHEET = param('sheet', CONTOUR / 2, 0, 2000);
+// the contour sheets drawn per pixel, SHEET m apart (the contour interval: every step has its ink line), each
+// with a lit rim toward the light and a shadow under the sheet above (?sheet=0 off)
+const SHEET = param('sheet', CONTOUR, 0, 2000);
 // the cast shadow is thrown by the large forms only: heights averaged over a square of half-width CAST_SMOOTH cells
 const CAST_SMOOTH = 6;
 // the plate's thickness in km, and the camera's tilt off straight down, in degrees, far and at the closest zoom
@@ -268,6 +268,8 @@ const TILT_FAR = 20;
 const TILT_NEAR = param('tilt', 40, 0, 55);
 // the cloud shadows drifting over the map: how dark (0 off)
 const CLOUDS = param('clouds', 0.12, 0, 0.5);
+// how much of the real relief's detail the light gets back up close
+const DETAIL_GAIN = param('crisp', 0.6, 0, 1.5);
 const TERRACE_SMOOTH = 1;
 const DETAIL = param('detail', 0.3, 0, 1);
 // representative mountains, as a campaign map draws them: the relief's large-scale shape (heights averaged over a
@@ -510,11 +512,12 @@ void main() {
 B.Effect.ShadersStore.printFragmentShader = `
 precision highp float;
 varying vec2 vW;
-uniform sampler2D uRelief, uLakes, uPaperT, uHeight, uLightH, uRealH, uFine0, uFine1, uClouds;
-uniform vec2 uHalf, uTexel, uLakeTexel, uLightXZ, uFineTexel0, uFineTexel1;
-uniform vec4 uFineRect0, uFineRect1;
+uniform sampler2D uRelief, uLakes, uPaperT, uHeight, uLightH, uLightD, uRealH, uFine0, uFine1, uFine2, uClouds;
+uniform vec2 uHalf, uTexel, uLakeTexel, uLightXZ, uFineTexel0, uFineTexel1, uFineTexel2;
+uniform vec4 uFineRect0, uFineRect1, uFineRect2;
 uniform vec3 uSun;
-uniform float uCellKm, uFineCellKm, uRZ, uFineK, uNearK, uSheetK, uContourK, uSheet, uTime, uCloudK, uHaze, uScreenH;
+uniform float uCellKm, uFineCellKm, uRZ, uFineK, uNearK, uDetailK, uSheetK, uContourK, uSheet;
+uniform float uTime, uCloudK, uHaze, uScreenH;
 uniform vec3 uPaper, uTable, uWater, uShadowInk, uHighlight;
 uniform float uFloor, uTop, uContour, uDark, uBase, uShadeK;
 
@@ -554,12 +557,19 @@ float fineIn(sampler2D t, vec4 rect, vec2 texel, vec2 w) {
 }
 
 float fineDetail(vec2 w) {
-  return (fineIn(uFine0, uFineRect0, uFineTexel0, w) + fineIn(uFine1, uFineRect1, uFineTexel1, w)) * uFineK;
+  return (fineIn(uFine0, uFineRect0, uFineTexel0, w) + fineIn(uFine1, uFineRect1, uFineTexel1, w) +
+          fineIn(uFine2, uFineRect2, uFineTexel2, w)) * uFineK;
 }
 
-/* the heights the light reads (representative, metres), with the finer detail up close */
+/* the heights the light reads (representative, metres), exaggerated by uRZ */
 float lightH(vec2 w) {
-  return bicubic(uLightH, gridUv(w), uTexel) + fineDetail(w);
+  return bicubic(uLightH, gridUv(w), uTexel);
+}
+
+/* up close, the real detail the simplification removed and the finer windows' detail: lit at its true slope */
+float detailH(vec2 w) {
+  float h = uDetailK > 0.0 ? uDetailK * bicubic(uLightD, gridUv(w), uTexel) : 0.0;
+  return h + fineDetail(w);
 }
 
 /* the heights the contours and sheets read: generalised far, the real ones (and the finer detail) up close */
@@ -596,9 +606,11 @@ void main() {
      close), the cast shadow of the large forms and the exposure baked */
   float px = max(length(fwidth(vW)), 1e-4);
   float e = max(px, mix(0.5 * uCellKm, 0.5 * uFineCellKm, uFineK));
-  float hx = (lightH(vW + vec2(e, 0.0)) - lightH(vW - vec2(e, 0.0))) / (2000.0 * e);
-  float hz = (lightH(vW + vec2(0.0, e)) - lightH(vW - vec2(0.0, e))) / (2000.0 * e);
-  vec3 n = normalize(vec3(-hx * uRZ, 1.0, -hz * uRZ));
+  vec2 ex = vec2(e, 0.0);
+  vec2 ez = vec2(0.0, e);
+  float hx = (lightH(vW + ex) - lightH(vW - ex)) * uRZ + (detailH(vW + ex) - detailH(vW - ex));
+  float hz = (lightH(vW + ez) - lightH(vW - ez)) * uRZ + (detailH(vW + ez) - detailH(vW - ez));
+  vec3 n = normalize(vec3(-hx, 2000.0 * e, -hz));
   float lambert = max(0.0, dot(n, uSun)) / uSun.y;
   vec3 R = texture2D(uRelief, uv).rgb;
   float sunlit = R.g;
@@ -622,7 +634,7 @@ void main() {
     float crowd = (1.0 - smoothstep(0.05, 0.14, fwidth(hc / uSheet))) * uSheetK;
     float rim = floor(contourH(vW + uLightXZ * 1.5 * px) / uSheet);
     float over = floor(contourH(vW + uLightXZ * 3.0 * px) / uSheet);
-    if (over > sheet) col *= 1.0 - 0.24 * crowd;
+    if (over > sheet) col *= 1.0 - 0.16 * crowd;
     else if (rim < sheet) col = mix(col, uHighlight, 0.45 * crowd);
   }
 
@@ -735,6 +747,16 @@ function displacement(shaped) {
   return boxMean(above, NX, NZ, DISP_SMOOTH);
 }
 
+/**
+ * The detail the simplification removed: the real heights minus their simplified form (before any lift), scaled by
+ * DETAIL_GAIN. Not lifted: lifted, and exaggerated for the light on top, it turned every alpine slope black or white.
+ */
+function lightDetail(h0, base) {
+  const out = new Float32Array(h0.length);
+  for (let k = 0; k < out.length; k++) out[k] = (h0[k] - base[k]) * DETAIL_GAIN;
+  return out;
+}
+
 /** Heights in metres as a half-float single-channel texture (bilinear, clamped, no mips: see contourTexture). */
 function halfTexture(values, w, h) {
   const half = new Uint16Array(values.length);
@@ -799,7 +821,7 @@ function fineDetailTexture(win) {
       const k = cj * NX + ci;
       const top = heights[k] * (1 - u) + heights[k + 1] * u;
       const bottom = heights[k + NX] * (1 - u) + heights[k + NX + 1] * u;
-      detail[j * win.nx + i] = fine[j * win.nx + i] - (top * (1 - v) + bottom * v);
+      detail[j * win.nx + i] = (fine[j * win.nx + i] - (top * (1 - v) + bottom * v)) * DETAIL_GAIN;
     }
   }
   return halfTexture(detail, win.nx, win.nz);
@@ -849,10 +871,14 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
     'worldViewProjection', 'uHalf', 'uTexel', 'uLakeTexel', 'uCellKm', 'uLightXZ',
     'uRise', 'uEdge', 'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uHighlight',
     'uFloor', 'uTop', 'uContour', 'uDark', 'uBase', 'uShadeK',
-    'uFineTexel0', 'uFineTexel1', 'uFineRect0', 'uFineRect1', 'uSun', 'uFineCellKm', 'uRZ', 'uFineK', 'uNearK',
-    'uSheet', 'uSheetK', 'uContourK', 'uTime', 'uCloudK', 'uHaze', 'uScreenH',
+    'uFineTexel0', 'uFineTexel1', 'uFineTexel2', 'uFineRect0', 'uFineRect1', 'uFineRect2',
+    'uSun', 'uFineCellKm', 'uRZ', 'uFineK', 'uNearK',
+    'uSheet', 'uDetailK', 'uSheetK', 'uContourK', 'uTime', 'uCloudK', 'uHaze', 'uScreenH',
   ],
-  samplers: ['uRelief', 'uLakes', 'uPaperT', 'uHeight', 'uDisp', 'uLightH', 'uRealH', 'uFine0', 'uFine1', 'uClouds'],
+  samplers: [
+    'uRelief', 'uLakes', 'uPaperT', 'uHeight', 'uDisp', 'uLightH', 'uLightD', 'uRealH', 'uFine0', 'uFine1', 'uFine2',
+    'uClouds',
+  ],
 });
 material.setTexture('uRelief', rawTexture(reliefBytes, NX, NZ, B.Engine.TEXTUREFORMAT_RGBA));
 material.setTexture('uHeight', contourTexture(contourField));
@@ -880,6 +906,8 @@ material.setFloat('uContour', CONTOUR);
 
 material.setTexture('uDisp', halfTexture(DISP, NX, NZ));
 material.setTexture('uLightH', halfTexture(lightHeights, NX, NZ));
+// the real relief's detail the simplification removed: added up close
+material.setTexture('uLightD', halfTexture(lightDetail(heights, representative), NX, NZ));
 material.setTexture('uRealH', halfTexture(heights, NX, NZ));
 const cloudTex = new B.DynamicTexture('clouds', cloudCanvas(), scene, true);
 cloudTex.update();
@@ -893,6 +921,7 @@ material.setFloat('uTime', 0);
 material.setFloat('uScreenH', engine.getRenderHeight());
 material.setFloat('uNearK', 0);
 material.setFloat('uSheetK', 0);
+material.setFloat('uDetailK', 0);
 material.setFloat('uContourK', 0);
 material.setFloat('uFineK', 0);
 (() => {
@@ -901,7 +930,7 @@ material.setFloat('uFineK', 0);
 })();
 // the focus windows' finer detail: none until their files load (tools/campaign-theatre.ts writes them beside the
 // theatre's); a window off the map and a blank texture meanwhile
-const FINE_SLOTS = ['0', '1'];
+const FINE_SLOTS = ['0', '1', '2'];
 material.setFloat('uFineCellKm', 0.05);
 for (const slot of FINE_SLOTS) {
   material.setTexture('uFine' + slot, halfTexture(new Float32Array(1), 1, 1));
@@ -1342,6 +1371,8 @@ function drawInk() {
   // the real heights for the contours and sheets only well in, from about 10 px a km (a 250 m bump 2.5 px): further
   // out their small bumps cross the sheet levels and dot the map with tiny rings
   material.setFloat('uNearK', sstep(10, 24, ppk));
+  // the light's real detail from about 3 px a km
+  material.setFloat('uDetailK', sstep(3, 8, ppk));
   material.setFloat('uFineK', sstep(6, 14, ppk));
   // the sheets from about 2 px a km: further out they speckle the plains
   material.setFloat('uSheetK', sstep(1.6, 4, ppk));
