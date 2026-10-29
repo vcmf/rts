@@ -250,7 +250,8 @@ against `?cavalry=0`.
   screen's top edge sees a figure at about 16° (lower on falling ground), and 4 frames a clip missed the inner legs
   mid-gallop. Now 10, 14, 19, 27 (the sun's), 40, 60 and 90°, 10 frames a clip, lod0 decimated to 8,600 to stay
   under the test's 8,000: 7,777 / 1,155 / 295. No holes in crops at 20 m with the horses at the screen's top
-  (`cull-low/`).
+  (`cull-low/`). Cost: +1.23 / +0.96 / +0.89 ms at 20 / 40 / 63 m (repeated: +1.24, +0.96, +0.88). The owner
+  approved the look (wide crops at 20, 40, 63 m: `horses-lighter/`).
 - **The near LOD torn** (the owner, 2026-10-29, after PR #256 was pushed: holes, shredded legs, broken riders, loose
   shards, plain at 20 m with the nearest LOD off). Not the cull: baked without it, the same tears. The decimation:
   the GLB's vertices are split at every UV and normal seam (3,739 islands; 175 once welded), and the collapse
@@ -263,16 +264,19 @@ against `?cavalry=0`.
   0.3 % and 9 %); the battery, welded too, far 17 % → 6 %. Before and after at 20 m forced, 40 and 63 m:
   `near-fix/`; the owner: "it's good now i like it". Cost of the cavalry over none (GPU frame p50, the bench at
   `?benchat=50,-25&benchr=20,40,63`, Metal, 3 rounds alternated from a load of 3 or less; the two runs spoiled by a
-  load spike dropped): +1.09 / +0.74 / +0.84 ms at 20 / 40 / 63 m (before: +1.23 / +0.96 / +0.89); textures +20 MB. Cost: +1.23 / +0.96 / +0.89 ms at 20 / 40 / 63 m (repeated: +1.24,
-  +0.96, +0.88). The owner approved the look (wide crops at 20, 40, 63 m: `horses-lighter/`).
+  load spike dropped): +1.09 / +0.74 / +0.84 ms at 20 / 40 / 63 m (before: +1.23 / +0.96 / +0.89); textures +20 MB.
 - **Sooner switches** (1.5 and 1.6 m) do not help at 20 m (+1.23, +1.62) and cost more at 40 and 63 m.
-- **20 m is still +1.2 ms**; with the nearest LOD off it is +0.99 (`horses-lighter/trot-20-c-nonearest.png`,
-  `halt-20-c-nonearest.png`, for the owner's call; the nearest LOD stays on until then).
+- **No nearest LOD** (the owner, 2026-10-29, having seen the remeshed near LOD forced at 20 m: the faster model up
+  close). The bake's profile lists the cuirassier's LODs, near and far only; a figure file with two has no nearest
+  (units.ts), so its near LOD is drawn up close and the nearest is neither shipped nor loaded (the file 663 → 332 KB;
+  nothing else read it: the shadows, contacts and tiny LOD come from the far LOD). The infantry and the battery keep
+  theirs. Its closest LOD's wholeness is now checked directly (`openEdgeShare`: 0.08 open edges a triangle, the torn
+  one's 1.9). Cost, as above (round 1's run with the cavalry off spoiled, dropped; a run that overlapped another
+  agent's bench rerun): **+0.77 / +0.75 / +0.81 ms** at 20 / 40 / 63 m (with the nearest: +1.09 / +0.74 / +0.84).
+  Stills at 20 m, trot and halt: `near-only/`.
 
 ## Open questions (the owner's)
 
-- The cavalry at 20 m (+1.09 ms with the nearest LOD since the remeshed LODs; +0.99 without it, measured before
-  them): the nearest LOD off for the horses?
 - A spread figure's shadow is as long as the sun casts it; up close the infantryman's is shortened to 0.7 (0062's
   close look). Bake the arms' per-step shape at the close length (a jump at 100 m), or keep them true?
 - The battery's firing cycle in 8 bins: more bins for long clips (a list a role) would step the gunners' shadows.

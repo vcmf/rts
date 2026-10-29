@@ -176,7 +176,9 @@ def battery_role(mat, bone, rgb, co):
 # a regiment in view, docs/plans/active/cavalry-artillery-demo.md; a gun and its four gunners about five figures)
 PROFILES = {
     'infantry': dict(roles=ROLES_INFANTRY, palette=PALETTE_INFANTRY, height=(1.6, 2.6)),
-    'cavalry': dict(glb='cavalry.glb', targets={'lod0': 8600, 'lod1': 1200, 'lod2': 300},
+    'cavalry': dict(glb='cavalry.glb', targets={'lod1': 1200, 'lod2': 300},
+                    # (no nearest LOD: its near LOD, remeshed whole, is drawn up close, the faster at 20 m; the owner,
+                    # 2026-10-29. Its nearest was 8,600 before the cull, 6,958 after)
                     # (the faces the RTS camera never sees culled first; the LODs switched at a man's height, so a
                     # horse hands over to its lighter LODs as soon as a man does: the owner, 2026-10-28)
                     cull=dict(elevations=(10, 14, 19, 27, 40, 60, 90), yaws=16, frames=10), lod_height=1.8,
@@ -204,6 +206,10 @@ PROFILES = {
 if KIND not in PROFILES: raise SystemExit(f'{SRC}: clips.json names the kind {KIND}; no profile for it ({", ".join(PROFILES)})')
 PROFILE = PROFILES[KIND]
 MULTI = KIND != 'infantry'
+# (a multi-part figure's LODs are its targets', nearest first: two of them, its near and far, and the page draws it
+# with no nearest LOD, its near LOD up close; three, the first drawn only for the men tall on screen)
+if MULTI: LODS = list(PROFILE['targets'])
+assert len(LODS) in (2, 3), f'{KIND}: two or three LODs, not {LODS}'
 ROLES = PROFILE['roles']
 PALETTE_ROLES = PROFILE['palette']
 ROLE_IDS = {r: i for i, r in enumerate(PALETTE_ROLES)}
@@ -513,7 +519,7 @@ for lod in LODS:
     assert lo < h < hi, f'{lod}: the figure is {h:.2f} m tall, not within {lo} to {hi} m (its kind: {KIND})'
     tot_a = sum(area.values()); share = {r: round(a / tot_a, 3) for r, a in sorted(area.items(), key=lambda x: -x[1])}
     lods.append(dict(name=lod, vertices=n, triangles=len(tris), roles=counts, areas=share))
-    if lod == 'lod0': height = float(pos[:, 1].max())
+    if lod == LODS[0]: height = float(pos[:, 1].max())
     blobs += [pos, nor, rol, bi, bw, tris]
     bpy.data.meshes.remove(me)
     print('BAKE', lod, n, 'vertices', len(tris), 'triangles', round(h, 3), 'm, surface by role', share)

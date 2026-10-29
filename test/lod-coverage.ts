@@ -131,3 +131,28 @@ function norm(a: number[]): number[] {
   const l = Math.hypot(a[0], a[1], a[2]) || 1
   return [a[0] / l, a[1] / l, a[2] / l]
 }
+
+/** A LOD's open edges (used by one triangle only) a triangle, its vertices welded by place (a figure's are split
+ *  where its colour roles meet): about 0.1 for a whole mesh, near 2 for one torn into scraps (the cuirassier's near LOD
+ *  decimated from the GLB's split mesh: 1.9) */
+export function openEdgeShare(d: UnitData, lod: string): number {
+  const m = d.mesh[lod]
+  const ids = new Map<string, number>()
+  const id = (v: number) => {
+    const k = [0, 1, 2].map(j => Math.round(m.positions[v * 3 + j] * 1e4)).join(',')
+    if (!ids.has(k)) ids.set(k, ids.size)
+    return ids.get(k)!
+  }
+  const edges = new Map<string, number>()
+  for (let t = 0; t < m.indices.length; t += 3) {
+    const v = [id(m.indices[t]), id(m.indices[t + 1]), id(m.indices[t + 2])]
+    for (let e = 0; e < 3; e++) {
+      const [a, b] = [v[e], v[(e + 1) % 3]]
+      const k = a < b ? `${a},${b}` : `${b},${a}`
+      edges.set(k, (edges.get(k) ?? 0) + 1)
+    }
+  }
+  let open = 0
+  for (const c of edges.values()) if (c === 1) open++
+  return open / (m.indices.length / 3)
+}

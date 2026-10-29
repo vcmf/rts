@@ -629,13 +629,16 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   normal seam, the cuirassier into 3,739 islands, and decimating that tore the figure apart: holes, shredded legs,
   loose shards, found by the owner, 2026-10-29), then its LODs collapse-decimated on the rest mesh (the battery
   30,000, 6,500 and 1,400 triangles, about the infantryman's triangles a pixel of its side on screen at the switches;
-  the cuirassier's lighter, the owner's, 2026-10-28: 8,600, 1,200 and 300). A welded shell stops decimating at about
+  the cuirassier's lighter, the owner's, 2026-10-28: 1,200 and 300, two LODs, no nearest: a profile's targets are its
+  LODs, nearest first, and a figure file with two has none, its near LOD drawn up close, the faster at 20 m and no
+  nearest LOD shipped or loaded, the owner, 2026-10-29). A welded shell stops decimating at about
   1,300 triangles, its open edges kept, faces flipped near it, so the cuirassier's near and far LODs are voxel
   remeshed first (`remesh`, 3 and 5 cm: `remeshed`, closed, its skin weights read barycentrically from the nearest
   point of the welded mesh and each face's colour role from its nearest face). Each LOD's faces never seen from the
-  RTS camera's pitches then culled (`cull`: the cuirassier 6,958, 1,153 and 292, its views from 10° above the
+  RTS camera's pitches then culled (`cull`: the cuirassier 1,153 and 292, its views from 10° above the
   horizon, below the screen's top edge's 16°, to 90°, 10 frames a clip; culling before decimating tore holes). A
-  lighter LOD must cover what the nearest covers, drawn with its back faces culled from the camera's views at its
+  figure's closest LOD (its nearest, or its near when it has none) must be whole (`openEdgeShare`: open edges a
+  triangle under 0.3, the torn near LOD's 1.9), and each lighter LOD cover what the closest covers, drawn with its back faces culled from the camera's views at its
   steps (`test/figure-lods.test.ts`, `lodGaps`: the torn near LOD left 6.4 % of it uncovered on average, now 1.4 %;
   its far LOD 35 %, now 5 %; the battery's far LOD, welded, 17 %, now 6 %). Each triangle's colour role read on the full mesh from its material, bone and texel and kept through the
   decimation as a face attribute; a chain whose span is not a whole number of 1/12 s steps (the gallop's 13 frames)
@@ -653,7 +656,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   depth (decision 0040). A battalion's instances are written when it moves (once a 1/12 s step) or changes phase; its
   LOD by the figure's height in pixels (48; the tiny LOD's 12), **cross-faded per man** (below; `?lodfade=0`: the hard
   switch, a battalion wholly at one LOD by its centre's height, ±10 %: `drawsNear`, `drawsTiny` in
-  `src/look/units-data.ts`). **The nearest LOD** (a figure with three, decision 0051;
+  `src/look/units-data.ts`). **The nearest LOD** (a figure with three, decision 0051; the cuirassier has two, so none;
   `?nearestpx=<px>`, 0: none; keep it at least `lodPx` × 1.25, the near band's top, so the nearest LOD only takes men
   the near LOD would draw whole): a battalion whose bounds' nearest point is within 90 % of `nearestPx` (100 px) and in the view
   is split, each man whose sphere is in the view and who stands taller than it (±10 %) drawn at the nearest LOD, the rest

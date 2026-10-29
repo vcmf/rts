@@ -256,9 +256,16 @@ describe('the figures (fr-cuirassier, fr-foot-artillery)', () => {
   })
   it("bakes the horse's LODs light, the faces the RTS camera never sees culled: under the infantryman's per pixel", () => {
     const tris = CAVALRY.lods.map(l => l.triangles)
-    expect(tris[0]).toBeLessThan(8000)
-    expect(tris[1]).toBeLessThan(1200)
-    expect(tris[2]).toBeLessThan(300)
+    expect(tris[0]).toBeLessThan(1200)
+    expect(tris[1]).toBeLessThan(300)
+  })
+  it('gives the horse no nearest LOD (its near drawn up close: the owner, 2026-10-29), the others theirs', () => {
+    // (the figure's file says which it has: two LODs, no nearest; units.ts draws a figure with two so, none shipped)
+    expect(CAVALRY.lods.map(l => l.name)).toEqual(['lod1', 'lod2'])
+    expect(INFANTRY.lods.length).toBe(3)
+    expect(BATTERY.lods.length).toBe(3)
+    const u = readFileSync(new URL('../src/look/units.ts', import.meta.url), 'utf8').replace(/\s+/g, '')
+    expect(u).toContain('this.hasNearest=data.lods.length>2')
   })
   it("the infantryman's file (none of the fields): the legacy roles, his parts the page's own, 1.8 m", () => {
     expect([INFANTRY.roles, INFANTRY.parts, INFANTRY.height, INFANTRY.lodHeight]).toEqual([
