@@ -6,8 +6,11 @@ precision highp float;attribute vec3 position;attribute vec3 normal;attribute fl
 // in steps), round his range's loop
 uniform mat4 viewProjection;uniform sampler2D uVAT;uniform float uVATStep;
 #ifdef INSTANCES
-// a man's clip: its first step, its steps in the loop, his phase in steps
+// a man's clip: its first step, its steps in the loop, his phase in steps. His pose (world0, the instance matrix's
+// first column; world1..3 unread, src/look/units.ts Lists): where he stands (x, y, z) and his turn about y (rad), 16 B
+// in place of a 64 B matrix (battle threads PR 4); his world matrix built from it (unitPose)
 attribute vec3 aVAT;
+#include<unitPose>
 #endif
 #if defined(SMOOTH)&&defined(INSTANCES)
 // the men's places moved every frame (?smoothmove=1, decision 0049): the step's place and the share of the next step's
@@ -84,7 +87,11 @@ vec3 palMix(vec3 p[PAL_N]){vec3 c=vec3(0.0);
 mat4 boneAt(float b,int f){int x=int(b)*4;
   return mat4(texelFetch(uVAT,ivec2(x,f),0),texelFetch(uVAT,ivec2(x+1,f),0),texelFetch(uVAT,ivec2(x+2,f),0),texelFetch(uVAT,ivec2(x+3,f),0));}
 void main(){
-  #include<instancesVertex>
+  #ifdef INSTANCES
+  mat4 finalWorld=poseWorld(world0);
+  #else
+  mat4 finalWorld=world;
+  #endif
   #if defined(SMOOTH)&&defined(INSTANCES)
   finalWorld[3].xyz+=aNext*uStepFrac;
   #endif

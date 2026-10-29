@@ -10,7 +10,8 @@ last_reviewed: 2026-10-24
 - Conventional Commits: `type(scope): subject`. Scope mandatory and specific (`water`, `terrain`,
   `foliage`, `postfx`, `sim`, `camera`, `docs`, `tools`, …); subject imperative, lowercase, no
   trailing period; breaking → `!` or `BREAKING CHANGE:`. One logical change per commit. No emoji.
-- PR titles in the same format; PRs are squash-merged, so the title becomes the commit.
+- PR titles in the same format; PRs are squash-merged, so the title becomes the commit. The exception: an
+  epic branch merges into main with a merge commit, keeping each squashed PR as one commit (decision 0020).
 - No AI attribution lines in commits or PRs.
 
 ## Units and numbers
@@ -57,7 +58,7 @@ included, whatever the older code around it does.
 ## Docs
 
 - **Types** (see `docs/INDEX.md`): vision, conventions, system (current, kept true), decision
-  (accepted: binding; proposed: open; append-only), proposal (before building, frozen after), plan (active/done), research
+  (accepted: binding; proposed: open; append-only), proposal (the design, kept true as it changes: nothing is frozen), plan (active/done), research
   (background).
 - **Front matter** on every doc under `docs/`: `status` and `last_reviewed` (YYYY-MM-DD); decision
   records use `date` instead of `last_reviewed`. System docs also list `code:` paths and `decisions:`.

@@ -1,6 +1,7 @@
 // The look page (app/look.html): the painted world in the game's toolchain, ported from
 // prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
+import type { SimPlay } from './sim-armies.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Engine } from '@babylonjs/core/Engines/engine.js'
@@ -14,6 +15,7 @@ import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { q, runBench, showBench } from './bench.ts'
+import { TR, tr, trNow } from './trace.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
@@ -520,7 +522,15 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dar
 // (docs/plans/active/cavalry-artillery-demo.md, the scenario's ARMS_DEMO): ?cavalry=0, ?artillery=0 leave them out
 // (with both, main's page before them)
 const armiesParam = params.get('armies')
-const armSwitch = (name: string) => bit(name) ?? true
+// (under ?sim the other arms are left out: their scripts are stand-ins the sim does not drive, nor place against its
+// armies; asked for there, a clear error)
+const armSwitch = (name: string) => {
+  const on = bit(name)
+  if (on && simParam) {
+    throw new Error(`?${name}=1 with ?sim: the sim drives the infantry alone; the ${name} is scripted`)
+  }
+  return on ?? !simParam
+}
 const unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
 // frame (else only when it would change); ?ushadowlod=1 casts from the LOD the view draws (else the far LOD always);
@@ -608,6 +618,9 @@ if (
 ) {
   throw new Error(`?ushadowswitch must be <r0>,<r1> m with r0 < r1, not ${uShadowSwitch}`)
 }
+// ?sim: the armies played by the sim, not the script (battle threads PR 4b; needs ?armies)
+const simParam = params.has('sim')
+if (simParam && armiesParam === null) throw new Error('?sim plays the armies: give ?armies=<battalions a side> too')
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 40)) {
   throw new Error(
     `?armies must be 1 to 40 battalions a side (the demo map holds 40: docs/plans/active/armies-32k.md), not ${armiesParam}`,
@@ -814,12 +827,35 @@ if (armiesParam !== null) {
   trodden.holdShare = smHold !== 'fixed'
   trodden.setOn(trample ?? true)
   armiesFocus = facingAt(foot.battalions)
+  // ?sim: the sim plays the infantry (src/look/sim-armies.ts, battle threads PR 4b) in place of its script (the other
+  // arms are left out under it: armSwitch)
+  let sim: SimPlay | null = null
+  if (simParam) {
+    const { playSim } = await import('./sim-armies.ts')
+    sim = await playSim(foot.battalions, drill.companies * drill.files * drill.ranks, armiesFocus, {
+      ruleset: ARMIES_DEMO.ruleset,
+      unitType: ARMIES_DEMO.unitType,
+      ...ARMIES_DEMO.sim,
+    })
+    foot.source = sim.source
+    const s = sim
+    // (first: the renderer's frame reads what the tick took)
+    scene.onBeforeRenderObservable.add(
+      () => {
+        const t = trNow()
+        s.tick(Math.min(engine.getDeltaTime() / 1000, 0.1))
+        if (t) tr(TR.simMs, performance.now() - t)
+      },
+      undefined,
+      true,
+    )
+  }
   // the tools' hooks: __units the infantry's renderer, as before the arms (tools/guard.mjs masks and scores it alone,
   // against its coats: like for like with main); __armies' show and setMask every arm's, arms the other arms'
   // renderers by name (the review's cameras)
   const show = (on: boolean) => all.forEach(u => u.show(on))
   const setMask = (m: Parameters<Units['setMask']>[0]) => all.forEach(u => u.setMask(m))
-  const hooks = { blocked, focus: armiesFocus, coats: foot.coats(), arms, show, setMask }
+  const hooks = { blocked, focus: armiesFocus, coats: foot.coats(), arms, show, setMask, sim: sim?.link }
   Object.assign(window, { __units: foot, __armies: hooks })
   lookAtArm(params.get('lookat'), arms, armiesFocus)
 }

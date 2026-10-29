@@ -1,11 +1,11 @@
 ---
-status: draft
+status: accepted
 last_reviewed: 2026-10-22
 ---
 
 # The battle's threads: a worker, soldiers stepped at 12 fps
 
-**Experimental.** Decision 0048 (proposed) adopts this design; the plan is `docs/plans/active/battle-threads.md`. If
+**Experimental.** Decision 0048 (proposed) adopts this design; the plan is `docs/plans/done/battle-threads.md`. If
 the plan's measurements fail, the decision is rejected and this design thrown away (the owner, 2026-10-22). It
 refines `docs/proposals/sim-design.md` §16 (the worker and the snapshot); where they differ, this proposal says why.
 
@@ -25,7 +25,7 @@ optimisations, `docs/plans/active/s1d1-unit-types.md`):
   cost, not a per-tick one).
 - **The state hash** (every 20 ticks): **2.7–4.1 ms** (issue #38), landing whole in one frame: **the biggest single-frame
   hitch**, more than a tick.
-- **The 3D armies** (branch `look/armies`, `src/look/units.ts`): every man of a moving battalion has its 16-float
+- **The 3D armies** (`src/look/units.ts`): every man of a moving battalion has its 16-float
   matrix written on the CPU at 12 Hz; the 3D page does not run the sim yet (its moves are scripted). When it does, the
   costs above join the renderer's on one thread.
 
@@ -68,7 +68,7 @@ second: with the renderer it cannot hold 8.33 ms at the 99th percentile.
 **The owner's decision (2026-10-22), per the art bible** (`docs/art-bible.md`: "Units animated at 12 fps, with the
 camera always smooth"): **soldiers move stepped at 12 fps, poses and positions together**, with no display-rate
 interpolation. So the soldier layer steps at `MEN_HZ = 12`, tied to the figures' bake rate (the animation baked at
-12 fps by the figure bake on branch look/armies), and the renderer draws the latest published step as is. The camera
+12 fps by the figure bake), and the renderer draws the latest published step as is. The camera
 stays smooth (it is the main thread's, at display rate).
 
 - **The rate is per real second**, not per game second: at 8× speed a fixed rate per game second would multiply the
@@ -166,7 +166,8 @@ incrementally (hash only what a tick changed), keeping the same digest definitio
 - Whether WebGL2 `bufferSubData` takes a `SharedArrayBuffer`-backed view in Chrome (else a copy, about 0.05 ms for
   320 KB, est.).
 - The hash's best form in the worker (amortised or incremental, §7).
-- Garbage collection from the `Man` objects and per-frame temporaries (plan PR 2).
+- Garbage collection from the `Man` objects and per-frame temporaries (plan PR 2; measured there: the collector's
+  share of the profile is under 1 %, and the objects were not its source).
 
 ## Sources
 

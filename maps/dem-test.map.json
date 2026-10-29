@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "id": "dem-test",
+  "name": "Real relief, a test",
+  "note": "The real relief's test map (docs/plans/done/m5-relief.md): small enough to compile for the sim. The Pratzen's western slope from the Austerlitz heightfield, set over the whole extent by a shift, a second piece from the Santon hill set in with a soft edge, a level edit on top and a brook that reads the real ground.",
+  "seed": 5,
+  "season": "summer",
+  "datum": 180,
+  "extent": { "w": 2000, "h": 2000 },
+  "play": { "w": 1200, "h": 1200 },
+  "sources": [
+    {"id":"cuzk","kind":"dem","ref":"ČÚZK DMR 4G, 49.1325 N 16.745 E, a transverse Mercator centred there","file":"austerlitz.rdem","hash":"sha256:84b60c9125020a0a38dd7388f301cbdcd4eb534e9bdd5b7f32995e5fa25f7ee8","credit":"© ČÚZK, 2026 (DMR 4G)","licence":"CC BY 4.0"}
+  ],
+  "features": [
+    {"id":"slope","kind":"relief.dem","source":"cuzk","shift":{"x":-183.99,"z":-1312.55}},
+    {"id":"knoll","kind":"relief.dem","source":"cuzk","priority":11,"area":[[[-700,400],[-300,400],[-300,800],[-700,800]]],"edge":80,"shift":{"x":-4783.99,"z":-112.55}},
+    { "id": "yard", "kind": "relief.level", "area": [[[100, -200], [260, -200], [260, -80], [100, -80]]], "to": 50, "edge": 20 },
+    { "id": "brook", "kind": "water.stream", "line": [[-1000, -600], [-300, -500], [400, -650], [1000, -560]], "width": 4 }
+  ]
+}

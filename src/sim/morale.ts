@@ -8,11 +8,12 @@
 //
 // A battalion that routs drops its orders and runs; the run's direction is fixed at the break (its side's
 // rear, else away from the nearest enemy, else straight back), and its phase is kept: running, halted at
-// impassable ground, or fled. Only a halted router tries again, the next direction of a fan about the
-// stored one. A router whose run has ended, safe and calm, rallies: its losses so far are written off and
-// its quality drops. A battalion that breaks too often, or routs below half strength, shatters and runs
-// for good. A wavering battalion left without orders, its morale still falling and the enemy in front of it,
-// falls back once (not in melee: it ends by a rout, docs/systems/melee.md).
+// impassable ground (or, with claims, by others), or fled. Only a halted router tries again, the next direction of a
+// fan about the stored one. Enemies that reach a router cut it down (the melee step). A router
+// whose run has ended, safe and calm, rallies: its losses so far are written off and its quality drops. A
+// battalion that breaks too often, or routs below half strength, shatters and runs for good. A wavering
+// battalion left without orders, its morale still falling and the enemy in front of it, falls back once (not
+// in melee: it ends by a rout, docs/systems/melee.md).
 //
 // Everything one battalion reads of another (its state, whether it broke, its men) was fixed before this
 // step began, so no outcome depends on the order battalions are visited in. One thing does: routs and
@@ -45,18 +46,38 @@ import {
   ordersFree,
   setOnMap,
   ST_HALTED,
+  ST_BLOCKED,
   RETIRE,
   fillRetire,
   cutChange,
 } from './formation.ts'
+import { formedFits, freeSpot } from './claims.ts'
 import { sin, cos, PI } from './num.ts'
 import { TICK_HZ, DT } from './time.ts'
 
 const RUN = 800 // how far a router is sent, metres (kept on the map)
 // the runs: the stored direction first, then turned from it by these angles, one every RETRY ticks while the
-// router is halted; after the last it stays where it is (pinned)
+// router is halted; after the last it stays where it is (pinned). With claims, while an enemy is near it goes on trying
+// the fan's directions in turn, since others may move off its way
 const FAN = [0, PI / 3, -PI / 3, (2 * PI) / 3, (-2 * PI) / 3]
 const RETRY = 100
+// s a run may stand held by other formations' cells before it counts as halted there (the claim grid's prototype)
+const HELD = 2
+// metres, anchor to anchor: an enemy this near may yet move off a held router's way, or reach it (two columns of route
+// tail to tail are about 700 m apart, anchor to anchor)
+const ENEMY_NEAR = 1000
+
+/** Whether an enemy in the fight stands within ENEMY_NEAR of battalion i, anchor to anchor. */
+export function enemyNear(w: World, i: number): boolean {
+  const f = w.f
+  for (let j = 0; j < MAX_FORMATIONS; j++) {
+    if (!f.alive[j] || f.side[j] === f.side[i] || outOfFight(f.mstate[j])) continue
+    const dx = f.x[j] - f.x[i]
+    const dz = f.z[j] - f.z[i]
+    if (dx * dx + dz * dz <= ENEMY_NEAR * ENEMY_NEAR) return true
+  }
+  return false
+}
 
 // what a battalion reads of the others this step (scratch): the contagion shock, its secured flanks, and the
 // nearest enemy in the fight (its distance, and the unit vector from it to the battalion)
@@ -117,6 +138,34 @@ export function moraleStep(w: World, i: number, lost: number): void {
   }
   if (s === MS_RALLYING) {
     if (now - f.since[i] >= M.rally.time * TICK_HZ) {
+      // with the claim grid's prototype, it forms only where it fits: standing on a formation in the fight, it goes
+      // first to the nearest place it fits (docs/plans/active/c1-claims.md, step 3)
+      if (w.claims && !formedFits(w, i, f.x[i], f.z[i], f.heading[i])) {
+        if (f.ordHead[i] < 0) {
+          const spot = freeSpot(w, i)
+          // a way that lies behind it is walked faced about, as a router's run is: a line cannot turn in place at the
+          // map's edge or among others; it faces back when it gets there
+          const back = !!spot && (spot[0] - f.x[i]) * sin(f.heading[i]) + (spot[1] - f.z[i]) * cos(f.heading[i]) < 0
+          const face = back && !!layoutOf(w, i).turn && !f.trans[i]
+          if (spot && ordersFree(w) >= (face ? 3 : 1)) {
+            if (face) {
+              const k = allocOrder(w, O_FACE)
+              w.ord.optional[k] = 1
+              appendOrder(w, i, k)
+            }
+            const n = allocOrder(w, O_MOVE)
+            setOnMap(w, n, spot[0], spot[1])
+            w.ord.resolved[n] = 1
+            appendOrder(w, i, n)
+            if (face) {
+              const k = allocOrder(w, O_FACE)
+              w.ord.optional[k] = 1
+              appendOrder(w, i, k)
+            }
+          }
+        }
+        return
+      }
       f.mstate[i] = m < M.wavering[0] ? MS_WAVERING : m < M.shaken[0] ? MS_SHAKEN : MS_STEADY
     }
     return
@@ -227,28 +276,44 @@ function rout(w: World, i: number, now: number, men: number): void {
   if (f.trans[i]) cutChange(w, i) // it breaks its ranks: no change finished under fire (#39)
   run(w, i)
 }
-// a router: a run ends when its orders do. Halted at impassable ground, it tries the fan's next direction
-// every RETRY ticks; otherwise it got where it was going (or as near as it could) and has fled
+/**
+ * A router's step: a run ends when its orders do, or when other formations' cells hold it for HELD seconds. Halted at
+ * impassable ground or by others, it tries the fan's next direction every RETRY ticks; otherwise it got where it was
+ * going (or as near as it could) and has fled.
+ */
 function routStep(w: World, i: number): void {
   const f = w.f
+  if (f.routPhase[i] === RP_RUNNING && f.status[i] === ST_BLOCKED && f.blockedFor[i] > HELD) {
+    clearOrders(w, i)
+    f.routPhase[i] = RP_HALTED
+  }
   if (f.routPhase[i] === RP_RUNNING && f.ordHead[i] < 0) {
     f.routPhase[i] = f.status[i] === ST_HALTED ? RP_HALTED : RP_FLED
   }
-  if (f.routPhase[i] === RP_HALTED && f.runs[i] < FAN.length && (w.meta[M_TICK] + 1 + i) % RETRY === 0) run(w, i)
+  if (
+    f.routPhase[i] === RP_HALTED &&
+    (f.runs[i] < FAN.length || (w.claims && enemyNear(w, i))) &&
+    (w.meta[M_TICK] + 1 + i) % RETRY === 0
+  ) {
+    run(w, i)
+  }
 }
-// the next run: the stored direction turned by the fan's angle, at the rout pace, with a Face about first
-// where the shape allows and the way is behind it. The run's order is made first; if the pool has none,
-// nothing changes (the same direction is tried at the next retry)
+/**
+ * Router i's next run: the stored direction turned by the fan's angle (in turn, past its last with claims), at the
+ * rout pace, with a Face about first where the shape allows and the way is behind it. The run's order is made first;
+ * if the pool has none, nothing changes (the same direction is tried at the next retry).
+ */
 function run(w: World, i: number): void {
   const f = w.f
-  const a = FAN[f.runs[i]]
+  const a = FAN[f.runs[i] % FAN.length]
   const ca = cos(a)
   const sa = sin(a)
   const dx = f.routX[i] * ca + f.routZ[i] * sa
   const dz = -f.routX[i] * sa + f.routZ[i] * ca
   const n = allocOrder(w, O_MOVE)
   if (n < 0) return
-  f.runs[i]++
+  // past the fan's last (with claims), the count stays at FAN.length or more and wraps before its byte does
+  f.runs[i] = f.runs[i] + 1 < 2 * FAN.length ? f.runs[i] + 1 : FAN.length
   f.routPhase[i] = RP_RUNNING
   f.status[i] = 0
   f.blockedFor[i] = 0

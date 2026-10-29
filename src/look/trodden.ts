@@ -9,6 +9,7 @@ import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js
 import { Matrix, Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { groundAt } from './heightfield.ts'
+import { behind, isHidden } from './pose.ts'
 import { D } from './spec.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
 
@@ -30,12 +31,12 @@ export const VIEW_REACH = 900
 
 /** An arm's men as the mask reads them: their weight (a man's tread: 1 a soldier), whether they moved since the mask
  *  last took them (trod: set by the arm, cleared by the mask when it draws), whether they show, and each unit's men's
- *  instance matrices with their bounds */
+ *  poses (x, y, z, his turn: src/look/pose.ts) with their bounds */
 export interface TreadSource {
   readonly tread: number
   trod: boolean
   readonly isShown: boolean
-  treadUnits(): Iterable<{ matrices: Float32Array; lo: Vector3; hi: Vector3 }>
+  treadUnits(): Iterable<{ pose: Float32Array; lo: Vector3; hi: Vector3 }>
 }
 
 /** Whether the mask is drawn this frame, its box held (not refitted): only when some arm's men moved since it was last
@@ -119,6 +120,7 @@ export class Trodden {
   private readonly boxV = new Vector4()
   private at = -1 // the clock when the mask was last drawn
   private wall = -Infinity // the wall's clock (ms) when its box was last fitted
+  private readonly back = [0, 0] // (the way behind a man: behind)
   /** the box's slack held in proportion (?smhold=fixed: refitted at once, false) */
   holdShare = true
 
@@ -234,15 +236,16 @@ export class Trodden {
       const k = s.tread
       for (const h of s.treadUnits()) {
         if (h.hi.x < b.x0 || h.lo.x > b.x0 + b.size || h.hi.z < b.z0 || h.lo.z > b.z0 + b.size) continue
-        const m = h.matrices
-        for (let o = 0; o < m.length; o += 16) {
-          const x = m[o + 12]
-          const z = m[o + 14]
-          // (+z in the figure's frame: behind him)
-          const bx = m[o + 8]
-          const bz = m[o + 10]
+        const p = h.pose
+        const back = this.back
+        for (let o = 0; o < p.length; o += 4) {
+          // (a man not drawn: none)
+          if (isHidden(p[o + 1])) continue
+          const x = p[o]
+          const z = p[o + 2]
+          behind(p[o + 3], back)
           splat(x, z, k)
-          for (const [d, w] of TR_TRAIL) splat(x + bx * d, z + bz * d, w * k)
+          for (const [d, w] of TR_TRAIL) splat(x + back[0] * d, z + back[1] * d, w * k)
         }
       }
     }
