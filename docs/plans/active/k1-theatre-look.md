@@ -121,7 +121,13 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   at low zoom it still looks soft"): the sheets off by default (`?sheet=200` to compare): their rim and shadow read as
   shadows cast by the lines; the light's heights read by Catmull-Rom (through the data; the cubic B-spline blurred
   them by about half a cell); the real detail at 0.8 from under 1 px a km (full from 3), the 50 m windows from 2 px a
-  km (full from 6). A frame on test machine A at 1600 × 900: 3.2 ms still, 10.3 ms with the ink. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  km (full from 6). A frame on test machine A at 1600 × 900: 3.2 ms still, 10.3 ms with the ink. Then (the owner: "strange pattern and artifacts", in the Alps by Salzburg): the light's heights are lifted
+  to about 10 km, where a half float steps every 8 m, and the per-pixel light drew the steps as rows of dots: the
+  height textures are 32-bit floats where the GPU filters them (half floats otherwise); the textures the Catmull-Rom
+  read takes at texel centres sampled nearest (the bilinear filter rounded the coordinates and mixed in a neighbour:
+  specks on steep slopes); the baked cast shadow read by a cubic B-spline (bilinear, its edges stepped along the
+  250 m grid). Still seen up close: the 1 km mesh's facets on the alpine skyline (K3). A frame at 1600 × 900: 2.8 ms
+  still, 9.9 ms with the ink. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast

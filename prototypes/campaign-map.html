@@ -532,6 +532,23 @@ vec2 gridUv(vec2 w) {
   return ((w + uHalf) / uCellKm + 0.5) * uTexel;
 }
 
+/* a smooth cubic B-spline read of all four channels, from four bilinear taps */
+vec4 bicubic4(sampler2D t, vec2 uv, vec2 texel) {
+  vec2 p = uv / texel - 0.5;
+  vec2 f = fract(p);
+  p = floor(p);
+  vec2 w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;
+  vec2 w1 = (3.0 * f * f * f - 6.0 * f * f + 4.0) / 6.0;
+  vec2 w3 = f * f * f / 6.0;
+  vec2 w2 = 1.0 - w0 - w1 - w3;
+  vec2 g0 = w0 + w1;
+  vec2 g1 = w2 + w3;
+  vec2 a = (p - 1.0 + w1 / g0 + 0.5) * texel;
+  vec2 b = (p + 1.0 + w3 / g1 + 0.5) * texel;
+  return g0.y * (g0.x * texture2D(t, vec2(a.x, a.y)) + g1.x * texture2D(t, vec2(b.x, a.y)))
+       + g1.y * (g0.x * texture2D(t, vec2(a.x, b.y)) + g1.x * texture2D(t, vec2(b.x, b.y)));
+}
+
 /* a smooth cubic B-spline read of a single-channel texture, from four bilinear taps */
 float bicubic(sampler2D t, vec2 uv, vec2 texel) {
   vec2 p = uv / texel - 0.5;
@@ -636,7 +653,8 @@ void main() {
   float hz = (lightH(vW + ez) - lightH(vW - ez)) * uRZ + (detailH(vW + ez) - detailH(vW - ez));
   vec3 n = normalize(vec3(-hx, 2000.0 * e, -hz));
   float lambert = max(0.0, dot(n, uSun)) / uSun.y;
-  vec3 R = texture2D(uRelief, uv).rgb;
+  /* the baked cast shadow and exposure, read smoothly: bilinear, the shadow edges stepped along the 250 m grid */
+  vec3 R = bicubic4(uRelief, uv, uTexel).rgb;
   float sunlit = R.g;
   float exposed = R.b * 2.0 - 1.0;
   float v = lambert * mix(0.6, 1.0, sunlit) * (1.0 + 0.3 * exposed);
@@ -781,14 +799,33 @@ function lightDetail(h0, base) {
   return out;
 }
 
-/** Heights in metres as a half-float single-channel texture (bilinear, clamped, no mips: see contourTexture). */
+/** Heights in metres as a float single-channel texture (bilinear, clamped, no mips: see contourTexture). */
 function halfTexture(values, w, h) {
+  // 32-bit floats where the GPU filters them: the light's heights are lifted to about 10 km, where a half float steps
+  // every 8 m and the light draws the steps as rows of dots
+  if (engine.getCaps().textureFloatLinearFiltering) {
+    const t = B.RawTexture.CreateRTexture(
+      Float32Array.from(values), w, h, scene, false, false, B.Texture.BILINEAR_SAMPLINGMODE, B.Engine.TEXTURETYPE_FLOAT,
+    );
+    t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+    return t;
+  }
   const half = new Uint16Array(values.length);
   for (let k = 0; k < half.length; k++) half[k] = toHalf(values[k]);
   const t = B.RawTexture.CreateRTexture(
     half, w, h, scene, false, false, B.Texture.BILINEAR_SAMPLINGMODE, B.Engine.TEXTURETYPE_HALF_FLOAT,
   );
   t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+  return t;
+}
+
+/**
+ * A texture read only at its texel centres (by catmullRom in the print shader), switched to nearest sampling: the
+ * GPU's bilinear filter rounds the coordinates, so a centre read mixed in a little of a neighbour, and the slope
+ * light drew that as specks on steep ground.
+ */
+function exact(t) {
+  t.updateSamplingMode(B.Texture.NEAREST_SAMPLINGMODE);
   return t;
 }
 
@@ -929,9 +966,9 @@ material.setFloat('uTop', SHADE_TOP);
 material.setFloat('uContour', CONTOUR);
 
 material.setTexture('uDisp', halfTexture(DISP, NX, NZ));
-material.setTexture('uLightH', halfTexture(lightHeights, NX, NZ));
+material.setTexture('uLightH', exact(halfTexture(lightHeights, NX, NZ)));
 // the real relief's detail the simplification removed: added up close
-material.setTexture('uLightD', halfTexture(lightDetail(heights, representative), NX, NZ));
+material.setTexture('uLightD', exact(halfTexture(lightDetail(heights, representative), NX, NZ)));
 material.setTexture('uRealH', halfTexture(heights, NX, NZ));
 const cloudTex = new B.DynamicTexture('clouds', cloudCanvas(), scene, true);
 cloudTex.update();
