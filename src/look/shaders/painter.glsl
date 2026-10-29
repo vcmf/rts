@@ -382,7 +382,12 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #endif
   vec3 lt=alb*sunC*mix(1.16,1.02,snow)+liftC*(1.0-snow);
   #ifdef MID2
-  shc=mix(shc,mid,0.10);mid=mix(mid,lt,0.22);   // the wide mid tone: lighter, the shadow lifted toward it (its cool hue kept)
+  // the wide mid tone: the mid lighter, the shadow lifted toward it (its cool hue kept), but on units, whose shadow
+  // keeps its value (uUnitShadow): lifted, a white coat on snow lost its separation (tools/guard.mjs)
+  #ifndef KEEP_HUE
+  shc=mix(shc,mid,0.10);
+  #endif
+  mid=mix(mid,lt,0.22);
   #elif defined(MID1)
   mid=mix(mid,lt,0.12);                          // soft band edges: the mid a little lighter
   #endif

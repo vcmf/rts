@@ -20,7 +20,8 @@ Proposed: we will paint the units, the buildings, the nature meshes (and the gro
 the same three colours meeting over wide, soft edges: a real mid tone, not three flat patches nor a photoreal lambert.
 Two candidates, behind `?midtone` per class (`src/look/midtone.ts`): **1**, the band edges 0.24 wide and the mid a
 little lighter; **2**, a wide mid tone: the light wrapped a little round the form, edges 0.38 wide, the mid lighter
-and the shadow band lifted 10 % toward it, its cool hue kept. The owner picks a mode per class; the pick becomes the
+and the shadow band lifted 10 % toward it, its cool hue kept (not on units: their shadow keeps its value, or a white
+coat on snow lost its separation in the guard). The owner picks a mode per class; the pick becomes the
 default and this record is accepted (it then amends decision 0022's "every other surface keeps the three bands" and
 the art bible's §4), or it is rejected and the switch goes.
 

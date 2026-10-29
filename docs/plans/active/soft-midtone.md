@@ -36,7 +36,7 @@ and main's ramp is untouched at 0. In `paint()`, a material's class picks:
 - **1, soft bands:** the same three bands, each edge about 0.24 wide instead of 0.08, the mid band a little lighter.
 - **2, wide mid tone:** the light wrapped round the form (a wrapped terminator, as the crowns', but weaker), edges
   about 0.36–0.40 wide so the mid tone spans the turn, the mid band lighter and the shadow band lifted a little toward
-  it (still cool: its hue is kept).
+  it (still cool: its hue is kept; not on units, below).
 
 The ground keeps its `fwidth` floor; its switch only raises the minimum width. Cast shadows keep their depth (the
 shadow map's term pushes the light far below every band edge).
@@ -54,6 +54,7 @@ shadow map's term pushes the light far below every band edge).
 
 ## Open questions
 
-- Whether the ground should take it at all (a flat field sits deep in the light band; only slopes and the cast
-  shadows' edges change).
+- Whether the ground should take it at all. Measured: it changes the whole terrain's modelling, not only shadow
+  edges (the golden start view, mean difference 25 of 255 in a region at 2, 6.5 at 1; the slopes turned from the sun
+  lifted toward the light), so the arm to judge first keeps it at 0 (`?midtone=u2,b2,n2`).
 - Whether the guard's army blocks (boxes) should follow the figures' ramp: they stand in for the figures, so they do.
