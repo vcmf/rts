@@ -390,6 +390,18 @@ tile) is no sim map. Two PRs, then PR 4.
   `?armies=40&sim`. The men worker's turn at 32,000 men, 8× (`tools/bench-sim.ts`) within 5 % of PR 4c's (the claim
   grid is off there).
 - **Stop**: none of its own (a merge must land); a design finding past three review rounds goes back to this section.
+- **Outcome** (2026-10-28 and 29): **met**.
+  - The men worker at 32,000 men, 8× (`tools/bench-sim.ts`, interleaved with the epic, four rounds, each waiting for
+    the machine's load to fall): the clean round (4: the five-minute load under 4 for both) as the epic's, its loop
+    10.12 against 10.15 ms a turn, stepping 3.79 against 3.80, publishing 0.21 against 0.21; the sim's tick 2.23
+    against 2.25; the men's sub-steps 100 %, no tick skipped. Rounds 1 and 2 (the five-minute load 6 to 8) within
+    the epic's own spread between them (its loop 9.07 to 10.12); round 3's epic run under a load of 8.5, left out.
+  - `app-check`: every session's replay reproduced in Node; the bench case in the worker, back to 30 s and on tick by
+    tick, reaches the hash first seen. The bench's time hooks first drew the page after each step: in headless Chrome
+    a scripted step then waited about 170 ms on the browser's rendering, so 1,400 steps ran past the check's minute;
+    they now read the frame and leave the drawing to the animation frame (a step about 0.7 ms).
+  - The map page's check under the isolation headers, `look-check` at `?armies=40&sim` (34,920 men, none floating):
+    pass. The overlay and a claims case's cells drawn in the worker (shots).
 
 ## PR 5 and PR 6: only if measured
 
