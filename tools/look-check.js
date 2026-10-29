@@ -112,7 +112,8 @@
   if (floating) {
     fail.push(`instancesFloating: ${floating} of ${tested} instances float, worst ${worstFloat.toFixed(3)} m`)
   }
-  // the drawn ground stays inside the spec's ground range (the camera footprint assumes it)
+  // the drawn ground stays inside the world's ground range, from its look data (the camera's checks assume it:
+  // checkView, src/look/spec.ts)
   const t = tileGround.getVerticesData(B.VertexBuffer.PositionKind)
   let lo = Infinity
   let hi = -Infinity
@@ -121,8 +122,10 @@
     hi = Math.max(hi, t[k])
   }
   out.ground = [+lo.toFixed(2), +hi.toFixed(2)]
-  if (lo < S.ground.lo || hi > S.ground.hi) {
-    fail.push(`groundRange: ${lo.toFixed(1)}..${hi.toFixed(1)} m outside ${S.ground.lo}..${S.ground.hi} m`)
+  const G = window.GROUND
+  if (!G) fail.push('groundRange: the page gives no GROUND')
+  else if (lo < G.lo - 1e-3 || hi > G.hi + 1e-3) {
+    fail.push(`groundRange: ${lo.toFixed(1)}..${hi.toFixed(1)} m outside ${G.lo.toFixed(1)}..${G.hi.toFixed(1)} m`)
   }
   if (fail.length) console.error('look-check FAILED: ' + fail.join(', '))
   return JSON.stringify(out)

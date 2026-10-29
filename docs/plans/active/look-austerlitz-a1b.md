@@ -5,7 +5,7 @@ last_reviewed: 2026-10-29
 
 # Plan: A1b, the camera's focus on the ground, and the ground range per world
 
-Step A1b of the Austerlitz look plan (PR #255, `docs/plans/active/look-austerlitz.md`, "The steps"), cut from A1's
+Step A1b of the Austerlitz look plan (PR #255, its "The steps"), cut from A1's
 branch (`docs/plans/active/look-austerlitz-a1.md`) and run beside A1's other PRs (the owner, 2026-10-29). Its showcase:
 the Pratzen window, centre (700, 250) in map metres, 36.6 m of relief in play (30.4 to 67.0 m after the rebase) and
 68.1 m at the tile's top, which today's camera and `SPEC.ground` (0 to 25 m) refuse.
@@ -31,10 +31,13 @@ the Pratzen window, centre (700, 250) in map metres, 36.6 m of relief in play (3
   (open question).
 - **The ground range per world** (`groundOf`): the tile's lowest and highest node, the far ring's lowest, and the focus
   range (a map world's: the lowest and highest ground in play) from the look data at load. The camera checks that
-  assumed `SPEC.ground` (the frame below the focus inside the margin, the whole frame inside the far ring, the eye
-  never held inside the ground: `nearReachOf`, `footprintOf`) take the world's ground (`checkView`, at load) and reckon
-  with the drop from the focus to the ground (the focus anywhere in its range, the ground anywhere in the world's).
-  `derive` keeps the camera's own checks on flat ground (the horizon, decision 0002).
+  assumed `SPEC.ground` take the world's ground (`checkView`, at load: the whole frame inside the far ring, no view
+  held inside the ground), reckoned with the drop from the focus to the ground (the focus anywhere in its range, the
+  ground anywhere in the world's). The frame below the focus row inside the tile is too loose a bound on planes over
+  relief (the Pratzen: 205 m against the 165 m margin), so it is marched on each world's own ground in the tests
+  (`nearFrameOf`: the frame's lower corners from views on the play area's edge). `derive` keeps the camera's own
+  checks on flat ground (the horizon, decision 0002). The focus follows down at once and eases only up, so it is
+  never above the ground the march assumes.
 - **The zoom's hold** (decision 0051): `clearBelow` from the highest ground within the eye's reach of the focus (a
   max grid of the heightfield) over the focus's own height, not `SPEC.ground.hi` over 8 m. The held radius is the same
   wherever the old bound held (the bound only says where the ground need not be read).

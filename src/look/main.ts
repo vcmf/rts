@@ -27,7 +27,7 @@ import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn, zoo
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
-import { D, TUNED_R, checkGround } from './spec.ts'
+import { D, FocusFollow, TUNED_R, checkView, groundOf, maxGrid } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS, type LookWorld } from './world/data.ts'
 import { windowFile, windowOf, type LookWindow } from './world/windows.ts'
@@ -107,18 +107,11 @@ const worldBuildings: readonly Building[] = onMap ? [] : BUILDINGS
 const frameCover = coarsenCover(look.cover, D.spec.macro.cover)
 setRiver(look.river)
 setHeightfield(look.hf, look.far, D.spec.tile / 2)
-{
-  // the heights themselves, not the header
-  let lo = Infinity
-  let hi = -Infinity
-  let farLo = Infinity
-  for (const v of look.hf.h) {
-    if (v < lo) lo = v
-    if (v > hi) hi = v
-  }
-  for (const v of look.far.h) if (v < farLo) farLo = v
-  checkGround(D.spec, lo, hi, farLo)
-}
+// the world's ground range, from the heights themselves (not the header): the camera's checks take it (checkView), and
+// the focus keeps to its range (the demo's focus stays on its 8 m plane, SPEC.camera.focusY; a map world's follows its
+// ground in play: docs/plans/active/look-austerlitz-a1b.md)
+const worldGround = groundOf(D.spec, look.hf, look.far, onMap ? null : D.spec.camera.focusY)
+checkView(D.spec, worldGround)
 const canvas = document.getElementById('c') as HTMLCanvasElement
 
 /** Throws unless the look data holds the world the page asked for (a stale or misnamed file draws the wrong one). */
@@ -521,7 +514,17 @@ if (!MACRO_ARMS.includes(macroArm)) {
 // (a baked arm other than the bake's own bakes as it is set)
 const armBake = await macro.setArm(macroArm)
 const macroBake = armBake.texels ? armBake : await macro.bake()
-const camera = buildCamera(scene, canvas, groundAt)
+// the camera's hold reads the highest ground near the focus from blocks of the heightfield (8 nodes, 14.3 m) and of
+// the far ring (2 nodes, 28.6 m: past the heightfield the eye's ground is the far ring's)
+const camera = (() => {
+  const nearTile = maxGrid(look.hf, 8)
+  const nearFar = maxGrid(look.far, 2)
+  return buildCamera(scene, canvas, {
+    ground: groundAt,
+    highest: (x, z, reach) => Math.max(nearTile(x, z, reach), nearFar(x, z, reach)),
+    follow: new FocusFollow(worldGround.focus),
+  })
+})()
 // the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
 // holds them and the tile's ground takes its material without them (the shader's size alone cost every ground pixel).
 // Nearing ROAD_LIVE_R the live roads fade to the baked look (uRoadFar: the wheel tracks to their dusting, the grit
@@ -1266,6 +1269,7 @@ Object.assign(window, {
   MASKN: D.spec.sizes.riverMask,
   SM_FADE_M: D.spec.shadowFade,
   SPEC: D.spec,
+  GROUND: worldGround,
   tileGround: terrain.tileGround,
   farGround: terrain.farGround,
   farTerrainMat: terrain.farTerrainMat,

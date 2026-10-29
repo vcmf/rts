@@ -77,6 +77,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/one-map-austerlitz.md`](plans/active/one-map-austerlitz.md) (one map in the language, drawn with the map editor: Austerlitz 1805, its draft-map mode and the real map),
   [`plans/active/look-austerlitz.md`](plans/active/look-austerlitz.md) (Austerlitz on the look page: the look compiler M4 for a window, then the 3D world in tiles, then the zoom handover; a plan),
   [`plans/active/look-austerlitz-a1.md`](plans/active/look-austerlitz-a1.md) (A1: the look compiler, a window of Austerlitz on the look page, Kobelnitz first),
+  [`plans/active/look-austerlitz-a1b.md`](plans/active/look-austerlitz-a1b.md) (A1b: the camera's focus on the ground, the ground range per world, the Pratzen),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
   [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c),

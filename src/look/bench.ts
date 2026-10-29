@@ -500,7 +500,8 @@ export async function runBench(
       camera.beta = cam.beta
       camera.radius = cam.radius
       zoomOf(camera).set(cam.radius)
-      camera.target.set(focus.x, D.spec.camera.focusY, focus.z)
+      // (the focus's height is the camera's hold's: the demo's plane, or a map world's ground, FocusFollow)
+      camera.target.set(focus.x, camera.target.y, focus.z)
       // (panning: a triangle wave along the view's right, the arc camera's alpha + π/2 on the ground)
       const ra = cam.alpha + Math.PI / 2
       const rx = Math.cos(ra)
@@ -510,7 +511,7 @@ export async function runBench(
         ? scene.onBeforeRenderObservable.add(() => {
             const u = ((((performance.now() - pt0) / 1000) * PAN_V) / (4 * PAN_A)) % 1
             const o = PAN_A * (u < 0.25 ? 4 * u : u < 0.75 ? 2 - 4 * u : 4 * u - 4)
-            camera.target.set(focus.x + rx * o, D.spec.camera.focusY, focus.z + rz * o)
+            camera.target.set(focus.x + rx * o, camera.target.y, focus.z + rz * o)
           })
         : null
       if (pan) undo.push(() => scene.onBeforeRenderObservable.remove(pan))
