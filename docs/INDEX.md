@@ -59,7 +59,9 @@ designs, kept true as they change (nothing is frozen; what is built is described
 ## Plans
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
+  [`plans/active/cavalry-artillery-demo.md`](plans/active/cavalry-artillery-demo.md) (the cavalry and the artillery on the armies demo, their shadows),
   [`plans/active/track-s.md`](plans/active/track-s.md) (Track S: the sim engine's remaining phases before the playtest, the `epic/sim-engine` branch),
+  [`plans/active/lightmap-half.md`](plans/active/lightmap-half.md) (the baked light map at about 0.5 m a texel),
   [`plans/active/c0-bench.md`](plans/active/c0-bench.md) (C0: the visual bench, its overlay, time controls and cases),
   [`plans/active/ci-faster-tests.md`](plans/active/ci-faster-tests.md) (CI's tests and coverage in three shards each, the bench split in five files),
   [`plans/active/c1-claims.md`](plans/active/c1-claims.md) (C1: a prototype of the claim grid, experimental; its weak points and their order),
@@ -74,6 +76,9 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/m6-lit-view.md`](plans/active/m6-lit-view.md) (Track M M6: the lit map view in the game's code, M6a–c done, M6d waits),
   [`plans/active/m8-austerlitz.md`](plans/active/m8-austerlitz.md) (Track M M8: Austerlitz drawn on the editor, the field as a scale model at 2×),
   [`plans/active/one-map-austerlitz.md`](plans/active/one-map-austerlitz.md) (one map in the language, drawn with the map editor: Austerlitz 1805, its draft-map mode and the real map),
+  [`plans/active/look-austerlitz.md`](plans/active/look-austerlitz.md) (Austerlitz on the look page: the look compiler M4 for a window, then the 3D world in tiles, then the zoom handover; a plan),
+  [`plans/active/look-austerlitz-a1.md`](plans/active/look-austerlitz-a1.md) (A1: the look compiler, a window of Austerlitz on the look page, Kobelnitz first),
+  [`plans/active/look-austerlitz-a1b.md`](plans/active/look-austerlitz-a1b.md) (A1b: the camera's focus on the ground, the ground range per world, the Pratzen),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
   [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c),

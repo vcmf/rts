@@ -99,8 +99,11 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0072](0072-battle-threads-pr6-not-needed.md) | Battle threads: no PR 6; the look page's placing goes to the men worker instead | accepted |
 | [0073](0073-modern-works-mended-from-their-surroundings.md) | Modern works are mended out of real relief by rebuilding the ground from what lies around them | accepted |
 | [0074](0074-soldier-shadow-per-step.md) | The soldiers' shadow from their pose up close, baked per animation step; no contact oval (amends 0062, supersedes 0071's oval) | accepted |
+| [0075](0075-arms-share-the-units-pipeline.md) | The cavalry and the artillery share the units pipeline; a figure on more than its root measures its shadow from its contacts (amends 0062, 0074) | proposed |
 | [0077](0077-a-pond-levels-at-its-lower-bank.md) | A pond with no level of its own levels at its lower bank; a dam is drawn, never implied | accepted |
 | [0078](0078-editor-writes-the-intent-file-in-place.md) | The editor edits the intent file in the page and saves only what changed, through the dev server | accepted |
 | [0079](0079-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |
 | [0080](0080-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | accepted |
 | [0081](0081-the-bench-timeline-in-the-battle.md) | The bench's timeline lives in the battle, wherever it runs; its overlay is a view on the page | accepted |
+| [0082](0082-light-map-at-half-a-metre.md) | The baked light map at about half a metre a texel (1536² over the 800 m tile, the target 0.53 m) | accepted |
+| [0085](0085-upright-meadow-and-wheat-fill.md) | The meadow's grass upright and shorter, the wheat filled (`?grassup`, `?wheatfill`; amends 0041's clumps) | accepted |

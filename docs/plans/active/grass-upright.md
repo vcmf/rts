@@ -66,7 +66,13 @@ The clump reach used for the growth rules stays main's (an upper bound: an uprig
   summer camera (winter identical: the snow keeps main's clumps, the wheat is ploughed under), the expected change.
   `npm test`, `check:data`, the docs check, the build: exit 0.
 
-## Open questions
+## Decided
 
-- The owner picks the looks by eye (`?grassup`, `?wheatfill`); a decision record follows his pick, and the looks not
-  picked can then go.
+- **The owner** (2026-10-30): "I like straighter and shorter grass, and wheat fill more space": the defaults
+  `?grassup=2` and `?wheatfill=1` as built, recorded in decision 0085; the other looks stay as switches for
+  comparisons.
+- **Review** (one round, nothing severe): the fill limited to the standing wheat (the green crop and stubble as main:
+  their pixels measured against main's at 20 m, under 0.04 % differing); the looks parsed in `src/look/meadow-look.ts`
+  (tested), `?grassup` refused with `?grass=brush`; the clump reach from `RINGS` and the meshes' measured radii; the
+  middle ring's look faded across its band out, so the carpet meets the outer ring's sparse clumps without a seam
+  (checked by eye at 30 to 60 m).
