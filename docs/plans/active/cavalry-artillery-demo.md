@@ -262,6 +262,11 @@ against `?cavalry=0`.
 - A spread figure's shadow is as long as the sun casts it; up close the infantryman's is shortened to 0.7 (0062's
   close look). Bake the arms' per-step shape at the close length (a jump at 100 m), or keep them true?
 - The battery's firing cycle in 8 bins: more bins for long clips (a list a role) would step the gunners' shadows.
+- The per-man LOD test measures a figure's on-screen height at its middle (`figH / 2`, `src/look/units.ts`), the
+  shader's fade at its root: already so on main, the gap larger for a 2.5 m horse than a 1.8 m man. Consistent enough
+  to leave (the review, 2026-10-29); measure both at the root if a horse is seen to switch early or late.
+- Answered (2026-10-29): the horses not tinted toward the side's colour far out (the far rule for the hide below is not
+  wanted); the dyes stay as first picked for now.
 - The battery's far LOD posed at its 264 steps (35 MB): skin it instead for an arm of few units?
 - Readability: measured with round 1's hook, which masked every arm against the infantry's coats, the widest view's
   side 0 figures within ΔE 25 of its coat fell from 55 % to 35 % with the arms: from above a regiment reads as its bay
