@@ -625,11 +625,19 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   a bone too small to be a part near the ground, a foot, lends its vertices to the first part up its chain of parents,
   the shin, whose quads then run down to the soles by at most 25 cm, so the shadow starts at the feet: `boneParts`,
   #165). A figure kind's profile (clips.json's `unit`; none: the infantryman, his file unchanged) bakes a
-  multi-part figure from its one GLB: its LODs collapse-decimated on the rest mesh (the battery 30,000, 6,500 and
-  1,400 triangles, about the infantryman's triangles a pixel of its side on screen at the switches; the cuirassier's
-  lighter, the owner's, 2026-10-28: 8,600, 1,200 and 300, then each LOD's faces never seen from the RTS camera's
-  pitches culled, `cull`: 7,777, 1,155 and 295, its views from 10° above the horizon, below the screen's top edge's
-  16°, to 90°, 10 frames a clip; culling before decimating tore holes), each triangle's colour role read on the full mesh from its material, bone and texel and kept through the
+  multi-part figure from its one GLB: its mesh welded first (`welded`: the GLB splits its vertices at every UV and
+  normal seam, the cuirassier into 3,739 islands, and decimating that tore the figure apart: holes, shredded legs,
+  loose shards, found by the owner, 2026-10-29), then its LODs collapse-decimated on the rest mesh (the battery
+  30,000, 6,500 and 1,400 triangles, about the infantryman's triangles a pixel of its side on screen at the switches;
+  the cuirassier's lighter, the owner's, 2026-10-28: 8,600, 1,200 and 300). A welded shell stops decimating at about
+  1,300 triangles, its open edges kept, faces flipped near it, so the cuirassier's near and far LODs are voxel
+  remeshed first (`remesh`, 3 and 5 cm: `remeshed`, closed, its skin weights read barycentrically from the nearest
+  point of the welded mesh and each face's colour role from its nearest face). Each LOD's faces never seen from the
+  RTS camera's pitches then culled (`cull`: the cuirassier 6,958, 1,153 and 292, its views from 10° above the
+  horizon, below the screen's top edge's 16°, to 90°, 10 frames a clip; culling before decimating tore holes). A
+  lighter LOD must cover what the nearest covers, drawn with its back faces culled from the camera's views at its
+  steps (`test/figure-lods.test.ts`, `lodGaps`: the torn near LOD left 6.4 % of it uncovered on average, now 1.4 %;
+  its far LOD 35 %, now 5 %; the battery's far LOD, welded, 17 %, now 6 %). Each triangle's colour role read on the full mesh from its material, bone and texel and kept through the
   decimation as a face attribute; a chain whose span is not a whole number of 1/12 s steps (the gallop's 13 frames)
   resampled between frames, its root speed scaled to keep the feet planted; bones past the format's 255 (the crew's
   fingers) folded into their hand. Its header names its roles in order (the cuirassier halt, walk, trot, gallop; the

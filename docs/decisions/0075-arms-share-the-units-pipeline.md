@@ -31,7 +31,9 @@ built: `docs/systems/look.md` ("The armies").
 - **The figure's data names its own.** The unit data's header names a figure's roles in order (at most four: the
   shadow's shader holds four), each colour role's cloth part or material (decision 0068: the dyes, never a colour), and
   its height (the LOD switch's); absent, the infantryman's. The bake (`tools/bake-figure.py`) has a profile a figure
-  kind, and decimates a multi-part figure's LODs itself.
+  kind, and makes a multi-part figure's LODs itself: its GLB's mesh welded, then decimated, a LOD lighter than the
+  welded shell decimates to voxel remeshed first; every lighter LOD must cover what the nearest covers
+  (`test/figure-lods.test.ts`).
 - **Scripts behind one interface.** The renderer asks a script for a unit's phase and each man's place, way and role;
   the scenario names the arms (`ARMS_DEMO`: a ride, a service), the ruleset their shapes. Nothing in the engine names
   a horse or a gun (decision 0015).

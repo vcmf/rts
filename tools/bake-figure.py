@@ -160,7 +160,8 @@ def battery_role(mat, bone, rgb, co):
     return uniform_role(rgb, bone)
 
 # A figure kind's profile (clips.json's `unit`). glbs: the infantryman's own LOD files; glb and targets: one GLB and
-# each LOD's target triangles (None: the mesh as published), decimated here; roles: the roles' clips, in the page's
+# each LOD's target triangles (None: the mesh as published), decimated here from the GLB's mesh welded (welded);
+# remesh: the LODs voxel remeshed before decimating (their voxel, m: remeshed); roles: the roles' clips, in the page's
 # order; palette: the colour roles; parts: each colour role's cloth part (the dress's dye), 'boots', or a material of
 # the era's dye set (src/look/world/dyes.ts); classify(material, bone, texel, centre): a triangle's colour role; height:
 # the figure's bounds in m (a check); fold: deforming bones folded into their nearest kept ancestor (a crew's fingers:
@@ -179,6 +180,9 @@ PROFILES = {
                     # (the faces the RTS camera never sees culled first; the LODs switched at a man's height, so a
                     # horse hands over to its lighter LODs as soon as a man does: the owner, 2026-10-28)
                     cull=dict(elevations=(10, 14, 19, 27, 40, 60, 90), yaws=16, frames=10), lod_height=1.8,
+                    # (its lighter LODs voxel remeshed first, m: decimated from its welded shell they stop at about
+                    # 1,300 triangles with faces flipped, from the GLB's split one they tore; the owner, 2026-10-29)
+                    remesh={'lod1': 0.03, 'lod2': 0.05},
                     roles={'halt': (['Idle'], True), 'walk': (['Walk'], True), 'trot': (['Trot'], True),
                            'gallop': (['Gallop'], True)},
                     palette=['coat', 'facings', 'white', 'dark', 'skin', 'leather', 'metal', 'hide', 'mane'],
@@ -356,23 +360,76 @@ def cull_unseen(mesh, cfg):
     bm.to_mesh(me); bm.free(); me.update()
     return int(seen.sum()), len(seen)
 
+def applied(o, kind, **props):
+    """o with a modifier of `kind` (props set) applied first, before its armature: on the rest mesh"""
+    m = o.modifiers.new(kind, kind)
+    for k, v in props.items(): setattr(m, k, v)
+    bpy.context.view_layer.objects.active = o
+    with bpy.context.temp_override(object=o, active_object=o):
+        bpy.ops.object.modifier_move_to_index(modifier=m.name, index=0)
+        bpy.ops.object.modifier_apply(modifier=m.name)
+    return o
+
+def tris_of(me):
+    return sum(len(p.vertices) - 2 for p in me.polygons)
+
+def welded(mesh, dist=1e-5):
+    """the mesh's vertices at one place merged (dist, model units). The GLB splits them at every UV and normal seam
+    (the cuirassier: 3,739 islands of a few triangles each, 175 once welded), and the collapse decimator, which keeps
+    an island's open edges in place only roughly, tore the figure at every seam: holes, shredded legs, loose shards
+    (the near LOD, found by the owner, 2026-10-29). The colours are per face role and the normals the vertices' own,
+    so the seams carry nothing the bake keeps"""
+    import bmesh
+    bm = bmesh.new(); bm.from_mesh(mesh.data)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=dist)
+    bm.to_mesh(mesh.data); bm.free(); mesh.data.update()
+
 def decimated(mesh, target):
     """a copy of the mesh collapse-decimated on its rest pose to about `target` triangles (before the armature deforms
     it, as tools/unitpipe/infantry/lod.py: the decimator interpolates the skin weights), or the mesh itself (None)"""
     if target is None: return mesh
     o = mesh.copy(); o.data = mesh.data.copy(); bpy.context.scene.collection.objects.link(o)
-    tris = sum(len(p.vertices) - 2 for p in mesh.data.polygons)
-    dec = o.modifiers.new('Decimate', 'DECIMATE'); dec.decimate_type = 'COLLAPSE'
-    dec.ratio = target / tris; dec.use_collapse_triangulate = True
-    bpy.context.view_layer.objects.active = o
-    with bpy.context.temp_override(object=o, active_object=o):
-        bpy.ops.object.modifier_move_to_index(modifier='Decimate', index=0)
-        bpy.ops.object.modifier_apply(modifier='Decimate')
+    return applied(o, 'DECIMATE', decimate_type='COLLAPSE', ratio=target / tris_of(mesh.data),
+                   use_collapse_triangulate=True)
+
+def remeshed(mesh, voxel, target):
+    """a closed copy of the mesh for a LOD lighter than its welded shell decimates to (the decimator keeps an open
+    shell's edges, so the cuirassier stops at about 1,300 triangles): voxel remeshed on its rest pose (voxel m), then
+    collapse-decimated to about `target`; each vertex's skin weights read from the nearest point of the mesh
+    (barycentric over that face's corners) and each face's colour role from the mesh's face nearest its centre"""
+    from mathutils.geometry import barycentric_transform
+    o = mesh.copy(); o.data = mesh.data.copy(); bpy.context.scene.collection.objects.link(o)
+    applied(o, 'REMESH', mode='VOXEL', voxel_size=voxel / M_PER_UNIT)
+    applied(o, 'DECIMATE', decimate_type='COLLAPSE', ratio=min(1.0, target / tris_of(o.data)),
+            use_collapse_triangulate=True)
+    src = mesh.data
+    bvh = BVHTree.FromPolygons([v.co.copy() for v in src.vertices], [tuple(p.vertices) for p in src.polygons])
+    names = {g.index: g.name for g in mesh.vertex_groups}
+    for g in list(o.vertex_groups): o.vertex_groups.remove(g)
+    groups = {n: o.vertex_groups.new(name=n) for n in names.values()}
+    me = o.data
+    for v in me.vertices:
+        co, _, fi, _ = bvh.find_nearest(v.co)
+        corners = [src.vertices[i] for i in src.polygons[fi].vertices]
+        assert len(corners) == 3, 'remeshed: the source mesh is triangles (the GLB)'
+        b = barycentric_transform(co, *(c.co for c in corners), Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1)))
+        b = [max(0.0, x) for x in b]; t = sum(b) or 1.0
+        acc = {}
+        for c, w in zip(corners, b):
+            for g in c.groups: acc[g.group] = acc.get(g.group, 0.0) + g.weight * w / t
+        for gi, w in acc.items():
+            if w > 1e-4: groups[names[gi]].add([v.index], w, 'REPLACE')
+    roles = src.attributes['role'].data
+    attr = me.attributes.get('role') or me.attributes.new('role', 'INT', 'FACE')
+    for p in me.polygons:
+        attr.data[p.index].value = roles[bvh.find_nearest(p.center)[2]].value
+    if not me.uv_layers: me.uv_layers.new()
     return o
 
 # ---- the LOD meshes
 lods, blobs = [], []
 if MULTI:
+    welded(mesh)
     face_roles(mesh)
     multi_src = mesh
 for lod in LODS:
@@ -380,7 +437,9 @@ for lod in LODS:
         # (a culled LOD is always a decimated copy: culling the published mesh itself would cut the source shared by
         # every LOD)
         assert not PROFILE.get('cull') or PROFILE['targets'][lod] is not None, f'{lod}: a culled LOD needs a target'
-        mesh = decimated(multi_src, PROFILE['targets'][lod])
+        voxel = PROFILE.get('remesh', {}).get(lod)
+        mesh = (remeshed(multi_src, voxel, PROFILE['targets'][lod]) if voxel else
+                decimated(multi_src, PROFILE['targets'][lod]))
         # (culled after decimating, on the LOD's own closed mesh: decimating an open shell tore holes at its edges)
         if PROFILE.get('cull'):
             kept, was = cull_unseen(mesh, PROFILE['cull'])
@@ -436,12 +495,16 @@ for lod in LODS:
     # are clockwise from outside (Babylon's; inside out, positive)
     p64 = pos.astype(np.float64)
     if PROFILE.get('cull'):
-        # (an open shell has no volume: its triangles' right-hand normals against their vertex normals instead, nearly
-        # all opposite for Babylon's clockwise fronts)
+        # (an open shell has no volume: its triangles' right-hand normals against their vertex normals instead, most
+        # of its area opposite for Babylon's clockwise fronts, a whole mesh wound backwards about none of it; by area,
+        # as a remeshed LOD's slivers' vertex normals, smoothed over a few hundred triangles, say little. Faces torn
+        # or flipped here and there: the LODs' coverage test, test/figure-lods.test.ts)
         rh = np.cross(p64[tris[:, 1]] - p64[tris[:, 0]], p64[tris[:, 2]] - p64[tris[:, 0]])
         vn = nor[tris[:, 0]] + nor[tris[:, 1]] + nor[tris[:, 2]]
-        out = float((np.einsum('ij,ij->i', rh, vn) < 0).mean())
-        assert out > 0.9, f'{lod}: only {out:.2f} of its triangles wound for Babylon (#164)'
+        ar = np.linalg.norm(rh, axis=1)
+        out = float(ar[np.einsum('ij,ij->i', rh, vn) < 0].sum() / max(ar.sum(), 1e-12))
+        print(f'BAKE {lod} wound for Babylon: {out:.3f} of its area')
+        assert out > 0.8, f'{lod}: only {out:.2f} of its area wound for Babylon (#164)'
     else:
         vol = float(np.einsum('ij,ij->i', p64[tris[:, 0]], np.cross(p64[tris[:, 1]], p64[tris[:, 2]])).sum() / 6)
         assert vol < 0, f'{lod}: signed volume {vol:.4f} m^3 by the right hand: wound inside out for Babylon'

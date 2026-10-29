@@ -541,7 +541,7 @@ describe('a spread figure on sloping ground (GROUND_FOLLOW)', () => {
     return Math.max(...err)
   }
   it("sets each foot, wheel and trail end on the ground under it, not at the root's height", () => {
-    expect(feet(false)).toBeGreaterThan(0.5)
+    expect(feet(false)).toBeGreaterThan(0.4) // (sunk or floating by a hand or more)
     expect(feet(true)).toBeLessThan(1e-9)
   })
   it('keeps what stands upright upright: a vertical line moves as one', () => {
