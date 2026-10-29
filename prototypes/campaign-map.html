@@ -88,7 +88,8 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * sky's share of the light (0.62); ?lamp= the light's fall-off across the map, warmer on the sun's side (0.55);
  * ?contour= the contour interval in metres (200); ?tilt= the camera's tilt at the closest zoom, in degrees (45);
  * ?clouds= the cloud shadows (0.15); ?view=x,z,km the target in km from the centre, east and north, and the camera
- * distance; ?theatre= the generated file.
+ * distance; ?theatre= the generated file; ?stepkm= the water's steps, km apart from the shore (0.7); ?steps= how
+ * many (6; 0 a flat sunk level).
  */
 'use strict';
 const t0 = performance.now();
@@ -201,6 +202,12 @@ const TILT_FAR = 30;
 const TILT_NEAR = param('tilt', 45, 0, 60);
 // the cloud shadows drifting over the map: how much of the sun they take (0 off)
 const CLOUDS = param('clouds', 0.15, 0, 0.6);
+// the water, sunk into the model as stepped basins (the owner's Black Sea model): the lake floor first SINK m of the
+// shape below the shore, then a step of STEP m every STEP_KM from the shore, at most BANDS steps (?steps=0: one level)
+const SINK = 70;
+const STEP = 45;
+const STEP_KM = param('stepkm', 0.7, 0.1, 5);
+const BANDS = Math.round(param('steps', 6, 0, 12));
 
 // the sun's direction (x east, y up, z north), toward the sun
 const SUN = (() => {
@@ -474,6 +481,71 @@ function bakeLines() {
   return { roads, rivers, w, h };
 }
 
+/**
+ * The signed distance to the lakes' shores on the height grid, in km: positive in the water, negative on land,
+ * clamped to -3..12. The lakes rasterised on the nodes (antialiased), then a two-pass chamfer distance inside and
+ * outside, the half-node at the shore refined by the coverage, then softly blurred.
+ */
+function lakeDistance() {
+  const c = document.createElement('canvas');
+  c.width = NX;
+  c.height = NZ;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  // node i at pixel centre i + 0.5
+  g.setTransform(1 / CELL, 0, 0, 1 / CELL, halfX / CELL + 0.5, halfZ / CELL + 0.5);
+  g.fillStyle = '#fff';
+  for (const ring of T.lakes) {
+    g.beginPath();
+    for (let k = 0; k < ring.length; k += 2) g.lineTo(ring[k], ring[k + 1]);
+    g.closePath();
+    g.fill();
+  }
+  const rgba = g.getImageData(0, 0, NX, NZ).data;
+  const cover = new Float32Array(NX * NZ);
+  for (let k = 0; k < cover.length; k++) cover[k] = rgba[k * 4] / 255;
+  /** Chamfer distance (in cells) to the nearest node where `seed` holds. */
+  const chamfer = seed => {
+    const d = new Float32Array(NX * NZ);
+    for (let k = 0; k < d.length; k++) d[k] = seed(k) ? 0 : 1e9;
+    const pass = (j0, j1, dj, i0, i1, di) => {
+      for (let j = j0; j !== j1; j += dj) {
+        for (let i = i0; i !== i1; i += di) {
+          const k = j * NX + i;
+          let v = d[k];
+          if (i - di >= 0 && i - di < NX) v = Math.min(v, d[k - di] + 1);
+          if (j - dj >= 0 && j - dj < NZ) {
+            v = Math.min(v, d[k - dj * NX] + 1);
+            if (i - di >= 0 && i - di < NX) v = Math.min(v, d[k - dj * NX - di] + Math.SQRT2);
+            if (i + di >= 0 && i + di < NX) v = Math.min(v, d[k - dj * NX + di] + Math.SQRT2);
+          }
+          d[k] = v;
+        }
+      }
+    };
+    pass(0, NZ, 1, 0, NX, 1);
+    pass(NZ - 1, -1, -1, NX - 1, -1, -1);
+    return d;
+  };
+  const toLand = chamfer(k => cover[k] < 0.5);
+  const toWater = chamfer(k => cover[k] >= 0.5);
+  const raw = new Float32Array(NX * NZ);
+  for (let k = 0; k < raw.length; k++) {
+    const cells = cover[k] >= 0.5 ? toLand[k] - 1 + cover[k] : -(toWater[k] - cover[k]);
+    raw[k] = clamp((cells * CELL) / 1000, -3, 12);
+  }
+  // smoothed: the chamfer's octagons and the grid's stairs would show as the steps' and the shore's corners
+  return blur(raw, NX, NZ, 3);
+}
+
+/** The lakes sunk into the shape: SINK m below the shore, eased in over the shore's half cell (steps per pixel). */
+function sinkLakes(shape, dist) {
+  for (let k = 0; k < shape.length; k++) {
+    const cells = (dist[k] * 1000) / CELL;
+    shape[k] -= SINK * clamp(cells + 0.5, 0, 1);
+  }
+  return shape;
+}
+
 /** A tileable paper grain: mottling, fibres and specks around mid grey (the shader colours it). */
 function paperCanvas() {
   const N = 1024;
@@ -603,12 +675,27 @@ void main() {
 B.Effect.ShadersStore.printFragmentShader = `
 precision highp float;
 varying vec2 vW;
-uniform sampler2D uShape, uLight, uLines, uRivers, uLakes, uPaperT, uContourH, uFine0, uFine1, uFine2, uClouds;
+uniform sampler2D uShape, uLight, uLines, uRivers, uLakes, uLakeD, uPaperT, uContourH, uFine0, uFine1, uFine2;
+uniform sampler2D uClouds;
+uniform vec3 uShallow, uDeep;
 uniform vec2 uHalf, uTexel, uLightTexel, uLineTexel, uLakeTexel, uFineTexel0, uFineTexel1, uFineTexel2;
 uniform vec4 uFineRect0, uFineRect1, uFineRect2;
 uniform vec3 uSun, uPaper, uTable, uWater, uKey, uSky, uRoad, uRoad2, uRiver, uContourInk, uContourMinor;
 uniform float uCellKm, uFineCellKm, uFineK, uSkyK, uLamp, uContour, uContourK, uLineK, uTime, uCloudK, uHaze;
 uniform float uScreenH, uVert;
+
+/* a screen pixel's size in km: set first thing in main, read by the water's steps */
+float gPx = 1.0;
+
+/* the lake floor's steps below the sunk surface, in metres of the shape, at a distance d (km) from the shore: one
+   step every STEP_KM, each edge a crisp bank about a pixel wide */
+float waterSteps(float d) {
+  if (d <= 0.0) return 0.0;
+  float b = d / ${STEP_KM.toFixed(3)};
+  float soft = clamp(gPx / ${STEP_KM.toFixed(3)} * 1.2, 0.02, 1.0);
+  float steps = floor(b) + smoothstep(1.0 - soft, 1.0, fract(b));
+  return min(steps, ${BANDS.toFixed(1)}) * ${STEP.toFixed(1)};
+}
 
 float rectDist(vec2 p, vec2 extent) {
   vec2 d = abs(p) - extent;
@@ -669,7 +756,7 @@ float fineIn(sampler2D t, vec4 rect, vec2 texel, vec2 w) {
 
 /* the shape (metres of the raised map), with the finer windows' detail up close, raised as the shape is */
 float shapeH(vec2 w) {
-  float h = catmullRom(uShape, gridUv(w), uTexel);
+  float h = catmullRom(uShape, gridUv(w), uTexel) - waterSteps(texture2D(uLakeD, gridUv(w)).r);
   if (uFineK > 0.0) {
     float fine = fineIn(uFine0, uFineRect0, uFineTexel0, w) + fineIn(uFine1, uFineRect1, uFineTexel1, w) +
                  fineIn(uFine2, uFineRect2, uFineTexel2, w);
@@ -711,6 +798,7 @@ void main() {
 
   /* the ink printed on it, before the light: contours, rivers and roads, lakes; the light then falls on the print */
   float px = max(length(fwidth(vW)), 1e-4);
+  gPx = px;
   vec3 print = paper;
 
   /* contours from the smoothed heights: the ordinary lines thin and a muted grey, every fifth (the index line)
@@ -727,10 +815,11 @@ void main() {
   print = mix(print, uContourMinor, 0.45 * l1 * uContourK * (1.0 - l5));
   print = mix(print, uContourInk, mix(0.4, 0.85, uContourK) * l5);
 
-  /* lakes: a flat blue wash */
+  /* water: blue, shallow by the shore and deeper with each step down; the light then falls on its sunk steps */
   vec2 luv = (vW + uHalf) / (2.0 * uHalf);
   float lake = smoothstep(0.15, 0.6, bicubic4(uLakes, luv, uLakeTexel).r);
-  print = mix(print, mix(paper, uWater, 0.85), lake);
+  float depth = waterSteps(texture2D(uLakeD, uv).r) / ${Math.max(1, BANDS * STEP).toFixed(1)};
+  print = mix(print, mix(uShallow, uDeep, sqrt(depth)), lake);
 
   /* rivers and roads on the ground, from about 3 px a km (further out they are ink above the map) */
   if (uLineK > 0.0) {
@@ -913,7 +1002,8 @@ function mapMesh() {
 const heights = decodeHeights();
 
 const tBake = performance.now();
-const SHAPE = buildShape(heights);
+const LAKE_D = lakeDistance();
+const SHAPE = sinkLakes(buildShape(heights), LAKE_D);
 const lightBake = bakeLight(SHAPE);
 const maxTextureSize = engine.getCaps().maxTextureSize;
 if (Math.max(NX, NZ) > maxTextureSize) throw new Error(`the theatre grid (${NX} × ${NZ}) passes this GPU's textures`);
@@ -932,10 +1022,11 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
     'uFineTexel0', 'uFineTexel1', 'uFineTexel2', 'uFineRect0', 'uFineRect1', 'uFineRect2',
     'uSun', 'uPaper', 'uTable', 'uWater', 'uKey', 'uSky', 'uRoad', 'uRoad2', 'uRiver', 'uContourInk', 'uContourMinor',
     'uCellKm', 'uFineCellKm', 'uFineK', 'uSkyK', 'uLamp', 'uContour', 'uContourK', 'uLineK', 'uTime', 'uCloudK',
-    'uHaze', 'uScreenH', 'uVert',
+    'uHaze', 'uScreenH', 'uVert', 'uShallow', 'uDeep',
   ],
   samplers: [
-    'uShape', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uPaperT', 'uContourH', 'uFine0', 'uFine1', 'uFine2', 'uClouds',
+    'uShape', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uLakeD', 'uPaperT', 'uContourH', 'uFine0', 'uFine1', 'uFine2',
+    'uClouds',
   ],
 });
 material.setTexture('uShape', exact(floatTexture(SHAPE, NX, NZ)));
@@ -964,14 +1055,17 @@ material.setVector3('uSun', new B.Vector3(...SUN));
 material.setColor3('uPaper', B.Color3.FromArray(PAPER));
 material.setColor3('uTable', B.Color3.FromArray(hex('#cbc9cf')));
 material.setColor3('uWater', B.Color3.FromArray(hex('#3b78b0')));
+material.setColor3('uShallow', B.Color3.FromArray(hex('#a9d0ec')));
+material.setColor3('uDeep', B.Color3.FromArray(hex('#2b67b0')));
+material.setTexture('uLakeD', floatTexture(LAKE_D, NX, NZ));
 // the sun warm, the sky cool; with the sky's share, flat open ground in the sun comes to about 1
 material.setColor3('uKey', B.Color3.FromArray([1.3, 0.98, 0.66]));
 material.setColor3('uSky', B.Color3.FromArray([0.82, 0.88, 1.08]));
 material.setColor3('uRoad', B.Color3.FromArray(hex('#a3412c')));
 material.setColor3('uRoad2', B.Color3.FromArray(hex('#b8705a')));
 material.setColor3('uRiver', B.Color3.FromArray(hex('#2f6aa3')));
-material.setColor3('uContourInk', B.Color3.FromArray(hex('#93421c')));
-material.setColor3('uContourMinor', B.Color3.FromArray(hex('#8b8a92')));
+material.setColor3('uContourInk', B.Color3.FromArray(hex('#d08450')));
+material.setColor3('uContourMinor', B.Color3.FromArray(hex('#a9a7ae')));
 material.setFloat('uSkyK', SKY);
 material.setFloat('uLamp', LAMP);
 material.setFloat('uContour', CONTOUR);

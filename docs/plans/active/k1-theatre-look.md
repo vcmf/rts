@@ -181,7 +181,13 @@ layer over the 3D view. Rebuilt on one principle, as the references are made (a 
 Measured on test machine A: the bake 4.9–5.1 s at load (the light's rays and the line fields; K3 moves it offline),
 ready in about 6 s; a frame at 1600 × 900 2.3 ms still, 3.8 ms with the ink. Then (the owner: "it looks awesome, though we don't have the warm yellow-orange light source anymore … at the top
 right", the Valdez print): the sun from the north-east (55°), 20° high, a warm orange (1.3, 0.98, 0.66); the lamp's
-fall-off 0.55, the sun warmer still on its side of the map and cooler on the far side.
+fall-off 0.55, the sun warmer still on its side of the map and cooler on the far side. Then (the owner: "contour line … lighter orange … time to do water", a stepped Black Sea model and a blue
+bathymetric relief): index contours a lighter orange (`#d08450`), the others a lighter grey; the lakes part of the
+one shape before the light: sunk 70 m (of the raised shape) below the shore, then stepped every 0.7 km from it
+(`?stepkm=`), six steps of 45 m (`?steps=`), each bank a crisp edge per pixel, the colour from a pale shallow blue
+(`#a9d0ec`) to a deep blue (`#2b67b0`) by depth. The depth comes from the distance to the shore (a chamfer distance,
+blurred), as no lake bathymetry is loaded; the sun, its shadows and the sky's occlusion fall on the basins as on the
+land. The bake rose to about 5.4 s.
 
 ## Review rounds
 
