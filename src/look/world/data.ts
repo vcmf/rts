@@ -1,6 +1,6 @@
-// The look data file (data/painted-world.lookdata), written by tools/build-look-data.ts and read by the look page:
-// the heightfield (tile plus margin), the far ring's heights, the river's per-sample arrays, the fine bank normals and
-// the water data.
+// The look data file (data/painted-world.lookdata, and a map window's data/<map>-<window>.lookdata), written by
+// tools/build-look-data.ts and read by the look page: the heightfield (tile plus margin), the far ring's heights, the
+// river's per-sample arrays, the fine bank normals and the water data.
 // Layout, little-endian: "LOOK", u32 version, u32 meta length, the meta as UTF-8 JSON padded to 4 bytes, then the
 // arrays in the order the meta lists them (float32, or bytes padded to 4). The cover (docs/plans/active/l5-macro.md):
 // its grid's runs, src/look/world/cover.ts.
@@ -9,8 +9,33 @@ import { ROAD_SLOTS, type Derived } from '../spec.ts'
 import { SAMPLE_KEYS, type RiverParams, type RiverSamples } from '../river.ts'
 import { packCover, unpackCover, type CoverGrid } from './cover.ts'
 
-// 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/done/roads.md)
-export const LOOK_VERSION = 8
+// 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/done/roads.md); 9: the world it holds
+// (the demo, or a map's window) and a map world's trees (docs/plans/active/look-austerlitz-a1.md)
+export const LOOK_VERSION = 9
+
+// the trees' species a map world's data names by index (src/look/world/from-map.ts; the page draws each as its
+// generated model, src/look/nature.ts)
+export const TREE_SPECIES = [
+  'oak',
+  'lime',
+  'beech',
+  'birch',
+  'spruce',
+  'pine',
+  'apple',
+  'hawthorn',
+  'poplar',
+  'willow',
+  'alder',
+] as const
+export type TreeSpecies = (typeof TREE_SPECIES)[number]
+// a tree in the look data: x, z (m), its species' index, its scale
+export const TREE_FLOATS = 4
+
+// The world a look data file holds: the demo (src/look/world/author.ts), or a window of a map
+// (src/look/world/windows.ts), its centre in map metres and the height taken off the map's (base, m)
+export type LookWorld =
+  { kind: 'demo' } | { kind: 'map'; map: string; window: string; x: number; z: number; base: number }
 
 // A grid of n² texels of `cell` metres from (x0, z0) with ch bytes a texel, stored only where covered: spans are (row,
 // first column, count) triples, tex holds ch bytes per covered texel in span order. The rest take the user's fill.
@@ -26,9 +51,9 @@ export interface SpanGrid {
   tex: Uint8Array
 }
 // the roads (docs/plans/done/roads.md): their segments (12 floats each: ax, az, bx, bz, the distance along their line
-// at a, the line's half width, its index, its flags (1 its start is a free end, 2 its end, 4 a track's earth), and its
-// mitre tangents at a and b) and a grid over the tile of `cell` m cells, ROAD_SLOTS segment indices a cell (−1: none),
-// every segment that reaches within its half width and SPEC.road.reach m of the cell
+// at a, the line's half width, its index, its flags (1 its start is a free end, 2 its end, 4 a track's earth, 8 dusty:
+// a map's way), and its mitre tangents at a and b) and a grid over the tile of `cell` m cells, ROAD_SLOTS segment
+// indices a cell (−1: none), every segment that reaches within its half width and SPEC.road.reach m of the cell
 export { ROAD_SLOTS }
 export const ROAD_SEG = 12 // floats a segment (three RGBA texels)
 export interface RoadGrid {
@@ -48,6 +73,8 @@ export interface LookData {
   water: SpanGrid
   roads: RoadGrid
   cover: CoverGrid
+  world: LookWorld
+  trees: Float32Array // a map world's trees, TREE_FLOATS each (none on the demo: its scatter is the page's)
 }
 
 const SPAN_GRIDS = ['bank', 'water'] as const
@@ -61,6 +88,7 @@ interface Meta {
   water: GridMeta
   roads: { n: number; cell: number; x0: number; z0: number }
   cover: { n: number; cell: number; x0: number; z0: number }
+  world: LookWorld
   arrays: [string, number, 'f32' | 'u8'][]
 }
 
@@ -83,6 +111,7 @@ export function encodeLook(d: LookData): Uint8Array {
     ['coverRuns', packCover(d.cover)],
     ['roadSegs', d.roads.segs],
     ['roadIds', d.roads.ids],
+    ['trees', d.trees],
   ]
   const type = (a: Float32Array | Uint8Array): 'f32' | 'u8' => (a instanceof Float32Array ? 'f32' : 'u8')
   const meta: Meta = {
@@ -93,6 +122,7 @@ export function encodeLook(d: LookData): Uint8Array {
     water: gridMeta(d.water),
     roads: { n: d.roads.n, cell: d.roads.cell, x0: d.roads.x0, z0: d.roads.z0 },
     cover: { n: d.cover.n, cell: d.cover.cell, x0: d.cover.x0, z0: d.cover.z0 },
+    world: d.world,
     arrays: arrays.map(([k, a]) => [k, a.length, type(a)]),
   }
   const json = new TextEncoder().encode(JSON.stringify(meta))
@@ -201,6 +231,7 @@ export function decodeLook(buf: ArrayBuffer): LookData {
   const roads: RoadGrid = { ...meta.roads, segs: arr.roadSegs, ids: arr.roadIds }
   if (!meta.cover || !u8.coverRuns) throw new Error('look data: no cover grid')
   const cover: CoverGrid = { ...meta.cover, tex: unpackCover(meta.cover.n, u8.coverRuns) }
+  if (!meta.world || !arr.trees || arr.trees.length % TREE_FLOATS) throw new Error('look data: no world, or no trees')
   return {
     hf: { ...meta.hf, h: arr.hf },
     far: { ...meta.far, h: arr.far },
@@ -209,6 +240,8 @@ export function decodeLook(buf: ArrayBuffer): LookData {
     water: grid('water'),
     roads,
     cover,
+    world: meta.world,
+    trees: arr.trees,
   }
 }
 
@@ -275,14 +308,17 @@ export function checkLookData(d: Derived, look: LookData): void {
   ) {
     bad.push(`road grid ${look.roads.n}² of ${look.roads.cell} m, the spec wants ${d.roadN}² of ${s.road.cell} m`)
   }
+  // (a map world's cover may be finer: a whole number of its cells to the spec's, within the min-spec's texture)
+  const coverK = s.macro.cover / look.cover.cell
   if (
-    !near(look.cover.cell, s.macro.cover) ||
+    !(coverK >= 1 && near(coverK, Math.round(coverK))) ||
+    look.cover.n > s.minSpec.maxTexture ||
     !near(look.cover.n * look.cover.cell, s.far) ||
     !near(look.cover.x0, -s.far / 2) ||
     !near(look.cover.z0, -s.far / 2)
   ) {
     bad.push(
-      `cover ${look.cover.n}² of ${look.cover.cell} m from ${look.cover.x0}, the spec wants ${s.macro.cover} m cells over the far ring (${s.far} m) from ${-s.far / 2}`,
+      `cover ${look.cover.n}² of ${look.cover.cell} m from ${look.cover.x0}, the spec wants ${s.macro.cover} m cells (or a whole fraction) over the far ring (${s.far} m) from ${-s.far / 2}`,
     )
   }
   if (bad.length) {

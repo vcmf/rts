@@ -69,9 +69,9 @@ void main(){
   #ifdef LEAF_PAINT
   // other trees' shadow, one value a leaf: read at the card's point on the crown's surface, where its sun ray
   // leaves the clump (the map's coordinates do not change along the light: read per pixel, every card a ray
-  // crosses took the same texels and an edge ran through the crown as straight lines), shifted across the ray by the card's draw and, up close, the
-  // leaf's (the atlas's G), so the edge follows the leaves; eight reads on two rings, and the share a thin caster
-  // (a trunk, a limb: a texel or two of the map) shades left out
+  // crosses took the same texels and an edge ran through the crown as straight lines), shifted across the ray by
+  // the card's draw and, up close, the leaf's (the atlas's G), so the edge follows the leaves; eight reads on two
+  // rings, and the share a thin caster (a trunk, a limb: a texel or two of the map) shades left out
   float lp=tx.g/max(tx.a,1e-3);
   vec3 qC=(vS-vEllC)/(vEllR*1.3);float qbC=dot(qC,dq),qcC=dot(qC,qC)-1.0,dC=qbC*qbC-qa*qcC;
   float t2C=(-qbC+sqrt(max(dC,0.0)))/qa;

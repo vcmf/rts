@@ -22,6 +22,15 @@ attribute vec3 aNext;uniform float uStepFrac;
 // src/look/units-data.ts), its place and normal two texels of uVATP: no bone matrices to blend
 uniform sampler2D uVATP;attribute float aVid;
 #endif
+#if defined(GROUND_FOLLOW)&&!defined(DEPTH)
+// a figure on more than its root (a gun and its crew, a horse: decision 0075): each vertex moved up or down by the
+// ground under it against the ground under the root (uMeadow's R: the meadow map's height, or without one the
+// heightfield's sampled over the tile, src/look/units.ts), a vertical shear: what is vertical stays so (a gunner stands
+// upright), each foot, hoof, wheel and the trail end on the ground under it on a slope (one rigid figure at its
+// root's height sank the men downhill of it into the ground and floated those uphill)
+uniform sampler2D uMeadow;
+float groundH(vec2 xz){return textureLod(uMeadow,(xz+TILE_HALF)/TILE_W,0.0).r;}
+#endif
 #ifdef DEPTH
 varying float vD;
 #else
@@ -114,6 +123,9 @@ void main(){
   lp*=vec3(mix(1.0,uFarScale.x,fk),mix(1.0,uFarScale.y,fk),mix(1.0,uFarScale.x,fk));
   #endif
   vec4 w=finalWorld*vec4(lp,1.0);
+  #if defined(GROUND_FOLLOW)&&!defined(DEPTH)
+  w.y+=groundH(w.xz)-groundH(finalWorld[3].xz);
+  #endif
   vec4 p=viewProjection*w;
   #ifdef DEPTH
   vD=p.z/p.w*0.5+0.5;
