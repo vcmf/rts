@@ -47,10 +47,11 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
   `claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@1.10.1 --isolated`.
 - Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
 - CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint, `format:check`,
-  typecheck, `check:data`, `check:docs`, Vitest, build. On PRs into `epic/**` and on all those pushes, Vitest with
-  coverage, uploaded to Codecov (informational only). Coverage makes the suite about six times slower, so that run skips
-  the tests marked `longIt` (they run in the check job) and gives each test a longer budget. The cost tests skip when
-  `CI` is set: run them locally. `npm run coverage` gives the same report locally (`coverage/`).
+  typecheck, `check:data`, `check:docs` and build in one job; Vitest in three shards side by side (a long test file is
+  split in several: Vitest runs a file's tests one after another). On PRs into `epic/**` and on all those pushes, Vitest
+  with coverage, in three shards too, uploaded to Codecov (informational only). Coverage makes the suite about six times
+  slower, so that run skips the tests marked `longIt` (they run in the test job) and gives each test a longer budget.
+  The cost tests skip when `CI` is set: run them locally. `npm run coverage` gives the same report locally (`coverage/`).
 - Regenerate model data: `node tools/obj-to-js.mjs`; `tools/blend-to-js.py` with Blender (see its header).
 
 ## Workflow (every PR)

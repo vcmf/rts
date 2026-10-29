@@ -65,7 +65,7 @@ already does that, and the bending of the proposal comes from the same lag model
 
 ## The checks
 
-- `test/bench.test.ts`: each case run with the switch on as well; invariant 1 is expected to hold in the cases where
+- `test/bench*.test.ts` (`test/bench-fx.ts`): each case run with the switch on as well; invariant 1 is expected to hold in the cases where
   the claims apply (X-02, X-05 to X-07, X-13, X-14), and whatever holds or fails is recorded, case by case, in this
   plan's results.
 - The reversed visiting order with the switch on: the keyed order makes it the same state.
