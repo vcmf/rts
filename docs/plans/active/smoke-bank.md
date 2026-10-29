@@ -117,6 +117,9 @@ round 1 | 2 | 3 | *Cossacks II* sheet: `output/armies-review/27-smoke-bank/round
 Cost (one round, the same worst views, started at a 1-min load of 2.85): the first side 25 m +0.30 ms, 40 m +0.20,
 90 m +0.10; the second side 25 m +0.19, 40 m +0.15, 90 m +0.07.
 
+Not measured: the mask's redraw and its full 256 KB upload at up to 12 Hz while formations march (the bench without
+`?firehold`); the machine's load stayed over 3 for the whole window (2026-10-29).
+
 ## Risks
 
 - **Fill cost** of blended cards where banks pile up at a wide zoom: thinned with zoom; measured, not assumed.
