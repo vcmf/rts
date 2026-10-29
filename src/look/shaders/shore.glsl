@@ -291,13 +291,26 @@ uniform vec3 uUnder;   // (the meadow map, uMeadow: declared in macro.glsl)
 #define UNDER_GRASS vec3(0.62,0.74,0.55)   // the ground's colour times this: a deep green
 #define UNDER_CROP vec3(0.74,0.58,0.42)    // a deep ochre, toward orange
 #define UNDER_AMT 0.45                     // how far toward them
+#ifdef WHEAT_FILL
+#define UNDER_WHEAT vec3(0.60,0.48,0.20)         // the standing wheat's deep gold (?wheatfill: the ground's colour, not times it)
+#define UNDER_WHEAT_AUTUMN vec3(0.60,0.41,0.19)  // its autumn orange
+#define UNDER_WHEAT_AMT 0.85
+#endif
 vec3 meadowUnder(vec3 alb,vec2 xz){
   float near=uUnder.z*(1.0-smoothstep(uUnder.x,uUnder.y,length(xz-uFocus.xz)));
   if(near<=0.0)return alb;
   vec4 m=meadowTexel(xz);   // (macro.glsl: read once)
   // (a crop by its height as the clumps: the low green crop half, the wheat cut to stubble half as the harvest goes)
-  if(m.a>m.g){float k=coverAt(xz).x;bool green=k>6.5&&k<7.5;float h=green?0.5:mix(1.0,0.5,smoothstep(0.55,0.95,uSeason)*(1.0-AUTUMN_WARM));   // (the warm autumn: the wheat stands, meadow.vert)
-    return mix(alb,alb*(green?UNDER_GRASS:UNDER_CROP),clamp(m.a*h*cropSeasonK(k,uSeason),0.0,1.0)*near*UNDER_AMT);}
+  if(m.a>m.g){float k=coverAt(xz).x;bool green=k>6.5&&k<7.5;float cut=smoothstep(0.55,0.95,uSeason)*(1.0-AUTUMN_WARM),h=green?0.5:mix(1.0,0.5,cut);   // (the warm autumn: the wheat stands, meadow.vert)
+    float g=clamp(m.a*h*cropSeasonK(k,uSeason),0.0,1.0)*near;
+    vec3 c=mix(alb,alb*(green?UNDER_GRASS:UNDER_CROP),g*UNDER_AMT);
+    #ifdef WHEAT_FILL
+    // the standing wheat's fill (docs/plans/active/grass-upright.md, the owner, 2026-10-29: the dark ochre read as bare
+    // earth between the clumps): the ground under it in the wheat's own deep colour, its stalks' gold in their shade,
+    // toward orange through the autumn as they turn (meadow.vert's cropLook), less as it is cut
+    if(k>5.5&&k<6.5)c=mix(c,mix(UNDER_WHEAT,UNDER_WHEAT_AUTUMN,min(uSeason,1.0)),g*(1.0-cut)*UNDER_WHEAT_AMT);
+    #endif
+    return c;}
   return mix(alb,alb*UNDER_GRASS,clamp(m.g*m.b*grassSeasonK(uSeason),0.0,1.0)*near*UNDER_AMT);}
 #else
 vec3 meadowUnder(vec3 alb,vec2 xz){return alb;}

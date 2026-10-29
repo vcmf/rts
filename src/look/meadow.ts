@@ -20,12 +20,17 @@ import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
 import {
   CLUMP_REACH,
+  CROP_WIDE,
   grassDefinesForClumps,
+  GRASS_UP,
+  GRASS_UP_DEFAULT,
+  type GrassUp,
   GREEN_HEIGHT,
   HEIGHT,
   HEIGHT_MAX,
   MEADOW_SINK,
   STUBBLE_HEIGHT,
+  WHEAT_FILL_DEFAULT,
   WHEAT_HEIGHT_MAX,
 } from './meadow-spec.ts'
 export { HEIGHT, HEIGHT_MAX }
@@ -43,11 +48,18 @@ const MAP_N = Math.round(TILE_W)
 // from band[0] to band[1], out from band[2] to band[3]; the next ring fades in where this one fades out), and its clump
 // the camera's radius over which the inner rings give way to the outer one (m): the default view is 125, the widest 260
 const WIDE: [number, number] = [150, 200] // (buildMeadow's wide: false, ?nowide, keeps the rings as before: the A/B)
-// a crop's clump (docs/plans/done/crop-depth.md): CROP_WIDE times the grass clump's spread at the root, its fan undone:
-// the grass clumps' blades spread about 1 + CROP_FAN aV up their height (measured from data/meadow-grass.json: Large
-// 0.31, 0.43, 0.58 at aV 0, 0.4, 0.8; Small 0.25, 0.34, 0.50), so the stalks stand parallel
+// a crop's clump (docs/plans/done/crop-depth.md): CROP_WIDE (src/look/meadow-spec.ts) times the grass clump's spread at
+// the root, its fan undone: the grass clumps' blades spread about 1 + CROP_FAN aV up their height (measured from
+// data/meadow-grass.json: Large 0.31, 0.43, 0.58 at aV 0, 0.4, 0.8; Small 0.25, 0.34, 0.50), so the stalks stand
+// parallel (the upright grass undoes part of it too: GrassUp.fanUndo)
 const CROP_FAN = 1.15
-const CROP_WIDE = 1.5
+/** The meadow's looks (docs/plans/active/grass-upright.md): the combed clumps' (?grassup) and the wheat's fill
+ * (?wheatfill) */
+export interface MeadowLook {
+  up: GrassUp
+  wheatFill: number
+}
+export const MEADOW_LOOK: MeadowLook = { up: GRASS_UP[GRASS_UP_DEFAULT], wheatFill: WHEAT_FILL_DEFAULT }
 export interface Ring {
   cell: number
   n: number
@@ -335,6 +347,7 @@ export function buildMeadow(
   mm: MeadowMap,
   wide = true,
   reach = CLUMP_REACH,
+  look: MeadowLook = MEADOW_LOOK,
 ): Meadow {
   const t0 = performance.now()
   const { map, growingCells, growthAt, cropAt, groundAt: groundAtMap } = mm
@@ -384,14 +397,14 @@ export function buildMeadow(
         uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'],
         samplers: ['uMeadow', 'uGB'],
         defines: [
-          ...grassDefinesForClumps(),
+          ...grassDefinesForClumps(look.up),
           '#define GROUND_BOUNCE',
           `#define MEADOW_N ${MAP_N.toFixed(1)}`,
           `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`,
           `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`,
           `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`,
           `#define CROP_FAN ${CROP_FAN.toFixed(2)}`,
-          `#define CROP_WIDE ${CROP_WIDE.toFixed(2)}`,
+          `#define CROP_WIDE ${CROP_WIDE[look.wheatFill].toFixed(2)}`,
           `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`,
           `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`,
         ],

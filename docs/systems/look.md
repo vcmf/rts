@@ -479,6 +479,11 @@ shader); `?meadow=off` puts back the old scatter.
   season's colour at the tip, the standing wheat gold in summer, turning orange while it is cut; stubble, the cut
   wheat's too, a pale straw over the darker soil (`stubbleTip`, no redder than the standing wheat), browning by late
   autumn; the green crop lime to olive. Ploughed fields grow nothing.
+- **The wheat's fill** (`?wheatfill=0|1`, the default 1; the owner, 2026-10-29: bare earth showed between the clumps;
+  `docs/plans/active/grass-upright.md`): the clumps wider at the root (`CROP_WIDE`, `src/look/meadow-spec.ts`) and none
+  thinned out by the clump field (`WHEAT_FILL` in `meadow.vert`), and the ground under the near standing wheat
+  (`meadowUnder`) painted toward the wheat's own deep gold (`UNDER_WHEAT`, orange through the autumn), not darkened
+  toward an ochre that read as soil; less as it is cut. 0 is the look before it.
 - **The combed meadow**, the default grass (decision 0041; `?grass=brush` the brush pattern before it, also the
   fallback without the meadow: WebGL1, `?meadow=off`; `docs/plans/done/grass-flow.md`; the research:
   `docs/research/painterly-grass.md`). It needs the bake arm (on the shader arm the meadow keeps the brush pattern).
@@ -502,6 +507,12 @@ shader); `?meadow=off` puts back the old scatter.
     (never over `HEIGHT_MAX`) and fewer thinned between the patches, leaning with the flow, a hue each (`vHue`); as the default's under the winter's snow. They
     read the bake alone. Their roots keep `CLUMP_REACH_FLOW` from the formation zones and the banks (crops keep
     `CLUMP_REACH`), which `tools/river-check.js` checks at the page's reach (`__look.meadow.reach`).
+  - **Upright** (`?grassup=0|1|2`, `GRASS_UP` in `src/look/meadow-spec.ts`, given as defines; the owner, 2026-10-29:
+    "more straight up", a short dense carpet like Tiny Glade's; `docs/plans/active/grass-upright.md`): the flow's lean
+    narrower round the vertical (`LEAN_MIN`, `LEAN_MAX`), the clump's own fan partly undone as a crop's is
+    (`GRASS_FAN_UNDO`), and on the default look (2) the clumps shorter on every ring (`GRASS_SHORT`), wider up close and
+    none thinned out between the patches there (`GRASS_DENSE`). 0 is the splayed look before it, 1 upright alone. Every
+    look stays within the combed clumps' reach (`clumpReach`, under `CLUMP_REACH_FLOW`, which the growth keeps).
   - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
   - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
     `__look.flowBuildMs`: the flow textures' time on load.

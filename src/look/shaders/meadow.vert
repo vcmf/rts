@@ -85,10 +85,15 @@ void main(){
   float nearK=big*step(uCell,1.5)*(1.0-smoothstep(CLOSE_ZOOM.x,CLOSE_ZOOM.y,length(uCamPos-uFocus)));
   #endif
   float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c);
+  #ifdef WHEAT_FILL
+  // (the wheat's fill, docs/plans/active/grass-upright.md: a sown field none thinned out by the clump field, so no bare
+  // earth between its clumps)
+  if(crop)keep=m.a*band;
+  #endif
   #if defined(GRASS_FLOW)&&!defined(GRASS_NO_DENSE)
   // denser (the owner, 2026-10-17): fewer clumps thinned between the patches, on the inner rings only (the outer ring's
   // clumps are a few pixels: denser there was fill, not look), as the default under the snow of winter
-  if(!crop)keep=m.g*band*mix(mix(0.45,0.8,nearK),1.0,c);
+  if(!crop)keep=m.g*band*mix(mix(0.45,GRASS_DENSE,nearK),1.0,c);   // (GRASS_DENSE: the look's, ?grassup)
   #endif
   float grow=smoothstep(h2-0.12,h2+0.12,keep);
   // nothing where nothing grows (the smoothstep above is over 0 at a growth of 0 for a low hash, and the height factor
@@ -107,6 +112,9 @@ void main(){
   else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*grassSeasonK(uSeason),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;
     #if defined(GRASS_FLOW)&&!defined(GRASS_NO_BIG)
     hgt=min(hgt*mix(1.0,GRASS_TALL,nearK),HEIGHT_MAX);fp*=mix(1.0,GRASS_WIDE,nearK);   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
+    #endif
+    #ifdef GRASS_FLOW
+    hgt*=mix(1.0,GRASS_SHORT,big);   // (the look's carpet, ?grassup: shorter on every ring, as the default under the snow)
     #endif
   }
   #ifdef TRAMPLE
@@ -133,6 +141,8 @@ void main(){
   #else
   vec3 fl=flowTex(root);
   #endif
+  // upright (?grassup, docs/plans/active/grass-upright.md): the clump's own fan partly undone, as a crop's is
+  if(!crop)p.xz/=1.0+GRASS_FAN_UNDO*big*CROP_FAN*aV;
   if(!crop)p.xz+=mix((vec2(h5,h6)-0.5)*0.25,fl.xy*mix(LEAN_MIN,LEAN_MAX,fl.z)*p.y/max(hgt,0.05)+(vec2(h5,h6)-0.5)*LEAN_JITTER,big)*p.y;   // (as the default under the snow)
   else p.xz+=(vec2(h5,h6)-0.5)*0.06*p.y;
   #else

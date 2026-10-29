@@ -19,10 +19,17 @@ import { TR, tr, trNow } from './trace.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
-import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
+import {
+  CLUMP_REACH,
+  CLUMP_REACH_FLOW,
+  CROP_WIDE,
+  GRASS_UP,
+  GRASS_UP_DEFAULT,
+  WHEAT_FILL_DEFAULT,
+} from './meadow-spec.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
-import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
+import { buildMeadow, buildMeadowMap, type MeadowLook, RINGS } from './meadow.ts'
 import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn, zoomOf } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
@@ -196,10 +203,23 @@ const grassDefines =
         ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`),
       ]
     : []
+// ?grassup=0|1|2: the combed clumps' look (docs/plans/active/grass-upright.md; GRASS_UP in src/look/meadow-spec.ts: 0
+// main's, splayed; 1 upright; 2 upright, shorter and denser, the default); ?wheatfill=0|1: the wheat's fill (0 main's,
+// bare earth between its clumps; 1 fuller clumps over a ground in the wheat's colour, the default)
+const lookChoice = (k: string, n: number, d: number): number => {
+  const v = params.get(k)
+  if (v === null) return d
+  if (!/^\d$/.test(v) || +v >= n) throw new Error(`?${k} must be 0 to ${n - 1}, not ${v}`)
+  return +v
+}
+const meadowLook: MeadowLook = {
+  up: GRASS_UP[lookChoice('grassup', GRASS_UP.length, GRASS_UP_DEFAULT)],
+  wheatFill: lookChoice('wheatfill', CROP_WIDE.length, WHEAT_FILL_DEFAULT),
+}
 const grain0 = makeGrainCanvas(null)
 const mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [
   ...softDefines(soft),
-  ...(meadowOn ? ['#define MEADOW', ...grassDefines] : []),
+  ...(meadowOn ? ['#define MEADOW', ...grassDefines, ...(meadowLook.wheatFill ? ['#define WHEAT_FILL'] : [])] : []),
 ])
 const keptGrains = new Set([mats.grain]) // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
@@ -509,7 +529,7 @@ else if (params.has('bench') || params.has('water') || params.get('river') === '
 // ?dofnear=0: the near blur off (its cost's A/B: docs/plans/done/dof-v2.md)
 if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
-const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach) : null
+const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach, meadowLook) : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dark ground under its clumps (shore.glsl)
 // ?armies=<battalions a side>: the demo's two armies (docs/plans/active/armies-demo.md): battalions of the ruleset's
 // infantry (about 400 a battalion, decision 0018) that march up in column, deploy and fire on a scripted loop, drawn
