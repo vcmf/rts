@@ -11,3 +11,10 @@ export const RULESETS: Readonly<
 > = {
   napoleonic: { ruleset: napoleonic, uniforms: NAPOLEONIC_UNIFORMS, dyes: NAPOLEONIC_DYES },
 }
+
+/** The ruleset named, or an error naming it. */
+export function rulesetOf(name: string): Ruleset {
+  const r = Object.hasOwn(RULESETS, name) ? RULESETS[name] : undefined
+  if (!r) throw new Error(`no ruleset ${name} (src/rulesets/index.ts)`)
+  return r.ruleset
+}
