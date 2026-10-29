@@ -61,3 +61,17 @@ the Pratzen window, centre (700, 250) in map metres, 36.6 m of relief in play (3
 
 - **The demo's focus.** The demo keeps its 8 m plane so its goldens stand; following its ground (0.4 to 20.3 m) would
   move every golden camera. For the owner, at A3.
+
+## Results (2026-10-29, the dev Mac)
+
+| What | Value | How |
+|---|---|---|
+| The Pratzen's ground | the tile 22.3–68.1 m, play 30.4–67.0 m (the focus's range), the far ring from 0 m; 4.50 m taken off | `groundOf` on its data |
+| Its camera reaches | the whole frame 664 m (+235 of play, inside the far ring's 1300); the frame below the focus row 398.4 m from the centre on either axis (the tile's 400; the demo 392.6, Kobelnitz 392.0) | `checkView`, `nearFrameOf` |
+| `data/austerlitz-pratzen.lookdata` | 3,219,764 bytes | file size |
+| The demo page | pixel-identical to `origin/main` at the goldens' eight cameras | `tools/golden.mjs`, two preview builds |
+| The demo's GPU frame p50, the bench's nine cameras, `l2` (main) | close 7.19, 7.00, 6.53 (7.19, 6.99, 6.53); default 9.17, 9.06, 9.43 (9.15, 9.05, 9.41); wide 12.44, 13.61, 12.31 (12.43, 13.61, 12.30) ms | `tools/bench-look.mjs --gpu metal`, one round each, 1-min load under 3 at the start |
+| A pan up the slope at 156 m/s (60 m zoom) | the focus 2.5–4.6 m under the ground under it while rising, on it when still | the pan's frames |
+
+Stills (git-ignored, `output/austerlitz-a1b/`): the plateau's top at (−40, −190) at 20 m, the default and the widest
+zoom, and seven frames of a pan from the low ground (z 200, 35 m) north up onto the top (z −235, 67 m) at 60 m.
