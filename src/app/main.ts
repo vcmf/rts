@@ -260,37 +260,41 @@ async function main(): Promise<void> {
     layersEl.append(b)
   }
   // time for the bench: a tick on, a tick back, a time to go to, asked of the battle (it plays them as the first pass
-  // did, and pauses); the page pauses with it, and takes one request at a time. The frame there is read, and drawn by
-  // the next animation frame: drawn here, every step of a scripted run waited on the browser's rendering of it
+  // did, and pauses); the page pauses with it, and takes one request at a time (another while one is out is refused).
+  // The frame there is read, and drawn by the next animation frame: drawn here, every step of a scripted run waited on
+  // the browser's rendering of it. A failure leaves the battle where it was; the hooks reject with it
   let timing = false
-  const timed = async (ask: () => Promise<void>) => {
-    if (timing) return
+  const timed = async (ask: () => Promise<void>): Promise<void> => {
+    if (timing) throw new Error('the bench is still going to a time')
     timing = true
     paused = true
     runAt()
     try {
       await ask()
-    } catch (e) {
-      // the battle is left where it was
-      note = String(e)
-      noteT = performance.now()
-      console.error(e)
     } finally {
       timing = false
+      look()
     }
-    look()
   }
   const stepTick = () => timed(() => link.stepTick())
   const goTo = (target: number) =>
     timed(async () => {
       const g = await link.goTo(target)
       if (g.error) throw new Error(g.error)
-      // a new world: the overlay's places and contacts found again
+      // a new world: the overlay's places and contacts found again, on it
+      look()
       over = new Overlay(seen.w, link.mode === 'worker')
       if (g.capped) {
         note = `went on five minutes, to ${clock(g.tick / TICK_HZ)}: G again to go on`
         noteT = performance.now()
       }
+    })
+  // the keys and buttons: a failure said on screen
+  const shown = (p: Promise<void>) =>
+    void p.catch((e: unknown) => {
+      note = e instanceof Error ? e.message : String(e)
+      noteT = performance.now()
+      console.error(e)
     })
   const askGoTo = () => {
     const said = prompt('Go to a time (m:ss, or seconds)')
@@ -303,11 +307,15 @@ async function main(): Promise<void> {
       }
       return
     }
-    void goTo(sec * TICK_HZ)
+    shown(goTo(sec * TICK_HZ))
   }
   document.querySelectorAll<HTMLElement>('[data-time]').forEach(el => {
     el.onclick = () =>
-      void (el.dataset.time === 'step' ? stepTick() : el.dataset.time === 'back' ? goTo(w.meta[M_TICK] - 1) : askGoTo())
+      el.dataset.time === 'step'
+        ? shown(stepTick())
+        : el.dataset.time === 'back'
+          ? shown(goTo(w.meta[M_TICK] - 1))
+          : askGoTo()
   })
   const orders: Record<string, (id: number) => Command> = {
     face: id => ({ type: 'face', id }),
@@ -360,11 +368,11 @@ async function main(): Promise<void> {
       // the frame shown, or a tick past it), marked there, and runs again after
       link.setSpeed(0)
       said = prompt('What happened here? (optional)')
-      if (said !== null) link.mark(said.trim())
+      if (said !== null) link.mark(said.trim(), w.meta[M_TICK])
       runAt()
       // the prompt swallowed the keyup and pointerup of anything held (space, a drag): let go of them
       releaseHeld()
-    } else if (said !== null) link.mark(said.trim())
+    } else if (said !== null) link.mark(said.trim(), w.meta[M_TICK])
     if (said === null) {
       note = 'mark cancelled: nothing marked'
       noteT = performance.now()
@@ -561,9 +569,9 @@ async function main(): Promise<void> {
     } else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
     else if (e.key === 'd' || e.key === 'D') overlay = !overlay
-    else if (e.key === '.') void stepTick()
+    else if (e.key === '.') shown(stepTick())
     // going back once a press, not on a held key's repeats
-    else if (e.key === ',' && !e.repeat) void goTo(w.meta[M_TICK] - 1)
+    else if (e.key === ',' && !e.repeat) shown(goTo(w.meta[M_TICK] - 1))
     else if ((e.key === 'g' || e.key === 'G') && !e.repeat) askGoTo()
     else if ((e.key === 'm' || e.key === 'M') && !e.repeat) mark()
   })

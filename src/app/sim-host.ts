@@ -13,7 +13,6 @@ import {
 } from '../sim/index.ts'
 import { BATTLE_SCENARIOS } from '../scenarios/page.ts'
 import { Battle, tailOf, applyTail, type Tail, type GoneTo } from './battle.ts'
-import type { Mark } from './timeline.ts'
 import { RingWriter, type RingBuffers } from './tick-ring.ts'
 import { Host, type Port, type Failed } from './host.ts'
 import { rulesetOf } from '../rulesets/index.ts'
@@ -28,18 +27,17 @@ export type ToSim =
   | { type: 'advance'; id: number; sec: number }
   | { type: 'goTo'; id: number; tick: number }
   | { type: 'stepTick'; id: number }
-  | { type: 'mark'; note: string }
+  | { type: 'mark'; note: string; tick: number }
   | { type: 'session'; id: number }
   | { type: 'hash'; id: number }
   | { type: 'record'; id: number; on: boolean }
 
-/** What changed of the battle's timeline since the last message: its lists' tails, and its divergences (how many, the
- * last's words). */
+/** What changed of the battle's timeline since the last message: its lists' tails (not the marks: the session the
+ * battle answers carries them), and its divergences (how many, the last's words). */
 export interface TimelineNews {
   log: Tail<Stamped>
   dropped: Tail<Dropped>
   hashes: Tail<HashPoint>
-  marks: Tail<Mark>
   warnings: number
   warning: string
 }
@@ -64,7 +62,7 @@ export function serveSim(port: Port<ToSim>): void {
   let battle: Battle | null = null
   let ring: RingWriter | null = null
   // the timeline's lists as last sent (their entries, in order), and its cuts then
-  const sent = { log: [] as Stamped[], dropped: [] as Dropped[], hashes: [] as HashPoint[], marks: [] as Mark[] }
+  const sent = { log: [] as Stamped[], dropped: [] as Dropped[], hashes: [] as HashPoint[] }
   let sentCuts = 0
   let rec: SimRecording | null = null
   // in the checks' advance: the men are held and read only its last world, so its ticks log their departures only
@@ -83,8 +81,7 @@ export function serveSim(port: Port<ToSim>): void {
       grown &&
       tl.log.length === sent.log.length &&
       tl.dropped.length === sent.dropped.length &&
-      tl.hashes.length === sent.hashes.length &&
-      tl.marks.length === sent.marks.length
+      tl.hashes.length === sent.hashes.length
     ) {
       return
     }
@@ -92,7 +89,6 @@ export function serveSim(port: Port<ToSim>): void {
       log: tailOf(sent.log, tl.log, grown),
       dropped: tailOf(sent.dropped, tl.dropped, grown),
       hashes: tailOf(sent.hashes, tl.hashes, grown),
-      marks: tailOf(sent.marks, tl.marks, grown),
       warnings: tl.warnings,
       warning: tl.warning,
     }
@@ -100,7 +96,6 @@ export function serveSim(port: Port<ToSim>): void {
     applyTail(sent.log, news.log)
     applyTail(sent.dropped, news.dropped)
     applyTail(sent.hashes, news.hashes)
-    applyTail(sent.marks, news.marks)
     sentCuts = tl.cuts
   }
   const clock = () => ring!.setClock(battle!.w.meta[M_TICK], battle!.acc, battle!.speed, tickMs)
@@ -164,15 +159,17 @@ export function serveSim(port: Port<ToSim>): void {
       b.speed = 0
       clock()
       advancing = true
+      let ran = 0
       try {
-        b.advanceBy(m.sec)
+        ran = b.advanceBy(m.sec)
       } finally {
         advancing = false
       }
       ring!.write(b.w, [])
       clock()
       flush()
-      host.send({ type: 'reply', id: m.id, value: null })
+      // the game seconds it ran (fewer where a tick parted from the first pass): the men step that far
+      host.send({ type: 'reply', id: m.id, value: ran })
     } else if (m.type === 'goTo' || m.type === 'stepTick') {
       // the time owed first, then the battle's: it pauses, and its new world (going to a time) or its tick is written
       // to the ring, a jump if the world does not follow the last
@@ -187,7 +184,7 @@ export function serveSim(port: Port<ToSim>): void {
       flush()
       host.send({ type: 'reply', id: m.id, value: gone })
     } else if (m.type === 'mark') {
-      b.mark(m.note)
+      b.mark(m.note, m.tick)
       flush()
     } else if (m.type === 'session') host.send({ type: 'reply', id: m.id, value: b.session() })
     else if (m.type === 'hash') host.send({ type: 'reply', id: m.id, value: b.hash() })

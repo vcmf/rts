@@ -40,7 +40,8 @@ export const JUMP = 300 * TICK_HZ
 
 /**
  * The tick going to `target` from tick `now` reaches: within the start and the battle's end (its time limit, `limit`
- * ticks, or ten minutes past the furthest tick played, `reached`, without one), and at most JUMP on (`capped`).
+ * ticks, or the furthest tick played, `reached`, if that is later: a battle plays on past its limit; without a limit,
+ * ten minutes past the furthest tick), and at most JUMP on (`capped`).
  */
 export function goToTick(
   target: number,
@@ -48,7 +49,7 @@ export function goToTick(
   reached: number,
   limit: number,
 ): { tick: number; capped: boolean } {
-  const end = limit > 0 ? limit : reached + 600 * TICK_HZ
+  const end = limit > 0 ? Math.max(limit, reached) : reached + 600 * TICK_HZ
   const t = Math.max(0, Math.min(Math.round(target), end))
   return t > now + JUMP ? { tick: now + JUMP, capped: true } : { tick: t, capped: false }
 }
@@ -185,13 +186,16 @@ export class Battle {
   }
 
   /** `sec` seconds of game time at 1×, in 1/30 s frames whatever the speed (the headless checks' advance); it stops
-   * where a tick parts from the first pass, as the page does. */
-  advanceBy(sec: number): void {
+   * where a tick parts from the first pass, as the page does. Returns the game seconds it ran. */
+  advanceBy(sec: number): number {
     const sp = this.speed
     const was = this.tl.warnings
     this.speed = 1
-    for (let n = Math.round(sec * 30); n > 0 && this.tl.warnings === was; n--) this.advance(1 / 30)
+    const frames = Math.round(sec * 30)
+    let n = 0
+    for (; n < frames && this.tl.warnings === was; n++) this.advance(1 / 30)
     this.speed = this.tl.warnings === was ? sp : 0
+    return n / 30
   }
 
   /** One tick and the battle paused (the bench's tick on); its men, where it steps them, one tick's way on. */
@@ -227,9 +231,10 @@ export class Battle {
     return { tick: w.meta[M_TICK], capped, error: '' }
   }
 
-  /** A moment marked at the world's tick (the playtest's M). */
-  mark(note: string): void {
-    mark(this.tl, this.w, note)
+  /** A moment marked (the playtest's M) at tick `tick`: the one the player saw, the world's if not given. */
+  mark(note: string, tick?: number): void {
+    if (tick === undefined) mark(this.tl, this.w, note)
+    else this.tl.marks.push({ tick, note })
   }
 
   /** One tick, the layer synced after it; hash points without section hashes (those cost a second serialization).

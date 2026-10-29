@@ -5,7 +5,7 @@
 import { loadSimData, compileRuleset, makeWorld, DT, type World } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { PAGE_SEED } from '../scenarios/page.ts'
-import { buildScene, type Scene } from '../render/scene.ts'
+import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { MenClock } from '../render/men-clock.ts'
 import { layoutFor, writeFrame, capFor, Slots, type Layout } from './battle-frame.ts'
@@ -45,7 +45,6 @@ const TAKE = 16
 /** Serves the men of one battle on `port` until the worker ends. */
 export function serveMen(port: Port<ToMen>): void {
   let w: World
-  let scene: Scene
   let layer: SoldierLayer
   let ring: RingReader
   const clock = new MenClock()
@@ -155,8 +154,7 @@ export function serveMen(port: Port<ToMen>): void {
         PAGE_SEED,
         false,
       )
-      scene = buildScene(w)
-      layer = new SoldierLayer(w, scene)
+      layer = new SoldierLayer(w, buildScene(w))
       layer.orients = !!m.orients
       src.w = w
       src.layer = layer

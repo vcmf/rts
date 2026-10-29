@@ -53,13 +53,12 @@ export interface BattleLink {
   readonly data: SimData
   // why the battle stopped (the worker failed), or null
   readonly failed: string | null
-  // the timeline's stamped log, orders dropped, hash points and marks (the worker's, as far as they have arrived; after
-  // going back, a future the world has not reached again), and its divergences: how many, the last's words. Read
-  // them here each time: going to a time replaces the battle's lists on the page's thread
+  // the timeline's stamped log, orders dropped and hash points (the worker's, as far as they have arrived; after going
+  // back, a future the world has not reached again), and its divergences: how many, the last's words. Read them here
+  // each time: going to a time replaces the battle's lists on the page's thread
   readonly log: Stamped[]
   readonly dropped: Dropped[]
   readonly hashes: HashPoint[]
-  readonly marks: Mark[]
   readonly warnings: number
   readonly warning: string
   /** A real frame of `dt` seconds: on the main thread, the battle advances; in the worker it runs on its own. */
@@ -79,8 +78,8 @@ export interface BattleLink {
   goTo(tick: number): Promise<GoneTo>
   /** The bench: one tick on, the battle paused; resolved once a frame of it is there to read. */
   stepTick(): Promise<void>
-  /** A moment marked at the battle's tick. */
-  mark(note: string): void
+  /** A moment marked at tick `tick` (the one the player saw). */
+  mark(note: string, tick: number): void
   session(): Promise<Session>
   hash(): Promise<string>
   /** The workers' costs (ms, smoothed): a tick (the sim worker's), the men's steps and publishing a frame (the men
@@ -114,9 +113,6 @@ export class MainLink implements BattleLink {
   }
   get hashes() {
     return this.battle.hashes
-  }
-  get marks() {
-    return this.battle.marks
   }
   get warnings() {
     return this.battle.tl.warnings
@@ -152,8 +148,8 @@ export class MainLink implements BattleLink {
   async stepTick() {
     this.battle.stepTick()
   }
-  mark(note: string): void {
-    this.battle.mark(note)
+  mark(note: string, tick: number): void {
+    this.battle.mark(note, tick)
   }
   async session() {
     return this.battle.session()
@@ -176,7 +172,6 @@ export class WorkerLink implements BattleLink {
   readonly log: Stamped[] = []
   readonly dropped: Dropped[] = []
   readonly hashes: HashPoint[] = []
-  readonly marks: Mark[] = []
   warnings = 0
   warning = ''
   readonly data: SimData
@@ -230,7 +225,6 @@ export class WorkerLink implements BattleLink {
         applyTail(this.log, m.log)
         applyTail(this.dropped, m.dropped)
         applyTail(this.hashes, m.hashes)
-        applyTail(this.marks, m.marks)
         this.warnings = m.warnings
         this.warning = m.warning
       } else if (m.type === 'reply') this.answer(m.id, m.value)
@@ -311,8 +305,8 @@ export class WorkerLink implements BattleLink {
   async advance(sec: number): Promise<void> {
     // the sim advances (its men's clock at speed 0, its ticks logging departures only), then the men take its last
     // world and step to their places
-    await this.ask(id => this.toSim({ type: 'advance', id, sec }))
-    await this.ask(id => this.toMen({ type: 'advance', id, sec }))
+    const ran = await this.ask<number>(id => this.toSim({ type: 'advance', id, sec }))
+    await this.ask(id => this.toMen({ type: 'advance', id, sec: ran }))
   }
   async goTo(tick: number): Promise<GoneTo> {
     // the sim's jump, then the men laid out on it and a frame of it published
@@ -324,8 +318,8 @@ export class WorkerLink implements BattleLink {
     await this.ask(id => this.toSim({ type: 'stepTick', id }))
     await this.ask(id => this.toMen({ type: 'advance', id, sec: DT }))
   }
-  mark(note: string): void {
-    this.toSim({ type: 'mark', note })
+  mark(note: string, tick: number): void {
+    this.toSim({ type: 'mark', note, tick })
   }
   session() {
     return this.ask<Session>(id => this.toSim({ type: 'session', id }))

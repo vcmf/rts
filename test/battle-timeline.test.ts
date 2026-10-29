@@ -62,7 +62,9 @@ describe('the battle goes to a time', () => {
     expect(goToTick(-5, 100, 200, 0)).toEqual({ tick: 0, capped: false })
     // no time limit: ten minutes past the furthest tick played
     expect(goToTick(1e9, 100, 200, 0)).toEqual({ tick: 100 + JUMP, capped: true })
-    expect(goToTick(150.4, 100, 200, 120)).toEqual({ tick: 120, capped: false })
+    expect(goToTick(150.4, 100, 110, 120)).toEqual({ tick: 120, capped: false })
+    // regression (PR 7 review): a battle plays on past its time limit, and a tick back there stays there
+    expect(goToTick(599, 600, 600, 120)).toEqual({ tick: 599, capped: false })
     expect(goToTick(200 + 600 * TICK_HZ, 200 + 600 * TICK_HZ - JUMP, 200, 0)).toEqual({
       tick: 200 + 600 * TICK_HZ,
       capped: false,
