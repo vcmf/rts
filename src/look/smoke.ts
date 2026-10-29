@@ -1,4 +1,4 @@
-// The musket smoke on the look page (docs/plans/active/smoke-bank.md, decision 0080): soft translucent cards, one
+// The musket smoke on the look page (docs/plans/active/smoke-bank.md, decision 0083): soft translucent cards, one
 // thin-instanced quad a puff (src/look/shaders/smoke.vert, smoke.frag), across the front, born at the muzzles as
 // plumes and grown into one bank along the front that rolls ahead, rises and thins into holes; blended over the scene
 // after everything opaque, no depth written, the lens term of what lies behind kept; its opacity capped where it lies

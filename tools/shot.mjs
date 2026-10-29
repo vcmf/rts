@@ -1,6 +1,7 @@
 // Headless Chrome driver for prototype verification: load a page, run steps, save screenshots.
 // Usage: node tools/shot.mjs <page.html|url> <outDir> [width] [height] ['<steps JSON>']
-// Steps: ["wait",ms] · ["eval","js"] (prints the result; a promise is awaited)
+// Steps: ["wait",ms] · ["eval","js"] (prints the result; a promise is awaited) · ["repl","js"] (the same in REPL mode:
+//   a top-level await allowed, the last statement's value printed)
 //   · ["shot","name"] · ["tap","KeyD",holdMs]
 // Exits non-zero on page exceptions/console errors or tool failure, and always cleans up Chrome.
 // Software GL (SwiftShader) by default: good for correctness, NOT for timing GPU frame cost. SHOT_ANGLE=metal (or
@@ -44,7 +45,7 @@ const EXTRA = (process.env.SHOT_CHROME_ARGS || '').split(' ').filter(Boolean)
 // how to (re)start an attached browser with everything this run asks for (headless, as a launched run always is)
 const RESTART = CDP ? startHint(CDP, ANGLE, EXTRA) : ''
 const steps = JSON.parse(script)
-const KNOWN = new Set(['wait', 'eval', 'shot', 'tap'])
+const KNOWN = new Set(['wait', 'eval', 'repl', 'shot', 'tap'])
 for (const [op] of steps) {
   if (!KNOWN.has(op)) {
     console.error(`unknown step "${op}"`)
@@ -311,9 +312,15 @@ try {
   if (state.unreachableUrl) throw new Error(`the page navigated to ${state.unreachableUrl}, which could not be opened`)
   for (const [op, a, b] of steps) {
     if (op === 'wait') await sleep(a)
-    else if (op === 'eval') {
-      // a promise is awaited
-      const r = await send('Runtime.evaluate', { expression: a, returnByValue: true, awaitPromise: true })
+    else if (op === 'eval' || op === 'repl') {
+      // a promise is awaited. `repl`: in REPL mode, which allows a top-level await (the sim page's hooks that ask its
+      // battle worker return promises) and gives the last statement's value, but does not await a promise that value is
+      const r = await send('Runtime.evaluate', {
+        expression: a,
+        returnByValue: true,
+        awaitPromise: true,
+        ...(op === 'repl' ? { replMode: true } : {}),
+      })
       if (r.exceptionDetails) {
         pageErrors++
         console.log('EVAL-EXC', r.exceptionDetails.exception?.description?.slice(0, 300))

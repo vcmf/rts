@@ -13,4 +13,6 @@ export const ARMIES_DEMO = {
     ['fr-line', 'fr-guard-grenadier', 'fr-dragoon'],
     ['at-line', 'ru-line', 'br-line', 'at-grenzer', 'br-rifles'],
   ],
+  // played by the sim (?sim, src/look/sim-armies.ts): the shape each battalion approaches in, and the one it fights in
+  sim: { approach: 'column', fight: 'line' },
 } as const

@@ -1,11 +1,16 @@
 # check: every PR into main or an epic/** branch, and every push to them. Lint, format, types, generated data,
-# docs, tests, build.
-# coverage: PRs into an epic/** branch, pushes to main or an epic/** branch, and by hand; not PRs into main.
+# docs, build.
+# test: the same events. Vitest, in three shards run side by side (vitest's --shard splits the files by a hash of
+# their paths); a test file's tests run one after another, so a long file is split in several (the bench:
+# test/bench-fx.ts). Each shard restores vitest's results cache, so its longest files start first.
+# coverage: PRs into an epic/** branch, pushes to main or an epic/** branch, and by hand; not PRs into main. In three
+# shards too, each uploading its own report: Codecov merges them (codecov.yml waits for all three).
 # Coverage instrumentation makes the sim's long scenarios about six times slower, so the coverage run skips the
-# tests marked longIt (test/fx.ts; they run in check): 144 s locally instead of 317 s, for 0.6 points of
-# statement coverage. A test there has a longer budget than in check (vitest.config.ts). It reports to Codecov.
+# tests marked longIt (test/fx.ts; they run in test): 144 s locally instead of 317 s, for 0.6 points of
+# statement coverage. A test there has a longer budget than in test (vitest.config.ts).
 # The cost tests skip themselves when CI is set (shared runners are too noisy for millisecond budgets).
 # tools/app-check.mjs (headless browser) is not run here yet.
+# Why and what it gave: docs/plans/active/ci-faster-tests.md.
 name: ci
 on:
   pull_request:
@@ -19,7 +24,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,12 +37,14 @@ jobs:
       - run: npm run typecheck
       - run: npm run check:data
       - run: npm run check:docs
-      - run: npx vitest run
       - run: npm run build
-  coverage:
-    if: github.event_name != 'pull_request' || startsWith(github.base_ref, 'epic/')
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,7 +52,45 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run coverage
+      # after npm ci, which empties node_modules. Saved only by pushes (a PR's cache serves only that PR), under a
+      # new key each run
+      - uses: actions/cache/restore@v4
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-test-${{ matrix.shard }}-${{ github.run_id }}
+          restore-keys: vitest-test-${{ matrix.shard }}-
+      - run: npx vitest run --shard=${{ matrix.shard }}/3
+      - if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-test-${{ matrix.shard }}-${{ github.run_id }}
+  coverage:
+    if: github.event_name != 'pull_request' || startsWith(github.base_ref, 'epic/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache/restore@v4
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-coverage-${{ matrix.shard }}-${{ github.run_id }}
+          restore-keys: vitest-coverage-${{ matrix.shard }}-
+      - run: npm run coverage -- --shard=${{ matrix.shard }}/3
+      - if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-coverage-${{ matrix.shard }}-${{ github.run_id }}
       - uses: codecov/codecov-action@v5
         with:
           files: coverage/lcov.info

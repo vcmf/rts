@@ -42,6 +42,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 
 | Image | Take | Ignore |
 |---|---|---|
+| `design/refs/staff-map-epic-history-waterloo.source.txt` | **The map view**, the first reference of decision 0058 (which governs where it and §6d differ): a frame of Epic History TV's Waterloo at 17:00, kept out of git (third-party), its source in the `.source.txt`: relief under one light with cast shadows, thin roads, army blocks standing off the ground with a short shadow, serif place names | Its massed dark canopy and field strips (tried, rejected: decision 0058), its saturated red roofs and bright greens next to the armies, its blood and fire effects, its portraits on staffs |
 | `design/refs/style-painterly.png` | **Brushwork and colour:** tapered grass flicks, flower dabs, broken edges, teal hue-shifted shadows, cloud-shadow patches | Its sky, horizon and ground-level camera |
 | `design/refs/north-star.png` | Composition only (superseded by the painted version) | Toy bases, its heavy tilt-shift (ours is mild, §1.6), sky glow, glossy figurine finish |
 | `design/refs/mood-wide.png` | Warm light temperature, gold-lit valley mist | Everything else: sky, mountains, cypresses, crowding, toy figures |
@@ -436,7 +437,7 @@ scanned. The prototype accepts a dropped PNG to test a grain live.
 
 | Effect | Style |
 |---|---|
-| Musket smoke | A soft translucent bank at muzzle height: warm white lit, pale cool shade, feathered painted edges; thinned over formations, never cut (decision 0080, proposed) |
+| Musket smoke | A soft translucent bank at muzzle height: warm white lit, pale cool shade, feathered painted edges; thinned over formations, never cut (decision 0083, proposed) |
 | Volley | Brief graphic flash marks, not glowing particles |
 | Cannon | Bigger sculpted puff plus a ring of dust |
 | Dust | Warm beige dry-brush clouds |

@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-28
 ---
 
-# 0080 Powder smoke as soft painted banks, thinned over the formations
+# 0083 Powder smoke as soft painted banks, thinned over the formations
 
 Proposed with the smoke track's first PR (`docs/plans/active/smoke-bank.md`, into `epic/smoke`, #239); the owner
 accepts it when the track is shown. The research: `docs/research/smoke.md`. As built: `docs/systems/look.md` ("The
