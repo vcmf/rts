@@ -839,35 +839,40 @@ scripted infantry's volleys, a plume at each muzzle group grown into one bank al
   in the fire loop, then once a loop until its cycle ends (`shotsBetween`). The moment is the figure's own `fire` clip
   event on the bake's timeline (`shotAt`, `data/figures/index.json`: 1.5 s for the infantry), the loop the unit
   data's fire range. Each shot leaves a puff for every `files` files of the rank (`muzzles`, `volleyPuffs`), born at
-  the muzzles ahead of the front rank, its birth spread by the men's own lag, its seed and life its own (`hash`: the
-  same at every load).
+  the muzzles (the era's `ahead` before the front rank, a rank behind `RANK_REACH` nearer), its birth set by its
+  section's own moment (`SECTION` m of the front go off together, ±`stagger`/2) and the men's own lag, its seed, life
+  and own factors on the era's size, reach, rise and density its own (`puffVary`: by the era's `vary`, one puff in
+  seven thin, the gaps between the clumps; `hash`: the same at every load).
 - **The ring** (`src/look/smoke.ts`): the puffs are thin instances of one quad, their birth place and clock, way
-  ahead, seed and life in the instance buffer's first two columns; written only when a shot falls between two frames'
+  ahead, seed, life and own factors in the instance buffer's first three columns; written only when a shot falls between two frames'
   clocks (a partial upload of the slots written), the oldest overwritten when full (`ringSize`: every line
   battalion's puffs alive at once). A clock that runs back or jumps by more than a second (a load, `?frozen` tools)
   rebuilds the ring from the shots of the longest life before it, so the smoke at a clock is the same however it was
   reached.
-- **The card** (`smoke.vert`): a quad facing the camera, moved by its age (`puffAt`, mirrored: the shot's blast ahead
-  dying fast, then the bank's slow roll, a rise slowing, the flags' wind, `FLAG_WIND`), grown, each puff's size,
-  reach and rise its own. Young, a plume: stretched along the shot as the eye sees it (foreshortened), its back at the
-  muzzle, relaxing to round; wide along the front (the era's `bank`), so a rank's puffs overlap into one sheet. Kept
-  off the ground it was born over. Not yet born or past its life it is put outside the view.
+- **The card** (`smoke.vert`): a quad across the front, the shot's way tilted a little up from the level (a jet near
+  it, a grown puff up to about 20°): a top-down eye sees it whole, and it hangs at the muzzles' height (an upright card
+  stood metres high and, seen from above, read metres ahead of the line). Moved by its age (`puffAt`, mirrored: the
+  shot's blast ahead dying fast, then the slow roll, a rise slowing, the flags' wind, each puff's a little its own,
+  `FLAG_WIND`), grown, by its own factors. Young, a jet: long along the shot, its back at the muzzle, narrow there and
+  widening ahead (`smoke.frag`), relaxing to round; grown, wider along the front (the era's `bank`) and rolled back
+  over the front rank's muskets. Not yet born, past its life or of no density it is put outside the view.
 - **The shape** (`smoke.frag`): a soft falloff from the card's middle, broken by the paint grain's blotches twice
   (billows about a puff's size and smaller ones on them, in the card's own metres, so the smoke spreads through them,
-  churning slowly) and a trace of the paper grain; young, softer all round and densest at the muzzle; with age it thins
+  churning slowly) and a trace of the paper grain; always densest toward the muzzles; young, softer; with age it thins
   (to a third of the era's opacity at its end, `PUFF_THIN`) and its threshold climbs past the billows (holes, then
   gone); faded out over its lowest 0.7 m at its ground (no hard line where a card meets it).
 - **The light**: two bands, the sun's side of the card against its middle with the billows drawing their edge: a warm
   white (the era's `#F3EFE6` in the sun's warmth) and a pale cool grey in its shade (0.84 of it, turned a little to
   the mood's shadow colour): light all over. The trees' baked shadow, the clouds' shade, the air, the grade. The young
-  plume's core shows the era's flash colour for its first 0.09 s.
+  jet's muzzle end shows the era's flash colour for its first 0.07 s (a small spark at the muzzle).
 - **The blend**: drawn after everything opaque, no depth written, both faces; colour by its opacity over what lies
   behind, the alpha (the depth of field's lens term, decision 0040) kept: the smoke blurs as what lies behind it, a few
   metres away at most, as the soldiers' simple shadows do. Cards are not sorted (one colour family: the order is not
   seen).
 - **The cap over the men** (`?smokecap=<0 to 1>`, 0.4 by default; 1 draws no mask): a 512² R8 mask over the play area
-  (about 0.94 m texels) of each battalion's ground box (`Units.boxes`: its men's roots padded by their reach) and a
-  1.5 m fall-off (`drawClearance`), drawn again when a battalion is placed (`Units.placeCount`), at most at 12 Hz. Each
+  (about 0.94 m texels) of each battalion's footprint in its own frame (`Units.footprints`: its men's roots, so a line
+  askew to the world's axes covers only its own narrow ground; a world box round it took in the ground before it and
+  thinned the smoke at the muzzles) and a 1 m fall-off (`drawClearance`), drawn again when a battalion is placed (`Units.placeCount`), at most at 12 Hz. Each
   smoke pixel follows its view ray down to a man's mid height over the puff's ground and reads it (`coverAt`); over a
   formation its opacity is capped (`coverCap`), so the front ranks inside the bank's edge read through it, from either
   side, and the smoke stays whole elsewhere.
@@ -879,12 +884,14 @@ scripted infantry's volleys, a plume at each muzzle group grown into one bank al
   bad value throws.
 - **The era's values** (`PuffDef` in `src/sim/ruleset.ts`; `src/rulesets/napoleonic-smoke.ts`, the ruleset's
   `smoke.volley` in `src/rulesets/index.ts`): puffs a file group, life, thinning, radius, growth, the muzzles' place,
-  the blast, the plume, the roll, the bank's width, the rise, the drift, the men's spread, opacity, colour and flash.
+  the blast, the plume, the roll, the bank's width, the rise, the drift, the men's spread, the sections' stagger, the
+  puffs' variety, opacity, colour and flash.
 - **The bench**: `?firehold=1` holds the script in its fire phase (`scriptClock`: each battalion in line fires all the
   time, its volleys still its own); `?bench=smoke&firehold=1` measures the smoke on and off in one page. `__smoke`:
   `written`, `capacity`. `?lookat=fight|line|line1[,<radius m>]` starts the camera on the fight, or the first or the
   second side's front battalion.
-- **Memory**: the ring, 64 B a puff (1,512 puffs at 20 a side: 97 KB, on the GPU and the CPU), and the mask, 256 KB.
+- **Memory**: the ring, 64 B a puff (1,512 puffs at 20 a side: 97 KB, on the GPU and the CPU; 12 of its 16 floats
+  used), and the mask, 256 KB.
 
 ### The readability guard (L2a)
 

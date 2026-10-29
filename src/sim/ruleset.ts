@@ -224,6 +224,8 @@ export interface PuffDef {
   rise: readonly [number, number] // m/s up at birth, and the time constant it slows over (s)
   drift: number // m/s: the wind's carry
   jitter: number // s: the men's own spread about their rank's shot
+  stagger: number // s: the spread of the moments a line's sections (about a company each) go off at
+  vary: number // 0 to 1: how much each puff's size, reach, rise and density differ from the era's (0: all alike)
   opacity: number // a puff's densest (0 to 1): a few of them over each other make the bank's core
   colour: string // the smoke's own colour, lit by the scene's light
   flash: readonly [string, number] // the muzzle flash: its colour and how long the young puff shows it (s)

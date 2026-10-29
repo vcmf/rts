@@ -1,5 +1,5 @@
 // The musket smoke on the look page (docs/plans/active/smoke-bank.md, decision 0080): soft translucent cards, one
-// thin-instanced quad a puff (src/look/shaders/smoke.vert, smoke.frag), facing the camera, born at the muzzles as
+// thin-instanced quad a puff (src/look/shaders/smoke.vert, smoke.frag), across the front, born at the muzzles as
 // plumes and grown into one bank along the front that rolls ahead, rises and thins into holes; blended over the scene
 // after everything opaque, no depth written, the lens term of what lies behind kept; its opacity capped where it lies
 // over a formation (the formations' mask). The puffs are written when the scripted battalions' ranks go off
@@ -23,6 +23,7 @@ import SMOKE_FS from './shaders/smoke.frag?raw'
 import { FLAG_WIND } from './units.ts'
 import type { Battalion, Drill } from './world/armies.ts'
 import {
+  FOOT_FLOATS,
   PUFF_FLOATS,
   PUFF_THIN,
   drawClearance,
@@ -42,20 +43,20 @@ const GL_SRC_ALPHA = 0x0302
 const GL_ONE_MINUS_SRC_ALPHA = 0x0303
 const KEEP_BAND = 0.08 // the zoom's thinning: the band of ranks a puff shrinks out over (keepScale)
 const MASK_N = 512 // the formations' mask's texels a side
-// m: the mask's fall-off round a formation's box (already padded by the men's reach: Units.boxes)
-const MASK_MARGIN = 1.5
+// m: the mask's fall-off round a formation's footprint (its men's roots: Units.footprints; a man's half width in it)
+const MASK_MARGIN = 1.0
 const MAN_MID = 0.9 // m: the height the cap follows a view ray down to (a man's middle)
 const MASK_EVERY = 1 / 12 // s: the mask redrawn at most this often while formations move
 const REBUILD = 1 // s: a clock jump past this rebuilds the ring from the last life's shots
 
 /** what the smoke needs of the armies: the battalions (only those in line fire), their drill, the script's fire
- *  timing (its start, the shot's moment, the loop, the ranks, the hold), each battalion's ground box (Units.boxes) and
- *  a count that changes when any moves (Units.placeCount) */
+ *  timing (its start, the shot's moment, the loop, the ranks, the hold), each battalion's footprint (Units.footprints)
+ *  and a count that changes when any moves (Units.placeCount) */
 export interface SmokeArmies {
   battalions: readonly Battalion[]
   drill: Drill
   fire: FireTiming
-  boxes(out: Float32Array): number
+  footprints(out: Float32Array): number
   readonly placeCount: number
 }
 
@@ -115,7 +116,7 @@ export class Smoke {
     const half = play + 2 * MASK_MARGIN
     this.maskOrigin = [-half, -half]
     this.maskTexel = (2 * half) / MASK_N
-    this.boxBuf = new Float32Array(armies.battalions.length * 4)
+    this.boxBuf = new Float32Array(armies.battalions.length * FOOT_FLOATS)
     this.maskTex = new RawTexture(
       this.mask,
       MASK_N,
@@ -218,7 +219,7 @@ export class Smoke {
   /** the shots since the last frame written as puffs: a clock that ran back or jumped (a load, the bench) rebuilds the
    *  ring from the shots of the longest life before it, so the smoke at a clock is the same however it was reached */
   private spawn(T: number): void {
-    const j = this.def.jitter
+    const j = this.def.jitter + this.def.stagger / 2 // (a puff's birth past its shot's nominal clock, at most)
     let t0 = this.last + j
     if (!(T >= this.last && T - this.last <= REBUILD)) {
       this.buf.fill(0)
@@ -264,7 +265,7 @@ export class Smoke {
     if (count === this.maskCount || (Math.abs(T - this.maskT) < MASK_EVERY && this.maskCount >= 0)) return
     this.maskCount = count
     this.maskT = T
-    const n = this.armies.boxes(this.boxBuf)
+    const n = this.armies.footprints(this.boxBuf)
     drawClearance(this.boxBuf, n, this.mask, MASK_N, this.maskOrigin, this.maskTexel, MASK_MARGIN)
     this.maskTex.update(this.mask)
   }

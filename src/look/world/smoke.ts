@@ -98,7 +98,7 @@ export function muzzles(d: Drill, files: number): number[] {
  *  ranks × muzzles, as many volleys as a puff's longest life, its spread and the ranks' lag span, and one more), at
  *  least 64 and at most max (64 B each) */
 export function ringSize(lines: number, muzzlesN: number, f: FireTiming, def: PuffDef, max = 8192): number {
-  const volleys = Math.ceil((def.life[1] + 2 * def.jitter + (f.ranks - 1) * RANK_LAG) / f.period) + 1
+  const volleys = Math.ceil((def.life[1] + 2 * def.jitter + def.stagger + (f.ranks - 1) * RANK_LAG) / f.period) + 1
   return Math.max(64, Math.min(max, lines * f.ranks * muzzlesN * volleys))
 }
 
@@ -115,13 +115,38 @@ export function hash(a: number, b = 0, c = 0, d = 0): number {
 }
 
 /** floats a puff: its birth place (x, y, z m) and clock (s), its way ahead (x, z: a unit vector), its seed (0 to 1)
- *  and its life (s): an instance's first two columns (src/look/shaders/smoke.vert) */
-export const PUFF_FLOATS = 8
+ *  and its life (s), then its own factors on the era's size, reach (the blast's and the roll's), rise and density
+ *  (puffVary): an instance's first three columns (src/look/shaders/smoke.vert) */
+export const PUFF_FLOATS = 12
+/** m: the stretch of a line that goes off together (a section: about a company), its moment its own (`stagger`) */
+export const SECTION = 12
+/** m: how much nearer the front rank a rank behind's muzzles are (its muskets over the shoulders of the one before) */
+export const RANK_REACH = 0.35
+
+/** A puff's own factors on the era's values (smoke.vert reads them), from three hashes (0 to 1) and the era's `vary`
+ *  (0: every puff the era's own): size, reach and rise spread evenly about 1 by 0.45, 0.7 and 0.8 of `vary`; density
+ *  1 down to 1 - ½ vary, and one puff in seven thin (a quarter of that: the gaps between the clumps) */
+export function puffVary(
+  h0: number,
+  h1: number,
+  h2: number,
+  vary: number,
+): { size: number; reach: number; rise: number; density: number } {
+  const thin = h2 < 1 / 7 ? 0.25 : 1
+  return {
+    size: 1 + (h0 * 2 - 1) * 0.45 * vary,
+    reach: 1 + (h1 * 2 - 1) * 0.7 * vary,
+    rise: 1 + (fract(h0 * 7.3 + h1) * 2 - 1) * 0.8 * vary,
+    density: (1 - fract(h2 * 5.1 + h0) * 0.5 * vary) * thin,
+  }
+}
+const fract = (x: number): number => x - Math.floor(x)
 
 /** The puffs of one shot of battalion `index` (its place in the battalions): one for each muzzle group, born at the
- *  muzzles (`ahead` m ahead of the front rank, `height` m over the ground there; a rank behind a little higher, as
- *  its muskets over the front rank's shoulders), at the shot's clock and a man's own spread (±jitter), each with its
- *  seed and life; pushed onto out, PUFF_FLOATS each. ground: the ground's height at (x, z) */
+ *  muzzles (`ahead` m ahead of the front rank, a rank behind RANK_REACH m nearer it and a little higher, `height` m
+ *  over the ground there), at the shot's clock, its section's own moment (±stagger/2: SECTION m of the front go off
+ *  together) and a man's own spread (±jitter), each with its seed, life and own factors (puffVary); pushed onto out,
+ *  PUFF_FLOATS each. ground: the ground's height at (x, z) */
 export function volleyPuffs(
   b: Battalion,
   index: number,
@@ -137,19 +162,25 @@ export function volleyPuffs(
     const h0 = hash(index, shot.cycle, shot.volley * 8 + shot.rank, g)
     const h1 = hash(g, index, shot.rank, shot.cycle * 31 + shot.volley)
     const h2 = hash(shot.volley, g, index * 7 + shot.rank, shot.cycle)
+    const h3 = hash(index, shot.cycle * 17 + shot.volley, Math.round(xs[g] / SECTION), 5)
     const lx = xs[g] + (h1 - 0.5) * 1.2
-    const lz = def.ahead + h2 * 0.6
+    const lz = def.ahead - shot.rank * RANK_REACH + h2 * 0.3
     const x = b.x + c * lx + s * lz
     const z = b.z - s * lx + c * lz
+    const v = puffVary(h0, h1, h2, def.vary)
     out.push(
       x,
       ground(x, z) + def.height + shot.rank * 0.12,
       z,
-      shot.t + (h0 * 2 - 1) * def.jitter,
+      shot.t + (h3 - 0.5) * def.stagger + (h0 * 2 - 1) * def.jitter,
       s,
       c,
       h1,
       def.life[0] + (def.life[1] - def.life[0]) * h2,
+      v.size,
+      v.reach,
+      v.rise,
+      v.density,
     )
   }
 }
@@ -192,11 +223,16 @@ export function keepScale(rank: number, keep: number, band = 0.08): number {
   return Math.min(1, Math.max(0, (keep * (1 + band) - rank) / (band * keep))) / Math.sqrt(keep)
 }
 
-/** The formations' clearance mask (smoke.frag reads it): a square of size² texels from origin (x0, z0 m) at texel m
- *  each; a texel's value 255 inside a box and falling linearly to 0 margin m outside it, the largest over the boxes.
- *  boxes: [x0, z0, x1, z1] m each (Units.boxes), n of them. Only the texels near a box are visited */
+/** floats a formation's footprint (Units.footprints, drawClearance): its place (x, z m), heading (rad) and its men's
+ *  bounds in its own frame [x0, z0, x1, z1] (m: x across, z ahead) */
+export const FOOT_FLOATS = 7
+
+/** The formations' mask (smoke.frag reads it): a square of size² texels from origin (x0, z0 m) at texel m each; a
+ *  texel's value 255 inside a formation's footprint (in its own frame, so a line askew to the axes covers only its own
+ *  narrow ground) and falling linearly to 0 margin m outside it, the largest over the footprints. feet: FOOT_FLOATS
+ *  each, n of them. Only the texels near a footprint are visited */
 export function drawClearance(
-  boxes: Float32Array,
+  feet: Float32Array,
   n: number,
   mask: Uint8Array,
   size: number,
@@ -206,23 +242,45 @@ export function drawClearance(
 ): void {
   mask.fill(0)
   for (let k = 0; k < n; k++) {
-    const x0 = boxes[k * 4]
-    const z0 = boxes[k * 4 + 1]
-    const x1 = boxes[k * 4 + 2]
-    const z1 = boxes[k * 4 + 3]
-    const i0 = Math.max(0, Math.floor((x0 - margin - origin[0]) / texel))
-    const i1 = Math.min(size - 1, Math.ceil((x1 + margin - origin[0]) / texel))
-    const j0 = Math.max(0, Math.floor((z0 - margin - origin[1]) / texel))
-    const j1 = Math.min(size - 1, Math.ceil((z1 + margin - origin[1]) / texel))
+    const o = k * FOOT_FLOATS
+    const bx = feet[o]
+    const bz = feet[o + 1]
+    const c = Math.cos(feet[o + 2])
+    const s = Math.sin(feet[o + 2])
+    const [x0, z0, x1, z1] = [feet[o + 3] - margin, feet[o + 4] - margin, feet[o + 5] + margin, feet[o + 6] + margin]
+    // (the footprint's world bounds: its four corners, x = bx + c·lx + s·lz, z = bz − s·lx + c·lz)
+    let wx0 = Infinity
+    let wx1 = -Infinity
+    let wz0 = Infinity
+    let wz1 = -Infinity
+    for (const [lx, lz] of [
+      [x0, z0],
+      [x1, z0],
+      [x0, z1],
+      [x1, z1],
+    ]) {
+      wx0 = Math.min(wx0, bx + c * lx + s * lz)
+      wx1 = Math.max(wx1, bx + c * lx + s * lz)
+      wz0 = Math.min(wz0, bz - s * lx + c * lz)
+      wz1 = Math.max(wz1, bz - s * lx + c * lz)
+    }
+    const i0 = Math.max(0, Math.floor((wx0 - origin[0]) / texel))
+    const i1 = Math.min(size - 1, Math.ceil((wx1 - origin[0]) / texel))
+    const j0 = Math.max(0, Math.floor((wz0 - origin[1]) / texel))
+    const j1 = Math.min(size - 1, Math.ceil((wz1 - origin[1]) / texel))
     for (let j = j0; j <= j1; j++) {
-      const z = origin[1] + (j + 0.5) * texel
-      const dz = Math.max(z0 - z, 0, z - z1)
+      const dz = origin[1] + (j + 0.5) * texel - bz
       for (let i = i0; i <= i1; i++) {
-        const x = origin[0] + (i + 0.5) * texel
-        const d = Math.hypot(Math.max(x0 - x, 0, x - x1), dz)
+        const dx = origin[0] + (i + 0.5) * texel - bx
+        const lx = c * dx - s * dz
+        const lz = s * dx + c * dz
+        const d = Math.hypot(
+          Math.max(feet[o + 3] - lx, 0, lx - feet[o + 5]),
+          Math.max(feet[o + 4] - lz, 0, lz - feet[o + 6]),
+        )
         const v = Math.round(255 * Math.max(0, 1 - d / margin))
-        const o = j * size + i
-        if (v > mask[o]) mask[o] = v
+        const at = j * size + i
+        if (v > mask[at]) mask[at] = v
       }
     }
   }

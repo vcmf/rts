@@ -61,6 +61,7 @@ import {
   type StepShadow,
 } from './shadow-look.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
+import { FOOT_FLOATS } from './world/smoke.ts'
 import {
   FADE_WIDTH,
   FAR_FROM,
@@ -139,6 +140,7 @@ interface Host {
   cz: number
   lo: Vector3
   hi: Vector3
+  foot: Float32Array // its men's roots in its own frame as placed: [x0, z0, x1, z1] m (footprints)
   step: number // the 1/fps step its matrices were written for (a moving battalion moves once a step)
   phase: Phase | null // the script's phase its men were last written in (a halted one is written once a phase)
   stale: boolean[] // per LOD: its GPU copy of the matrices is older than the matrices
@@ -860,6 +862,7 @@ export class Units {
       cz: b.z,
       lo: new Vector3(),
       hi: new Vector3(),
+      foot: new Float32Array(4),
       step: -1,
       phase: null,
       stale: all(),
@@ -901,6 +904,10 @@ export class Units {
     let maxX = -Infinity
     let maxY = -Infinity
     let maxZ = -Infinity
+    let fx0 = Infinity
+    let fz0 = Infinity
+    let fx1 = -Infinity
+    let fz1 = -Infinity
     let changed = false
     const ls = moving ? Math.max(0, local - back) : local
     const ln = ls + 1 / fps
@@ -919,6 +926,10 @@ export class Units {
       manAt(this.drill, this.slot, i, ls, p, this.speed.run, this.speed.march, jitter[i * 4 + 3], man)
       const lx = man.x + jitter[i * 4]
       const lz = man.z + jitter[i * 4 + 1]
+      fx0 = Math.min(fx0, lx)
+      fx1 = Math.max(fx1, lx)
+      fz0 = Math.min(fz0, lz)
+      fz1 = Math.max(fz1, lz)
       const x = b.x + c * lx + s * lz
       const z = b.z - s * lx + c * lz
       const y = reuse ? matrices[i * 16 + 13] + next[i * 3 + 1] : groundAt(x, z)
@@ -985,6 +996,10 @@ export class Units {
     }
     h.cx = (minX + maxX) / 2
     h.cz = (minZ + maxZ) / 2
+    h.foot[0] = fx0
+    h.foot[1] = fz0
+    h.foot[2] = fx1
+    h.foot[3] = fz1
     // thin-instance bounds do not follow the animation: padded by a figure's height (his bayonet up,
     // SHADOW_H, as tall as the far figures grow, FAR_SCALE_Y) and his reach (sidePad: from the baked
     // poses); cull() stretches the same box
@@ -2308,16 +2323,19 @@ export class Units {
   get placeCount(): number {
     return this.placed
   }
-  /** each battalion's ground box as it stands (its men's roots, padded by their reach: the bounds place() keeps),
-   *  [x0, z0, x1, z1] m a battalion into out (4 floats each, at least 4 × battalions); returns how many */
-  boxes(out: Float32Array): number {
+  /** each battalion's footprint as it stands, in its own frame (the smoke's cap over the men, src/look/smoke.ts): its
+   *  place and heading and its men's roots' bounds there, [x, z, heading, x0, z0, x1, z1] (FOOT_FLOATS a battalion)
+   *  into out (at least FOOT_FLOATS × battalions); returns how many. A line askew to the world's axes keeps its own
+   *  narrow box (a world box round it would take in the ground before it) */
+  footprints(out: Float32Array): number {
     let n = 0
     for (const h of this.hosts) {
       if (h.step < 0) continue // (not placed yet)
-      out[n * 4] = h.lo.x
-      out[n * 4 + 1] = h.lo.z
-      out[n * 4 + 2] = h.hi.x
-      out[n * 4 + 3] = h.hi.z
+      const o = n * FOOT_FLOATS
+      out[o] = h.b.x
+      out[o + 1] = h.b.z
+      out[o + 2] = h.b.heading
+      out.set(h.foot, o + 3)
       n++
     }
     return n

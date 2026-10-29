@@ -825,7 +825,7 @@ async function buildSmoke(u: Units, drill: Drill, def: PuffDef, figure: string):
     battalions: u.battalions,
     drill,
     fire: timing,
-    boxes: (out: Float32Array) => u.boxes(out),
+    footprints: (out: Float32Array) => u.footprints(out),
     get placeCount() {
       return u.placeCount
     },

@@ -18,6 +18,8 @@ import {
 } from '../src/look/world/armies.ts'
 import {
   PUFF_FLOATS,
+  RANK_REACH,
+  SECTION,
   SMOKE_DEFAULT,
   SMOKE_LOOKS,
   coverAt,
@@ -29,6 +31,7 @@ import {
   muzzles,
   puffAt,
   puffLive,
+  puffVary,
   ringSize,
   shotAt,
   shotsBetween,
@@ -144,14 +147,15 @@ describe("a volley's puffs", () => {
     expect(Math.min(...xs)).toBeGreaterThan(-e.halfFront)
     expect(Math.max(...xs)).toBeLessThan(e.halfFront)
   })
-  it('born ahead of the front rank, over the ground, at the shot with the men’s spread', () => {
+  it('born at the muzzles, over the ground, at the shot with its section’s moment and the men’s spread', () => {
     const p = puffs()
     expect(p.length).toBe(xs.length * PUFF_FLOATS)
     for (let k = 0; k < p.length; k += PUFF_FLOATS) {
-      // (heading π: ahead is −z)
-      expect(b.z - p[k + 2]).toBeGreaterThanOrEqual(DEF.ahead)
+      // (heading π: ahead is −z; rank 1's muzzles RANK_REACH nearer the front rank's, within a metre and a half of it)
+      expect(b.z - p[k + 2]).toBeGreaterThanOrEqual(DEF.ahead - RANK_REACH)
+      expect(b.z - p[k + 2]).toBeLessThan(1.5)
       expect(p[k + 1]).toBeGreaterThan(10 + DEF.height)
-      expect(Math.abs(p[k + 3] - shot.t)).toBeLessThanOrEqual(DEF.jitter)
+      expect(Math.abs(p[k + 3] - shot.t)).toBeLessThanOrEqual(DEF.jitter + DEF.stagger / 2)
       expect(p[k + 4]).toBeCloseTo(0, 9)
       expect(p[k + 5]).toBeCloseTo(-1, 9)
       expect(p[k + 7]).toBeGreaterThanOrEqual(DEF.life[0])
@@ -160,6 +164,42 @@ describe("a volley's puffs", () => {
   })
   it('the same at every load', () => {
     expect(puffs()).toEqual(puffs())
+  })
+  it('each its own: the sizes, reaches and densities differ along the front, some puffs thin', () => {
+    const p = puffs()
+    const col = (i: number) => Array.from({ length: xs.length }, (_, g) => p[g * PUFF_FLOATS + i])
+    for (const i of [8, 9, 10, 11]) expect(Math.max(...col(i)) - Math.min(...col(i))).toBeGreaterThan(0.2)
+  })
+  it("the line's sections go off at their own moments, every puff of a section at its section's", () => {
+    // (without the men's own spread: the births are the shot's and the section's moment alone)
+    const out: number[] = []
+    volleyPuffs(b, 3, shot, xs, { ...DEF, jitter: 0 }, () => 10, out)
+    const bySection = new Map<number, Set<number>>()
+    xs.forEach((x, g) => {
+      const k = Math.round(x / SECTION)
+      bySection.set(k, (bySection.get(k) ?? new Set()).add(out[g * PUFF_FLOATS + 3]))
+    })
+    for (const births of bySection.values()) expect(births.size).toBe(1)
+    const moments = [...bySection.values()].map(v => [...v][0])
+    expect(new Set(moments).size).toBeGreaterThan(1)
+    for (const t of moments) expect(Math.abs(t - shot.t)).toBeLessThanOrEqual(DEF.stagger / 2)
+  })
+})
+
+describe("a puff's own factors", () => {
+  it('about 1, within their spreads, the density at most 1', () => {
+    for (const h of [0, 0.13, 0.5, 0.77, 0.999]) {
+      const v = puffVary(h, 1 - h, (h * 7) % 1, DEF.vary)
+      expect(Math.abs(v.size - 1)).toBeLessThanOrEqual(0.45 * DEF.vary + 1e-9)
+      expect(Math.abs(v.reach - 1)).toBeLessThanOrEqual(0.7 * DEF.vary + 1e-9)
+      expect(Math.abs(v.rise - 1)).toBeLessThanOrEqual(0.8 * DEF.vary + 1e-9)
+      expect(v.density).toBeGreaterThan(0)
+      expect(v.density).toBeLessThanOrEqual(1)
+    }
+  })
+  it('all the era’s own at vary 0, but the thin ones', () => {
+    expect(puffVary(0.3, 0.8, 0.5, 0)).toEqual({ size: 1, reach: 1, rise: 1, density: 1 })
+    expect(puffVary(0.3, 0.8, 0.05, 0).density).toBe(0.25)
   })
 })
 
@@ -236,11 +276,11 @@ describe("the zoom's thinning", () => {
 })
 
 describe("the formations' mask and the opacity cap", () => {
-  // a battalion's box: 40 m across, 3 m deep, at the origin; the mask over ±50 m at 0.5 m texels
+  // a battalion's footprint: 40 m across, 3 m deep, at the origin facing +z; the mask over ±50 m at 0.5 m texels
   const N = 200
   const O: [number, number] = [-50, -50]
   const mask = new Uint8Array(N * N)
-  drawClearance(Float32Array.from([-20, -1.5, 20, 1.5]), 1, mask, N, O, 0.5, 2)
+  drawClearance(Float32Array.from([0, 0, 0, -20, -1.5, 20, 1.5]), 1, mask, N, O, 0.5, 2)
   it('marks the box whole and falls to nothing a margin out', () => {
     expect(maskAt(mask, N, O, 0.5, 0, 0)).toBeCloseTo(1, 2)
     expect(maskAt(mask, N, O, 0.5, 0, 2.5)).toBeGreaterThan(0.2)
@@ -263,10 +303,21 @@ describe("the formations' mask and the opacity cap", () => {
   })
   it('takes the largest of overlapping boxes and is drawn afresh each time', () => {
     const m = new Uint8Array(N * N)
-    drawClearance(Float32Array.from([-5, -5, 5, 5, 0, 0, 10, 10]), 2, m, N, O, 0.5, 2)
+    drawClearance(Float32Array.from([0, 0, 0, -5, -5, 5, 5, 0, 0, 0, 0, 0, 10, 10]), 2, m, N, O, 0.5, 2)
     expect(maskAt(m, N, O, 0.5, 7, 7)).toBeCloseTo(1, 2)
     drawClearance(new Float32Array(0), 0, m, N, O, 0.5, 2)
     expect(m.every(v => v === 0)).toBe(true)
+  })
+  it('keeps a line askew to the axes to its own narrow ground', () => {
+    const m = new Uint8Array(N * N)
+    // a line 40 m across and 2 m deep at (10, 5), turned 45°: its men along x = z (in its frame x across)
+    drawClearance(Float32Array.from([10, 5, Math.PI / 4, -20, -2, 20, 0]), 1, m, N, O, 0.5, 1)
+    const c = Math.SQRT1_2
+    // 12 m along its front (its frame's x: world (c, −c)), a metre behind it: covered
+    expect(maskAt(m, N, O, 0.5, 10 + 12 * c - 1 * c, 5 - 12 * c - 1 * c)).toBeCloseTo(1, 1)
+    // 5 m ahead of its middle (its frame's z: world (c, c)): the ground before it, which its world box would cover
+    expect(maskAt(m, N, O, 0.5, 10 + 5 * c, 5 + 5 * c)).toBe(0)
+    expect(maskAt(m, N, O, 0.5, 10 + 12 * c + 5 * c, 5 - 12 * c + 5 * c)).toBe(0)
   })
   it('caps the opacity over the men smoothly, whole clear of them', () => {
     expect(coverCap(0, 0.4)).toBe(1)

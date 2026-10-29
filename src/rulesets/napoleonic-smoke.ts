@@ -4,24 +4,27 @@
 // the look's values (the owner judges them)
 import type { PuffDef } from '../sim/ruleset.ts'
 
-/** a volley's smoke: a puff for every six files of a rank, so a 400-man battalion's three ranks make about 70 */
+/** a volley's smoke: a puff for every six files of a rank, so a 400-man battalion's three ranks make about 70, each
+ *  its own (size, reach, rise, density), the companies going off a little apart */
 export const VOLLEY_SMOKE: PuffDef = {
   files: 6,
-  life: [10, 15],
+  life: [9, 14],
   erode: 0.4,
-  radius: [0.6, 3.2],
-  grow: 1.6,
-  ahead: 0.3,
-  height: 1.45,
-  jet: [5, 0.3],
-  plume: [3.5, 0.9],
-  roll: 0.15,
-  bank: 2.0,
-  rise: [0.2, 6],
-  drift: 0.3,
-  jitter: 0.3,
+  radius: [0.3, 1.7],
+  grow: 1.8,
+  ahead: 0.7,
+  height: 1.5,
+  jet: [2, 0.3],
+  plume: [3.5, 0.6],
+  roll: 0.06,
+  bank: 1.5,
+  rise: [0.06, 6],
+  drift: 0.2,
+  jitter: 0.25,
+  stagger: 0.8,
+  vary: 0.8,
   opacity: 0.75,
   // a warm white: bright in the sun, a pale cool grey in its shade, never dark (the art bible §9)
   colour: '#F3EFE6',
-  flash: ['#FFD27A', 0.09],
+  flash: ['#FFE2A0', 0.07],
 }

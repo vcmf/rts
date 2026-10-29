@@ -21,11 +21,12 @@ float maxOf(vec3 c){return max(c.r,max(c.g,c.b));}
 void main(){
   vec2 s=vec2(vSeed*37.0,vSeed*19.0),drift=vec2(uSmokeT*0.02,0.0);
   // the billows (the grain's blotches, about a puff's size, and smaller ones on them) and the paper's fine grain
-  float bil=G((vM.yx+s)*0.07+drift).g,sub=G((vM+s.yx)*0.19-drift).g,fib=G((vM+s)*0.9).r;
-  float d=length(vQ);
-  // (young, a plume: densest at the muzzle, its back, and soft all round; grown, the billows' edges drawn firmer)
-  float dens=(1.0-d)*1.4-0.05-vQ.x*0.35*vPl+(bil-0.5)*1.4+(sub-0.5)*0.55+(fib-0.5)*0.05-vErode*1.5;
-  float a=smoothstep(0.06,0.32+0.4*vPl,dens)*smoothstep(1.0,0.85,d);
+  float bil=G((vM.yx+s)*0.15+drift).g,sub=G((vM+s.yx)*0.38-drift).g,fib=G((vM+s)*1.4).r;
+  // young, a jet: narrow at the muzzle (its back, vQ.x -1) and widening ahead; always densest toward the muzzles
+  vec2 q=vec2(vQ.x,vQ.y/mix(1.0,0.3+0.7*(vQ.x*0.5+0.5),vPl));
+  float d=length(q);
+  float dens=(1.0-d)*1.3-0.05-vQ.x*(0.25+0.3*vPl)+(bil-0.5)*1.6+(sub-0.5)*0.7+(fib-0.5)*0.06-vErode*1.5;
+  float a=smoothstep(0.0,0.5+0.2*vPl,dens)*smoothstep(1.0,0.8,d);
   a*=uOpacity*vOp*smoothstep(0.0,0.7,vW.y-vGround);
   #ifdef CLEAR
   vec3 dv=vW-uCamPos;
@@ -37,14 +38,14 @@ void main(){
   // the light: the sun's way across the card (its frame's U, V) against the puff's middle, its edge the billows':
   // the side toward the sun lit, the far side in a pale cool shade, the billows' tops catching it (painted bands)
   vec2 sun=normalize(vec2(dot(uSunDir,vU),dot(uSunDir,vV))+1e-4);
-  float l=dot(vQ,sun)*0.9+(bil-0.5)*1.6+(sub-0.5)*0.6+0.2;
+  float l=dot(q,sun)*0.9+(bil-0.5)*1.6+(sub-0.5)*0.6+0.2;
   vec3 warm=mix(vec3(1.0),uSunCol/maxOf(uSunCol),0.35);
   vec3 cool=mix(vec3(1.0),uShadowCol/max(dot(uShadowCol,LUMA),1e-3),0.2);
   vec3 c=mix(uSmokeCol*cool*0.84,uSmokeCol*warm,smoothstep(-0.08,0.08,l));
   vec4 lm=LM(vC);float sh=(1.0-lm.r)*uShadowsOn;
   c*=mix(1.0,0.84,sh);
   c=cloudShade(c,cloud(vC),0.0);
-  if(vAge<uFlashT)c=mix(c,uFlashCol,smoothstep(0.7,0.2,d));
+  if(vAge<uFlashT)c=mix(c,uFlashCol,smoothstep(-0.55,-0.85,vQ.x)*smoothstep(0.6,0.2,abs(q.y)));
   c=airOf(c,vW,lm,vW.y-vGround);
   if(!all(lessThan(abs(c),vec3(65504.0))))discard;
   gl_FragColor=vec4(c,a);

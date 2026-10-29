@@ -26,7 +26,7 @@ In:
   side and a pale cool shade, never dark grey.
 - **Readable**: translucent over the men; where it lies over a formation its opacity is capped, never cut away, the
   same rule for both sides from the locked camera (the old clearance rule removed the smoke instead).
-- **Cheap**: camera-facing cards, one thin-instanced quad, one draw, blended after the opaque scene with no depth
+- **Cheap**: cards, one thin-instanced quad, one draw, blended after the opaque scene with no depth
   written.
 - **The depth of field**: the blend keeps the scene's alpha (the lens term), as the soldiers' simple shadows do.
 - **Era-generic**: the smoke's values are ruleset data (`PuffDef`: new `plume`, `roll`, `bank`, `opacity`); the engine
@@ -81,6 +81,27 @@ fill costs too much: see Results); soft-particle depth (a card's plane crossing 
   48 B: about 0.6 MB, less than the first look (one mesh, no icosphere, no shadow mesh).
 - **Looks**: stills, a volley's sequence and a sheet against the owner's references in
   `output/armies-review/27-smoke-bank/` (not in git; `00-sheet-vs-refs.png` first).
+
+## Round 2 (2026-10-28, the owner's review at 20 to 40 m behind the French line)
+
+The owner: "cloud form a line u see? need to be random, also it's too far away from the muskets and too big" (still
+not in git: `output/smoke-refs/owner-2026-10-28/bank-too-far-too-big-a-line.png`). Found and changed:
+
+- **Too far**: two causes. The formations' mask was drawn from each battalion's world box (`Units.boxes`); a line
+  askew to the world's axes has a box that takes in the ground before it, so the cap thinned the smoke at the muzzles
+  to 0.4 and the visible bank began metres out. The mask now draws each battalion's footprint in its own frame
+  (`Units.footprints`, `FOOT_FLOATS`), with a 1 m fall-off. And the camera-facing card stood metres high: from the
+  camera behind a line, smoke two to four metres up reads metres ahead of it. The card now lies across the front,
+  tilted a little up from the level, at the muzzles' height; its back at the muzzles, densest toward them, and grown
+  it rolls back over the front rank's muskets.
+- **A line**: each puff has its own size, reach, rise and density (`puffVary`, the era's `vary`; one puff in seven
+  thin: gaps), the line's sections (`SECTION`, 12 m) go off up to the era's `stagger` (0.8 s) apart, and each puff's
+  wind drift differs a little.
+- **Too big**: radius 0.3 m at birth to 1.7 m grown (was 0.6 to 3.2), the blast 0.6 m (was 1.5), the roll 0.06 m/s,
+  the rise halved; the bank's width over its depth 1.5.
+- **The first half second**: a young puff is a jet, long along the shot, narrow at the muzzle and widening ahead; the
+  flash is a small spark at the muzzle end for 0.07 s, not the plume's core.
+- Stills and a before/after sheet: `output/armies-review/27-smoke-bank/round2/` (`00-before-after.png` first).
 
 ## Risks
 
