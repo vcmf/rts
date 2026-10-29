@@ -18,8 +18,6 @@ import {
 } from '../src/look/world/armies.ts'
 import {
   PUFF_FLOATS,
-  RANK_REACH,
-  SECTION,
   SMOKE_DEFAULT,
   SMOKE_LOOKS,
   coverAt,
@@ -37,6 +35,7 @@ import {
   shotAt,
   shotsBetween,
   smokeLook,
+  validateSmoke,
   volleyPuffs,
   type ClipInfo,
   type FireTiming,
@@ -152,8 +151,8 @@ describe("a volley's puffs", () => {
     const p = puffs()
     expect(p.length).toBe(xs.length * PUFF_FLOATS)
     for (let k = 0; k < p.length; k += PUFF_FLOATS) {
-      // (heading π: ahead is −z; rank 1's muzzles RANK_REACH nearer the front rank's, within a metre and a half of it)
-      expect(b.z - p[k + 2]).toBeGreaterThanOrEqual(DEF.ahead - RANK_REACH)
+      // (heading π: ahead is −z; rank 1's muzzles rankReach nearer the front rank's, within 1.5 m of it)
+      expect(b.z - p[k + 2]).toBeGreaterThanOrEqual(DEF.ahead - DEF.rankReach)
       expect(b.z - p[k + 2]).toBeLessThan(1.5)
       expect(p[k + 1]).toBeGreaterThan(10 + DEF.height)
       expect(Math.abs(p[k + 3] - shot.t)).toBeLessThanOrEqual(DEF.jitter + DEF.stagger / 2)
@@ -165,6 +164,53 @@ describe("a volley's puffs", () => {
   })
   it('the same at every load', () => {
     expect(puffs()).toEqual(puffs())
+  })
+  it('its draws independent: place, seed, reach, size, rise, density and life uncorrelated over many puffs', () => {
+    // (each draw its own hash: a puff right of its group's middle no more likely to reach further, a thin one no more
+    // likely to be short-lived or near the line; and no draw follows the muzzle group's place)
+    const cols: number[][] = Array.from({ length: 8 }, () => [])
+    for (let cycle = 0; cycle < 6; cycle++) {
+      for (let rank = 0; rank < 3; rank++) {
+        for (let volley = 0; volley < 4; volley++) {
+          const out: number[] = []
+          volleyPuffs(b, 5, { t: 0, rank, cycle, volley }, xs, DEF, () => 0, out)
+          for (let g = 0; g < xs.length; g++) {
+            const o = g * PUFF_FLOATS
+            // (the place along the front less its group's middle: x, heading π, is b.x − lx)
+            const lat = b.x - out[o] - xs[g]
+            cols[0].push(lat)
+            cols[1].push(out[o + 6])
+            cols[2].push(out[o + 9])
+            cols[3].push(out[o + 8])
+            cols[4].push(out[o + 10])
+            cols[5].push(out[o + 7])
+            cols[6].push(b.z - out[o + 2])
+            cols[7].push(out[o + 11] > 0 ? Math.log(out[o + 11]) : 0)
+          }
+        }
+      }
+    }
+    const r = (a: number[], c: number[]) => {
+      const ma = a.reduce((x, y) => x + y) / a.length
+      const mc = c.reduce((x, y) => x + y) / c.length
+      let n = 0
+      let da = 0
+      let dc = 0
+      for (let i = 0; i < a.length; i++) {
+        n += (a[i] - ma) * (c[i] - mc)
+        da += (a[i] - ma) ** 2
+        dc += (c[i] - mc) ** 2
+      }
+      return n / Math.sqrt(da * dc)
+    }
+    // (6 × 3 × 4 × 24 = 1,728 puffs: an independent pair's |r| stays under 0.1; the density, which carries the
+    // volley's clumps along the front, is left out of the pairs with the place)
+    for (let i = 0; i < 8; i++) {
+      for (let j = i + 1; j < 8; j++) {
+        if (i === 0 && j === 7) continue
+        expect(Math.abs(r(cols[i], cols[j])), `draws ${i} and ${j}`).toBeLessThan(0.1)
+      }
+    }
   })
   it('each its own: the sizes, reaches and densities differ along the front, some puffs thin', () => {
     const p = puffs()
@@ -179,14 +225,14 @@ describe("a volley's puffs", () => {
     const moments = [...new Set(xs.map((_, g) => out[g * PUFF_FLOATS + 3]))]
     const e = extents(drill)
     expect(moments.length).toBeGreaterThan(1)
-    expect(moments.length).toBeLessThanOrEqual(Math.ceil((2 * e.halfFront) / SECTION) + 1)
+    expect(moments.length).toBeLessThanOrEqual(Math.ceil((2 * e.halfFront) / DEF.section) + 1)
     for (const t of moments) expect(Math.abs(t - shot.t)).toBeLessThanOrEqual(DEF.stagger / 2)
   })
 })
 
 describe("a volley's clumps", () => {
   it("between 0.2 and 1, thick in places and thin in others along a battalion's front", () => {
-    const v = Array.from({ length: 200 }, (_, i) => clump(0.31, 0.77, -50 + i * 0.5))
+    const v = Array.from({ length: 200 }, (_, i) => clump(0.31, 0.77, -50 + i * 0.5, DEF.clumps))
     for (const x of v) {
       expect(x).toBeGreaterThanOrEqual(0.2)
       expect(x).toBeLessThanOrEqual(1)
@@ -195,7 +241,7 @@ describe("a volley's clumps", () => {
     expect(Math.min(...v)).toBeLessThan(0.5)
   })
   it("not at the muzzle groups' spacing: the gaps differ from one group to the next and from volley to volley", () => {
-    const at = (a: number) => Array.from({ length: 16 }, (_, k) => clump(a, 0.5, -30 + k * 3.9))
+    const at = (a: number) => Array.from({ length: 16 }, (_, k) => clump(a, 0.5, -30 + k * 3.9, DEF.clumps))
     expect(Math.max(...at(0.1)) - Math.min(...at(0.1))).toBeGreaterThan(0.3)
     expect(at(0.1)).not.toEqual(at(0.6))
   })
@@ -204,7 +250,7 @@ describe("a volley's clumps", () => {
 describe("a puff's own factors", () => {
   it('about 1, within their spreads, the density at most 1', () => {
     for (const h of [0, 0.13, 0.5, 0.77, 0.999]) {
-      const v = puffVary(h, 1 - h, (h * 7) % 1, DEF.vary)
+      const v = puffVary(h, 1 - h, (h * 7) % 1, (h * 3) % 1, DEF.vary)
       expect(Math.abs(v.size - 1)).toBeLessThanOrEqual(0.45 * DEF.vary + 1e-9)
       expect(Math.abs(v.reach - 1)).toBeLessThanOrEqual(0.7 * DEF.vary + 1e-9)
       expect(Math.abs(v.rise - 1)).toBeLessThanOrEqual(0.8 * DEF.vary + 1e-9)
@@ -213,8 +259,8 @@ describe("a puff's own factors", () => {
     }
   })
   it('all the era’s own at vary 0, but the thin ones', () => {
-    expect(puffVary(0.3, 0.8, 0.5, 0)).toEqual({ size: 1, reach: 1, rise: 1, density: 1 })
-    expect(puffVary(0.3, 0.8, 0.05, 0).density).toBe(0.25)
+    expect(puffVary(0.3, 0.8, 0.5, 0.5, 0)).toEqual({ size: 1, reach: 1, rise: 1, density: 1 })
+    expect(puffVary(0.3, 0.8, 0.5, 0.05, 0).density).toBe(0.25)
   })
 })
 
@@ -334,7 +380,7 @@ describe("the formations' mask and the opacity cap", () => {
     expect(maskAt(m, N, O, 0.5, 10 + 5 * c, 5 + 5 * c)).toBe(0)
     expect(maskAt(m, N, O, 0.5, 10 + 12 * c + 5 * c, 5 - 12 * c + 5 * c)).toBe(0)
   })
-  it('caps the opacity over the men smoothly, whole clear of them', () => {
+  it("sets one card's opacity factor over the men, smoothly, 1 clear of them (cards over each other add up)", () => {
     expect(coverCap(0, 0.4)).toBe(1)
     expect(coverCap(0.15, 0.4)).toBe(1)
     expect(coverCap(1, 0.4)).toBeCloseTo(0.4, 9)
@@ -349,9 +395,32 @@ describe("the formations' mask and the opacity cap", () => {
 })
 
 describe("the puffs' ring", () => {
-  it("holds every line battalion's puffs alive at once", () => {
-    const n = ringSize(14, muzzles(drill, DEF.files).length, timing(true), DEF)
-    expect(n).toBeGreaterThanOrEqual(14 * drill.ranks * muzzles(drill, DEF.files).length)
+  it("holds every line battalion's puffs alive at once, held or not: the live count simulated over the script", () => {
+    // (seven battalions in line, their fire starting 9.7 s apart as on the demo map; every puff's birth and life from
+    // volleyPuffs, the live count read every quarter second over two cycles)
+    const lines = 7
+    const xsN = muzzles(drill, DEF.files)
+    for (const hold of [false, true]) {
+      const f = timing(hold)
+      const spans: [number, number][] = []
+      const shots: Shot[] = []
+      for (let i = 0; i < lines; i++) {
+        const b: Battalion = { side: 0, uniform: 'x', x: 0, z: 0, heading: 0, offset: i * 9.7 }
+        for (const s of shotsBetween(-CYCLE, 3 * CYCLE, b.offset, f, shots)) {
+          const out: number[] = []
+          volleyPuffs(b, i, s, xsN, DEF, () => 0, out)
+          for (let k = 0; k < out.length; k += PUFF_FLOATS) spans.push([out[k + 3], out[k + 3] + out[k + 7]])
+        }
+      }
+      let most = 0
+      for (let t = CYCLE; t < 3 * CYCLE; t += 0.25) {
+        let n = 0
+        for (const [a, e] of spans) if (a <= t && t < e) n++
+        most = Math.max(most, n)
+      }
+      expect(most).toBeGreaterThan(0)
+      expect(most, hold ? 'held' : 'unheld').toBeLessThanOrEqual(ringSize(lines, xsN.length, f, DEF))
+    }
     expect(ringSize(1000, 100, timing(true), DEF)).toBe(8192)
   })
 })
@@ -368,10 +437,49 @@ describe('the switches', () => {
     expect(look('smoke=soft&smokestep=12&smokecap=0.6')).toEqual({ step: 12, cap: 0.6 })
     expect(look('smokecap=1')?.cap).toBe(1)
     expect(look('smokecap=0')?.cap).toBe(0)
+    expect(look('smokecap=1.0')?.cap).toBe(1)
+    expect(look('smokecap=0.50')?.cap).toBe(0.5)
+    expect(look('smokecap=.25')?.cap).toBe(0.25)
   })
   it('a bad value throws', () => {
-    for (const q of ['smoke=a', 'smoke=d', 'smokestep=x', 'smokestep=61', 'smokecap=2', 'smokecap=-1', 'smokecap=x']) {
+    for (const q of [
+      'smoke=a',
+      'smoke=d',
+      'smokestep=x',
+      'smokestep=61',
+      'smokecap=2',
+      'smokecap=-1',
+      'smokecap=x',
+      'smokecap=',
+      'smokecap=1.01',
+    ]) {
       expect(() => look(q)).toThrow()
     }
+  })
+})
+
+describe("the era's smoke checked", () => {
+  it('passes the era’s own values and the script’s timing, held and not', () => {
+    expect(() => validateSmoke(DEF, timing(false))).not.toThrow()
+    expect(() => validateSmoke(DEF, timing(true))).not.toThrow()
+  })
+  it('throws, naming it, on a value that would make a puff NaN or a loop run forever', () => {
+    const bad: [Partial<typeof DEF>, string][] = [
+      [{ grow: 0 }, 'grow'],
+      [{ jet: [2, 0] }, 'jet[1]'],
+      [{ rise: [0.1, 0] }, 'rise[1]'],
+      [{ plume: [3, 0] }, 'plume[1]'],
+      [{ erode: 1 }, 'erode'],
+      [{ life: [5, 4] }, 'life'],
+      [{ section: 0 }, 'section'],
+      [{ clumps: [7, 0, 19] }, 'clumps[1]'],
+      [{ opacity: 0 }, 'opacity'],
+    ]
+    for (const [d, name] of bad) expect(() => validateSmoke({ ...DEF, ...d }, timing(false))).toThrow(name)
+    expect(() => validateSmoke(DEF, { ...timing(false), period: 0 })).toThrow('fire period')
+    expect(() => validateSmoke(DEF, { ...timing(false), hold: CYCLE })).toThrow('hold')
+  })
+  it('shotsBetween refuses a loop of no length rather than running forever', () => {
+    expect(() => shotsBetween(0, 10, 0, { ...timing(false), period: 0 }, [])).toThrow()
   })
 })

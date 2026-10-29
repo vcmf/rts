@@ -637,6 +637,12 @@ let smoke: Smoke | null = null
 const fireHold = bit('firehold')
 // (the fight's middle: the bench's focus)
 let armiesFocus: [number, number] | null = null
+// (the smoke's and the armies' switches do nothing without the armies: said, not ignored)
+if (armiesParam === null) {
+  const needs = ['smokecap', 'smokestep', 'lookat', 'firehold'].filter(k => params.has(k))
+  if (params.has('smoke') && params.get('smoke') !== '0') needs.unshift('smoke')
+  if (needs.length) throw new Error(`?${needs.join(', ?')} need ?armies=<n> (the armies and their smoke)`)
+}
 if (armiesParam !== null) {
   if (mats.webgl1) {
     throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')

@@ -59,6 +59,10 @@ export interface Shot {
 export function shotsBetween(t0: number, t1: number, offset: number, f: FireTiming, out: Shot[]): Shot[] {
   out.length = 0
   if (!(t1 > t0)) return out
+  // (a loop of no length, or a hold past the cycle, would never end: validateSmoke checks them once, this guards)
+  if (!(f.period > 0) || (f.hold !== null && !(f.hold < CYCLE))) {
+    throw new Error('smoke: shotsBetween needs period > 0 and hold < CYCLE')
+  }
   const from = f.hold ?? 0
   const len = CYCLE - from
   for (let k = Math.floor((t0 - offset) / len); k <= Math.floor((t1 - offset) / len); k++) {
@@ -118,50 +122,51 @@ export function hash(a: number, b = 0, c = 0, d = 0): number {
  *  and its life (s), then its own factors on the era's size, reach (the blast's and the roll's), rise and density
  *  (puffVary): an instance's first three columns (src/look/shaders/smoke.vert) */
 export const PUFF_FLOATS = 12
-/** m: the stretch of a line that goes off together (a section: about a company), its moment its own (`stagger`) */
-export const SECTION = 12
-/** m: the spread of a puff's place along the front about its muzzle group's middle (most of a group's width: the
- *  groups' even spacing does not show) */
-export const LATERAL = 3
-/** m: how much nearer the front rank a rank behind's muzzles are (its muskets over the shoulders of the one before) */
-export const RANK_REACH = 0.35
-
-/** A puff's own factors on the era's values (smoke.vert reads them), from three hashes (0 to 1) and the era's `vary`
- *  (0: every puff the era's own): size, reach and rise spread evenly about 1 by 0.45, 0.7 and 0.8 of `vary`; density
- *  1 down to 1 - ½ vary, and one puff in seven thin (a quarter of that: the gaps between the clumps) */
+/** A puff's own factors on the era's values (smoke.vert reads them), each from its own hash (0 to 1) and the era's
+ *  `vary` (0: every puff the era's own): size, reach and rise spread evenly about 1 by 0.45, 0.7 and 0.8 of `vary`;
+ *  density 1 down to 1 - ½ vary, and one puff in seven thin (a quarter of that: the gaps between the clumps) */
 export function puffVary(
-  h0: number,
-  h1: number,
-  h2: number,
+  hSize: number,
+  hReach: number,
+  hRise: number,
+  hDensity: number,
   vary: number,
 ): { size: number; reach: number; rise: number; density: number } {
-  const thin = h2 < 1 / 7 ? 0.25 : 1
+  const thin = hDensity < 1 / 7 ? 0.25 : 1
   return {
-    size: 1 + (h0 * 2 - 1) * 0.45 * vary,
-    reach: 1 + (h1 * 2 - 1) * 0.7 * vary,
-    rise: 1 + (fract(h0 * 7.3 + h1) * 2 - 1) * 0.8 * vary,
-    density: (1 - fract(h2 * 5.1 + h0) * 0.5 * vary) * thin,
+    size: 1 + (hSize * 2 - 1) * 0.45 * vary,
+    reach: 1 + (hReach * 2 - 1) * 0.7 * vary,
+    rise: 1 + (hRise * 2 - 1) * 0.8 * vary,
+    // (the density from the hash's own spread past the thin share: as even as the hash, and apart from the flag)
+    density: (1 - fract(hDensity * 7) * 0.5 * vary) * thin,
   }
 }
 const fract = (x: number): number => x - Math.floor(x)
 
-/** The volley's clumps along the front (m, the battalion's frame x): a density factor 0.2 to 1 from three waves of
- *  unrelated lengths (7.3, 11.9 and 19.7 m) whose phases the seeds a, b set, so where the shots thicken and where they
- *  leave gaps differs from volley to volley and never repeats at the muzzle groups' spacing */
-export function clump(a: number, b: number, x: number): number {
+/** The volley's clumps along the front (m, the battalion's frame x): a density factor 0.2 to 1 from three waves of the
+ *  era's unrelated lengths (`clumps`) whose phases the seeds a, b set, so where the shots thicken and where they leave
+ *  gaps differs from volley to volley and never repeats at the muzzle groups' spacing */
+export function clump(a: number, b: number, x: number, lengths: readonly [number, number, number]): number {
   const w =
-    0.5 * Math.sin(x / 7.3 + a * 6.2832) +
-    0.3 * Math.sin(x / 11.9 + b * 6.2832) +
-    0.2 * Math.sin(x / 19.7 + (a + b) * 3.1416)
+    0.5 * Math.sin(x / lengths[0] + a * 6.2832) +
+    0.3 * Math.sin(x / lengths[1] + b * 6.2832) +
+    0.2 * Math.sin(x / lengths[2] + (a + b) * 3.1416)
   return Math.min(1, Math.max(0.2, 0.75 + 0.6 * w))
 }
 
+/** the salts of a puff's own hashes (puffHash): each of its draws from its own, so none follows another */
+const H = { lateral: 0, ahead: 1, seed: 2, life: 3, jitter: 4, size: 5, reach: 6, rise: 7, density: 8 } as const
+/** a puff's hash for one of its draws (H): its battalion, rank, cycle, volley and muzzle group, salted */
+function puffHash(index: number, shot: Shot, g: number, salt: number): number {
+  return hash(index * 8 + shot.rank, shot.cycle, shot.volley * 4096 + g, 101 + salt)
+}
+
 /** The puffs of one shot of battalion `index` (its place in the battalions): one for each muzzle group, born at the
- *  muzzles (`ahead` m ahead of the front rank, a rank behind RANK_REACH m nearer it and a little higher, `height` m
- *  over the ground there; spread ±LATERAL/2 along the front), at the shot's clock, its section's own moment
- *  (±stagger/2: SECTION m of the front go off together, the sections' grid shifted each volley) and a man's own spread
- *  (±jitter), each with its seed, life and own factors (puffVary, the volley's clumps); pushed onto out,
- *  PUFF_FLOATS each. ground: the ground's height at (x, z) */
+ *  muzzles (the era's `ahead` m ahead of the front rank, a rank behind `rankReach` m nearer it and `rankLift` m higher,
+ *  `height` m over the ground there; spread ±`lateral`/2 along the front), at the shot's clock, its section's own
+ *  moment (±`stagger`/2: `section` m of the front go off together, the sections' grid shifted each volley) and a man's
+ *  own spread (±`jitter`), each with its seed, life and own factors (puffVary, the volley's clumps), every draw from
+ *  its own hash; pushed onto out, PUFF_FLOATS each. ground: the ground's height at (x, z) */
 export function volleyPuffs(
   b: Battalion,
   index: number,
@@ -173,33 +178,71 @@ export function volleyPuffs(
 ): void {
   const c = Math.cos(b.heading)
   const s = Math.sin(b.heading)
+  // (the sections' grid shifted volley by volley, so their edges never fall twice in one place; the clumps' phases)
+  const shift = hash(index, shot.cycle, shot.volley, 9) * def.section
+  const ca = hash(index, shot.cycle, shot.volley, 3)
+  const cb = hash(index, shot.cycle, shot.volley, 4)
   for (let g = 0; g < xs.length; g++) {
-    const h0 = hash(index, shot.cycle, shot.volley * 8 + shot.rank, g)
-    const h1 = hash(g, index, shot.rank, shot.cycle * 31 + shot.volley)
-    const h2 = hash(shot.volley, g, index * 7 + shot.rank, shot.cycle)
-    // (the sections' grid shifted volley by volley, so their edges never fall twice in one place)
-    const shift = hash(index, shot.cycle, shot.volley, 9) * SECTION
-    const h3 = hash(index, shot.cycle * 17 + shot.volley, Math.round((xs[g] + shift) / SECTION), 5)
-    const lx = xs[g] + (h1 - 0.5) * LATERAL
-    const lz = def.ahead - shot.rank * RANK_REACH + h2 * 0.3
+    const h = (salt: number) => puffHash(index, shot, g, salt)
+    const sec = hash(index, shot.cycle * 17 + shot.volley, Math.round((xs[g] + shift) / def.section), 5)
+    const lx = xs[g] + (h(H.lateral) - 0.5) * def.lateral
+    const lz = def.ahead - shot.rank * def.rankReach + h(H.ahead) * 0.3
     const x = b.x + c * lx + s * lz
     const z = b.z - s * lx + c * lz
-    const v = puffVary(h0, h1, h2, def.vary)
+    const v = puffVary(h(H.size), h(H.reach), h(H.rise), h(H.density), def.vary)
     out.push(
       x,
-      ground(x, z) + def.height + shot.rank * 0.12,
+      ground(x, z) + def.height + shot.rank * def.rankLift,
       z,
-      shot.t + (h3 - 0.5) * def.stagger + (h0 * 2 - 1) * def.jitter,
+      shot.t + (sec - 0.5) * def.stagger + (h(H.jitter) * 2 - 1) * def.jitter,
       s,
       c,
-      h1,
-      def.life[0] + (def.life[1] - def.life[0]) * h2,
+      h(H.seed),
+      def.life[0] + (def.life[1] - def.life[0]) * h(H.life),
       v.size,
       v.reach,
       v.rise,
-      v.density * clump(hash(index, shot.cycle, shot.volley, 3), hash(index, shot.cycle, shot.volley, 4), lx),
+      v.density * clump(ca, cb, lx, def.clumps),
     )
   }
+}
+
+/** The era's smoke and the script's fire checked once (the Smoke's constructor): every time constant, life, size and
+ *  spread positive or in its range, so no puff is NaN and no loop runs forever; a bad value throws, naming it */
+export function validateSmoke(def: PuffDef, f: FireTiming): void {
+  const bad = (what: string, v: unknown) => {
+    throw new Error(`smoke: ${what} must be ${v} (src/rulesets/<era>-smoke.ts, PuffDef; or the fire timing)`)
+  }
+  const pos: [string, number][] = [
+    ['files', def.files],
+    ['life[0]', def.life[0]],
+    ['grow', def.grow],
+    ['jet[1]', def.jet[1]],
+    ['plume[0]', def.plume[0]],
+    ['plume[1]', def.plume[1]],
+    ['rise[1]', def.rise[1]],
+    ['bank', def.bank],
+    ['section', def.section],
+    ['radius[0]', def.radius[0]],
+    ['body', def.body],
+    ['fire period', f.period],
+    ['ranks', f.ranks],
+    ...def.clumps.map((l, i) => [`clumps[${i}]`, l] as [string, number]),
+  ]
+  for (const [k, v] of pos) if (!(v > 0)) bad(`${k} > 0`, `positive, not ${v}`)
+  if (!(def.life[1] >= def.life[0])) bad('life', `[shortest, longest], not ${def.life.join(', ')}`)
+  if (!(def.radius[1] >= def.radius[0])) bad('radius', `[birth, grown], not ${def.radius.join(', ')}`)
+  if (!(def.erode >= 0 && def.erode < 1)) bad('erode', `in [0, 1), not ${def.erode}`)
+  if (!(def.vary >= 0 && def.vary <= 1)) bad('vary', `in [0, 1], not ${def.vary}`)
+  if (!(def.opacity > 0 && def.opacity <= 1)) bad('opacity', `in (0, 1], not ${def.opacity}`)
+  for (const [k, v] of [
+    ['jitter', def.jitter],
+    ['stagger', def.stagger],
+    ['lateral', def.lateral],
+  ] as const) {
+    if (!(v >= 0)) bad(k, `0 or more, not ${v}`)
+  }
+  if (f.hold !== null && !(f.hold >= 0 && f.hold < CYCLE)) bad('the fire hold', `in [0, ${CYCLE}), not ${f.hold}`)
 }
 
 /** the share of its densest a puff keeps at an age (s) of a life (s): whole while young, then thinning to a third at
@@ -342,9 +385,9 @@ export function coverAt(
   return maskAt(mask, size, origin, texel, cam[0] + (p[0] - cam[0]) * t, cam[2] + (p[2] - cam[2]) * t)
 }
 
-/** The opacity cap over the men (smoke.frag's): the factor on a smoke pixel's opacity where it lies over a share
- *  `cover` (coverAt) of a formation: 1 clear of them, falling smoothly to cap over them. So a bank in front of a line
- *  facing the camera stays, thinned over the men to a veil they read through (decision 0080) */
+/** The cap over the men (smoke.frag's): the factor on one card's opacity where it lies over a share `cover` (coverAt)
+ *  of a formation: 1 clear of them, falling smoothly to cap over them. A factor per card, not a cap on the bank's
+ *  total: cards over each other add up (three grown puffs at 0.95 × 0.6 make about 0.92); decision 0080 */
 export function coverCap(cover: number, cap: number): number {
   const t = Math.min(1, Math.max(0, (cover - 0.15) / 0.5))
   return 1 - (1 - cap) * t * t * (3 - 2 * t)
@@ -381,8 +424,9 @@ export function smokeLook(params: URLSearchParams): SmokeLook | null {
   }
   const cap = params.get('smokecap')
   if (cap !== null) {
-    if (!/^(0|1|0?\.\d+)$/.test(cap)) throw new Error(`?smokecap must be 0 to 1, not ${cap}`)
-    look.cap = +cap
+    const v = cap.trim() === '' ? NaN : Number(cap)
+    if (!(v >= 0 && v <= 1)) throw new Error(`?smokecap must be a number from 0 to 1, not ${cap}`)
+    look.cap = v
   }
   return look
 }

@@ -1,22 +1,22 @@
 precision highp float;varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl;
-// the smoke's own colour and its flash (the era's, PuffDef), a puff's densest (uOpacity), the opacity kept over the men
-// (uCap) and the formations' mask (uClear: its origin x, z, 1 / its side in m, a man's mid height m)
+// the smoke's own colour and its flash (the era's, PuffDef), a puff's densest (uOpacity), the factor on a card's
+// opacity over the men (uCap) and the formations' mask (uClear: its origin x, z, 1 / its side in m, a man's body m)
 uniform vec3 uSmokeCol,uFlashCol;uniform float uFlashT,uOpacity,uCap,uSmokeT;
 #ifdef CLEAR
 uniform sampler2D uClearTex;uniform vec4 uClear;
 #endif
 #include<painter>
 // THE MUSKET SMOKE (src/look/smoke.ts, decision 0080): a soft card, blended over the scene (no depth written). Its
-// shape: a round falloff from the middle (vQ, ±1 at the card's edge) broken by the paint grain twice, large billows and
-// a fine brush, in the card's own metres (vM: the brush keeps its size as the puff grows, so the smoke spreads through
-// it), churning slowly; with age it thins (vOp) and its threshold climbs past the billows (vErode), so it breaks into
-// holes before it is gone. Soft at the ground it was born over (no hard line where the card meets it). Its light: a
-// round puff's (the card's middle faces the eye, its rim the sides), a warm white on the sun's side and a pale cool
-// grey on the other, close in value (smoke is light all over); the clouds' shade, the trees' baked shadow, the air.
-// Over the men (CLEAR): the view ray through the pixel followed down to a man's mid height and the formations' mask read
-// there (src/look/world/smoke.ts, coverAt, coverCap): the opacity there capped to uCap, so a formation reads through.
-// The lens term: the blend keeps what lies behind it (as the soldiers' simple shadows: src/look/smoke.ts). The flash:
-// the young plume's core in the flash's colour for its first uFlashT s
+// shape: a falloff from the middle (vQ, ±1 at the edge; a young jet narrow at the muzzle) broken by the paint grain,
+// large billows and smaller ones, in the card's own metres (vM: they keep their size as the puff grows, so the smoke
+// spreads through them), churning slowly, the rim torn by the smaller billows and the paper's grain; with age it thins
+// (vOp) and its threshold climbs past the billows (vErode), holes before it is gone. Soft at the ground it was born
+// over. Its light: the sun's side of the card against its middle, the billows drawing the edge, a warm white and a
+// pale cool grey, close in value (smoke is light all over); the clouds' shade, the trees' baked shadow, the air.
+// Over the men (CLEAR): the view ray through the pixel followed down to a man's body height and the formations' mask
+// read there (src/look/world/smoke.ts, coverAt, coverCap): this card's opacity takes the factor uCap there (a factor
+// per card: cards over each other add up). The lens term: the blend keeps what lies behind it (as the soldiers'
+// simple shadows: src/look/smoke.ts). The flash: the young jet's muzzle end in the flash's colour for uFlashT s
 float maxOf(vec3 c){return max(c.r,max(c.g,c.b));}
 void main(){
   vec2 s=vec2(vSeed*37.0,vSeed*19.0),drift=vec2(uSmokeT*0.02,0.0);

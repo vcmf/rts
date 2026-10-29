@@ -27,6 +27,7 @@ import {
   PUFF_FLOATS,
   PUFF_THIN,
   drawClearance,
+  validateSmoke,
   keepShare,
   muzzles,
   ringSize,
@@ -43,9 +44,12 @@ const GL_SRC_ALPHA = 0x0302
 const GL_ONE_MINUS_SRC_ALPHA = 0x0303
 const KEEP_BAND = 0.08 // the zoom's thinning: the band of ranks a puff shrinks out over (keepScale)
 const MASK_N = 512 // the formations' mask's texels a side
-// m: the mask's fall-off round a formation's footprint (its men's roots: Units.footprints; a man's half width in it)
+// m: the mask's fall-off round a formation's footprint (its men's roots: Units.footprints): about one texel (0.93 m),
+// so the cap's edge is the bilinear read's soft step across the outer men's half width and a little past it, not a
+// wider band before the line (a wider one thinned the jets at the muzzles)
 const MASK_MARGIN = 1.0
-const MAN_MID = 0.9 // m: the height the cap follows a view ray down to (a man's middle)
+// (after the soldiers' simple shadows, alphaIndex 1000, src/look/units.ts: the smoke lies over them)
+const SMOKE_ALPHA_INDEX = 2000
 const MASK_EVERY = 1 / 12 // s: the mask redrawn at most this often while formations move
 const REBUILD = 1 // s: a clock jump past this rebuilds the ring from the last life's shots
 
@@ -109,6 +113,7 @@ export class Smoke {
     this.def = def
     this.look = look
     this.clock = clock
+    validateSmoke(def, armies.fire)
     this.lines = armies.battalions.flatMap((b, i) => (b.reserve ? [] : [i]))
     this.xs = muzzles(armies.drill, def.files)
     this.cap = ringSize(this.lines.length, this.xs.length, armies.fire, def)
@@ -158,6 +163,7 @@ export class Smoke {
     m.isPickable = false
     m.alwaysSelectAsActiveMesh = true // (its bounds would follow the ring; the puffs sit on the battlefield)
     m.doNotSyncBoundingInfo = true
+    m.alphaIndex = SMOKE_ALPHA_INDEX
     return m
   }
 
@@ -185,10 +191,7 @@ export class Smoke {
     m.setVector2('uKeep', this.keepV)
     m.setFloat('uSmokeT', 0)
     if (clear) {
-      m.setVector4(
-        'uClear',
-        new Vector4(this.maskOrigin[0], this.maskOrigin[1], 1 / (MASK_N * this.maskTexel), MAN_MID),
-      )
+      m.setVector4('uClear', new Vector4(this.maskOrigin[0], this.maskOrigin[1], 1 / (MASK_N * this.maskTexel), d.body))
       m.setTexture('uClearTex', this.maskTex)
     }
     m.setVector3('uWind', new Vector3(Math.cos(FLAG_WIND) * d.drift, 0, Math.sin(FLAG_WIND) * d.drift))
@@ -198,7 +201,9 @@ export class Smoke {
     m.disableDepthWrite = true
     m.backFaceCulling = false
     const engine = this.scene.getEngine() as ThinEngine
-    m.alphaMode = Constants.ALPHA_EXCLUSION // (a mode nothing else draws with: its blend is replaced at each bind)
+    // (a mode no stock material draws with, as the soldiers' simple shadows' (src/look/units.ts): each sets its own
+    // blend at its bind, so the mode only marks the material as blended)
+    m.alphaMode = Constants.ALPHA_EXCLUSION
     m.onBindObservable.add(() =>
       engine.alphaState.setAlphaBlendFunctionParameters(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE, 0),
     )

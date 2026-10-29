@@ -42,12 +42,16 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
   smoke blurs as what lies behind it, at most a few metres away (the ground or the men it hangs over). Its soft bottom
   fades out at the ground it was born over, so a card meets the ground with no hard line.
 - **Thinned over the men, never cut.** A top-down mask of the formations' footprints, each in its own frame (a soft
-  margin round each; a world box round a line askew to the axes took in the ground before it),
-  drawn on the CPU when a battalion's men are placed; each smoke pixel follows its view ray down to a man's mid height,
-  reads the mask there, and where it lies over a formation its opacity is capped (0.6 of its own by default), so the
-  front ranks may stand inside the smoke's edge and still read, from either side, and the smoke stays whole elsewhere.
+  margin round each; a world box round a line askew to the axes took in the ground before it), drawn on the CPU when a
+  battalion's men are placed; each smoke pixel follows its view ray down to a man's body height (the era's `body`),
+  reads the mask there, and where it lies over a formation that card's opacity takes a factor (0.6 by default). It is
+  a factor per card, not a cap on the bank's total: cards over each other add up (three grown puffs at 0.95 × 0.6 make
+  about 0.92 over the front rank). The men read in the stills from either side, and the smoke stays whole elsewhere;
+  a true cap is an open question (the plan's).
 - **The era's values, the figure's moment.** Puffs a file group, life, thinning, size, the plume, the blast, the roll,
-  the bank's width, rise, drift, the sections' stagger, the puffs' variety, opacity, colour and flash are ruleset data (`PuffDef`, `src/rulesets/<era>-smoke.ts`);
+  the bank's width, rise, drift, the sections' stagger, the puffs' variety, the muzzles' places by rank, the sections'
+  and the clumps' lengths, a man's body height for the cap, opacity, colour and flash are ruleset data (`PuffDef`,
+  `src/rulesets/<era>-smoke.ts`);
   a shot's moment is the figure's own `fire` clip event (`data/figures/index.json`). The engine names no weapon
   (decision 0015).
 - **Fewer, larger puffs further out**: a share of the puffs kept by the camera's distance, the kept ones grown so the
@@ -59,7 +63,8 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
   by the ring and thinned with zoom; the paired bench (`?bench=smoke`) measures it (the plan's Results).
 - Cards cross the men's figures with a straight edge where a card's plane passes through them (no soft-particle depth
   read); translucent and capped over the men, it reads as the smoke's edge.
-- Cards in one draw are not sorted: they blend in their birth order. The smoke is one colour family, so the order is
-  not seen.
+- Cards in one draw are not sorted: they blend in their slots' order (birth order as the clock runs; a rebuild writes
+  battalion by battalion). The smoke is one colour family, the same up to blend order, so the order is not seen. It
+  draws after the soldiers' simple shadows (alphaIndex 2000 against their 1000).
 - The sim's smoke (sight, `docs/proposals/sim-design.md` §11) will drive the puffs instead of the script; the cap then
   reads the sim's formations.

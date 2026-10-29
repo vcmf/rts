@@ -44,10 +44,10 @@ fill costs too much: see Results); soft-particle depth (a card's plane crossing 
 ## Approach
 
 - **Spawn** unchanged (`shotsBetween`, `volleyPuffs`, the ring and its rebuild on a clock jump).
-- **The card** (`smoke.vert`): one quad facing the camera, its frame across the shot's way as the eye sees it; young,
-  stretched along the shot (foreshortened) with its back at the muzzle and relaxing to round over the era's time;
-  `bank` times wider along the front than deep, so a rank's puffs overlap into one sheet; moved by the blast, then the
-  roll, the rise and the wind (`puffAt`, mirrored); kept off its ground.
+- **The card** (`smoke.vert`; as built after round 3, see below): one quad; young, a jet along the shot near the
+  level with its back at the muzzle; grown, a low streak hung at the muskets, facing the eye's up, `bank` times wider
+  along the front than tall, into its neighbours; moved by the blast, then the roll, the rise and the wind (`puffAt`,
+  mirrored).
 - **The shape and light** (`smoke.frag`): a soft falloff broken by the grain's blotches at two scales in the card's own
   metres; two light bands from the sun's side, their edge drawn by the billows; thinning (`PUFF_THIN`) and holes with
   age; faded out at its ground.
@@ -121,9 +121,14 @@ Cost (one round, the same worst views, started at a 1-min load of 2.85): the fir
 
 - **Fill cost** of blended cards where banks pile up at a wide zoom: thinned with zoom; measured, not assumed.
 - **A card's straight edge across the men** where its plane passes through them: soft, translucent and capped there.
-- **Unsorted cards**: one colour family, blended in birth order.
+- **Unsorted cards**: one colour family, the same up to blend order (slot order: birth order, or battalion by
+  battalion after a rebuild).
 
 ## Open questions
 
-- The cap's value (0.4) and whether the smoke over the side facing away from the camera should thin too.
+- The cap's value (0.6) and whether the smoke over the side facing away from the camera should thin too.
+- **The cap is a factor per card, not a cap on the total**: overlapping cards over the front rank add up (three grown
+  puffs at 0.95 × 0.6 make about 0.92). The men read in the approved stills, so it stays for now. Fixes if it bites: a
+  separate (half-resolution) smoke target composited with a true cap on its alpha where it covers a formation; or the
+  cap divided by the expected overlap there (cheap, approximate).
 - Whether the bank should linger longer, and whether `step` (12 fps) suits the owner's "painted" better than smooth.

@@ -873,15 +873,17 @@ scripted infantry's volleys, a plume at each muzzle group grown into one bank al
   jet's muzzle end shows the era's flash colour for its first 0.07 s (a small spark at the muzzle).
 - **The blend**: drawn after everything opaque, no depth written, both faces; colour by its opacity over what lies
   behind, the alpha (the depth of field's lens term, decision 0040) kept: the smoke blurs as what lies behind it, a few
-  metres away at most, as the soldiers' simple shadows do. Cards are not sorted (one colour family: the order is not
-  seen).
+  metres away at most, as the soldiers' simple shadows do; drawn after those shadows (alphaIndex 2000 against their
+  1000). Cards are not sorted (one colour family, the same up to blend order).
 - **The cap over the men** (`?smokecap=<0 to 1>`, 0.6 by default; 1 draws no mask): a 512² R8 mask over the play area
-  (about 0.94 m texels) of each battalion's footprint in its own frame (`Units.footprints`: its men's roots, so a line
+  (about 0.93 m texels: 474 m over 512) of each battalion's footprint in its own frame (`Units.footprints`: its men's roots, so a line
   askew to the world's axes covers only its own narrow ground; a world box round it took in the ground before it and
-  thinned the smoke at the muzzles) and a 1 m fall-off (`drawClearance`), drawn again when a battalion is placed (`Units.placeCount`), at most at 12 Hz. Each
-  smoke pixel follows its view ray down to a man's mid height over the puff's ground and reads it (`coverAt`); over a
-  formation its opacity is capped (`coverCap`), so the front ranks inside the bank's edge read through it, from either
-  side, and the smoke stays whole elsewhere.
+  thinned the smoke at the muzzles) and a 1 m fall-off, about a texel: the bilinear read's soft step, no wider band
+  before the line (`drawClearance`), drawn again when a battalion is placed (`Units.placeCount`), at most at 12 Hz.
+  Each smoke pixel follows its view ray down to a man's body height (the era's `body`) over the puff's ground and reads
+  it (`coverAt`); over a formation that card's opacity takes the cap's factor (`coverCap`). A factor per card, not a
+  cap on the bank's total: overlapping cards add up (three grown puffs at 0.95 × 0.6 make about 0.92); the men read in
+  the stills from either side, and the smoke stays whole elsewhere (a true cap: the plan's open question).
 - **Zoom**: each puff a rank from its seed; the share kept is 1 up to 60 m from the focus, then 60 / r down to a
   quarter (`keepShare`), the kept ones grown by 1/√share and those at the cut shrinking out (`keepScale`), so the
   smoke's area holds while its puffs fall to a quarter at the widest zoom.
@@ -891,7 +893,9 @@ scripted infantry's volleys, a plume at each muzzle group grown into one bank al
 - **The era's values** (`PuffDef` in `src/sim/ruleset.ts`; `src/rulesets/napoleonic-smoke.ts`, the ruleset's
   `smoke.volley` in `src/rulesets/index.ts`): puffs a file group, life, thinning, radius, growth, the muzzles' place,
   the blast, the plume, the roll, the bank's width, the rise, the drift, the men's spread, the sections' stagger, the
-  puffs' variety, opacity, colour and flash.
+  puffs' variety, the muzzles' places by rank (`rankReach`, `rankLift`), the spread along the front (`lateral`), the
+  sections' and the clumps' lengths (`section`, `clumps`), a man's body height for the cap (`body`), opacity, colour
+  and flash; checked once (`validateSmoke`: a bad value throws, naming it).
 - **The bench**: `?firehold=1` holds the script in its fire phase (`scriptClock`: each battalion in line fires all the
   time, its volleys still its own); `?bench=smoke&firehold=1` measures the smoke on and off in one page. `__smoke`:
   `written`, `capacity`. `?lookat=fight|line|line1[,<radius m>]` starts the camera on the fight, or the first or the

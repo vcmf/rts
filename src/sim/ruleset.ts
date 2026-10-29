@@ -217,6 +217,12 @@ export interface PuffDef {
   grow: number // s: the growth's time constant
   ahead: number // m ahead of the front rank at birth (the muzzles)
   height: number // m above the ground at birth
+  rankReach: number // m: how much nearer the front rank a rank behind's muzzles are (over the shoulders before it)
+  rankLift: number // m: how much higher a rank behind's muzzles are than the one before's
+  lateral: number // m: the spread of a puff's place along the front about its muzzle group's middle
+  section: number // m: the stretch of a line that goes off together (about a company), its moment its own
+  clumps: readonly [number, number, number] // m: the lengths of the three waves the volley's clumps are made of
+  body: number // m: the height over the ground a man is read at, for the smoke's cap over the men
   jet: readonly [number, number] // the blast: m/s ahead at birth, and the time constant it dies over (s)
   plume: readonly [number, number] // the young plume: its length over its width at birth, the time it relaxes in (s)
   roll: number // m/s: the bank's slow roll ahead once the blast has died

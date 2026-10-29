@@ -803,7 +803,8 @@ export class Units {
             null)
     // (the proxy: shown to the map alone; the simple shadows and the tiny LOD: shown by frame())
     if (li >= this.proxyLod) host.isVisible = false
-    if (li === this.decalLod) host.alphaIndex = 1000 // (after everything else)
+    // (after the opaque scene, before the smoke's 2000: src/look/smoke.ts)
+    if (li === this.decalLod) host.alphaIndex = 1000
     // (a clone of a disabled source is disabled: enabled while the figures show; the nearest LOD's by setSplit)
     host.isPickable = false
     host.alwaysSelectAsActiveMesh = false
@@ -2317,9 +2318,8 @@ export class Units {
   get figures(): number {
     return this.hosts.length * this.slot.line.length
   }
-  /** the battalions as placed (the tools aim their cameras at them) */
   /** how many times a battalion's men have been placed: it changes whenever a formation's ground does (the smoke's
-   *  clearance mask, src/look/smoke.ts) */
+   *  mask of the formations, src/look/smoke.ts) */
   get placeCount(): number {
     return this.placed
   }
@@ -2340,6 +2340,7 @@ export class Units {
     }
     return n
   }
+  /** the battalions as placed (the tools aim their cameras at them) */
   get battalions(): Battalion[] {
     return this.hosts.map(h => h.b)
   }
