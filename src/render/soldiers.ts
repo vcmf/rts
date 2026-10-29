@@ -123,6 +123,8 @@ export class SoldierLayer {
   // the revision a new battalion starts at: past every revision of the layer this one replaced (revAfter), so a
   // reader that caches a battalion by its revision never takes the new layer's for the old's (decision 0081)
   private readonly revFrom: number
+  // the highest revision of a battalion that has left the layer (revAfter counts it: it may come back after going back)
+  private revGone = 0
   /** `revFrom`: where new battalions' revisions start (a layer laid out again: the last one's `revAfter()`). */
   constructor(w: World, scene: Scene, revFrom = 0) {
     this.w = w
@@ -293,6 +295,7 @@ export class SoldierLayer {
             }
           }
         }
+        this.revGone = Math.max(this.revGone, u.rev)
         this.units.delete(i)
         this.leaveGroup(u)
       }
@@ -810,11 +813,19 @@ export class SoldierLayer {
       this.men.yaw[m] = Math.atan2(vx, vz)
     } else this.halted(i, m)
   }
-  /** A revision past every battalion's of this layer (and its own start): where a layer that replaces it starts. */
+  /** A revision past every battalion's of this layer, those gone from it too (and its own start): where a layer
+   *  that replaces it starts. */
   revAfter(): number {
-    let r = this.revFrom
+    let r = Math.max(this.revFrom, this.revGone)
     for (const u of this.units.values()) r = Math.max(r, u.rev)
     return r + 1
+  }
+  /** A new layer on world `w` (going to a time builds one), its men to be laid out by its first sync: its settings
+   *  this one's, its revisions past this one's (decision 0081). The battle's own and the men worker's. */
+  laidOutOn(w: World): SoldierLayer {
+    const l = new SoldierLayer(w, this.scene, this.revAfter())
+    l.orients = this.orients
+    return l
   }
   private readonly pYaw = [0, 0, 0]
   /** Works out the way each man faces and his gait (Men.yaw, Men.gait) for every battalion whose men moved since

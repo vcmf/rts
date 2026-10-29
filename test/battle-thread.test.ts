@@ -224,6 +224,26 @@ describe('the tick ring', () => {
     expect(reader.take(copy, 10)).toEqual({ tick: 11, departed: [{ id: 4, men: 2 }], skipped: 0, jumped: false })
     expect(hashWorld(copy)).toBe(hashWorld(b.w))
   })
+  // regression (PR 7 review): a reader taking a world from before a jump read past the departures the writer logged
+  // after it, so they were never returned, and a formation that left the field stayed drawn
+  it("a jump's departures written while the reader takes an older world come with the ticks after the jump", () => {
+    const { b, writer, copy, reader } = setup()
+    for (let k = 1; k <= 3; k++) {
+      b.advance(DT)
+      writer.write(b.w, [])
+    }
+    const t = reader.take(copy, 1, undefined, () => {
+      // while the reader holds tick 2's slot: the battle back at tick 1, then a tick on with a departure
+      b.goTo(1)
+      writer.jump(b.w)
+      b.speed = 1
+      b.advance(DT)
+      writer.write(b.w, [{ id: 6, men: 30 }])
+    })!
+    expect([t.tick, t.departed, t.jumped]).toEqual([2, [], false])
+    expect(reader.take(copy, 2)).toMatchObject({ tick: 1, jumped: true, departed: [] })
+    expect(reader.take(copy, 1)).toEqual({ tick: 2, departed: [{ id: 6, men: 30 }], skipped: 0, jumped: false })
+  })
   it("the writer fills the slots from before a jump first: the jump's world and its ticks stay in the ring", () => {
     const { b, writer, copy, reader } = setup()
     for (let k = 1; k <= RING; k++) {

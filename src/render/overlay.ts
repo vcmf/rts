@@ -67,8 +67,11 @@ export class Overlay {
   // mostly looked at paused)
   private at = -1
   private near: Contact[] | null = null
-  // the worlds drawn are copies (published frames), whose claim grid is built here; else the sim's own is read
+  // the worlds drawn are copies (published frames), whose claim grid is built here; else the sim's own is read. The
+  // tick each copy's grid was built at by this overlay (the page makes a new one after going to a time: a copy's grid
+  // from before it may be another branch's at the same tick)
   private readonly copies: boolean
+  private readonly built = new WeakMap<World, number>()
   /** `copies`: the worlds drawn are published frames' (their scratch the page's own), not the battle's. */
   constructor(w: World, copies = false) {
     this.P = mkPlaced(w)
@@ -85,9 +88,10 @@ export class Overlay {
     // a frame's world (each slot its own scratch) builds its grid once a tick: every formation claimed afresh where
     // it stands, not the last build's cells stamped again (claims.ts buildClaims)
     const C = w.scratch.claims
-    if (this.copies && w.claims && on.has('cells') && C?.built !== w.meta[M_TICK]) {
+    if (this.copies && w.claims && on.has('cells') && this.built.get(w) !== w.meta[M_TICK]) {
       if (C) C.built = -1
       buildClaims(w)
+      this.built.set(w, w.meta[M_TICK])
     }
     const P = this.P
     const near = (this.near ??= on.has('contacts') ? contacts(w, P, NEAR) : null) ?? []

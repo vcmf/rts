@@ -84,9 +84,6 @@ export class Battle {
   readonly clock = new MenClock()
   /** The bench's timeline: the log, the hash points, the orders dropped, the marks and the saves. */
   readonly tl: Timeline = mkTimeline()
-  /** Moves on whenever the timeline's arrays may have changed other than by growing: an order (it may branch), going to
-   * a time, a tick that parted from the first pass. Their readers elsewhere look again from the start then. */
-  cuts = 0
   // game time owed to the next tick, in seconds; the game speed (0: paused)
   acc = 0
   speed = 1
@@ -163,7 +160,6 @@ export class Battle {
    * them. */
   command(c: Command): void {
     order(this.tl, this.w, c)
-    this.cuts++
   }
 
   /**
@@ -176,9 +172,10 @@ export class Battle {
     this.acc += realDt * this.speed
     let ticks = 0
     while (this.acc >= DT && ticks < MAX_TICKS) {
+      ticks++
+      // (a tick that parted from the first pass ran, and paused the battle)
       if (!this.tick()) break
       this.acc -= DT
-      ticks++
     }
     if (ticks === MAX_TICKS) this.acc = 0
     const b = performance.now()
@@ -222,12 +219,9 @@ export class Battle {
     } catch (e) {
       return { tick: now, capped: false, error: e instanceof Error ? e.message : String(e) }
     }
-    this.cuts++
     this.wOf = w
     if (this.layerOf) {
-      const orients = this.layerOf.orients
-      this.layerOf = new SoldierLayer(w, this.scene, this.layerOf.revAfter())
-      this.layerOf.orients = orients
+      this.layerOf = this.layerOf.laidOutOn(w)
       this.layerOf.sync(0, [])
     }
     return { tick: w.meta[M_TICK], capped, error: '' }
@@ -246,7 +240,6 @@ export class Battle {
     if (this.men) this.layer.sync(0, r.departed)
     this.onTick?.(this.w, r)
     if (this.tl.warnings === was) return true
-    this.cuts++
     this.speed = 0
     this.acc = 0
     return false

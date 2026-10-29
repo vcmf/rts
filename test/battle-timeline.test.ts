@@ -37,12 +37,12 @@ describe('the battle goes to a time', () => {
     b.advanceBy(5)
     move(b, 40)
     b.advanceBy(5)
-    const cuts = b.cuts
+    const cuts = b.tl.cuts
     b.goTo(2 * TICK_HZ)
     expect(b.log.length).toBe(2)
     expect(b.session().replay.log.length).toBe(1)
     move(b, 0)
-    expect(b.cuts).toBeGreaterThan(cuts)
+    expect(b.tl.cuts).toBeGreaterThan(cuts)
     expect(b.log.map(s => s.tick)).toEqual([1, 2 * TICK_HZ + 1])
     b.advanceBy(3)
     const { replay, hashes } = b.session()

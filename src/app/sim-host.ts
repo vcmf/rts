@@ -74,11 +74,11 @@ export function serveSim(port: Port<ToSim>): void {
   let ringMs = 0
   let last = performance.now()
 
-  // what changed of the timeline since the last message: only grown unless the battle cut it since (tailOf)
+  // what changed of the timeline since the last message: only grown unless the timeline was cut since (tailOf)
   const flush = () => {
     const b = battle!
     const tl = b.tl
-    const grown = b.cuts === sentCuts
+    const grown = tl.cuts === sentCuts
     if (
       grown &&
       tl.log.length === sent.log.length &&
@@ -101,7 +101,7 @@ export function serveSim(port: Port<ToSim>): void {
     applyTail(sent.dropped, news.dropped)
     applyTail(sent.hashes, news.hashes)
     applyTail(sent.marks, news.marks)
-    sentCuts = b.cuts
+    sentCuts = tl.cuts
   }
   const clock = () => ring!.setClock(battle!.w.meta[M_TICK], battle!.acc, battle!.speed, tickMs)
   // one turn: the ticks owed since the last (none at speed 0: paused, or held after the checks' advance), the clock

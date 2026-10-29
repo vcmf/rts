@@ -96,9 +96,7 @@ export function serveMen(port: Port<ToMen>): void {
   // a new layer on the world as it stands (its battalions' revisions on from the last's: a frame's readers cache by
   // them), as the battle's own on the page's thread (Battle.goTo)
   const relayout = () => {
-    const orients = layer.orients
-    layer = new SoldierLayer(w, scene, layer.revAfter())
-    layer.orients = orients
+    layer = layer.laidOutOn(w)
     src.layer = layer
   }
   const makeSlots = (cap: number) => {

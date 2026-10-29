@@ -225,7 +225,8 @@ export class RingReader extends RingEnd {
   }
 
   /** The departures logged in ticks up to `tick` (of the jump last taken) not read yet, in the order they were
-   * written; those from before it passed over, and returned none of with `jumped` (its world holds them). */
+   * written; those from before it passed over, and none returned with `jumped` (its world holds them). A later
+   * jump's are left for when its world is taken. */
   private departures(tick: number, jumped: boolean): { id: number; men: number }[] {
     const g = this.log
     const n = Atomics.load(g, 0)
@@ -234,7 +235,8 @@ export class RingReader extends RingEnd {
     if (n - this.read > LOG) this.read = n - LOG
     while (this.read < n) {
       const k = 1 + D_LEN * (this.read % LOG)
-      if (g[k] === this.jumps && g[k + 1] > tick) break
+      // a later tick's, or a jump's not taken yet (its departures follow its world): left for then
+      if (g[k] > this.jumps || (g[k] === this.jumps && g[k + 1] > tick)) break
       if (g[k] === this.jumps && !jumped) out.push({ id: g[k + 2], men: g[k + 3] })
       this.read++
     }

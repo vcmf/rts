@@ -42,7 +42,7 @@ import { MAN_ALIVE } from '../render/men.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 import { Overlay, LAYERS, type Layer } from '../render/overlay.ts'
 import { startLink, type Seen } from './battle-link.ts'
-import { pruneSelection, runSpeed, lastDropped } from './page-rules.ts'
+import { pruneSelection, runSpeed, lastDropped, clockText as clock, parseTime } from './page-rules.ts'
 
 const SPEEDS = [0, 0.25, 0.5, 1, 2, 4, 8]
 
@@ -104,7 +104,6 @@ async function main(): Promise<void> {
   // a bench case names itself under the panel's title
   const bench = [...BENCH_CASES, ...CLAIM_CASES].find(c => c.scenario === scenario)
   if (bench) document.getElementById('sub')!.textContent = bench.title
-  const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
   const lookAt = bench ? `look at ${bench.keys.map(clock).join(' · ')} (G)` : ''
 
   const mapC = document.getElementById('map') as HTMLCanvasElement
@@ -296,15 +295,15 @@ async function main(): Promise<void> {
   const askGoTo = () => {
     const said = prompt('Go to a time (m:ss, or seconds)')
     releaseHeld()
-    const m = said?.trim().match(/^(?:(\d+):([0-5]?\d)|(\d+(?:\.\d+)?))$/)
-    if (!m) {
+    const sec = said ? parseTime(said) : null
+    if (sec === null) {
       if (said?.trim()) {
         note = `not a time: ${said.trim()} (m:ss, or seconds)`
         noteT = performance.now()
       }
       return
     }
-    void goTo((m[3] !== undefined ? Number(m[3]) : Number(m[1]) * 60 + Number(m[2])) * TICK_HZ)
+    void goTo(sec * TICK_HZ)
   }
   document.querySelectorAll<HTMLElement>('[data-time]').forEach(el => {
     el.onclick = () =>
@@ -357,21 +356,21 @@ async function main(): Promise<void> {
   const mark = (text?: string) => {
     let said = text ?? null
     if (text === undefined) {
-      // the prompt blocks this thread, not the worker's: the battle is held while it is open, and runs again after
+      // the prompt blocks this thread, not the worker's: the battle is held while it is open (at the time it owed then:
+      // the frame shown, or a tick past it), marked there, and runs again after
       link.setSpeed(0)
       said = prompt('What happened here? (optional)')
+      if (said !== null) link.mark(said.trim())
       runAt()
       // the prompt swallowed the keyup and pointerup of anything held (space, a drag): let go of them
       releaseHeld()
-    }
+    } else if (said !== null) link.mark(said.trim())
     if (said === null) {
       note = 'mark cancelled: nothing marked'
       noteT = performance.now()
       return
     }
-    // (the battle marks it at its own tick: the one shown, as the prompt held the battle)
-    link.mark(said.trim())
-    note = `moment marked at ${clock(w.meta[M_TICK] * DT)}`
+    note = 'moment marked'
     noteT = performance.now()
   }
 
