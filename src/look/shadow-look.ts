@@ -181,10 +181,18 @@ function grownBox(box: ShapeBox, r: number, len: number): ShapeBox {
  *  s at g along the gradient (0 at the core, 1 at the tip), the share of the samples it covers and the darkness every
  *  covered sample takes (the look's darkest, the same for every shadow: so where shadows overlap and the stencil lets
  *  the first through, the darkest share wins whatever their order). The gain is not part of it: one value a frame for
- *  every shadow, it makes that darkness stronger alike for all (shadowShade), so the rule holds at any gain */
-export function decalFragment(s: number, g: number, foot: number, dark: number): { cover: number; dark: number } {
+ *  every shadow, it makes that darkness stronger alike for all (shadowShade), so the rule holds at any gain. darken (an
+ *  arm's SH_DARKEN, decision 0075; 1: none) raises the share alone: the cover still caps at 1 and the darkness at the
+ *  look's darkest, so a darkened shadow is never darker than the ground's shade */
+export function decalFragment(
+  s: number,
+  g: number,
+  foot: number,
+  dark: number,
+  darken = 1,
+): { cover: number; dark: number } {
   const dm = Math.max(foot, dark, 1e-4)
-  return { cover: Math.min(1, (s * (foot + (dark - foot) * g)) / dm), dark: dm }
+  return { cover: Math.min(1, (s * (foot + (dark - foot) * g) * darken) / dm), dark: dm }
 }
 
 /** The luminance weights the gain measures the darkening by (Rec. 709, as the shader's) */

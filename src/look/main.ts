@@ -637,6 +637,10 @@ if (params.has('msaa')) {
 }
 // (the fight's middle: the bench's focus)
 let armiesFocus: [number, number] | null = null
+// (?lookat looks at the armies' arms: without them a clear error)
+if (armiesParam === null && params.get('lookat') !== null) {
+  throw new Error(`?lookat=${params.get('lookat')} needs ?armies: it looks at the armies' arms`)
+}
 if (armiesParam !== null) {
   if (mats.webgl1) {
     throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
@@ -648,7 +652,7 @@ if (armiesParam !== null) {
     { dressAll, dyeOverride, wearInTurn },
     { RULESETS },
     { ARMIES_DEMO, ARMS_DEMO },
-    { armScript, battalionBoxes, drillScript, placeArmUnits },
+    { armScript, battalionBoxes, drillScript, lookAtSpot, placeArmUnits },
     { Trodden, ViewRays },
   ] = await Promise.all([
     import('./units.ts'),
@@ -857,28 +861,16 @@ if (armiesParam !== null) {
   const setMask = (m: Parameters<Units['setMask']>[0]) => all.forEach(u => u.setMask(m))
   const hooks = { blocked, focus: armiesFocus, coats: foot.coats(), arms, show, setMask, sim: sim?.link }
   Object.assign(window, { __units: foot, __armies: hooks })
-  lookAtArm(params.get('lookat'), arms, armiesFocus)
+  // ?lookat=<arm>[,<radius m>]: the camera starts on that arm's first unit or the fight's middle (lookAtSpot), its
+  // target on the ground there: to judge the arms by eye without panning to them
+  const firsts = Object.fromEntries(Object.entries(arms).map(([k, a]) => [k, a.battalions[0]]))
+  const at = lookAtSpot(params.get('lookat'), firsts, armiesFocus)
+  if (at) {
+    camera.target.set(at.x, groundAt(at.x, at.z), at.z)
+    zoomOf(camera).set(at.radius)
+  }
 }
 
-/** ?lookat=<arm>[,<radius m>] (artillery, cavalry, or fight): the camera starts on that arm's first side's unit, or on
- *  the fight's middle, at that zoom (30 m by default): to judge the arms by eye without panning to them */
-function lookAtArm(
-  want: string | null,
-  arms: Record<string, { battalions: readonly { x: number; z: number }[] }>,
-  fight: [number, number],
-): void {
-  if (!want) return
-  const [name, r] = want.split(',')
-  const radius = r === undefined ? 30 : Number(r)
-  const arm = arms[name]
-  if ((name !== 'fight' && !arm) || !(radius > 0)) {
-    throw new Error(`?lookat must be fight or one of ${Object.keys(arms).join(', ')}[,<radius m>], not ${want}`)
-  }
-  const at = arm ? arm.battalions[0] : { x: fight[0], z: fight[1] }
-  camera.target.x = at.x
-  camera.target.z = at.z
-  zoomOf(camera).set(radius)
-}
 if (flag('rt16')) MSAA.byte = false
 // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
 if (flag('nanmark')) {

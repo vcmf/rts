@@ -165,18 +165,20 @@ def battery_role(mat, bone, rgb, co):
 # the era's dye set (src/look/world/dyes.ts); classify(material, bone, texel, centre): a triangle's colour role; height:
 # the figure's bounds in m (a check); fold: deforming bones folded into their nearest kept ancestor (a crew's fingers:
 # the format's bone indices are bytes); cull: the faces never seen from the RTS camera's pitches (elevations, degrees
-# above the horizon, the sun's 27 among them so the shadow keeps its sides; yaws round the figure; frames sampled per
-# clip of its roles) removed from each LOD after decimating it (the targets are before the cull); lod_height: the height its LOD switches measure on screen (m; none: its
+# above the horizon: down to 10, below the camera's lowest, about 16 at the screen's top edge, src/look/spec.ts, and
+# lower on falling ground; the sun's 27 among them so the shadow keeps its sides; yaws round the figure; frames
+# sampled per clip of its roles, enough to catch the inner legs mid-gallop) removed from each LOD after decimating it
+# (the targets are before the cull); lod_height: the height its LOD switches measure on screen (m; none: its
 # own). The LOD targets keep about the infantryman's triangles a pixel of the figure's
 # side on screen at each LOD's switch, which falls at the same height in pixels for every figure (his 1,197 and 243;
 # at its switch a horse and rider shows about twice his pixels: 2,000 and 450; 4,000 cost 3.5 ms of GPU at 63 m with
 # a regiment in view, docs/plans/active/cavalry-artillery-demo.md; a gun and its four gunners about five figures)
 PROFILES = {
     'infantry': dict(roles=ROLES_INFANTRY, palette=PALETTE_INFANTRY, height=(1.6, 2.6)),
-    'cavalry': dict(glb='cavalry.glb', targets={'lod0': 9000, 'lod1': 1200, 'lod2': 300},
+    'cavalry': dict(glb='cavalry.glb', targets={'lod0': 8600, 'lod1': 1200, 'lod2': 300},
                     # (the faces the RTS camera never sees culled first; the LODs switched at a man's height, so a
                     # horse hands over to its lighter LODs as soon as a man does: the owner, 2026-10-28)
-                    cull=dict(elevations=(25, 40, 60, 90), yaws=16, frames=4), lod_height=1.8,
+                    cull=dict(elevations=(10, 14, 19, 27, 40, 60, 90), yaws=16, frames=10), lod_height=1.8,
                     roles={'halt': (['Idle'], True), 'walk': (['Walk'], True), 'trot': (['Trot'], True),
                            'gallop': (['Gallop'], True)},
                     palette=['coat', 'facings', 'white', 'dark', 'skin', 'leather', 'metal', 'hide', 'mane'],
@@ -375,6 +377,9 @@ if MULTI:
     multi_src = mesh
 for lod in LODS:
     if MULTI:
+        # (a culled LOD is always a decimated copy: culling the published mesh itself would cut the source shared by
+        # every LOD)
+        assert not PROFILE.get('cull') or PROFILE['targets'][lod] is not None, f'{lod}: a culled LOD needs a target'
         mesh = decimated(multi_src, PROFILE['targets'][lod])
         # (culled after decimating, on the LOD's own closed mesh: decimating an open shell tore holes at its edges)
         if PROFILE.get('cull'):

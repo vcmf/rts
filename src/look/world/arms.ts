@@ -404,3 +404,25 @@ export function placeArmUnits(
   }
   return out
 }
+
+/** Where ?lookat=<arm>[,<radius m>] starts the camera (src/look/main.ts): on that arm's first side's unit (arms: each
+ *  arm on the page by name, its first unit's place), or on the fight's middle (fight), at that zoom (30 m by default);
+ *  null without ?lookat. A clear error for a radius that is not a positive number, or an arm not on the page, naming
+ *  those that are (none under ?sim, nor with ?cavalry=0 and ?artillery=0). (?lookat without ?armies: main.ts's) */
+export function lookAtSpot(
+  want: string | null,
+  arms: Readonly<Record<string, { x: number; z: number }>>,
+  fight: readonly [number, number],
+): { x: number; z: number; radius: number } | null {
+  if (want === null) return null
+  const [name, r, ...more] = want.split(',')
+  const radius = r === undefined ? 30 : Number(r)
+  const names = Object.keys(arms)
+  if (name !== 'fight' && !Object.hasOwn(arms, name)) {
+    const on = names.length > 0 ? `the arms on this page: ${names.join(', ')}` : 'no other arm on this page'
+    throw new Error(`?lookat=${want}: not fight nor an arm on this page (${on}; ?sim leaves them out, as ?<arm>=0)`)
+  }
+  if (!(radius > 0) || more.length > 0) throw new Error(`?lookat=${want}: <arm>[,<radius m>], a radius above 0`)
+  const at = name === 'fight' ? { x: fight[0], z: fight[1] } : arms[name]
+  return { x: at.x, z: at.z, radius }
+}

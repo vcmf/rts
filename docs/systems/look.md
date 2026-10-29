@@ -586,7 +586,9 @@ type, figure and uniforms, resolved through `src/rulesets/index.ts` (`RULESETS`:
 and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glob in `src/look/main.ts`).
 
 - **The other arms** (decision 0075, `docs/plans/active/cavalry-artillery-demo.md`; `?cavalry=0`, `?artillery=0`: left
-  out, both: the page before them): the scenario's `ARMS_DEMO` (`src/scenarios/armies-demo.ts`), each a unit type and
+  out, both: the page before them; `?lookat=<arm>|fight[,<radius m>]`: the camera starts on that arm's first unit or
+  the fight's middle, on the ground there, at 30 m or that zoom, `lookAtSpot`; a clear error without `?armies`, or
+  naming the arms on the page, none under `?sim`): the scenario's `ARMS_DEMO` (`src/scenarios/armies-demo.ts`), each a unit type and
   formation of the ruleset, a figure, a script, each side's uniform and a man's weight in the trodden mask (`tread`):
   a foot battery a side (the ruleset's 8 pieces 16 m apart, unlimbered 12 m before the lines, a piece one figure:
   the gun and four of its detachment; `serveScript`: at rest 8 s, then each piece's firing cycle, Load, Ready, Fire
@@ -625,8 +627,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   #165). A figure kind's profile (clips.json's `unit`; none: the infantryman, his file unchanged) bakes a
   multi-part figure from its one GLB: its LODs collapse-decimated on the rest mesh (the battery 30,000, 6,500 and
   1,400 triangles, about the infantryman's triangles a pixel of its side on screen at the switches; the cuirassier's
-  lighter, the owner's, 2026-10-28: 9,000, 1,200 and 300, then each LOD's faces never seen from the RTS camera's
-  pitches culled, `cull`: 7,630, 1,113 and 289; decimating after the cull tore holes), each triangle's colour role read on the full mesh from its material, bone and texel and kept through the
+  lighter, the owner's, 2026-10-28: 8,600, 1,200 and 300, then each LOD's faces never seen from the RTS camera's
+  pitches culled, `cull`: 7,777, 1,155 and 295, its views from 10° above the horizon, below the screen's top edge's
+  16°, to 90°, 10 frames a clip; culling before decimating tore holes), each triangle's colour role read on the full mesh from its material, bone and texel and kept through the
   decimation as a face attribute; a chain whose span is not a whole number of 1/12 s steps (the gallop's 13 frames)
   resampled between frames, its root speed scaled to keep the feet planted; bones past the format's 255 (the crew's
   fingers) folded into their hand. Its header names its roles in order (the cuirassier halt, walk, trot, gallop; the

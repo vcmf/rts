@@ -1371,9 +1371,10 @@ export function contactReach(posed: ReturnType<typeof posedVertices>): number {
  *  nearest LOD's view test */
 export const MAN_R = 1.6
 /** m: a figure's bounding sphere round its middle (half its height up) for the nearest LOD's view test: reaching its
- *  farthest point (reach m across from its root, its top and feet half its height from the middle), MAN_R at least */
-export function manRadius(reach: number, height: number): number {
-  return Math.max(MAN_R, Math.hypot(reach, height / 2))
+ *  farthest point (reach m across from its root, its top and feet half its height from the middle, and slope m more up
+ *  or down: a spread figure's vertices following the ground, as its battalion's bounds are padded), MAN_R at least */
+export function manRadius(reach: number, height: number, slope = 0): number {
+  return Math.max(MAN_R, Math.hypot(reach, height / 2 + slope))
 }
 
 /** A vertex's height on the ground under a spread figure (units.vert's GROUND_FOLLOW, mirrored for its tests): its

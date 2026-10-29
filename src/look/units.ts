@@ -601,12 +601,12 @@ export class Units {
     }
     this.sidePad = reach * farScale.x + 0.2
     this.topH = Math.max(SHADOW_H, top)
-    this.manR = manRadius(reach, this.figH)
     const feet = contactReach(pv)
     this.spread = feet > SPREAD_FROM ? feet : 0
     // (a spread figure's vertices on the ground under each: units.vert's GROUND_FOLLOW, its bounds padded for a slope)
     const follow = this.spread > 0 ? ['#define GROUND_FOLLOW'] : []
     this.slopePad = this.spread > 0 ? SLOPE * Math.max(reach, this.spread) : 0
+    this.manR = manRadius(reach, this.figH, this.slopePad)
     for (const id of new Set(battalions.map(b => b.uniform))) {
       const u = uniforms[id]
       if (!u) throw new Error(`units: no uniform ${id} (a battalion names it)`)

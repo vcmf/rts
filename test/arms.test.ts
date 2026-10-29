@@ -16,6 +16,7 @@ import {
   boxOf,
   drillScript,
   formationSlots,
+  lookAtSpot,
   placeArm,
   placeArmUnits,
   rideDistance,
@@ -498,6 +499,12 @@ describe("a spread figure's contact and view sphere (contactFor, manRadius)", ()
   it("holds the whole figure: its reach across and half its height up and down, the infantryman's 1.6 m at least", () => {
     expect(manRadius(1.2, 2.66)).toBeCloseTo(Math.hypot(1.2, 1.33), 12)
     expect(manRadius(0.5, 1.8)).toBe(MAN_R)
+    // a spread figure's sphere grows by the slope its vertices may follow, as its battalion's bounds (slopePad)
+    expect(manRadius(1.2, 2.66, 0.96)).toBeCloseTo(Math.hypot(1.2, 1.33 + 0.96), 12)
+    expect(manRadius(1.2, 2.66, 0)).toBe(manRadius(1.2, 2.66))
+    expect(manRadius(1.2, 2.66, 0.5)).toBeGreaterThan(manRadius(1.2, 2.66))
+    const u = readFileSync(new URL('../src/look/units.ts', import.meta.url), 'utf8').replace(/\s+/g, '')
+    expect(u).toContain('this.manR=manRadius(reach,this.figH,this.slopePad)')
     const reach = (d: UnitData) => {
       const pv = posedVertices(d, d.lods[d.lods.length - 1].name)
       let r = 0
@@ -561,5 +568,24 @@ describe("the guns' shadows a little darker (SH_DARKEN)", () => {
     // (applied to the share before its cap: never past the ground's shade k, the soldiers' core)
     expect(f.indexOf('v*=SH_DARKEN;')).toBeLessThan(f.indexOf('floata=min(1.0,v/dm);'))
     expect(f.indexOf('v*=SH_DARKEN;')).toBeGreaterThan(0)
+  })
+})
+
+describe('?lookat (lookAtSpot)', () => {
+  const arms = { cavalry: { x: 50, z: -25 }, artillery: { x: 21, z: 25 } }
+  const fight: [number, number] = [3, 4]
+  it("starts on an arm's first unit or the fight's middle, at 30 m or the radius asked", () => {
+    expect(lookAtSpot(null, arms, fight)).toBeNull()
+    expect(lookAtSpot('cavalry', arms, fight)).toEqual({ x: 50, z: -25, radius: 30 })
+    expect(lookAtSpot('artillery,12.5', arms, fight)).toEqual({ x: 21, z: 25, radius: 12.5 })
+    expect(lookAtSpot('fight,80', {}, fight)).toEqual({ x: 3, z: 4, radius: 80 })
+  })
+  it('names the arms on the page, or none (?sim, ?cavalry=0 and ?artillery=0), and refuses a bad radius', () => {
+    expect(() => lookAtSpot('horse', arms, fight)).toThrow(/the arms on this page: cavalry, artillery/)
+    expect(() => lookAtSpot('cavalry', {}, fight)).toThrow(/no other arm on this page/)
+    expect(() => lookAtSpot('toString', {}, fight)).toThrow(/no other arm on this page/)
+    for (const bad of ['cavalry,0', 'cavalry,-3', 'cavalry,x', 'cavalry,', 'cavalry,10,2']) {
+      expect(() => lookAtSpot(bad, arms, fight)).toThrow(/a radius above 0/)
+    }
   })
 })

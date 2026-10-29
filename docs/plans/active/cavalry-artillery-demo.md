@@ -246,7 +246,11 @@ against `?cavalry=0`.
   in non-fading draws: 0.07 (not worth a second set of materials).
 - **Built:** the horse's LODs decimated to 9,000 / 1,200 / 300, then each LOD's faces never seen from the camera's
   pitches culled (7,630 / 1,113 / 289; culling before decimating tore holes), and its LOD switches measured at a
-  man's height (`lodHeight` 1.8 m, figure data). Cost: +1.23 / +0.96 / +0.89 ms at 20 / 40 / 63 m (repeated: +1.24,
+  man's height (`lodHeight` 1.8 m, figure data). Review round 3: the cull's views reached down to 25° only, but the
+  screen's top edge sees a figure at about 16° (lower on falling ground), and 4 frames a clip missed the inner legs
+  mid-gallop. Now 10, 14, 19, 27 (the sun's), 40, 60 and 90°, 10 frames a clip, lod0 decimated to 8,600 to stay
+  under the test's 8,000: 7,777 / 1,155 / 295. No holes in crops at 20 m with the horses at the screen's top
+  (`cull-low/`). Cost: +1.23 / +0.96 / +0.89 ms at 20 / 40 / 63 m (repeated: +1.24,
   +0.96, +0.88). The owner approved the look (wide crops at 20, 40, 63 m: `horses-lighter/`).
 - **Sooner switches** (1.5 and 1.6 m) do not help at 20 m (+1.23, +1.62) and cost more at 40 and 63 m.
 - **20 m is still +1.2 ms**; with the nearest LOD off it is +0.99 (`horses-lighter/trot-20-c-nonearest.png`,
