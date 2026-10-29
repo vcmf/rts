@@ -216,6 +216,15 @@ function despiked(h, nx, nz) {
   return out;
 }
 
+/**
+ * A soft, round blur of a grid, about as wide as a box mean of half-width r: three box means of a third of the width
+ * each, which approach a Gaussian. A single box mean leaves square, grid-aligned edges (the owner's "carreaux").
+ */
+function blur(h, nx, nz, r) {
+  const third = Math.max(1, Math.round(r / Math.sqrt(3)));
+  return boxMean(boxMean(boxMean(h, nx, nz, third), nx, nz, third), nx, nz, third);
+}
+
 /** Box mean of a grid over a square of half-width r cells, by a summed-area table (edges clamped). */
 function boxMean(h, nx, nz, r) {
   const S = new Float64Array((nx + 1) * (nz + 1));
@@ -299,7 +308,7 @@ const MOUNT_TO = 1600;
  * in; without terraces, the smoothed heights alone); `lifted` then raises it where the region stands high.
  */
 function terraced(h0) {
-  const big = boxMean(h0, NX, NZ, BIG_R);
+  const big = blur(h0, NX, NZ, BIG_R);
   const equalised = new Float32Array(h0.length);
   for (let k = 0; k < h0.length; k++) equalised[k] = big[k] + (h0[k] - big[k]) * FINE;
   return terracedFrom(equalised);
@@ -311,7 +320,7 @@ function terraced(h0) {
  */
 function lifted(h, h0, gain) {
   if (!gain) return h;
-  const region = boxMean(h0, NX, NZ, MOUNT_R);
+  const region = blur(h0, NX, NZ, MOUNT_R);
   let low = Infinity;
   for (const v of h0) low = Math.min(low, v);
   const out = new Float32Array(h.length);
@@ -321,12 +330,12 @@ function lifted(h, h0, gain) {
 
 /** The terraced heights of `h0` (see `terraced`): bands of TERRACE m, DETAIL of the smoothed heights mixed back. */
 function terracedFrom(h0) {
-  const detail = SMOOTH ? boxMean(h0, NX, NZ, SMOOTH) : h0;
+  const detail = SMOOTH ? blur(h0, NX, NZ, SMOOTH) : h0;
   if (!TERRACE) return detail;
-  const field = boxMean(h0, NX, NZ, TERRACE_SMOOTH);
+  const field = blur(h0, NX, NZ, TERRACE_SMOOTH);
   const bands = new Float32Array(h0.length);
   for (let k = 0; k < bands.length; k++) bands[k] = Math.floor(field[k] / TERRACE) * TERRACE;
-  const steps = boxMean(bands, NX, NZ, 1);
+  const steps = blur(bands, NX, NZ, 1);
   const out = new Float32Array(h0.length);
   for (let k = 0; k < out.length; k++) out[k] = steps[k] * (1 - DETAIL) + detail[k] * DETAIL;
   return out;
@@ -352,7 +361,7 @@ function bakeRelief(h0) {
   const L = [NW[0] * Math.cos(el), Math.sin(el), NW[1] * Math.cos(el)];
 
   // the cast shadow from the large forms
-  const castH = boxMean(h, NX, NZ, CAST_SMOOTH);
+  const castH = blur(h, NX, NZ, CAST_SMOOTH);
   const lit = new Float32Array(NX * NZ);
   const line = new Float32Array(NX * NZ);
   for (let j = NZ - 1; j >= 0; j--) {
@@ -365,8 +374,8 @@ function bakeRelief(h0) {
   }
 
   // exposure: how far a node stands above or below its surroundings, near (about 1.5 km) and wide (about 6 km)
-  const near = boxMean(shaped, NX, NZ, 6);
-  const wide = boxMean(shaped, NX, NZ, 24);
+  const near = blur(shaped, NX, NZ, 6);
+  const wide = blur(shaped, NX, NZ, 24);
 
   const out = new Uint8Array(NX * NZ * 4);
   for (let j = 0; j < NZ; j++) {
@@ -786,7 +795,7 @@ function displacement(shaped) {
   for (const v of shaped) low = Math.min(low, v);
   const above = new Float32Array(shaped.length);
   for (let k = 0; k < above.length; k++) above[k] = shaped[k] - low;
-  return boxMean(above, NX, NZ, DISP_SMOOTH);
+  return blur(above, NX, NZ, DISP_SMOOTH);
 }
 
 /**
@@ -917,7 +926,7 @@ const heights = decodeHeights();
 
 const tBake = performance.now();
 // the heights smoothed for the contours
-const contourField = boxMean(heights, NX, NZ, CONTOUR_SMOOTH);
+const contourField = blur(heights, NX, NZ, CONTOUR_SMOOTH);
 const { bytes: reliefBytes, base: representative, shaped: lightHeights } = bakeRelief(heights);
 const DISP = displacement(lifted(representative, heights, MOUNT));
 const maxTextureSize = engine.getCaps().maxTextureSize;

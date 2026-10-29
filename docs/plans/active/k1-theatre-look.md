@@ -127,7 +127,10 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   read takes at texel centres sampled nearest (the bilinear filter rounded the coordinates and mixed in a neighbour:
   specks on steep slopes); the baked cast shadow read by a cubic B-spline (bilinear, its edges stepped along the
   250 m grid). Still seen up close: the 1 km mesh's facets on the alpine skyline (K3). A frame at 1600 × 900: 2.8 ms
-  still, 9.9 ms with the ink. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  still, 9.9 ms with the ink. Then (the owner: "somewhere there's still this carreaux effect"): every smoothing at load (the large
+  forms, the mountain lift's region, the cast shadow's forms, the exposure, the contour field, the displacement) a
+  box mean, whose square, grid-aligned edges showed in the light: now three box means of a third of the width, which
+  approach a Gaussian. The bake at load went from 1.5 to 3.2 s on test machine A (an offline bake, K3). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
