@@ -90,8 +90,13 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   representative"): the relief's shape at about 6 km kept whole and its smaller detail halved (`?fine=`, the
   research note's band smoothing in its simplest form), then heights above the lowlands lifted up to three times
   where the wider region (about 12 km) stands from 500 to 1,600 m (`?mount=`): the plains stay flat, the ranges rise
-  as masses with long shadows. Still a flat plane: the mountains look big by their light, not by their shape on
-  screen. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  as masses with long shadows. Eighth (the owner: "yes try that and makes mountains even bigger"): the map raised in 3D, a
+  mesh with a vertex about every km, displaced in the vertex shader by the representative heights lifted ×4
+  (`?mount=`), 1.5 km of map a km of them (`?rise=`), smoothed over 2 cells, flat over the last 12 km to the plate's
+  edge; the ink projected at the same height, so roads and rivers drape over the ranges; the camera kept above the
+  ground. The light reads a milder lift (×1.5, `?mountlight=`): lifted as much, the cast shadows swallowed the
+  valleys. Ink behind a raised range still shows through it, and picking still reads the flat plane (K3). A frame,
+  GPU waited for, at 1600 × 900 on test machine A: 0.9 ms still, 7.3 ms with the ink redrawn. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast

@@ -86,8 +86,9 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * shade comes to a warm black (0.88); ?terrace= the terraces' height in metres (half the contour interval; 0 off);
  * ?detail= the real relief mixed back over them (0.3); ?smooth= the real relief's smoothing in cells (1); ?contour=
  * the contour interval in metres (200); ?view=x,z,km the target in km from the centre, east and north, and the
- * camera distance; ?theatre= the generated file; ?mount= the mountains' extra lift (2; 0 true heights); ?fine=
- * the relief's small detail kept (0.5).
+ * camera distance; ?theatre= the generated file; ?mount= the mountains' extra lift (4; 0 true heights); ?fine=
+ * the relief's small detail kept (0.5); ?rise= the map's 3D rise per km of those heights (1.5; 0 flat);
+ * ?mountlight= the milder lift the light reads (1.5).
  */
 'use strict';
 const t0 = performance.now();
@@ -241,7 +242,15 @@ const DETAIL = param('detail', 0.3, 0, 1);
 // the plains stay flat, the Alps tower and throw long shadows
 const BIG_R = 12;
 const FINE = param('fine', 0.5, 0, 1);
-const MOUNT = param('mount', 2, 0, 8);
+const MOUNT = param('mount', 4, 0, 12);
+// the light reads a milder lift than the 3D shape: lifted as much, the cast shadows would swallow the valleys
+const MOUNT_LIGHT = param('mountlight', 1.5, 0, 12);
+// the map raised in 3D by the same representative heights, RISE km of map for each km of them, smoothed over
+// DISP_SMOOTH cells (the mesh has a vertex about every km), fading to flat over the last RISE_EDGE km to the plate's
+// edge so the map still lies on its table
+const RISE = param('rise', 1.5, 0, 6);
+const DISP_SMOOTH = 2;
+const RISE_EDGE = 12;
 const MOUNT_R = 24;
 const MOUNT_FROM = 500;
 const MOUNT_TO = 1600;
@@ -250,26 +259,26 @@ const MOUNT_TO = 1600;
  * The heights the light reads: the relief made representative (its large-scale shape whole, its detail scaled by
  * FINE), terraced (smoothed over TERRACE_SMOOTH cells and snapped down to its TERRACE band, each step softened over a
  * cell either side so it is a steep bank rather than a cliff, with DETAIL of it smoothed over SMOOTH cells mixed back
- * in; without terraces, the smoothed heights alone), then lifted where the region stands high.
+ * in; without terraces, the smoothed heights alone); `lifted` then raises it where the region stands high.
  */
 function terraced(h0) {
   const big = boxMean(h0, NX, NZ, BIG_R);
   const equalised = new Float32Array(h0.length);
   for (let k = 0; k < h0.length; k++) equalised[k] = big[k] + (h0[k] - big[k]) * FINE;
-  return lifted(terracedFrom(equalised), h0);
+  return terracedFrom(equalised);
 }
 
 /**
- * The heights above the lowlands lifted by 1 + MOUNT · how high the wider region stands (from MOUNT_FROM to MOUNT_TO
+ * The heights above the lowlands lifted by 1 + gain · how high the wider region stands (from MOUNT_FROM to MOUNT_TO
  * m, smoothly), so a mountain range rises as a mass while the plains stay as they are.
  */
-function lifted(h, h0) {
-  if (!MOUNT) return h;
+function lifted(h, h0, gain) {
+  if (!gain) return h;
   const region = boxMean(h0, NX, NZ, MOUNT_R);
   let low = Infinity;
   for (const v of h0) low = Math.min(low, v);
   const out = new Float32Array(h.length);
-  for (let k = 0; k < h.length; k++) out[k] = low + (h[k] - low) * (1 + MOUNT * sstep(MOUNT_FROM, MOUNT_TO, region[k]));
+  for (let k = 0; k < h.length; k++) out[k] = low + (h[k] - low) * (1 + gain * sstep(MOUNT_FROM, MOUNT_TO, region[k]));
   return out;
 }
 
@@ -287,7 +296,8 @@ function terracedFrom(h0) {
 }
 
 /**
- * The shaded relief, baked once at load into RGBA bytes the size of the grid, the south row first: R the slope light
+ * The shaded relief, baked once at load into RGBA bytes (`bytes`) the size of the grid, with the heights the light read
+ * before their lift (`base`), the south row first: R the slope light
  * (Lambert over LAMBERT_RANGE), G the cast shadow (1 lit, 0 in shadow), B the exposure (0.5 even, lower in valleys,
  * higher on crests). The battle map bake (prototypes/staff-map.html, bakeRelief) at the theatre scale.
  *
@@ -296,7 +306,8 @@ function terracedFrom(h0) {
  * north-west neighbour is (i - 1, j + 1), so the walk goes north to south, west to east.
  */
 function bakeRelief(h0) {
-  const shaped = terraced(h0);
+  const base = terraced(h0);
+  const shaped = lifted(base, h0, MOUNT_LIGHT);
   const h = new Float32Array(h0.length);
   for (let k = 0; k < h.length; k++) h[k] = shaped[k] * RELIEF_Z;
   const el = (RELIEF_SUN * Math.PI) / 180;
@@ -334,7 +345,7 @@ function bakeRelief(h0) {
       out[o + 3] = 255;
     }
   }
-  return out;
+  return { bytes: out, base };
 }
 
 /**
@@ -447,10 +458,17 @@ B.Effect.ShadersStore.printVertexShader = `
 precision highp float;
 attribute vec3 position;
 uniform mat4 worldViewProjection;
+uniform sampler2D uDisp;
+uniform vec2 uHalf, uTexel;
+uniform float uCellKm, uRise, uEdge;
 varying vec2 vW;
 void main() {
   vW = position.xz;
-  gl_Position = worldViewProjection * vec4(position, 1.0);
+  /* raised by the representative heights, flat at the plate edge and on the table beyond it */
+  vec2 uv = ((position.xz + uHalf) / uCellKm + 0.5) * uTexel;
+  float fade = smoothstep(0.0, uEdge, min(uHalf.x - abs(position.x), uHalf.y - abs(position.z)));
+  float y = position.y + texture2D(uDisp, uv).r / 1000.0 * uRise * fade;
+  gl_Position = worldViewProjection * vec4(position.x, y, position.z, 1.0);
 }`;
 
 B.Effect.ShadersStore.printFragmentShader = `
@@ -576,6 +594,44 @@ function contourTexture(smooth) {
   return t;
 }
 
+/** How far the map rises above the plate, in metres of representative height above the lowest, smoothed. */
+function displacement(shaped) {
+  let low = Infinity;
+  for (const v of shaped) low = Math.min(low, v);
+  const above = new Float32Array(shaped.length);
+  for (let k = 0; k < above.length; k++) above[k] = shaped[k] - low;
+  return boxMean(above, NX, NZ, DISP_SMOOTH);
+}
+
+/** The displacement as a half-float single-channel texture for the vertex shader (bilinear, no mips). */
+function displacementTexture(disp) {
+  const half = new Uint16Array(disp.length);
+  for (let k = 0; k < half.length; k++) half[k] = toHalf(disp[k]);
+  const t = B.RawTexture.CreateRTexture(
+    half, NX, NZ, scene, false, false, B.Texture.BILINEAR_SAMPLINGMODE, B.Engine.TEXTURETYPE_HALF_FLOAT,
+  );
+  t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+  return t;
+}
+
+/**
+ * How high the map stands at a point (map metres), in km: the displacement read bilinearly, as the vertex shader
+ * reads it, times RISE, faded to the plate's edge. The ink is projected at this height so it lies on the raised map.
+ */
+function riseAt(x, z) {
+  const fx = clamp((x + halfX) / CELL, 0, NX - 1.001);
+  const fz = clamp((z + halfZ) / CELL, 0, NZ - 1.001);
+  const i = Math.floor(fx);
+  const j = Math.floor(fz);
+  const u = fx - i;
+  const v = fz - j;
+  const k = j * NX + i;
+  const top = DISP[k] * (1 - u) + DISP[k + 1] * u;
+  const bottom = DISP[k + NX] * (1 - u) + DISP[k + NX + 1] * u;
+  const edge = Math.min(halfX - Math.abs(x), halfZ - Math.abs(z)) / 1000;
+  return ((top * (1 - v) + bottom * v) / 1000) * RISE * sstep(0, RISE_EDGE, edge);
+}
+
 /** A raw RGBA or single-channel texture, clamped, mipmapped (trilinear), so it does not shimmer when minified. */
 function rawTexture(data, w, h, format) {
   const t = new B.RawTexture(data, w, h, format, scene, true, false, B.Texture.TRILINEAR_SAMPLINGMODE);
@@ -588,7 +644,8 @@ const heights = decodeHeights();
 const tBake = performance.now();
 // the heights smoothed for the contours
 const contourField = boxMean(heights, NX, NZ, CONTOUR_SMOOTH);
-const reliefBytes = bakeRelief(heights);
+const { bytes: reliefBytes, base: representative } = bakeRelief(heights);
+const DISP = displacement(lifted(representative, heights, MOUNT));
 const maxTextureSize = engine.getCaps().maxTextureSize;
 if (Math.max(NX, NZ) > maxTextureSize) throw new Error(`the theatre grid (${NX} × ${NZ}) passes this GPU's textures`);
 const lakes = bakeLakes(maxTextureSize);
@@ -599,9 +656,10 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
   attributes: ['position'],
   uniforms: [
     'worldViewProjection', 'uHalf', 'uTexel', 'uLakeTexel', 'uCellKm', 'uLightXZ',
-    'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uHighlight', 'uFloor', 'uTop', 'uContour', 'uDark', 'uBase', 'uShadeK',
+    'uRise', 'uEdge', 'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uHighlight',
+    'uFloor', 'uTop', 'uContour', 'uDark', 'uBase', 'uShadeK',
   ],
-  samplers: ['uRelief', 'uLakes', 'uPaperT', 'uHeight'],
+  samplers: ['uRelief', 'uLakes', 'uPaperT', 'uHeight', 'uDisp'],
 });
 material.setTexture('uRelief', rawTexture(reliefBytes, NX, NZ, B.Engine.TEXTUREFORMAT_RGBA));
 material.setTexture('uHeight', contourTexture(contourField));
@@ -627,8 +685,20 @@ material.setFloat('uFloor', SHADE_FLOOR);
 material.setFloat('uTop', SHADE_TOP);
 material.setFloat('uContour', CONTOUR);
 
-const plane = B.MeshBuilder.CreateGround('print', { width: MAP_W + 2 * TABLE, height: MAP_H + 2 * TABLE }, scene);
+material.setTexture('uDisp', displacementTexture(DISP));
+material.setFloat('uRise', RISE);
+material.setFloat('uEdge', RISE_EDGE);
+
+// the table: one flat quad a little below the map; the map: a vertex about every km, raised in the vertex shader
+const table = B.MeshBuilder.CreateGround('table', { width: MAP_W + 2 * TABLE, height: MAP_H + 2 * TABLE }, scene);
+table.position.y = -0.05;
+table.material = material;
+const plane = B.MeshBuilder.CreateGround(
+  'print', { width: MAP_W, height: MAP_H, subdivisionsX: Math.round(MAP_W), subdivisionsY: Math.round(MAP_H) }, scene,
+);
 plane.material = material;
+// raised in the shader, beyond the flat bounding box Babylon culls by
+plane.alwaysSelectAsActiveMesh = true;
 
 /* =========================================================================
    CAMERA: tilted 20 degrees off straight down, north up; pan by drag, zoom to the cursor
@@ -641,7 +711,7 @@ cam.minZ = 1;
 cam.maxZ = 20000;
 // the target on the map (km, x east, z north) and the camera distance from it (km)
 const view = { x: 0, z: 0, dist: 1150 };
-const DIST_MIN = 25;
+const DIST_MIN = 30;
 const DIST_MAX = 1300;
 (() => {
   const v = (Q.get('view') || '').split(',').map(Number);
@@ -653,6 +723,8 @@ function placeCamera() {
   view.dist = clamp(view.dist, DIST_MIN, DIST_MAX);
   view.x = clamp(view.x, -MAP_W / 2, MAP_W / 2);
   view.z = clamp(view.z, -MAP_H / 2, MAP_H / 2);
+  // never inside a mountain: the camera stays well above the raised ground under its target
+  view.dist = Math.max(view.dist, (riseAt(view.x * 1000, view.z * 1000) + 15) / Math.cos(TILT));
   cam.position.set(view.x, view.dist * Math.cos(TILT), view.z - view.dist * Math.sin(TILT));
   cam.setTarget(new B.Vector3(view.x, 0, view.z));
   dirty = true;
@@ -733,12 +805,17 @@ sizeInk();
 // before the perspective divide, which would flip them
 const W_NEAR = 0.5;
 
-/** Map metres to clip space, as [cx, cy, cw], through the camera's view and projection. */
+/** Map metres to clip space, as [cx, cy, cw], through the camera's view and projection, on the raised map. */
 function toClip(x, z) {
   const m = VP;
   const X = x / 1000;
+  const Y = riseAt(x, z);
   const Z = z / 1000;
-  return [X * m[0] + Z * m[8] + m[12], X * m[1] + Z * m[9] + m[13], X * m[3] + Z * m[11] + m[15]];
+  return [
+    X * m[0] + Y * m[4] + Z * m[8] + m[12],
+    X * m[1] + Y * m[5] + Z * m[9] + m[13],
+    X * m[3] + Y * m[7] + Z * m[11] + m[15],
+  ];
 }
 
 /** A clip-space point in front of the camera to CSS pixels on screen. */
