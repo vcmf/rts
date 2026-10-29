@@ -1,8 +1,8 @@
 # Coverage is reported, not enforced: the statuses inform and never fail a PR.
-# CI's coverage job runs in three shards, each uploading its part: Codecov reports once all three are in.
+# CI's coverage job runs in five shards, each uploading its part: Codecov reports once all five are in.
 codecov:
   notify:
-    after_n_builds: 3
+    after_n_builds: 5
 coverage:
   status:
     project:
@@ -14,4 +14,4 @@ coverage:
 comment:
   layout: "diff, files"
   require_changes: true
-  after_n_builds: 3
+  after_n_builds: 5

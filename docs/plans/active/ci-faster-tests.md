@@ -3,7 +3,7 @@ status: active
 last_reviewed: 2026-10-29
 ---
 
-# Plan: CI's tests in shards, the bench split
+# Plan: CI's tests and coverage in shards, the bench split
 
 ## Problem
 
@@ -34,9 +34,9 @@ what the tests check, which tests the coverage run skips (`longIt`), the test bu
 2. **The bench in five files.** The plain cases' invariants in two shares (`test/bench-plain-{1,2}.test.ts`), the
    claim cases' in two (`test/bench-claim-{1,2}.test.ts`), X-14, the queue and the melee in `test/bench.test.ts`.
    Same tests, same titles under the same describes.
-3. **Tests and coverage in three shards each.** `vitest run --shard=i/3` in a matrix (the repo is public: the runners
+3. **Tests in three shards, coverage in five.** `vitest run --shard=i/n` in a matrix (the repo is public: the runners
    cost nothing). Vitest gives each shard a third of the files by a hash of their paths. Each coverage shard uploads
-   its own `lcov.info`; Codecov merges them, and `codecov.yml` waits for all three before it reports. The check job
+   its own `lcov.info`; Codecov merges them, and `codecov.yml` waits for all five before it reports. The check job
    keeps lint, format, types, data, docs and build.
 4. **Vitest's results cache restored per shard.** Without it Vitest starts the largest files first, and the bench's
    files are four lines long; with it, the longest first. Pushes save it (a PR's cache would serve only that PR).
@@ -56,8 +56,10 @@ the epic's own commits covered to compare a PR with, and with shards the run no 
 On the dev Mac (10 cores), the bench alone: 264 s in one file before; 56 s in five after. Under coverage, after: the
 five files 150, 191, 190, 242 and 83 s, 243 s in all side by side.
 
-Estimate for CI, from run 40802708005's times per file with the bench's new ones: 3266 s of tests, the shards' sums
-790, 1256 and 1170 s, each over the runner's workers (Vitest uses all cores but one). To be measured on this PR.
+On CI, three shards each (run 40832173191, by hand, no results cache yet): check 1 min; the test shards 3.3, 3.3 and
+3.9 min (7–12 min before); the coverage shards 13.8, 16.3 and 20.1 min (33 min and more before). The runner is about
+2.4 times slower than the dev Mac under coverage (`bench-claim-2` 582 s against 242 s), and the slowest shard's longest
+file was under half of it: the shards were full, not held up by one file. So coverage went to five shards (below).
 
 ## Open questions
 

@@ -3,8 +3,9 @@
 # test: the same events. Vitest, in three shards run side by side (vitest's --shard splits the files by a hash of
 # their paths); a test file's tests run one after another, so a long file is split in several (the bench:
 # test/bench-fx.ts). Each shard restores vitest's results cache, so its longest files start first.
-# coverage: PRs into an epic/** branch, pushes to main or an epic/** branch, and by hand; not PRs into main. In three
-# shards too, each uploading its own report: Codecov merges them (codecov.yml waits for all three).
+# coverage: PRs into an epic/** branch, pushes to main or an epic/** branch, and by hand; not PRs into main. In five
+# shards, each uploading its own report: Codecov merges them (codecov.yml waits for all five). Its work is about
+# five times the test job's: in three shards it took 13–20 min (run 40832173191).
 # Coverage instrumentation makes the sim's long scenarios about six times slower, so the coverage run skips the
 # tests marked longIt (test/fx.ts; they run in test): 144 s locally instead of 317 s, for 0.6 points of
 # statement coverage. A test there has a longer budget than in test (vitest.config.ts).
@@ -72,7 +73,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -85,7 +86,7 @@ jobs:
           path: node_modules/.vite/vitest
           key: vitest-coverage-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: vitest-coverage-${{ matrix.shard }}-
-      - run: npm run coverage -- --shard=${{ matrix.shard }}/3
+      - run: npm run coverage -- --shard=${{ matrix.shard }}/5
       - if: github.event_name == 'push'
         uses: actions/cache/save@v4
         with:

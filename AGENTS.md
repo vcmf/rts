@@ -49,7 +49,7 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
 - CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint, `format:check`,
   typecheck, `check:data`, `check:docs` and build in one job; Vitest in three shards side by side (a long test file is
   split in several: Vitest runs a file's tests one after another). On PRs into `epic/**` and on all those pushes, Vitest
-  with coverage, in three shards too, uploaded to Codecov (informational only). Coverage makes the suite about six times
+  with coverage, in five shards, uploaded to Codecov (informational only). Coverage makes the suite about six times
   slower, so that run skips the tests marked `longIt` (they run in the test job) and gives each test a longer budget.
   The cost tests skip when `CI` is set: run them locally. `npm run coverage` gives the same report locally (`coverage/`).
 - Regenerate model data: `node tools/obj-to-js.mjs`; `tools/blend-to-js.py` with Blender (see its header).
