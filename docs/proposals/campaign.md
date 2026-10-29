@@ -218,7 +218,7 @@ has to write the same contract.
 | Courier | about 12 km/h |
 | Getting under way | about 1 hour |
 | Stragglers of a forced march | 10–20 % of each battalion, back in 1–2 days |
-| Battle zone | a few km, inside the 2–6 km battle map |
+| Battle zone | 2.5 km from the battle's centre, inside its map (at most 6 km a side) |
 
 ## The models in code
 
@@ -235,9 +235,14 @@ The numbers and rules above are code in `src/campaign/` (exact maths, as the sim
 | The road network (a road's length its line's) and the fastest route, the same on every machine | `src/campaign/roads.ts` |
 | The day as a timeline, ordered by time, then id | `src/campaign/timeline.ts` |
 
-Contact is exact rather than tested at ticks: two corps closing on a road at 6 km/h cross a 1.5 km radius in
-15 seconds, which a 10-minute tick would miss. Between two waypoints both move in straight lines, so the moment of
-contact is the first root of a quadratic.
+Contact is exact rather than tested at ticks: a 10-minute tick finds two corps closing at 6 km/h up to 10 minutes
+and a kilometre late, and a courier riding at 12 km/h through the edge of a zone (2 km of it inside) not at all.
+Between two waypoints both move in straight lines, so the moment of contact is the first root of a quadratic. A
+courier is caught when it is inside an enemy's zone and closing on that enemy: one sent from a battle rides out of
+the zone of the enemy its corps fights, unless its road leads toward that enemy.
+
+The battle zone is a radius that fits in the battle map (2.5 km: decision 0061's largest map is 6 km a side). Every
+road is taken at one speed for now: road kinds come with the theatre's data and the march (K3, K4).
 
 ## Alternatives considered
 

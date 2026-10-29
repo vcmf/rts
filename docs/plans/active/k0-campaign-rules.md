@@ -80,3 +80,12 @@ after); the map's code (K2a–K2d).
   agree); the graph prepared once and searched with a heap (the network will be Europe's); the docs' tie-break claim
   corrected; the stragglers and the help radius used; the lint block shared with the map engine and tested; the
   conventions and the index updated.
+- **Round 2**: severe: round 1's exemption let a courier ride straight through the enemy its corps fights. Fixed
+  exactly: a courier is caught when it is inside a zone and closing on the enemy (`firstClosing`, the quadratic's
+  roots and its vertex), so it gets away from its battle only by riding away; the nudges are gone. With: the battle
+  zone a radius that fits the largest battle map (2.5 km); a contact joins the nearest battle; the quadratic's roots
+  clamped to their interval (a pair on the radius at a corner is not lost to rounding); the road graph copied into a
+  network searched as built (a later change to the graph cannot make a live turn and its replay differ); positions
+  along a track in one sweep; no argument spread on long routes; stragglers in proportion to the forced march made;
+  the doc's case for exact contact corrected (a tick finds contact late, and misses a courier's short crossing);
+  road kinds named as K3–K4's.

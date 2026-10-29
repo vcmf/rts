@@ -29,6 +29,28 @@ export function positionAt(track: Track, t: number): { x: number; z: number } {
 }
 
 /**
+ * The positions on a track at rising times, in one sweep along the track (positionAt for each would scan it from
+ * the start every time: quadratic on a long route).
+ */
+export function positionsAt(track: Track, times: number[]): { x: number; z: number }[] {
+  const out: { x: number; z: number }[] = []
+  let k = 1
+  for (const t of times) {
+    while (k < track.length && track[k].t < t) k++
+    if (t <= track[0].t || k >= track.length) {
+      const w = t <= track[0].t ? track[0] : track[track.length - 1]
+      out.push({ x: w.x, z: w.z })
+      continue
+    }
+    const a = track[k - 1]
+    const b = track[k]
+    const u = (t - a.t) / (b.t - a.t)
+    out.push({ x: a.x + (b.x - a.x) * u, z: a.z + (b.z - a.z) * u })
+  }
+  return out
+}
+
+/**
  * The track of something leaving the start of a route (points in metres) at `startMin` and keeping to it at
  * `speed` metres a minute, to its end.
  */

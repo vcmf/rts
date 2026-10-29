@@ -15,6 +15,7 @@ export const napoleonicCampaign: CampaignRules = {
   courierKmPerHour: 12,
   underWayMin: 60,
   contactRadiusM: 1500,
-  battleZoneM: 4000,
+  // a radius: a battle's zone fits in its map (6 km a side at most, decision 0061: 3 km from its centre)
+  battleZoneM: 2500,
   helpRadiusM: 25000,
 }

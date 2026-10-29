@@ -22,7 +22,7 @@ the day's loop (orders, standing orders, the turn) comes later in the track. The
 | Size | full speed up to 6 units, 3 % slower a unit more, 20 % at most |
 | Column | 2 km of road a unit |
 | Courier | 12 km/h; a corps gets under way in an hour |
-| Contact, battle zone, help | 1.5 km, 4 km, 25 km by road |
+| Contact, battle zone, help | 1.5 km, 2.5 km (a radius: inside a 6 km battle map), 25 km by road |
 
 ## The models
 
@@ -31,15 +31,20 @@ the day's loop (orders, standing orders, the turn) comes later in the track. The
 - **Tracks** (`track.ts`): a moving corps or courier as timed waypoints, linear between them, still before the first
   and after the last; `walk` makes one from a route and a speed.
 - **Contact** (`contact.ts`): `firstContact` gives the earliest moment two tracks come within a radius, exactly:
-  between breakpoints the separation moves in a straight line, so contact is the first root of a quadratic.
-  `battleFor` joins a contact to the first battle whose zone it lies in, or starts one.
+  between breakpoints the separation moves in a straight line, so contact is the first root of a quadratic (its
+  roots clamped to the interval: a pair on the radius at a corner is not lost to rounding). `firstClosing` gives the
+  earliest moment one is inside the radius and closing on the other. `battleFor` joins a contact to the nearest
+  battle whose zone holds it, or starts one.
 - **Couriers** (`courier.ts`): `ride` takes the courier along its route and loses it to the first enemy whose
-  contact zone it enters (by time, then index), where it enters it; a zone it starts in (the battle it is sent from)
-  catches it only if it comes back in after leaving (`firstExit`, then contact again); a route of one town delivers
-  at once. `help` gives the head's and tail's arrival of the corps that heard the call, at a forced march, and the
-  share of its strength with it (stragglers left behind); `inHelpRadius` whether an ally is in reach.
-- **Roads** (`roads.ts`): the graph of towns and roads; `fastestRoute` (Dijkstra, the heap ordered by distance, then
-  town; a road's length is its line's), `routePoints` its line in the direction travelled.
+  zone it is inside and closing on (`firstClosing`, by time, then index), where that happens: a call leaves its
+  battle uncaught if it rides away from the enemy there, not if its road leads toward it; a route of one town
+  delivers at once. `help` gives the head's and tail's arrival of the corps that heard the call, at a forced march,
+  and the share of its strength with it (stragglers in proportion to the day's forced march it made);
+  `inHelpRadius` whether an ally is in reach.
+- **Roads** (`roads.ts`): the graph of towns and roads, made into a `network` (a copy, searched as it was built: a
+  changed graph makes a new network); `fastestRoute` (Dijkstra, the heap ordered by distance, then town; a road's
+  length is its line's; every road at one speed until road kinds come, K3–K4), `routePoints` its line in the
+  direction travelled.
 - **Timeline** (`timeline.ts`): the day's events, played in the order of their time, then id; an event may queue
   later ones.
 

@@ -1,8 +1,8 @@
 // When two moving things meet (docs/proposals/campaign.md, Contact and battle): the first moment two tracks come
-// within a radius, found exactly rather than at the next tick, so two corps on one road meet at the minute they do
-// and a courier is caught where it enters an enemy's zone. And whether a contact joins a battle being fought or
-// starts its own.
-import { positionAt, type Track } from './track.ts'
+// within a radius, found exactly rather than at a tick (a 10-minute tick finds two corps closing at 6 km/h up to
+// 10 minutes and a kilometre late); the first moment a courier is inside an enemy's zone and closing on it, where it
+// is caught; and which battle a contact joins.
+import { positionsAt, type Track } from './track.ts'
 
 /** Every time either track turns (its waypoints' times) inside [t0, t1], with t0 and t1, in order. */
 function breakpoints(a: Track, b: Track, t0: number, t1: number): number[] {
@@ -14,76 +14,85 @@ function breakpoints(a: Track, b: Track, t0: number, t1: number): number[] {
 }
 
 /**
- * The earliest time in [t0, t1] at which tracks a and b are within `radius` metres, or null if they never are.
- * Between breakpoints both move in straight lines, so their separation is d(s) = d0 + v·s: within the radius where
- * |d0 + v·s|² ≤ r², a quadratic in s, whose first root is the moment of contact.
+ * The separation of b from a over one interval between breakpoints, where both move in straight lines: d(s) =
+ * d0 + v·s for s in [0, span], s from the interval's start. Within the radius r where |d(s)|² ≤ r², which is
+ * qa·s² + 2·half·s + c ≤ 0 (qa = |v|², half = d0·v, c = |d0|² − r²): between the roots s1 ≤ s2. The separation
+ * shrinks while d·v < 0, that is before the vertex s* = −half / qa.
+ */
+interface Interval {
+  ts: number
+  span: number
+  qa: number
+  half: number
+  c: number
+}
+
+/** The intervals of [t0, t1] between the two tracks' breakpoints, each with its separation's quadratic. */
+function intervals(a: Track, b: Track, radius: number, t0: number, t1: number): Interval[] {
+  if (t1 < t0) throw new RangeError(`contact: the window ends (${t1}) before it starts (${t0})`)
+  const times = breakpoints(a, b, t0, t1)
+  const pa = positionsAt(a, times)
+  const pb = positionsAt(b, times)
+  const out: Interval[] = []
+  const last = Math.max(1, times.length - 1)
+  for (let k = 0; k < last; k++) {
+    const e = Math.min(k + 1, times.length - 1)
+    const span = times[e] - times[k]
+    const dx = pb[k].x - pa[k].x
+    const dz = pb[k].z - pa[k].z
+    const vx = span > 0 ? (pb[e].x - pa[e].x - dx) / span : 0
+    const vz = span > 0 ? (pb[e].z - pa[e].z - dz) / span : 0
+    out.push({
+      ts: times[k],
+      span,
+      qa: vx * vx + vz * vz,
+      half: dx * vx + dz * vz,
+      c: dx * dx + dz * dz - radius * radius,
+    })
+  }
+  return out
+}
+
+/** The roots s1 ≤ s2 of an interval's quadratic, or null when the separation never comes within the radius. */
+function roots(iv: Interval): [number, number] | null {
+  if (iv.qa === 0) return iv.c <= 0 ? [-Infinity, Infinity] : null
+  const disc = iv.half * iv.half - iv.qa * iv.c
+  if (disc < 0) return null
+  const root = Math.sqrt(disc)
+  return [(-iv.half - root) / iv.qa, (-iv.half + root) / iv.qa]
+}
+
+/**
+ * The earliest time in [t0, t1] at which tracks a and b are within `radius` metres, or null if they never are:
+ * per interval, the first s in [0, span] between the roots (clamped to the interval, so a pair just on the radius
+ * at a breakpoint is not lost to rounding).
  */
 export function firstContact(a: Track, b: Track, radius: number, t0: number, t1: number): number | null {
-  if (t1 < t0) throw new RangeError(`firstContact: the window ends (${t1}) before it starts (${t0})`)
-  const r2 = radius * radius
-  if (within(a, b, r2, t0)) return t0
-  const times = breakpoints(a, b, t0, t1)
-  for (let k = 0; k < times.length - 1; k++) {
-    const ts = times[k]
-    const te = times[k + 1]
-    const pa = positionAt(a, ts)
-    const pb = positionAt(b, ts)
-    const qa = positionAt(a, te)
-    const qb = positionAt(b, te)
-    const dx = pb.x - pa.x
-    const dz = pb.z - pa.z
-    if (dx * dx + dz * dz <= r2) return ts
-    const span = te - ts
-    // the separation's change a minute
-    const vx = (qb.x - qa.x - dx) / span
-    const vz = (qb.z - qa.z - dz) / span
-    const qa2 = vx * vx + vz * vz
-    if (qa2 === 0) continue
-    const half = dx * vx + dz * vz
-    const disc = half * half - qa2 * (dx * dx + dz * dz - r2)
-    if (disc < 0) continue
-    const s = (-half - Math.sqrt(disc)) / qa2
-    if (s >= 0 && s <= span) return ts + s
+  for (const iv of intervals(a, b, radius, t0, t1)) {
+    const r = roots(iv)
+    if (r === null) continue
+    const from = Math.max(0, r[0])
+    if (from <= Math.min(iv.span, r[1])) return iv.ts + from
   }
   return null
 }
 
 /**
- * The earliest time in [t0, t1] at which tracks a and b, within `radius` at t0, are no longer within it, or null if
- * they stay within it: the later root of the same quadratic as firstContact's, the first interval where it falls.
+ * The earliest time in [t0, t1] at which b is within `radius` of a and closing on it, or null: how a courier (a) is
+ * caught by an enemy (b). One that enters the zone is closing as it enters; one that starts inside it (the battle it
+ * is sent from) is caught at once if it rides toward the enemy, and not while it rides away: per interval, the s in
+ * [0, span] between the roots and before the vertex, where the separation shrinks.
  */
-export function firstExit(a: Track, b: Track, radius: number, t0: number, t1: number): number | null {
-  if (t1 < t0) throw new RangeError(`firstExit: the window ends (${t1}) before it starts (${t0})`)
-  const r2 = radius * radius
-  const times = breakpoints(a, b, t0, t1)
-  for (let k = 0; k < times.length - 1; k++) {
-    const ts = times[k]
-    const te = times[k + 1]
-    const pa = positionAt(a, ts)
-    const pb = positionAt(b, ts)
-    const dx = pb.x - pa.x
-    const dz = pb.z - pa.z
-    if (dx * dx + dz * dz > r2) return ts
-    const qa = positionAt(a, te)
-    const qb = positionAt(b, te)
-    const span = te - ts
-    const vx = (qb.x - qa.x - dx) / span
-    const vz = (qb.z - qa.z - dz) / span
-    const qa2 = vx * vx + vz * vz
-    if (qa2 === 0) continue
-    const half = dx * vx + dz * vz
-    const disc = half * half - qa2 * (dx * dx + dz * dz - r2)
-    const s = (-half + Math.sqrt(Math.max(0, disc))) / qa2
-    if (s >= 0 && s < span) return ts + s
+export function firstClosing(a: Track, b: Track, radius: number, t0: number, t1: number): number | null {
+  for (const iv of intervals(a, b, radius, t0, t1)) {
+    if (iv.qa === 0) continue
+    const r = roots(iv)
+    if (r === null) continue
+    const from = Math.max(0, r[0])
+    const vertex = -iv.half / iv.qa
+    if (from < Math.min(iv.span, vertex)) return iv.ts + from
   }
   return null
-}
-
-/** Whether tracks a and b are within the radius (given squared) at time t. */
-export function within(a: Track, b: Track, r2: number, t: number): boolean {
-  const pa = positionAt(a, t)
-  const pb = positionAt(b, t)
-  return (pb.x - pa.x) * (pb.x - pa.x) + (pb.z - pa.z) * (pb.z - pa.z) <= r2
 }
 
 /** A battle being fought, as far as the contact rule reads it: where it is. */
@@ -93,15 +102,21 @@ export interface BattleSite {
 }
 
 /**
- * The battle a contact at (x, z) joins: the first (lowest index) whose centre lies within `zoneM`, or -1 when it
- * lies in none and starts a battle of its own (Plancenoit was part of Waterloo; Wavre, 15 km away, was not).
+ * The battle a contact at (x, z) joins: the nearest whose centre lies within `zoneM` (the lowest index on a tie), or
+ * -1 when it lies in none and starts a battle of its own (Plancenoit was part of Waterloo; Wavre, 15 km away, was
+ * not).
  */
 export function battleFor(battles: BattleSite[], x: number, z: number, zoneM: number): number {
-  const z2 = zoneM * zoneM
+  let best = -1
+  let bestD2 = zoneM * zoneM
   for (let k = 0; k < battles.length; k++) {
     const dx = battles[k].x - x
     const dz = battles[k].z - z
-    if (dx * dx + dz * dz <= z2) return k
+    const d2 = dx * dx + dz * dz
+    if (d2 < bestD2 || (d2 === bestD2 && best < 0)) {
+      best = k
+      bestD2 = d2
+    }
   }
-  return -1
+  return best
 }

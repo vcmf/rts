@@ -2,10 +2,10 @@
 // march speeds and columns, the exact moment of contact, the courier caught on its road, the help that arrives
 // about 9 hours after a morning call, the fastest road, and the timeline's order.
 import { describe, it, expect } from 'vitest'
-import { battleFor, firstContact, firstExit } from '../src/campaign/contact.ts'
+import { battleFor, firstClosing, firstContact } from '../src/campaign/contact.ts'
 import { help, inHelpRadius, ride } from '../src/campaign/courier.ts'
 import { arrival, columnLength, dayMarch, marchSpeed } from '../src/campaign/march.ts'
-import { fastestRoute, roadLength, routePoints, type RoadGraph } from '../src/campaign/roads.ts'
+import { fastestRoute, network, roadLength, routePoints, type RoadGraph } from '../src/campaign/roads.ts'
 import { Timeline } from '../src/campaign/timeline.ts'
 import { positionAt, standing, walk } from '../src/campaign/track.ts'
 import { napoleonicCampaign as rules } from '../src/rulesets/napoleonic-campaign.ts'
@@ -63,10 +63,38 @@ describe('contact', () => {
     expect(() => firstContact(standing(0, 0), standing(10, 0), 1500, 5, 4)).toThrow(RangeError)
   })
 
-  it('finds when two tracks part', () => {
-    // a courier at 200 m a minute leaving a corps standing at its start: out of 1.5 km after 7.5 minutes
-    const courier = walk(along(0, 25000), 0, 200)
-    expect(firstExit(courier, standing(0, 0), 1500, 0, 200)).toBeCloseTo(7.5, 9)
+  it('finds contact for a pair just on the radius at a breakpoint', () => {
+    // a corner of the route exactly 1.5 km from a standing enemy
+    const courier = walk(
+      [
+        { x: 0, z: 1500 },
+        { x: -3000, z: 1500 },
+      ],
+      10,
+      200,
+    )
+    expect(firstContact(courier, standing(0, 0), 1500, 10, 100)).toBe(10)
+  })
+
+  it('tells closing from parting inside a zone', () => {
+    const away = walk(along(0, -25000), 0, 200)
+    const toward = walk(along(0, 25000), 0, 200)
+    // the enemy 1 km east: riding west it parts from it, riding east it closes on it at once
+    expect(firstClosing(away, standing(1000, 0), 1500, 0, 125)).toBeNull()
+    expect(firstClosing(toward, standing(1000, 0), 1500, 0, 125)).toBe(0)
+  })
+
+  it('fits a battle zone in the largest battle map (6 km a side)', () => {
+    expect(rules.battleZoneM).toBeLessThanOrEqual(3000)
+  })
+
+  it('joins the nearest battle when zones overlap', () => {
+    const battles = [
+      { x: 0, z: 0 },
+      { x: 4000, z: 0 },
+    ]
+    expect(battleFor(battles, 2300, 0, rules.battleZoneM)).toBe(1)
+    expect(battleFor(battles, 2000, 0, rules.battleZoneM)).toBe(0)
   })
 
   it('joins a battle within its zone, starts one beyond', () => {
@@ -74,8 +102,8 @@ describe('contact', () => {
       { x: 0, z: 0 },
       { x: 20000, z: 0 },
     ]
-    // Plancenoit, about 3 km from the main fight: part of it
-    expect(battleFor(battles, 3000, 0, rules.battleZoneM)).toBe(0)
+    // a contact 2 km from the main fight, within its zone (2.5 km): part of it
+    expect(battleFor(battles, 2000, 0, rules.battleZoneM)).toBe(0)
     // Wavre, 15 km away: a battle of its own
     expect(battleFor(battles, 0, 15000, rules.battleZoneM)).toBe(-1)
   })
@@ -90,8 +118,10 @@ describe('couriers and help', () => {
     // under way in an hour, then 25 km at a forced 4 km/h: 6 h 15; the head at 9 h 20 after the call
     const { headMin, strength } = help(rules, 6, r.atMin, 25000)
     expect(headMin).toBeCloseTo(560, 9)
-    // the forced march leaves 15 % behind
-    expect(strength).toBeCloseTo(0.85, 9)
+    // 25 km of the forced march's 35 a day: 25/35 of its 15 % left behind
+    expect(strength).toBeCloseTo(1 - 0.15 * (25 / 35), 9)
+    // a full day's forced march or more: the whole 15 %
+    expect(help(rules, 6, 0, 40000).strength).toBeCloseTo(0.85, 9)
     expect(inHelpRadius(rules, 25000)).toBe(true)
     expect(inHelpRadius(rules, 25001)).toBe(false)
     expect(headMin / 60).toBeGreaterThan(9)
@@ -112,6 +142,11 @@ describe('couriers and help', () => {
     // the engaged corps at 0, the enemy it fights 1 km east; the call goes 25 km west
     const r = ride(rules, along(0, -25000), 0, [standing(1000, 0)])
     expect(r).toEqual({ delivered: true, atMin: 125 })
+  })
+
+  it('is caught at once if its road leads through the enemy its corps fights', () => {
+    const r = ride(rules, along(0, 25000), 0, [standing(1000, 0)])
+    expect(r).toEqual({ delivered: false, atMin: 0, by: 0, x: 0, z: 0 })
   })
 
   it('is caught by the enemy it rode away from if its road comes back into that enemy’s zone', () => {
@@ -197,16 +232,18 @@ describe('the roads', () => {
     ],
   }
 
+  const net = network(graph)
+
   it('measures a road by its line', () => {
     expect(roadLength(graph.roads[4])).toBeCloseTo(2 * Math.sqrt(15000 * 15000 + 5000 * 5000), 6)
   })
 
   it('takes the shortest way, the same one every time on a tie', () => {
-    const route = fastestRoute(graph, 0, 2)
+    const route = fastestRoute(net, 0, 2)
     expect(route).not.toBeNull()
     expect(route!.lengthM).toBe(20000)
     expect(route!.towns).toEqual([0, 1, 2])
-    expect(routePoints(graph, route!)).toEqual([
+    expect(routePoints(net, route!)).toEqual([
       { x: 0, z: 0 },
       { x: 10000, z: 0 },
       { x: 10000, z: 10000 },
@@ -214,18 +251,25 @@ describe('the roads', () => {
   })
 
   it('walks a road backwards when the route takes it from its far end', () => {
-    const route = fastestRoute(graph, 2, 0)!
-    expect(routePoints(graph, route)[0]).toEqual({ x: 10000, z: 10000 })
+    const route = fastestRoute(net, 2, 0)!
+    expect(routePoints(net, route)[0]).toEqual({ x: 10000, z: 10000 })
   })
 
   it('routes a town to itself with no road, and a courier there arrives at once', () => {
-    const route = fastestRoute(graph, 1, 1)!
+    const route = fastestRoute(net, 1, 1)!
     expect(route).toEqual({ towns: [1], roads: [], lengthM: 0 })
-    expect(ride(rules, routePoints(graph, route), 30, [standing(500, 0)])).toEqual({ delivered: true, atMin: 30 })
+    expect(ride(rules, routePoints(net, route), 30, [standing(500, 0)])).toEqual({ delivered: true, atMin: 30 })
   })
 
   it('finds no route to a town no road reaches', () => {
-    expect(fastestRoute({ towns: 2, roads: [] }, 0, 1)).toBeNull()
+    expect(fastestRoute(network({ towns: 2, roads: [] }), 0, 1)).toBeNull()
+  })
+
+  it('does not see later changes to the graph it was built from', () => {
+    const g: RoadGraph = { towns: graph.towns, roads: [...graph.roads] }
+    const n = network(g)
+    g.roads.splice(0, 1)
+    expect(fastestRoute(n, 0, 2)!.towns).toEqual([0, 1, 2])
   })
 })
 

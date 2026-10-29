@@ -35,33 +35,40 @@ export function roadLength(road: Road): number {
   return length
 }
 
-/** What a search needs of a graph, built once per graph: the roads touching each town, and each road's length. */
-const prepared = new WeakMap<RoadGraph, { touching: number[][]; lengths: Float64Array }>()
+/**
+ * A road network ready to search: the graph's roads copied (a later change to the graph does not reach it: build a
+ * new network, so a replay that builds it fresh routes as the live turn did), the roads touching each town, and
+ * each road's length.
+ */
+export interface Network {
+  towns: number
+  roads: Road[]
+  touching: number[][]
+  lengths: Float64Array
+}
 
-function prepare(graph: RoadGraph) {
-  let p = prepared.get(graph)
-  if (!p) {
-    const touching: number[][] = Array.from({ length: graph.towns }, () => [])
-    graph.roads.forEach((r, k) => {
-      touching[r.a].push(k)
-      touching[r.b].push(k)
-    })
-    p = { touching, lengths: Float64Array.from(graph.roads, roadLength) }
-    prepared.set(graph, p)
-  }
-  return p
+/** A network from a road graph. */
+export function network(graph: RoadGraph): Network {
+  const roads = graph.roads.map(r => ({ a: r.a, b: r.b, points: r.points.map(p => ({ x: p.x, z: p.z })) }))
+  const touching: number[][] = Array.from({ length: graph.towns }, () => [])
+  roads.forEach((r, k) => {
+    touching[r.a].push(k)
+    touching[r.b].push(k)
+  })
+  return { towns: graph.towns, roads, touching, lengths: Float64Array.from(roads, roadLength) }
 }
 
 /**
  * The shortest route by road from town `from` to town `to` (Dijkstra, a heap ordered by distance, then town index),
  * or null when no road leads there. Among routes of equal length, the one the search reaches first: the same for a
- * given graph on every machine (the graph is prepared once, then reused).
+ * given network on every machine. Every road is taken at one speed: road kinds (high road, country road) come with
+ * the theatre's data and the march (K3, K4).
  */
-export function fastestRoute(graph: RoadGraph, from: number, to: number): Route | null {
-  const { touching, lengths } = prepare(graph)
-  const dist = new Float64Array(graph.towns).fill(Infinity)
-  const viaRoad = new Int32Array(graph.towns).fill(-1)
-  const done = new Uint8Array(graph.towns)
+export function fastestRoute(net: Network, from: number, to: number): Route | null {
+  const { touching, lengths } = net
+  const dist = new Float64Array(net.towns).fill(Infinity)
+  const viaRoad = new Int32Array(net.towns).fill(-1)
+  const done = new Uint8Array(net.towns)
   const queue = new Timeline<null>()
   dist[from] = 0
   queue.push({ t: 0, id: from, data: null })
@@ -71,7 +78,7 @@ export function fastestRoute(graph: RoadGraph, from: number, to: number): Route 
     done[town] = 1
     if (town === to) break
     for (const k of touching[town]) {
-      const r = graph.roads[k]
+      const r = net.roads[k]
       const next = r.a === town ? r.b : r.a
       const d = dist[town] + lengths[k]
       if (d < dist[next]) {
@@ -87,19 +94,20 @@ export function fastestRoute(graph: RoadGraph, from: number, to: number): Route 
   for (let t = to; t !== from;) {
     const k = viaRoad[t]
     roads.push(k)
-    t = graph.roads[k].a === t ? graph.roads[k].b : graph.roads[k].a
+    t = net.roads[k].a === t ? net.roads[k].b : net.roads[k].a
     towns.push(t)
   }
   return { towns: towns.reverse(), roads: roads.reverse(), lengthM: dist[to] }
 }
 /** A route's line, from its first town to its last, each road's points in the direction travelled. */
-export function routePoints(graph: RoadGraph, route: Route): { x: number; z: number }[] {
+export function routePoints(net: Network, route: Route): { x: number; z: number }[] {
   const out: { x: number; z: number }[] = []
   route.roads.forEach((k, step) => {
-    const r = graph.roads[k]
+    const r = net.roads[k]
     const forward = r.a === route.towns[step]
-    const pts = forward ? r.points : [...r.points].reverse()
-    out.push(...(out.length ? pts.slice(1) : pts))
+    const n = r.points.length
+    // a loop, not push(...points): a long traced road would pass the engine's limit on arguments
+    for (let i = out.length ? 1 : 0; i < n; i++) out.push(r.points[forward ? i : n - 1 - i])
   })
   return out
 }
