@@ -139,7 +139,7 @@ A router rallies as today (its run over, no enemy within `rally.safe`, no loss f
 | `toughness` (owed men ÷) | 0.9 | 1 | 1.1 | 1.2 | 1.3 | 1.4 |
 | `reload` (× `fire.reload`, `artillery.reload`) | 1.12 | 1 | 0.92 | 0.88 | 0.84 | 0.8 |
 | `precision` (× hit chance; canister's hits ×, roundshot's `spread` and `short` ÷) | 0.85 | 1 | 1.1 | 1.15 | 1.2 | 1.25 |
-| `drill` (× change times, Face about and, new, dressing) | 1.3 | 1 | 0.85 | 0.8 | 0.75 | 0.7 |
+| `drill` (× change times, Face about's, and the longest dressing) | 1.3 | 1 | 0.85 | 0.8 | 0.75 | 0.7 |
 | `react` (× `melee.refuge.react`) | 2.5 | 1 | 1 | 0.5 | 0.5 | 0.5 |
 | `pursue` (× `charge.pursue`) | 2 | 1 | 0.8 | 0.7 | 0.7 | 0.7 |
 
@@ -220,8 +220,8 @@ and its men lost at once, and a smaller bar breaks on contact, with no melee to 
 | `src/sim/morale.ts` | the bar: losses, shocks, recovery, the effective level, the states, rout and rally (§§ 3–6); `moraleShare(w, i)` for the page |
 | `src/sim/experience.ts` (new) | points and their credits, the level up (§ 7); `levelOf(w, i)`, the row's factors for the readers |
 | `src/sim/ruleset.ts`, `src/rulesets/napoleonic.ts` | `levels`, `points`, the morale numbers in points, the guards (§§ 8–9) |
-| `src/sim/fire.ts`, `src/sim/artillery.ts`, `src/sim/melee.ts` | toughness where men are owed (`oweByMen`, melee's `owe`), reload, precision, the credits; `react` and `pursue` |
-| `src/sim/formation.ts` | `drill` from the level, and scaling dressing too |
+| `src/sim/fire.ts`, `src/sim/artillery.ts`, `src/sim/melee.ts` | toughness where men are owed (`oweByMen`: volleys, guns, charges, melee), reload, precision, the credits; `react` and `pursue` |
+| `src/sim/formation.ts`, `src/sim/morale.ts` | `drill` from the level (set at the spawn), scaling the longest dressing too |
 | `src/sim/commands.ts` | `debug-spawn` takes `level` (default 2) and `bar` in place of `quality`; `debug-morale` sets `B` |
 | `src/sim/world.ts`, `src/sim/serialize.ts` | `level`, `pts`, `B`, `Bmax`, `cost`, `up` in place of `quality`, `morale`, `baseMen`; the save format moves |
 | `src/app/main.ts` | the panel: level, its name, the bar and how near the next level is |
@@ -230,9 +230,10 @@ and its men lost at once, and a smaller bar breaks on contact, with no melee to 
 
 - `test/morale.test.ts`: P-28 to P-37 on scripted battalions (the existing morale tests move onto the bar: the scale
   in § 8), and the reversed visiting order on the bar's state.
-- `test/experience.test.ts` (new): P-38 and P-39; each level's factors as a ratio against level 2 (B-02 on a change's
-  time, C-02's reload and precision on a volley's expected hits, toughness on owed men, E-05's reaction, E-08 and E-09's
-  pursuit); P-40 in `test/ruleset.test.ts`.
+- `test/experience.test.ts` (new): P-38 and P-39; each level's factors against level 2's (B-02 on a change's and
+  a Face about's time, exactly; C-02's reload on each new reload, within its jitter; precision and toughness on a
+  line's and a battery's canister losses over the same seeds, within 0.05 of the ratio; E-05's reaction and E-08 and
+  E-09's pursuit, exactly); P-40 in `test/ruleset.test.ts`.
 - **Calibrations:** C-01 (`tools/calibrate-fire.ts`, bars 114 and 71: the weaker breaks in 6–10 minutes); C-02 (level 3
   against level 1 at 100 m: the veteran wins clearly with about half the losses); H-04 (level 5 against two level 2
   battalions: holds a while, then loses); G-06 (level 6 stands about 2.5 times the fire of level 2). New cases in

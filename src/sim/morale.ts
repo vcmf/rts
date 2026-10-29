@@ -439,6 +439,7 @@ export function spawnMorale(w: World, i: number, level: number, bar?: number): v
   const f = w.f
   const L = w.cr.rs.levels[level - 1]
   f.level[i] = level
+  f.drill[i] = L.drill
   f.pts[i] = L.points
   f.up[i] = 0
   f.barMax[i] = bar ?? L.bar

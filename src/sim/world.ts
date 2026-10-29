@@ -6,7 +6,7 @@
 import type { SimData } from './data.ts'
 import { type RngState, seedRng } from './rng.ts'
 import type { Stamped } from './commands.ts'
-import type { Compiled, TypeTable } from './ruleset.ts'
+import type { Compiled, LevelDef, TypeTable } from './ruleset.ts'
 import type { Terrain } from './terrain.ts'
 import { buildTerrain } from './terrain.ts'
 import { type Handle, KIND_FORMATION, handleKind, handleIndex, handleGen, makeHandle } from './handle.ts'
@@ -402,4 +402,6 @@ export function formationSlot(w: World, h: Handle): number {
 }
 // formation i's unit type
 export const typeOf = (w: World, i: number): TypeTable => w.cr.types[w.f.type[i]]
+/** Formation i's level's row (morale-bar-model § 8): its bar and its factors, toughness to pursue. */
+export const levelOf = (w: World, i: number): LevelDef => w.cr.rs.levels[w.f.level[i] - 1]
 export const formationHandle = (w: World, i: number): Handle => makeHandle(KIND_FORMATION, i, w.f.gen[i])

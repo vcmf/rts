@@ -14,6 +14,7 @@ import {
   formationSlot as slotOf,
   formationHandle as handleOf,
   typeOf,
+  levelOf,
 } from './world.ts'
 import type { Handle } from './handle.ts'
 import { placeWorld, layoutOf, occupied, removeMan, nearImpassable, sheltering } from './formation.ts'
@@ -426,7 +427,10 @@ export function fireStep(w: World): void {
       }
       const d = sqrt(sqDist(G, k, m))
       volley(w, G, i, c, j, d, share, keyedStream(ks, seed, tick, h, c, K_HITS), R)
-      f.reload[k] = F.reload * (1 + F.reloadJitter * (2 * nextUnit(keyedStream(ks, seed, tick, h, c, K_RELOAD)) - 1))
+      f.reload[k] =
+        F.reload *
+        levelOf(w, i).reload *
+        (1 + F.reloadJitter * (2 * nextUnit(keyedStream(ks, seed, tick, h, c, K_RELOAD)) - 1))
       f.volleyTick[k] = tick
     }
   }
@@ -517,6 +521,7 @@ function volley(
   const lambda =
     rounds *
     pAt(w, d) *
+    levelOf(w, i).precision *
     w.cr.stateFactor[Math.min(2, f.mstate[i])] *
     (1 - F.cohesion * f.disorder[i]) *
     exposure(w, G, k, j)
@@ -529,8 +534,11 @@ function volley(
   }
   oweByMen(w, j, open, hits, rs)
 }
-// n men owed to battalion j's companies marked in `mask`, each drawn from rs to a marked company weighted by its
-// men (as they stood at the start of the step): a volley's hits, a charge's and a melee's losses (melee.ts)
+/**
+ * n men struck in battalion j's companies marked in `mask`, owed after j's toughness (n ÷ toughness, the fraction
+ * drawn from rs; no draw at toughness 1), each drawn from rs to a marked company weighted by its men (as they stood at
+ * the start of the step): a volley's hits, a gun's, a charge's and a melee's losses (melee.ts).
+ */
 export function oweByMen(w: World, j: number, mask: ArrayLike<number>, n: number, rs: Uint32Array): void {
   const f = w.f
   const CS = w.cr.maxC
@@ -538,6 +546,12 @@ export function oweByMen(w: World, j: number, mask: ArrayLike<number>, n: number
   let tot = 0
   for (let q = 0; q < C; q++) if (mask[q]) tot += f.men[j * CS + q]
   if (!tot) return
+  const t = levelOf(w, j).toughness
+  if (t !== 1) {
+    const x = n / t
+    n = Math.floor(x)
+    if (nextUnit(rs) < x - n) n++
+  }
   for (let k = 0; k < n; k++) {
     let r = Math.floor(nextUnit(rs) * tot)
     let q = 0

@@ -22,6 +22,7 @@ import {
   formationSlot as slotOf,
   formationHandle as handleOf,
   typeOf,
+  levelOf,
 } from './world.ts'
 import {
   blockGeometry,
@@ -121,6 +122,7 @@ export function artilleryStep(w: World): void {
       const crew = Math.min(A.crewSlow, A.crew / f.men[k]) // fewer men reload slower
       f.reload[k] =
         A.reload *
+        levelOf(w, i).reload *
         (1 + A.reloadJitter * (2 * nextUnit(keyedStream(ks, seed, tick, h, c, K_RELOAD)) - 1)) *
         Math.max(1, crew)
       f.volleyTick[k] = tick
@@ -164,7 +166,7 @@ function cone(
   const ux = (ax - mx) / d
   const uz = (az - mz) / d
   const cosH = cos(A.half)
-  const lambda = coneHits(A.hits, d) * exposure(w, G, k, j)
+  const lambda = coneHits(A.hits, d) * levelOf(w, i).precision * exposure(w, G, k, j)
   let n = Math.floor(lambda)
   if (nextUnit(rs) < lambda - n) n++
   f.shotKind[k] = SHOT_CONE
@@ -298,9 +300,10 @@ function ray(
   const T = w.terrain
   const STEP = R.step
   // the aim, dispersed across and in range
-  const a = R.spread * (2 * nextUnit(rs) - 1)
+  const P = levelOf(w, i).precision
+  const a = (R.spread / P) * (2 * nextUnit(rs) - 1)
   const D0 = sqrt((ax - mx) * (ax - mx) + (az - mz) * (az - mz))
-  const D = D0 * (1 + R.short * (2 * nextUnit(rs) - 1))
+  const D = D0 * (1 + (R.short / P) * (2 * nextUnit(rs) - 1))
   const ca = cos(a)
   const sa = sin(a)
   const ex = (ax - mx) / D0

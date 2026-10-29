@@ -34,6 +34,7 @@ import {
   formationSlot as slotOf,
   formationHandle as handleOf,
   typeOf,
+  levelOf,
 } from './world.ts'
 import {
   allocOrder,
@@ -375,7 +376,7 @@ function pursue(w: World, i: number, j: number, tick: number): void {
   appendOrder(w, i, allocOrder(w, O_CHARGE))
   f.chTarget[i] = handleOf(w, j)
   f.chPhase[i] = CH_PURSUIT
-  f.chUntil[i] = tick + Math.round(typeOf(w, i).def.charge!.pursue * TICK_HZ)
+  f.chUntil[i] = tick + Math.round(typeOf(w, i).def.charge!.pursue * levelOf(w, i).pursue * TICK_HZ)
   f.status[i] = 0
   f.blockedFor[i] = 0
 }
@@ -413,7 +414,7 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
   // the target broke before contact: ride it down
   if (outOfFight(f.mstate[j])) {
     f.chPhase[i] = CH_PURSUIT
-    f.chUntil[i] = tick + Math.round(ch.pursue * TICK_HZ)
+    f.chUntil[i] = tick + Math.round(ch.pursue * levelOf(w, i).pursue * TICK_HZ)
     return
   }
   const b = bracedOf(w, j)
@@ -544,7 +545,6 @@ export function standingStep(w: World): void {
   const f = w.f
   const Q = w.cr.rs.melee.refuge
   const tick = w.meta[M_TICK] + 1
-  const react = Math.round(Q.react * TICK_HZ)
   const hold = Math.round(Q.hold * TICK_HZ)
   // the charging types in the fight, once; nothing to do with none, no battalion on the alert and none to form back
   let n = 0
@@ -572,7 +572,8 @@ export function standingStep(w: World): void {
     const into = targetShape(w, i)
     if (f.alertAt[i]) {
       // in a spell: form square once the threat has run react seconds unbroken, unless a player's order stood it down
-      // threatened now, unbroken for react
+      // threatened now, unbroken for react (× its level's)
+      const react = Math.round(Q.react * levelOf(w, i).react * TICK_HZ)
       if (
         f.alertAt[i] !== tick ||
         f.refugeOff[i] ||

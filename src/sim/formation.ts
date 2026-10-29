@@ -1764,7 +1764,7 @@ function formationStep(w: World, i: number): void {
     if (o.t0[n] < 0) o.t0[n] = t
     let lmax = 0
     for (let j = 0; j < NB; j++) if (f.binN[i * NS + j]) lmax = Math.max(lmax, f.lags[i * NS + j])
-    if (lmax < 0.05 || t - o.t0[n] > w.cr.rs.dressTime) shiftOrder(w, i)
+    if (lmax < 0.05 || t - o.t0[n] > w.cr.rs.dressTime * f.drill[i]) shiftOrder(w, i)
   } else if (type === O_FACE) {
     f.vx[i] = 0
     f.vz[i] = 0

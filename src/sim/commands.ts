@@ -194,7 +194,6 @@ function apply(w: World, c: Command, player = true): string {
     f.type[i] = type
     f.shape[i] = shape
     f.style[i] = cr.presetIndex(cr.rs.start.orders)
-    f.drill[i] = 1
     f.x[i] = c.x
     f.z[i] = c.z
     f.heading[i] = c.heading
