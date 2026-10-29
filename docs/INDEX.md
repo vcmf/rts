@@ -59,6 +59,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 ## Plans
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
+  [`plans/active/cavalry-artillery-demo.md`](plans/active/cavalry-artillery-demo.md) (the cavalry and the artillery on the armies demo, their shadows),
   [`plans/active/track-s.md`](plans/active/track-s.md) (Track S: the sim engine's remaining phases before the playtest, the `epic/sim-engine` branch),
   [`plans/active/lightmap-half.md`](plans/active/lightmap-half.md) (the baked light map at about 0.5 m a texel),
   [`plans/active/c0-bench.md`](plans/active/c0-bench.md) (C0: the visual bench, its overlay, time controls and cases),

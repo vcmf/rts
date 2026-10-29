@@ -111,4 +111,57 @@ export const UNIFORMS: Readonly<Record<string, Dress>> = {
     },
     flag: ['flag-green', 'flag-black', 'flag-green'],
   },
+  // the cavalry and the artillery (docs/plans/active/cavalry-artillery-demo.md; first picks, the owner's to change):
+  // the French cuirassiers: blue coat, red facings, white breeches, black boots (the figure's shabraque wears the
+  // coat, its lace the breeches' white)
+  'fr-cuirassier': {
+    id: 'fr-cuirassier',
+    parts: {
+      coat: 'imperial-blue',
+      facings: 'madder-red',
+      trousers: 'white',
+      headgear: 'black',
+      greatcoat: 'greatcoat-beige',
+    },
+    flag: ['flag-blue', 'flag-white', 'flag-red'],
+  },
+  // the Austrian cuirassiers: white coat, red facings, off-white breeches
+  'at-cuirassier': {
+    id: 'at-cuirassier',
+    parts: {
+      coat: 'white',
+      facings: 'madder-red',
+      trousers: 'off-white',
+      headgear: 'black',
+      greatcoat: 'greatcoat-grey',
+    },
+    flag: ['flag-yellow', 'flag-black', 'flag-yellow'],
+  },
+  // the French foot artillery: blue coat and trousers, red facings; the carriages olive green
+  'fr-foot-artillery': {
+    id: 'fr-foot-artillery',
+    parts: {
+      coat: 'imperial-blue',
+      facings: 'madder-red',
+      trousers: 'imperial-blue',
+      headgear: 'black',
+      greatcoat: 'greatcoat-beige',
+      paint: 'carriage-olive',
+    },
+    flag: ['flag-blue', 'flag-white', 'flag-red'],
+  },
+  // the Austrian artillery: brown coat (the Grenzer's, near its fawn brown), red facings, off-white breeches; the
+  // carriages yellow ochre (the buff)
+  'at-artillery': {
+    id: 'at-artillery',
+    parts: {
+      coat: 'grenzer-brown',
+      facings: 'madder-red',
+      trousers: 'off-white',
+      headgear: 'black',
+      greatcoat: 'greatcoat-grey',
+      paint: 'buff',
+    },
+    flag: ['flag-yellow', 'flag-black', 'flag-yellow'],
+  },
 }

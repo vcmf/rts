@@ -40,6 +40,9 @@ export const DYES: DyeSet = {
     'greatcoat-brown': '#5E5448',
     // black: boots, gaiters, shakos, bearskins, the rifles' facings
     black: '#24252B',
+    // the French guns' paint: the carriages' olive green (Gribeauval's; docs/plans/active/cavalry-artillery-demo.md,
+    // a first pick; the Austrian guns' yellow ochre is the buff)
+    'carriage-olive': '#5A6236',
   },
   // the flags' own dyes (the owner: beautiful and standing out, not out of the painted palette): the colours the
   // flags flew before the dye set, the Russian green the art bible's
@@ -52,6 +55,18 @@ export const DYES: DyeSet = {
     'flag-green': '#2F6B3C',
   },
   // not cloth: the figure's neutral roles, per era (the owner, 2026-10-26)
-  materials: { skin: '#C89474', leather: '#7A5C3E', pack: '#8C7152', wood: '#5E3F26', metal: '#A3A6AB' },
+  // (and for the cavalry and the guns, first picks: the horses' bay hide and black mane, the gunners' pipeclayed belts,
+  // the barrels' bronze)
+  materials: {
+    skin: '#C89474',
+    leather: '#7A5C3E',
+    pack: '#8C7152',
+    wood: '#5E3F26',
+    metal: '#A3A6AB',
+    'horse-hide': '#6B4128',
+    'horse-mane': '#221B17',
+    belts: '#E8E2D2',
+    bronze: '#B08A4A',
+  },
   boots: 'black',
 }
