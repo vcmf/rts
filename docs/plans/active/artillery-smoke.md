@@ -5,7 +5,7 @@ last_reviewed: 2026-10-29
 
 # Plan: artillery smoke on the look page (the smoke track's second step)
 
-The musket smoke shipped on `epic/smoke` (#250, `docs/plans/active/smoke-bank.md`, decision 0080, renumbered 0083 by
+The musket smoke shipped on `epic/smoke` (#250, `docs/plans/active/smoke-bank.md`, decision 0083, 0080 before
 the sync #252): soft translucent cards born at the muzzles, a low ragged streak at musket height in clumps, a jet and
 a spark, the opacity thinned to 0.6 over the formations; about +0.3 ms at its worst views. The owner approved its look
 after three rounds. The guns now stand on the demo map (#256, `look/cavalry-artillery`: a foot battery of 8 pieces a
@@ -72,7 +72,7 @@ estimate.
   the shape this plan builds in 3D. Ultimate General: Gettysburg players asked for heavier smoke
   ([Game-Labs forum](https://forum.game-labs.net/topic/1034-cosmetic-suggestions/page/5/)) **[V]**; Cossacks: nothing
   checkable found. War of Rights darkened its lingering smoke so it would not glow (research note §2) **[V]**.
-- **The game's own constraints** (the art bible §9, decision 0080): the armies are the most saturated thing on screen;
+- **The game's own constraints** (the art bible §9, decision 0083): the armies are the most saturated thing on screen;
   smoke is light all over (warm white, pale cool grey), never dark; it never hides a formation.
 
 So, in plain words: **a gun's shot is one big white blast**. A brief spark at the muzzle; a jet that shoots straight
@@ -131,22 +131,24 @@ smoke; a half-resolution smoke target; howitzers' high-angle fire; a limber and 
    grown card's lean back toward the level for clouds this wide, so from the battle camera it lies on the ground as
    a cloud and does not stand as a wall); first tried with the musket's frame.
 6. **Readability**: the cap's mask takes the arms' footprints too (the battery's pieces and crews, the cavalry). The
-   cap is a factor per card (decision 0080's): five big overlapping puffs over a gun crew can add past the musket's
+   cap is a factor per card (decision 0083's): five big overlapping puffs over a gun crew can add past the musket's
    case; measured on the stills, and if it bites, the gun def's `opacity` lowered rather than a new rule.
 7. **The ring**: its size from the shots a piece has alive (life ÷ the loop, plus one) × pieces × `strung[0]`: about
    8 × 3 × 5 = 120 puffs a side (8 KB).
 
 ## Era data (`PuffDef`, src/sim/ruleset.ts)
 
-One new field; the rest are the musket's, with gun values (a first guess, tuned by eye):
+One new field; the rest are the musket's, with gun values (tuned by eye on the stills from a first guess of
+`strung` [5, 2.4], `radius` [0.8, 4.5], `grow` 3, `jet` [30, 0.35]: the far puffs flew into the cavalry and the muzzle
+cloud swelled too slowly to read):
 
 | Field | Musket (today) | Gun (first guess) | Note |
 |---|---|---|---|
-| `strung` (new) | [1, 1] | [5, 2.4] | puffs a muzzle's shot leaves along its jet, and the farthest one's reach over the jet's |
-| `life` | [9, 14] s | [20, 30] s | lingers longer |
-| `radius` | [0.3, 1.8] m | [0.8, 4.5] m | the size of the gun and crew |
-| `grow` | 1.8 s | 3 s | |
-| `jet` | [2, 0.3] | [30, 0.35] | 10 m in its first second; the farthest puff 25 m |
+| `strung` (new) | [1, 1] | [4, 1.8] | puffs a muzzle's shot leaves along its jet, and the farthest one's reach over the jet's |
+| `life` | [9, 14] s | [14, 22] s | lingers longer (cut from [20, 30] for the cost) |
+| `radius` | [0.3, 1.8] m | [1.5, 4.2] m | the size of the gun and crew |
+| `grow` | 1.8 s | 1.5 s | the blast swells fast, then slowly |
+| `jet` | [2, 0.3] | [24, 0.35] | 8 m in its first second; the farthest puff about 15 m, 18 m with the roll |
 | `plume` | [3.5, 0.6] | [3, 0.5] | |
 | `roll` | 0.06 m/s | 0.12 m/s | |
 | `rise` | [0.06, 6] | [0.04, 8] | hugs the ground |
@@ -163,6 +165,10 @@ and `main` into `epic/smoke` (#252, which also renumbers decision 0080 to 0083).
 it can be rebased onto `epic/smoke` once both land. Conflicts expected in `src/look/main.ts` (the smoke's `?lookat`,
 `fight|line|line1`, against the arms' `?lookat=<arm>`: kept both, the arms' `lookAtSpot` taking `line` and `line1`)
 and `src/look/units.ts` (`holdFire`, `footprints`, the arms' renderers).
+
+Landed (2026-10-29): #252 merged into `epic/smoke`, #256 into `main` (db753ee2); `main` merged into the smoke track
+by `sync/smoke-main-2` (every unit's script with its fire hold, `scriptClock` over its own cycle, `?lookat` taking
+both), and this branch's commits rebased onto it.
 
 ## Acceptance
 
@@ -187,10 +193,48 @@ smaller cards, measured +0.3 ms. Estimate: **+0.15 to 0.35 ms at the worst view 
 40 and 90 m; the CPU's share nil between shots (8 shots in 19 s a side). The risk is the close view's fill; the
 zoom's thinning does not help there (it keeps all puffs up to 60 m). Measured, not assumed, before the owner sees it.
 
+## Results (2026-10-29, this machine: M1 Pro, ANGLE Metal, 1920 × 1080)
+
+Built as the approach says, with what the stills taught:
+
+- **Two sources, one system.** `src/look/smoke.ts`: `PuffSource` (`volleySource`, `pieceSource`), `SmokeMask` (one
+  mask for both), `Smoke` (a ring, a mesh, a material each). The muskets' look is unchanged (their `strung` is
+  [1, 1]; a puff's hashes are the same).
+- **The shots** come from each piece's script at its cycle's end (its work role, its start with its own lag:
+  `Units.lagOf`), the role's clip loop and the scenario's event (`ArmSpec.smoke`: `gun`, `shot`); measured 12.5 s into
+  the loop, 18.8 s a loop; the smoke leaves each muzzle as the gun recoils.
+- **`?firehold=1` holds the guns too**: `Script.hold` (the infantry's fire start; a battery's last piece's start),
+  `scriptClock` over each script's own cycle.
+- **Cut by the ground**: big cards carried 15 m over rising ground were cut in hard lines by the depth test. Each
+  puff now carries the ground's rise along its way (`pathGround`, two more floats a puff) and the vertex shader lifts
+  it by it; and a card whose lower edge would pass under the ground is drawn nearer the eye along the view ray (the
+  same place on screen) until it clears it.
+- **The muzzle cloud**: one shot's first puff came out as one of the thin ones by chance and the gun fired with no
+  smoke at its muzzle; the first puff of a string is never thin now.
+- **The crews and the cavalry** in the mask (`Units.footPad`: a piece's crew round its root; the cavalry's ride
+  footprint): the guns' smoke thins over them as the muskets' over a line; the cuirassiers riding through the bank
+  read through it in the sequence.
+- **Cost**, `?armies=20&firehold=1&bench=smoke&benchat=60,-43&benchr=25,40,90` (the first side's battery, both
+  batteries firing without pause, arms smoke · nogunsmoke · nosmoke paired in one page; the guns' share = smoke less
+  nogunsmoke, GPU frame p50; each round started at a 1-min load ≤ 3 under the bench lock):
+  - First def (life 20 to 30 s, 5 puffs a shot, radius to 5 m; two rounds): 25 m +0.52 / +0.60 ms, 40 m +0.69 /
+    +0.69, 90 m +0.52 / +0.52; worst camera +1.01 (25 m, yaw −45°). Over the budget.
+  - As built (life 14 to 22 s, 4 puffs, radius to 4.2 m, a card's corners left before the texture reads; two rounds):
+    25 m +0.37 / +0.22 ms, 40 m +0.33 / +0.33, 90 m +0.24 / +0.25; worst camera +0.76 in one round and +0.34 in the
+    other (25 m, yaw −45°: one arm's noise), else at most +0.40. About the budget (≤ ~0.3 ms) on the means; a little
+    over it at the worst views. The muskets' share in these views (the camera on the battery) is about 0.
+  - Not measured: the far zoom (125, 250 m), a half-resolution smoke target (the fallback if the owner's machine
+    finds the fill dear).
+- **Memory**: the guns' ring 192 puffs × 64 B (12 KB); the mask shared.
+- **Looks**: `output/armies-review/28-gun-smoke/` (not in git): stills at 25, 40 and 90 m on the first side and 40 m
+  on the second (facing the camera), on and off (a compare page: space flips), a battery's volley over a minute
+  (`volley-life.gif`, `seq-sheet.png`), and the tuning rounds (`it2` to `it6`).
+
 ## Open questions for the owner
 
-1. **How long should a gun's cloud stay?** 20 to 30 s to start (twice a volley's): a battery in action then keeps a
-   standing bank before its guns. Longer is truer to Mercer, but hides the ground between the lines.
+1. **How long should a gun's cloud stay, and how thick the bank?** 14 to 22 s as built (cut from 20 to 30 s for the
+   cost): a battery in action keeps a ragged row of clouds before its guns, not a continuous bank. A thicker,
+   longer bank is truer to Mercer and costs about 0.3 ms more at the worst views (measured with the first def).
 2. **Dust**: a low, warm brown puff at the ground under the muzzle as the blast kicks it up (Leonardo's smoke and
    dust), or white smoke only?
 3. **The flash**: a short spark only (as the muskets'), or a warm glow lighting the young cloud for a tenth of a second?

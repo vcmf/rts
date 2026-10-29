@@ -205,12 +205,14 @@ export interface DyeSet {
   materials: Readonly<Record<string, string>>
   boots: string
 }
-/** the smoke a unit's fire makes, as the renderer paints it (docs/plans/active/smoke-bank.md, decision 0083): a soft
- *  translucent card for a group of files when a rank fires, born at the muzzles as a plume jetting ahead, then grown
+/** the smoke a unit's fire makes, as the renderer paints it (docs/plans/active/smoke-bank.md, artillery-smoke.md,
+ *  decision 0083): a soft translucent card for a group of files when a rank fires (or a string of them along a piece's
+ *  jet when it fires), born at the muzzles as a plume jetting ahead, then grown
  *  into its neighbours' (the volley's bank), rolling ahead, rising, drifting with the wind, thinning and broken into
  *  holes as it dies. Era data (src/rulesets/<era>-smoke.ts); metres, seconds, sRGB. Not read by the simulation */
 export interface PuffDef {
   files: number // a puff for this many files of a firing rank
+  strung: readonly [number, number] // puffs a muzzle's shot leaves along its jet, the farthest's reach over the jet's
   life: readonly [number, number] // s: a puff's life, the shortest and the longest
   erode: number // the share of its life after which it thins and breaks into holes
   radius: readonly [number, number] // m: at birth and grown

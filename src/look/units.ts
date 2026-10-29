@@ -300,7 +300,8 @@ export class Units {
     c: new Vector3(),
     pts: Array.from({ length: 9 }, () => new Vector3()),
   }
-  private readonly script: Script
+  /** its script (the guns' smoke reads its pieces' places and work starts) */
+  readonly script: Script
   // the figure's roles (its data's, in the shadow's row order), its height (m: the LOD switch's figure height), its
   // highest point posed (m, SHADOW_H at least: the shadows' reach), a man's sphere for the nearest LOD's view test (m)
   private readonly roles: readonly string[]
@@ -333,6 +334,9 @@ export class Units {
   /** the script held in its fire phase (?firehold=1: every battalion in line firing, for the bench and the smoke's
    *  stills; scriptClock), set before the first frame */
   holdFire = false
+  /** m its footprint (footprints) reaches past its men's roots: left, behind, right, ahead (a piece's crew and
+   *  carriage round the root it stands for) */
+  footPad: readonly [number, number, number, number] = [0, 0, 0, 0]
   private placed = 0 // battalions placed so far (placeCount)
   /** Where the men stand when not the script (?sim: the sim's, src/look/sim-men.ts); null: the script. */
   source: MenSource | null = null
@@ -2501,6 +2505,11 @@ export class Units {
   get placeCount(): number {
     return this.placed
   }
+  /** a man's own lag in a battalion (-1 to 1: the script's jitter, the time his role's clip starts by): the guns'
+   *  smoke times a piece's shots by it */
+  lagOf(battalion: number, man: number): number {
+    return this.hosts[battalion].jitter[man * 4 + 3]
+  }
   /** each battalion's footprint as it stands, in its own frame (the smoke's cap over the men, src/look/smoke.ts): its
    *  place and heading and its men's roots' bounds there, [x, z, heading, x0, z0, x1, z1] (FOOT_FLOATS a battalion)
    *  into out (at least FOOT_FLOATS × battalions); returns how many. A line askew to the world's axes keeps its own
@@ -2513,7 +2522,11 @@ export class Units {
       out[o] = h.b.x
       out[o + 1] = h.b.z
       out[o + 2] = h.b.heading
-      out.set(h.foot, o + 3)
+      const p = this.footPad
+      out[o + 3] = h.foot[0] - p[0]
+      out[o + 4] = h.foot[1] - p[1]
+      out[o + 5] = h.foot[2] + p[2]
+      out[o + 6] = h.foot[3] + p[3]
       n++
     }
     return n

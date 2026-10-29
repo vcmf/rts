@@ -3,22 +3,28 @@
 import type { Dress, DyeSet, PuffDef, Ruleset } from '../sim/ruleset.ts'
 import { napoleonic } from './napoleonic.ts'
 import { DYES as NAPOLEONIC_DYES } from './napoleonic-dyes.ts'
-import { VOLLEY_SMOKE as NAPOLEONIC_VOLLEY_SMOKE } from './napoleonic-smoke.ts'
+import { GUN_SMOKE as NAPOLEONIC_GUN_SMOKE, VOLLEY_SMOKE as NAPOLEONIC_VOLLEY_SMOKE } from './napoleonic-smoke.ts'
 import { UNIFORMS as NAPOLEONIC_UNIFORMS } from './napoleonic-uniforms.ts'
 
 // uniforms: each names its cloth parts' dyes from the era's dye set (decision 0068; the look resolves them); smoke:
-// what its units' fire leaves in the air (decision 0083: the volley's)
+// what its units' fire leaves in the air, by name (decision 0083: the volley's; a piece's shot, gun: an arm of the
+// scenario names it, src/scenarios/armies-demo.ts)
 export const RULESETS: Readonly<
   Record<
     string,
-    { ruleset: Ruleset; uniforms: Readonly<Record<string, Dress>>; dyes: DyeSet; smoke: { volley: PuffDef } }
+    {
+      ruleset: Ruleset
+      uniforms: Readonly<Record<string, Dress>>
+      dyes: DyeSet
+      smoke: { volley: PuffDef } & Readonly<Record<string, PuffDef>>
+    }
   >
 > = {
   napoleonic: {
     ruleset: napoleonic,
     uniforms: NAPOLEONIC_UNIFORMS,
     dyes: NAPOLEONIC_DYES,
-    smoke: { volley: NAPOLEONIC_VOLLEY_SMOKE },
+    smoke: { volley: NAPOLEONIC_VOLLEY_SMOKE, gun: NAPOLEONIC_GUN_SMOKE },
   },
 }
 

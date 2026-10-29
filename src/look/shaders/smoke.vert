@@ -24,7 +24,9 @@ void main(){
   float reach=(uJet.x*uJet.y*(1.0-exp(-age/uJet.y))+uRoll*age)*world2.y;
   float rise=uJet.z*uJet.w*(1.0-exp(-age/uJet.w))*world2.z;
   // (the wind's carry, 0.7 to 1.3 of the era's for each puff)
-  vec3 m=world0.xyz+fwd*reach+vec3(0.0,rise,0.0)+uWind*age*(0.7+0.6*fract(seed*2.93));
+  // (and the ground's rise along its way, world3: how much higher the ground lies where it ends up, and how far)
+  float gl=world3.x*clamp(reach/max(world3.y,0.01),0.0,1.0);
+  vec3 m=world0.xyz+fwd*reach+vec3(0.0,rise+gl,0.0)+uWind*age*(0.7+0.6*fract(seed*2.93));
   // the frame. Young, a jet: across it the shot's way, near the level (Uj), its back at the muzzle. Grown (g), a streak
   // hung at the muskets: across it the eye's up (B: square to the front and the view ray), along the front wide and
   // low (wider than tall, flatter with age), so it reads at the men's chests from the front and just past their
@@ -37,7 +39,11 @@ void main(){
   float rx=r*mix(1.0+st,fl,g),ry=r*mix(1.0,uPlume.z*(1.0+0.3*(1.0-exp(-age/5.0))),g);
   // (the jet's back at the muzzle; the streak at the muskets and a little above, as it rises)
   vec3 c=m+Uj*(r*(1.0+st)*0.55*pl)+vec3(0.0,0.2*g,0.0);
-  vGround=world0.y-uHeight;
+  vGround=world0.y-uHeight+gl;
+  // (a card whose lower edge would pass under the ground, cut there hard by the depth test, is drawn nearer the eye
+  // along the view ray until it clears it: the same place on screen, its soft fade at its ground kept)
+  vec3 toE=normalize(uCamPos-c);float low=c.y-abs(U.y)*rx-(vGround+0.15);
+  if(low<0.0&&toE.y>0.05)c+=toE*(-low/toE.y);
   vec3 p=c+U*(position.x*rx)+V*(position.y*ry);
   vU=U;vV=V;vC=c;vQ=position.xy;vM=position.xy*vec2(rx,ry);vR=r;
   vAge=age;vSeed=seed;vPl=pl;
