@@ -82,7 +82,11 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   only on a change. Fifth look (the owner: "contour line must not have 'light' part … put close height to same bracket … low
   become flat"): contours in dark ink only; the light reads terraced heights: the contour field snapped down to its
   200 m band (`?terrace=`, 0 off), each step softened over a cell either side, 0.3 of the smoothed real relief mixed
-  back (`?detail=`). Low ground goes flat and the relief reads as stacked layers, their banks on the contour lines. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  back (`?detail=`). Low ground goes flat and the relief reads as stacked layers, their banks on the contour lines. Sixth look (the owner: the terraces "too soft … must be less than the contour so the contour lines not
+  align with the slopes all the time … too grey, make the map lighter, whiter … only see the shadow texture at zoom
+  from a certain threshold"): terraces of half the contour interval (100 m) from heights smoothed over one cell, the
+  real relief smoothed over one cell; flat ground 0.96 of a whiter paper (`#f4f1e8`), lit slopes to pure white; the
+  shade's strength 0.45 over the whole theatre, rising to full from about 3 px a km (`?far=`). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
