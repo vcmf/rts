@@ -59,6 +59,12 @@ the Pratzen window, centre (700, 250) in map metres, 36.6 m of relief in play (3
 
 ## Open questions
 
+- **The Pratzen's headroom below the focus row.** Marched on its ground (`nearFrameOf`: foci every 10 m on the play
+  area's edge, and every 2 m: the same, 398.4 m; nine yaws, three pitches, four zooms, the focus on its ground and
+  `FOLLOW.lag`, 4 m, under it), the frame below the focus row reaches 398.4 m of the tile's 400 m: 1.6 m of headroom,
+  the test holds 1 m. A sample, not a bound: a view between the samples could show a sliver of the apron at the
+  frame's edge. If a window needs more, its play area shrinks by a few metres or its centre moves (the owner's).
+
 - **The demo's focus.** The demo keeps its 8 m plane so its goldens stand; following its ground (0.4 to 20.3 m) would
   move every golden camera. For the owner, at A3.
 

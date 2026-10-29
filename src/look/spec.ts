@@ -494,6 +494,10 @@ export class ZoomHold {
     this.wanted = r
     this.explicit = true
   }
+  /** the wanted radius this frame's step will hold, given the camera's now (step's own rule, without stepping) */
+  peek(current: number): number {
+    return this.explicit || current === this.shown || Number.isNaN(this.shown) ? this.wanted : current
+  }
   /** the radius to show, given the camera's now and the hold */
   step(current: number, hold: (r: number) => number): number {
     if (this.explicit) this.explicit = false
@@ -529,12 +533,14 @@ export interface HoldGround {
 /** The camera's hold, once a frame before it renders (src/look/post.ts): the focus kept within ±play, its height on the
  *  ground under it (FocusFollow; dt, s, since the last frame), and the radius the zoom hold gives, held out over high
  *  ground where the eye could come within its clearance of it (clearRadius below clearBelow of the highest ground
- *  within the eye's reach), the player's wanted zoom kept apart so it comes back in on lower ground (#145) */
+ *  within the eye's reach), the player's wanted zoom kept apart so it comes back in on lower ground (#145). dt
+ *  Infinity settles the focus at once (a frozen page: the tools' views do not hang on the frames' timing) */
 export function holdView(s: Spec, zoom: ZoomHold, cam: OrbitView, w: HoldGround, dt: number): void {
   const t = cam.target
   t.x = Math.max(-s.play, Math.min(s.play, t.x))
   t.z = Math.max(-s.play, Math.min(s.play, t.z))
-  t.y = w.follow.step(t.x, t.z, Number.isNaN(zoom.wanted) ? cam.radius : zoom.wanted, dt, w.ground)
+  const wanted = zoom.peek(cam.radius)
+  t.y = w.follow.step(t.x, t.z, Number.isNaN(wanted) ? cam.radius : wanted, dt, w.ground)
   const below = clearBelow(s, w.highest(t.x, t.z, eyeReach(s)) - t.y)
   const r = zoom.step(cam.radius, q =>
     q < below ? clearRadius(s.camera, q, cam.alpha, cam.beta, t.x, t.y, t.z, w.ground) : q,
@@ -548,8 +554,9 @@ export const spreadOf = (radius: number): number =>
 
 /** The focus's follow: its spread (the disc the ground is averaged over, `spread` times the zoom, within min..max m),
  *  its easing time (s), and a jump (a step of the focus over `jump` m plus `jumpR` times the zoom in one frame: a new
- *  view, taken at once). A pan moves the focus at most about a tenth of the zoom a frame (src/look/post.ts) */
-export const FOLLOW = { spread: 0.15, spreadMin: 3, spreadMax: 30, tau: 0.3, jump: 10, jumpR: 0.5 }
+ *  view, taken at once), and its lag (the most the eased focus lies under the ground under it, m: nearFrameOf is
+ *  marched with it). A pan moves the focus at most about a tenth of the zoom a frame (src/look/post.ts) */
+export const FOLLOW = { spread: 0.15, spreadMin: 3, spreadMax: 30, tau: 0.3, jump: 10, jumpR: 0.5, lag: 4 }
 
 /** The ground under the focus, m: the mean of the ground at the focus and on two rings round it (six points at half
  *  the spread `r`, six at the spread, the outer turned by 30°), so a ditch or a sunken road narrower than the spread
@@ -566,9 +573,10 @@ export function groundUnder(ground: (x: number, z: number) => number, x: number,
 
 /** The focus's height, following the ground under it (decision 0002 holds: the camera stays the top-down view, only
  *  its pivot rises and falls): the ground under the focus (groundUnder, spread by the zoom) clamped to the world's
- *  focus range, eased up over FOLLOW.tau so a pan up a ridge does not jolt, and down at once (that ground is itself a
- *  mean, so it falls smoothly; never above it, the frame reaches no farther than nearFrameOf marched); the first frame
- *  and a jump are taken at once. A range of one height (the demo's 8 m plane) never reads the ground */
+ *  focus range, eased up over FOLLOW.tau so a pan up a ridge does not jolt (never more than FOLLOW.lag under it), and
+ *  down at once (that ground is itself a mean, so it falls smoothly; never above it: nearFrameOf marches the focus on
+ *  it and FOLLOW.lag under it); the first frame and a jump are taken at once. A range of one height (the demo's 8 m
+ *  plane) never reads the ground */
 export class FocusFollow {
   y = NaN
   private x = NaN
@@ -584,7 +592,8 @@ export class FocusFollow {
     const want = lo === hi ? lo : Math.max(lo, Math.min(hi, groundUnder(ground, x, z, spreadOf(radius))))
     // (NaN on the first frame: not within, so taken at once)
     const near = Math.hypot(x - this.x, z - this.z) <= f.jump + f.jumpR * radius
-    this.y = near && want > this.y ? this.y + (want - this.y) * (1 - Math.exp(-Math.max(0, dt) / f.tau)) : want
+    const eased = this.y + (want - this.y) * (1 - Math.exp(-Math.max(0, dt) / f.tau))
+    this.y = near && want > this.y ? Math.max(eased, want - f.lag) : want
     this.x = x
     this.z = z
     return this.y
@@ -593,16 +602,18 @@ export class FocusFollow {
 
 /** How far into the world the frame below the focus row reaches on a world's ground, m on either axis (the largest
  *  |x| or |z| where its rays meet the ground; the tile must hold it, so the far ring shows only toward the top): its
- *  corners and its focus row's ends, from views with the focus on the play area's edge every `step` m, at the yaw's
- *  ends and middle, the pitch's ends, the closest zoom (held out: clearRadius) and the widest. focusY: the focus's
- *  height at x, z for the zoom (the follow's want, which it is never above: FocusFollow). Marched in 2 m steps, then
- *  bisected; Infinity when a ray meets no ground within 3 km. Sampled, not a bound: the tests run it on each world's
+ *  corners and its focus row's ends, from views with the focus on the play area's edge every `step` m, at nine yaws,
+ *  three pitches and four zooms (held out: clearRadius), the focus at focusY (the follow's want at x, z for the zoom,
+ *  which it is never above: FocusFollow) and `lag` m under it (a lower focus holds the eye farther back). Marched in
+ *  2 m steps, then bisected; Infinity when a ray meets no ground within 3 km. Sampled, not a bound: the tests run it
+ *  on each world's
  *  data */
 export function nearFrameOf(
   s: Spec,
   ground: (x: number, z: number) => number,
   focusY: (x: number, z: number, radius: number) => number,
   step = 10,
+  lag = FOLLOW.lag,
 ): number {
   const c = s.camera
   const tv = Math.tan(c.fov / 2)
@@ -612,11 +623,16 @@ export function nearFrameOf(
   for (let u = -p; u <= p + 1e-9; u += step) foci.push([u, -p], [u, p], [-p, u], [p, u])
   let far = 0
   for (const [fx, fz] of foci) {
-    for (const k of [-1, -0.5, 0, 0.5, 1]) {
-      const a = c.yaw0 + k * c.yawRange
-      for (const b of [c.betaMin, c.betaMax]) {
-        for (const r0 of [c.rMin, c.rMax]) {
-          const fy = focusY(fx, fz, r0)
+    for (let k = -4; k <= 4; k++) {
+      const a = c.yaw0 + (k / 4) * c.yawRange
+      for (const b of [c.betaMin, (c.betaMin + c.betaMax) / 2, c.betaMax]) {
+        for (const [r0, fy] of [c.rMin, 30, 60, c.rMax].flatMap(q => {
+          const y = focusY(fx, fz, q)
+          return [
+            [q, y],
+            [q, y - lag],
+          ]
+        })) {
           const r = clearRadius(c, r0, a, b, fx, fy, fz, ground)
           // the eye, its forward (to the focus), the image's up and right
           const ca = Math.cos(a)

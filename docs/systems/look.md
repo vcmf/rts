@@ -140,8 +140,9 @@ from the centre; the demo 392.6, Kobelnitz 392.0). `derive` keeps the camera's o
 - **The focus follows the ground** on a map world (`FocusFollow`, run by the hold each frame before it renders): the
   orbit's target rises and falls with the mean of the ground over a small disc round it (`groundUnder`: 13 points out
   to 15 % of the zoom, 3 to 30 m, so a ditch or a sunken road barely moves it), clamped to the ground in play, eased
-  up over 0.3 s (a pan up a ridge does not jolt) and followed down at once (that mean falls smoothly; the focus is
-  then never above it, which `nearFrameOf` assumes). A jump (a tool's new view, 10 m plus half the zoom in a frame) is
+  up over 0.3 s (a pan up a ridge does not jolt; never more than 4 m under it, `FOLLOW.lag`) and followed down at
+  once (that mean falls smoothly; the focus is then never above it, which `nearFrameOf` assumes, with the lag). On a
+  frozen page (`?frozen`, the tools' views) it settles at once. A jump (a tool's new view, 10 m plus half the zoom in a frame) is
   taken at once. The camera stays the top-down view (decision 0002), its yaw, pitch and zoom limits unchanged
   (decision 0010). **The demo keeps its focus plane at 8 m** (`SPEC.camera.focusY`, its focus range one height), so
   its camera and its goldens do not move (open question: `docs/plans/active/look-austerlitz-a1b.md`).

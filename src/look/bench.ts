@@ -507,12 +507,17 @@ export async function runBench(
       const rx = Math.cos(ra)
       const rz = Math.sin(ra)
       const pt0 = performance.now()
+      // (inserted first: the pan moves the focus before the camera's hold follows the ground under it)
       const pan = PAN
-        ? scene.onBeforeRenderObservable.add(() => {
-            const u = ((((performance.now() - pt0) / 1000) * PAN_V) / (4 * PAN_A)) % 1
-            const o = PAN_A * (u < 0.25 ? 4 * u : u < 0.75 ? 2 - 4 * u : 4 * u - 4)
-            camera.target.set(focus.x + rx * o, camera.target.y, focus.z + rz * o)
-          })
+        ? scene.onBeforeRenderObservable.add(
+            () => {
+              const u = ((((performance.now() - pt0) / 1000) * PAN_V) / (4 * PAN_A)) % 1
+              const o = PAN_A * (u < 0.25 ? 4 * u : u < 0.75 ? 2 - 4 * u : 4 * u - 4)
+              camera.target.set(focus.x + rx * o, camera.target.y, focus.z + rz * o)
+            },
+            undefined,
+            true,
+          )
         : null
       if (pan) undo.push(() => scene.onBeforeRenderObservable.remove(pan))
       for (const arm of [...arms, ...[...arms].reverse()]) {

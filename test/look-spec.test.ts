@@ -521,6 +521,23 @@ describe('the focus on the ground (FocusFollow, groundUnder)', () => {
     // a jump (a tool's new view): at once
     expect(step(-40)).toBeCloseTo(plane(-40, 0), 9)
   })
+  it('eases the same at any frame rate, settles at once with dt Infinity (a frozen page), lags at most FOLLOW.lag', () => {
+    const at = (steps: number[]) => {
+      const f = new FocusFollow([0, 100])
+      f.step(0, 0, 20, 0, () => 0)
+      let y = 0
+      for (const dt of steps) y = f.step(0, 0, 20, dt, () => 3)
+      return y
+    }
+    expect(at([0.1])).toBeCloseTo(at([0.05, 0.05]), 12)
+    expect(at([0.1])).toBeGreaterThan(0)
+    expect(at([0.1])).toBeLessThan(3)
+    expect(at([Infinity])).toBe(3)
+    // a rise of 20 m in a frame (within a jump's reach): the focus held FOLLOW.lag under it
+    const f = new FocusFollow([0, 100])
+    f.step(0, 0, 20, 0, () => 0)
+    expect(f.step(0, 0, 20, 1 / 60, () => 20)).toBe(20 - FOLLOW.lag)
+  })
   it("clamps to the world's focus range", () => {
     const f = new FocusFollow([12, 20])
     expect(f.step(-100, 0, 20, 0, plane)).toBe(12)
@@ -579,6 +596,30 @@ describe("the camera's hold a frame (holdView, clearBelow in src/look/spec.ts, r
     )
     expect(v.target.y).toBe(67)
     expect(v.radius).toBe(20)
+  })
+  it("follows a map world's focus over a hill, settled with dt Infinity, the zoom held over the hill's top", () => {
+    const z = new ZoomHold()
+    const hill = (x: number) => Math.max(0, 30 - Math.abs(x) / 2) // a ridge 30 m high at x = 0
+    const w = world(hill, 30, [0, 30])
+    const v = view(c.rMin, -100)
+    holdView(SPEC, z, v, w, Infinity)
+    expect(v.target.y).toBeCloseTo(groundUnder(hill, -100, 0, spreadOf(c.rMin)), 9)
+    expect(v.radius).toBe(c.rMin)
+    v.target.x = -2
+    holdView(SPEC, z, v, w, Infinity)
+    expect(v.target.y).toBeGreaterThan(28) // (on the ridge's top, the ground under it a mean)
+    // the eye clears the ground under it by its clearance
+    const ex = v.target.x + v.radius * Math.cos(v.alpha) * Math.sin(v.beta)
+    expect(v.radius * Math.cos(v.beta) + v.target.y - hill(ex)).toBeGreaterThanOrEqual(c.clearance - 1e-6)
+  })
+  it("takes the wanted zoom it will hold for the focus's spread (ZoomHold.peek)", () => {
+    const z = new ZoomHold()
+    expect(z.peek(80)).toBeNaN()
+    z.step(80, r => r)
+    expect(z.peek(80)).toBe(80)
+    expect(z.peek(120)).toBe(120) // (Babylon's own input moved it: the new wanted one)
+    z.set(40)
+    expect(z.peek(80)).toBe(40)
   })
   it("holds the zoom out over a hill and brings the player's zoom back past it (#145)", () => {
     const z = new ZoomHold()
@@ -719,7 +760,8 @@ describe("each world's data against the camera (checkView, nearFrameOf)", () => 
       const [lo, hi] = g.focus
       const focusY = (x: number, z: number, r: number) =>
         lo === hi ? lo : Math.max(lo, Math.min(hi, groundUnder(groundAt, x, z, spreadOf(r))))
-      expect(nearFrameOf(SPEC, groundAt, focusY)).toBeLessThanOrEqual(SPEC.tile / 2)
+      // (1 m of headroom: the Pratzen's is 1.6 m, docs/plans/active/look-austerlitz-a1b.md, open questions)
+      expect(nearFrameOf(SPEC, groundAt, focusY)).toBeLessThanOrEqual(SPEC.tile / 2 - 1)
     })
   }
 })

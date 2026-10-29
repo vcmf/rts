@@ -60,10 +60,15 @@ export const zoomOf = (camera: ArcRotateCamera): ZoomHold => {
   return z
 }
 
-// the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit. world: the
-// drawn ground (the focus follows it, and the zoom is held out where the eye would come within the SPEC's clearance
-// of it: holdView)
-export function buildCamera(scene: Scene, canvas: HTMLCanvasElement, world: HoldGround): ArcRotateCamera {
+/** The top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit. world: the
+ *  drawn ground (the focus follows it, and the zoom is held out where the eye would come within the SPEC's clearance
+ *  of it: holdView). frozen: the page's clock is frozen (?frozen, the tools' views): the focus settles at once */
+export function buildCamera(
+  scene: Scene,
+  canvas: HTMLCanvasElement,
+  world: HoldGround,
+  frozen = false,
+): ArcRotateCamera {
   const c = D.spec.camera
   const camera = new ArcRotateCamera(
     'cam',
@@ -91,7 +96,7 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement, world: Hold
   // TUNED_R out
   camera.mapPanning = true
   scene.onBeforeRenderObservable.add(() =>
-    holdView(D.spec, zoom, camera, world, Math.min(0.1, scene.getEngine().getDeltaTime() / 1000)),
+    holdView(D.spec, zoom, camera, world, frozen ? Infinity : Math.min(0.1, scene.getEngine().getDeltaTime() / 1000)),
   )
   camera.upperRadiusLimit = c.rMax
   camera.lowerBetaLimit = c.betaMin

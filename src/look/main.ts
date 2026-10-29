@@ -519,11 +519,16 @@ const macroBake = armBake.texels ? armBake : await macro.bake()
 const camera = (() => {
   const nearTile = maxGrid(look.hf, 8)
   const nearFar = maxGrid(look.far, 2)
-  return buildCamera(scene, canvas, {
-    ground: groundAt,
-    highest: (x, z, reach) => Math.max(nearTile(x, z, reach), nearFar(x, z, reach)),
-    follow: new FocusFollow(worldGround.focus),
-  })
+  return buildCamera(
+    scene,
+    canvas,
+    {
+      ground: groundAt,
+      highest: (x, z, reach) => Math.max(nearTile(x, z, reach), nearFar(x, z, reach)),
+      follow: new FocusFollow(worldGround.focus),
+    },
+    new URLSearchParams(location.search).has('frozen'),
+  )
 })()
 // the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
 // holds them and the tile's ground takes its material without them (the shader's size alone cost every ground pixel).
