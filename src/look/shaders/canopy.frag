@@ -52,7 +52,12 @@ void main(){
   float sq=sqrt(max(disc,0.0)),t1=(-qb-sq)/qa,t2=(-qb+sq)/qa;
   float t=disc>0.0?max(0.0,t2-max(t1,0.0)):0.0;                 // the chord ahead, not the air before it
   float self=1.0-exp(-t*0.75/max(vEllR.x,vEllR.y));
-  float shO=shadowAt(vW+uSunDir*max(t2,0.0),uSunDir),sh=max(self*SELF_SHADE,shO);   // other trees: where that ray leaves the crown (shadowAt adds its 0.6 m)
+  #ifdef LEAF_PAINT
+  float shO=shadowAtWide(vW+uSunDir*max(t2,0.0),uSunDir,3.0);   // a wide clean edge: no leaf-hole streaks along the light
+  #else
+  float shO=shadowAt(vW+uSunDir*max(t2,0.0),uSunDir);
+  #endif
+  float sh=max(self*SELF_SHADE,shO);   // other trees: where that ray leaves the crown (shadowAt adds its 0.6 m)
   float core=mix(CORE_DARK,1.0,smoothstep(0.25,0.95,length(q)));    // D. deep inside, darker
   #else
   vec3 N=normalize(vN);
@@ -68,9 +73,12 @@ void main(){
   #ifdef LEAF_PAINT
   // the crown's light decides how many of the upper layers show: the shade side its dark and mid leaves, the lit side
   // up to the highlights; each layer one flat tone (the layer snapped, its edge antialiased), dark cool to pale warm
-  float lit=clamp((dot(N,uSunDir)+0.45)/1.45,0.0,1.0)*(1.0-sh);
+  float lit=clamp((dot(N,uSunDir)+0.7)/1.7,0.0,1.0)*(1.0-sh*0.85);   // wrapped as LEAF_RAMP wraps it
   float li=clamp((clamp(tx.r/max(tx.a,1e-3),0.0,1.0)-0.12)/0.293,0.0,3.0),lf=floor(li),lw=max(fwidth(li),1e-3);
-  li=min(lf+smoothstep(0.5-lw,0.5+lw,li-lf),1.0+lit*2.3);
+  // each leaf drops to the layer below by its own draw (G: one per leaf patch), so toward the shade the light leaves
+  // thin into the mid and the mid into the dark, leaf by leaf, over a wide band
+  float pick=tx.g/max(tx.a,1e-3);
+  li=min(lf+smoothstep(0.5-lw,0.5+lw,li-lf),floor(0.6+lit*2.9+(0.5-pick)*1.1));
   vec3 tone=li<1.0?mix(LAYER_0,LAYER_1,li):li<2.0?mix(LAYER_1,LAYER_2,li-1.0):mix(LAYER_2,LAYER_3,li-2.0);
   vec3 gain=mix(vec3(valGain),tone,near);
   #else

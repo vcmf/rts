@@ -239,7 +239,12 @@ export function cardMaterial(
     defines: [
       ...(look.volume ? ['#define VOLUME', '#define SOFT_RAMP', '#define BOUNCE'] : []),
       ...(look.paint
-        ? ['#define LEAF_PAINT', ...LAYER_DEFINES, `#define LEAF_LOD ${(-Math.log2(look.leafScale)).toFixed(3)}`]
+        ? [
+            '#define LEAF_PAINT',
+            '#define LEAF_RAMP',
+            ...LAYER_DEFINES,
+            `#define LEAF_LOD ${(-Math.log2(look.leafScale)).toFixed(3)}`,
+          ]
         : []),
       ...(thins ? ['#define LEAF_LOSS'] : []),
       ...(fade ? ['#define FAR_FADE'] : []),

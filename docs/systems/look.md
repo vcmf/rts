@@ -293,8 +293,14 @@ The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the ow
   L7a's drawn oak clumps. The layered atlas turns on `LEAF_PAINT` in `canopy.frag`: up close (the mip level under
   1.5, fading out by 4) each layer is one flat tone, a gain on the crown's colour (`LEAF_LAYERS` in `canopy.ts`: a cool
   dark base, the mid, a warmer light, a pale warm highlight), and the crown's light at the pixel (its ellipsoid's
-  normal to the sun, the soft wrap, its shadow) decides how many upper layers show: `min(layer, 1 + 2.3 · light)`, so
-  the shade side shows its dark and mid leaves and the lit side its highlights; no leaf has a tilt of its own. Its
+  normal to the sun, wrapped (n·l + 0.7) / 1.7, its shadow) decides how many upper layers show, leaf by leaf: each
+  leaf patch has its own draw (the atlas's G), and a leaf drops to the layer below where `0.6 + 2.9 · light + 1.1 ·
+  (0.5 − draw)` is under its layer, so toward the shade the light leaves thin into the mid and the mid into the dark
+  over a wide band; no leaf has a tilt of its own. `LEAF_RAMP` (in `paint()`, the owner's call for Tiny Glade's middle
+  tone): the light wraps farther, the ramp's bands are wider and overlap, the shade colour is lifted toward a cool mid
+  (a third of the way). Other trees' shadows on these crowns are read with `shadowAtWide` (eight reads on two rings, 3
+  and 1.5 texels, no grain jitter): read where the sun ray leaves the crown, at a grazing angle, the shadow map's
+  leaf-cut holes came out as streaks along the light (the owner's "line effect"); the rings average them away. Its
   crowns are lighter in shade (the self-shade 0.5 of the light, not 0.7; the core 0.85, not 0.72; the inner leaves'
   tint halved), at every distance; the brush's grain is looser up close (jitter 0.4). From the default zoom out the
   layers fade to the old value range: a crown is the mass it was. The same 1024² texture (about 5.3 MB with its

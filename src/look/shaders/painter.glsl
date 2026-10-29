@@ -83,6 +83,20 @@ float shadowAtRaw(vec3 wp,vec3 n){
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,uSMFade.x,e.x)*smoothstep(0.0,uSMFade.y,e.y);   // soft edge: far foliage past the box fades to lit
   return s/4.0*fade;}
 float shadowAt(vec3 wp,vec3 n){return shadowAtRaw(wp,n)*uShadowsOn;}
+// a wide, clean penumbra (the layered crowns, docs/plans/active/crown-leaves.md): eight reads on two rings, r and r/2
+// texels round the point, no grain jitter. Read where a sun ray leaves a crown, the point slides along the light at a
+// grazing angle, and the map's leaf-cut holes (the cards cast through the atlas) came out as streaks along it; the
+// rings average the holes away and widen the edge
+float shadowAtWide(vec3 wp,vec3 n,float r){
+  vec4 lp=uLightVP*vec4(wp+n*0.6,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
+  if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;
+  float d=q.z*0.5+0.5-SBIAS,s=0.0;
+  for(int i=0;i<8;i++){
+    float a=float(i)*0.785398+0.39,rr=i<4?r:r*0.5;   // the inner four turned 45 degrees off the outer
+    if(i>=4)a+=0.785398;
+    s+=step(texture2D(uShadowMap,uv+vec2(cos(a),sin(a))*rr*uSMTexel).r,d);}
+  vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,uSMFade.x,e.x)*smoothstep(0.0,uSMFade.y,e.y);
+  return s/8.0*fade*uShadowsOn;}
 #ifdef UNIT_SHADOWS
 // THE FIGURES' CAST SHADOWS (decision 0047; src/look/units.ts): their own depth map from the sun (a depth texture with
 // a comparison sampler), fitted to the ground in view (the figures move: only moving things get runtime light), read
@@ -285,7 +299,9 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   pDetail=gd;
   float gr=(gd-0.5)*uGrainAmt;
   float ndl=dot(N,uSunDir),ndlR=ndl;
-  #ifdef SOFT_RAMP
+  #if defined(LEAF_RAMP)
+  ndlR=(ndl+0.7)/1.7;    // the layered crowns: the light wraps farther round (a wide middle tone, as Tiny Glade's)
+  #elif defined(SOFT_RAMP)
   ndlR=(ndl+0.45)/1.45;   // the crowns as volumes (L7b): light wraps round a mass of leaves (the ramp only, not the rim)
   #endif
   #ifdef DETAIL_ON
@@ -305,7 +321,9 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   float t=smoothstep(-0.06-bw*0.5,-0.06+bw*0.5,l)*0.55+smoothstep(0.34-bw*0.5,0.34+bw*0.5,l)*0.45;
   #endif
   #else
-  #ifdef SOFT_RAMP
+  #if defined(LEAF_RAMP)
+  float t=smoothstep(-0.80,0.10,l)*0.55+smoothstep(-0.05,0.60,l)*0.45;   // the layered crowns: wider bands, overlapping
+  #elif defined(SOFT_RAMP)
   float t=smoothstep(-0.40,0.0,l)*0.55+smoothstep(0.06,0.40,l)*0.45;   // the crowns as volumes (L7b): the same three colours, blended
   #else
   float t=smoothstep(-0.10,-0.02,l)*0.55+smoothstep(0.30,0.38,l)*0.45;   // shadow | mid | light, grain-broken edges
@@ -328,6 +346,9 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   mid=clamp(mix(vec3(dot(mid,vec3(0.3,0.59,0.11))),mid,1.3),0.0,1.0);   // the crowns turning side keeps its colour (L7b)
   #endif
   vec3 lt=alb*sunC*mix(1.16,1.02,snow)+liftC*(1.0-snow);
+  #ifdef LEAF_RAMP
+  shc=mix(shc,mid*vec3(0.88,0.95,1.04),0.35);   // the layered crowns' shade: lighter and cooler, never near black
+  #endif
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
   #ifdef BOUNCE
   vec3 bc=pBounce;   // its full hue on units too: the eye balances on the main light (the sun), not on a bounce off coloured ground

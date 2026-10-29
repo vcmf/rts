@@ -43,6 +43,14 @@ and the card shader:
   then the crown's ordinary light over it, a little lighter in shade than before. One texture read as before, no pass;
   the layers fade with the mip level to the old mass.
 
+- **Clean shadows and a middle tone** (the owner, of the layered crowns in the wood): "this 'line effect' in the
+  shadow looks a bit weak", and ours goes straight from lit leaves to a near-black shade where Tiny Glade has a soft,
+  lighter middle tone. The streaks: another tree's shadow is read where the sun ray leaves the crown, a point that
+  slides along the light at a grazing angle, and the shadow map holds the cards' leaf-cut holes, so the holes (and
+  the grain-jittered four reads) stretched into lines along the light; now eight reads on two rings, no jitter
+  (`shadowAtWide`). The middle tone: `LEAF_RAMP` (a wider wrap, wider overlapping bands, the shade lifted toward a cool
+  mid) and the layers dropping leaf by leaf toward the shade (a draw per leaf patch in the atlas's G).
+
 ## Acceptance
 
 - Stills at 15–25 m, the default and the widest zoom, main and each variant, with a compare page and a sheet next to

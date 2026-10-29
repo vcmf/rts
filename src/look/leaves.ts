@@ -165,7 +165,7 @@ export function clumpCopies(k: number, leafScale: number): [number, number, numb
  * A sheet's clumps as painted layers: each cell the sheet's clumps at SHRINK × leafScale (clumpCopies), so the leaves
  * are smaller and the cell stays full; each pixel's value snapped to its layer (the
  * sheet's dark, mid and light), a share of the light leaves lifted to highlights (a patch of one value at a time,
- * seeded); G and B flat (no tilt: the crown's own light shades it)
+ * seeded); G each leaf's draw (it drops a layer toward the shade), B flat (no tilt: the crown's own light shades it)
  */
 function layered(atlas: HTMLCanvasElement, leafScale: number, seed = 5): HTMLCanvasElement {
   const W = CELL * 2
@@ -211,21 +211,26 @@ function layered(atlas: HTMLCanvasElement, leafScale: number, seed = 5): HTMLCan
     }
   }
   layer.set(clean)
-  // the light leaves' patches (4-connected pixels of the light layer), each lifted to a highlight by a draw
+  // each leaf's patch (4-connected pixels of one layer, mid or light) its own draw in G (the shader drops a leaf to
+  // the layer below by it, toward the shade); a share of the light patches lifted to highlights
   const R = mulberry(seed)
   const seen = new Uint8Array(W * W)
+  const pick = new Uint8Array(W * W).fill(128)
   const stack: number[] = []
   for (let i = 0; i < layer.length; i++) {
-    if (layer[i] !== 2 || seen[i]) continue
-    const lift = R() < HIGHLIGHT
+    const L = layer[i]
+    if (L < 1 || seen[i]) continue
+    const lift = L === 2 && R() < HIGHLIGHT
+    const draw = Math.round(R() * 255)
     stack.push(i)
     seen[i] = 1
     while (stack.length) {
       const p = stack.pop()!
+      pick[p] = draw
       if (lift) layer[p] = 3
       const x = p % W
       for (const q of [p - 1, p + 1, p - W, p + W]) {
-        if (q < 0 || q >= layer.length || seen[q] || layer[q] !== 2) continue
+        if (q < 0 || q >= layer.length || seen[q] || layer[q] !== L) continue
         if ((q === p - 1 && x === 0) || (q === p + 1 && x === W - 1)) continue
         seen[q] = 1
         stack.push(q)
@@ -235,7 +240,8 @@ function layered(atlas: HTMLCanvasElement, leafScale: number, seed = 5): HTMLCan
   for (let i = 0; i < layer.length; i++) {
     if (layer[i] < 0) continue
     d[i * 4] = Math.round(LAYER[layer[i]] * 255)
-    d[i * 4 + 1] = d[i * 4 + 2] = 128
+    d[i * 4 + 1] = pick[i]
+    d[i * 4 + 2] = 128
   }
   g.putImageData(img, 0, 0)
   return out
