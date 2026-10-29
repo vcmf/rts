@@ -125,9 +125,21 @@ function hex(c) {
   return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
-if (!T || !D) {
-  document.getElementById('missing').style.display = 'grid';
-  throw new Error('campaign map: the theatre did not load');
+/**
+ * Why the generated theatre cannot be drawn with the data file, or '' when it can: missing, or older than the data
+ * file (a town or region it has no position for).
+ */
+function theatreProblem() {
+  if (!T || !D) return 'No theatre';
+  const unplaced = D.towns.filter(t => !T.towns?.[t.id]);
+  if (unplaced.length || T.regions?.length !== D.regions.length) return 'The theatre is older than the data file';
+  return '';
+}
+if (theatreProblem()) {
+  const missing = document.getElementById('missing');
+  missing.firstChild.textContent = theatreProblem() + ': run ';
+  missing.style.display = 'grid';
+  throw new Error('campaign map: ' + theatreProblem());
 }
 
 /* =========================================================================
@@ -250,20 +262,20 @@ function bakeRelief(h0) {
 }
 
 /**
- * The lakes as a mask over the frame, LAKE_RES texels a cell (sharper shores than the heights), the south row first:
- * 255 in the water, antialiased at the shore so the shader can find the bank. Its texels tile the frame
- * from edge to edge.
+ * The lakes as a mask over the frame, two texels a cell where the GPU allows it (sharper shores than the heights),
+ * else one; the south row first: 255 in the water, antialiased at the shore so the shader can find the bank. Its
+ * texels tile the frame from edge to edge. Returns the bytes and their size.
  */
-const LAKE_RES = 2;
-const LAKE_W = (NX - 1) * LAKE_RES;
-const LAKE_H = (NZ - 1) * LAKE_RES;
-function bakeLakes() {
+function bakeLakes(maxTextureSize) {
+  const res = Math.max(NX, NZ) * 2 <= maxTextureSize ? 2 : 1;
+  const w = (NX - 1) * res;
+  const h = (NZ - 1) * res;
   const c = document.createElement('canvas');
-  c.width = LAKE_W;
-  c.height = LAKE_H;
+  c.width = w;
+  c.height = h;
   const g = c.getContext('2d', { willReadFrequently: true });
-  // canvas row 0 is the south edge: world (x, z) to pixel ((x + halfX), (z + halfZ)) · LAKE_RES / CELL
-  const scale = LAKE_RES / CELL;
+  // canvas row 0 is the south edge: world (x, z) to pixel ((x + halfX), (z + halfZ)) · res / CELL
+  const scale = res / CELL;
   g.setTransform(scale, 0, 0, scale, halfX * scale, halfZ * scale);
   g.fillStyle = '#fff';
   for (const ring of T.lakes) {
@@ -272,10 +284,10 @@ function bakeLakes() {
     g.closePath();
     g.fill();
   }
-  const rgba = g.getImageData(0, 0, LAKE_W, LAKE_H).data;
-  const out = new Uint8Array(LAKE_W * LAKE_H);
-  for (let k = 0; k < out.length; k++) out[k] = rgba[k * 4];
-  return out;
+  const rgba = g.getImageData(0, 0, w, h).data;
+  const data = new Uint8Array(w * h);
+  for (let k = 0; k < data.length; k++) data[k] = rgba[k * 4];
+  return { data, w, h };
 }
 
 /** A tileable paper grain: mottling, fibres and specks around mid grey (the shader colours it). */
@@ -439,9 +451,9 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
-/** A raw RGBA or single-channel texture, linear, clamped, no mips. */
+/** A raw RGBA or single-channel texture, clamped, mipmapped (trilinear), so it does not shimmer when minified. */
 function rawTexture(data, w, h, format) {
-  const t = new B.RawTexture(data, w, h, format, scene, false, false, B.Texture.BILINEAR_SAMPLINGMODE);
+  const t = new B.RawTexture(data, w, h, format, scene, true, false, B.Texture.TRILINEAR_SAMPLINGMODE);
   t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
   return t;
 }
@@ -449,7 +461,9 @@ function rawTexture(data, w, h, format) {
 const heights = decodeHeights();
 const tBake = performance.now();
 const reliefBytes = bakeRelief(heights);
-const lakeBytes = bakeLakes();
+const maxTextureSize = engine.getCaps().maxTextureSize;
+if (Math.max(NX, NZ) > maxTextureSize) throw new Error(`the theatre grid (${NX} × ${NZ}) passes this GPU's textures`);
+const lakes = bakeLakes(maxTextureSize);
 window.__bakeMs = Math.round(performance.now() - tBake);
 
 const PAPER = hex('#e6d8b4');
@@ -462,14 +476,14 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
   samplers: ['uRelief', 'uLakes', 'uPaperT'],
 });
 material.setTexture('uRelief', rawTexture(reliefBytes, NX, NZ, B.Engine.TEXTUREFORMAT_RGBA));
-material.setTexture('uLakes', rawTexture(lakeBytes, LAKE_W, LAKE_H, B.Engine.TEXTUREFORMAT_LUMINANCE));
+material.setTexture('uLakes', rawTexture(lakes.data, lakes.w, lakes.h, B.Engine.TEXTUREFORMAT_LUMINANCE));
 const paperTex = new B.DynamicTexture('paper', paperCanvas(), scene, true);
 paperTex.update();
 paperTex.wrapU = paperTex.wrapV = B.Texture.WRAP_ADDRESSMODE;
 material.setTexture('uPaperT', paperTex);
 material.setVector2('uHalf', new B.Vector2(MAP_W / 2, MAP_H / 2));
 material.setVector2('uTexel', new B.Vector2(1 / NX, 1 / NZ));
-material.setVector2('uLakeTexel', new B.Vector2(1 / LAKE_W, 1 / LAKE_H));
+material.setVector2('uLakeTexel', new B.Vector2(1 / lakes.w, 1 / lakes.h));
 material.setFloat('uCellKm', CELL / 1000);
 material.setVector2('uLightXZ', new B.Vector2(NW[0], NW[1]));
 material.setColor3('uPaper', B.Color3.FromArray(PAPER));
@@ -896,12 +910,12 @@ document.getElementById('meta').innerHTML =
 document.getElementById('credit').textContent = T.credit;
 
 placeCamera();
+// the print and its ink are drawn only when the view changed, until the scene is ready (its shader compiled)
 engine.runRenderLoop(() => {
+  if (!dirty) return;
   scene.render();
-  if (dirty) {
-    drawInk();
-    dirty = false;
-  }
+  drawInk();
+  if (scene.isReady()) dirty = false;
 });
 
 /**
@@ -928,7 +942,11 @@ window.__proto = {
   },
   bench,
 };
-document.fonts.load('16px "Instrument Serif"').finally(() => {
+// both faces: the river names are italic
+Promise.allSettled([
+  document.fonts.load('16px "Instrument Serif"'),
+  document.fonts.load('italic 16px "Instrument Serif"'),
+]).then(() => {
   dirty = true;
   window.__readyMs = Math.round(performance.now() - t0);
 });

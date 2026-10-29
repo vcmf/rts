@@ -56,9 +56,10 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   at 250 m, heights 53 to 4,033 m; 7.8 s with an empty cache, 4.4 s from it. Spot heights against the real ones:
   Vienna 189 m, Ulm 481 m, Munich 525 m, the Pratzen 314 m (324 m); peaks are softened by the grid (the
   Grossglockner 3,562 m against 3,798 m). St. Pölten to Vienna by the routed road: 58 km (about 60 km today); Stockach
-  to Bregenz goes round Lake Constance, 70 km. The tool's pure parts (`tools/campaign-theatre-lib.ts`: projection,
-  grid, PNG decoding, the router) are tested in `test/campaign-theatre.test.ts`; it reuses the heap and the
-  simplification of `tools/streams.ts`.
+  to Bregenz goes round Lake Constance, 70 km. The tool's pure parts (`tools/campaign-theatre-lib.ts`: the projection,
+  the grid, the router) are tested in `test/campaign-theatre.test.ts`; it reuses the heap and the simplification of
+  `tools/streams.ts`, the PNG reader of `tools/png.mjs` and the ring helpers of `src/map/geometry.ts`. The Terrarium
+  decoding (red · 256 + green + blue / 256 − 32768) is checked only by the spot heights below.
 - The look, settled by eye on the first rounds: the battle map's exaggeration and its hard shading floor crumpled
   every hill at this scale (×8 read as crushed paper, the shade a muddy olive). Now: heights ×3 for the light, the
   slope light from heights smoothed over about 750 m, a soft knee toward the darkest and lightest tones (0.76 and
@@ -74,9 +75,10 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   HydroRIVERS).
 - Measured on test machine A's GPU (RTX 3080, Windows Chrome, D3D11, over CDP, headless): the bake at load 0.78–0.79 s
   (relief and lakes, main thread; a canvas blur on the lake mask had cost 1.8 s of the first 2.6 s), the page ready in
-  1.3–1.4 s (the 17 MB theatre file included). A frame, GPU waited for, at 1600 × 900: 0.95–0.97 ms still, 5.7–6.6 ms
-  with the ink redrawn (as while panning); at 3840 × 2160 (device ratio 1): 1.4–1.7 ms still, 6.1–7.2 ms with the
-  ink. The ink (rivers and labels on a 2D canvas) is the cost; it moves to the GPU with K3.
+  1.3–1.4 s (the 17 MB theatre file included). A frame, GPU waited for, after review round 3 (mipmapped textures): at
+  1600 × 900, 1.8 ms still, 6.0 ms with the ink redrawn (as while panning); at 3840 × 2160 (device ratio 1), 2.7 ms
+  still, 6.5 ms with the ink. The page draws only when the view changes. The ink (rivers and labels on a 2D canvas) is
+  the cost; it moves to the GPU with K3.
 
 ## Review rounds
 
@@ -97,7 +99,20 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   values clamped (a 0 kept, the shading's knee never divided by zero); a drag ended by a cancelled pointer too.
   The closest zoom (about 25 km) shows the limit of the 250 m grid: the relief goes soft below about 60 km (K3).
 
+- **Round 3**: no severe issue; fixed: a theatre file older than the data file says so instead of throwing every
+  frame; the lake mask falls back to one texel a cell where the GPU's textures are smaller; the italic face awaited
+  for the river names; the relief and lake textures mipmapped; the page draws only when the view changes. Left open
+  (below): the drawn road against the lake shores, the strokes batched, the near-plane cut tested as a pure function,
+  the lakes closed by rows. Review stops here (`AGENTS.md`, Workflow).
+
 ## Open questions
 
 - The Alps up close: a higher sun, a lower exaggeration for the cast shadow, or both.
 - The region names sometimes sit under a city's name; their placement joins the label collision in K3.
+- A road is routed out of the lakes, but simplified within 400 m and smoothed after: along a shore it can cross the
+  lake's wash by a little. K4's roads are traced, not routed.
+- The ink's cost while panning: roads and rivers stroked per line (batched by style, or drawn on the GPU in K3).
+- The near-plane cut (`screenLine`, `frameOnScreen`) lives in the single-file page with no test; it moves into a
+  tested module when the map comes into the game's code (K5).
+- The router closes lake cells point by point; `ringRow` of `src/map/geometry.ts` does it by rows, needed at
+  Europe's scale (K7).
