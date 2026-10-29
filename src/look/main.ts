@@ -44,6 +44,7 @@ const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', {
   eager: true,
 })
 // the map worlds' look data by file (data/<map>-<window>.lookdata, src/look/world/windows.ts): ?map&window picks one
+// (a glob takes a literal pattern; the page reads only the files the windows name: windowFile)
 const WINDOW_DATA = import.meta.glob<string>('../../data/*-*.lookdata', {
   query: '?url',
   import: 'default',
@@ -54,7 +55,7 @@ import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
 import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
 import { BUILDINGS, YARD_ALL, YARD_BASE, onPaving, paveShape, type Building } from './world/buildings.ts'
-import { COVER } from './world/cover.ts'
+import { COVER, coarsenCover } from './world/cover.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
@@ -100,6 +101,9 @@ checkWorld(look.world, lookWindow)
 // a map's window: no hand-placed copses, zones or buildings (the demo's), its trees from its data
 const onMap = look.world.kind === 'map'
 const worldBuildings: readonly Building[] = onMap ? [] : BUILDINGS
+// the cover the per-frame shaders read (and the road split, which must class its triangles as they paint): a map
+// world's coarsened to the spec's cells (src/look/world/cover.ts, coarsenCover); the macro colour's bakes read the fine
+const frameCover = coarsenCover(look.cover, D.spec.macro.cover)
 setRiver(look.river)
 setHeightfield(look.hf, look.far, D.spec.tile / 2)
 {
@@ -469,10 +473,21 @@ const meadowMap = meadowOn
 // twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
 // at the SPEC's lines). The marched depth, not the eased one (no lag as the camera zooms in), the last frame's (none
 // yet: it bakes)
-const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, {
-  reach: RINGS[0].band[3],
-  shows: () => !focusDist || ((pixA * D.spec.detail.lines) / sceneH()) * focusDist < 2 * STROKE_FOOT,
-})
+const macro = buildMacro(
+  scene,
+  mats,
+  frameCover,
+  meadowOn,
+  roadTex,
+  grassDefines,
+  flowTex,
+  meadowMap?.map ?? null,
+  {
+    reach: RINGS[0].band[3],
+    shows: () => !focusDist || ((pixA * D.spec.detail.lines) / sceneH()) * focusDist < 2 * STROKE_FOOT,
+  },
+  look.cover,
+)
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) {
@@ -504,7 +519,7 @@ if (roadTex) {
   // closest zooms; with the paving's split and its gate the buildings cost about 0.35 ms at the village's closest, from
   // 1.25: docs/plans/done/buildings.md); ?split=0 (above): the live shader
   // with the paving on the whole tile, the A/B (its share all paved)
-  const sg = splitParam === '0' ? null : splitGround(terrain, look.cover)
+  const sg = splitParam === '0' ? null : splitGround(terrain, frameCover)
   const split = sg?.material ?? live
   groundShare = sg?.share ?? [1, 0, 0]
   // (the materials the ground draws with: all three split, the live and the baked unsplit)

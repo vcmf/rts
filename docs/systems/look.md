@@ -87,22 +87,25 @@ Kobelnitz on Austerlitz, (−450, 350)). `tools/build-look-data.ts` compiles the
 - the heights from the layers' nodes (bilinear, `heightOf`), taken down by the window's lowest node so it meets
   `SPEC.ground.lo`; the window's far ring must lie inside the map;
 - the cover at 1 m cells (`MAP_COVER_CELL`, half the demo's 2 m), its ground, vegetation and built areas rasterised
-  from the map's own shapes in the layers' painting order (`fineAreas`), not read off the layers' 2 m cells (the water
-  from the layers' cells: a pond stands only where its bed lies under its level). The macro colour's bakes read it
-  and paint a cover finer than the demo's with a second, fine warp (`COVER_FINE`, blotches 2.5 m across,
-  `coverWarpFine` in `src/look/shaders/macro.glsl`), so a slanted edge wanders instead of stepping by its cells (the
-  slow warp alone moves the steps whole; the demo's fields lie near the grid's axes). The per-frame shaders read it
-  coarsened to the demo's 2 m (`coarsenCover`, `src/look/macro.ts`): no cost a frame. The classes: wood under a wood, meadow on a meadow, the water's cells and an orchard's floor, pasture
-  on pasture and rough ground; the arable (one `ground.field` in Austerlitz) cut into strips by a hash of the map's
+  from the map's own shapes by apply's rules (`fineAreas`: the painting order, a ground area clearing the vegetation
+  under it, an area's `clear` keep-offs, the lines' reach), not read off the layers' 2 m cells (the water and a
+  bridge's deck from the layers' cells: a pond stands only where its bed lies under its level). The macro colour's
+  bakes read it and paint a cover finer than the demo's with a second, fine warp (`COVER_FINE`, blotches 2.5 m
+  across, `coverWarpFine` in `src/look/shaders/macro.glsl`), so a slanted edge wanders instead of stepping by its
+  cells (the slow warp alone moves the steps whole; the demo's fields lie near the grid's axes). The per-frame
+  shaders and the road split read it coarsened to the demo's 2 m (`coarsenCover` in `src/look/world/cover.ts`, each
+  texel the least wear of its block, so the roads' gate holds): no cost a frame. The classes: wood under a wood,
+  meadow on a meadow, the water's cells and an orchard's floor, pasture on pasture and rough ground; the arable (one `ground.field` in Austerlitz) cut into strips by a hash of the map's
   position (blocks round seeds 240 m apart, each turned its own way, bands 70 m long cut into strips 18–45 m wide, a
   crop each by the field's stage: winter's ploughed land, green corn and stubble), temporary until the language's
   field generator; the roads and tracks (lanes, tracks and paths) over them from the ways' lines; every built cell the
   village's ground; the wear by the distance to them;
 - the roads' segments from the `way.*` lines, resampled every 8 m, their widths twice their painted reach;
 - the trees: a wood's on a 6 m lattice jittered 2.4 m, kept by its density, its species by its `leaf` (birches and
-  hawthorns within 5 m of its edge), its size by its `height`; an orchard's apples in its rows; the free-standing
-  trees. On the page the tile's are placed by the placement rule as the demo's scatter, the far ring's are far trees
-  (none in the apron band).
+  hawthorns within 5 m of its edge), its size by its `height`; an orchard's apples in its rows (both against the 1 m
+  areas); the free-standing trees. On the page the tile's are placed by the placement rule as the demo's scatter, but
+  as placed on purpose (`onFields`: one beside a field stays drawn), the far ring's are far trees (none in the apron
+  band).
 
 The page loads that window's data (`windowOf`; an unknown name throws, and so does a file holding another world).
 On a map world the demo's hand-placed copses, woods, hedgerows, extras, wheat lattice and formation zones are off;

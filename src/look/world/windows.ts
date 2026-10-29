@@ -6,7 +6,7 @@
 export interface LookWindow {
   map: string // the map's name: its file is maps/<map>.map.json
   name: string
-  x: number // the window's centre in map metres, on even metres (the cover's 2 m cells are then the map's)
+  x: number // the window's centre in map metres, on even metres (the cover's 1 m cells and the layers' 2 m line up)
   z: number
 }
 

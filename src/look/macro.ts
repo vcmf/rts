@@ -14,7 +14,7 @@ import { Vector4 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { withPainter, type Materials } from './materials.ts'
 import { D, bakeMB } from './spec.ts'
-import { coarsenCover, type CoverGrid } from './world/cover.ts'
+import type { CoverGrid } from './world/cover.ts'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 import BRUSH_URL from '../../data/meadow-brush.png?url'
 import type { FlowTextures } from './flow.ts'
@@ -131,19 +131,20 @@ export function buildMacro(
   flowTex: FlowTextures | null = null,
   meadowMap: BaseTexture | null = null,
   near: { reach: number; shows: () => boolean } = { reach: 25, shows: () => true },
+  bakeCover: CoverGrid = cover,
 ): Macro {
   const engine = scene.getEngine() as AbstractEngine
   const s = D.spec.macro
-  // the cover's texture: the per-frame shaders read it at the spec's cells; the bakes read a map world's finer cover
-  // (coarsenCover, src/look/world/cover.ts), and paint its class edges with the fine warp (macro.glsl, coverWarpFine)
+  // the cover's texture: the per-frame shaders read `cover` (a map world's coarsened to the spec's cells: coarsenCover,
+  // src/look/world/cover.ts); the bakes read `bakeCover` (a map world's finer one), whose class edges they paint with
+  // the fine warp (macro.glsl, coverWarpFine)
   const coverTexOf = (g: CoverGrid) => {
     const t = RawTexture.CreateRGBATexture(g.tex, g.n, g.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
     t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
     return t
   }
-  const runCover = coarsenCover(cover, s.cover)
-  const coverTex = coverTexOf(runCover)
-  const bakeCoverTex = runCover === cover ? coverTex : coverTexOf(cover)
+  const coverTex = coverTexOf(cover)
+  const bakeCoverTex = bakeCover === cover ? coverTex : coverTexOf(bakeCover)
   // mipmapped on WebGL2; WebGL1 cannot mipmap a texture whose sides are not powers of two (1600², 650²), so there the
   // bakes are read bilinear, without mips (an incomplete mipmapped texture would read black)
   const mips = !mats.webgl1

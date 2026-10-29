@@ -27,7 +27,15 @@ import {
 import { TREE_FLOATS, TREE_SPECIES, decodeLook, encodeLook } from '../src/look/world/data.ts'
 import { WINDOWS, windowOf, type LookWindow } from '../src/look/world/windows.ts'
 import { noRiver } from '../src/look/river.ts'
-import { ROAD_SLOTS } from '../src/look/spec.ts'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { Catalogue, MapFile } from '../src/map/schema.ts'
+import { validate } from '../src/map/validate.ts'
+import { expand } from '../src/map/expand.ts'
+import { apply } from '../src/map/apply.ts'
+import { segD } from '../src/look/world/geom.ts'
+import { D as SPEC_D, ROAD_SLOTS } from '../src/look/spec.ts'
 
 const WIN: LookWindow = { map: 'test', name: 'test', x: 0, z: 0 }
 const N = 60 // cells a side: 120 m, from −60 m
@@ -46,6 +54,23 @@ const TABLE: Resolved[] = [
   { id: 'hamlet', kind: 'built.village', priority: 60, attrs: {} },
 ]
 const K = Object.fromEntries(TABLE.map((r, k) => [r.id, k + 1]))
+
+// the layers' features' own shapes (as layers() paints their cells)
+const square = (x0: number, z0: number, x1: number, z1: number): Pt[][] => [
+  [
+    [x0, z0],
+    [x1, z0],
+    [x1, z1],
+    [x0, z1],
+  ],
+]
+const FEATURES = [
+  { id: 'arable', area: square(-60, -60, 60, 60) },
+  { id: 'meadow', area: square(-60, -60, 0, 0) },
+  { id: 'pines', area: square(0, 0, 60, 60) },
+  { id: 'apples', area: square(0, -40, 60, 0) },
+  { id: 'hamlet', area: square(-30, 0, -10, 20) },
+]
 
 /** Layers of N² cells over the arable: a meadow, a wood, an orchard, a pond and a village's cells in quarters. */
 function layers(): Layers {
@@ -225,15 +250,22 @@ describe('the cover classes', () => {
 })
 
 describe('the coarse cover', () => {
-  it('takes each coarse cell from the fine cell past its centre, and leaves a cover already coarse as it is', () => {
+  it('takes the least wear of each block, a trodden cell first at wear 0, else the cell past its centre', () => {
     const n = 4
     const tex = new Uint8Array(n * n * 4)
-    for (let c = 0; c < n * n; c++) tex[c * 4] = c
-    const fine = { n, cell: 1, x0: -2, z0: -2, tex }
-    const g = coarsenCover(fine, 2)
+    for (let c = 0; c < n * n; c++) [tex[c * 4], tex[c * 4 + 3]] = [COVER.wheat, 50]
+    // block (0, 0): even wears, its centre's cell (1, 1) taken; block (1, 0): the cell at (2, 1) worn least
+    tex[(1 * n + 1) * 4 + 1] = 9
+    tex[(1 * n + 2) * 4 + 3] = 20
+    // block (0, 1): a field and a track both at wear 0: the track
+    tex[(2 * n + 0) * 4 + 3] = 0
+    tex[(3 * n + 1) * 4] = COVER.track
+    tex[(3 * n + 1) * 4 + 3] = 0
+    const g = coarsenCover({ n, cell: 1, x0: -2, z0: -2, tex }, 2)
     expect([g.n, g.cell, g.x0, g.z0]).toEqual([2, 2, -2, -2])
-    // coarse (i, j) from fine (2i + 1, 2j + 1)
-    expect([g.tex[0], g.tex[4], g.tex[8], g.tex[12]]).toEqual([5, 7, 13, 15])
+    expect([g.tex[1], g.tex[3]]).toEqual([9, 50])
+    expect(g.tex[7]).toBe(20)
+    expect([g.tex[8], g.tex[11]]).toEqual([COVER.track, 0])
     expect(coarsenCover(g, 2)).toBe(g)
   })
 })
@@ -298,7 +330,7 @@ describe('the roads', () => {
 
 describe('the trees', () => {
   const L = layers()
-  const trees = mapTrees(L, WIN, 120)
+  const trees = mapTrees(L, fineAreas(L, FEATURES, WIN, 120, 1), WIN)
 
   it('stands the woods by their leaf and their rim, the orchards in rows, nowhere else', () => {
     const wood = trees.filter(t => t.x > 0 && t.z > 0)
@@ -316,7 +348,8 @@ describe('the trees', () => {
   })
 
   it('stands the same trees whatever the window, moved by its centre', () => {
-    const moved = mapTrees(L, { ...WIN, x: 10, z: -10 }, 80)
+    const win = { ...WIN, x: 10, z: -10 }
+    const moved = mapTrees(L, fineAreas(L, FEATURES, win, 80, 1), win)
     const t = moved.find(m => m.sp !== 'apple')!
     expect(
       trees.some(u => u.sp === t.sp && Math.abs(u.x - (t.x + 10)) < 1e-9 && Math.abs(u.z - (t.z - 10)) < 1e-9),
@@ -370,5 +403,124 @@ describe('the page and the data', () => {
     expect(back.world).toEqual(world)
     expect(Array.from(back.trees)).toEqual([1, 2, 3, 4])
     expect(back.river.n).toBe(0)
+  })
+})
+
+describe("the areas by apply's rules", () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+  const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps/kinds.json'), 'utf8')) as Catalogue
+  // overlaps: a wood over the arable kept off a lane, a later meadow (a glade) clearing part of the wood, a line of
+  // reeds, a house and a redoubt; slanted, so the cells' edges are not the axes (no corner on a cell's centre: a
+  // point on a ring may fall either side)
+  const map = {
+    format: 1,
+    id: 'overlaps',
+    name: 'Overlaps',
+    seed: 7,
+    season: 'summer',
+    extent: { w: 120, h: 120 },
+    play: { w: 120, h: 120 },
+    features: [
+      { id: 'arable', kind: 'ground.field', area: square(-60, -60, 60, 60) },
+      {
+        id: 'wood',
+        kind: 'veg.wood',
+        area: [
+          [
+            [-50, -10],
+            [10, -45],
+            [45, 20],
+            [-15, 50],
+          ],
+        ],
+        clear: [{ id: 'lane' }],
+      },
+      {
+        id: 'glade',
+        kind: 'ground.meadow',
+        priority: 50,
+        area: [
+          [
+            [-5, 0],
+            [15, -8],
+            [22, 12],
+            [2, 18],
+          ],
+        ],
+      },
+      {
+        id: 'lane',
+        kind: 'way.road.lane',
+        line: [
+          [-60, -33],
+          [60, 41],
+        ],
+      },
+      {
+        id: 'reeds',
+        kind: 'veg.reeds',
+        line: [
+          [-55, 55],
+          [30, 52],
+        ],
+      },
+      {
+        id: 'house',
+        kind: 'built.house',
+        area: [
+          [
+            [30, -40],
+            [42, -36],
+            [39.3, -27.4],
+            [27, -31],
+          ],
+        ],
+      },
+      { id: 'redoubt', kind: 'work.redoubt', area: square(-55, -55, -40, -42) },
+    ],
+  } as unknown as MapFile
+
+  it('paints the ground, the vegetation and the built as apply does, at its own 2 m cells', () => {
+    expect(validate(map, cat)).toEqual([])
+    const ex = expand(map, cat).map
+    const L = apply(ex, cat)
+    const A = fineAreas(L, ex.features, { map: 't', name: 't', x: 0, z: 0 }, 120, 2)
+    let differ = 0
+    for (const layer of ['ground', 'veg', 'built'] as const) {
+      for (let c = 0; c < A.n * A.n; c++) if (A[layer][c] !== L[layer][c]) differ++
+    }
+    // (the glade clears the wood; the wood keeps off the lane; the reeds' line is painted)
+    const at = (x: number, z: number) => (Math.floor(z + 60) >> 1) * 60 + (Math.floor(x + 60) >> 1)
+    const name = (v: number) => (v ? L.table[v - 1].id : '')
+    expect(name(A.veg[at(10, 5)])).toBe('glade')
+    expect(name(A.veg[at(-30, 0)])).toBe('wood')
+    expect(name(A.veg[at(-20, -8.3)])).not.toBe('wood') // on the lane
+    expect(name(A.veg[at(0, 53)])).toBe('reeds')
+    expect(name(A.built[at(-50, -50)])).toBe('redoubt')
+    expect(differ).toBe(0)
+  })
+})
+
+describe("the frame's coarse cover and the roads' gate", () => {
+  it("never reads a wear past the ground's own distance to a road and a coarse cell's half diagonal", () => {
+    const L = layers()
+    const hw = 3
+    const road = { pts: [[-55, -48] as const, [50, 37] as const], w: 2 * hw, cls: COVER.road }
+    const fine = mapCover(fineAreas(L, FEATURES, WIN, 100, 1), TABLE, WIN, [road])
+    const g = coarsenCover(fine, SPEC_D.spec.macro.cover)
+    // the gate's slack (src/look/spec.ts: road.near ≥ edge + cover · 0.71 + 0.05)
+    const slack = SPEC_D.spec.road.near - SPEC_D.spec.road.edge
+    let worst = -Infinity
+    for (let k = 0; k < 4000; k++) {
+      const x = -48 + ihash(k, 1, 9) * 96
+      const z = -48 + ihash(k, 2, 9) * 96
+      const o = (Math.floor((z - g.z0) / g.cell) * g.n + Math.floor((x - g.x0) / g.cell)) * 4
+      const wear = g.tex[o + 3] * 0.1
+      const d = Math.max(0, segD(x, z, road.pts[0], road.pts[1]) - hw)
+      if (wear < 25.4) worst = Math.max(worst, wear - d)
+    }
+    expect(worst).toBeLessThanOrEqual(slack)
+    // a fine cell's half diagonal and the wear's rounding: well inside it
+    expect(worst).toBeLessThanOrEqual(Math.SQRT1_2 + 0.05)
   })
 })

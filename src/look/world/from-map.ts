@@ -9,9 +9,12 @@
 // so its trees are scattered (woodTree); an orchard's trees stand in its rows. Each is decided by a hash of the map's
 // position, so two windows agree where they overlap.
 import type { Layers } from '../../map/apply.ts'
-import { lineReach } from '../../map/apply.ts'
+import { CELL, lineReach, nearLine } from '../../map/apply.ts'
+import { categoryOf } from '../../map/catalogue.ts'
+import type { Clear } from '../../map/util.ts'
+import { listOf, num } from '../../map/util.ts'
 import type { Resolved } from '../../map/resolve.ts'
-import type { Feature } from '../../map/schema.ts'
+import type { Feature, Pt as MapPt } from '../../map/schema.ts'
 import type { Grid, Heightfield } from '../heightfield.ts'
 import type { Derived } from '../spec.ts'
 import { COVER, WEAR_STEP, resample, type CoverClass, type CoverGrid } from './cover.ts'
@@ -59,8 +62,8 @@ export function cellAt(L: Layers, x: number, z: number): number {
 
 /**
  * The window's heights: the tile's nodes and their margin (the demo's layout, tools/build-look-data.ts) and the far
- * ring's, read from `heightAt` (map metres to m above the datum), all taken down by the lowest of them so the window
- * meets the spec's ground at 0. `base`: the height taken off, m.
+ * ring's, read from `heightAt` (map metres to m above the datum), all moved so the lowest of them lies on the spec's
+ * lowest ground (SPEC.ground.lo). `base`: the height taken off, m.
  */
 export function windowHeights(
   heightAt: (x: number, z: number) => number,
@@ -77,7 +80,8 @@ export function windowHeights(
   const fx = (col: number) => Math.fround((col * s.far) / s.farSub - s.far / 2)
   const fh = new Float32Array(fn * fn)
   for (let j = 0; j < fn; j++) for (let i = 0; i < fn; i++) fh[j * fn + i] = heightAt(fx(i) + win.x, fx(j) + win.z)
-  const base = Math.min(minOf(h), minOf(fh))
+  // (the lowest node lands on the spec's lowest ground)
+  const base = Math.min(minOf(h), minOf(fh)) - s.ground.lo
   for (let k = 0; k < h.length; k++) h[k] -= base
   for (let k = 0; k < fh.length; k++) fh[k] -= base
   const x0 = (-m * s.tile) / s.tileSub - s.tile / 2
@@ -342,6 +346,7 @@ export function fillRings(
   x0: number,
   cell: number,
   value: number,
+  skip?: (x: number, z: number) => boolean,
 ) {
   let zlo = Infinity
   let zhi = -Infinity
@@ -363,16 +368,71 @@ export function fillRings(
     for (let k = 0; k + 1 < xs.length; k += 2) {
       const i0 = Math.max(0, Math.ceil((xs[k] - x0) / cell - 0.5))
       const i1 = Math.min(n - 1, Math.floor((xs[k + 1] - x0) / cell - 0.5))
-      for (let i = i0; i <= i1; i++) grid[j * n + i] = value
+      for (let i = i0; i <= i1; i++) if (!skip?.(x0 + (i + 0.5) * cell, z)) grid[j * n + i] = value
+    }
+  }
+}
+
+/** A clear's keep-off (apply's maskOf, src/map/apply.ts): its line in map metres and its reach, m. */
+interface KeepOff {
+  line: MapPt[]
+  reach: number
+}
+
+/**
+ * An area's keep-offs (its `clear`), as apply's masks reach: a line its painted reach, a cut or a ditch where its
+ * edit's weight is a half (its half width and half its edge), a barrier its thickness, each widened by the offset.
+ * Approximations at the look's cells of apply's cell rules (a barrier's cells, a sunken way's cut marks).
+ */
+function keepOffsOf(f: Feature, byId: Map<string, Feature>, rById: Map<string, Resolved>): KeepOff[] {
+  return listOf<Clear>(f.clear as Clear | Clear[] | undefined).flatMap(e => {
+    const g = byId.get(e.id)
+    const r = rById.get(e.id)
+    if (!g?.line || !r) return []
+    const a = r.attrs
+    const off = e.offset ?? 0
+    const reach =
+      categoryOf(r.kind) === 'barrier'
+        ? (num(a.thickness, 2) * CELL) / 2
+        : r.kind === 'relief.cut' || r.kind === 'relief.ditch'
+          ? num(a.width, 4) / 2 + num(a.edge, 5) / 2
+          : Math.max(
+              lineReach(r.kind, a),
+              categoryOf(r.kind) === 'way' && num(a.cut) > 0 ? num(a.width, 4) / 2 + 0.5 : 0,
+            )
+    return [{ line: g.line, reach: reach + off }]
+  })
+}
+
+/** Whether a map point lies within a line's reach, beside it (not past a free end): apply's paintLine rule. */
+const onLine = (line: MapPt[], reach: number, x: number, z: number): boolean => {
+  const q = nearLine(line, x, z, reach)
+  return q.d < reach && q.over === 0
+}
+
+/** Fills the cells whose centres lie on a line by onLine (`line` in map metres, the grid in window metres). */
+function fillLine(line: MapPt[], reach: number, grid: Uint16Array, A: FineAreas, win: LookWindow, value: number) {
+  const { n, cell, x0 } = A
+  const xs = line.map(p => p[0] - win.x)
+  const zs = line.map(p => p[1] - win.z)
+  const i0 = Math.max(0, Math.floor((Math.min(...xs) - reach - x0) / cell))
+  const i1 = Math.min(n - 1, Math.floor((Math.max(...xs) + reach - x0) / cell))
+  const j0 = Math.max(0, Math.floor((Math.min(...zs) - reach - x0) / cell))
+  const j1 = Math.min(n - 1, Math.floor((Math.max(...zs) + reach - x0) / cell))
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) {
+      if (onLine(line, reach, x0 + (i + 0.5) * cell + win.x, x0 + (j + 0.5) * cell + win.z)) grid[j * n + i] = value
     }
   }
 }
 
 /**
- * The window's areas (FineAreas) at `cell` m over the far ring (side `far` m): the ground, the stands and low growth
- * of the vegetation and the built from the map's features' own shapes, in the layers' painting order (L.table); the
- * water from the layers' cells (apply's: a pond's water stands only where its bed lies under its level, not over its
- * whole outline). `features`: the expanded map's.
+ * The window's areas (FineAreas) at `cell` m over the far ring (side `far` m), by apply's rules
+ * (src/map/apply.ts, apply) at the look's cells, from the map's features' own shapes, in the layers' painting order
+ * (L.table): a ground area paints the ground and the vegetation (a later meadow over a wood clears it), a vegetation
+ * area the vegetation, a vegetation line its painted reach, each area kept off its `clear` lines; the built and the
+ * works their areas and lines; a bridge's deck and the water from the layers' cells (a pond's water stands only where
+ * its bed lies under its level, not over its whole outline). `features`: the expanded map's.
  */
 export function fineAreas(
   L: Layers,
@@ -386,22 +446,46 @@ export function fineAreas(
   const U = () => new Uint16Array(n * n)
   const A: FineAreas = { n, cell, x0, ground: U(), veg: U(), water: U(), built: U() }
   const byId = new Map(features.map(f => [f.id, f]))
+  const rById = new Map(L.table.map(r => [r.id, r]))
   const local = (r: readonly Pt[]) => r.map(([x, z]) => [x - win.x, z - win.z] as Pt)
-  const grids: Record<string, Uint16Array> = { ground: A.ground, veg: A.veg, built: A.built }
   L.table.forEach((r, k) => {
     const f = byId.get(r.id)
-    const grid = grids[r.kind.split('.')[0]]
-    if (!f || !grid || r.attrs.growth === 'tree') return
+    const cat = categoryOf(r.kind)
+    if (!f || (cat !== 'ground' && cat !== 'veg') || r.attrs.growth === 'tree') return
+    if (f.line) return fillLine(f.line, lineReach(r.kind, r.attrs), A.veg, A, win, k + 1)
+    const keep = keepOffsOf(f, byId, rById)
+    const skip = keep.length
+      ? (x: number, z: number) => keep.some(o => onLine(o.line, o.reach, x + win.x, z + win.z))
+      : undefined
     const rings = ringsOf(f).map(local)
-    if (rings.length) fillRings(rings, grid, n, x0, cell, k + 1)
+    if (cat === 'ground') fillRings(rings, A.ground, n, x0, cell, k + 1, skip)
+    fillRings(rings, A.veg, n, x0, cell, k + 1, skip)
+  })
+  L.table.forEach((r, k) => {
+    const f = byId.get(r.id)
+    const cat = categoryOf(r.kind)
+    if (!f || (cat !== 'built' && cat !== 'work')) return
+    if (f.line) fillLine(f.line, lineReach(r.kind, r.attrs), A.built, A, win, k + 1)
+    else if (f.area || f.circle || f.ellipse) fillRings(ringsOf(f).map(local), A.built, n, x0, cell, k + 1)
   })
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
       const c = cellAt(L, x0 + (i + 0.5) * cell + win.x, x0 + (j + 0.5) * cell + win.z)
-      if (c >= 0) A.water[j * n + i] = L.water[c]
+      if (c < 0) continue
+      A.water[j * n + i] = L.water[c]
+      // a bridge's deck (built, from its road and its water): the layers' cells
+      const b = L.built[c] ? byId.get(L.table[L.built[c] - 1].id) : undefined
+      if (b?.carries && b.crosses) A.built[j * n + i] = L.built[c]
     }
   }
   return A
+}
+
+/** The areas' cell holding a map point (FineAreas, window `win`), or −1 off them. */
+export function fineAt(A: FineAreas, win: LookWindow, x: number, z: number): number {
+  const i = Math.floor((x - win.x - A.x0) / A.cell)
+  const j = Math.floor((z - win.z - A.x0) / A.cell)
+  return i < 0 || j < 0 || i >= A.n || j >= A.n ? -1 : j * A.n + i
 }
 
 const WEAR_REACH = 255 * WEAR_STEP // the wear channel's reach, m
@@ -547,22 +631,36 @@ export function treeScale(sp: TreeSpecies, height: number, u: number): number {
   return Math.min(1.6, Math.max(0.5, height / model)) * (0.85 + 0.3 * u)
 }
 
-/** Whether a map point's cell lies in a wood. */
-const woodAt = (L: Layers, x: number, z: number): boolean => {
-  const k = cellAt(L, x, z)
-  return k >= 0 && isWood(featureOf(L, L.veg[k]))
+/** The window's areas and the layers a tree is placed against: the areas' shapes at 1 m, the density and the ways. */
+export interface TreeGround {
+  L: Layers
+  A: FineAreas
+  win: LookWindow
+}
+
+/** The vegetation's feature at a map point, by the areas' cells (null: none, or off them). */
+const vegAt = (g: TreeGround, x: number, z: number): Resolved | null => {
+  const c = fineAt(g.A, g.win, x, z)
+  return c >= 0 && g.A.veg[c] ? g.L.table[g.A.veg[c] - 1] : null
+}
+
+/** Whether nothing keeps a tree off a map point: on the areas, dry, off the built, off the layers' ways. */
+const treeFree = (g: TreeGround, x: number, z: number): boolean => {
+  const c = fineAt(g.A, g.win, x, z)
+  const k = cellAt(g.L, x, z)
+  return c >= 0 && k >= 0 && !g.A.water[c] && !g.A.built[c] && !g.L.way[k]
 }
 
 /** The tree a wood's lattice point (a, b) holds, if any: its map point, species and scale. */
-export function woodTree(L: Layers, a: number, b: number): MapTree | null {
+export function woodTree(g: TreeGround, a: number, b: number): MapTree | null {
   const x = a * WOOD_STEP + (ihash(a, b, 20) - 0.5) * 2 * WOOD_JITTER
   const z = b * WOOD_STEP + (ihash(a, b, 21) - 0.5) * 2 * WOOD_JITTER
-  const k = cellAt(L, x, z)
-  if (k < 0 || L.water[k] || L.way[k] || L.built[k]) return null
-  const r = featureOf(L, L.veg[k])
-  if (!isWood(r) || ihash(a, b, 22) >= L.density[k] / 255) return null
+  if (!treeFree(g, x, z)) return null
+  const r = vegAt(g, x, z)
+  // (the density's ramp from the layers' cell)
+  if (!isWood(r) || ihash(a, b, 22) >= g.L.density[cellAt(g.L, x, z)] / 255) return null
   const rim = [0, 1, 2, 3].some(
-    q => !woodAt(L, x + Math.cos((q * Math.PI) / 2) * WOOD_RIM, z + Math.sin((q * Math.PI) / 2) * WOOD_RIM),
+    q => !isWood(vegAt(g, x + Math.cos((q * Math.PI) / 2) * WOOD_RIM, z + Math.sin((q * Math.PI) / 2) * WOOD_RIM)),
   )
   const shares = rim ? RIM : (LEAF[String(r!.attrs.leaf)] ?? LEAF.mixed)
   const sp = speciesOf(shares, ihash(a, b, 23))
@@ -570,7 +668,7 @@ export function woodTree(L: Layers, a: number, b: number): MapTree | null {
 }
 
 /** The tree an orchard's row point (a, b) holds, if any: its rows along `rows.dir`, `rows.spacing` apart. */
-export function orchardTree(L: Layers, r: Resolved, a: number, b: number): MapTree | null {
+export function orchardTree(g: TreeGround, r: Resolved, a: number, b: number): MapTree | null {
   const rows = (r.attrs.rows ?? {}) as Record<string, number>
   const sp = Number(rows.spacing ?? 9)
   const c = Math.cos(Number(rows.dir ?? 0))
@@ -579,8 +677,7 @@ export function orchardTree(L: Layers, r: Resolved, a: number, b: number): MapTr
   const v = b * sp + (ihash(a, b, 31) - 0.5) * 0.6
   const x = u * c - v * s
   const z = u * s + v * c
-  const k = cellAt(L, x, z)
-  if (k < 0 || L.water[k] || L.way[k] || L.built[k] || featureOf(L, L.veg[k]) !== r) return null
+  if (!treeFree(g, x, z) || vegAt(g, x, z) !== r) return null
   // the odd gap in a row
   if (ihash(a, b, 32) < 0.06) return null
   return { x, z, sp: 'apple', s: treeScale('apple', Number(r.attrs.height ?? 6), ihash(a, b, 33)) }
@@ -595,11 +692,12 @@ function freeSpecies(r: Resolved): TreeSpecies {
 }
 
 /**
- * The window's trees, in window metres, within the far ring: the woods' scatter, the orchards' rows and the
- * free-standing trees (Layers.trees), in that order.
+ * The window's trees, in window metres, within its areas (the far ring): the woods' scatter, the orchards' rows (each
+ * placed against the areas' 1 m shapes) and the free-standing trees (Layers.trees), in that order.
  */
-export function mapTrees(L: Layers, win: LookWindow, far: number): MapTree[] {
-  const h = far / 2
+export function mapTrees(L: Layers, A: FineAreas, win: LookWindow): MapTree[] {
+  const g: TreeGround = { L, A, win }
+  const h = (A.n * A.cell) / 2
   const out: MapTree[] = []
   const keep = (t: MapTree | null) => {
     if (t && Math.abs(t.x - win.x) < h && Math.abs(t.z - win.z) < h) out.push({ ...t, x: t.x - win.x, z: t.z - win.z })
@@ -608,8 +706,8 @@ export function mapTrees(L: Layers, win: LookWindow, far: number): MapTree[] {
   const a1 = Math.ceil((win.x + h) / WOOD_STEP) + 1
   const b0 = Math.floor((win.z - h) / WOOD_STEP) - 1
   const b1 = Math.ceil((win.z + h) / WOOD_STEP) + 1
-  for (let b = b0; b <= b1; b++) for (let a = a0; a <= a1; a++) keep(woodTree(L, a, b))
-  for (const r of orchardsIn(L, win, far)) {
+  for (let b = b0; b <= b1; b++) for (let a = a0; a <= a1; a++) keep(woodTree(g, a, b))
+  for (const r of orchardsIn(g)) {
     const rows = (r.attrs.rows ?? {}) as Record<string, number>
     const sp = Number(rows.spacing ?? 9)
     // the rows' lattice over the window's whole far ring, in the rows' frame (a turned square's reach: its diagonal)
@@ -619,7 +717,7 @@ export function mapTrees(L: Layers, win: LookWindow, far: number): MapTree[] {
     const cv = Math.round((-win.x * s + win.z * c) / sp)
     const reach = Math.ceil((h * Math.SQRT2) / sp) + 1
     for (let b = cv - reach; b <= cv + reach; b++) {
-      for (let a = cu - reach; a <= cu + reach; a++) keep(orchardTree(L, r, a, b))
+      for (let a = cu - reach; a <= cu + reach; a++) keep(orchardTree(g, r, a, b))
     }
   }
   for (const t of L.trees) {
@@ -635,16 +733,12 @@ export function mapTrees(L: Layers, win: LookWindow, far: number): MapTree[] {
   return out
 }
 
-/** The orchards with a cell in the window's far ring. */
-function orchardsIn(L: Layers, win: LookWindow, far: number): Resolved[] {
+/** The orchards with a cell in the window's areas. */
+function orchardsIn(g: TreeGround): Resolved[] {
   const found = new Set<Resolved>()
-  const h = far / 2
-  for (let z = win.z - h + 1; z < win.z + h; z += L.cell) {
-    for (let x = win.x - h + 1; x < win.x + h; x += L.cell) {
-      const k = cellAt(L, x, z)
-      const r = k >= 0 ? featureOf(L, L.veg[k]) : null
-      if (r && r.kind.startsWith('veg.orchard')) found.add(r)
-    }
+  for (const v of g.A.veg) {
+    const r = v ? g.L.table[v - 1] : null
+    if (r && r.kind.startsWith('veg.orchard')) found.add(r)
   }
   return [...found]
 }

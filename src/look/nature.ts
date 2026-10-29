@@ -629,7 +629,8 @@ export function buildNature(
       const mdl = oneTree ? 'CommonTree_1' : genModels ? genModels.species(sp, x, z) : PACK_OF[sp](x, z)
       const sc = oneTree || !genModels ? s * (PACK_SCALED.has(sp) ? 1 : PACK_METRE) : s
       if (Math.max(Math.abs(x), Math.abs(z)) < D.spec.tile / 2) {
-        if (addPlaced(mdl, [x, z, sc, hash(x, z) * 6.28, hash(z, x)], '', mdl) !== 'drawn') continue
+        // (onFields: placed on purpose, by the map; a rim's or a row's tree beside a field is not hidden)
+        if (addPlaced(mdl, [x, z, sc, hash(x, z) * 6.28, hash(z, x)], '', mdl, true) !== 'drawn') continue
         const M = NATURE[mdl]
         smTree(
           x,

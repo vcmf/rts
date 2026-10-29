@@ -122,6 +122,11 @@ view (`app/map.html`) at the same spots (`kobelnitz-map-*`), and the pheasantry'
 
 ### Open questions
 
+- **Kinds or attributes.** The compiler reads some things off a kind's name (`way.road.lane` as a track,
+  `veg.wood.*` as a wood, `veg.tree.poplar` as a poplar) where an attribute could say it (a way's surface or use, a
+  stand's growth and leaf). Whether the language should carry these as attributes, so a new kind needs no compiler
+  change: with the field generator (the code review, 2026-10-29).
+
 - **The fields' edges at the closest zoom.** Fixed for the paint (1 m cover, the fine warp at the bake); the crops'
   dark under-layer (the meadow map, from the cover's cells, unwarped) still shows faint 1 m steps at 20 m along a
   green-corn strip. The field generator in the language could give the look polygons instead of cells.
