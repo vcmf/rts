@@ -81,7 +81,8 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * down (decision 0055). Rivers, roads, towns and names are ink on a 2D canvas above, redrawn when the camera moves.
  *
  * URL: ?rz= the heights exaggerated for the light (2), ?sun= the sun height in degrees (38), ?floor= and ?top= the
- * darkest and lightest relief tone against the paper (0.55, 1.16), ?smooth= the slope light smoothing in cells (2),
+ * darkest and lightest relief tone against the paper (0.55, 1.16), ?dark= how near the deepest shade comes to a warm
+ * black (0.88), ?smooth= the slope light smoothing in cells (2),
  * ?contour= the contour interval in metres (200), ?view=x,z,km (the
  * target in km from the centre, east and north, and the camera distance), ?theatre= the generated file.
  */
@@ -166,6 +167,8 @@ const RELIEF_SUN = param('sun', 38, 2, 85);
 // shader's soft knee divides by
 const SHADE_FLOOR = param('floor', 0.55, 0.3, 0.97);
 const SHADE_TOP = param('top', 1.16, 1.02, 1.6);
+// how far the deepest shade goes toward the warm black ink (1: all the way)
+const SHADE_DARK = param('dark', 0.88, 0, 1);
 // the light from the north-west, as on the battle map: x east, z north
 const NW = [-Math.SQRT1_2, Math.SQRT1_2];
 
@@ -392,8 +395,8 @@ varying vec2 vW;
 uniform sampler2D uRelief, uLakes, uPaperT, uHeight;
 uniform vec2 uHalf, uTexel, uLakeTexel, uLightXZ;
 uniform float uCellKm;
-uniform vec3 uPaper, uTable, uWater;
-uniform float uFloor, uTop, uContour;
+uniform vec3 uPaper, uTable, uWater, uShadowInk;
+uniform float uFloor, uTop, uContour, uDark;
 
 float rectDist(vec2 p, vec2 extent) {
   vec2 d = abs(p) - extent;
@@ -439,9 +442,11 @@ void main() {
   float dv = v - 1.0;
   v = dv < 0.0 ? 1.0 - (1.0 - uFloor) * (1.0 - exp(dv / (1.0 - uFloor)))
                : 1.0 + (uTop - 1.0) * (1.0 - exp(-dv / (uTop - 1.0)));
-  vec3 hue = v < 1.0 ? mix(vec3(0.93, 0.92, 0.93), vec3(1.0), (v - uFloor) / (1.0 - uFloor))
-                     : mix(vec3(1.0), vec3(1.0, 0.985, 0.95), (v - 1.0) / (uTop - 1.0));
-  vec3 col = min(paper * v * hue, vec3(1.0));
+  /* the shade runs from the paper to a warm black ink, the lit slopes brighten the paper toward white */
+  float shade = pow(clamp((1.0 - v) / (1.0 - uFloor), 0.0, 1.0), 1.15);
+  vec3 lit = min(paper * mix(vec3(1.0), vec3(1.0, 0.985, 0.95), clamp((v - 1.0) / (uTop - 1.0), 0.0, 1.0)) * v,
+                 vec3(1.0));
+  vec3 col = v < 1.0 ? mix(paper, uShadowInk, shade * uDark) : lit;
 
   /* contours from the smoothed heights, as the draft map draws them: a thin warm line every uContour metres, a
      stronger index line every fifth; each fades where its lines would crowd on screen */
@@ -452,10 +457,10 @@ void main() {
   float w5 = fwidth(f5);
   float l1 = 1.0 - smoothstep(0.5, 1.3, abs(fract(f1 + 0.5) - 0.5) / max(w1, 1e-5));
   float l5 = 1.0 - smoothstep(0.6, 1.5, abs(fract(f5 + 0.5) - 0.5) / max(w5, 1e-5));
-  l1 *= 1.0 - smoothstep(0.12, 0.3, w1);
-  l5 *= 1.0 - smoothstep(0.12, 0.3, w5);
-  vec3 contourInk = vec3(0.42, 0.36, 0.3);
-  col = mix(col, contourInk, max(0.22 * l1, 0.42 * l5));
+  l1 *= 1.0 - smoothstep(0.06, 0.16, w1);
+  l5 *= 1.0 - smoothstep(0.08, 0.2, w5);
+  vec3 contourInk = vec3(0.24, 0.19, 0.15);
+  col = mix(col, contourInk, max(0.4 * l1, 0.68 * l5));
 
   /* lakes: a flat pale wash sunk below the shore, the bank toward the light shading the water */
   vec2 luv = (vW + uHalf) / (2.0 * uHalf);
@@ -467,7 +472,7 @@ void main() {
                    texture2D(uLakes, luv + lz).r - texture2D(uLakes, luv - lz).r);
     vec2 n = gW / max(length(gW), 1e-4);
     float bank = smoothstep(0.02, 0.3, length(gW));
-    vec3 wash = mix(paper, uWater, 0.62);
+    vec3 wash = mix(paper, uWater, 0.88);
     wash *= 1.0 - 0.3 * clamp(dot(n, -uLightXZ), 0.0, 1.0) * bank;
     col = mix(col, wash, smoothstep(0.15, 0.6, w));
   }
@@ -527,7 +532,7 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
   attributes: ['position'],
   uniforms: [
     'worldViewProjection', 'uHalf', 'uTexel', 'uLakeTexel', 'uCellKm', 'uLightXZ',
-    'uPaper', 'uTable', 'uWater', 'uFloor', 'uTop', 'uContour',
+    'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uFloor', 'uTop', 'uContour', 'uDark',
   ],
   samplers: ['uRelief', 'uLakes', 'uPaperT', 'uHeight'],
 });
@@ -545,7 +550,9 @@ material.setFloat('uCellKm', CELL / 1000);
 material.setVector2('uLightXZ', new B.Vector2(NW[0], NW[1]));
 material.setColor3('uPaper', B.Color3.FromArray(PAPER));
 material.setColor3('uTable', B.Color3.FromArray(hex('#d6cfbf')));
-material.setColor3('uWater', B.Color3.FromArray(hex('#9fbcc2')));
+material.setColor3('uWater', B.Color3.FromArray(hex('#3b78b0')));
+material.setColor3('uShadowInk', B.Color3.FromArray(hex('#2a2119')));
+material.setFloat('uDark', SHADE_DARK);
 material.setFloat('uFloor', SHADE_FLOOR);
 material.setFloat('uTop', SHADE_TOP);
 material.setFloat('uContour', CONTOUR);
@@ -642,7 +649,7 @@ const ink = inkCanvas.getContext('2d');
 const INK_DPR = Math.min(2, window.devicePixelRatio || 1);
 const INK = '#2b2824';
 const ROAD_RED = '#a3412c';
-const RIVER_INK = '#4f7380';
+const RIVER_INK = '#2f6aa3';
 let VP = null;
 
 /** Sizes the ink canvas to the screen. */
@@ -893,7 +900,7 @@ function drawRiverNames(ppk, placed, screen) {
     ink.save();
     ink.translate(mid[0], mid[1]);
     ink.rotate(ang);
-    haloText(name, -w / 2, -5, '#3f6270');
+    haloText(name, -w / 2, -5, '#24578a');
     ink.restore();
   }
   ink.letterSpacing = '0px';

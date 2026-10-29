@@ -70,7 +70,11 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   about 1.25 km (`?smooth=`), a warm off-white paper (`#eeeadf`), tones 0.55 to 1.16, the cast shadow down to 0.6, and
   contours every 200 m with an index line every 1,000 m (`?contour=`), drawn from heights smoothed over about 1.75 km
   in a half-float texture (8 bits drew them in 16 m stairs), each fading where its lines crowd on screen. How to
-  simplify further: a research note, in progress. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  simplify further: a research note, in progress. Third look (2026-10-29: "give contour a darker color and water ocean blue, and shadows of mountain …
+  darker (near black, warm black)"): the shade runs from the paper to a warm black ink (`#2a2119`, `?dark=` how far,
+  0.88), contours in a dark warm brown, faded sooner where they crowd, lakes and rivers an ocean blue (`#3b78b0`).
+  Darker than the battle map's readability bound (#141: the darkest about 0.6 of the paper): to check once the
+  armies are on it (K2). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
