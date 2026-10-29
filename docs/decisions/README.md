@@ -72,7 +72,7 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0045](0045-render-scale-easu.md) | The render scale 0.9 from the closest zoom, upscaled by EASU | accepted |
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
 | [0047](0047-figures-cast-runtime-shadows.md) | The figures cast runtime shadows from a map of their own | proposed |
-| [0048](0048-battle-in-a-worker.md) | The battle runs in a worker, its soldiers stepped at 12 fps | proposed |
+| [0048](0048-battle-in-a-worker.md) | The battle runs in a worker, its soldiers stepped at 12 fps | accepted |
 | [0049](0049-simple-shadows-beyond-close-zoom.md) | The figures' shadow map only up close; one simple shadow a soldier beyond | proposed |
 | [0050](0050-armies-32k-at-120fps.md) | 32,000 soldiers at 120 fps: four steps, each kept only if measured (experimental) | proposed |
 | [0051](0051-closer-zoom-nearest-lod.md) | The closest zoom at 15 m, held over high ground, with the full figure for the men nearest | proposed |

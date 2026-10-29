@@ -19,7 +19,7 @@ import { startPreview } from './preview.ts'
 const out = process.argv[2] || 'scratch/app-check'
 const PORT = 4178
 // the page is served cross-origin isolated, so its battle runs in the battle worker (PR 3 of
-// docs/plans/active/battle-threads.md; ?thread=main runs it on the page)
+// docs/plans/done/battle-threads.md; ?thread=main runs it on the page)
 const READY = [
   'eval',
   'if (!window.APP) throw new Error("the page did not start (no window.APP)"); if (APP.thread !== "worker") throw new Error(`the battle runs on the ${APP.thread} thread, not the worker`); "ready"',

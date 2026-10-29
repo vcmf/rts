@@ -76,7 +76,7 @@ frames (`src/app/page-rules.ts`); the selection is pruned of formations whose sl
 loop) adds `dt × speed` to an accumulator and runs the
 ticks owed (at most 20 per frame; the rest is dropped), syncing the soldier layer after each. The layer
 then takes the sub-steps due on its own clock (`src/render/men-clock.ts`, battle threads PR 1,
-`docs/plans/active/battle-threads.md`), not once a frame: `MEN_HZ` rounds a real second, whatever the frame rate,
+`docs/plans/done/battle-threads.md`), not once a frame: `MEN_HZ` rounds a real second, whatever the frame rate,
 each split into a sub-step per group of battalions (`MEN_GROUPS`, shared out by their men; a battalion keeps its
 group while it lasts), spread evenly over the round. A sub-step covers its group's game time since its last one, at
 most `MEN_DT` (above it halted men near trunks jitter, measured), so at higher speeds the rounds come faster and 8×
@@ -105,7 +105,7 @@ indices in the order they joined; nothing is compacted, so a fallen man keeps hi
 it, gone battalions' men included, while a man who left the field frees his for a newcomer. Readers (picking, box
 select, the map, `app-check`) take the arrays from `layer.men` each time they read them, through a battalion's list:
 a full store grows into new arrays, which the battle worker will have to share again
-(`docs/plans/active/battle-threads.md`, PRs 2 and 3).
+(`docs/plans/done/battle-threads.md`, PRs 2 and 3).
 
 **Who stands where** (`SoldierLayer.sync`). The sim keeps men per company (decisions 0007, 0018); the layer
 places them. A battalion is matched again only when its signature changes: men per company, shape,

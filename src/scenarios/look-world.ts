@@ -1,4 +1,4 @@
-// The scenarios on the look page's world (maps/painted-world.ts, docs/plans/active/battle-threads.md, PR 4a): the
+// The scenarios on the look page's world (maps/painted-world.ts, docs/plans/done/battle-threads.md, PR 4a): the
 // painted demo tile as a sim map. `look-cross`: four battalions a side in column on the open ground east of the
 // river, 300 m apart, holding their fire (the map's check: a battle runs on it, its replay reproduced).
 import type { World, Scenario } from '../sim/index.ts'

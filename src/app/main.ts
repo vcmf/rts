@@ -1,7 +1,7 @@
 // The S1b page (docs/plans/done/s1b-sim-page.md): the sim at 20 Hz, drawn as a staff map with every soldier as a
 // circle; the mouse selects and orders battalions. Every input becomes a command, stamped and logged by the battle,
 // so a session can be replayed. The battle runs in the battle worker and the page reads its published frames
-// (docs/plans/active/battle-threads.md, PR 3); without cross-origin isolation, or at ?thread=main, on this thread.
+// (docs/plans/done/battle-threads.md, PR 3); without cross-origin isolation, or at ?thread=main, on this thread.
 // The visual bench (docs/plans/active/c0-bench.md): an overlay of what the sim tests, drawn from the world the page
 // reads; a tick on, a tick back and a time to go to, asked of the battle wherever it runs (decision 0081).
 import fieldUrl from '../../data/formation-field.simdata?url'

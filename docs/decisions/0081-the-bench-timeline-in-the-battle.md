@@ -6,7 +6,7 @@ date: 2026-10-28
 # 0081 The bench's timeline lives in the battle; its overlay is a view on the page
 
 How Track S's visual bench (C0, #191: going back to a tick, a tick on, a time to go to, branching, marks; an overlay
-of what the sim tests) works with the battle in its workers (decision 0048, `docs/plans/active/battle-threads.md`).
+of what the sim tests) works with the battle in its workers (decision 0048, `docs/plans/done/battle-threads.md`).
 The plan's section: "PR 7".
 
 ## Context

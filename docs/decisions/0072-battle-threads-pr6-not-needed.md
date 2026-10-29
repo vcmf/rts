@@ -6,7 +6,7 @@ date: 2026-10-27
 # 0072 Battle threads: no PR 6; the look page's placing goes to the men worker instead
 
 Closes the battle threads plan's PR 6 (rendering in a worker, or the soldier layer in WebAssembly) against its own
-decision rule, which tripped. The plan and its measurement: `docs/plans/active/battle-threads.md` ("PR 5 and PR 6",
+decision rule, which tripped. The plan and its measurement: `docs/plans/done/battle-threads.md` ("PR 5 and PR 6",
 its Outcome); the next step: its "PR 4c".
 
 ## Context

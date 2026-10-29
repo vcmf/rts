@@ -1,4 +1,4 @@
-// The bench's timeline in the battle (docs/plans/active/battle-threads.md, PR 7; decision 0081): Battle.goTo,
+// The bench's timeline in the battle (docs/plans/done/battle-threads.md, PR 7; decision 0081): Battle.goTo,
 // stepTick, a branch, the soldier layer laid out again; the timeline's tails the sim worker sends (tailOf).
 import { describe, it, expect } from 'vitest'
 import { dataBytes, GOLDEN_DATA_VERSION } from './fx.ts'

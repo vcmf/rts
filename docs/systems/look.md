@@ -814,7 +814,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   width, its approach only as wide as its column) and the trapezoid its companies cross as they deploy (as wide as
   the line at the ranks' depth, as the column at its rear: four boxes), so they may stand behind a line's flanks,
   never ahead of a line nor in a deploying company's way (the test checks every man's path at 40 a side).
-- **The sim** (`?armies=<n>&sim`, battle threads PR 4b, `docs/plans/active/battle-threads.md`): the same layout, the
+- **The sim** (`?armies=<n>&sim`, battle threads PR 4b, `docs/plans/done/battle-threads.md`): the same layout, the
   battle played by the sim in its workers (`src/look/sim-armies.ts`, on the look world's sim map
   `maps/painted-world.ts`; on the page when it cannot share memory with them): each battalion spawned where it is laid
   out by a command (so the session replays), in column, firing at will; it marches to 90 m short of the fight's middle,

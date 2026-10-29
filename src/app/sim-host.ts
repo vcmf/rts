@@ -1,4 +1,4 @@
-// The sim worker (docs/plans/active/battle-threads.md, PR 5): the battle's sim on its own clock, without its men.
+// The sim worker (docs/plans/done/battle-threads.md, PR 5): the battle's sim on its own clock, without its men.
 // After every tick it writes the world to the tick ring (src/app/tick-ring.ts) for the men worker
 // (src/app/men-host.ts), and the game clock to the ring's header; commands and requests come from the page (the
 // bench's too: going to a time, a tick on, a mark; PR 7), what changed of the battle's timeline goes back to it.

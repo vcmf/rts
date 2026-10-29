@@ -44,7 +44,7 @@ function bench(w: World): void {
 }
 export const s1bBench: Scenario = { name: 's1b-bench', setup: bench }
 
-// the 32,000-men bench (docs/plans/active/battle-threads.md, PR 3): 80 battalions of 400 in column on the 1.2 km
+// the 32,000-men bench (docs/plans/done/battle-threads.md, PR 3): 80 battalions of 400 in column on the 1.2 km
 // battlefield, 40 a side in five rows of eight on the two ridges, the stream between them (the page at
 // ?scenario=s1b-bench-80)
 function bench80(w: World): void {

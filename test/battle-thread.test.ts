@@ -1,4 +1,4 @@
-// The battle worker (docs/plans/active/battle-threads.md, PR 3): the published frame read in place equals the battle
+// The battle worker (docs/plans/done/battle-threads.md, PR 3): the published frame read in place equals the battle
 // it was written from, the slot protocol never hands the reader a slot being written, and the battle played in a
 // real worker thread (Node's worker_threads, the same host code as the browser's) reproduces the main thread's.
 import { describe, it, expect } from 'vitest'

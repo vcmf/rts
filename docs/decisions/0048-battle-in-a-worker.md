@@ -1,12 +1,13 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-22
 ---
 
 # 0048 The battle runs in a worker, its soldiers stepped at 12 fps
 
-**Experimental**: if the measurements in `docs/plans/active/battle-threads.md` fail, this decision is rejected and the
-design (`docs/proposals/battle-threads.md`) thrown away (the owner, 2026-10-22).
+**Accepted** (2026-10-29): the plan's measurements were met (`docs/plans/done/battle-threads.md`; Outcome below). It
+was experimental: had they failed, this decision would have been rejected and the design
+(`docs/proposals/battle-threads.md`) thrown away (the owner, 2026-10-22).
 
 ## Context
 
@@ -57,6 +58,13 @@ Annihilation, Supreme Commander).
   (worker vs headless tests) to keep identical, checked by a new browser replay harness.
 - Unknowns measured by the plan: Babylon's own main-thread cost, efficiency cores, `bufferSubData` with shared views,
   the hash's form in the worker.
+
+## Outcome
+
+The plan's PRs 1–5, 4a–4c and 7 met their acceptance; PR 6 (rendering in a worker, or the layer in WebAssembly) was
+measured as not needed (decision 0072). The battle runs in two workers (the sim, and the soldier layer on its 12 Hz
+clock) and the pages read its published frames: the sim page, and the look page's armies at `?sim`. Track S's visual
+bench lives in the battle wherever it runs (decision 0081).
 
 ## Alternatives considered
 

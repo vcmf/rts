@@ -1,4 +1,4 @@
-// The look page's armies from the sim (docs/plans/active/battle-threads.md, PR 4b): each drawn battalion is a sim
+// The look page's armies from the sim (docs/plans/done/battle-threads.md, PR 4b): each drawn battalion is a sim
 // formation, each figure one of its men in the men worker's published frame (src/app/battle-frame.ts), read where he
 // stands: his place, the way he faces and his gait (the frame's: SoldierLayer.orient), his role (run, march, halt;
 // fire while his company's volley is fresh) and when it began. The renderer (src/look/units.ts) asks it in place of

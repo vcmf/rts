@@ -1,4 +1,4 @@
-// The look page's world as a sim map (maps/painted-world.ts, docs/plans/active/battle-threads.md, PR 4a): the
+// The look page's world as a sim map (maps/painted-world.ts, docs/plans/done/battle-threads.md, PR 4a): the
 // committed sim data against the look data it was built from, and a battle on it.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'

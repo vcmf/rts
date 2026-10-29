@@ -1,4 +1,4 @@
-// The battle's published frame (docs/plans/active/battle-threads.md, PR 3): what the battle worker hands the page,
+// The battle's published frame (docs/plans/done/battle-threads.md, PR 3): what the battle worker hands the page,
 // in three slots of shared memory, and the page's read-only views of a slot. A slot holds the world's columns (every
 // typed array of its state: src/sim/columns.ts), the men as the page reads them (src/render/men.ts), the battalions'
 // men, and a header (the clock for the anchors' alpha, the worker's costs). The page's `World` and `SoldierLayer` read

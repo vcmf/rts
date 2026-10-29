@@ -1,5 +1,5 @@
 // The look page's world (the painted demo tile, src/look/world/author.ts) as a map for the sim data build
-// (tools/build-sim-data.ts), so the sim can drive the look page's armies (docs/plans/active/battle-threads.md,
+// (tools/build-sim-data.ts), so the sim can drive the look page's armies (docs/plans/done/battle-threads.md,
 // PR 4a). Built from the look data file (data/painted-world.lookdata), not from the authoring formulas again: the
 // ground the sim walks is the ground drawn. The 800 m tile; x east, z north, as the look page's.
 //   heights: the look's heightfield (heightAt: its own triangles, as the mesh is drawn);
