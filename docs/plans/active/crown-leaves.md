@@ -50,6 +50,15 @@ and the card shader:
   the grain-jittered four reads) stretched into lines along the light; now eight reads on two rings, no jitter
   (`shadowAtWide`). The middle tone: `LEAF_RAMP` (a wider wrap, wider overlapping bands, the shade lifted toward a cool
   mid) and the layers dropping leaf by leaf toward the shade (a draw per leaf patch in the atlas's G).
+- **Streaks, speckle, straight shadow lines** (the owner, at some camera angles; an angle sweep over yaw ±45°, pitch
+  0.6–0.98 and 15–25 m in the wood and by the river, and a pan, found them): (1) whole crowns in horizontal streaks
+  when the camera looks along x: `paint()`'s grain is projected on a plane picked by the normal, and on a card seen
+  edge-on to it the grain stretched across the crown (on main too); the cards now read it in the crown's plane
+  facing the camera (`CARD_GRAIN`). (2) Straight lines along the light at shadow edges: the shadow map's coordinates
+  are the same all along a sun ray, so all the cards it crosses read one texel and an edge is extruded through the
+  crown; each card, and each leaf up close, reads it shifted across the ray. (3) Far speckle: the smaller leaves'
+  coverage thinned in the mips; the alpha cut grows with their mip level. Clumps also stay inside the card's read
+  (`CLUMP_REACH`), so no leaf is cut straight by the cell's edge.
 
 ## Acceptance
 

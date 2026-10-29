@@ -300,7 +300,16 @@ The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the ow
   tone): the light wraps farther, the ramp's bands are wider and overlap, the shade colour is lifted toward a cool mid
   (a third of the way). Other trees' shadows on these crowns are read with `shadowAtWide` (eight reads on two rings, 3
   and 1.5 texels, no grain jitter): read where the sun ray leaves the crown, at a grazing angle, the shadow map's
-  leaf-cut holes came out as streaks along the light (the owner's "line effect"); the rings average them away. Its
+  leaf-cut holes came out as streaks along the light (the owner's "line effect"); the rings average them away. The
+  map's coordinates do not change along the light, so every card a sun ray crosses read the same texels and a
+  caster's edge ran through the crown as straight lines along it: each card reads it 1.5 m across the sun ray by its
+  own draw (`LEAF_SH_JIT`), each leaf by its own up close (to 2.25 m), so the edge follows the leaves; the share a
+  thin caster shades (a trunk, a limb) is left out (`smoothstep(0.3, 0.95, …)`). **The grain on the cards**
+  (`CARD_GRAIN`, every card material): `paint()`'s brush grain is read in the crown's plane facing the camera, not
+  by `grainW`'s planar projection chosen by the normal, which ran along a card edge-on (the zy plane with the view
+  along x) and drew the grain as long horizontal streaks across whole crowns at some yaws (the owner's 2026-10-29
+  still; on main too, with the oak sheet). **Far crowns**: the layered leaves' alpha cut grows with their own mip level
+  too (`LEAF_LOD`), so a far crown is a solid mass with a steady edge. Its
   crowns are lighter in shade (the self-shade 0.5 of the light, not 0.7; the core 0.85, not 0.72; the inner leaves'
   tint halved), at every distance; the brush's grain is looser up close (jitter 0.4). From the default zoom out the
   layers fade to the old value range: a crown is the mass it was. The same 1024² texture (about 5.3 MB with its

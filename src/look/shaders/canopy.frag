@@ -1,5 +1,5 @@
 #extension GL_OES_standard_derivatives : enable
-precision highp float;varying vec3 vW,vN,vS;varying float vTint,vOcc,vH,vRole;varying vec2 vRoot,vUV;varying vec3 vEllC,vEllR,vTU,vTV;varying float vDrop,vFade;uniform vec3 uFolA,uFolB;uniform float uRim,uKind,uLeafSize;uniform sampler2D uLeaf;
+precision highp float;varying vec3 vW,vN,vS;varying float vTint,vOcc,vH,vRole;varying vec2 vRoot,vUV;varying vec3 vEllC,vEllR,vTU,vTV;varying float vDrop,vFade;varying vec3 vCamR,vCamU;uniform vec3 uFolA,uFolB;uniform float uRim,uKind,uLeafSize;uniform sampler2D uLeaf;
 #include<cards>
 #include<painter>
 #include<shore>
@@ -10,6 +10,7 @@ precision highp float;varying vec3 vW,vN,vS;varying float vTint,vOcc,vH,vRole;va
 #define SELF_SHADE 0.5
 #define CORE_DARK 0.85
 #define INNER_TINT vec3(0.86,0.93,0.96)
+#define LEAF_SH_JIT 1.5   // metres: how far a leaf's shadow read moves across the sun ray
 #else
 #define SELF_SHADE 0.7
 #define CORE_DARK 0.72
@@ -25,7 +26,13 @@ void main(){
   vec4 tx=texture2D(uLeaf,vUV);
   // the coverage grows with the mip level, so far crowns keep their mass instead of thinning out
   vec2 d=vUV*uLeafSize;float lod=max(0.0,0.5*log2(max(dot(dFdx(d),dFdx(d)),dot(dFdy(d),dFdy(d)))));
+  #ifdef LEAF_PAINT
+  // the layered leaves are smaller, their mips' coverage thinner between them: grown by the leaves' own mip level
+  // too, so a far crown is a solid mass with a steady edge, not a speckle of alpha-test holes
+  if(tx.a*(1.0+lod*0.6+max(0.0,lod+LEAF_LOD-1.0)*0.8)<0.5)discard;
+  #else
   if(tx.a*(1.0+lod*0.6)<0.5)discard;
+  #endif
   // the value over the coverage: the black around each clump, filtered in at its edge and in the mips, would darken it
   float val=mix(clamp(tx.r/max(tx.a,1e-3),0.0,1.0),0.6,smoothstep(1.5,4.0,lod));                 // far crowns: less value noise between leaves
   #ifdef LEAF_PAINT
@@ -53,7 +60,17 @@ void main(){
   float t=disc>0.0?max(0.0,t2-max(t1,0.0)):0.0;                 // the chord ahead, not the air before it
   float self=1.0-exp(-t*0.75/max(vEllR.x,vEllR.y));
   #ifdef LEAF_PAINT
-  float shO=shadowAtWide(vW+uSunDir*max(t2,0.0),uSunDir,3.0);   // a wide clean edge: no leaf-hole streaks along the light
+  // a wide clean edge: no leaf-hole streaks along the light; the share a thin caster (a trunk, a limb: a texel or two
+  // of the map, a straight band across the crown) shades of the eight reads is left out, a crown's shadow kept
+  // and each leaf reads it a little across the sun ray (its own draw, the atlas's G, and its card's): the map's
+  // coordinates do not change along the light, so every card a sun ray crosses read the same texels and a caster's
+  // edge ran through the crown as straight lines along the light; shifted per leaf, the edge follows the leaves
+  float lp=tx.g/max(tx.a,1e-3);
+  vec3 sa=normalize(cross(uSunDir,vec3(0.0,1.0,0.0))),sb=cross(uSunDir,sa);
+  // (per card, each leaf adding its own only up close: a leaf a few pixels wide turned the edge to speckle)
+  float j1=mix(fract(vDrop*3.71),lp,near),j2=mix(fract(vDrop*7.31+0.37),fract(lp*3.17),near);
+  vec3 jit=(sa*(j1-0.5)+sb*(j2-0.5))*LEAF_SH_JIT*mix(1.0,1.5,near);
+  float shO=smoothstep(0.3,0.95,shadowAtWide(vW+uSunDir*max(t2,0.0)+jit,uSunDir,3.0));
   #else
   float shO=shadowAt(vW+uSunDir*max(t2,0.0),uSunDir);
   #endif
@@ -86,6 +103,8 @@ void main(){
   #endif
   vec3 alb=mix(foliage(uFolA,uFolB,vTint,uKind),groundSeason(groundBounce(vRoot)),bw)*gain   // the painted value of the leaves
     *mix(vec3(1.0),INNER_TINT,step(0.5,vRole));                                                          // the inner leaves (role 1), as the pack crowns paint them
+  // the grain in the crown's plane facing the camera, from its clump's centre (offset by it, so clumps differ)
+  vec3 rel=vW-vEllC;pCard=vec2(dot(rel,vCamR),dot(rel,vCamU))+vEllC.xz*0.37;
   vec3 c=paint(alb,N,vW,core*vOcc*mix(0.85,1.0,val)*mix(1.0,lm.g,uAO*0.6),uRim,jitter,sh);
   vec3 V=normalize(uCamPos-vW);                                 // golden backlight, as on the default crowns
   float back=clamp(dot(-normalize(V.xz+1e-4),normalize(uSunDir.xz)),0.0,1.0);back*=back;

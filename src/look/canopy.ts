@@ -237,6 +237,7 @@ export function cardMaterial(
     uniforms: ['view', 'uFolA', 'uFolB', 'uRim', 'uKind', 'uLeafSize', 'uSeason'],
     samplers: ['uLeaf'],
     defines: [
+      '#define CARD_GRAIN', // the grain in the card's plane (painter.glsl, grainW)
       ...(look.volume ? ['#define VOLUME', '#define SOFT_RAMP', '#define BOUNCE'] : []),
       ...(look.paint
         ? [

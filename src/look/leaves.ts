@@ -133,24 +133,19 @@ export function atlasFromPicture(
 export const LAYER = [0.12, 0.42, 0.72, 1.0]
 const SPLIT = [0.44, 0.82] // a sheet's normalised value: under the first dark, under the second mid, else light
 const HIGHLIGHT = 0.3 // the share of the light leaves (each a patch of one value) that become highlights
+export const CLUMP_REACH = 0.46 // a layered clump's farthest leaf from its cell's middle (cardUV reads to 0.47)
 const SHRINK = 0.8 // a layered cell: three clumps at this scale over each other (smaller leaves, the cell still full)
 
 /**
- * The clumps a layered cell k is painted from, back to front: [sheet clump, x and y offset (cells), turn]. At
- * leafScale 1 three (two behind, offset and turned, its own on top); smaller leaves take more, smaller clumps (about
- * 3 / leafScale² of them) on a sunflower spiral within the cell, the outer ones first, the cell's own clump last in
+ * The clumps a layered cell k is painted from, back to front: [sheet clump, x and y offset (cells), turn]: about
+ * 3 / leafScale² clumps on a sunflower spiral within the cell, the outer ones first, the cell's own clump last in
  * the middle, so the cell keeps its outline and stays full
  */
 export function clumpCopies(k: number, leafScale: number): [number, number, number, number][] {
-  if (leafScale === 1) {
-    return [
-      [(k + 2) % 4, -0.1, 0.08, 2.4],
-      [(k + 1) % 4, 0.09, -0.09, -1.3],
-      [k, 0, 0, 0],
-    ]
-  }
   const n = Math.ceil(3 / (leafScale * leafScale))
-  const reach = 0.47 * (1 - SHRINK * leafScale) + 0.04 // the copies' centres: their clumps' reach within the cell
+  // the copies' centres: each clump (half-extent 0.47 of a cell at scale 1) stays inside CLUMP_REACH of the cell's
+  // middle, so no leaf is cut by the cell's clip (a straight edge across the card, crossing its crown)
+  const reach = Math.max(0, CLUMP_REACH - 0.47 * SHRINK * leafScale)
   const out: [number, number, number, number][] = []
   for (let i = n - 1; i >= 1; i--) {
     const r = reach * Math.sqrt(i / (n - 1))

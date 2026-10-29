@@ -14,7 +14,19 @@ uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason,uSeasonGround;
 // Rec. 709 luma: the grade and the value units keep (the painted bands use the older 0.3, 0.59, 0.11)
 const vec3 LUMA=vec3(0.2126,0.7152,0.0722);
 vec3 G(vec2 uv){return texture2D(uGrain,uv).rgb;}
-vec3 grainW(vec3 wp,vec3 n,float sc){vec2 p=abs(n.y)>0.6?wp.xz:(abs(n.x)>abs(n.z)?wp.zy:wp.xy);return G(p/sc);}
+#ifdef CARD_GRAIN
+// the leaf cards (canopy.frag) set this before paint(): the pixel in its crown's plane facing the camera, in metres.
+// A card faces the camera, not the surface normal grainW projects by: the planar projection chosen by a crown's
+// normal ran along the card edge-on (the zy plane with the view along x) and drew the grain as streaks across it
+vec2 pCard;
+#endif
+vec3 grainW(vec3 wp,vec3 n,float sc){
+  #ifdef CARD_GRAIN
+  return G(pCard/sc);
+  #else
+  vec2 p=abs(n.y)>0.6?wp.xz:(abs(n.x)>abs(n.z)?wp.zy:wp.xy);return G(p/sc);
+  #endif
+}
 // SEASON (docs/art-bible.md §4b): 0 summer · 1 early autumn · 2 late autumn · 3 winter.
 // Snow settles on whatever faces up, broken by the grain, so it reads as painted.
 // NOSNOW: surfaces snow never settles on (the guard's army blocks, as units)
