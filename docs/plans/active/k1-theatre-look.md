@@ -70,7 +70,7 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   about 1.25 km (`?smooth=`), a warm off-white paper (`#eeeadf`), tones 0.55 to 1.16, the cast shadow down to 0.6, and
   contours every 200 m with an index line every 1,000 m (`?contour=`), drawn from heights smoothed over about 1.75 km
   in a half-float texture (8 bits drew them in 16 m stairs), each fading where its lines crowd on screen. How to
-  simplify further: `docs/research/relief-generalization.md` (in progress). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  simplify further: a research note, in progress. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
