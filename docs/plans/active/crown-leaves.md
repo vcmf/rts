@@ -28,11 +28,16 @@ and the card shader:
   pointed, stylised leaves, each leaf filled with one of three tones (the inner ones darker, the outer lighter), a
   darker edge so overlapping leaves part, and its own tilt written directly (each leaf leans out of its clump, and its
   two halves lean apart along the midrib, so a leaf has a lit half and a shaded half). The same 1024² RGBA texture as
-  today (about 5.3 MB with mips), so no memory is added; the oak picture stays for `?leaves=oak`.
+  today (about 5.3 MB with mips), so no GPU memory is added; the oak picture stays for `?leaves=oak`.
 - **The card shader, under `LEAF_PAINT`**: up close the leaf's value spans more of the albedo and its tilt turns the
   normal more; both fade with the mip level to today's flat mass, so the default and widest zooms keep their read.
-- **Two variants for the owner to pick**: `?leaves=painted` (a rosette of pointed leaves) and `?leaves=sprays` (pinnate
-  sprays, leaves in pairs along a stem, closer to Tiny Glade's); `?leaves=oak` keeps today's crowns.
+- **The owner's sheet** (2026-10-29, after the first stills): clumps of simple leaves, sparser than the oak sheet; the
+  owner generated `design/refs/leaf-clumps-simple-greyscale-v1.png` (four rosettes of plain pointed leaves, three flat
+  values), committed as `data/leaf-clumps-simple-v1.png` and the default (`?leaves=simple`); the sheet is a swappable
+  input (`?leafpic=<url>`, or Shift-drop), read with a dome tilt per clump and a darker line between values.
+- **Variants for the owner to pick**: `?leaves=simple` (the owner's sheet), `?leaves=painted` (the interim: a rosette
+  of 38 pointed leaves drawn on load) and `?leaves=sprays` (pinnate sprays, closer to Tiny Glade's); `?leaves=oak`
+  keeps today's crowns.
 
 ## Acceptance
 

@@ -55,6 +55,7 @@ import { MACRO_ARMS, SHADER_ARMS, buildMacro, isBakedArm, type MacroArm, type Ro
 import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasPainted, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
+import SIMPLE_LEAF_URL from '../../data/leaf-clumps-simple-v1.png?url'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import {
   SHADOW_LOOK,
@@ -320,10 +321,11 @@ if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has(
 // the generator (a plain script that sets window.TREEGEN), loaded only for the arm that draws its trees
 if (treeSet.has('gen')) await import('../../prototypes/tree-core.js')
 const cardsOn = treeSet.has('cards')
-// ?leaves: the leaf atlas (docs/plans/active/crown-leaves.md): painted (the default) or sprays, the painted leaves
-// drawn on load; oak, the oak picture the crowns had before; procedural, L7a's drawn oak clumps
-const LEAVES = ['painted', 'sprays', 'oak', 'procedural'] as const
-const leavesParam = params.get('leaves') ?? 'painted'
+// ?leaves: the leaf atlas (docs/plans/active/crown-leaves.md): simple (the default), the owner's sheet of simple
+// leaves; painted or sprays, the painted leaves drawn on load (the interim and Tiny Glade's sprays); oak, the oak
+// picture the crowns had before; procedural, L7a's drawn oak clumps
+const LEAVES = ['simple', 'painted', 'sprays', 'oak', 'procedural'] as const
+const leavesParam = params.get('leaves') ?? 'simple'
 for (const k of ['leaves', 'leafpic', 'cardsize', 'cardcover', 'cardsink', 'volume']) {
   if (params.has(k) && !cardsOn) throw new Error(`?${k} needs the leaf-card crowns (the default, or ?trees=cards)`)
 }
@@ -336,7 +338,7 @@ const leafPic = params.get('leafpic')
 if (leafPic !== null && (!leafPic || params.has('leaves'))) {
   throw new Error('?leafpic takes a picture URL, and replaces ?leaves')
 }
-const paintedLeaves = leavesParam === 'painted' || leavesParam === 'sprays' || leafPic !== null
+const paintedLeaves = leavesParam !== 'oak' && leavesParam !== 'procedural'
 const cardOpt = (k: string, d: number) => {
   const v = Number(params.get(k) ?? d)
   if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`)
@@ -354,13 +356,14 @@ if (params.has('volume') && params.get('volume') !== 'off') {
 }
 let leafTex: DynamicTexture | null = null
 if (cardsOn) {
-  const atlas = leafPic
-    ? atlasFromPicture(await loadImage(leafPic))
-    : leavesParam === 'painted' || leavesParam === 'sprays'
-      ? atlasPainted(leavesParam)
-      : leavesParam === 'procedural'
-        ? atlasProcedural()
-        : atlasFromPicture(await loadImage(LEAF_URL))
+  const atlas =
+    leafPic || leavesParam === 'simple'
+      ? atlasFromPicture(await loadImage(leafPic ?? SIMPLE_LEAF_URL), true)
+      : leavesParam === 'painted' || leavesParam === 'sprays'
+        ? atlasPainted(leavesParam)
+        : leavesParam === 'procedural'
+          ? atlasProcedural()
+          : atlasFromPicture(await loadImage(LEAF_URL))
   leafTex = new DynamicTexture('leaves', atlas, scene, true, Texture.TRILINEAR_SAMPLINGMODE)
   leafTex.hasAlpha = true
   leafTex.wrapU = leafTex.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -1051,7 +1054,7 @@ addEventListener('drop', e => {
       URL.revokeObjectURL(url)
       let atlas: HTMLCanvasElement
       try {
-        atlas = atlasFromPicture(img)
+        atlas = atlasFromPicture(img, cardOpts.paint) // read as the page reads its sheet
       } catch (err) {
         alert(String(err))
         return

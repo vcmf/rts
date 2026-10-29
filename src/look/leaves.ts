@@ -35,7 +35,15 @@ function gutter(empty: (k: number) => boolean, lo: number, hi: number): number {
   return mid
 }
 
-export function atlasFromPicture(img: CanvasImageSource & { width: number; height: number }): HTMLCanvasElement {
+/**
+ * The atlas from a picture of four clumps on black. painted: a sheet of flat-valued simple leaves (the owner's,
+ * docs/plans/active/crown-leaves.md) read as the painted leaves are: each clump a dome (paintedTilt), not the
+ * value's gradient, and a darker line where two values meet, so overlapping leaves part
+ */
+export function atlasFromPicture(
+  img: CanvasImageSource & { width: number; height: number },
+  painted = false,
+): HTMLCanvasElement {
   const { w, h, l } = brightnessOf(img)
   const rowEmpty = (y: number, x0: number, x1: number) => {
     for (let x = x0; x < x1; x++) if (l[y * w + x] > BLACK) return false
@@ -117,7 +125,37 @@ export function atlasFromPicture(img: CanvasImageSource & { width: number; heigh
     }
   })
   og.putImageData(od, 0, 0)
-  return withTilt(out)
+  return painted ? paintedTilt(out) : withTilt(out)
+}
+
+const DOME = 0.75 // how far a painted clump's edge leans out (its middle faces the card's normal)
+const PART = 0.35 // the darkening of a painted sheet's value where two values meet (the line between leaves)
+
+// a painted sheet's tilt and parting (atlasFromPicture): G and B the clump's dome at each pixel (the lean out of its
+// cell's middle, as atlasPainted's leaves lean), R darkened by the value's step over a pixel either side
+function paintedTilt(cv: HTMLCanvasElement): HTMLCanvasElement {
+  const g = cv.getContext('2d', { willReadFrequently: true })!
+  const W = cv.width
+  const img = g.getImageData(0, 0, W, W)
+  const d = img.data
+  const v = new Float32Array(W * W)
+  for (let i = 0; i < v.length; i++) v[i] = d[i * 4 + 3] > 0 ? d[i * 4] / 255 : 0
+  const at = (x: number, y: number) => v[Math.min(W - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))]
+  const reach = CELL * 0.47
+  for (let y = 0; y < W; y++) {
+    for (let x = 0; x < W; x++) {
+      const q = (y * W + x) * 4
+      if (d[q + 3] === 0) continue
+      const step = Math.max(Math.abs(at(x + 1, y) - at(x - 1, y)), Math.abs(at(x, y + 1) - at(x, y - 1)))
+      d[q] = Math.round(d[q] * (1 - PART * Math.min(1, step * 4)))
+      const lx = ((x % CELL) + 0.5 - CELL / 2) / reach
+      const ly = ((y % CELL) + 0.5 - CELL / 2) / reach
+      d[q + 1] = Math.round(128 + 127 * Math.max(-1, Math.min(1, lx * DOME)))
+      d[q + 2] = Math.round(128 + 127 * Math.max(-1, Math.min(1, ly * DOME)))
+    }
+  }
+  g.putImageData(img, 0, 0)
+  return cv
 }
 
 // each leaf's tilt (L7b, docs/plans/done/l7b-crown-volume.md): the value read as a height, its gradient over
