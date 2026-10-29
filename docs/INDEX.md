@@ -81,6 +81,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/look-austerlitz-a1b.md`](plans/active/look-austerlitz-a1b.md) (A1b: the camera's focus on the ground, the ground range per world, the Pratzen),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
   [`plans/active/smoke-bank.md`](plans/active/smoke-bank.md) (musket smoke as soft painted banks at the muzzles, the smoke track's first step),
+  [`plans/active/artillery-smoke.md`](plans/active/artillery-smoke.md) (artillery smoke: a gun's shot as a string of big soft clouds from its muzzle, the battery's bank, the smoke track's second step),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
   [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c),
   [`plans/active/s1c2-morale-machine.md`](plans/active/s1c2-morale-machine.md) (S1c-2),

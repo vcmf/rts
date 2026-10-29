@@ -5,6 +5,7 @@
 // values are the era's (PuffDef, src/rulesets/<era>-smoke.ts), the shot's moment the figure's own clip event.
 import type { PuffDef } from '../../sim/ruleset.ts'
 import { CYCLE, RANK_LAG, slots, type Battalion, type Drill } from './armies.ts'
+import type { Script } from './arms.ts'
 
 /** a clip of the figure registry (data/figures/index.json): its length in source frames and its events' frames */
 export interface ClipInfo {
@@ -99,11 +100,12 @@ export function muzzles(d: Drill, files: number): number[] {
 }
 
 /** the ring's size in puffs (src/look/smoke.ts): every line battalion's puffs alive at once at the most (a volley's
- *  ranks × muzzles, as many volleys as a puff's longest life, its spread and the ranks' lag span, and one more), at
+ *  ranks × muzzles × the era's strung puffs, as many volleys as a puff's longest life, its spread and the ranks' lag
+ *  span, and one more), at
  *  least 64 and at most max (64 B each) */
 export function ringSize(lines: number, muzzlesN: number, f: FireTiming, def: PuffDef, max = 8192): number {
   const volleys = Math.ceil((def.life[1] + 2 * def.jitter + def.stagger + (f.ranks - 1) * RANK_LAG) / f.period) + 1
-  return Math.max(64, Math.min(max, lines * f.ranks * muzzlesN * volleys))
+  return Math.max(64, Math.min(max, lines * f.ranks * muzzlesN * volleys * def.strung[0]))
 }
 
 /** a hash of up to four integers to [0, 1): the puffs' seeds, the same at every load */
@@ -120,8 +122,25 @@ export function hash(a: number, b = 0, c = 0, d = 0): number {
 
 /** floats a puff: its birth place (x, y, z m) and clock (s), its way ahead (x, z: a unit vector), its seed (0 to 1)
  *  and its life (s), then its own factors on the era's size, reach (the blast's and the roll's), rise and density
- *  (puffVary): an instance's first three columns (src/look/shaders/smoke.vert) */
-export const PUFF_FLOATS = 12
+ *  (puffVary), then the ground's rise along its way (m: pathGround) and that way's length (m): an instance's first
+ *  three columns and two of its fourth (src/look/shaders/smoke.vert) */
+export const PUFF_FLOATS = 14
+
+/** The ground along a puff's way (smoke.vert lifts the puff by it, so a cloud carried tens of metres over rising
+ *  ground is not cut by it): how far the blast and the roll carry it in its life (m, puffAt's at its end, its reach
+ *  factor on it) and how much higher the ground is there than at its birth (m) */
+export function pathGround(
+  def: PuffDef,
+  reach: number,
+  life: number,
+  x: number,
+  z: number,
+  way: readonly [number, number],
+  ground: (x: number, z: number) => number,
+): [number, number] {
+  const d = puffAt(def, life, life).ahead * reach
+  return [ground(x + way[0] * d, z + way[1] * d) - ground(x, z), d]
+}
 /** A puff's own factors on the era's values (smoke.vert reads them), each from its own hash (0 to 1) and the era's
  *  `vary` (0: every puff the era's own): size, reach and rise spread evenly about 1 by 0.45, 0.7 and 0.8 of `vary`;
  *  density 1 down to 1 - ½ vary, and one puff in seven thin (a quarter of that: the gaps between the clumps) */
@@ -183,33 +202,190 @@ export function volleyPuffs(
   const ca = hash(index, shot.cycle, shot.volley, 3)
   const cb = hash(index, shot.cycle, shot.volley, 4)
   for (let g = 0; g < xs.length; g++) {
-    const h = (salt: number) => puffHash(index, shot, g, salt)
     const sec = hash(index, shot.cycle * 17 + shot.volley, Math.round((xs[g] + shift) / def.section), 5)
-    const lx = xs[g] + (h(H.lateral) - 0.5) * def.lateral
-    const lz = def.ahead - shot.rank * def.rankReach + h(H.ahead) * 0.3
+    for (let k = 0; k < def.strung[0]; k++) {
+      // (the first of a group's strung puffs keeps the hashes a lone puff had)
+      const h = (salt: number) => puffHash(index, shot, g + k * 1009, salt)
+      const lx = xs[g] + (h(H.lateral) - 0.5) * def.lateral
+      const lz = def.ahead - shot.rank * def.rankReach + h(H.ahead) * 0.3
+      const x = b.x + c * lx + s * lz
+      const z = b.z - s * lx + c * lz
+      const v = puffVary(h(H.size), h(H.reach), h(H.rise), h(H.density), def.vary)
+      const st = strungPuff(k, def.strung[0], def.strung[1])
+      const life = def.life[0] + (def.life[1] - def.life[0]) * h(H.life)
+      out.push(
+        x,
+        ground(x, z) + def.height + shot.rank * def.rankLift,
+        z,
+        shot.t + (sec - 0.5) * def.stagger + (h(H.jitter) * 2 - 1) * def.jitter,
+        s,
+        c,
+        h(H.seed),
+        life,
+        v.size * st.size,
+        v.reach * st.reach,
+        v.rise,
+        v.density * st.density * clump(ca, cb, lx, def.clumps),
+        ...pathGround(def, v.reach * st.reach, life, x, z, [s, c], ground),
+      )
+    }
+  }
+}
+
+/** Where puff k of the n a muzzle's shot leaves (the era's `strung`) lies along its jet, as factors on the era's
+ *  reach, size and density: a lone puff (n 1) the era's own; else the nearest is the muzzle's cloud (a tenth of the
+ *  reach, a little smaller and densest), the farthest `far` × the reach, each larger and fainter than the one before
+ *  (the staff map's gun clouds, docs/research/smoke.md §1) */
+export function strungPuff(k: number, n: number, far: number): { reach: number; size: number; density: number } {
+  if (n <= 1) return { reach: 1, size: 1, density: 1 }
+  const u = k / (n - 1)
+  return { reach: 0.1 + (far - 0.1) * u, size: 0.8 + 0.5 * u, density: 1 - 0.45 * u }
+}
+
+/** A unit of pieces' fire (a battery's, src/look/world/arms.ts serveScript; docs/plans/active/artillery-smoke.md): its
+ *  script's cycle (s) and hold (scriptClock's: null, or the local time the fire runs from, over again), its work
+ *  role's loop (s) and its shot's moment in it (shotAt), and when each piece's work began (s, local: its role's
+ *  start, the script's, the piece's own lag in it) */
+export interface ServeTiming {
+  cycle: number
+  hold: number | null
+  shot: number
+  period: number
+  starts: readonly number[]
+}
+/** a piece's discharge: its clock (s), the piece (its index in the unit's men), the script's cycle and the shot's
+ *  number in it */
+export interface PieceShot {
+  t: number
+  piece: number
+  cycle: number
+  n: number
+}
+
+/** The shots a unit of pieces fires with clocks in (t0, t1] (s), oldest first, into out (cleared): each cycle of its
+ *  script (held: its run from the hold to the cycle's end) each piece goes off at its work's start + the shot's
+ *  moment, then once a loop, until the cycle ends; under the hold, only the shots within the held run */
+export function pieceShotsBetween(
+  t0: number,
+  t1: number,
+  offset: number,
+  f: ServeTiming,
+  out: PieceShot[],
+): PieceShot[] {
+  out.length = 0
+  if (!(t1 > t0)) return out
+  if (!(f.period > 0) || !(f.cycle > 0) || (f.hold !== null && !(f.hold >= 0 && f.hold < f.cycle))) {
+    throw new Error('smoke: pieceShotsBetween needs period > 0, cycle > 0 and 0 <= hold < cycle')
+  }
+  const from = f.hold ?? 0
+  const len = f.cycle - from
+  for (let k = Math.floor((t0 - offset) / len); k <= Math.floor((t1 - offset) / len); k++) {
+    const base = offset + k * len - from // the clock at the cycle's local time 0
+    for (let i = 0; i < f.starts.length; i++) {
+      for (let j = 0; ; j++) {
+        const local = f.starts[i] + f.shot + j * f.period
+        if (local >= f.cycle) break
+        if (local < from) continue
+        const t = base + local
+        if (t > t0 && t <= t1) out.push({ t, piece: i, cycle: k, n: j })
+      }
+    }
+  }
+  return out.sort((a, b) => a.t - b.t || a.piece - b.piece)
+}
+
+/** The puffs of one piece's shot, unit `index` (its place among the units that fire so): the era's `strung` puffs from
+ *  its muzzle (`ahead` m before the piece's place, `height` m over the ground there; spread ±`lateral`/2 across),
+ *  strung along its jet (strungPuff), at the shot's clock (± the era's `jitter`), each with its own seed, life and
+ *  factors (puffVary); pushed onto out, PUFF_FLOATS each. place: the piece's place in the unit's frame (m) */
+export function piecePuffs(
+  b: Battalion,
+  index: number,
+  shot: PieceShot,
+  place: readonly [number, number],
+  def: PuffDef,
+  ground: (x: number, z: number) => number,
+  out: number[],
+): void {
+  const c = Math.cos(b.heading)
+  const s = Math.sin(b.heading)
+  const n = def.strung[0]
+  for (let k = 0; k < n; k++) {
+    const h = (salt: number) => hash(index * 256 + shot.piece, shot.cycle, shot.n * 64 + k, 201 + salt)
+    const lx = place[0] + (h(H.lateral) - 0.5) * def.lateral
+    const lz = place[1] + def.ahead
     const x = b.x + c * lx + s * lz
     const z = b.z - s * lx + c * lz
-    const v = puffVary(h(H.size), h(H.reach), h(H.rise), h(H.density), def.vary)
+    // (the muzzle's own cloud, the first, never one of the thin ones: every shot shows at its gun)
+    const hd = k === 0 && n > 1 ? 1 / 7 + h(H.density) * (6 / 7) : h(H.density)
+    const v = puffVary(h(H.size), h(H.reach), h(H.rise), hd, def.vary)
+    const st = strungPuff(k, n, def.strung[1])
+    const life = def.life[0] + (def.life[1] - def.life[0]) * h(H.life)
     out.push(
       x,
-      ground(x, z) + def.height + shot.rank * def.rankLift,
+      ground(x, z) + def.height,
       z,
-      shot.t + (sec - 0.5) * def.stagger + (h(H.jitter) * 2 - 1) * def.jitter,
+      shot.t + (h(H.jitter) * 2 - 1) * def.jitter,
       s,
       c,
       h(H.seed),
-      def.life[0] + (def.life[1] - def.life[0]) * h(H.life),
-      v.size,
-      v.reach,
+      life,
+      v.size * st.size,
+      v.reach * st.reach,
       v.rise,
-      v.density * clump(ca, cb, lx, def.clumps),
+      v.density * st.density,
+      ...pathGround(def, v.reach * st.reach, life, x, z, [s, c], ground),
     )
   }
 }
 
+/** A unit of pieces as its smoke reads it from its script (src/look/world/arms.ts serveScript): at its cycle's end
+ *  every piece is at work, so each piece's place (m, the unit's frame: the first unit's, the units alike), its work
+ *  role and that role's start (s, local) in each of `units` units, its man's own lag in it (lag: the renderer's,
+ *  Units.lagOf, -1 to 1). Throws if the pieces end the cycle in different roles */
+export function pieceStarts(
+  sc: Script,
+  units: number,
+  lag: (unit: number, man: number) => number,
+): { places: [number, number][]; starts: number[][]; role: string } {
+  const local = sc.cycle - 1e-6
+  const ph = sc.phase(local, false)
+  const man = { x: 0, z: 0, face: 0, role: '', since: 0, moving: false }
+  const places: [number, number][] = []
+  let role = ''
+  const starts = Array.from({ length: units }, (_, u) =>
+    Array.from({ length: sc.men }, (_, i) => {
+      sc.man(i, local, ph, lag(u, i), man)
+      if (u === 0) places.push([man.x, man.z])
+      if (role && man.role !== role) throw new Error(`smoke: a unit's pieces end its cycle in ${role} and ${man.role}`)
+      role = man.role
+      return man.since
+    }),
+  )
+  return { places, starts, role }
+}
+
+/** How far a big card is lifted (m; smoke.vert's, uLift 1): enough that its lower edge (its middle's height cy less
+ *  its half height rx along its up's rise uy) clears its ground (m) by 0.15 m, the depth test cutting it in a hard line
+ *  there otherwise; 0 for a card already clear */
+export function cardLift(cy: number, uy: number, rx: number, ground: number): number {
+  return Math.max(0, ground + 0.15 - (cy - Math.abs(uy) * rx))
+}
+
+/** the ring's size in puffs for units of pieces: every piece's puffs alive at once at the most (its shots within a
+ *  puff's longest life and spread, and one more, × the era's strung puffs), at least 64 and at most max */
+export function pieceRingSize(pieces: number, f: ServeTiming, def: PuffDef, max = 8192): number {
+  const shots = Math.ceil((def.life[1] + 2 * def.jitter) / f.period) + 1
+  return Math.max(64, Math.min(max, pieces * shots * def.strung[0]))
+}
+
 /** The era's smoke and the script's fire checked once (the Smoke's constructor): every time constant, life, size and
- *  spread positive or in its range, so no puff is NaN and no loop runs forever; a bad value throws, naming it */
-export function validateSmoke(def: PuffDef, f: FireTiming): void {
+ *  spread positive or in its range, so no puff is NaN and no loop runs forever; a bad value throws, naming it. f: a
+ *  line's fire (FireTiming: its ranks, in the infantry's CYCLE) or a unit of pieces' (its own cycle) */
+export function validateSmoke(
+  def: PuffDef,
+  f: { period: number; hold: number | null; ranks?: number; cycle?: number },
+): void {
   const bad = (what: string, v: unknown) => {
     throw new Error(`smoke: ${what} must be ${v} (src/rulesets/<era>-smoke.ts, PuffDef; or the fire timing)`)
   }
@@ -226,10 +402,15 @@ export function validateSmoke(def: PuffDef, f: FireTiming): void {
     ['radius[0]', def.radius[0]],
     ['body', def.body],
     ['fire period', f.period],
-    ['ranks', f.ranks],
+    ['ranks', f.ranks ?? 1],
+    ['cycle', f.cycle ?? CYCLE],
     ...def.clumps.map((l, i) => [`clumps[${i}]`, l] as [string, number]),
   ]
   for (const [k, v] of pos) if (!(v > 0)) bad(`${k} > 0`, `positive, not ${v}`)
+  if (!(Number.isInteger(def.strung[0]) && def.strung[0] >= 1)) {
+    bad('strung[0]', `a whole number 1 or more, not ${def.strung[0]}`)
+  }
+  if (!(def.strung[1] > 0)) bad('strung[1]', `positive, not ${def.strung[1]}`)
   if (!(def.life[1] >= def.life[0])) bad('life', `[shortest, longest], not ${def.life.join(', ')}`)
   if (!(def.radius[1] >= def.radius[0])) bad('radius', `[birth, grown], not ${def.radius.join(', ')}`)
   if (!(def.erode >= 0 && def.erode < 1)) bad('erode', `in [0, 1), not ${def.erode}`)
@@ -242,7 +423,8 @@ export function validateSmoke(def: PuffDef, f: FireTiming): void {
   ] as const) {
     if (!(v >= 0)) bad(k, `0 or more, not ${v}`)
   }
-  if (f.hold !== null && !(f.hold >= 0 && f.hold < CYCLE)) bad('the fire hold', `in [0, ${CYCLE}), not ${f.hold}`)
+  const cycle = f.cycle ?? CYCLE
+  if (f.hold !== null && !(f.hold >= 0 && f.hold < cycle)) bad('the fire hold', `in [0, ${cycle}), not ${f.hold}`)
 }
 
 /** the share of its densest a puff keeps at an age (s) of a life (s): whole while young, then thinning to a third at

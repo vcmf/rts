@@ -54,6 +54,12 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
   `src/rulesets/<era>-smoke.ts`);
   a shot's moment is the figure's own `fire` clip event (`data/figures/index.json`). The engine names no weapon
   (decision 0015).
+- **A gun's shot is a string of the same cards** (2026-10-29, `docs/plans/active/artillery-smoke.md`): one big white
+  blast from the muzzle, the era's `strung` puffs along its jet, the nearest a fat cloud round the muzzle, the
+  farthest some metres out, larger and fainter (the staff map's gun clouds), lingering about half as long again as a volley's smoke;
+  a battery firing in turn lays one low bank before its guns. A second source of puffs in the same system: the same
+  shader, its own ring and draw, the same mask and cap (the arms' footprints joined to it, a piece's crew round its
+  root). Which arms smoke, with which era smoke and on which clip event, is the scenario's (`ArmSpec.smoke`).
 - **Fewer, larger puffs further out**: a share of the puffs kept by the camera's distance, the kept ones grown so the
   smoke's area holds.
 
@@ -66,5 +72,12 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
 - Cards in one draw are not sorted: they blend in their slots' order (birth order as the clock runs; a rebuild writes
   battalion by battalion). The smoke is one colour family, the same up to blend order, so the order is not seen. It
   draws after the soldiers' simple shadows (alphaIndex 2000 against their 1000).
+- Big cards (the guns') meet rising ground and the depth test cuts them in a hard line: such a puff is lifted by the
+  ground's rise along its way, and a card whose lower edge would pass under its ground is lifted until it clears it
+  (it sits a little higher on screen). The muskets' small cards are drawn as approved, without either.
+- Far out (50 to 85 m and beyond), a big card's grain is read in its own frame, not in metres, its billows gentler and
+  its thinning a fade: an old grown card read the grain's blotches as an even mottle of holes, and the battery's
+  merged clouds as a camouflage pattern (the owner, 2026-10-29).
+- The muskets' smoke draws first, then each arm's (one draw each); within a draw the cards are unsorted, as above.
 - The sim's smoke (sight, `docs/proposals/sim-design.md` §11) will drive the puffs instead of the script; the cap then
   reads the sim's formations.

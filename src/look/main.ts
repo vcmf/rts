@@ -37,8 +37,9 @@ import { buildTerrain, splitGround } from './terrain.ts'
 import { buildBuildings } from './buildings.ts'
 import { buildBuildingLight } from './building-light.ts'
 import type { Units } from './units.ts'
-import type { Smoke } from './smoke.ts'
-import type { ClipInfo } from './world/smoke.ts'
+import type { PuffSource, Smoke } from './smoke.ts'
+import type { ArmSpec } from './world/arms.ts'
+import { FOOT_FLOATS, type ClipInfo } from './world/smoke.ts'
 import type { Drill } from './world/armies.ts'
 import type { PuffDef } from '../sim/ruleset.ts'
 // the figures' unit data by file (data/figures/<figure>.unitdata): a scenario names its figure, the page finds it here
@@ -724,13 +725,21 @@ if (params.has('msaa')) {
 // ?smoke (with ?armies; decision 0083, docs/plans/active/smoke-bank.md): the musket smoke, the default variant;
 // ?smoke=0 none (main's look), ?smoke=soft|step a variant, and the knobs over it (src/look/world/smoke.ts, smokeLook);
 // ?firehold=1: the script held in its fire phase (every battalion in line firing: the bench's and the stills')
-let smoke: Smoke | null = null
+/** the page's smokes (the muskets', each arm's): on and off together (the bench's arms) */
+interface SmokeSet {
+  parts: Smoke[]
+  setOn(on: boolean): void
+}
+let smoke: SmokeSet | null = null
+// ?armsmoke=0|1: the other arms' smoke (ArmSpec.smoke: the guns') left out (the musket smoke alone, as before them:
+// the owner's comparison, the bench's split) or on (the default); given where no arm smokes, an error
+const armSmoke = bit('armsmoke')
 const fireHold = bit('firehold')
 // (the fight's middle: the bench's focus)
 let armiesFocus: [number, number] | null = null
 // (the smoke's and the armies' switches do nothing without the armies: said, not ignored)
 if (armiesParam === null) {
-  const needs = ['smokecap', 'smokestep', 'lookat', 'firehold'].filter(k => params.has(k))
+  const needs = ['smokecap', 'smokestep', 'lookat', 'firehold', 'armsmoke'].filter(k => params.has(k))
   if (params.has('smoke') && params.get('smoke') !== '0') needs.unshift('smoke')
   if (needs.length) throw new Error(`?${needs.join(', ?')} need ?armies=<n> (the armies and their smoke)`)
 }
@@ -972,7 +981,19 @@ if (armiesParam !== null) {
   if (simParam && params.has('smoke') && params.get('smoke') !== '0') {
     throw new Error('?smoke follows the script, not the sim yet: drop ?sim or ?smoke (src/look/smoke.ts)')
   }
-  smoke = simParam ? null : await buildSmoke(foot, drill, era.smoke.volley, ARMIES_DEMO.figure)
+  // (?armsmoke where nothing would read it: said, not ignored)
+  if (armSmoke !== null) {
+    const none = simParam
+      ? '?sim has no smoke'
+      : params.get('smoke') === '0'
+        ? '?smoke=0 has none'
+        : armSpecs.some(a => a.smoke && arms[a.name])
+          ? null
+          : 'no arm on this page smokes'
+    if (none) throw new Error(`?armsmoke: ${none} (src/look/smoke.ts)`)
+  }
+  const armsOn = armSpecs.flatMap(spec => (arms[spec.name] ? [{ spec, units: arms[spec.name] }] : []))
+  smoke = simParam ? null : await buildSmoke(foot, drill, era.smoke, ARMIES_DEMO.figure, armsOn)
 }
 
 /** the front battalion of each side nearest the fight's middle (line: the first side's, line1: the second's), for
@@ -992,21 +1013,31 @@ function frontLines(
   }
   return out
 }
-/** the musket smoke over the armies (src/look/smoke.ts), unless ?smoke=0: the era's volley smoke, the figure's fire
- *  clip (its shot from the clips' registry, its loop from the unit data), the script's fire phase */
-async function buildSmoke(u: Units, drill: Drill, def: PuffDef, figure: string): Promise<Smoke | null> {
-  const [{ Smoke: SmokeC }, { smokeLook, shotAt }, { fireStart }] = await Promise.all([
-    import('./smoke.ts'),
-    import('./world/smoke.ts'),
-    import('./world/armies.ts'),
-  ])
+/** the smoke over the armies (src/look/smoke.ts), unless ?smoke=0: the era's volley smoke on the infantry (the
+ *  figure's fire clip: its shot from the clips' registry, its loop from the unit data; the script's fire phase), and
+ *  each arm's that names one (ArmSpec.smoke: its pieces' shots on their work role's clip event; ?armsmoke=0 leaves
+ *  them out); the formations' mask, shared: the infantry's footprints, and with the arms' smoke every arm's (their
+ *  pieces' crews, the cavalry riding through it) */
+async function buildSmoke(
+  u: Units,
+  drill: Drill,
+  smokes: Readonly<Record<string, PuffDef>> & { volley: PuffDef },
+  figure: string,
+  arms: readonly { spec: ArmSpec; units: Units }[],
+): Promise<SmokeSet | null> {
+  const [{ Smoke: SmokeC, SmokeMask, volleySource, pieceSource }, { smokeLook, shotAt, pieceStarts }, { fireStart }] =
+    await Promise.all([import('./smoke.ts'), import('./world/smoke.ts'), import('./world/armies.ts')])
   const look = smokeLook(params)
   if (!look) return null
   const r = await fetch(FIGURE_INDEX)
   if (!r.ok) throw new Error(`figure index: ${r.status} ${r.statusText} for ${FIGURE_INDEX}`)
   const index = (await r.json()) as { figures: Record<string, { fps: number; clips: Record<string, ClipInfo> }> }
-  const f = index.figures[figure]
-  if (!f) throw new Error(`smoke: no figure ${figure} in data/figures/index.json`)
+  const clipsOf = (name: string) => {
+    const f = index.figures[name]
+    if (!f) throw new Error(`smoke: no figure ${name} in data/figures/index.json`)
+    return f
+  }
+  const f = clipsOf(figure)
   const fire = u.data.ranges.fire
   const start = fireStart(drill, u.data.ranges.march.speed, u.data.ranges.run.speed)
   const timing = {
@@ -1016,18 +1047,63 @@ async function buildSmoke(u: Units, drill: Drill, def: PuffDef, figure: string):
     ranks: drill.ranks,
     hold: u.holdFire ? start : null,
   }
-  const armies = {
-    battalions: u.battalions,
-    drill,
-    fire: timing,
-    footprints: (out: Float32Array) => u.footprints(out),
-    get placeCount() {
-      return u.placeCount
+  const guns = armSmoke === false ? [] : arms.filter(a => a.spec.smoke)
+  for (const a of guns) a.units.footPad = a.spec.smoke?.crew ?? [0, 0, 0, 0]
+  // the formations' mask: the infantry's footprints and, with the arms' smoke, every arm's, one after another (the
+  // musket smoke alone as it was before the arms)
+  const all = [u, ...(guns.length > 0 ? arms.map(a => a.units) : [])]
+  const feet = {
+    get count() {
+      return all.reduce((n, x) => n + x.placeCount, 0)
+    },
+    footprints(out: Float32Array) {
+      let n = 0
+      for (const x of all) n += x.footprints(out.subarray(n * FOOT_FLOATS))
+      return n
     },
   }
-  const s = new SmokeC(scene, camera, mats, armies, def, look, () => S.t, D.spec.play)
-  Object.assign(window, { __smoke: s })
-  return s
+  const units = all.reduce((n, x) => n + x.battalions.length, 0)
+  const mask = new SmokeMask(scene, feet, units, D.spec.play, look.cap, () => S.t)
+  const volley = volleySource({ battalions: u.battalions, drill, fire: timing }, smokes.volley)
+  const parts = [new SmokeC(scene, camera, mats, volley, smokes.volley, look, () => S.t, mask)]
+  for (const { spec, units: a } of guns) {
+    const sm = spec.smoke!
+    const def = Object.hasOwn(smokes, sm.puffs) ? smokes[sm.puffs] : undefined
+    if (!def) throw new Error(`smoke: the era has no smoke ${sm.puffs} (${spec.name}; src/rulesets/index.ts)`)
+    const source = piecesOf(a, sm.event, clipsOf(spec.figure), def)
+    parts.push(new SmokeC(scene, camera, mats, source, def, look, () => S.t, mask, `smoke-${spec.name}`))
+  }
+  const set: SmokeSet = {
+    parts,
+    setOn(on) {
+      mask.on = on
+      for (const p of parts) p.setOn(on)
+    },
+  }
+  Object.assign(window, { __smoke: set })
+  return set
+
+  /** an arm's pieces as the guns' smoke reads them: each piece's place and work start from its script (pieceStarts:
+   *  every piece at work at its cycle's end, its own lag in it), the role's clip loop and the shot's moment in it (the
+   *  clips' registry's event), the script's cycle and hold */
+  function piecesOf(
+    a: Units,
+    event: string,
+    fig: { fps: number; clips: Record<string, ClipInfo> },
+    def: PuffDef,
+  ): PuffSource {
+    const sc = a.script
+    const { places, starts, role } = pieceStarts(sc, a.battalions.length, (bi, i) => a.lagOf(bi, i))
+    const range = a.data.ranges[role]
+    if (!range) throw new Error(`smoke: the figure has no clips for the role ${role}`)
+    const fire = {
+      cycle: sc.cycle,
+      hold: a.holdFire ? (sc.hold ?? null) : null,
+      shot: shotAt(range.clips, fig.clips, fig.fps, event),
+      period: (range.end - range.start) / a.data.fps,
+    }
+    return pieceSource({ units: a.battalions, places, fire, starts }, def)
+  }
 }
 
 if (flag('rt16')) MSAA.byte = false
@@ -1701,7 +1777,8 @@ if (params.has('bench')) {
   // ?bench=macro: the macro colour's arms whose shaders differ instead (with the detail layer)
   // ?bench=earth: the bare earth's surface up close off and on (earthOn, docs/plans/done/bare-earth.md)
   // ?bench=dof: the gameplay depth of field off and on (decision 0024)
-  // ?bench=smoke (with ?armies): the musket smoke on and off (decision 0083; best with ?firehold=1)
+  // ?bench=smoke (with ?armies): the smoke on, the arms' smoke alone off, and all off (decision 0083; best with
+  // ?firehold=1)
   if (params.get('bench') === 'smoke' && !smoke) throw new Error('?bench=smoke needs the smoke: ?armies, no ?smoke=0')
   // (each material set as it stands, no binder left behind, once the texture's load has set 1: else a late load would
   // turn the off arm on)
@@ -1805,6 +1882,18 @@ if (params.has('bench')) {
                   : params.get('bench') === 'smoke' && smoke
                     ? [
                         { name: 'smoke', apply: () => smoke?.setOn(true) },
+                        // (the arms' smoke off, the muskets' on: the arms' share, docs/plans/active/artillery-smoke.md)
+                        ...(smoke.parts.length > 1
+                          ? [
+                              {
+                                name: 'noarmsmoke',
+                                apply: () => {
+                                  smoke?.setOn(true)
+                                  smoke?.parts.slice(1).forEach(p => p.setOn(false))
+                                },
+                              },
+                            ]
+                          : []),
                         { name: 'nosmoke', apply: () => smoke?.setOn(false) },
                       ]
                     : params.get('bench') === 'dof'

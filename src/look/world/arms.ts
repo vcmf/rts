@@ -200,6 +200,8 @@ export function serveScript(
   return {
     men: n,
     cycle: times.cycle,
+    // (?firehold: from the last piece's start, every piece at work)
+    hold: times.rest + (n - 1) * times.lag,
     bearer: 0,
     fileSpacing,
     roles: [roles.rest, roles.work],
@@ -351,6 +353,11 @@ export interface ArmSpec {
   tread: number
   /** its simple shadows' share of the samples raised by this (1 to 1.5; none: 1), never past the ground's shade */
   shadowDarken?: number
+  /** the smoke its pieces' shots leave (docs/plans/active/artillery-smoke.md): the era's smoke by name (its PuffDef,
+   *  src/rulesets/index.ts), the figure's clip event its shot falls on (data/figures/index.json), and how far the
+   *  ground a piece's crew and carriage take reaches past its root (m: left, behind, right, ahead), for the smoke's
+   *  cap over the men */
+  smoke?: { puffs: string; event: string; crew: readonly [number, number, number, number] }
 }
 
 /** An arm's script (rideScript, serveScript) from its spec, its type's geometry and formation, and its figure's roles'
