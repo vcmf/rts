@@ -81,8 +81,8 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * down (decision 0055). Rivers, roads, towns and names are ink on a 2D canvas above, redrawn when the camera moves.
  *
  * URL: ?rz= the heights exaggerated for the light (2), ?sun= the sun height in degrees (38), ?floor= and ?top= the
- * darkest and lightest relief tone against the paper (0.55, 1.16), ?dark= how near the deepest shade comes to a warm
- * black (0.88), ?smooth= the slope light smoothing in cells (2),
+ * darkest and lightest relief tone against the paper (0.55, 1.3), ?base= flat ground's tone (0.86), ?dark= how
+ * near the deepest shade comes to a warm black (0.88), ?smooth= the slope light smoothing in cells (2),
  * ?contour= the contour interval in metres (200), ?view=x,z,km (the
  * target in km from the centre, east and north, and the camera distance), ?theatre= the generated file.
  */
@@ -166,9 +166,11 @@ const RELIEF_SUN = param('sun', 38, 2, 85);
 // the relief tone on the paper: no darker than SHADE_FLOOR, no lighter than SHADE_TOP; both kept off 1, which the
 // shader's soft knee divides by
 const SHADE_FLOOR = param('floor', 0.55, 0.3, 0.97);
-const SHADE_TOP = param('top', 1.16, 1.02, 1.6);
+const SHADE_TOP = param('top', 1.3, 1.02, 1.8);
 // how far the deepest shade goes toward the warm black ink (1: all the way)
 const SHADE_DARK = param('dark', 0.88, 0, 1);
+// flat ground's tone against the paper: below 1, so the lit slopes have room to rise to near white above it
+const SHADE_BASE = param('base', 0.86, 0.5, 1);
 // the light from the north-west, as on the battle map: x east, z north
 const NW = [-Math.SQRT1_2, Math.SQRT1_2];
 
@@ -395,8 +397,8 @@ varying vec2 vW;
 uniform sampler2D uRelief, uLakes, uPaperT, uHeight;
 uniform vec2 uHalf, uTexel, uLakeTexel, uLightXZ;
 uniform float uCellKm;
-uniform vec3 uPaper, uTable, uWater, uShadowInk;
-uniform float uFloor, uTop, uContour, uDark;
+uniform vec3 uPaper, uTable, uWater, uShadowInk, uHighlight;
+uniform float uFloor, uTop, uContour, uDark, uBase;
 
 float rectDist(vec2 p, vec2 extent) {
   vec2 d = abs(p) - extent;
@@ -442,15 +444,21 @@ void main() {
   float dv = v - 1.0;
   v = dv < 0.0 ? 1.0 - (1.0 - uFloor) * (1.0 - exp(dv / (1.0 - uFloor)))
                : 1.0 + (uTop - 1.0) * (1.0 - exp(-dv / (uTop - 1.0)));
-  /* the shade runs from the paper to a warm black ink, the lit slopes brighten the paper toward white */
+  /* flat ground a mid tone of the paper; the shade runs from it to a warm black ink, the lit slopes up to near white */
+  vec3 base = paper * uBase;
   float shade = pow(clamp((1.0 - v) / (1.0 - uFloor), 0.0, 1.0), 1.15);
-  vec3 lit = min(paper * mix(vec3(1.0), vec3(1.0, 0.985, 0.95), clamp((v - 1.0) / (uTop - 1.0), 0.0, 1.0)) * v,
-                 vec3(1.0));
-  vec3 col = v < 1.0 ? mix(paper, uShadowInk, shade * uDark) : lit;
+  float light = pow(clamp((v - 1.0) / (uTop - 1.0), 0.0, 1.0), 0.8);
+  vec3 col = v < 1.0 ? mix(base, uShadowInk, shade * uDark) : mix(base, uHighlight, light);
 
-  /* contours from the smoothed heights, as the draft map draws them: a thin warm line every uContour metres, a
-     stronger index line every fifth; each fades where its lines would crowd on screen */
+  /* contours from the smoothed heights, as the draft map draws them: a thin line every uContour metres, a stronger
+     index line every fifth; each fades where its lines would crowd on screen. Illuminated (Tanaka): a line is near
+     white where its slope faces the light, dark ink where it faces away */
   float hm = texture2D(uHeight, uv).r;
+  vec2 tx = vec2(uTexel.x, 0.0);
+  vec2 tz = vec2(0.0, uTexel.y);
+  vec2 grad = vec2(texture2D(uHeight, uv + tx).r - texture2D(uHeight, uv - tx).r,
+                   texture2D(uHeight, uv + tz).r - texture2D(uHeight, uv - tz).r);
+  float facing = dot(-grad / max(length(grad), 1e-3), uLightXZ);
   float f1 = hm / uContour;
   float f5 = f1 / ${CONTOUR_INDEX.toFixed(1)};
   float w1 = fwidth(f1);
@@ -459,8 +467,8 @@ void main() {
   float l5 = 1.0 - smoothstep(0.6, 1.5, abs(fract(f5 + 0.5) - 0.5) / max(w5, 1e-5));
   l1 *= 1.0 - smoothstep(0.06, 0.16, w1);
   l5 *= 1.0 - smoothstep(0.08, 0.2, w5);
-  vec3 contourInk = vec3(0.24, 0.19, 0.15);
-  col = mix(col, contourInk, max(0.4 * l1, 0.68 * l5));
+  vec3 contourInk = mix(vec3(0.2, 0.16, 0.12), uHighlight, smoothstep(-0.25, 0.45, facing));
+  col = mix(col, contourInk, max(0.45 * l1, 0.75 * l5));
 
   /* lakes: a flat pale wash sunk below the shore, the bank toward the light shading the water */
   vec2 luv = (vW + uHalf) / (2.0 * uHalf);
@@ -532,7 +540,7 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
   attributes: ['position'],
   uniforms: [
     'worldViewProjection', 'uHalf', 'uTexel', 'uLakeTexel', 'uCellKm', 'uLightXZ',
-    'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uFloor', 'uTop', 'uContour', 'uDark',
+    'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uHighlight', 'uFloor', 'uTop', 'uContour', 'uDark', 'uBase',
   ],
   samplers: ['uRelief', 'uLakes', 'uPaperT', 'uHeight'],
 });
@@ -553,6 +561,8 @@ material.setColor3('uTable', B.Color3.FromArray(hex('#d6cfbf')));
 material.setColor3('uWater', B.Color3.FromArray(hex('#3b78b0')));
 material.setColor3('uShadowInk', B.Color3.FromArray(hex('#2a2119')));
 material.setFloat('uDark', SHADE_DARK);
+material.setFloat('uBase', SHADE_BASE);
+material.setColor3('uHighlight', B.Color3.FromArray(hex('#fdfcf8')));
 material.setFloat('uFloor', SHADE_FLOOR);
 material.setFloat('uTop', SHADE_TOP);
 material.setFloat('uContour', CONTOUR);
@@ -975,12 +985,13 @@ document.getElementById('meta').innerHTML =
 document.getElementById('credit').textContent = T.credit;
 
 placeCamera();
-// the print and its ink are drawn only when the view changed, until the scene is ready (its shader compiled)
+// the print every frame (cheap on the GPU, and safe while its shader compiles in the background: drawing only on a
+// change left an empty frame in a visible Chrome); the ink only when the view changed
 engine.runRenderLoop(() => {
-  if (!dirty) return;
   scene.render();
+  if (!dirty) return;
   drawInk();
-  if (scene.isReady()) dirty = false;
+  dirty = false;
 });
 
 /**
