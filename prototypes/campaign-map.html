@@ -78,7 +78,7 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 /*
  * The campaign map prototype (docs/plans/active/k1-theatre-look.md; the look: docs/proposals/campaign-map.md).
  * The 1805 theatre as a lit relief print: the heights baked into a relief at load (the battle map lit view bake,
- * prototypes/staff-map.html, at a thousand times the scale), on parchment, in a 3D view tilted 30 to 52 degrees off
+ * prototypes/staff-map.html, at a thousand times the scale), on parchment, in a 3D view tilted 30 to 60 degrees off
  * straight down (decision 0055). Rivers, roads, towns and names are ink on a 2D canvas above, redrawn when the
  * camera moves.
  *
@@ -90,7 +90,8 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * ?detail= the real relief mixed back over them (0.3); ?smooth= the real relief's smoothing in cells (1); ?contour=
  * the contour interval in metres (200); ?view=x,z,km the target in km from the centre, east and north, and the
  * camera distance; ?theatre= the generated file; ?mount= the mountains' extra lift (4; 0 true heights); ?fine=
- * the relief's small detail kept (0.5); ?rise= the map's 3D rise per km of those heights (3; 0 flat);
+ * the relief's small detail kept (0.5); ?rise= the map's 3D rise per km of those heights (4; 0 flat; above about 5
+ * the ranges break into shards); ?grain= the slopes' streaked grain (0.2);
  * ?mountlight= the milder lift the light reads (1.5).
  */
 'use strict';
@@ -277,9 +278,11 @@ const CAST_SMOOTH = 6;
 // the plate's thickness in km, and the camera's tilt off straight down, in degrees, far and at the closest zoom
 const THICK = 8;
 const TILT_FAR = 30;
-const TILT_NEAR = param('tilt', 52, 0, 60);
+const TILT_NEAR = param('tilt', 60, 0, 60);
 // the cloud shadows drifting over the map: how dark (0 off)
 const CLOUDS = param('clouds', 0.12, 0, 0.5);
+// the grain on the slopes: fine noise streaked downhill, like gullies (0 off)
+const GRAIN = param('grain', 0.2, 0, 0.8);
 // how much of the real relief's detail the light gets back up close
 const DETAIL_GAIN = param('crisp', 0.8, 0, 1.5);
 const TERRACE_SMOOTH = 1;
@@ -296,8 +299,8 @@ const MOUNT_LIGHT = param('mountlight', 1.5, 0, 12);
 // the map raised in 3D by the same representative heights, RISE km of map for each km of them, smoothed over
 // DISP_SMOOTH cells (the mesh has a vertex about every km), fading to flat over the last RISE_EDGE km to the plate's
 // edge so the map still lies on its table
-const RISE = param('rise', 3, 0, 8);
-const DISP_SMOOTH = 1;
+const RISE = param('rise', 4, 0, 8);
+const DISP_SMOOTH = 3;
 const RISE_EDGE = 12;
 const MOUNT_R = 24;
 const MOUNT_FROM = 500;
@@ -529,8 +532,8 @@ uniform vec2 uHalf, uTexel, uLakeTexel, uLightXZ, uFineTexel0, uFineTexel1, uFin
 uniform vec4 uFineRect0, uFineRect1, uFineRect2;
 uniform vec3 uSun;
 uniform float uCellKm, uFineCellKm, uRZ, uFineK, uNearK, uDetailK, uSheetK, uContourK, uSheet;
-uniform float uTime, uCloudK, uHaze, uScreenH;
-uniform vec3 uPaper, uTable, uWater, uShadowInk, uHighlight, uGlow, uContourInk;
+uniform float uTime, uCloudK, uHaze, uScreenH, uGrain;
+uniform vec3 uPaper, uTable, uWater, uShadowInk, uHighlight, uGlow, uContourInk, uContourMinor;
 uniform float uFloor, uTop, uContour, uDark, uBase, uShadeK;
 
 float rectDist(vec2 p, vec2 extent) {
@@ -669,6 +672,26 @@ void main() {
   float sunlit = R.g;
   float exposed = R.b * 2.0 - 1.0;
   float v = lambert * mix(0.6, 1.0, sunlit) * (1.0 + 0.3 * exposed);
+  /* grain: fine noise streaked downhill (gullies), at two scales, stronger on steep ground, faded where it would
+     shimmer (under about 1.5 px a period); applied to the colour below, after the tone knee, which flattened it */
+  float grainK = 0.0;
+  {
+    float slope = length(vec2(hx, hz)) / (2000.0 * e);
+    vec2 down = vec2(hx, hz) / max(length(vec2(hx, hz)), 1e-6);
+    vec2 across = vec2(-down.y, down.x);
+    vec2 q = vec2(dot(vW, across), dot(vW, down));
+    /* the level of detail set by hand: the streak frame turns with the slope from pixel to pixel, so the automatic
+       one saw huge derivatives and read the flat top mip */
+    /* the smooth cloud noise (256 texels a tile), streaked: cells of about 300 m across the slope, 2 km down it, and a
+       finer octave three times smaller */
+    float lod1 = log2(max(1.0, px * 0.2 * 256.0));
+    float lod2 = log2(max(1.0, px * 0.6 * 256.0));
+    float n1 = textureLod(uClouds, q * vec2(0.2, 0.03), lod1).r;
+    float n2 = textureLod(uClouds, q * vec2(0.6, 0.09) + 0.41, lod2).r;
+    float g = ((n1 - 0.5) * 0.6 + (n2 - 0.5) * 0.4 * (1.0 - smoothstep(0.15, 0.4, px * 2.0))) * 3.5;
+    float steep = smoothstep(0.03, 0.25, slope);
+    grainK = uGrain * clamp(g, -1.0, 1.0) * mix(0.25, 1.0, steep) * (1.0 - smoothstep(0.5, 1.2, px));
+  }
   /* a soft knee toward the floor and the top: steep ground keeps its gradation instead of a flat tone */
   float dv = v - 1.0;
   v = dv < 0.0 ? 1.0 - (1.0 - uFloor) * (1.0 - exp(dv / (1.0 - uFloor)))
@@ -680,6 +703,8 @@ void main() {
   /* cold paper, cool shade, warm light: the lit slopes turn a warm yellow, the brightest faces glow orange */
   vec3 lit = mix(mix(base, uHighlight, light), uGlow, 0.65 * pow(light, 2.5));
   vec3 col = v < 1.0 ? mix(base, uShadowInk, shade * uDark * uShadeK) : lit;
+  /* the grain: lighter flecks in the shade, darker in the light */
+  col = clamp(col * (1.0 + grainK), 0.0, 1.0);
 
   /* the contour sheets, per pixel at any zoom: a pixel whose ground toward the light lies on a lower sheet is on the
      lit rim of its own; one whose ground toward the light lies on a higher sheet is in that sheet's shadow */
@@ -700,11 +725,13 @@ void main() {
   float w1 = fwidth(f1);
   float w5 = fwidth(f5);
   float l1 = 1.0 - smoothstep(0.5, 1.3, abs(fract(f1 + 0.5) - 0.5) / max(w1, 1e-5));
-  float l5 = 1.0 - smoothstep(0.6, 1.5, abs(fract(f5 + 0.5) - 0.5) / max(w5, 1e-5));
+  float l5 = 1.0 - smoothstep(1.0, 2.1, abs(fract(f5 + 0.5) - 0.5) / max(w5, 1e-5));
   l1 *= 1.0 - smoothstep(0.06, 0.16, w1);
   l5 *= 1.0 - smoothstep(0.08, 0.2, w5);
   /* far out only the index lines, fainter: half-faded lines on steep uplands read as crumbs */
-  col = mix(col, uContourInk, max(0.55 * l1 * uContourK, mix(0.35, 0.85, uContourK) * l5));
+  /* the ordinary lines thin and a muted grey, every fifth (the index line) thicker in dark orange */
+  col = mix(col, uContourMinor, 0.5 * l1 * uContourK * (1.0 - l5));
+  col = mix(col, uContourInk, mix(0.4, 0.9, uContourK) * l5);
 
   /* lakes: a flat wash sunk below the shore, the bank toward the light shading the water */
   vec2 luv = (vW + uHalf) / (2.0 * uHalf);
@@ -944,11 +971,11 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
   attributes: ['position'],
   uniforms: [
     'worldViewProjection', 'uHalf', 'uTexel', 'uLakeTexel', 'uCellKm', 'uLightXZ',
-    'uRise', 'uEdge', 'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uHighlight', 'uGlow', 'uContourInk',
+    'uRise', 'uEdge', 'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uHighlight', 'uGlow', 'uContourInk', 'uContourMinor',
     'uFloor', 'uTop', 'uContour', 'uDark', 'uBase', 'uShadeK',
     'uFineTexel0', 'uFineTexel1', 'uFineTexel2', 'uFineRect0', 'uFineRect1', 'uFineRect2',
     'uSun', 'uFineCellKm', 'uRZ', 'uFineK', 'uNearK',
-    'uSheet', 'uDetailK', 'uSheetK', 'uContourK', 'uTime', 'uCloudK', 'uHaze', 'uScreenH',
+    'uSheet', 'uGrain', 'uDetailK', 'uSheetK', 'uContourK', 'uTime', 'uCloudK', 'uHaze', 'uScreenH',
   ],
   samplers: [
     'uRelief', 'uLakes', 'uPaperT', 'uHeight', 'uDisp', 'uLightH', 'uLightD', 'uRealH', 'uFine0', 'uFine1', 'uFine2',
@@ -972,7 +999,8 @@ material.setColor3('uTable', B.Color3.FromArray(hex('#cbc9cf')));
 material.setColor3('uWater', B.Color3.FromArray(hex('#3b78b0')));
 material.setColor3('uShadowInk', B.Color3.FromArray(hex('#4a4656')));
 material.setColor3('uGlow', B.Color3.FromArray(hex('#f2a35e')));
-material.setColor3('uContourInk', B.Color3.FromArray(hex('#a4542a')));
+material.setColor3('uContourInk', B.Color3.FromArray(hex('#93421c')));
+material.setColor3('uContourMinor', B.Color3.FromArray(hex('#8b8a92')));
 material.setFloat('uDark', SHADE_DARK);
 material.setFloat('uBase', SHADE_BASE);
 material.setFloat('uShadeK', 1);
@@ -999,6 +1027,7 @@ material.setFloat('uScreenH', engine.getRenderHeight());
 material.setFloat('uNearK', 0);
 material.setFloat('uSheetK', 0);
 material.setFloat('uDetailK', 0);
+material.setFloat('uGrain', GRAIN);
 material.setFloat('uContourK', 0);
 material.setFloat('uFineK', 0);
 (() => {
@@ -1040,7 +1069,7 @@ plane.material = material;
 plane.alwaysSelectAsActiveMesh = true;
 
 /* =========================================================================
-   CAMERA: tilted 30 degrees off straight down far out, 52 up close (?tilt=), north up; pan by drag, zoom to the cursor
+   CAMERA: tilted 30 degrees off straight down far out, 60 up close (?tilt=), north up; pan by drag, zoom to the cursor
    ========================================================================= */
 /** The camera's tilt off straight down for a distance (km): TILT_FAR far out, TILT_NEAR at the closest zoom. */
 function tiltFor(dist) {

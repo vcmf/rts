@@ -135,7 +135,13 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   (`#f2a35e`) on the brightest faces, a cool grey-violet shade (`#4a4656`, 0.78 of the way), contours in orange-brown
   (`#a4542a`). And (the owner's grey relief model: "make the mountain steeper, exaggerate more its height, and look at
   the map from an angle"): the 3D rise doubled (`?rise=3`), its shape smoothed over one cell instead of two, the camera
-  tilted 30° far out to 52° at the closest zoom (the top edge of the view about 66° off straight down: still no sky). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  tilted 30° far out to 52° at the closest zoom (the top edge of the view about 66° off straight down: still no sky). Then (the owner: "tallest and tiltest … only some contour lines … thicker and orange-dark, the others a more
+  muted grey … make the light texture noisy"): the tilt up close at 60°; the rise tried at 8, which broke the ranges
+  into shards and stretched the 1 km mesh into sheets, so 4 (`?rise=` up to 8), its shape smoothed over three cells;
+  index contours (every 1,000 m) thicker in dark orange (`#93421c`), the others thin muted grey (`#8b8a92`); a grain
+  on the slopes (`?grain=`, 0.2): smooth noise streaked downhill, cells about 300 m across and 2 km down the slope, on
+  the final colour (before the tone knee it vanished), its level of detail set by hand (the streak frame turns with
+  the slope from pixel to pixel, and the automatic level read the flat top mip). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
