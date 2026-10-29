@@ -80,11 +80,12 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * prototypes/staff-map.html, at a thousand times the scale), on parchment, in a 3D view tilted 20 degrees off straight
  * down (decision 0055). Rivers, roads, towns and names are ink on a 2D canvas above, redrawn when the camera moves.
  *
- * URL: ?rz= the heights exaggerated for the light (2), ?sun= the sun height in degrees (38), ?floor= and ?top= the
- * darkest and lightest relief tone against the paper (0.55, 1.3), ?base= flat ground's tone (0.86), ?dark= how
- * near the deepest shade comes to a warm black (0.88), ?smooth= the slope light smoothing in cells (2),
- * ?contour= the contour interval in metres (200), ?view=x,z,km (the
- * target in km from the centre, east and north, and the camera distance), ?theatre= the generated file.
+ * URL (defaults in brackets): ?rz= the heights exaggerated for the light (2); ?sun= the sun height in degrees (38);
+ * ?floor= and ?top= the darkest and lightest relief tone against the paper (0.55, 1.3); ?base= flat ground's tone
+ * (0.86); ?dark= how near the deepest shade comes to a warm black (0.88); ?terrace= the terraces' height in metres
+ * (the contour interval; 0 off); ?detail= the real relief mixed back over them (0.3); ?smooth= the real relief's
+ * smoothing in cells (2); ?contour= the contour interval in metres (200); ?view=x,z,km the target in km from the
+ * centre, east and north, and the camera distance; ?theatre= the generated file.
  */
 'use strict';
 const t0 = performance.now();
@@ -222,6 +223,28 @@ const CONTOUR_SMOOTH = 3;
 // the contours: one every CONTOUR m, an index line every CONTOUR_INDEX lines
 const CONTOUR = param('contour', 200, 25, 2000);
 const CONTOUR_INDEX = 5;
+// the terraces: the light reads heights snapped into bands TERRACE m tall (every height in a band lifted to its
+// floor, so low ground goes flat and the relief reads as stacked layers), their steps on the contour lines; DETAIL of
+// the smoothed real heights is mixed back so a terrace is not a bare plateau. ?terrace=0 turns them off
+const TERRACE = param('terrace', CONTOUR, 0, 2000);
+const DETAIL = param('detail', 0.3, 0, 1);
+
+/**
+ * The heights the light reads: the contour field (heights smoothed over CONTOUR_SMOOTH cells) snapped down to its
+ * TERRACE band, each step softened over a cell either side so it is a steep bank rather than a cliff, with DETAIL of
+ * the real heights smoothed over SMOOTH cells (small hills faded, large forms kept) mixed back in. Without terraces,
+ * the smoothed real heights alone.
+ */
+function terraced(h0, contourField) {
+  const detail = SMOOTH ? boxMean(h0, NX, NZ, SMOOTH) : h0;
+  if (!TERRACE) return detail;
+  const bands = new Float32Array(h0.length);
+  for (let k = 0; k < bands.length; k++) bands[k] = Math.floor(contourField[k] / TERRACE) * TERRACE;
+  const steps = boxMean(bands, NX, NZ, 1);
+  const out = new Float32Array(h0.length);
+  for (let k = 0; k < out.length; k++) out[k] = steps[k] * (1 - DETAIL) + detail[k] * DETAIL;
+  return out;
+}
 
 /**
  * The shaded relief, baked once at load into RGBA bytes the size of the grid, the south row first: R the slope light
@@ -232,11 +255,10 @@ const CONTOUR_INDEX = 5;
  * of its neighbour toward the light, dropped by the sun slope over one step, or its own height). On this grid the
  * north-west neighbour is (i - 1, j + 1), so the walk goes north to south, west to east.
  */
-function bakeRelief(h0) {
+function bakeRelief(h0, contourField) {
+  const shaped = terraced(h0, contourField);
   const h = new Float32Array(h0.length);
-  for (let k = 0; k < h.length; k++) h[k] = h0[k] * RELIEF_Z;
-  // the slope light from smoothed heights, so the 250 m grid does not crumple every hill
-  const soft = SMOOTH ? boxMean(h, NX, NZ, SMOOTH) : h;
+  for (let k = 0; k < h.length; k++) h[k] = shaped[k] * RELIEF_Z;
   const el = (RELIEF_SUN * Math.PI) / 180;
   const drop = CELL * Math.SQRT2 * Math.tan(el);
   const L = [NW[0] * Math.cos(el), Math.sin(el), NW[1] * Math.cos(el)];
@@ -253,18 +275,18 @@ function bakeRelief(h0) {
   }
 
   // exposure: how far a node stands above or below its surroundings, near (about 1.5 km) and wide (about 6 km)
-  const near = boxMean(h0, NX, NZ, 6);
-  const wide = boxMean(h0, NX, NZ, 24);
+  const near = boxMean(shaped, NX, NZ, 6);
+  const wide = boxMean(shaped, NX, NZ, 24);
 
   const out = new Uint8Array(NX * NZ * 4);
   for (let j = 0; j < NZ; j++) {
     for (let i = 0; i < NX; i++) {
       const k = j * NX + i;
-      const gx = (soft[j * NX + Math.min(NX - 1, i + 1)] - soft[j * NX + Math.max(0, i - 1)]) / (2 * CELL);
-      const gz = (soft[Math.min(NZ - 1, j + 1) * NX + i] - soft[Math.max(0, j - 1) * NX + i]) / (2 * CELL);
+      const gx = (h[j * NX + Math.min(NX - 1, i + 1)] - h[j * NX + Math.max(0, i - 1)]) / (2 * CELL);
+      const gz = (h[Math.min(NZ - 1, j + 1) * NX + i] - h[Math.max(0, j - 1) * NX + i]) / (2 * CELL);
       const nl = Math.hypot(gx, 1, gz);
       const lambert = Math.max(0, (-gx * L[0] + L[1] - gz * L[2]) / nl) / L[1];
-      const exposed = 0.5 - ((near[k] - h0[k]) * 0.0007 + (wide[k] - h0[k]) * 0.00025);
+      const exposed = 0.5 - ((near[k] - shaped[k]) * 0.0007 + (wide[k] - shaped[k]) * 0.00025);
       const o = k * 4;
       out[o] = Math.round(clamp((lambert - LAMBERT_RANGE[0]) / (LAMBERT_RANGE[1] - LAMBERT_RANGE[0]), 0, 1) * 255);
       out[o + 1] = Math.round(lit[k] * 255);
@@ -451,14 +473,8 @@ void main() {
   vec3 col = v < 1.0 ? mix(base, uShadowInk, shade * uDark) : mix(base, uHighlight, light);
 
   /* contours from the smoothed heights, as the draft map draws them: a thin line every uContour metres, a stronger
-     index line every fifth; each fades where its lines would crowd on screen. Illuminated (Tanaka): a line is near
-     white where its slope faces the light, dark ink where it faces away */
+     index line every fifth, in dark ink; each fades where its lines would crowd on screen */
   float hm = texture2D(uHeight, uv).r;
-  vec2 tx = vec2(uTexel.x, 0.0);
-  vec2 tz = vec2(0.0, uTexel.y);
-  vec2 grad = vec2(texture2D(uHeight, uv + tx).r - texture2D(uHeight, uv - tx).r,
-                   texture2D(uHeight, uv + tz).r - texture2D(uHeight, uv - tz).r);
-  float facing = dot(-grad / max(length(grad), 1e-3), uLightXZ);
   float f1 = hm / uContour;
   float f5 = f1 / ${CONTOUR_INDEX.toFixed(1)};
   float w1 = fwidth(f1);
@@ -467,7 +483,7 @@ void main() {
   float l5 = 1.0 - smoothstep(0.6, 1.5, abs(fract(f5 + 0.5) - 0.5) / max(w5, 1e-5));
   l1 *= 1.0 - smoothstep(0.06, 0.16, w1);
   l5 *= 1.0 - smoothstep(0.08, 0.2, w5);
-  vec3 contourInk = mix(vec3(0.2, 0.16, 0.12), uHighlight, smoothstep(-0.25, 0.45, facing));
+  vec3 contourInk = vec3(0.2, 0.16, 0.12);
   col = mix(col, contourInk, max(0.45 * l1, 0.75 * l5));
 
   /* lakes: a flat pale wash sunk below the shore, the bank toward the light shading the water */
@@ -504,12 +520,12 @@ function toHalf(v) {
 }
 
 /**
- * The heights smoothed over CONTOUR_SMOOTH cells, as a half-float single-channel texture for the contours: 8 bits
+ * The contour field (heights smoothed over CONTOUR_SMOOTH cells), as a half-float single-channel texture for the
+ * contours: 8 bits
  * would step every 16 m over the theatre's 4 km and draw the lines in stairs. Bilinear, no mips (half floats are not
  * always renderable, which mip generation needs); the contour lines fade by their own screen density instead.
  */
-function contourTexture(h0) {
-  const smooth = boxMean(h0, NX, NZ, CONTOUR_SMOOTH);
+function contourTexture(smooth) {
   const half = new Uint16Array(smooth.length);
   for (let k = 0; k < half.length; k++) half[k] = toHalf(smooth[k]);
   const t = B.RawTexture.CreateRTexture(
@@ -529,7 +545,9 @@ function rawTexture(data, w, h, format) {
 const heights = decodeHeights();
 
 const tBake = performance.now();
-const reliefBytes = bakeRelief(heights);
+// the heights smoothed for the contours, which the terraces step on too
+const contourField = boxMean(heights, NX, NZ, CONTOUR_SMOOTH);
+const reliefBytes = bakeRelief(heights, contourField);
 const maxTextureSize = engine.getCaps().maxTextureSize;
 if (Math.max(NX, NZ) > maxTextureSize) throw new Error(`the theatre grid (${NX} × ${NZ}) passes this GPU's textures`);
 const lakes = bakeLakes(maxTextureSize);
@@ -545,7 +563,7 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
   samplers: ['uRelief', 'uLakes', 'uPaperT', 'uHeight'],
 });
 material.setTexture('uRelief', rawTexture(reliefBytes, NX, NZ, B.Engine.TEXTUREFORMAT_RGBA));
-material.setTexture('uHeight', contourTexture(heights));
+material.setTexture('uHeight', contourTexture(contourField));
 material.setTexture('uLakes', rawTexture(lakes.data, lakes.w, lakes.h, B.Engine.TEXTUREFORMAT_LUMINANCE));
 const paperTex = new B.DynamicTexture('paper', paperCanvas(), scene, true);
 paperTex.update();

@@ -79,7 +79,10 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   above it and the shade falls to the warm black below; illuminated contours (Tanaka): a line near white where its
   slope faces the light, dark where it faces away. The page draws the print every frame again: drawing only on a
   change left an empty frame in a visible Chrome (its shader compiles in the background); the ink is still redrawn
-  only on a change. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  only on a change. Fifth look (the owner: "contour line must not have 'light' part … put close height to same bracket … low
+  become flat"): contours in dark ink only; the light reads terraced heights: the contour field snapped down to its
+  200 m band (`?terrace=`, 0 off), each step softened over a cell either side, 0.3 of the smoothed real relief mixed
+  back (`?detail=`). Low ground goes flat and the relief reads as stacked layers, their banks on the contour lines. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
