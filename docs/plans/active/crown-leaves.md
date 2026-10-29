@@ -98,6 +98,11 @@ branch − main −0.36 to −0.01 ms, no cost (main's close and default ran on 
 their shadows' edges differ on every camera with crowns (the crowns a little lighter in shade at every distance),
 nothing else. The guard (`?armies=20`, base main): ok, no block newly failing.
 
+**The final crowns** (0b9962a9: the middle tone, clean shadows, no streaks; one round, main first): close 4.82 / 4.71,
+default 6.70 / 6.43, widest 7.05 / 6.81; the forest close 8.95 / 8.96, default 10.15 / 10.15, widest 7.67 / 7.66: branch
+− main −0.27 to +0.01 ms, no cost. Goldens: the crowns and their shadows' edges on every camera with crowns, nothing
+else. The guard (`?armies=20`, base main): ok, no block newly failing (the 7 `fails*` fail on main too).
+
 ## Open questions
 
 - The layers' tones and how fast the light reveals them (`LEAF_LAYERS`, the 2.3 in `canopy.frag`): the owner's eye.
