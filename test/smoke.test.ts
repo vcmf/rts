@@ -23,6 +23,7 @@ import {
   SMOKE_DEFAULT,
   SMOKE_LOOKS,
   coverAt,
+  clump,
   coverCap,
   drawClearance,
   keepScale,
@@ -174,15 +175,29 @@ describe("a volley's puffs", () => {
     // (without the men's own spread: the births are the shot's and the section's moment alone)
     const out: number[] = []
     volleyPuffs(b, 3, shot, xs, { ...DEF, jitter: 0 }, () => 10, out)
-    const bySection = new Map<number, Set<number>>()
-    xs.forEach((x, g) => {
-      const k = Math.round(x / SECTION)
-      bySection.set(k, (bySection.get(k) ?? new Set()).add(out[g * PUFF_FLOATS + 3]))
-    })
-    for (const births of bySection.values()) expect(births.size).toBe(1)
-    const moments = [...bySection.values()].map(v => [...v][0])
-    expect(new Set(moments).size).toBeGreaterThan(1)
+    // (a section's puffs share one moment: as many moments as sections across the front, and more than one)
+    const moments = [...new Set(xs.map((_, g) => out[g * PUFF_FLOATS + 3]))]
+    const e = extents(drill)
+    expect(moments.length).toBeGreaterThan(1)
+    expect(moments.length).toBeLessThanOrEqual(Math.ceil((2 * e.halfFront) / SECTION) + 1)
     for (const t of moments) expect(Math.abs(t - shot.t)).toBeLessThanOrEqual(DEF.stagger / 2)
+  })
+})
+
+describe("a volley's clumps", () => {
+  it("between 0.2 and 1, thick in places and thin in others along a battalion's front", () => {
+    const v = Array.from({ length: 200 }, (_, i) => clump(0.31, 0.77, -50 + i * 0.5))
+    for (const x of v) {
+      expect(x).toBeGreaterThanOrEqual(0.2)
+      expect(x).toBeLessThanOrEqual(1)
+    }
+    expect(Math.max(...v)).toBe(1)
+    expect(Math.min(...v)).toBeLessThan(0.5)
+  })
+  it("not at the muzzle groups' spacing: the gaps differ from one group to the next and from volley to volley", () => {
+    const at = (a: number) => Array.from({ length: 16 }, (_, k) => clump(a, 0.5, -30 + k * 3.9))
+    expect(Math.max(...at(0.1)) - Math.min(...at(0.1))).toBeGreaterThan(0.3)
+    expect(at(0.1)).not.toEqual(at(0.6))
   })
 })
 

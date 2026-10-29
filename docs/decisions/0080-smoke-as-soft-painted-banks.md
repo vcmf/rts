@@ -25,15 +25,15 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
 
 ## Decision
 
-- **Soft blended cards, low at the muzzles.** A puff is a card lying across the front, tilted a little up from the
-  level (one thin-instanced quad: one draw for all the smoke), moved, grown and thinned in the vertex shader from its
-  age: born at the muzzles as a jet along the shot, then grown wider along the front, partly into its neighbours, and
-  rolled a few metres ahead at most, rising a little, drifting with the wind, gone in nine to fourteen seconds. Each
-  puff is its own (size, reach, rise, density; some thin, the gaps) and a line's sections go off a little apart, so a
-  volley reads as many shots partly merged, clumps and gaps hugging the line, not one even band. (A card facing the
-  camera stood metres high and read, from above, metres ahead of the line: the owner's second review, 2026-10-28.) Its shape is a soft falloff broken by the paint
-  grain (billows about a puff's size and smaller ones on them, in the card's own metres, churning slowly); with age it
-  thins and breaks into holes. Nothing a puff a frame on the CPU.
+- **Soft blended cards at the muskets.** A puff is a card (one thin-instanced quad: one draw for all the smoke),
+  moved, grown and thinned in the vertex shader from its age: born at the muzzles as a jet along the shot, near the
+  level, then a low streak hung at the muskets and a little above them, wider along the front than tall, facing the
+  eye's up, into its neighbours; rolled a few metres ahead at most, drifting with the wind, gone in nine to fourteen
+  seconds. Each puff is its own (size, reach, rise, density, its place along the front), the volley thickens and thins
+  in clumps along the front, and a line's sections go off a little apart, so a volley reads as one ragged streak
+  hugging the line, thick in places, with uneven gaps (the owner's references: *Cossacks II*). (Tried and set aside:
+  a tall card facing the camera read metres ahead of a line seen from behind, round 1; a card lying flat read as a row
+  of cotton balls from behind and dust at the knees from the front, round 2.)
 - **Light, painted in two bands.** A warm white on the sun's side and a pale cool grey in its shade, their edge drawn
   by the billows, close in value: smoke is light all over, never dark. The trees' baked shadow, the clouds' shade and
   the air as every surface.
@@ -44,7 +44,7 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
 - **Thinned over the men, never cut.** A top-down mask of the formations' footprints, each in its own frame (a soft
   margin round each; a world box round a line askew to the axes took in the ground before it),
   drawn on the CPU when a battalion's men are placed; each smoke pixel follows its view ray down to a man's mid height,
-  reads the mask there, and where it lies over a formation its opacity is capped (0.4 of its own by default), so the
+  reads the mask there, and where it lies over a formation its opacity is capped (0.6 of its own by default), so the
   front ranks may stand inside the smoke's edge and still read, from either side, and the smoke stays whole elsewhere.
 - **The era's values, the figure's moment.** Puffs a file group, life, thinning, size, the plume, the blast, the roll,
   the bank's width, rise, drift, the sections' stagger, the puffs' variety, opacity, colour and flash are ruleset data (`PuffDef`, `src/rulesets/<era>-smoke.ts`);

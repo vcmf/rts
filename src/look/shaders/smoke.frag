@@ -22,10 +22,12 @@ void main(){
   vec2 s=vec2(vSeed*37.0,vSeed*19.0),drift=vec2(uSmokeT*0.02,0.0);
   // the billows (the grain's blotches, about a puff's size, and smaller ones on them) and the paper's fine grain
   float bil=G((vM.yx+s)*0.15+drift).g,sub=G((vM+s.yx)*0.38-drift).g,fib=G((vM+s)*1.4).r;
-  // young, a jet: narrow at the muzzle (its back, vQ.x -1) and widening ahead; always densest toward the muzzles
+  // young, a jet: narrow at the muzzle (its back, vQ.x -1) and widening ahead, densest there; grown, densest low.
+  // The rim torn by the smaller billows and the paper's grain (a brushed edge, not a round one)
   vec2 q=vec2(vQ.x,vQ.y/mix(1.0,0.3+0.7*(vQ.x*0.5+0.5),vPl));
   float d=length(q);
-  float dens=(1.0-d)*1.3-0.05-vQ.x*(0.25+0.3*vPl)+(bil-0.5)*1.6+(sub-0.5)*0.7+(fib-0.5)*0.06-vErode*1.5;
+  float dens=(1.0-d)*1.3-0.05-vQ.x*(0.25+0.3*vPl)+(bil-0.5)*1.6+(sub-0.5)*(0.7+0.5*smoothstep(0.35,0.9,d))
+    +(fib-0.5)*(0.06+0.35*smoothstep(0.5,0.95,d))-vErode*1.5;
   float a=smoothstep(0.0,0.5+0.2*vPl,dens)*smoothstep(1.0,0.8,d);
   a*=uOpacity*vOp*smoothstep(0.0,0.7,vW.y-vGround);
   #ifdef CLEAR

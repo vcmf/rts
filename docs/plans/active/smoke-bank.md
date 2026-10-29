@@ -52,7 +52,7 @@ fill costs too much: see Results); soft-particle depth (a card's plane crossing 
   metres; two light bands from the sun's side, their edge drawn by the billows; thinning (`PUFF_THIN`) and holes with
   age; faded out at its ground.
 - **The cap**: the formations' mask and view-ray rule kept from the first look (`drawClearance`, `coverAt`); its value
-  now caps the opacity (`coverCap`, 0.4 by default) instead of cutting.
+  now caps the opacity (`coverCap`, 0.4 by default; 0.6 from round 3) instead of cutting.
 
 ## Acceptance
 
@@ -105,6 +105,15 @@ not in git: `output/smoke-refs/owner-2026-10-28/bank-too-far-too-big-a-line.png`
   40 m +0.19, 90 m +0.09; the second side 25 m −0.10 (one camera's arms 1.7 ms apart: noise), 40 m +0.11, 90 m +0.05.
   About a third of round 1's: the puffs are smaller.
 - Stills and a before/after sheet: `output/armies-review/27-smoke-bank/round2/` (`00-before-after.png` first).
+
+## Round 3 (2026-10-29, the coordinator's call on round 2's sheet; the owner has not judged round 2)
+
+Round 2 overcorrected: from behind, a row of separate, evenly spaced cotton balls; facing the camera, dust at the
+men's knees; old puffs round. Changed: grown puffs turn from the flat jet to a low streak hung at the muskets and a
+little above, facing the eye's up, wider than tall and flatter with age (so it reads at the chests from the front);
+puffs spread along the front by most of a group's width (`LATERAL`), the volley's density in clumps (`clump`), the
+sections' grid shifted each volley; rims torn by the grain; radius to 1.8 m, opacity 0.95, the cap 0.6. Stills and a
+round 1 | 2 | 3 | *Cossacks II* sheet: `output/armies-review/27-smoke-bank/round3/` (`00-sheet-r1-r2-r3-ref.png`).
 
 ## Risks
 

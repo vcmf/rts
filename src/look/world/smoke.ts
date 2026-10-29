@@ -120,6 +120,9 @@ export function hash(a: number, b = 0, c = 0, d = 0): number {
 export const PUFF_FLOATS = 12
 /** m: the stretch of a line that goes off together (a section: about a company), its moment its own (`stagger`) */
 export const SECTION = 12
+/** m: the spread of a puff's place along the front about its muzzle group's middle (most of a group's width: the
+ *  groups' even spacing does not show) */
+export const LATERAL = 3
 /** m: how much nearer the front rank a rank behind's muzzles are (its muskets over the shoulders of the one before) */
 export const RANK_REACH = 0.35
 
@@ -142,10 +145,22 @@ export function puffVary(
 }
 const fract = (x: number): number => x - Math.floor(x)
 
+/** The volley's clumps along the front (m, the battalion's frame x): a density factor 0.2 to 1 from three waves of
+ *  unrelated lengths (7.3, 11.9 and 19.7 m) whose phases the seeds a, b set, so where the shots thicken and where they
+ *  leave gaps differs from volley to volley and never repeats at the muzzle groups' spacing */
+export function clump(a: number, b: number, x: number): number {
+  const w =
+    0.5 * Math.sin(x / 7.3 + a * 6.2832) +
+    0.3 * Math.sin(x / 11.9 + b * 6.2832) +
+    0.2 * Math.sin(x / 19.7 + (a + b) * 3.1416)
+  return Math.min(1, Math.max(0.2, 0.75 + 0.6 * w))
+}
+
 /** The puffs of one shot of battalion `index` (its place in the battalions): one for each muzzle group, born at the
  *  muzzles (`ahead` m ahead of the front rank, a rank behind RANK_REACH m nearer it and a little higher, `height` m
- *  over the ground there), at the shot's clock, its section's own moment (±stagger/2: SECTION m of the front go off
- *  together) and a man's own spread (±jitter), each with its seed, life and own factors (puffVary); pushed onto out,
+ *  over the ground there; spread ±LATERAL/2 along the front), at the shot's clock, its section's own moment
+ *  (±stagger/2: SECTION m of the front go off together, the sections' grid shifted each volley) and a man's own spread
+ *  (±jitter), each with its seed, life and own factors (puffVary, the volley's clumps); pushed onto out,
  *  PUFF_FLOATS each. ground: the ground's height at (x, z) */
 export function volleyPuffs(
   b: Battalion,
@@ -162,8 +177,10 @@ export function volleyPuffs(
     const h0 = hash(index, shot.cycle, shot.volley * 8 + shot.rank, g)
     const h1 = hash(g, index, shot.rank, shot.cycle * 31 + shot.volley)
     const h2 = hash(shot.volley, g, index * 7 + shot.rank, shot.cycle)
-    const h3 = hash(index, shot.cycle * 17 + shot.volley, Math.round(xs[g] / SECTION), 5)
-    const lx = xs[g] + (h1 - 0.5) * 1.2
+    // (the sections' grid shifted volley by volley, so their edges never fall twice in one place)
+    const shift = hash(index, shot.cycle, shot.volley, 9) * SECTION
+    const h3 = hash(index, shot.cycle * 17 + shot.volley, Math.round((xs[g] + shift) / SECTION), 5)
+    const lx = xs[g] + (h1 - 0.5) * LATERAL
     const lz = def.ahead - shot.rank * RANK_REACH + h2 * 0.3
     const x = b.x + c * lx + s * lz
     const z = b.z - s * lx + c * lz
@@ -180,7 +197,7 @@ export function volleyPuffs(
       v.size,
       v.reach,
       v.rise,
-      v.density,
+      v.density * clump(hash(index, shot.cycle, shot.volley, 3), hash(index, shot.cycle, shot.volley, 4), lx),
     )
   }
 }
@@ -342,8 +359,8 @@ export interface SmokeLook {
 /** the variants (?smoke=soft|step): soft, smooth; step, its clock stepped at 12 fps (the art bible's stepped
  *  effects) */
 export const SMOKE_LOOKS: Readonly<Record<'soft' | 'step', Readonly<SmokeLook>>> = {
-  soft: { step: 0, cap: 0.4 },
-  step: { step: 12, cap: 0.4 },
+  soft: { step: 0, cap: 0.6 },
+  step: { step: 12, cap: 0.6 },
 }
 /** the variant drawn without ?smoke */
 export const SMOKE_DEFAULT: keyof typeof SMOKE_LOOKS = 'soft'
