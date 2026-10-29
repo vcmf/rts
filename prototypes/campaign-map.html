@@ -191,7 +191,29 @@ function decodeHeights() {
   if (h16.length !== NX * NZ) {
     throw new Error('theatre heights: ' + h16.length + ' values, expected ' + NX * NZ);
   }
-  return Float32Array.from(h16);
+  return despiked(h16, NX, NZ);
+}
+
+/**
+ * The grid with its single-node spikes and pits removed: each node clamped to the range of its eight neighbours.
+ * The terrain tiles hold thousands of nodes standing 15 m and more above (or below) all their neighbours; lit per
+ * pixel, each one drew a dark dot. Edge nodes are kept.
+ */
+function despiked(h, nx, nz) {
+  const out = Float32Array.from(h);
+  for (let j = 1; j < nz - 1; j++) {
+    for (let i = 1; i < nx - 1; i++) {
+      const k = j * nx + i;
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const o of [-1, 1, -nx, nx, -nx - 1, -nx + 1, nx - 1, nx + 1]) {
+        lo = Math.min(lo, h[k + o]);
+        hi = Math.max(hi, h[k + o]);
+      }
+      out[k] = clamp(h[k], lo, hi);
+    }
+  }
+  return out;
 }
 
 /** Box mean of a grid over a square of half-width r cells, by a summed-area table (edges clamped). */
@@ -492,7 +514,7 @@ uniform sampler2D uRelief, uLakes, uPaperT, uHeight, uLightH, uRealH, uFine0, uF
 uniform vec2 uHalf, uTexel, uLakeTexel, uLightXZ, uFineTexel0, uFineTexel1;
 uniform vec4 uFineRect0, uFineRect1;
 uniform vec3 uSun;
-uniform float uCellKm, uFineCellKm, uRZ, uFineK, uNearK, uSheetK, uSheet, uTime, uCloudK, uHaze, uScreenH;
+uniform float uCellKm, uFineCellKm, uRZ, uFineK, uNearK, uSheetK, uContourK, uSheet, uTime, uCloudK, uHaze, uScreenH;
 uniform vec3 uPaper, uTable, uWater, uShadowInk, uHighlight;
 uniform float uFloor, uTop, uContour, uDark, uBase, uShadeK;
 
@@ -614,7 +636,8 @@ void main() {
   float l5 = 1.0 - smoothstep(0.6, 1.5, abs(fract(f5 + 0.5) - 0.5) / max(w5, 1e-5));
   l1 *= 1.0 - smoothstep(0.06, 0.16, w1);
   l5 *= 1.0 - smoothstep(0.08, 0.2, w5);
-  col = mix(col, vec3(0.2, 0.16, 0.12), max(0.45 * l1, 0.75 * l5));
+  /* far out only the index lines, fainter: half-faded lines on steep uplands read as crumbs */
+  col = mix(col, vec3(0.2, 0.16, 0.12), max(0.45 * l1 * uContourK, mix(0.3, 0.75, uContourK) * l5));
 
   /* lakes: a flat wash sunk below the shore, the bank toward the light shading the water */
   vec2 luv = (vW + uHalf) / (2.0 * uHalf);
@@ -633,8 +656,10 @@ void main() {
   }
 
   /* cloud shadows drifting slowly from the west */
-  float cloud = texture2D(uClouds, vW / 60.0 + uTime * vec2(0.0012, 0.0004)).r;
-  col *= 1.0 - uCloudK * smoothstep(0.55, 0.8, cloud);
+  /* two scales, crossed, so the tile never repeats visibly */
+  float cloud = texture2D(uClouds, vW / 310.0 + uTime * vec2(0.0005, 0.00015)).r *
+                texture2D(uClouds, vW / 170.0 + vec2(0.37, 0.61) + uTime * vec2(0.0007, 0.0002)).r;
+  col *= 1.0 - uCloudK * smoothstep(0.3, 0.55, cloud);
 
   /* haze toward the top of the view, as the camera tilts up close */
   gl_FragColor = vec4(mix(col, uPaper * 0.97, haze), 1.0);
@@ -664,7 +689,8 @@ uniform float uThick;
 void main() {
   float lit = 0.62 + 0.38 * max(0.0, dot(normalize(vN.xz + 1e-5), uLightXZ));
   float low = mix(0.82, 1.0, clamp(vY / uThick + 1.0, 0.0, 1.0));
-  gl_FragColor = vec4(uPaper * lit * low * (vN.y > 0.5 ? 0.0 : 1.0), 1.0);
+  /* the top face lies just under the map's edge: paper, so it never shows as specks where they meet */
+  gl_FragColor = vec4(vN.y > 0.5 ? uPaper : uPaper * lit * low, 1.0);
 }`;
 
 // one float's bits, shared by every call of toHalf (allocating per value cost seconds over the grid)
@@ -680,7 +706,8 @@ function toHalf(v) {
   const mant = x & 0x7fffff;
   if (exp <= 0) return sign;
   if (exp >= 31) return sign | 0x7c00;
-  return sign | (exp << 10) | ((mant + 0x1000) >> 13);
+  // added, not or-ed: a mantissa rounding up to 1024 carries into the exponent (or-ed, 511.9 m read as 256)
+  return sign | ((exp << 10) + ((mant + 0x1000) >> 13));
 }
 
 /**
@@ -759,7 +786,7 @@ function fineDetailTexture(win) {
   const text = atob(win.h);
   const bytes = new Uint8Array(text.length);
   for (let k = 0; k < text.length; k++) bytes[k] = text.charCodeAt(k);
-  const fine = new Int16Array(bytes.buffer);
+  const fine = despiked(new Int16Array(bytes.buffer), win.nx, win.nz);
   const detail = new Float32Array(win.nx * win.nz);
   for (let j = 0; j < win.nz; j++) {
     const fz = clamp((win.z0 + j * win.cell + halfZ) / CELL, 0, NZ - 1.001);
@@ -823,7 +850,7 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
     'uRise', 'uEdge', 'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uHighlight',
     'uFloor', 'uTop', 'uContour', 'uDark', 'uBase', 'uShadeK',
     'uFineTexel0', 'uFineTexel1', 'uFineRect0', 'uFineRect1', 'uSun', 'uFineCellKm', 'uRZ', 'uFineK', 'uNearK',
-    'uSheet', 'uSheetK', 'uTime', 'uCloudK', 'uHaze', 'uScreenH',
+    'uSheet', 'uSheetK', 'uContourK', 'uTime', 'uCloudK', 'uHaze', 'uScreenH',
   ],
   samplers: ['uRelief', 'uLakes', 'uPaperT', 'uHeight', 'uDisp', 'uLightH', 'uRealH', 'uFine0', 'uFine1', 'uClouds'],
 });
@@ -866,6 +893,7 @@ material.setFloat('uTime', 0);
 material.setFloat('uScreenH', engine.getRenderHeight());
 material.setFloat('uNearK', 0);
 material.setFloat('uSheetK', 0);
+material.setFloat('uContourK', 0);
 material.setFloat('uFineK', 0);
 (() => {
   const el = (RELIEF_SUN * Math.PI) / 180;
@@ -1311,11 +1339,13 @@ function drawInk() {
   const ppk = pxPerKm();
   // the shade's strength by the zoom (screen pixels per km): SHADE_FAR over the whole theatre, full from about 3
   material.setFloat('uShadeK', lerp(SHADE_FAR, 1, sstep(0.9, 3, ppk)));
-  // the real heights for the contours and sheets from about 3 px a km; the finer windows' detail from about 6
-  material.setFloat('uNearK', sstep(2.5, 6, ppk));
+  // the real heights for the contours and sheets only well in, from about 10 px a km (a 250 m bump 2.5 px): further
+  // out their small bumps cross the sheet levels and dot the map with tiny rings
+  material.setFloat('uNearK', sstep(10, 24, ppk));
   material.setFloat('uFineK', sstep(6, 14, ppk));
   // the sheets from about 2 px a km: further out they speckle the plains
   material.setFloat('uSheetK', sstep(1.6, 4, ppk));
+  material.setFloat('uContourK', sstep(1.2, 3, ppk));
   const placed = [];
   // the ink stops at the neatline, as the print does
   ink.save();

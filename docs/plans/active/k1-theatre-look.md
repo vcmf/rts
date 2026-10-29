@@ -106,7 +106,13 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   20° far out to 40° at the closest zoom (`?tilt=`), with a haze toward the top of the view (the top edge stays about
   54° off straight down: no sky); the plate 8 km thick, its sides lit from the north-west, its shadow on the table.
   Measured on test machine A, 1600 × 900: a frame 1.8 ms still, 6.5 ms with the ink. Up close, the 1 km mesh shows
-  its facets on the alpine skyline (a finer mesh near the camera: K3). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  its facets on the alpine skyline (a finer mesh near the camera: K3). Then the owner: "there's black points a lot on the map now". The cause, a bug in the page's half-float
+  conversion: a mantissa rounding up to 1,024 was or-ed into the exponent instead of added, so a height just under a
+  power of two (511.9 m) was stored as half of it (256 m): a sharp pit, lit per pixel as a black dot (the bake had
+  hidden it). Fixed (added; the round trip now within 2 m to 5,000 m), with: single-node spikes in the heights
+  clamped to their neighbours (3,335 above and 476 below them by 15 m or more); the contours and sheets read the real
+  heights only from about 10 px a km, the contours far out only the index lines, fainter; the plate's hidden top face
+  in paper, not black (it showed as specks along the edge); the clouds at two crossed scales, larger. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
