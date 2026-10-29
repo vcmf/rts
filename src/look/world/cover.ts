@@ -201,9 +201,8 @@ function curvy(p: readonly Pt[], amp: number, k: number): Pt[] {
     return [pt[0] - (dz / l) * m, pt[1] + (dx / l) * m] as Pt
   })
 }
-// a line resampled every `step` m along it (its ends kept): the roads' segments, few enough a cell
-// (src/look/world/data.ts)
-function resample(p: readonly Pt[], step: number): Pt[] {
+/** A line resampled every `step` m along it (its ends kept): the roads' segments, few enough a cell (data.ts). */
+export function resample(p: readonly Pt[], step: number): Pt[] {
   const out: Pt[] = [p[0]]
   let carry = 0
   for (let i = 0; i < p.length - 1; i++) {

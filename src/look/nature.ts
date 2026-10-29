@@ -21,6 +21,7 @@ import { fbm, hash, mulberry } from './noise.ts'
 import { H } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
 import { COVER, coverAt, fieldAt, inFormationZone, isField, type CoverGrid } from './world/cover.ts'
+import { TREE_FLOATS, TREE_SPECIES, type TreeSpecies } from './world/data.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 import { cardMaterial, cardMesh, leafLoss, placeCards, type CardOptions } from './canopy.ts'
@@ -125,6 +126,8 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
 // oneTree: every tree drawn as one broadleaf model, where and as large as it stands (L5b's judging: ?trees=one)
 // gen: generated trees where the pack's stand (?trees=gen, docs/plans/done/tree-generator.md): the season the page
 // opens in (the sky's occlusion is baked for it), and whether the cards take their clump's volume
+// mapTrees: a map window's trees from its look data (TREE_FLOATS each, src/look/world/data.ts) in place of the demo's
+// hand-placed copses, woods, hedgerows and extras, and no formation zones (docs/plans/active/look-austerlitz-a1.md)
 export interface GenOptions {
   season: number
   clumpVolume: boolean
@@ -139,6 +142,7 @@ export function buildNature(
   meadow = false,
   oneTree = false,
   gen: GenOptions | null = null,
+  mapTrees: Float32Array | null = null,
 ): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
@@ -281,7 +285,8 @@ export function buildNature(
   /* ---------- scattering: composition follows the north star ---------- */
   const R = mulberry(77)
   const rr = () => R()
-  const KEEP_CLEAR = inFormationZone // formations (src/look/world/cover.ts: the cover keeps them meadow)
+  // formations (src/look/world/cover.ts: the cover keeps them meadow); a map's window has none
+  const KEEP_CLEAR = mapTrees ? () => false : inFormationZone
   // THE placement rule (docs/art-bible.md §6c): nothing in the water or on the wet bank except stones,
   // nothing in the formation zones. r = the object's footprint/crown radius. Every scatter loop uses it.
   // largest distance of any vertex from the model pivot in plan: the true footprint under any yaw
@@ -300,10 +305,11 @@ export function buildNature(
   const boxD = (x: number, z: number, x0: number, x1: number, z0: number, z1: number) =>
     Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(z0 - z, 0, z - z1))
   const touchesZone = (x: number, z: number, r: number) =>
-    KEEP_CLEAR(x, z) ||
-    boxD(x, z, -25, 15, -44, -2) < r ||
-    boxD(x, z, -14, 26, 7, 19) < r ||
-    Math.hypot(x - 34, z + 24) < Math.sqrt(160) + r
+    !mapTrees &&
+    (KEEP_CLEAR(x, z) ||
+      boxD(x, z, -25, 15, -44, -2) < r ||
+      boxD(x, z, -14, 26, 7, 19) < r ||
+      Math.hypot(x - 34, z + 24) < Math.sqrt(160) + r)
   // off the banks by r m (W2: a point bar reaches farther): the scatter's rule, and the meadow's growth's
   const offBanks = (q: ReturnType<typeof riverQuery>, r: number) =>
     !q || q.dist >= Math.max((lerpA(RIVER.W, q) / 2) * 1.7, bankReachAt(q)) + r
@@ -402,7 +408,7 @@ export function buildNature(
     [-95, -70, 7],
     [120, -70, 6],
   ]
-  for (const [cx, cz, n] of clusters) {
+  for (const [cx, cz, n] of mapTrees ? [] : clusters) {
     for (let i = 0; i < n; i++) {
       const x = cx + (rr() - 0.5) * 42
       const z = cz + (rr() - 0.5) * 32
@@ -425,7 +431,7 @@ export function buildNature(
   // ?wood: one dense wood, to judge the sky's occlusion (docs/plans/done/soft-shadows.md); ?wood=big: a forest that
   // fills the bench's frame (docs/plans/done/forest-bench.md); each its own random stream, so the rest of the
   // scatter is unchanged
-  if (wood !== 'off') {
+  if (wood !== 'off' && !mapTrees) {
     const W = mulberry(91)
     const [cx, cz, w, h, n] = wood === 'big' ? [-110, -25, 150, 110, 520] : [-105, -30, 50, 40, 70]
     for (let i = 0; i < n; i++) {
@@ -464,7 +470,7 @@ export function buildNature(
     const M = NATURE[tree(mdl, x, z)]
     smTree(x, z, M.max[1] * 0.6 * s, (M.max[0] - M.min[0]) * 0.45 * s, crownLeft(tree(mdl, x, z)))
   }
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < (mapTrees ? 0 : 5); i++) {
     const x = 150 + (rr() - 0.5) * 30
     const z = -40 + (rr() - 0.5) * 30
     const mdl = 'PineTree_' + (1 + Math.floor(rr() * 3))
@@ -478,7 +484,7 @@ export function buildNature(
   }
   // under gen: an orchard, a hedgerow, a row of poplars, a forest, a wood and lone field trees, from their own random
   // stream (the scatter's is unchanged)
-  if (genModels) {
+  if (genModels && !mapTrees) {
     for (const [mdl, x, z, s, lone] of genModels.extras()) {
       if (addPlaced(mdl, [x, z, s, hash(x, z) * 6.28, hash(z, x)], '', mdl, lone === true) === 'drawn') {
         const M = NATURE[mdl]
@@ -545,7 +551,7 @@ export function buildNature(
   const addWheat = (item: Item) => {
     if (!meadow) addPlaced('Wheat', item)
   }
-  for (let u = 0; u < 30; u += 1.25) {
+  for (let u = 0; u < (mapTrees ? 0 : 30); u += 1.25) {
     for (let v = 0; v < 22; v += 1.3) {
       const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5
       const z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5
@@ -565,7 +571,7 @@ export function buildNature(
     const m = Math.max(Math.abs(x), Math.abs(z))
     return m > D.spec.tile / 2 && m < D.band
   }
-  for (let k = -8; k <= 8; k++) {
+  for (let k = -8; k <= 8 && !mapTrees; k++) {
     for (let t = -560; t <= 560; t += 6) {
       const qx = k * 70 + (hash(k, t) - 0.5) * 2
       const qy = t
@@ -584,7 +590,7 @@ export function buildNature(
     }
   }
   const hedgeN = far.length
-  for (let w = 0; w < 20; w++) {
+  for (let w = 0; w < (mapTrees ? 0 : 20); w++) {
     const a = hash(w, 51) * 6.283
     const r = 230 + hash(w, 52) * 320
     const cx = Math.cos(a) * r
@@ -612,6 +618,30 @@ export function buildNature(
                   ? 'birch'
                   : 'spruce',
       )
+    }
+  }
+  // a map window's trees (its look data): on the tile each its species' model, placed by the placement rule as the
+  // demo's; past the apron band each a far tree of its species, as the demo's far woods (the band's are dropped)
+  if (mapTrees) {
+    for (let k = 0; k < mapTrees.length; k += TREE_FLOATS) {
+      const [x, z, si, s] = mapTrees.subarray(k, k + TREE_FLOATS)
+      const sp = TREE_SPECIES[si]
+      const mdl = oneTree ? 'CommonTree_1' : genModels ? genModels.species(sp, x, z) : PACK_OF[sp](x, z)
+      const sc = oneTree || !genModels ? s * (PACK_SCALED.has(sp) ? 1 : PACK_METRE) : s
+      if (Math.max(Math.abs(x), Math.abs(z)) < D.spec.tile / 2) {
+        if (addPlaced(mdl, [x, z, sc, hash(x, z) * 6.28, hash(z, x)], '', mdl) !== 'drawn') continue
+        const M = NATURE[mdl]
+        smTree(
+          x,
+          z,
+          M.max[1] * 0.62 * sc,
+          Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * sc,
+          crownLeft(mdl),
+        )
+      } else if (!inBand(x, z)) {
+        far.push([x, z, footprint(mdl, sc) / footprint('Bush_1', 1), hash(x, z) * 6.28, hash(z, x)])
+        farSp.push(sp)
+      }
     }
   }
   // stones on purpose (W5a, docs/plans/done/w5-banks.md; docs/art-bible.md §6c): in riffles, and at the foot of the
@@ -975,6 +1005,27 @@ export function buildNature(
 // place, so the scatter's random stream is unchanged), every model sized so its reach in plan is its class's mean: the
 // page's composition and its placement rule stay as they are.
 const GEN_VARIANTS = 4
+// a map's trees under the pack's models (?trees=pack, ?trees=one): each species' nearest pack class, a variant by the
+// place; the species the look data scales in metres (an apple, a thorn, a poplar) take PACK_METRE times that scale
+const packOf =
+  (cls: string, n: number) =>
+  (x: number, z: number): string =>
+    `${cls}_${1 + Math.floor(hash(z * 0.37, x * 0.37) * n)}`
+const PACK_OF: Record<TreeSpecies, (x: number, z: number) => string> = {
+  oak: packOf('CommonTree', 5),
+  lime: packOf('CommonTree', 5),
+  beech: packOf('CommonTree', 5),
+  apple: packOf('CommonTree', 5),
+  birch: packOf('BirchTree', 5),
+  poplar: packOf('BirchTree', 5),
+  spruce: packOf('PineTree', 3),
+  pine: packOf('PineTree', 3),
+  willow: packOf('Willow', 3),
+  alder: packOf('Willow', 3),
+  hawthorn: packOf('Bush', 2),
+}
+const PACK_SCALED = new Set<TreeSpecies>(['oak', 'lime', 'beech', 'birch', 'spruce', 'pine', 'willow', 'alder'])
+const PACK_METRE = 0.8
 const TRUNK_TAPER = 0.6 // a trunk's radius above its root flare, over the flare's (the trunks' baked shadows)
 // the far trees (their size): a height over SIZE_H counts as reach (an oak's is 1.36 its reach: a birch or a spruce
 // stands about a third taller, as near, not twice), and the hedgerow's odd oak's size over the thorns'
@@ -1038,6 +1089,8 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
     `Gen_${sp}_${1 + Math.floor(hash(z * 0.37, x * 0.37) * GEN_VARIANTS)}`
   const sizes: Record<string, number> = {}
   return {
+    // a species' generated model at a place (a map's trees: src/look/world/data.ts, TREE_SPECIES)
+    species: variant,
     pick(model: string, x: number, z: number): string {
       const species = GEN_FOR[model.replace(/_\d+$/, '')]
       if (!species) return model
