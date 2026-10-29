@@ -62,6 +62,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
   [`plans/active/track-s.md`](plans/active/track-s.md) (Track S: the sim engine's remaining phases before the playtest, the `epic/sim-engine` branch),
   [`plans/active/track-k.md`](plans/active/track-k.md) (Track K: the campaign, its phases K0–K7, the `epic/campaign` branch),
+  [`plans/active/k1-theatre-look.md`](plans/active/k1-theatre-look.md) (K1: the 1805 theatre in the lit style, a prototype),
   [`plans/active/c0-bench.md`](plans/active/c0-bench.md) (C0: the visual bench, its overlay, time controls and cases),
   [`plans/active/ci-faster-tests.md`](plans/active/ci-faster-tests.md) (CI's tests and coverage in three shards each, the bench split in five files),
   [`plans/active/c1-claims.md`](plans/active/c1-claims.md) (C1: a prototype of the claim grid, experimental; its weak points and their order),

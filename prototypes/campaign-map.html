@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Campaign map — the 1805 theatre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #e9dab3;
+  --ink: #211f1c;
+  --ink-2: #5f5a52;
+  --ink-3: #8f877b;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --serif: "Instrument Serif", Georgia, serif;
+}
+html, body { height: 100%; margin: 0; overflow: hidden; background: #c9b78f; color: var(--ink); }
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#ink { pointer-events: none; }
+#cart {
+  position: fixed; left: 16px; top: 14px; width: 290px; padding: 12px 14px 12px; pointer-events: none;
+  background: radial-gradient(130% 120% at 30% 30%, var(--paper) 55%, rgba(233, 218, 179, 0) 100%);
+}
+#cart h1 { margin: 0; font: 400 26px/1.05 var(--serif); letter-spacing: 0.01em; }
+#cart .sub { font: italic 400 15px/1.3 var(--serif); color: var(--ink-2); }
+#cart .rule { height: 5px; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); margin-top: 10px; }
+#cart .m { font: 400 10.5px/1.6 var(--mono); color: var(--ink-2); margin-top: 8px; letter-spacing: 0.02em; }
+#cart .n { font: 400 9.5px/1.5 var(--mono); color: var(--ink-3); margin-top: 6px; }
+#scale { position: fixed; left: 18px; bottom: 16px; pointer-events: none; font: 400 10px/1 var(--mono); color: var(--ink-2); }
+#scale .bar { height: 5px; border: 1px solid var(--ink); border-top: 0; margin-bottom: 5px; }
+#missing { position: fixed; inset: 0; display: none; place-items: center; font: 400 13px/1.7 var(--mono); color: var(--ink); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@9.29.0/babylon.js"></script>
+<script src="campaign-1805.data.js"></script>
+<script>
+// ?theatre=<path.js>: the generated theatre (heights, water, routed roads) from tools/campaign-theatre.mjs, by default
+// its output under scratch/ at the repository root (git-ignored). Only a .js file of this page's own origin and
+// protocol, never a script from another host.
+(() => {
+  const given = new URLSearchParams(location.search).get('theatre') || '../scratch/campaign-1805' + '.js';
+  let url;
+  try {
+    url = new URL(given, location.href);
+  } catch (e) {
+    return;
+  }
+  const sameOrigin = url.protocol === location.protocol && url.host === location.host;
+  if (sameOrigin && url.pathname.endsWith('.js') && !/["<>]/.test(url.href)) {
+    document.write('<script src="' + url.href + '"><\/script>');
+  } else {
+    console.warn('?theatre= ignored: not a .js file of this page\'s origin');
+  }
+})();
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<canvas id="ink"></canvas>
+<div id="cart">
+  <h1>The Theatre of 1805</h1>
+  <div class="sub">from the Rhine to Austerlitz</div>
+  <div class="rule"></div>
+  <div class="m" id="meta"></div>
+  <div class="n" id="credit"></div>
+</div>
+<div id="scale"><div class="bar" id="scaleBar"></div><span id="scaleText"></span></div>
+<div id="missing">No theatre: run <b>node tools/campaign-theatre.mjs</b>, then reload.</div>
+<script>
+/*
+ * The campaign map prototype (docs/plans/active/k1-theatre-look.md; the look: docs/proposals/campaign-map.md).
+ * The 1805 theatre as a lit relief print: the heights baked into a relief at load (the battle map lit view bake,
+ * prototypes/staff-map.html, at a thousand times the scale), on parchment, in a 3D view tilted 20 degrees off straight
+ * down (decision 0055). Rivers, roads, towns and names are ink on a 2D canvas above, redrawn when the camera moves.
+ *
+ * URL: ?rz= the heights exaggerated for the light (3), ?sun= the sun height in degrees (28), ?floor= and ?top= the
+ * darkest and lightest relief tone against the paper (0.76, 1.08), ?view=x,z,km (the
+ * target in km from the centre, east and north, and the camera distance), ?theatre= the generated file.
+ */
+'use strict';
+const t0 = performance.now();
+const Q = new URLSearchParams(location.search);
+const B = BABYLON;
+const T = window.THEATRE;
+const D = window.CAMPAIGN_1805;
+
+/* =========================================================================
+   SMALL HELPERS
+   ========================================================================= */
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+
+/** Smoothstep from a to b. */
+function sstep(a, b, x) {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+/** A repeatable pseudo-random number in [0, 1) for a pair of numbers. */
+function hash(x, y) {
+  const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return h - Math.floor(h);
+}
+
+/** A seeded generator of numbers in [0, 1). */
+function mulberry(seed) {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** '#rrggbb' to [r, g, b] in 0..1. */
+function hex(c) {
+  const n = parseInt(c.slice(1), 16);
+  return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+if (!T || !D) {
+  document.getElementById('missing').style.display = 'grid';
+  throw new Error('campaign map: the theatre did not load');
+}
+
+/* =========================================================================
+   THE THEATRE: the frame, its projection, the heights
+   ========================================================================= */
+const { lat0, lon0, halfX, halfZ } = T.frame;
+const CELL = T.cell;
+const NX = T.nx;
+const NZ = T.nz;
+// the light's exaggeration of the heights, and the sun's height
+const RELIEF_Z = Number(Q.get('rz')) || 3;
+const RELIEF_SUN = Number(Q.get('sun')) || 28;
+// the relief tone on the paper: no darker than SHADE_FLOOR, no lighter than SHADE_TOP
+const SHADE_FLOOR = Number(Q.get('floor')) || 0.76;
+const SHADE_TOP = Number(Q.get('top')) || 1.08;
+// the light from the north-west, as on the battle map: x east, z north
+const NW = [-Math.SQRT1_2, Math.SQRT1_2];
+
+/**
+ * Degrees to the map's metres, as [x, z]: Lambert azimuthal equal-area on a sphere, centred on the frame (the same
+ * formula as tools/campaign-theatre.mjs).
+ */
+function project(lat, lon) {
+  const rad = Math.PI / 180;
+  const R = 6371007.2;
+  const phi = lat * rad;
+  const dLon = (lon - lon0) * rad;
+  const sin0 = Math.sin(lat0 * rad);
+  const cos0 = Math.cos(lat0 * rad);
+  const cosC = sin0 * Math.sin(phi) + cos0 * Math.cos(phi) * Math.cos(dLon);
+  const k = Math.sqrt(2 / (1 + cosC));
+  return [R * k * Math.cos(phi) * Math.sin(dLon), R * k * (cos0 * Math.sin(phi) - sin0 * Math.cos(phi) * Math.cos(dLon))];
+}
+
+/** The heights in metres, the south row first, decoded from the generated file. */
+function decodeHeights() {
+  const bytes = Uint8Array.from(atob(T.h), c => c.charCodeAt(0));
+  const h16 = new Int16Array(bytes.buffer);
+  if (h16.length !== NX * NZ) throw new Error('theatre heights: ' + h16.length + ' values, expected ' + NX * NZ);
+  return Float32Array.from(h16);
+}
+
+/** Box mean of a grid over a square of half-width r cells, by a summed-area table (edges clamped). */
+function boxMean(h, nx, nz, r) {
+  const S = new Float64Array((nx + 1) * (nz + 1));
+  for (let j = 0; j < nz; j++) {
+    let row = 0;
+    for (let i = 0; i < nx; i++) {
+      row += h[j * nx + i];
+      S[(j + 1) * (nx + 1) + i + 1] = S[j * (nx + 1) + i + 1] + row;
+    }
+  }
+  const out = new Float32Array(nx * nz);
+  for (let j = 0; j < nz; j++) {
+    const j0 = Math.max(0, j - r);
+    const j1 = Math.min(nz, j + r + 1);
+    for (let i = 0; i < nx; i++) {
+      const i0 = Math.max(0, i - r);
+      const i1 = Math.min(nx, i + r + 1);
+      const sum = S[j1 * (nx + 1) + i1] - S[j0 * (nx + 1) + i1] - S[j1 * (nx + 1) + i0] + S[j0 * (nx + 1) + i0];
+      out[j * nx + i] = sum / ((i1 - i0) * (j1 - j0));
+    }
+  }
+  return out;
+}
+
+// the slope light is stored over LAMBERT_RANGE (1 on flat ground), wide enough that steep alpine slopes do not clip
+const LAMBERT_RANGE = [0.0, 1.8];
+// the cast shadow softens over this many metres of true height under the shadow line
+const RELIEF_SOFT = 120;
+
+/**
+ * The shaded relief, baked once at load into RGBA bytes the size of the grid, the south row first: R the slope light
+ * (Lambert over LAMBERT_RANGE), G the cast shadow (1 lit, 0 in shadow), B the exposure (0.5 even, lower in valleys,
+ * higher on crests). The battle map bake (prototypes/staff-map.html, bakeRelief) at the theatre scale.
+ *
+ * Cast shadow, in one pass: walking from the light, each node carries the highest shadow line reaching it (the line
+ * of its neighbour toward the light, dropped by the sun slope over one step, or its own height). On this grid the
+ * north-west neighbour is (i - 1, j + 1), so the walk goes north to south, west to east.
+ */
+function bakeRelief(h0) {
+  const h = new Float32Array(h0.length);
+  for (let k = 0; k < h.length; k++) h[k] = h0[k] * RELIEF_Z;
+  // the slope light from heights smoothed over about 750 m, so the 250 m grid does not crumple every hill
+  const soft = boxMean(h, NX, NZ, 1);
+  const el = (RELIEF_SUN * Math.PI) / 180;
+  const drop = CELL * Math.SQRT2 * Math.tan(el);
+  const L = [NW[0] * Math.cos(el), Math.sin(el), NW[1] * Math.cos(el)];
+
+  const lit = new Float32Array(NX * NZ);
+  const line = new Float32Array(NX * NZ);
+  for (let j = NZ - 1; j >= 0; j--) {
+    for (let i = 0; i < NX; i++) {
+      const k = j * NX + i;
+      const fromLight = i > 0 && j < NZ - 1 ? line[(j + 1) * NX + i - 1] - drop : -Infinity;
+      line[k] = Math.max(h[k], fromLight);
+      lit[k] = 1 - sstep(0, 1, (fromLight - h[k]) / (RELIEF_SOFT * RELIEF_Z));
+    }
+  }
+
+  // exposure: how far a node stands above or below its surroundings, near (about 1.5 km) and wide (about 6 km)
+  const near = boxMean(h0, NX, NZ, 6);
+  const wide = boxMean(h0, NX, NZ, 24);
+
+  const out = new Uint8Array(NX * NZ * 4);
+  for (let j = 0; j < NZ; j++) {
+    for (let i = 0; i < NX; i++) {
+      const k = j * NX + i;
+      const gx = (soft[j * NX + Math.min(NX - 1, i + 1)] - soft[j * NX + Math.max(0, i - 1)]) / (2 * CELL);
+      const gz = (soft[Math.min(NZ - 1, j + 1) * NX + i] - soft[Math.max(0, j - 1) * NX + i]) / (2 * CELL);
+      const nl = Math.hypot(gx, 1, gz);
+      const lambert = Math.max(0, (-gx * L[0] + L[1] - gz * L[2]) / nl) / L[1];
+      const exposed = 0.5 - ((near[k] - h0[k]) * 0.0007 + (wide[k] - h0[k]) * 0.00025);
+      const o = k * 4;
+      out[o] = Math.round(clamp((lambert - LAMBERT_RANGE[0]) / (LAMBERT_RANGE[1] - LAMBERT_RANGE[0]), 0, 1) * 255);
+      out[o + 1] = Math.round(lit[k] * 255);
+      out[o + 2] = Math.round(clamp(exposed, 0, 1) * 255);
+      out[o + 3] = 255;
+    }
+  }
+  return out;
+}
+
+/**
+ * The lakes as a mask the size of the height grid, the south row first: 255 in the water, softened over a cell at
+ * the shore so the shader can find the bank.
+ */
+function bakeLakes() {
+  const c = document.createElement('canvas');
+  c.width = NX;
+  c.height = NZ;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  // canvas row 0 is the south edge: world (x, z) to pixel ((x + halfX) / CELL, (z + halfZ) / CELL)
+  g.setTransform(1 / CELL, 0, 0, 1 / CELL, halfX / CELL + 0.5, halfZ / CELL + 0.5);
+  g.filter = 'blur(0.8px)';
+  g.fillStyle = '#fff';
+  for (const ring of T.lakes) {
+    g.beginPath();
+    for (let k = 0; k < ring.length; k += 2) g.lineTo(ring[k], ring[k + 1]);
+    g.closePath();
+    g.fill();
+  }
+  const rgba = g.getImageData(0, 0, NX, NZ).data;
+  const out = new Uint8Array(NX * NZ);
+  for (let k = 0; k < out.length; k++) out[k] = rgba[k * 4];
+  return out;
+}
+
+/** A tileable paper grain: mottling, fibres and specks around mid grey (the shader colours it). */
+function paperCanvas() {
+  const N = 1024;
+  const P = 16;
+  const c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d');
+  const im = g.createImageData(N, N);
+  // periodic value noise on a P × P lattice
+  const noise = (x, y) => {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const u = (x - xi) * (x - xi) * (3 - 2 * (x - xi));
+    const v = (y - yi) * (y - yi) * (3 - 2 * (y - yi));
+    const at = (a, b) => hash(((a % P) + P) % P, ((b % P) + P) % P);
+    const a = at(xi, yi);
+    const b = at(xi + 1, yi);
+    const cc = at(xi, yi + 1);
+    const d = at(xi + 1, yi + 1);
+    return a + (b - a) * u + (cc - a) * v + (a - b - cc + d) * u * v;
+  };
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const v = 0.55 * noise((x / N) * P, (y / N) * P) + 0.3 * (noise((x / N) * P * 2 + 0.5, (y / N) * P * 2) % 1) + 0.15 * hash(x, y);
+      const i = (y * N + x) * 4;
+      im.data[i] = im.data[i + 1] = im.data[i + 2] = 96 + v * 64;
+      im.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(im, 0, 0);
+  const R = mulberry(9);
+  for (let k = 0; k < 2600; k++) {
+    const x = R() * N;
+    const y = R() * N;
+    const a = R() * 6.28;
+    const l = 6 + R() * 26;
+    const dark = R() < 0.5;
+    g.strokeStyle = dark ? `rgba(40,40,40,${0.08 + R() * 0.1})` : `rgba(255,255,255,${0.1 + R() * 0.12})`;
+    g.lineWidth = 0.5 + R() * 0.6;
+    for (const ox of [-N, 0, N]) {
+      for (const oy of [-N, 0, N]) {
+        g.beginPath();
+        g.moveTo(x + ox, y + oy);
+        g.quadraticCurveTo(x + ox + Math.cos(a + 0.6) * l * 0.5, y + oy + Math.sin(a + 0.6) * l * 0.5, x + ox + Math.cos(a) * l, y + oy + Math.sin(a) * l);
+        g.stroke();
+      }
+    }
+  }
+  for (let k = 0; k < 2400; k++) {
+    g.fillStyle = `rgba(30,30,30,${0.06 + R() * 0.16})`;
+    g.beginPath();
+    g.arc(R() * N, R() * N, 0.4 + R() * 0.9, 0, 6.28);
+    g.fill();
+  }
+  return c;
+}
+
+/* =========================================================================
+   THE PRINT: one plane in km, the map in the middle and the table around it
+   ========================================================================= */
+const canvas = document.getElementById('c');
+const GL_DPR = Math.min(2, window.devicePixelRatio || 1);
+const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: false }, false);
+engine.setHardwareScalingLevel(1 / GL_DPR);
+const scene = new B.Scene(engine);
+scene.clearColor = new B.Color4(0.79, 0.72, 0.56, 1);
+scene.skipPointerMovePicking = true;
+
+const MAP_W = (2 * halfX) / 1000;
+const MAP_H = (2 * halfZ) / 1000;
+// the table runs this far past the map on every side, in km
+const TABLE = 900;
+
+B.Effect.ShadersStore.printVertexShader = `
+precision highp float;
+attribute vec3 position;
+uniform mat4 worldViewProjection;
+varying vec2 vW;
+void main() {
+  vW = position.xz;
+  gl_Position = worldViewProjection * vec4(position, 1.0);
+}`;
+
+B.Effect.ShadersStore.printFragmentShader = `
+precision highp float;
+varying vec2 vW;
+uniform sampler2D uRelief, uLakes, uPaperT;
+uniform vec2 uHalf, uTexel, uLightXZ;
+uniform vec3 uPaper, uTable, uWater;
+uniform float uFloor, uTop;
+
+float rectDist(vec2 p, vec2 extent) {
+  vec2 d = abs(p) - extent;
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+
+void main() {
+  vec2 uv = (vW + uHalf) / (2.0 * uHalf);
+  float g1 = texture2D(uPaperT, vW / 3.0).r;
+  float g2 = texture2D(uPaperT, vW / 31.0 + 0.37).r;
+  float g3 = texture2D(uPaperT, vW / 170.0 + 0.71).r;
+  float grain = 0.93 + (g1 - 0.5) * 0.2 + (g2 - 0.5) * 0.12 + (g3 - 0.5) * 0.07;
+
+  float d = rectDist(vW, uHalf);
+  if (d > 0.0) {
+    /* the table, and the plate shadow thrown to the south-east */
+    float sd = rectDist(vW - vec2(5.0, -5.0), uHalf);
+    float shadow = 1.0 - smoothstep(-6.0, 22.0, sd);
+    vec3 table = uTable * (0.97 + (g2 - 0.5) * 0.08 + (g3 - 0.5) * 0.06);
+    table *= 1.0 - 0.32 * shadow;
+    /* the plate edge: a thin lit rim to the north-west, a dark one to the south-east */
+    float rim = 1.0 - smoothstep(0.0, 1.6, d);
+    vec2 nrm = normalize(max(abs(vW) - uHalf, 0.0) * sign(vW) + 1e-5);
+    float facing = dot(nrm, uLightXZ);
+    vec3 edge = uPaper * mix(0.62, 1.04, facing * 0.5 + 0.5);
+    gl_FragColor = vec4(mix(table, edge, rim), 1.0);
+    return;
+  }
+
+  vec3 paper = uPaper * grain;
+  /* a thin worn border inside the neatline */
+  float inner = -d;
+  paper *= mix(vec3(0.9, 0.85, 0.75), vec3(1.0), smoothstep(0.6, 3.0, inner));
+
+  /* the shaded relief, in the paper hues: a warm grey-brown in the shade, ochre on the lit slopes */
+  vec3 R = texture2D(uRelief, uv).rgb;
+  float slopeLight = mix(${LAMBERT_RANGE[0].toFixed(3)}, ${LAMBERT_RANGE[1].toFixed(3)}, R.r);
+  float sunlit = R.g;
+  float exposed = R.b * 2.0 - 1.0;
+  float v = slopeLight * mix(0.78, 1.0, sunlit) * (1.0 + 0.3 * exposed);
+  /* a soft knee toward the floor and the top: steep ground keeps its gradation instead of a flat tone */
+  float dv = v - 1.0;
+  v = dv < 0.0 ? 1.0 - (1.0 - uFloor) * (1.0 - exp(dv / (1.0 - uFloor)))
+               : 1.0 + (uTop - 1.0) * (1.0 - exp(-dv / (uTop - 1.0)));
+  vec3 hue = v < 1.0 ? mix(vec3(0.93, 0.92, 0.93), vec3(1.0), (v - uFloor) / (1.0 - uFloor))
+                     : mix(vec3(1.0), vec3(1.0, 0.985, 0.95), (v - 1.0) / (uTop - 1.0));
+  vec3 col = min(paper * v * hue, vec3(1.0));
+
+  /* lakes: a flat pale wash sunk below the shore, the bank toward the light shading the water */
+  float w = texture2D(uLakes, uv).r;
+  if (w > 0.01) {
+    vec2 gW = vec2(texture2D(uLakes, uv + vec2(uTexel.x, 0.0)).r - texture2D(uLakes, uv - vec2(uTexel.x, 0.0)).r,
+                   texture2D(uLakes, uv + vec2(0.0, uTexel.y)).r - texture2D(uLakes, uv - vec2(0.0, uTexel.y)).r);
+    vec2 n = gW / max(length(gW), 1e-4);
+    float bank = smoothstep(0.02, 0.3, length(gW));
+    vec3 wash = mix(paper, uWater, 0.62);
+    wash *= 1.0 - 0.3 * clamp(dot(n, -uLightXZ), 0.0, 1.0) * bank;
+    col = mix(col, wash, smoothstep(0.15, 0.6, w));
+  }
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+/** A raw RGBA or single-channel texture, linear, clamped, no mips. */
+function rawTexture(data, w, h, format) {
+  const t = new B.RawTexture(data, w, h, format, scene, false, false, B.Texture.BILINEAR_SAMPLINGMODE);
+  t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+  return t;
+}
+
+const heights = decodeHeights();
+const tBake = performance.now();
+const reliefBytes = bakeRelief(heights);
+const lakeBytes = bakeLakes();
+window.__bakeMs = Math.round(performance.now() - tBake);
+
+const PAPER = hex('#e6d8b4');
+const material = new B.ShaderMaterial('print', scene, 'print', {
+  attributes: ['position'],
+  uniforms: ['worldViewProjection', 'uHalf', 'uTexel', 'uLightXZ', 'uPaper', 'uTable', 'uWater', 'uFloor', 'uTop'],
+  samplers: ['uRelief', 'uLakes', 'uPaperT'],
+});
+material.setTexture('uRelief', rawTexture(reliefBytes, NX, NZ, B.Engine.TEXTUREFORMAT_RGBA));
+material.setTexture('uLakes', rawTexture(lakeBytes, NX, NZ, B.Engine.TEXTUREFORMAT_LUMINANCE));
+const paperTex = new B.DynamicTexture('paper', paperCanvas(), scene, true);
+paperTex.update();
+paperTex.wrapU = paperTex.wrapV = B.Texture.WRAP_ADDRESSMODE;
+material.setTexture('uPaperT', paperTex);
+material.setVector2('uHalf', new B.Vector2(MAP_W / 2, MAP_H / 2));
+material.setVector2('uTexel', new B.Vector2(1 / NX, 1 / NZ));
+material.setVector2('uLightXZ', new B.Vector2(NW[0], NW[1]));
+material.setColor3('uPaper', B.Color3.FromArray(PAPER));
+material.setColor3('uTable', B.Color3.FromArray(hex('#c9b78f')));
+material.setColor3('uWater', B.Color3.FromArray(hex('#9fbcc2')));
+material.setFloat('uFloor', SHADE_FLOOR);
+material.setFloat('uTop', SHADE_TOP);
+
+const plane = B.MeshBuilder.CreateGround('print', { width: MAP_W + 2 * TABLE, height: MAP_H + 2 * TABLE }, scene);
+plane.material = material;
+
+/* =========================================================================
+   CAMERA: tilted 20 degrees off straight down, north up; pan by drag, zoom to the cursor
+   ========================================================================= */
+const TILT = (20 * Math.PI) / 180;
+const cam = new B.FreeCamera('cam', new B.Vector3(0, 1000, 0), scene);
+cam.inputs.clear();
+cam.fov = 0.5;
+cam.minZ = 1;
+cam.maxZ = 20000;
+// the target on the map (km, x east, z north) and the camera distance from it (km)
+const view = { x: 0, z: 0, dist: 1150 };
+const DIST_MIN = 25;
+const DIST_MAX = 1300;
+(() => {
+  const v = (Q.get('view') || '').split(',').map(Number);
+  if (v.length === 3 && v.every(Number.isFinite)) Object.assign(view, { x: v[0], z: v[1], dist: v[2] });
+})();
+
+/** Places the camera from the view. */
+function placeCamera() {
+  view.dist = clamp(view.dist, DIST_MIN, DIST_MAX);
+  view.x = clamp(view.x, -MAP_W / 2, MAP_W / 2);
+  view.z = clamp(view.z, -MAP_H / 2, MAP_H / 2);
+  cam.position.set(view.x, view.dist * Math.cos(TILT), view.z - view.dist * Math.sin(TILT));
+  cam.setTarget(new B.Vector3(view.x, 0, view.z));
+  dirty = true;
+}
+
+/** The point of the map (km) under a screen position (CSS pixels), or null above the horizon. */
+function groundAt(sx, sy) {
+  const ray = scene.createPickingRay(sx * GL_DPR, sy * GL_DPR, B.Matrix.Identity(), cam);
+  if (ray.direction.y >= -1e-6) return null;
+  const t = -ray.origin.y / ray.direction.y;
+  return [ray.origin.x + ray.direction.x * t, ray.origin.z + ray.direction.z * t];
+}
+
+let dirty = true;
+let drag = null;
+canvas.addEventListener('pointerdown', e => {
+  drag = groundAt(e.clientX, e.clientY);
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const now = groundAt(e.clientX, e.clientY);
+  if (!now) return;
+  view.x += drag[0] - now[0];
+  view.z += drag[1] - now[1];
+  placeCamera();
+});
+canvas.addEventListener('pointerup', () => {
+  drag = null;
+});
+canvas.addEventListener(
+  'wheel',
+  e => {
+    e.preventDefault();
+    const before = groundAt(e.clientX, e.clientY);
+    view.dist *= Math.exp(e.deltaY * 0.0012);
+    placeCamera();
+    scene.updateTransformMatrix(true);
+    const after = groundAt(e.clientX, e.clientY);
+    if (before && after) {
+      view.x += before[0] - after[0];
+      view.z += before[1] - after[1];
+      placeCamera();
+    }
+  },
+  { passive: false },
+);
+addEventListener('resize', () => {
+  engine.resize();
+  sizeInk();
+  dirty = true;
+});
+
+/* =========================================================================
+   INK: rivers, roads, towns and names on a 2D canvas, projected through the camera
+   ========================================================================= */
+const inkCanvas = document.getElementById('ink');
+const ink = inkCanvas.getContext('2d');
+const INK_DPR = Math.min(2, window.devicePixelRatio || 1);
+const INK = '#2b2824';
+const ROAD_RED = '#a3412c';
+const RIVER_INK = '#4f7380';
+let VP = null;
+
+/** Sizes the ink canvas to the screen. */
+function sizeInk() {
+  inkCanvas.width = Math.round(innerWidth * INK_DPR);
+  inkCanvas.height = Math.round(innerHeight * INK_DPR);
+}
+sizeInk();
+
+/** Map metres to CSS pixels on screen, through the camera's view and projection. */
+function toScreen(x, z) {
+  const m = VP;
+  const X = x / 1000;
+  const Z = z / 1000;
+  const cx = X * m[0] + Z * m[8] + m[12];
+  const cy = X * m[1] + Z * m[9] + m[13];
+  const cw = X * m[3] + Z * m[11] + m[15];
+  return [((cx / cw) * 0.5 + 0.5) * innerWidth, (0.5 - (cy / cw) * 0.5) * innerHeight];
+}
+
+/** Screen pixels per km at the screen's centre. */
+function pxPerKm() {
+  const c = groundAt(innerWidth / 2, innerHeight / 2) || [view.x, view.z];
+  const a = toScreen(c[0] * 1000, c[1] * 1000);
+  const b = toScreen(c[0] * 1000 + 1000, c[1] * 1000);
+  return Math.hypot(b[0] - a[0], b[1] - a[1]);
+}
+
+/** Traces a flat [x, z, ...] line in metres as a path on the ink canvas. */
+function tracePath(p) {
+  ink.beginPath();
+  for (let k = 0; k < p.length; k += 2) {
+    const [sx, sy] = toScreen(p[k], p[k + 1]);
+    if (k === 0) ink.moveTo(sx, sy);
+    else ink.lineTo(sx, sy);
+  }
+}
+
+/** Width of a river line in CSS pixels, by its rank (lower is bigger) and the zoom; 0 when hidden. */
+function riverWidth(rank, ppk) {
+  const base = rank <= 2 ? 2.4 : rank <= 4 ? 1.7 : rank <= 6 ? 1.15 : 0.8;
+  const show = rank <= 4 ? 0 : rank <= 6 ? 0.6 : 1.4;
+  if (ppk < show) return 0;
+  return base * clamp(0.7 + ppk * 0.12, 0.7, 1.8);
+}
+
+/** Rivers as fine blue-grey ink, widening with their rank. */
+function drawRivers(ppk) {
+  ink.lineJoin = 'round';
+  ink.lineCap = 'round';
+  ink.strokeStyle = RIVER_INK;
+  for (const r of T.rivers) {
+    const w = riverWidth(r.rank, ppk);
+    if (!w) continue;
+    ink.lineWidth = w;
+    ink.globalAlpha = 0.85;
+    tracePath(r.p);
+    ink.stroke();
+  }
+  ink.globalAlpha = 1;
+}
+
+/** Roads in red ink: high roads solid, country roads thinner and dashed; a pale casing so they sit on the relief. */
+function drawRoads(ppk) {
+  const scale = clamp(0.75 + ppk * 0.1, 0.75, 1.7);
+  ink.lineJoin = 'round';
+  ink.lineCap = 'round';
+  for (const pass of ['casing', 'ink']) {
+    for (const r of T.roads) {
+      const high = r.kind === 'high';
+      tracePath(r.p);
+      if (pass === 'casing') {
+        ink.setLineDash([]);
+        ink.strokeStyle = 'rgba(244, 233, 205, 0.55)';
+        ink.lineWidth = (high ? 3.6 : 2.6) * scale;
+      } else {
+        ink.setLineDash(high ? [] : [5 * scale, 3.5 * scale]);
+        ink.strokeStyle = ROAD_RED;
+        ink.lineWidth = (high ? 1.5 : 1.0) * scale;
+      }
+      ink.stroke();
+    }
+  }
+  ink.setLineDash([]);
+}
+
+// the zoom (screen pixels per km) from which a town of each size is shown
+const TOWN_SHOW = { 4: 0, 3: 0.75, 2: 1.3, 1: 2.2 };
+
+/** Towns as dark blocks sized by importance, a fortress ringed; their names placed so none overlap. */
+function drawTowns(ppk, placed) {
+  const towns = D.towns.filter(t => ppk >= TOWN_SHOW[t.size]).sort((a, b) => b.size - a.size);
+  for (const t of towns) {
+    const [x, z] = project(t.lat, t.lon);
+    const [sx, sy] = toScreen(x, z);
+    const s = [0, 2.6, 3.4, 4.4, 5.6][t.size] * clamp(0.85 + ppk * 0.05, 0.85, 1.3);
+    ink.fillStyle = INK;
+    ink.fillRect(sx - s / 2, sy - s / 2, s, s);
+    if (t.fort) {
+      ink.strokeStyle = INK;
+      ink.lineWidth = 1;
+      ink.beginPath();
+      ink.moveTo(sx, sy - s * 1.15);
+      ink.lineTo(sx + s * 1.15, sy);
+      ink.lineTo(sx, sy + s * 1.15);
+      ink.lineTo(sx - s * 1.15, sy);
+      ink.closePath();
+      ink.stroke();
+    }
+    const big = t.size >= 3;
+    const px = big ? 15 + t.size * 1.5 : 13 + t.size;
+    ink.font = `400 ${px}px "Instrument Serif", Georgia, serif`;
+    ink.letterSpacing = big ? '0.12em' : '0.02em';
+    const text = big ? t.name.toUpperCase() : t.name;
+    const w = ink.measureText(text).width;
+    // try right, left, above, below; skip the name if every place is taken
+    const spots = [
+      [sx + s + 4, sy + px * 0.32],
+      [sx - s - 4 - w, sy + px * 0.32],
+      [sx - w / 2, sy - s - 5],
+      [sx - w / 2, sy + s + px * 0.8],
+    ];
+    for (const [lx, ly] of spots) {
+      const box = [lx - 2, ly - px * 0.8, w + 4, px * 1.05];
+      if (placed.some(b => overlaps(b, box))) continue;
+      placed.push(box, [sx - s, sy - s, 2 * s, 2 * s]);
+      haloText(text, lx, ly, big ? INK : '#3a3630');
+      break;
+    }
+  }
+  ink.letterSpacing = '0px';
+}
+
+/** Whether two [x, y, w, h] boxes overlap. */
+function overlaps(a, b) {
+  return a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
+}
+
+/** Text with a soft paper halo, so it reads over the relief and the ink. */
+function haloText(text, x, y, colour) {
+  ink.lineJoin = 'round';
+  ink.strokeStyle = 'rgba(236, 224, 192, 0.8)';
+  ink.lineWidth = 3;
+  ink.strokeText(text, x, y);
+  ink.fillStyle = colour;
+  ink.fillText(text, x, y);
+}
+
+/** River names in serif italic, once per river, along the middle of its longest line on screen. */
+function drawRiverNames(ppk, placed) {
+  const best = new Map();
+  for (const r of T.rivers) {
+    if (!r.name || riverWidth(r.rank, ppk) === 0 || r.rank > (ppk > 1.5 ? 8 : 4)) continue;
+    const pts = [];
+    for (let k = 0; k < r.p.length; k += 2) pts.push(toScreen(r.p[k], r.p[k + 1]));
+    let len = 0;
+    for (let k = 1; k < pts.length; k++) {
+      if (onScreen(pts[k])) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+    }
+    const name = r.name.replace(/^Rhein$|^Rhin$/, 'Rhine').replace(/^Donau$/, 'Danube');
+    if (len > 160 && len > (best.get(name)?.len ?? 0)) best.set(name, { pts, len });
+  }
+  ink.font = 'italic 400 16px "Instrument Serif", Georgia, serif';
+  ink.letterSpacing = '0.08em';
+  for (const [name, { pts }] of best) {
+    // the on-screen point nearest the middle of the visible length
+    const on = pts.filter(onScreen);
+    const mid = on[Math.floor(on.length / 2)];
+    const k = pts.indexOf(mid);
+    const a = pts[Math.max(0, k - 2)];
+    const b = pts[Math.min(pts.length - 1, k + 2)];
+    let ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    if (ang > Math.PI / 2) ang -= Math.PI;
+    if (ang < -Math.PI / 2) ang += Math.PI;
+    const w = ink.measureText(name).width;
+    const box = [mid[0] - w / 2, mid[1] - 14, w, 16];
+    if (placed.some(p => overlaps(p, box))) continue;
+    placed.push(box);
+    ink.save();
+    ink.translate(mid[0], mid[1]);
+    ink.rotate(ang);
+    haloText(name, -w / 2, -5, '#3f6270');
+    ink.restore();
+  }
+  ink.letterSpacing = '0px';
+}
+
+/** Whether a screen point lies on the screen, with a margin. */
+function onScreen([x, y]) {
+  return x > 20 && y > 20 && x < innerWidth - 20 && y < innerHeight - 20;
+}
+
+/** Region names letter-spaced across the land, anchored to the map, fading as the camera closes in. */
+function drawRegions(ppk) {
+  const alpha = 0.5 * (1 - sstep(2.2, 4, ppk));
+  if (alpha <= 0.01) return;
+  const px = clamp(ppk * 22, 13, 46);
+  ink.font = `400 ${px}px "Instrument Serif", Georgia, serif`;
+  ink.letterSpacing = `${(px * 0.55).toFixed(1)}px`;
+  ink.globalAlpha = alpha;
+  ink.fillStyle = '#4a4238';
+  for (const r of D.regions) {
+    const [x, z] = project(r.lat, r.lon);
+    const [sx, sy] = toScreen(x, z);
+    ink.save();
+    ink.translate(sx, sy);
+    ink.rotate((-r.angle * Math.PI) / 180);
+    ink.textAlign = 'center';
+    ink.fillText(r.name, 0, px * 0.35);
+    ink.restore();
+  }
+  ink.globalAlpha = 1;
+  ink.letterSpacing = '0px';
+  ink.textAlign = 'left';
+}
+
+/** The scale bar: a round number of km about 120 px long at the screen's centre. */
+function drawScale(ppk) {
+  const km = [5, 10, 20, 25, 50, 100, 200].find(k => k * ppk >= 90) || 200;
+  document.getElementById('scaleBar').style.width = Math.round(km * ppk) + 'px';
+  document.getElementById('scaleText').textContent = km + ' km';
+}
+
+/** Redraws the ink for the current camera. */
+function drawInk() {
+  VP = scene.getTransformMatrix().m;
+  ink.setTransform(INK_DPR, 0, 0, INK_DPR, 0, 0);
+  ink.clearRect(0, 0, innerWidth, innerHeight);
+  const ppk = pxPerKm();
+  const placed = [];
+  // the ink stops at the neatline, as the print does
+  ink.save();
+  ink.beginPath();
+  const corners = [[-halfX, -halfZ], [halfX, -halfZ], [halfX, halfZ], [-halfX, halfZ]].map(([x, z]) => toScreen(x, z));
+  corners.forEach(([sx, sy], k) => (k ? ink.lineTo(sx, sy) : ink.moveTo(sx, sy)));
+  ink.clip();
+  drawRegions(ppk);
+  drawRivers(ppk);
+  drawRoads(ppk);
+  drawTowns(ppk, placed);
+  drawRiverNames(ppk, placed);
+  ink.restore();
+  drawScale(ppk);
+}
+
+/* =========================================================================
+   START
+   ========================================================================= */
+document.getElementById('meta').innerHTML =
+  `Lambert equal-area ${lat0}° N ${lon0}° E · ${NX - 1} × ${NZ - 1} cells of ${CELL} m<br>` +
+  `relief ×${RELIEF_Z} for the light · sun ${RELIEF_SUN}° from the north-west<br>` +
+  `${D.towns.length} towns · ${T.roads.length} roads, routed over the heights`;
+document.getElementById('credit').textContent = T.credit;
+
+placeCamera();
+let frames = 0;
+engine.runRenderLoop(() => {
+  scene.render();
+  if (dirty) {
+    drawInk();
+    dirty = false;
+  }
+  frames++;
+});
+
+/**
+ * Renders n frames back to back, waiting for the GPU after each, and returns the mean in ms. With `withInk`, the ink
+ * is redrawn every frame too, as while panning; without, as when the camera stands still.
+ */
+function bench(n = 60, withInk = true) {
+  const gl = engine._gl;
+  const px = new Uint8Array(4);
+  const start = performance.now();
+  for (let k = 0; k < n; k++) {
+    scene.render();
+    if (withInk) drawInk();
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  }
+  return (performance.now() - start) / n;
+}
+
+window.__proto = {
+  view: () => ({ ...view }),
+  setView(x, z, dist) {
+    Object.assign(view, { x, z, dist });
+    placeCamera();
+  },
+  bench,
+};
+document.fonts.load('16px "Instrument Serif"').finally(() => {
+  dirty = true;
+  window.__readyMs = Math.round(performance.now() - t0);
+});
+</script>
+</body>
+</html>
