@@ -1,0 +1,91 @@
+---
+status: active
+last_reviewed: 2026-10-29
+---
+
+# Plan: A1, the look compiler and a first window of Austerlitz (Kobelnitz)
+
+Stage A1 of the Austerlitz look plan (PR #255, "Stage A": `docs/plans/active/one-map-austerlitz.md` step 5, the look
+compiler M4). The owner's decision of 2026-10-29: Kobelnitz first, then Sokolnitz; the Pratzen after A1b.
+
+## Scope
+
+- **In:** the look compiler for a named window of a map file; the look page's `?map=<map>&window=<name>`; the land
+  (heights, cover, roads, villages' ground, trees) in PR (a); the yards and buildings in PR (b); the water drawn plain
+  in PR (c). The window Kobelnitz: centre (−450, 350) in map metres, the tile ±400 m, play ±235 m, the far ring
+  ±1300 m (today's `SPEC`, unchanged).
+- **Out:** A1b (the camera's focus on the ground, the ground range per world), A2 (one water for every world), A3 (the
+  demo as a map file), A4 (the armies and the checks on windows); the dev server's `?at=<x>,<z>` (with A4's checks, when
+  a window is chosen by hand); new art beyond the three models below.
+
+## Approach
+
+**The window** (`src/look/world/windows.ts`): a name, its map file, its centre on even metres (so the cover's 2 m
+cells are the map's). The look world's origin is the window's centre, with the map's axes; heights are taken down by
+the far ring's lowest node, so the window meets `SPEC.ground.lo` = 0. The window's far ring must lie inside the map's
+extent (Kobelnitz's and Sokolnitz's do); a collar past the edge waits for a window that needs it (stage B).
+
+**The compiler** (`tools/build-look-data.ts --window <name>`; render-side maths, decision 0006 does not apply): the
+map engine's `layersOf` (`maps/engine.ts`) once, then pure functions in `src/look/world/from-map.ts` turn the layers
+inside the window into today's look inputs, and today's encoder writes `data/<map>-<window>.lookdata`. `--check`
+compares, as today, and `npm run check:data` checks the demo and every named window. The page never compiles a map.
+
+**The page** chooses its data by `?map` and `?window` (an unknown name throws); without `?map` it draws the demo
+exactly as today. The look data's meta says which world it holds; the demo-only parts of the page (the hand-placed
+copses, hedgerows, far woods and extras, the formation zones, the buildings' list) run only on the demo, a map world's
+trees come from its data.
+
+### What the map language lacked, and how A1 fills it
+
+| Need | Filled by |
+|---|---|
+| The fields as fields (the arable is one `ground.field` over the whole map) | Temporary, in the compiler: the arable cut into strips 18–45 m wide in blocks of 240 m on the map's grid, each block turned its own way, each strip a crop (wheat, green, stubble, ploughed, a few pasture or fallow meadow) by a hash of the map's position, so two windows agree where they overlap. The language's field generator (#255) replaces it |
+| Trees in a wood (`veg.wood` is an area) | The compiler scatters them: a jittered grid at the wood's spacing, kept by its `density`, the species by `leaf` (broad, needle, mixed) and the wood's rim (birch, hawthorn), sized by `height`, by a hash of the map's position |
+| Orchards (`veg.orchard`, `rows`) | Apple trees in rows along `rows.dir` at `rows.spacing` |
+| The cover class of each kind | meadow: `ground.meadow`, the water's cells, the orchard's floor; pasture: `ground.pasture`, `ground.rough`; wood: `veg.wood.*`; village: `built.village` and the buildings' cells; road: `way.road`, `.highway`, `.paved`, `.brick`, `.sunken`; track: `way.road.lane`, `way.track`, `way.path`; `ground.marsh` as meadow (no marsh paint) |
+| A road's paint (`surface`) | Earth for every road (no paved paint yet) |
+
+### The PRs
+
+1. **(a) The compiler and `?map` with land.** Heights (tile, margin, far ring) from `Layers.height`; the cover's
+   classes, fields, wear and the village ground from the layers; the roads' segments from the `way.*` lines (their
+   widths from `lineReach`), resampled every 8 m as the demo's; the trees as above. No water yet: the water's data,
+   bank normals and river are empty on a map world, so the streams' channels and the pond's bed show as dry hollows,
+   and no buildings (the village's ground only). The look data's version 9: its meta names its world, and it carries
+   the trees (the demo's file is rebuilt, its world unchanged).
+2. **(b) Yards and buildings.** The buildings from `built.house` and `built.church` footprints: a model fitted by size
+   and shape (house, farmhouse, manor; the church its own), turned to the footprint's long axis, its door to the
+   nearest road, seeded by the id. The yards' shapes move from 16 uniforms to a texture (a byte's index, up to 239 a
+   world), and a yard is clipped at its road on a map world instead of throwing (Kobelnitz's tile holds 17 buildings,
+   a street village's houses stand 3 m from their road). The new models, from the raw packs in `assets/buildings/`
+   (git-ignored) as `docs/plans/done/tripo-lowpoly-buildings.md` brought the farmhouse and the manor: the **church**
+   (`church-low-poly.zip`), the **windmill** (`windmill-low-poly.zip`, for `built.mill` when the language has it) and
+   the **stone bridge** (`bridge-low-poly.zip`, for `built.bridge` once M8 places them).
+3. **(c) Water drawn plain.** The water data from the layers (depth from `Layers.depth` and the streams' levels, the
+   distance to the shore by a distance transform, the flow along each stream), a flat ribbon per stream and a surface
+   per pond at its level, the bank normals and the far mask from the water layer; the river's own features (riffles,
+   stones, reeds, cut banks, reflections) off on map worlds until A2.
+
+## Acceptance
+
+- (a) `?map=austerlitz&window=kobelnitz` loads on the production build; the ground, the fields, the roads, the
+  village's ground and the trees stand where the lit map view (`app/map.html`) puts them, shown side by side at 20 m,
+  the default and the widest zoom.
+- (a) Vitest: the compiler's pure parts (the window's grids, the cover's classes, the fields, the trees' scatter, the
+  roads' lines, the rebasing) on small hand-made layers.
+- The demo page unchanged: `tools/golden.mjs` against `origin/main` without `?map` equal; `npm test`,
+  `npm run check:data`, `node tools/check-docs.mjs` and the build pass.
+- Measured and written here: the compile's time and memory, the data's size, the bakes' memory and time, one bench
+  round on the window (`tools/bench-look.mjs`, Metal, preview build) beside the demo's.
+- (b) every footprint of the window has its building; (c) every water of the window drawn, `look-check` passing.
+
+## Risks
+
+- The roads' 16 segments a cell at the village crossings: measured by the compiler (it throws over the limit).
+- A wood's trees are the forest's cost (`docs/plans/done/forest-bench.md`): Kobelnitz's far ring holds about 22 ha of
+  wood, its tile none; measured by the bench.
+- The dry channels and pond bed of (a) are not the look: (c) fills them.
+
+## Results
+
+To be written as each PR lands.

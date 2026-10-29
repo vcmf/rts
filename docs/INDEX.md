@@ -74,6 +74,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/m6-lit-view.md`](plans/active/m6-lit-view.md) (Track M M6: the lit map view in the game's code, M6a–c done, M6d waits),
   [`plans/active/m8-austerlitz.md`](plans/active/m8-austerlitz.md) (Track M M8: Austerlitz drawn on the editor, the field as a scale model at 2×),
   [`plans/active/one-map-austerlitz.md`](plans/active/one-map-austerlitz.md) (one map in the language, drawn with the map editor: Austerlitz 1805, its draft-map mode and the real map),
+  [`plans/active/look-austerlitz-a1.md`](plans/active/look-austerlitz-a1.md) (A1: the look compiler, a window of Austerlitz on the look page, Kobelnitz first),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
   [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c),
