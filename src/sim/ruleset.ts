@@ -35,6 +35,9 @@ export interface FormationDef {
   // to tail): its places only; a change into or out of it passes through the block's spacing
   step?: { file: number; rank: number }
   braced?: boolean // proof against a charge from any side (the square; S1d-2)
+  // fire from its flank and from its rear over fire from its front (each ≥ 1; docs/proposals/sectors-model.md § 5);
+  // none: 1, as from the front
+  exposure?: { flank: number; rear: number }
   place(g: Geometry): Placement[]
 }
 export interface TerrainDef {
@@ -80,11 +83,11 @@ export interface MoraleDef {
   // S1c-2 (docs/plans/active/s1c2-morale-machine.md)
   // a friend's break: the morale lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
   contagion: { shock: number; front: number; back: number }
+  // the back exposed (decision 0081): the target's drain per weight of flank and of rear of the worst enemy that can
+  // hurt it (docs/proposals/sectors-model.md § 5)
+  drain: { flank: number; rear: number }
   // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
   support: { bonus: number; reach: number; arc: number }
-  // a wavering battalion without orders Retires `metres` once its morale has fallen by more than `rate` a second for
-  // `after` seconds
-  fallback: { metres: number; after: number; rate: number }
   // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
   rally: { safe: number; calm: number; time: number; cost: number; max: number }
   shatter: number // a router below this share of its spawn strength shatters
@@ -121,6 +124,8 @@ export interface MeleeDef {
   hold: number
   threat: Quarters
   impact: { kill: number; shock: Quarters }
+  // the shock of a charge striking a battalion already in melee with another, by the side it strikes (decision 0080)
+  second: { flank: number; rear: number }
   rate: number
   strength: Record<string, number>
   cohesion: number
@@ -218,6 +223,15 @@ export interface Dress {
   far?: 'coat' | 'own'
 }
 
+// where a threat stands to a formation (docs/proposals/sectors-model.md § 8): the blend's centre T and half-width H on
+// the angle measure (45°, 35° to 55°), the corner's length (metres), the slices a threat's block is cut into, and the
+// farthest an enemy presses on a battalion's morale (metres between their nearest companies)
+export interface SectorsDef {
+  blend: { T: number; H: number }
+  corner: number
+  slices: number
+  reach: number
+}
 export interface Ruleset {
   name: string
   types: Record<string, UnitType> // the first is the default
@@ -235,6 +249,7 @@ export interface Ruleset {
   fire: FireDef
   morale: MoraleDef
   melee: MeleeDef
+  sectors: SectorsDef
   // S1e-2: a side is broken at this share of its spawned men in the fight; at a time limit, shares within margin draw
   end: { broken: number; margin: number }
 }
@@ -416,6 +431,13 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     if (!paces.includes(d.pace)) throw new Error(`${at}: shape ${n}'s pace ${d.pace} is not one of the paces`)
     if (d.roadPace && !paces.includes(d.roadPace)) {
       throw new Error(`${at}: shape ${n}'s roadPace ${d.roadPace} is not one of the paces`)
+    }
+    // a flank or rear under 1 would make fire from the front the worst
+    if (
+      d.exposure &&
+      !(d.exposure.flank >= 1 && d.exposure.rear >= 1 && d.exposure.flank + d.exposure.rear < Infinity)
+    ) {
+      throw new Error(`${at}: shape ${n}'s exposure must be finite and ≥ 1 (flank and rear)`)
     }
   }
   // a change time naming a shape it has not would be ignored, and the default taken in silence (#156)
@@ -610,6 +632,23 @@ export function compileRuleset(rs: Ruleset): Compiled {
     throw new Error(
       `ruleset ${rs.name}: morale.contagion.shock over 0.6 of the gap from the default quality to the rout`,
     )
+  }
+  // nor a second enemy's charge (decision 0080)
+  const sec = rs.melee.second
+  if (!(sec.flank >= 0 && sec.rear >= 0 && Math.max(sec.flank, sec.rear) <= 0.6 * (M.quality - M.rout))) {
+    throw new Error(
+      `ruleset ${rs.name}: melee.second must be ≥ 0 and at most 0.6 of the gap from the quality to the rout`,
+    )
+  }
+  const SC = rs.sectors
+  if (!(SC.blend.H > 0 && SC.blend.T - SC.blend.H > 0 && SC.blend.T + SC.blend.H < 1)) {
+    throw new Error(`ruleset ${rs.name}: sectors.blend must lie inside the angle measure's 0..1 (0 < T − H, T + H < 1)`)
+  }
+  if (!(SC.corner > 0 && Number.isInteger(SC.slices) && SC.slices >= 1 && SC.reach > 0 && SC.reach < Infinity)) {
+    throw new Error(`ruleset ${rs.name}: sectors needs corner > 0, a whole number of slices ≥ 1 and a finite reach > 0`)
+  }
+  if (!(M.drain.flank >= 0 && M.drain.rear >= 0 && M.drain.flank + M.drain.rear < Infinity)) {
+    throw new Error(`ruleset ${rs.name}: morale.drain must be finite and ≥ 0`)
   }
   if (!(M.rally.max >= 0 && M.rally.max < 255)) {
     throw new Error(`ruleset ${rs.name}: morale.rally.max must be 0..254 (the break count is a byte)`)

@@ -387,6 +387,44 @@ export const BENCH_CASES: BenchCase[] = [
     [0, 0, 2],
     [25, 120],
   ),
+  // the sectors' cases (U1, docs/plans/active/u1-sectors.md): a line at the origin facing north, and an enemy where
+  // its front, flank and rear meet; the overlay's Sectors layer shows each formation's front, flank and rear
+  bench(
+    's01-enfilade',
+    'S-01: a line fired on from its flank by a line at right angles to it, 120 m off its east end',
+    [
+      { side: 0, x: 0, z: 0, heading: N, shape: LINE },
+      { side: 1, x: 170, z: -20, heading: W, shape: LINE },
+    ],
+    [step(1, 1, { type: 'fire', mode: 'at will' })],
+    120,
+    [60, -10, 2.5],
+    [10, 60],
+  ),
+  bench(
+    's02-end-of-a-line',
+    'S-02: an enemy ahead of one end of a long line, then walked round to its flank',
+    [
+      { side: 0, x: 0, z: 0, heading: N, shape: LINE },
+      { side: 1, x: 70, z: 90, heading: S, shape: COL },
+    ],
+    [step(10, 1, move(140, 30)), step(10, 1, move(140, -40, true))],
+    150,
+    [40, 20, 2],
+    [5, 40, 90],
+  ),
+  bench(
+    's03-across-the-front',
+    "S-03: a column of route crossing a line's front at 150 m",
+    [
+      { side: 0, x: 0, z: 0, heading: N, shape: LINE },
+      { side: 1, x: -220, z: 150, heading: E, shape: 'march' },
+    ],
+    [step(1, 1, move(220, 150))],
+    200,
+    [0, 80, 1.6],
+    [20, 80, 140],
+  ),
 ]
 
 /** A case with the claim grid's prototype on (docs/plans/active/c1-claims.md): `bench-…-claims` on the page. */

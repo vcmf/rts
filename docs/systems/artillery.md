@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-28
 code: [src/sim/artillery.ts, src/sim/fire.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-guns.ts, src/render/map.ts, tools/calibrate-artillery.ts, test/artillery.test.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine]
 ---
@@ -67,8 +67,8 @@ step 11 casualties   the owed men fall
 - **The shot:** inside `cone.range` of the company aimed at, the cone; beyond it, the ray.
 
 **The cone:**
-- **Men struck:** `hits(range)` (the table, linear between points) × the target kind's depth factor
-  (`fire.depth`).
+- **Men struck:** `hits(range)` (the table, linear between points) × the aimed target's exposure to the firing
+  piece (U1, `docs/systems/fire-morale.md`): its kind's depth factor (`fire.depth`), more from its flank or rear.
 - **Who:** spread over the enemy companies whose centres lie inside the cone (`cone.half`) and its range, that
   the piece sees. Each man goes first to a formation weighted by its men there, then to a company of it
   (`oweByMen`).

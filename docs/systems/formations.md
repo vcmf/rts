@@ -1,7 +1,7 @@
 ---
 status: current
-last_reviewed: 2026-10-11
-code: [src/sim/formation.ts, src/sim/ruleset.ts, src/sim/terrain.ts, src/rulesets/napoleonic.ts, test/formations.test.ts, test/types.test.ts]
+last_reviewed: 2026-10-28
+code: [src/sim/formation.ts, src/sim/sectors.ts, src/sim/ruleset.ts, src/sim/terrain.ts, src/rulesets/napoleonic.ts, test/formations.test.ts, test/sectors.test.ts, test/types.test.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0012-heightfield-authority, 0015-era-generic-engine]
 ---
 
@@ -58,8 +58,9 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
 first is the default), each with:
 - its block geometry: companies, files, ranks, spacings, the minimum spacing, the accordion gap, bins per
   company;
-- its shapes as company placements, with kind, pace, road pace, `trail`, `closeAcross` and, for a trail
-  shape, an optional `step`: the spacing of its places' files and ranks when it is not the block's (a column
+- its shapes as company placements, with kind, pace, road pace, `trail`, `closeAcross`, `braced`, the
+  `exposure` to fire from a flank and the rear (U1, `docs/systems/fire-morale.md`) and, for a trail shape, an
+  optional `step`: the spacing of its places' files and ranks when it is not the block's (a column
   of route of horses, nose to tail);
 - its change times, the shape a spawn takes, and whether it fires by company (S1c's musketry).
 
@@ -90,6 +91,14 @@ kind or giving a value not a finite number ≥ 0. That terrain only slows (a fac
 shipped data, checked there, not a rule of the engine.
 
 The ruleset's hash is recorded in the world, the replays and the saves.
+
+**The face** (U1, `src/sim/sectors.ts`, `docs/proposals/sectors-model.md` § 2). Each tick, from the placed
+blocks, each formation's face: a formed shape's front is the box of its companies in its own frame (front and rear
+edges, left and right ends); a braced shape (the square) is all front; a trail shape (a march column) has its head
+company's frame for its front and its tail's for its rear; a formation changing shape has no front. A point, or a
+threat's block, has weights (front, flank, rear) that sum to 1 on that face, read alike by fire, charges and morale:
+front within about 35° of straight ahead from the face's nearer end, flank past 55°, a blend between; the rear the
+same behind; `sectors` in the ruleset holds the blend, the corner, the slices and the reach. Scratch, not state.
 
 **Types in the world.** A formation stores its type (`f.type`), and `f.shape` indexes its type's shapes. The
 per-company and per-bin rows of the world are strided by the most of any type (`cr.maxC`, `cr.maxNB`,

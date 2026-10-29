@@ -1189,7 +1189,7 @@ export function shiftOrder(w: World, i: number): void {
   freeOrder(w, n)
 }
 // the Retire drill: face about, march `metres`, halt and dress, face the front again; the last two survive a
-// halt. Used by the `retire` command and the wavering fall-back: fills order k of RETIRE
+// halt. Used by the `retire` command: fills order k of RETIRE
 export const RETIRE = [O_FACE, O_MOVE, O_DRESS, O_FACE]
 export function fillRetire(w: World, n: number, k: number, metres: number): void {
   if (k === 1) w.ord.a[n] = metres

@@ -2,7 +2,8 @@
 // flank support, the wavering fall-back. The cases are scripted: morale and states are set between ticks, on
 // levelled ground, in the open band west of the stream (x ≈ −60, z −105..30) or at the map's west edge.
 import { describe, it, expect } from 'vitest'
-import { data, cr, shipped } from './fx.ts'
+import { data, cr, shipped, Sim, openBattlefield, OPEN_DATA } from './fx.ts'
+import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import {
   makeWorld,
   issue,
@@ -32,6 +33,9 @@ import {
   outOfFight,
   mayFire,
   formationSlot,
+  MORALE_STATES,
+  blockGeometry,
+  screenShare,
   type World,
   type Command,
   type Dropped,
@@ -370,90 +374,210 @@ describe('flank support', () => {
   })
 })
 
-describe('the wavering fall-back', () => {
-  // side 1 at x = −10 facing west, an enemy (holding fire) 100 m west; spawned at the default quality, its
-  // quality then lowered, so its morale falls into wavering (spawned at 0.45 it would start there, not falling)
-  const setup = () => {
+describe('a wavering battalion keeps fighting (decision 0082)', () => {
+  it('P-24: with no orders, losing men to an enemy in front of it, it stands and fires; it never Retires by itself', () => {
+    // side 1 at x = −10 facing west, an enemy firing at it 100 m west; spawned at the default quality, its quality
+    // then lowered, so its morale falls into wavering (the old fall-back's case)
     const s = new W()
     SIDES_SET(s)
-    s.spawn(0, -110, -35)
+    s.spawn(0, -110, -35, { fire: 'at will' })
     const h = s.spawn(1, -10, -35, { fire: 'at will' })
-    s.w.f.quality[s.i(h)] = 0.45
-    return [s, h] as const
-  }
-  it('a wavering battalion without orders, morale falling, an enemy in range, Retires 15 m once, faces the front and fires again', () => {
-    const [s, h] = setup()
     const i = s.i(h)
-    let fell = -1
+    const men = menOf(s.w, i)
+    s.w.f.quality[i] = 0.45
+    let wavering = -1
+    let moved = false
     s.run(120, () => {
-      if (fell < 0 && s.w.f.fellBack[i]) fell = s.w.meta[M_TICK]
+      if (s.state(h) !== MS_WAVERING) return
+      if (wavering < 0) wavering = s.w.meta[M_TICK]
+      // the heading is kept to 0.1 mrad
+      moved ||= s.w.f.x[i] !== -10 || Math.abs(s.w.f.heading[i] + E) > 1e-4 || s.w.f.ordHead[i] >= 0
     })
-    expect(fell).toBeGreaterThan(0)
-    expect(s.state(h)).toBe(MS_WAVERING)
-    expect(s.w.f.x[i]).toBeCloseTo(-10 + M.fallback.metres, 0)
-    expect(s.w.f.heading[i]).toBeCloseTo(-E, 4) // the spawn's heading, to 0.1 mrad
-    expect(s.w.f.ordHead[i]).toBe(-1) // once: no second Retire while still wavering
+    expect(wavering).toBeGreaterThan(0)
+    expect(menOf(s.w, i)).toBeLessThan(men)
+    expect(moved).toBe(false)
     const last = Math.max(...s.w.f.volleyTick.slice(i * s.w.cr.maxC, i * s.w.cr.maxC + 4))
-    expect(last).toBeGreaterThan(fell + 20 * 10) // it fired after the Retire
+    expect(last).toBeGreaterThan(wavering) // it fired while wavering
   })
-  it('not with orders', () => {
-    const [s, h] = setup()
-    s.do({ type: 'move', id: h, points: [[-10, 150]], append: false })
-    let fell = false
-    s.run(60, () => {
-      fell ||= s.w.f.fellBack[s.i(h)] === 1
-    })
-    expect(s.state(h)).toBe(MS_WAVERING)
-    expect(fell).toBe(false)
+})
+
+describe('the back exposed (decision 0081, sectors-model §§ 5–6)', () => {
+  const PI = Math.PI
+  const D = napoleonic.morale.drain
+  // a battalion spawned on the open field with the shipped ruleset (a line of 400 holding its fire unless told)
+  const put = (s: Sim, side: number, x: number, z: number, heading: number, extra: Partial<Command> = {}): number => {
+    const slot = s.w.free[s.w.meta[M_FREE] - 1]
+    s.cmd({ type: 'debug-spawn', side, x, z, heading, shape: 'line', men: 400, fire: 'hold', ...extra } as Command)
+    s.tick()
+    expect(s.w.f.alive[slot]).toBe(1)
+    return slot
+  }
+  const field = () => new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)
+  // the drain on battalion j a tick after `place` sets the field (j: what it returns)
+  const drainOf = (place: (s: Sim) => number): number => {
+    const s = field()
+    const j = place(s)
+    s.tick()
+    return s.w.scratch.drain![j]
+  }
+  // a line at the origin facing north (+z), side 0
+  const line = (s: Sim, extra: Partial<Command> = {}) => put(s, 0, 0, 0, 0, extra)
+  const cav = { unit: 'cavalry', men: 256 } as Partial<Command>
+  const guns = (shape: string) => ({ unit: 'battery', men: 96, shape }) as Partial<Command>
+
+  it('P-22: a steady line with an enemy on its flank settles at 0.65, still steady; one behind it, 0.55: shaken', () => {
+    const settle = (x: number, z: number, heading: number) => {
+      const s = field()
+      const j = line(s)
+      put(s, 1, x, z, heading)
+      s.advance(120)
+      return [s.w.f.morale[j], MORALE_STATES[s.w.f.mstate[j]]]
+    }
+    const q = napoleonic.morale.quality
+    const [mf, sf] = settle(150, 0, -PI / 2)
+    expect(mf).toBeCloseTo(q - D.flank, 3)
+    expect(sf).toBe('steady')
+    const [mr, sr] = settle(0, -120, 0)
+    expect(mr).toBeCloseTo(q - D.rear, 3)
+    expect(sr).toBe('shaken')
   })
-  it('not with no enemy within musket range', () => {
-    const s = new W()
-    SIDES_SET(s)
-    const h = s.spawn(1, -10, -35)
-    s.w.f.quality[s.i(h)] = 0.45
-    let fell = false
-    s.run(60, () => {
-      fell ||= s.w.f.fellBack[s.i(h)] === 1
-    })
-    expect(s.state(h)).toBe(MS_WAVERING)
-    expect(fell).toBe(false)
+  it('P-22: the drain lowers a target at most to wavering, never below, and leaves one already under it', () => {
+    const W0 = napoleonic.morale.wavering[0]
+    for (const q of [0.52, 0.45]) {
+      const s = field()
+      const j = line(s, { quality: q })
+      put(s, 1, 0, -120, 0)
+      s.advance(120)
+      expect(s.w.scratch.drain![j]).toBe(D.rear)
+      expect(s.w.f.morale[j]).toBeCloseTo(Math.min(q, Math.max(W0, q - D.rear)), 3)
+      expect(outOfFight(s.w.f.mstate[j])).toBe(false)
+    }
   })
-  it('not with the enemy behind it: a Retire, back from its facing, would march toward the enemy', () => {
-    // faced east, its back to the enemy 100 m west (a rallied battalion faces the way it ran)
-    const s = new W()
-    SIDES_SET(s)
-    s.spawn(0, -110, -35)
-    const h = s.spawn(1, -10, -35, { heading: E })
-    s.w.f.quality[s.i(h)] = 0.45
-    let fell = false
-    s.run(60, () => {
-      fell ||= s.w.f.fellBack[s.i(h)] === 1
+  it('P-21: two threats on one flank drain no more than the worse of them', () => {
+    const one = drainOf(s => {
+      const j = line(s)
+      put(s, 1, 150, 0, -PI / 2)
+      return j
     })
-    expect(s.state(h)).toBe(MS_WAVERING)
-    expect(fell).toBe(false)
-    expect(s.w.f.x[s.i(h)]).toBe(-10)
+    const two = drainOf(s => {
+      const j = line(s)
+      put(s, 1, 150, 0, -PI / 2)
+      put(s, 1, 250, 0, -PI / 2)
+      return j
+    })
+    expect(one).toBe(D.flank)
+    expect(two).toBe(one)
   })
-  it('not on the slow crawl of a morale settling onto a fixed target', () => {
-    const [s, h] = setup()
-    const i = s.i(h)
-    s.set(h, 0.45 + 1e-4) // wavering, a hair above its target: it creeps down by about 2.5e-7 a tick
-    let fell = false
-    s.run(30, () => {
-      fell ||= s.w.f.fellBack[i] === 1
-    })
-    expect(fell).toBe(false)
+  it('P-23: an enemy in front drains nothing; a square is never drained', () => {
+    expect(
+      drainOf(s => {
+        const j = line(s)
+        put(s, 1, 0, 120, PI)
+        return j
+      }),
+    ).toBe(0)
+    expect(
+      drainOf(s => {
+        const j = line(s, { shape: 'square' })
+        put(s, 1, 0, -120, 0)
+        put(s, 1, 150, 0, -PI / 2)
+        return j
+      }),
+    ).toBe(0)
   })
-  it('not on a dip into wavering that recovers (its morale rising)', () => {
-    const [s, h] = setup()
-    const i = s.i(h)
-    s.w.f.quality[i] = M.quality
-    s.set(h, 0.48)
-    // the flag clears once it recovers
-    let fell = false
-    s.run(30, () => {
-      fell ||= s.w.f.fellBack[i] === 1 || s.w.f.ordHead[i] >= 0
-    })
-    expect(fell).toBe(false)
+  it("P-25: a march across an enemy line's front within its range drains; screened by friends, out of range, or with the enemy facing away, nothing", () => {
+    // side 0's column of route marches east 150 m north of side 1's line, which faces it
+    const march = (extra: (s: Sim) => void = () => {}, z = 150, heading = PI) =>
+      drainOf(s => {
+        const j = put(s, 0, 0, z, PI / 2, { shape: 'march' })
+        put(s, 1, 0, 0, heading === PI ? 0 : heading)
+        extra(s)
+        return j
+      })
+    expect(march()).toBeGreaterThan(0.9 * D.flank)
+    // a friendly line between them blocks every ray
+    expect(march(s => put(s, 0, 0, 75, PI))).toBe(0)
+    // beyond the enemy's range (and 300 m)
+    expect(march(() => {}, 360)).toBe(0)
+    // the enemy faces away
+    expect(march(() => {}, 150, 0.0001 + PI)).toBe(0)
+  })
+  it('P-25: behind a crest, nothing; on level ground, the same enemy on its flank drains', () => {
+    // the rise at x ≈ −13 hides lines 150 m apart (fire's test of sight): a 100-man line at x = 25 facing north, its
+    // west flank toward an enemy at x = −125 facing east
+    const at = (ground: typeof data) => {
+      const w = makeWorld(ground, cr, 1, true)
+      const spawn = (c: Partial<Command>) => {
+        issue(w, { type: 'debug-spawn', shape: 'line', men: 100, fire: 'hold', ...c } as Command)
+        advanceTick(w)
+      }
+      const j = w.free[w.meta[M_FREE] - 1]
+      spawn({ side: 0, x: 25, z: -165, heading: 0 })
+      spawn({ side: 1, x: -125, z: -165, heading: Math.PI / 2 })
+      advanceTick(w)
+      return w.scratch.drain![j]
+    }
+    expect(at(data)).toBe(0)
+    expect(at(levelled(data))).toBeGreaterThan(0)
+  })
+  it("P-25: musketry with one ray of three clear of the target's friends still drains", () => {
+    const s = field()
+    const j = line(s)
+    const e = put(s, 1, 150, 0, -PI / 2)
+    // a small friend between them, across two of the three rays from the enemy's company nearest the target
+    put(s, 0, 120, -8, PI, { men: 60 })
+    s.tick()
+    const G = blockGeometry(s.w)
+    const CS = s.w.cr.maxC
+    let near = [Infinity, -1, -1]
+    for (let p = 0; p < 4; p++) {
+      for (let q = 0; q < 4; q++) {
+        const [k, m] = [e * CS + p, j * CS + q]
+        const d = (G.cx[m] - G.cx[k]) ** 2 + (G.cz[m] - G.cz[k]) ** 2
+        if (d < near[0]) near = [d, k, m]
+      }
+    }
+    expect(screenShare(s.w, G, near[1], near[2], 0)).toBeCloseTo(1 / 3, 9)
+    expect(s.w.scratch.drain![j]).toBe(D.flank)
+  })
+  it('P-26: a limbered battery is no threat, an unlimbered one is; cavalry within 200 m is, blown, beyond 200 m, in march column or screened it is not', () => {
+    const flank = (extra: Partial<Command>, x = 150, then: (s: Sim, e: number) => void = () => {}) =>
+      drainOf(s => {
+        const j = line(s)
+        const e = put(s, 1, x, 0, -PI / 2, extra)
+        then(s, e)
+        return j
+      })
+    expect(flank(guns('limbered'))).toBe(0)
+    expect(flank(guns('unlimbered'))).toBe(D.flank)
+    expect(flank(cav)).toBe(D.flank)
+    expect(flank(cav, 280)).toBe(0)
+    expect(flank({ ...cav, shape: 'march' })).toBe(0)
+    expect(flank(cav, 150, (s, e) => (s.w.f.blownUntil[e] = s.w.meta[M_TICK] + 100))).toBe(0)
+    expect(
+      drainOf(s => {
+        const j = line(s)
+        put(s, 0, 100, 0, -PI / 2)
+        put(s, 1, 170, 0, -PI / 2, cav)
+        return j
+      }),
+    ).toBe(0)
+  })
+  it('P-27: the reversed visiting order gives the same state', () => {
+    const go = (rev: boolean) => {
+      const s = field()
+      s.w.scratch.reverse = rev
+      line(s, { fire: 'at will' })
+      put(s, 0, 160, 60, 0, { fire: 'at will' })
+      put(s, 1, 0, 110, PI, { fire: 'at will' })
+      put(s, 1, 180, 0, -PI / 2, cav)
+      const g = put(s, 1, -170, 30, PI / 2, guns('limbered'))
+      s.cmd({ type: 'form', id: makeHandle(KIND_FORMATION, g, s.w.f.gen[g]), shape: 'unlimbered' } as Command)
+      s.advance(90)
+      const f = s.w.f
+      return JSON.stringify([f.x, f.z, f.heading, f.men, f.morale, f.mstate, f.shape, f.trans].map(a => [...a]))
+    }
+    expect(go(true)).toBe(go(false))
   })
 })
 
@@ -465,28 +589,26 @@ describe('determinism', () => {
     const run = record(lev, cr, sc, 2, 14000, () => {})
     expect(play(run.replay, lev, cr, sc, run.hashes)).toBeNull()
   })
-  it('a save taken with one battalion rallying, one routing and one mid-fall-back reproduces', () => {
+  it('a save taken with one battalion rallying, one routing and one wavering reproduces', () => {
     // side 0: a router that runs to the west edge and rallies, a second routing, and east of the stream a
-    // wavering line falling back from side 1's line 60 m in front of it (side 1 stays east: the edge is safe)
+    // wavering line in a firefight with side 1's line 60 m in front of it (side 1 stays east: the edge is safe)
     const s = new W()
     SIDES_SET(s)
     const r1 = s.spawn(0, -60, -35)
     const r2 = s.spawn(0, -60, 25)
     s.spawn(1, 170, -95)
-    const fb = s.spawn(0, 110, -95, { fire: 'at will' })
+    const wv = s.spawn(0, 110, -95, { fire: 'at will' })
     const until = (ok: () => boolean) => {
       for (let n = 0; n < 20 * 600 && !ok(); n++) s.tick()
       expect(ok()).toBe(true)
     }
     s.breakNow(r1)
     until(() => s.state(r1) === MS_RALLYING)
-    // just above wavering, its quality lowered: it falls back within about 6 s, inside the 30 s rally
-    s.w.f.quality[s.i(fb)] = 0.45
-    s.set(fb, 0.51)
+    s.w.f.quality[s.i(wv)] = 0.45
+    s.set(wv, 0.49)
     s.breakNow(r2)
-    until(() => s.w.f.fellBack[s.i(fb)] === 1 && s.w.f.ordHead[s.i(fb)] >= 0)
-    // the rally lasts 30 s: the fall-back must come first
-    expect([s.state(r1), s.state(r2), s.state(fb)]).toEqual([MS_RALLYING, MS_ROUTING, MS_WAVERING])
+    s.tick()
+    expect([s.state(r1), s.state(r2), s.state(wv)]).toEqual([MS_RALLYING, MS_ROUTING, MS_WAVERING])
     const w2 = deserialize(serialize(s.w), lev, cr, true, levTerrain)
     for (let n = 0; n < 1200; n++) {
       advanceTick(s.w)

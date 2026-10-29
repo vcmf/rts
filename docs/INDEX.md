@@ -51,6 +51,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 - [`proposals/map-format.md`](proposals/map-format.md): the map format, one schema-checked description of a battlefield that the sim, the 3D battlefield and the staff map compile from. *(draft)*
 - [`proposals/unit-model.md`](proposals/unit-model.md): the unit model: categories, shapes and faces, sectors, engagement, experience levels, fire, the assault, guns taken, collision, pathfinding, counters and bonuses; phases U1–U9. *(draft)*
 - [`proposals/collision-and-orders.md`](proposals/collision-and-orders.md): formed and loose bodies, the clamp on bins with half gaps, a melee that holds until one side breaks, the visual bench, the orders' queue and what suspends or clears it; phases C0–C4. *(draft)*
+- [`proposals/sectors-model.md`](proposals/sectors-model.md): the math and code structure of U1's sectors: the face, the weight of a point and of a threat, what reads them, who can hurt a battalion; each rule a definition, its properties and their tests. *(draft)*
 - [`proposals/unit-scenarios.md`](proposals/unit-scenarios.md): the situations the unit model must get right, each with its expected outcome and what the sim does today. *(draft)*
 - [`proposals/map-engine.md`](proposals/map-engine.md): the map engine: a closed JSON language (one feature shape, dotted kinds from a catalogue of presets, five layers), its generator, compilers in Node and the browser, square grids, the draft and rendered views, Track M's phases. *(draft)*
 - [`proposals/ai.md`](proposals/ai.md): the enemy AI: layers, influence maps, utility scores, lookahead with the sim, honest difficulty; built after pathfinding. *(draft)*
@@ -62,6 +63,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/track-s.md`](plans/active/track-s.md) (Track S: the sim engine's remaining phases before the playtest, the `epic/sim-engine` branch),
   [`plans/active/c0-bench.md`](plans/active/c0-bench.md) (C0: the visual bench, its overlay, time controls and cases),
   [`plans/active/c1-claims.md`](plans/active/c1-claims.md) (C1: a prototype of the claim grid, experimental; its weak points and their order),
+  [`plans/active/u1-sectors.md`](plans/active/u1-sectors.md) (U1: sectors, exposure by shape, the back exposed, the second enemy in melee),
   [`plans/active/battle-threads.md`](plans/active/battle-threads.md) (the battle's threads: a worker, soldiers stepped at 12 fps),
   [`plans/active/paper-layers.md`](plans/active/paper-layers.md) (paper layers: the relief as stacked lit sheets in the staff map prototype),
   [`plans/active/brigades-proto.md`](plans/active/brigades-proto.md) (brigades of two battalions in the staff map prototype),

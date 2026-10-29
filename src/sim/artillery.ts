@@ -25,6 +25,7 @@ import {
 } from './world.ts'
 import {
   blockGeometry,
+  exposure,
   reachOf,
   chooseTarget,
   chosen,
@@ -36,7 +37,6 @@ import {
   RETARGET_TICKS,
   type FireGeo,
 } from './fire.ts'
-import { layoutOf } from './formation.ts'
 import { heightAt } from './terrain.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
@@ -139,7 +139,7 @@ function coneHits(T: [number, number][], d: number): number {
   }
   return 0
 }
-// the cone from piece k (muzzle mx, mz) toward (ax, az), d away: hits(d) × the target's depth factor, spread over
+// the cone from piece k (muzzle mx, mz) toward (ax, az), d away: hits(d) × the aimed target's exposure, spread over
 // the enemy companies whose centres lie inside it and in range, that the piece sees, weighted by their men
 const coneJ = new Int32Array(MAX_FORMATIONS)
 const perJ = new Int32Array(MAX_FORMATIONS)
@@ -164,7 +164,7 @@ function cone(
   const ux = (ax - mx) / d
   const uz = (az - mz) / d
   const cosH = cos(A.half)
-  const lambda = coneHits(A.hits, d) * w.cr.depthByKind[layoutOf(w, j).kind]
+  const lambda = coneHits(A.hits, d) * exposure(w, G, k, j)
   let n = Math.floor(lambda)
   if (nextUnit(rs) < lambda - n) n++
   f.shotKind[k] = SHOT_CONE

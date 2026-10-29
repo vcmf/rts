@@ -28,7 +28,7 @@ const WINDOW = 20 * 180
 interface Job {
   range: number
   seed: number
-  kind: 'fight' | 'nofallback' | 'brigade'
+  kind: 'fight' | 'brigade'
 }
 
 if (!isMainThread) {
@@ -36,15 +36,13 @@ if (!isMainThread) {
     loadSimData(new Uint8Array(fs.readFileSync(new URL('../data/formation-field.simdata', import.meta.url)))),
   )
   const cr = compileRuleset(napoleonic)
-  const M = napoleonic.morale
-  const crOff = compileRuleset({ ...napoleonic, morale: { ...M, fallback: { ...M.fallback, after: 1e9 } } })
   for (const j of workerData as Job[]) {
     parentPort!.postMessage({
       ...j,
       r:
         j.kind === 'brigade'
           ? runBrigade(data, cr, j.seed, j.range, MAX, WINDOW)
-          : runFirefight(data, j.kind === 'fight' ? cr : crOff, j.seed, j.range, MAX),
+          : runFirefight(data, cr, j.seed, j.range, MAX),
     })
   }
 } else {
@@ -52,7 +50,7 @@ if (!isMainThread) {
   const jobs: Job[] = []
   for (const range of RANGES) for (let seed = 1; seed <= seeds; seed++) jobs.push({ range, seed, kind: 'fight' })
   for (let seed = 1; seed <= seeds; seed++) {
-    jobs.push({ range: 100, seed, kind: 'nofallback' }, { range: 100, seed, kind: 'brigade' })
+    jobs.push({ range: 100, seed, kind: 'brigade' })
   }
   const n = Math.max(1, Math.min(os.availableParallelism() - 1, 12))
   const out: (Job & { r: FightResult })[] = []
@@ -82,10 +80,7 @@ if (!isMainThread) {
   console.log(
     'range | weaker broke | stronger first | none in 20 min | time to break, min (p10 / median / p90) | weaker losses at break (p10 / median / p90) | at the break: losses term / recent term',
   )
-  for (const [label, kind, range] of [
-    ...RANGES.map(r => [`${r} m`, 'fight', r] as const),
-    ['100 m, no fall-back', 'nofallback', 100] as const,
-  ]) {
+  for (const [label, kind, range] of RANGES.map(r => [`${r} m`, 'fight', r] as const)) {
     const rs = out.filter(o => o.range === range && o.kind === kind).map(o => o.r)
     const weak = rs.filter(r => r.first === 1)
     const strong = rs.filter(r => r.first === 0)

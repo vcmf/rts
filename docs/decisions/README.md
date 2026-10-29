@@ -101,4 +101,6 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0077](0077-a-pond-levels-at-its-lower-bank.md) | A pond with no level of its own levels at its lower bank; a dam is drawn, never implied | accepted |
 | [0078](0078-editor-writes-the-intent-file-in-place.md) | The editor edits the intent file in the page and saves only what changed, through the dev server | accepted |
 | [0079](0079-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |
-| [0080](0080-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | accepted |
+| [0080](0080-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | superseded in part by 0081 |
+| [0081](0081-the-back-exposed.md) | The back exposed: a pressure while it lasts, not a retreat detected (supersedes 0080's retreat shock) | accepted |
+| [0082](0082-wavering-keeps-fighting.md) | A wavering battalion keeps fighting: no automatic fall-back | accepted |

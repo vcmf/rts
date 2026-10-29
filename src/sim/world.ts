@@ -15,6 +15,7 @@ import type { FireGeo } from './fire.ts'
 import type { Melee } from './melee.ts'
 import type { PlanStep } from './plan.ts'
 import type { Claims } from './claims.ts'
+import type { Faces } from './sectors.ts'
 
 export const MAX_FORMATIONS = 128
 export const MAX_ORDERS = 2048
@@ -121,14 +122,11 @@ export interface Formations {
   routPhase: Uint8Array
   runs: Uint8Array
   // the rest of the machine (S1c-2): the men the losses term counts from (the spawn strength until a rally),
-  // the ticks it last broke, last lost a man and started rallying, the ticks in a row its morale has fallen,
-  // whether it has fallen back in this wavering spell, and how many times it has broken
+  // the ticks it last broke, last lost a man and started rallying, and how many times it has broken
   baseMen: Int32Array
   brokeTick: Int32Array
   lastLoss: Int32Array
   since: Int32Array
-  falling: Int32Array
-  fellBack: Uint8Array
   routs: Uint8Array
   pressed: Int32Array // losses that could only fall onto impassable ground (the re-packing gate)
   // the charge (S1d-2, melee.ts): its target (a handle), its phase (CH_*), the metres galloped, the gap to the
@@ -239,6 +237,7 @@ export interface World {
     fireSight?: Int32Array
     fireEpoch?: number
     claims?: Claims
+    faces?: Faces // the formations' faces this tick (src/sim/sectors.ts)
     fireCrossed?: Float64Array
     reverse?: boolean
     reverseMoves?: boolean
@@ -247,6 +246,7 @@ export interface World {
     menNow?: Int32Array
     melee?: Melee
     fireGeoTick?: number
+    drain?: Float64Array // each battalion's drain this tick, the back exposed (morale.ts, threatPass)
   }
 }
 
@@ -325,8 +325,6 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     brokeTick: i32(N),
     lastLoss: i32(N),
     since: i32(N),
-    falling: i32(N),
-    fellBack: u8(N),
     routs: u8(N),
     chTarget: i32(N),
     chPhase: u8(N),
