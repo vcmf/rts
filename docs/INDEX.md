@@ -62,6 +62,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/cavalry-artillery-demo.md`](plans/active/cavalry-artillery-demo.md) (the cavalry and the artillery on the armies demo, their shadows),
   [`plans/active/track-s.md`](plans/active/track-s.md) (Track S: the sim engine's remaining phases before the playtest, the `epic/sim-engine` branch),
   [`plans/active/crown-leaves.md`](plans/active/crown-leaves.md) (painted leaves on the crowns up close, the owner's sheet of simple leaves),
+  [`plans/active/soft-midtone.md`](plans/active/soft-midtone.md) (a soft mid tone between light and shade, `?midtone`; decision 0084, accepted),
   [`plans/active/lightmap-half.md`](plans/active/lightmap-half.md) (the baked light map at about 0.5 m a texel),
   [`plans/active/c0-bench.md`](plans/active/c0-bench.md) (C0: the visual bench, its overlay, time controls and cases),
   [`plans/active/ci-faster-tests.md`](plans/active/ci-faster-tests.md) (CI's tests and coverage in three shards each, the bench split in five files),
