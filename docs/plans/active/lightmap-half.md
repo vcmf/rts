@@ -29,3 +29,18 @@ is sized from it (each an RGBA8 colour and a 4-byte depth buffer).
 - The page's texture memory estimate (the bench's) about 108 MiB lower with `?armies`; the bake time measured over
   a few loads; one bench round main against branch on the production build.
 - `npm test`, `npm run check:data`, `node tools/check-docs.mjs`, the build: once, at the end.
+
+## Results
+
+- **Memory** (`?armies=20`, Metal): the page's texture estimate (colour only, the bench's `textureMB`) 309.7 → 255.7
+  MB, 322.7 → 268.7 MiB counted in the page: 54 MiB less, and as much again in the two targets' depth buffers (not in
+  the estimate), 108 MiB in all.
+- **The bake** (the light map and what follows it, waited on by reading the bounce map back, the median of 11, three
+  loads each, main and branch alternated): 36.4–36.8 ms on main, 24.3–24.5 ms on the branch, with 10.3–10.5 ms of a
+  frame without it: about 26 → 14 ms.
+- **The bench** (one round each, production build, Metal, `?armies=20`): the frame's p50 within the noise (close 8.60
+  → 8.55 ms, default 10.40 → 10.05, wide 8.20 → 8.05; main's default views were contended mid-run).
+- **The goldens** against main: differ at every camera, a mean of 0.7–1.4 of 255 at worst per region; the sheet of a
+  tree's foot, a house, the village and the default view (`output/lightmap-half/`): the trunk's strip and the
+  buildings' shadows kept, the strip's edge a little softer.
+- **The guard** against main: ok, no block that separates on main fails (the 7 that fail fail on main too).
