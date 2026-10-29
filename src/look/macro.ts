@@ -59,7 +59,12 @@ precision highp float;varying vec2 vUV;uniform vec4 uRect;uniform float uTexel;
 #include<painter>
 #include<shore>
 void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=bakeTexel(xz,uTexel);
-  if(uTexel<1.0)gl_FragColor.rgb=roadPaint(gl_FragColor.rgb,xz);}`
+  // (the relief's tone before the roads: their paint tones its own colour, as on the live ground: shore.glsl)
+  #ifdef RELIEF
+  gl_FragColor.rgb=reliefTone(gl_FragColor.rgb,xz);
+  #endif
+  if(uTexel<1.0)gl_FragColor.rgb=roadPaint(gl_FragColor.rgb,xz);
+}`
 // Arm 5's pass (L5b): a four-quadrant Kuwahara filter over a finished bake (uSrc, nearest, uN² texels) into the
 // bake's target, uR texels a side (at most KUWAHARA_MAX). Each texel takes the mean colour of the quadrant whose
 // colours vary least; the alpha (the snow's lie) stays its own, so off the fields the lie stays exactly 0 (macro.glsl).
@@ -131,19 +136,21 @@ export function buildMacro(
   flowTex: FlowTextures | null = null,
   meadowMap: BaseTexture | null = null,
   near: { reach: number; shows: () => boolean } = { reach: 25, shows: () => true },
+  bakeCover: CoverGrid = cover,
+  relief: { tex: BaseTexture; k: number } | null = null,
 ): Macro {
   const engine = scene.getEngine() as AbstractEngine
   const s = D.spec.macro
-  const coverTex = RawTexture.CreateRGBATexture(
-    cover.tex,
-    cover.n,
-    cover.n,
-    scene,
-    false,
-    false,
-    Texture.NEAREST_SAMPLINGMODE,
-  )
-  coverTex.wrapU = coverTex.wrapV = Texture.CLAMP_ADDRESSMODE
+  // the cover's texture: the per-frame shaders read `cover` (a map world's coarsened to the spec's cells: coarsenCover,
+  // src/look/world/cover.ts); the bakes read `bakeCover` (a map world's finer one), whose class edges they paint with
+  // the fine warp (macro.glsl, coverWarpFine)
+  const coverTexOf = (g: CoverGrid) => {
+    const t = RawTexture.CreateRGBATexture(g.tex, g.n, g.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
+    t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
+    return t
+  }
+  const coverTex = coverTexOf(cover)
+  const bakeCoverTex = bakeCover === cover ? coverTex : coverTexOf(bakeCover)
   // mipmapped on WebGL2; WebGL1 cannot mipmap a texture whose sides are not powers of two (1600², 650²), so there the
   // bakes are read bilinear, without mips (an incomplete mipmapped texture would read black)
   const mips = !mats.webgl1
@@ -238,8 +245,20 @@ export function buildMacro(
     if (brush) m.setTexture('uMeadowBrush', brush)
   })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN']
+  const UNIFORMS = [
+    'uRect',
+    'uTexel',
+    'uSeason',
+    'uRoadOn',
+    'uRoadSegN',
+    'uRoadFar',
+    'uPaveA',
+    'uPaveB',
+    'uPaveN',
+    ...(relief ? ['uReliefK'] : []),
+  ]
   const SAMPLERS = [
+    ...(relief ? ['uRelief'] : []),
     'uGrain',
     'uCover',
     'uMeadowBrush',
@@ -255,6 +274,8 @@ export function buildMacro(
     ...(meadow ? ['#define MEADOW', ...flow] : []),
     ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []),
     ...(roads ? ['#define ROADS', '#define PAVING_FAR', ...paveDefines()] : []),
+    // the relief's painted tone (src/look/relief.ts; ?relief, the page)
+    ...(relief ? ['#define RELIEF'] : []),
   ]
   const wrapper = new EffectWrapper({
     engine,
@@ -362,7 +383,11 @@ export function buildMacro(
         e.setFloat('uTexel', world / n)
         e.setFloat('uSeason', 0)
         e.setTexture('uGrain', mats.grain)
-        e.setTexture('uCover', coverTex)
+        e.setTexture('uCover', bakeCoverTex)
+        if (relief) {
+          e.setTexture('uRelief', relief.tex)
+          e.setFloat('uReliefK', relief.k)
+        }
         if (brush) e.setTexture('uMeadowBrush', brush)
         if (flowTex) {
           e.setTexture('uFlow', flowTex.flow)
@@ -538,7 +563,7 @@ export function buildMacro(
       e.setFloat4('uRect', x0, z0, x0 + NEAR_W, z0 + NEAR_W)
       e.setFloat('uTexel', t)
       e.setTexture('uGrain', mats.grain)
-      e.setTexture('uCover', coverTex)
+      e.setTexture('uCover', bakeCoverTex)
       if (brush) e.setTexture('uMeadowBrush', brush)
       e.setTexture('uFlow', flowTex.flow)
       e.setTexture('uComb', flowTex.comb)

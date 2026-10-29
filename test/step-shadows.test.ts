@@ -281,8 +281,10 @@ describe('unitdecal.vert picks the bin as stepBin and stepBlend do (the source)'
   })
   it("unitdecal.frag: the feet sharpened as footSharpen does, on the shape alone, before the contact's oval", () => {
     const f = src('unitdecal.frag')
-    const boost = 'v*=mix(uShFootK.x,1.0,smoothstep(0.0,max(uShFootK.y,1.0e-3),vAlong));'
+    // (al: the distance along the shadow from the soles, vAlong; from each contact under SH_SPREAD, a horse's hooves)
+    const boost = 'v*=mix(uShFootK.x,1.0,smoothstep(0.0,max(uShFootK.y,1.0e-3),al));'
     once(f, `v=s*mix(uShFoot.x,uShFoot.y,g);#ifdefSH_STEPS${boost}#endif`)
+    once(f, 'floatal=vAlong;#endiffloatg=smoothstep(uShFoot.z,uShFoot.w,al);')
     // (the oval joins after it, so ?ushcontact=1 draws decision 0071's oval unboosted)
     expect(f.indexOf(boost)).toBeLessThan(f.indexOf('dm=max(dm,uShContact.y);v=max(v,ct);'))
     once(f, 'floata=min(1.0,v/dm);')

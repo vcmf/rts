@@ -77,15 +77,17 @@ const DETAIL_AMT = 0.35 // how much of the texture's value shows (the paint's gr
 // baked: the static light read from the bake (src/look/building-light.ts; ?bldlm=0, the runtime's taps, the A/B);
 // bounce: the ground's bounce on the walls (paint's BOUNCE: computed before and never added;
 // the baked path's only: main.ts)
+/** The world's buildings (`list`: the demo's BUILDINGS, none on a map's window yet) as instanced, painted meshes. */
 export function buildBuildings(
   scene: Scene,
   mats: Materials,
   canopy: Nature['canopy'],
   { baked = true, bounce = true } = {},
+  list: readonly Building[] = BUILDINGS,
 ): { meshes: Mesh[]; instances: LitInstance[] } {
   const data = window.BUILDINGS
   if (!data) throw new Error('the buildings data is missing: run tools/building-to-js.py (its header)')
-  const lay = atlasLayout(BUILDINGS.length)
+  const lay = atlasLayout(list.length)
   const meshes: Mesh[] = []
   const instances: LitInstance[] = []
   const _m = new Matrix()
@@ -93,7 +95,7 @@ export function buildBuildings(
   const _s = new Vector3()
   const _t = new Vector3()
   for (const model of Object.keys(PALETTE) as Building['model'][]) {
-    const items = BUILDINGS.filter(b => b.model === model)
+    const items = list.filter(b => b.model === model)
     const d = data[model]
     if (!items.length) continue
     if (!d) throw new Error(`the buildings data has no ${model}: run tools/building-to-js.py`)
@@ -166,8 +168,8 @@ export function buildBuildings(
       _m.copyToArray(buf, i * 16)
       // its tile in the light atlas and its bounce texel, by its place among all the buildings (BUILDINGS' order:
       // building-light.ts, tileOf)
-      const at = BUILDINGS.indexOf(b)
-      tile.set([...tileOf(at, BUILDINGS.length).slice(0, 2), at], i * 3)
+      const at = list.indexOf(b)
+      tile.set([...tileOf(at, list.length).slice(0, 2), at], i * 3)
       instances[at] = { mesh: m, root: [b.x, y, b.z] }
       // the sky it hides at its foot (the light map's occlusion, as a tree's contact: nature.ts smBlob)
       const r = (f.r ?? Math.hypot(f.hx!, f.hz!) * 0.8) * b.scale

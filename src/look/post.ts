@@ -18,7 +18,7 @@ import '@babylonjs/core/Shaders/postprocess.vertex.js'
 import '@babylonjs/core/Shaders/fsr1Upscale.fragment.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
-import { D, TUNED_R, ZoomHold, clearBelow, holdView } from './spec.ts'
+import { D, TUNED_R, ZoomHold, holdView, type HoldGround } from './spec.ts'
 import DOFCOC from './shaders/dofcoc.glsl?raw'
 import DOF_FS from './shaders/dof.frag?raw'
 import DOFDOWN_FS from './shaders/dofdown.frag?raw'
@@ -60,12 +60,14 @@ export const zoomOf = (camera: ArcRotateCamera): ZoomHold => {
   return z
 }
 
-// the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit. ground: the
-// drawn ground's height (the zoom is held out where the eye would come within the SPEC's clearance of it)
+/** The top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit. world: the
+ *  drawn ground (the focus follows it, and the zoom is held out where the eye would come within the SPEC's clearance
+ *  of it: holdView). frozen: the page's clock is frozen (?frozen, the tools' views): the focus settles at once */
 export function buildCamera(
   scene: Scene,
   canvas: HTMLCanvasElement,
-  ground: (x: number, z: number) => number,
+  world: HoldGround,
+  frozen = false,
 ): ArcRotateCamera {
   const c = D.spec.camera
   const camera = new ArcRotateCamera(
@@ -73,7 +75,7 @@ export function buildCamera(
     c.yaw0,
     START.beta,
     START.radius,
-    new Vector3(START.x, c.focusY, START.z),
+    new Vector3(START.x, world.follow.step(START.x, START.z, START.radius, 0, world.ground), START.z),
     scene,
   )
   scene.activeCamera = camera
@@ -87,12 +89,15 @@ export function buildCamera(
   rtsControls(scene, camera, canvas, zoom)
   // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target);
   // the focus stays in the play area
+  // the focus's height on the ground under it (FocusFollow: a map world's; the demo's stays at SPEC.camera.focusY) and
   // the closest zoom held out over high ground (holdView, clearRadius, ZoomHold, src/look/spec.ts: decision 0051), the
   // player's wanted zoom kept apart so it comes back in on lower ground; from clearBelow out the eye always clears the
-  // tile's highest ground, so the ground is not read there. The depth of field's zoom ease is reckoned from TUNED_R out
+  // highest ground within its reach, so the ground is not read there. The depth of field's zoom ease is reckoned from
+  // TUNED_R out
   camera.mapPanning = true
-  const below = clearBelow(D.spec)
-  scene.onBeforeRenderObservable.add(() => holdView(D.spec, zoom, camera, ground, below))
+  scene.onBeforeRenderObservable.add(() =>
+    holdView(D.spec, zoom, camera, world, frozen ? Infinity : Math.min(0.1, scene.getEngine().getDeltaTime() / 1000)),
+  )
   camera.upperRadiusLimit = c.rMax
   camera.lowerBetaLimit = c.betaMin
   camera.upperBetaLimit = c.betaMax
@@ -332,9 +337,9 @@ export class Post {
     return this.sizes[0]?.size.height ?? this.engine.getRenderHeight(true)
   }
   // the depth along the view axis of the ground the screen's centre shows: the centre ray marched against the
-  // terrain (the target sits at a fixed height, inside a hill or above a valley, so neither it nor the ground under
-  // it is what the centre shows), eased over FOCUS_S so a pan over a hillside does not jump the sharp band; a jump
-  // of over a third (a new view) is taken at once
+  // terrain (the target sits at a fixed height on the demo, inside a hill or above a valley, and over the ground's
+  // smoothed height on a map world, so neither it nor the ground under it is what the centre shows), eased over
+  // FOCUS_S so a pan over a hillside does not jump the sharp band; a jump of over a third (a new view) is taken at once
   private focus = 0
   // the marched depth, not eased (the near bake's zoom gate: src/look/main.ts)
   focusRaw = 0

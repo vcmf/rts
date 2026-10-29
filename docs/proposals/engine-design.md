@@ -129,7 +129,7 @@ later). Each declares coverage, texel target, inputs and consumers.
 | Bake | Covers | Texel | Inputs | Used by |
 |---|---|---|---|---|
 | Sun shadow depth | `detail` casters, fitted in light space | 0.33 m | static casters | light-map bake only; **disposed after** |
-| Light map (sun vis., AO, valley mask) | `detail` | 0.26–0.5 m | shadow depth, AO, heightfield | terrain, scatter |
+| Light map (sun vis., AO, valley mask) | `detail` | 0.52 m (1536², was 0.26 m) | shadow depth, AO, heightfield | terrain, scatter |
 | AO + valley | `detail` + 40 m margin | 4 m | heightfield (+ `H()` beyond it) | light map |
 | River mask | `far` | 1.3 m | river | far ring, apron |
 | Water data (W3: depth, SDF, flow, foam) | `detail` | 0.5 m | river, heightfield | water |
