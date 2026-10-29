@@ -28,8 +28,9 @@ what the tests check, which tests the coverage run skips (`longIt`), the test bu
 
 1. **One forward play per case.** `test/bench-fx.ts` plays a case forward once, watching for the first overlap, and
    keeps its end state; invariant 1 reads the overlap and invariant 4 compares the reversed play's state with it.
-   Watching only reads the world (the placement cache in `w.scratch` is keyed on what it places): checked once for
-   all 44 cases, the watched play ends with the same section hashes as a plain play.
+   Watching places the men with a slot cache of its own, so it leaves the sim's (`w.scratch.filled`) as the sim left
+   it; checked once for all 44 cases, before that cache was set apart: the watched play ends with the same section
+   hashes as a plain play.
 2. **The bench in five files.** The plain cases' invariants in two shares (`test/bench-plain-{1,2}.test.ts`), the
    claim cases' in two (`test/bench-claim-{1,2}.test.ts`), X-14, the queue and the melee in `test/bench.test.ts`.
    Same tests, same titles under the same describes.
@@ -38,7 +39,7 @@ what the tests check, which tests the coverage run skips (`longIt`), the test bu
    its own `lcov.info`; Codecov merges them, and `codecov.yml` waits for all three before it reports. The check job
    keeps lint, format, types, data, docs and build.
 4. **Vitest's results cache restored per shard.** Without it Vitest starts the largest files first, and the bench's
-   files are four lines long; with it, the longest first.
+   files are four lines long; with it, the longest first. Pushes save it (a PR's cache would serve only that PR).
 
 Not done: running coverage only once per merge into an epic (today on the PR and on the push after it). Codecov needs
 the epic's own commits covered to compare a PR with, and with shards the run no longer comes near its limit.
@@ -60,4 +61,15 @@ Estimate for CI, from run 40802708005's times per file with the bench's new ones
 
 ## Open questions
 
-- If one shard keeps being the slowest, a fourth shard, or splitting its longest file.
+- Vitest's `--shard` splits by a hash of the paths, not by time, and a new test file moves the boundaries: if one shard
+  keeps being the slowest, a fourth shard, or a sequencer whose `shard()` uses the cached durations.
+- With `after_n_builds: 3`, a coverage shard that fails uploads nothing and Codecov reports nothing for that commit.
+  A failing test fails the test job too, so it is fixed anyway.
+
+## Review rounds
+
+- **Round 1** (`/code-review high`; 8 findings, none severe: fixed what was worth it, stopped). Fixed: the watched play
+  has its own slot cache (it shared the sim's); doc comments on `bench-fx.ts`'s helpers; the plans that named
+  `test/bench.test.ts` or the check job; the results cache saved by pushes only. Left: the two X-14 tests in one file
+  (about 50 s together in the test job); the shards' balance and the partial Codecov report (Open questions); an error
+  in a play swallowed by `it.fails` (as before the split).

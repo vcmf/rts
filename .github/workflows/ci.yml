@@ -52,13 +52,19 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      # after npm ci, which empties node_modules; a new key each run, so each run saves its durations
-      - uses: actions/cache@v4
+      # after npm ci, which empties node_modules. Saved only by pushes (a PR's cache serves only that PR), under a
+      # new key each run
+      - uses: actions/cache/restore@v4
         with:
           path: node_modules/.vite/vitest
           key: vitest-test-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: vitest-test-${{ matrix.shard }}-
       - run: npx vitest run --shard=${{ matrix.shard }}/3
+      - if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-test-${{ matrix.shard }}-${{ github.run_id }}
   coverage:
     if: github.event_name != 'pull_request' || startsWith(github.base_ref, 'epic/')
     runs-on: ubuntu-latest
@@ -74,12 +80,17 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         with:
           path: node_modules/.vite/vitest
           key: vitest-coverage-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: vitest-coverage-${{ matrix.shard }}-
       - run: npm run coverage -- --shard=${{ matrix.shard }}/3
+      - if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-coverage-${{ matrix.shard }}-${{ github.run_id }}
       - uses: codecov/codecov-action@v5
         with:
           files: coverage/lcov.info

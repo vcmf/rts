@@ -27,6 +27,7 @@ import {
 
 const data = loadSimData(new Uint8Array(fs.readFileSync(path.join(root, 'data/bench.simdata'))), MAP_VERSIONS.bench)
 const cr = compileRuleset(napoleonic)
+/** The bench case (plain or with claims) of that id. */
 export const caseOf = (id: string): BenchCase => [...BENCH_CASES, ...CLAIM_CASES].find(c => c.id === id)!
 
 /** Plays a case for `seconds` (its own length by default), calling `each` every `every` ticks. */
@@ -51,18 +52,24 @@ export function play(
 
 /**
  * Plays a case forward, watching it: the first tick two formations both in the fight overlap (−1 if none), and the
- * world it ends in. Watching only reads the world (the placement cache in `w.scratch` is keyed on what it places).
+ * world it ends in, the same as `play`'s. Placing the men fills the sim's slot cache (`w.scratch.filled`), so the
+ * watching places them with a cache of its own and leaves the sim's as the sim left it.
  */
 export function watched(c: BenchCase, seconds?: number): { first: number; w: World } {
   let first = -1
   let P: ReturnType<typeof mkPlaced> | null = null
+  let own: World['scratch']['filled']
   const w = play(c, {
     seconds,
     every: 10,
     each: w => {
       if (first >= 0) return
+      const sims = w.scratch.filled
+      w.scratch.filled = own
       P ??= mkPlaced(w)
       if (formedOverlaps(w, placeAll(w, P)).length) first = w.meta[M_TICK]
+      own = w.scratch.filled
+      w.scratch.filled = sims
     },
   })
   return { first, w }
@@ -76,11 +83,14 @@ export const moves = (w: World, i: number): [number, number][] => {
   }
   return out
 }
+/** Whether formation `i` stands within `d` m of (x, z), in m. */
 export const near = (w: World, i: number, x: number, z: number, d: number) => Math.hypot(w.f.x[i] - x, w.f.z[i] - z) < d
 
-// the state but for which pool entries the orders took: the pool is served in visiting order, so two orders made in
-// one tick take their entries the other way round in the reversed order (docs/systems/fire-morale.md, Open
-// questions). The pool and the formations' links into it are left out, and each queue is compared by what is in it
+/**
+ * The state but for which pool entries the orders took: the pool is served in visiting order, so two orders made in
+ * one tick take their entries the other way round in the reversed order (docs/systems/fire-morale.md, Open
+ * questions). The pool and the formations' links into it are left out, and each queue is compared by what is in it.
+ */
 const stateOf = (w: World) => ({
   sections: sectionHashes(w).filter(([n]) => n !== 'order pool' && n !== 'formations'),
   // the formations but for their queues' first and last entries in the pool
