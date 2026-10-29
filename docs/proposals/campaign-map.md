@@ -13,6 +13,20 @@ of PR #234; the track is `docs/plans/active/track-k.md`.
 > off warm paper, its roads drawn in red ink. The corps are small coloured slabs on those roads; when the day is
 > played they all march at once, and where two meet, the map opens into the battle.*
 
+## As settled (K1, 2026-10-29)
+
+The prototype settled the look with the owner (`docs/plans/active/k1-theatre-look.md`; decision 0086, proposed). Where
+this proposal's first draft says otherwise, this section holds:
+- **A relief model, not a print with shading**: one shape (the large forms kept, mountain regions lifted, raised
+  ×2.5, lakes sunk as stepped basins) displaces a 3D surface and is lit; the camera tilts from 30° far out to 45° up
+  close (no sky).
+- **Light as a photograph of the model**: a warm sun low from the north-east (top right on screen), a cool sky, the
+  sun's soft shadows and the sky's occlusion baked offline; a slight fall-off across the table from the sun's side.
+- **Cold white paper**; contours every 200 m in muted grey, every 1,000 m in a thin light orange; water in stepped
+  blues; rivers and roads printed on the ground; names as ink above.
+- **Data**: the theatre baked at 250 m for the far zoom and at 100 m in tiles for the close zoom; FSR 1 above
+  1080p.
+
 ## Context
 
 The battle map's lit view is settled (decisions 0055, 0058, 0064): paper, a shaded relief baked from real heights

@@ -36,6 +36,7 @@ const banned = [
 export const formatted = [
   'src/sim/',
   'src/map/',
+  'src/campaign/',
   'src/rulesets/',
   'src/scenarios/',
   'maps/',
@@ -186,7 +187,35 @@ export default tseslint.config(
       ],
     },
   },
-  // a ruleset is data for the sim: the same rules, and it may import the sim's types and maths
+  // the campaign (docs/proposals/campaign.md): its turns play the same on every machine, so the exact-number rules
+  // apply as in the map engine (Map and Set allowed: insertion order); it imports only itself and the sim's exact
+  // maths, never the renderer (decision 0005)
+  {
+    files: ['src/campaign/**/*.ts'],
+    rules: {
+      'no-restricted-properties': ['error', ...exactProperties],
+      'no-restricted-globals': [
+        'error',
+        ...exactGlobals,
+        { name: 'process', message: 'The campaign runs without Node.' },
+        { name: 'window', message: 'The campaign runs without a browser.' },
+        { name: 'document', message: 'The campaign runs without a browser.' },
+      ],
+      'no-restricted-syntax': ['error', ...exactSyntax],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^(?!\\./(?!.*\\.\\.)|\\.\\./sim/num\\.ts$)',
+              message: 'src/campaign/ imports only from src/campaign/ and src/sim/num.ts.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // a ruleset is data for the sim and the campaign: the same rules, and it may import their types and maths
   {
     files: ['src/rulesets/**/*.ts'],
     rules: {
@@ -195,8 +224,8 @@ export default tseslint.config(
         {
           patterns: [
             {
-              regex: '^(?!\\.\\./sim/[\\w-]+\\.ts$|\\./)',
-              message: 'A ruleset imports only from src/sim/ and src/rulesets/.',
+              regex: '^(?!\\.\\./(sim|campaign)/[\\w-]+\\.ts$|\\./)',
+              message: 'A ruleset imports only from src/sim/, src/campaign/ and src/rulesets/.',
             },
           ],
         },
