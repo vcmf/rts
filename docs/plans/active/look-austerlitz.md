@@ -226,6 +226,13 @@ the widest view at 2 m, side by side for the owner. Options 1 and 2 keep the inv
 the camera, deterministically; only moving things get per-frame lighting", a decision for the owner with stage B's
 plan. Sources and arithmetic: the research note that stage B's plan writes up (`docs/research/`).
 
+**The test's result** (2026-10-29, branch `look/lightres-test`, sheets in `output/lightres-test/`): at 0.52 m a texel
+the light map looks the same as at 0.26 m at every zoom (the trunks' thin shadow strips and the buildings' shadow
+corners kept); at 1.04 m the trunk strips vanish up close; at 2 m the buildings' shadows go blobby up close, but the
+far half of the widest view shows no difference that matters. So option 2: **the fine level at 0.5 m** around the
+camera, **the coarse level at 2 m** for the whole map, handing over within about 100 m of the focus. The fine level
+is on its way to today's page already: PR #253 (decision 0082, 108 MiB less with `?armies`, the same look).
+
 ## Stage C: the zoom handover (a sketch)
 
 Past 260 m the lit map view (decision 0058, `src/render/lit/`, M6) takes over on the same camera, in the staff map's
@@ -257,10 +264,11 @@ instead of zoom. Its own plan once vision is a rule in the sim and stage C exist
 
 ## #240
 
-Issue #240: the sim reads the look world through a legacy TypeScript map (`maps/painted-world.ts`, on
-`epic/battle-threads`), not a map file. A3 fixes it: the demo world becomes a map file, the sim compiles it with
-`engineMap()` and the look with this compiler, and `maps/painted-world.ts` goes (`Fixes #240`, once the epic is on
-`main`). A window's sim is `engineMap()` over the window's square (a crop option): format 2 is about 22 MB for 2 km
+Issue #240: the sim reads the look world through a legacy TypeScript map (`maps/painted-world.ts`, on `main` since
+the battle threads epic, #203), not a map file. A3 fixes it: the demo world becomes a map file, the sim compiles it
+with `engineMap()` and the look with this compiler, and `maps/painted-world.ts` goes (`Fixes #240`). With the sim now
+able to play the look page's armies (`?sim`), a window's armies (A4) run on the sim from the start, as the look page
+becomes the match's test bed. A window's sim is `engineMap()` over the window's square (a crop option): format 2 is about 22 MB for 2 km
 (the proposal's figure), so a 470 m play area needs no compact format (S-data).
 
 ## Risks
