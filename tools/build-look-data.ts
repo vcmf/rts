@@ -26,6 +26,8 @@ import type { MapFile } from '../src/map/schema.ts'
 import { noRiver } from '../src/look/river.ts'
 import {
   checkWindowInside,
+  fineAreas,
+  MAP_COVER_CELL,
   mapCover,
   mapTrees,
   packTrees,
@@ -236,7 +238,7 @@ export function buildWindowData(win: LookWindow, map: MapFile, L: Layers): Uint8
     bank: emptySpans(D.bankN, s.bank.texel, 3),
     water: emptySpans(D.waterN, s.water.texel, 4),
     roads: roadGrid(lines),
-    cover: mapCover(L, win, lines, s.far, s.macro.cover),
+    cover: mapCover(fineAreas(L, map.features, win, s.far, MAP_COVER_CELL), L.table, win, lines),
     world: { kind: 'map', map: win.map, window: win.name, x: win.x, z: win.z, base },
     trees: packTrees(mapTrees(L, win, s.far)),
   }

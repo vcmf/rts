@@ -4,10 +4,14 @@
 import { describe, expect, it } from 'vitest'
 import type { Layers } from '../src/map/apply.ts'
 import type { Resolved } from '../src/map/resolve.ts'
+import type { Pt } from '../src/map/schema.ts'
 import { D } from '../src/look/spec.ts'
-import { COVER, isField } from '../src/look/world/cover.ts'
+import { COVER, coarsenCover, isField } from '../src/look/world/cover.ts'
 import {
   cellAt,
+  fillRings,
+  fineAreas,
+  ringsOf,
   checkWindowInside,
   cropFor,
   fieldAt,
@@ -153,21 +157,84 @@ describe('the cover classes', () => {
 
   it('lays the roads over the ground, the village over all, and wears the ground by its distance to them', () => {
     const lines = [{ pts: [[-60, -40] as const, [60, -40] as const], w: 6, cls: COVER.road }]
-    const g = mapCover(L, WIN, lines, 100, 2)
+    const sq = (x0: number, z0: number, x1: number, z1: number): Pt[][] => [
+      [
+        [x0, z0],
+        [x1, z0],
+        [x1, z1],
+        [x0, z1],
+      ],
+    ]
+    const features = [
+      { id: 'arable', area: sq(-60, -60, 60, 60) },
+      { id: 'meadow', area: sq(-60, -60, 0, 0) },
+      { id: 'hamlet', area: sq(-30, 0, -10, 20) },
+    ]
+    const g = mapCover(fineAreas(L, features, WIN, 100, 1), TABLE, WIN, lines)
+    expect(g.cell).toBe(1)
     const at = (x: number, z: number) => {
       const o = (Math.floor((z - g.z0) / g.cell) * g.n + Math.floor((x - g.x0) / g.cell)) * 4
       return g.tex.subarray(o, o + 4)
     }
     expect(at(10, -40)[0]).toBe(COVER.road)
     expect(at(10, -40)[3]).toBe(0)
-    // 10 m from the road's edge (13 from its centre line): worn 10 m
-    expect(at(10, -27)[3]).toBe(100)
+    // the cell centred 10.5 m from the road's edge (13.5 from its centre line): worn 10.5 m
+    expect(at(10.5, -26.5)[3]).toBe(105)
     expect(at(-20, 10)[0]).toBe(COVER.village)
     expect(at(-20, 10)[1]).toBe(0)
+    expect(at(-40, -20)[0]).toBe(COVER.meadow)
     // a field's texel names its furrow; a road's has no field id
     expect(at(10, -40)[1]).toBe(0)
     const field = at(30, -47)
     if (isField(field[0])) expect(field[1]).toBeGreaterThan(0)
+  })
+
+  it("rasterises an area at the look's own cells, by their centres, holes left out", () => {
+    const n = 20
+    const grid = new Uint16Array(n * n)
+    // a slanted band and a hole in it: the cells whose centres fall inside, on 1 m cells from −10
+    const outer: Pt[] = [
+      [-10, -10],
+      [10, -2],
+      [10, 10],
+      [-10, 2],
+    ]
+    const hole: Pt[] = [
+      [-2, -2],
+      [2, -2],
+      [2, 2],
+      [-2, 2],
+    ]
+    fillRings([outer, hole], grid, n, -10, 1, 7)
+    const inside = (x: number, z: number) => {
+      const lo = -10 + ((x + 10) * 8) / 20
+      return z > lo && z < lo + 12 && !(Math.abs(x) < 2 && Math.abs(z) < 2)
+    }
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) expect(grid[j * n + i] === 7).toBe(inside(-9.5 + i, -9.5 + j))
+    }
+  })
+
+  it('gives an ellipse its outline, turned by its angle', () => {
+    const [ring] = ringsOf({ id: 'p', ellipse: [[100, 50], 20, 5, Math.PI / 2] })
+    expect(ring.length).toBe(64)
+    // its long axis along z
+    expect(ring[0][0]).toBeCloseTo(100, 6)
+    expect(ring[0][1]).toBeCloseTo(70, 6)
+  })
+})
+
+describe('the coarse cover', () => {
+  it('takes each coarse cell from the fine cell past its centre, and leaves a cover already coarse as it is', () => {
+    const n = 4
+    const tex = new Uint8Array(n * n * 4)
+    for (let c = 0; c < n * n; c++) tex[c * 4] = c
+    const fine = { n, cell: 1, x0: -2, z0: -2, tex }
+    const g = coarsenCover(fine, 2)
+    expect([g.n, g.cell, g.x0, g.z0]).toEqual([2, 2, -2, -2])
+    // coarse (i, j) from fine (2i + 1, 2j + 1)
+    expect([g.tex[0], g.tex[4], g.tex[8], g.tex[12]]).toEqual([5, 7, 13, 15])
+    expect(coarsenCover(g, 2)).toBe(g)
   })
 })
 

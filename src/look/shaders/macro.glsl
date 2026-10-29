@@ -92,6 +92,17 @@ vec3 wear(vec3 c,vec4 cv,Grain g){
   return cv.x>1.5?c:mix(c,vec3(0.56,0.53,0.45),w*(0.3+0.4*g.wearDab));}
 // the class lookup's point, pushed by the grain's soft blotches (±1.5 m) so a class edge wanders like a painted one
 vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*COVER_WARP;}
+// The class colour's warp (macro(), and the views that show its classes). A map world's cover is finer than the demo's
+// (src/look/world/from-map.ts, MAP_COVER_CELL): there a second, fine warp (blotches 2.5 m across, COVER_FINE) breaks a
+// slanted class edge's cell steps into a painted wander; the slow warp alone moves the steps but keeps their shape.
+// Off on the demo's cover (its cells COVER_CELL) and on WebGL1. Only the class colour takes it: on the bake's arm (the
+// default) that is once, at the bake; the per-frame reads (the dirt's gate, the roads') keep the slow warp alone
+vec2 coverWarpFine(vec2 xz){
+  vec2 w=coverWarp(xz);
+  #ifdef WEBGL2
+  if(float(textureSize(uCover,0).x)*COVER_CELL>FAR_W+0.5)w+=(vec2(blot(xz+5.3,2.5),blot(xz+17.9,2.5))-0.5)*COVER_FINE;
+  #endif
+  return w;}
 // THE DIRT SURFACE (docs/plans/done/ground-surface.md): where the ground is bare (a track, the village's trodden
 // ground, ploughed land, bare earth, a little on the road, the worn ground by the lines), the dirt texture (the
 // owner's, scratches, drag marks and splats, about DIRT_M m a repeat) in its value, around 1 so the class colour holds
@@ -277,7 +288,7 @@ vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
   return c*mix(1.0,t,gr);}
 #endif
 vec4 macro(vec2 xz,float q,float px){
-  vec2 w=coverWarp(xz);vec4 cv=coverAt(w);Grain g=grainAt(xz);vec3 c;float e=0.0;
+  vec2 w=coverWarpFine(xz);vec4 cv=coverAt(w);Grain g=grainAt(xz);vec3 c;float e=0.0;
   if(q>0.5){
     c=vec3(0.0);float other=0.0;
     for(int i=-1;i<=1;i++)for(int j=-1;j<=1;j++){vec2 o=vec2(float(i),float(j));vec4 t=coverAt(w+o);
@@ -313,7 +324,7 @@ vec3 strokes(vec2 xz,vec3 c,float px){
   for(int k=0;k<9;k++){
     vec2 id=cell+vec2(float(k-(k/3)*3-1),float(k/3-1));
     vec2 o=(id+vec2(strokeHash(id),strokeHash(id+17.3)))*STROKE_CELL;
-    vec4 cv=coverAt(coverWarp(o));
+    vec4 cv=coverAt(coverWarpFine(o));
     float a=cv.y>0.5?cv.z:(texM(uGrain,o/60.0,60.0).g-0.5)*6.2831853;
     vec2 u=vec2(cos(a),sin(a)),d=xz-o;
     float hl=0.8+0.6*strokeHash(id+41.9),hw=0.25+0.2*strokeHash(id+73.1);
@@ -396,7 +407,7 @@ float classAt(vec2 xz){
   #if defined(MACRO_FLAT)
   return coverAt(xz).x;
   #else
-  return coverAt(coverWarp(xz)).x;
+  return coverAt(coverWarpFine(xz)).x;
   #endif
 }
 // the snow's lie at a point (added to snowAt's threshold through pSnowLie): from the stripes, by arm. Bare ridges in

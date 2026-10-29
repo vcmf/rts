@@ -308,14 +308,17 @@ export function checkLookData(d: Derived, look: LookData): void {
   ) {
     bad.push(`road grid ${look.roads.n}² of ${look.roads.cell} m, the spec wants ${d.roadN}² of ${s.road.cell} m`)
   }
+  // (a map world's cover may be finer: a whole number of its cells to the spec's, within the min-spec's texture)
+  const coverK = s.macro.cover / look.cover.cell
   if (
-    !near(look.cover.cell, s.macro.cover) ||
+    !(coverK >= 1 && near(coverK, Math.round(coverK))) ||
+    look.cover.n > s.minSpec.maxTexture ||
     !near(look.cover.n * look.cover.cell, s.far) ||
     !near(look.cover.x0, -s.far / 2) ||
     !near(look.cover.z0, -s.far / 2)
   ) {
     bad.push(
-      `cover ${look.cover.n}² of ${look.cover.cell} m from ${look.cover.x0}, the spec wants ${s.macro.cover} m cells over the far ring (${s.far} m) from ${-s.far / 2}`,
+      `cover ${look.cover.n}² of ${look.cover.cell} m from ${look.cover.x0}, the spec wants ${s.macro.cover} m cells (or a whole fraction) over the far ring (${s.far} m) from ${-s.far / 2}`,
     )
   }
   if (bad.length) {

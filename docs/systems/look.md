@@ -86,7 +86,13 @@ Kobelnitz on Austerlitz, (−450, 350)). `tools/build-look-data.ts` compiles the
 
 - the heights from the layers' nodes (bilinear, `heightOf`), taken down by the window's lowest node so it meets
   `SPEC.ground.lo`; the window's far ring must lie inside the map;
-- the cover from the cells: wood under a wood, meadow on a meadow, the water's cells and an orchard's floor, pasture
+- the cover at 1 m cells (`MAP_COVER_CELL`, half the demo's 2 m), its ground, vegetation and built areas rasterised
+  from the map's own shapes in the layers' painting order (`fineAreas`), not read off the layers' 2 m cells (the water
+  from the layers' cells: a pond stands only where its bed lies under its level). The macro colour's bakes read it
+  and paint a cover finer than the demo's with a second, fine warp (`COVER_FINE`, blotches 2.5 m across,
+  `coverWarpFine` in `src/look/shaders/macro.glsl`), so a slanted edge wanders instead of stepping by its cells (the
+  slow warp alone moves the steps whole; the demo's fields lie near the grid's axes). The per-frame shaders read it
+  coarsened to the demo's 2 m (`coarsenCover`, `src/look/macro.ts`): no cost a frame. The classes: wood under a wood, meadow on a meadow, the water's cells and an orchard's floor, pasture
   on pasture and rough ground; the arable (one `ground.field` in Austerlitz) cut into strips by a hash of the map's
   position (blocks round seeds 240 m apart, each turned its own way, bands 70 m long cut into strips 18–45 m wide, a
   crop each by the field's stage: winter's ploughed land, green corn and stubble), temporary until the language's

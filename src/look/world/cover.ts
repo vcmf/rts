@@ -485,6 +485,27 @@ export function fieldAt(g: CoverGrid, x: number, z: number): number {
   return i < 0 || j < 0 || i >= g.n || j >= g.n ? 0 : g.tex[(j * g.n + i) * 4 + 1]
 }
 
+/**
+ * A finer cover (a map world's, src/look/world/from-map.ts) on coarser cells of `cell` m: each coarse cell takes the
+ * fine cell just past its centre. The page's per-frame shaders read this one (the same size as the demo's: a texture
+ * four times larger cost the meadow's blades about 3 ms a close frame on the dev Mac); the macro colour's bake reads
+ * the fine one. A cover already that coarse comes back as it is.
+ */
+export function coarsenCover(g: CoverGrid, cell: number): CoverGrid {
+  const k = Math.round(cell / g.cell)
+  if (k <= 1) return g
+  const n = Math.round(g.n / k)
+  const tex = new Uint8Array(n * n * 4)
+  const h = k >> 1
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const o = ((j * k + h) * g.n + i * k + h) * 4
+      tex.set(g.tex.subarray(o, o + 4), (j * n + i) * 4)
+    }
+  }
+  return { n, cell: g.cell * k, x0: g.x0, z0: g.z0, tex }
+}
+
 // Run-length coding by rows (classes lie in long runs): per run, the length (u16, little-endian) and the 4 bytes
 export function packCover(g: CoverGrid): Uint8Array {
   const out: number[] = []

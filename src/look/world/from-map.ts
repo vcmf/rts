@@ -263,18 +263,23 @@ function cropOfKind(stage: string): CoverClass {
 const isWood = (r: Resolved | null): boolean => !!r && (r.kind === 'veg.wood' || r.kind.startsWith('veg.wood.'))
 
 /**
- * The class, field id and furrow of one layers' cell before the lines and the villages: wood under a wood; a strip of
- * the arable or the field's own crop; pasture on pasture and rough ground; meadow elsewhere (the water's cells, an
- * orchard's floor, a meadow, a marsh: no paint of its own yet).
+ * The class, field id and furrow at a map point before the lines and the villages, from the features that cover it
+ * (`g` its ground, `v` its vegetation, `wet` under water): wood under a wood; a strip of the arable or the field's own
+ * crop; pasture on pasture and rough ground; meadow elsewhere (the water, an orchard's floor, a meadow, a marsh: no
+ * paint of its own yet).
  */
-export function groundClass(L: Layers, k: number, x: number, z: number): { cls: CoverClass; id: number; dir: number } {
+export function classOf(
+  g: Resolved | null,
+  v: Resolved | null,
+  wet: boolean,
+  x: number,
+  z: number,
+): { cls: CoverClass; id: number; dir: number } {
   const none = { cls: COVER.meadow as CoverClass, id: 0, dir: 0 }
-  if (k < 0 || L.water[k]) return none
-  const v = featureOf(L, L.veg[k])
+  if (wet) return none
   if (isWood(v)) return { ...none, cls: COVER.wood }
   // an orchard's floor is grass, whatever ground it was planted on (the arable, in Austerlitz)
   if (v?.kind.startsWith('veg.orchard')) return none
-  const g = featureOf(L, L.ground[k])
   if (!g) return none
   if (g.kind === 'ground.field') return fieldAt(x, z, String(g.attrs.stage ?? 'standing'))
   if (g.kind.startsWith('ground.field.')) {
@@ -285,34 +290,152 @@ export function groundClass(L: Layers, k: number, x: number, z: number): { cls: 
   return none
 }
 
-const WEAR_REACH = 255 * WEAR_STEP // the wear channel's reach, m
+/** classOf at one of the layers' cells (k: −1 off the layers). */
+export function groundClass(L: Layers, k: number, x: number, z: number): { cls: CoverClass; id: number; dir: number } {
+  if (k < 0) return classOf(null, null, false, x, z)
+  return classOf(featureOf(L, L.ground[k]), featureOf(L, L.veg[k]), !!L.water[k], x, z)
+}
 
 /**
- * The window's cover grid (src/look/world/cover.ts's layout): `n`² cells of `cell` m over the far ring, each its class
- * (groundClass), the roads and tracks over it where within their half width, the villages' ground (every built cell)
- * over all, and the distance to the nearest of those three in WEAR_STEP m. No yards yet (A1b's buildings).
+ * The window's areas at the look's own cells (`n`² of `cell` m from x0, z0 = x0, window metres): each cell's ground,
+ * vegetation, water and built feature (its index in the table, plus 1; 0 none): fineAreas.
  */
-export function mapCover(L: Layers, win: LookWindow, lines: readonly MapLine[], far: number, cell: number): CoverGrid {
+export interface FineAreas {
+  n: number
+  cell: number
+  x0: number
+  ground: Uint16Array
+  veg: Uint16Array
+  water: Uint16Array
+  built: Uint16Array
+}
+
+// how many points an ellipse's or a circle's outline takes
+const OUTLINE = 64
+
+/** A feature's area as rings (map metres): its area's rings, or its circle's or ellipse's outline; none for a line. */
+export function ringsOf(f: Feature): Pt[][] {
+  if (f.area) return f.area
+  const e = f.ellipse ?? (f.circle ? [f.circle[0], f.circle[1], f.circle[1], 0] : null)
+  if (!e) return []
+  const [[cx, cz], a, b, t] = e as [Pt, number, number, number]
+  const c = Math.cos(t)
+  const s = Math.sin(t)
+  const ring: Pt[] = []
+  for (let k = 0; k < OUTLINE; k++) {
+    const u = (k / OUTLINE) * 2 * Math.PI
+    const p = a * Math.cos(u)
+    const q = b * Math.sin(u)
+    ring.push([cx + p * c - q * s, cz + p * s + q * c])
+  }
+  return [ring]
+}
+
+/**
+ * Fills the cells whose centres lie inside `rings` (even-odd over every ring, so holes stay out) with `value`: a scan
+ * of each row's crossings. `rings` in window metres; the grid `n`² cells of `cell` m from (x0, x0).
+ */
+export function fillRings(
+  rings: readonly Pt[][],
+  grid: Uint16Array,
+  n: number,
+  x0: number,
+  cell: number,
+  value: number,
+) {
+  let zlo = Infinity
+  let zhi = -Infinity
+  for (const r of rings) for (const p of r) [zlo, zhi] = [Math.min(zlo, p[1]), Math.max(zhi, p[1])]
+  const j0 = Math.max(0, Math.ceil((zlo - x0) / cell - 0.5))
+  const j1 = Math.min(n - 1, Math.floor((zhi - x0) / cell - 0.5))
+  const xs: number[] = []
+  for (let j = j0; j <= j1; j++) {
+    const z = x0 + (j + 0.5) * cell
+    xs.length = 0
+    for (const r of rings) {
+      for (let k = 0, m = r.length - 1; k < r.length; m = k++) {
+        const [ax, az] = r[m]
+        const [bx, bz] = r[k]
+        if (az > z !== bz > z) xs.push(ax + ((z - az) * (bx - ax)) / (bz - az))
+      }
+    }
+    xs.sort((a, b) => a - b)
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const i0 = Math.max(0, Math.ceil((xs[k] - x0) / cell - 0.5))
+      const i1 = Math.min(n - 1, Math.floor((xs[k + 1] - x0) / cell - 0.5))
+      for (let i = i0; i <= i1; i++) grid[j * n + i] = value
+    }
+  }
+}
+
+/**
+ * The window's areas (FineAreas) at `cell` m over the far ring (side `far` m): the ground, the stands and low growth
+ * of the vegetation and the built from the map's features' own shapes, in the layers' painting order (L.table); the
+ * water from the layers' cells (apply's: a pond's water stands only where its bed lies under its level, not over its
+ * whole outline). `features`: the expanded map's.
+ */
+export function fineAreas(
+  L: Layers,
+  features: readonly Feature[],
+  win: LookWindow,
+  far: number,
+  cell: number,
+): FineAreas {
   const n = Math.round(far / cell)
   const x0 = -far / 2
+  const U = () => new Uint16Array(n * n)
+  const A: FineAreas = { n, cell, x0, ground: U(), veg: U(), water: U(), built: U() }
+  const byId = new Map(features.map(f => [f.id, f]))
+  const local = (r: readonly Pt[]) => r.map(([x, z]) => [x - win.x, z - win.z] as Pt)
+  const grids: Record<string, Uint16Array> = { ground: A.ground, veg: A.veg, built: A.built }
+  L.table.forEach((r, k) => {
+    const f = byId.get(r.id)
+    const grid = grids[r.kind.split('.')[0]]
+    if (!f || !grid || r.attrs.growth === 'tree') return
+    const rings = ringsOf(f).map(local)
+    if (rings.length) fillRings(rings, grid, n, x0, cell, k + 1)
+  })
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const c = cellAt(L, x0 + (i + 0.5) * cell + win.x, x0 + (j + 0.5) * cell + win.z)
+      if (c >= 0) A.water[j * n + i] = L.water[c]
+    }
+  }
+  return A
+}
+
+const WEAR_REACH = 255 * WEAR_STEP // the wear channel's reach, m
+// a map world's cover cells, m: half the demo's (SPEC.macro.cover), so a slanted edge (a strip's, a wood's) steps by a
+// metre, under the paint's warp (macro.glsl, coverWarp: ±1.5 m), not by the layers' 2 m
+export const MAP_COVER_CELL = 1
+
+/**
+ * The window's cover grid (src/look/world/cover.ts's layout) on the areas' cells (FineAreas: their size is the
+ * cover's) over the far ring: each its class (classOf), the roads and tracks over it where within their half width,
+ * the villages' ground (every built cell) over all, and the distance to the nearest of those three in WEAR_STEP m. No
+ * yards yet (the plan's PR b).
+ */
+export function mapCover(
+  A: FineAreas,
+  table: readonly Resolved[],
+  win: LookWindow,
+  lines: readonly MapLine[],
+): CoverGrid {
+  const { n, cell, x0 } = A
   const tex = new Uint8Array(n * n * 4)
   const wear = new Float32Array(n * n).fill(Infinity)
   const lineCls = new Uint8Array(n * n).fill(255)
   for (const l of lines) markLine(l, n, x0, cell, wear, lineCls)
   const built = new Uint8Array(n * n)
-  for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) {
-      const k = cellAt(L, x0 + (i + 0.5) * cell + win.x, x0 + (j + 0.5) * cell + win.z)
-      if (k >= 0 && L.built[k]) built[j * n + i] = 1
-    }
-  }
+  for (let c = 0; c < n * n; c++) if (A.built[c]) built[c] = 1
   markNear(built, n, cell, wear)
+  const at = (v: number) => (v ? table[v - 1] : null)
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
       const c = j * n + i
       const x = x0 + (i + 0.5) * cell + win.x
       const z = x0 + (j + 0.5) * cell + win.z
-      const g = groundClass(L, cellAt(L, x, z), x, z)
+      const g = classOf(at(A.ground[c]), at(A.veg[c]), !!A.water[c], x, z)
       const dir = g.dir
       let { cls, id } = g
       if (lineCls[c] !== 255) [cls, id] = [lineCls[c] as CoverClass, 0]

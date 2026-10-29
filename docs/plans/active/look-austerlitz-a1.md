@@ -92,29 +92,36 @@ trees come from its data.
 
 | What | Value | How |
 |---|---|---|
-| The map's compile (`layersOf`) | 5.4–5.7 s, 500–570 MiB resident | `node tools/build-look-data.ts`, three runs |
-| The window's compile on the layers | about 0.5 s | the window's build less the map's compile |
-| `data/austerlitz-kobelnitz.lookdata` | 3,031,116 bytes (the demo's 4,269,060: no river, water or bank normals yet) | file size |
-| The whole build (the demo and the window) | 12 s, 703 MB peak resident | `/usr/bin/time -l` |
+| The map's compile (`layersOf`) | 5.4–5.8 s, 485–570 MiB resident | `node tools/build-look-data.ts`, four runs |
+| The window's compile on the layers | about 1.2–1.5 s (the cover at 1 m) | the window's build less the map's compile |
+| `data/austerlitz-kobelnitz.lookdata` | 5,278,944 bytes (the demo's 4,269,060: no river, water or bank normals yet; the cover at 1 m) | file size |
+| The window's build alone | 7.6 s, 716 MB peak resident | `/usr/bin/time -l` |
 | The window's heights | the tile 4.0–22.3 m, the far ring 0–66.7 m (the Pratzen at its north-east), 5.53 m taken off | the data |
-| Its trees | 4,723 in the far ring, 487 on the tile (the pheasantry's apples) | the data |
+| Its trees | 4,723 in the far ring; on the tile only the pheasantry's 487 apples (the nearest wood lies past the frame's reach, as on the lit map view) | the data |
 | Its roads | 134 segments on the tile, at most 8 a cell (of 16) | the data |
-| The page's build (load to built, bakes included) | 1.18 s (the demo's 1.50 s); the meadow's bake 147 ms (197) | `window.__buildMs`, Metal, preview build, one load each |
-| Texture memory | 241.9 MB (the demo's 252.4) | the bench's `textureMB` |
-| GPU frame p50, the bench's nine cameras (the demo's) | close 9.1, 9.3, 9.6 ms (7.3, 7.1, 6.6); default 8.6, 9.6, 9.6 (9.2, 9.1, 9.4); wide 9.9, 10.1, 9.9 (12.6, 13.9, 12.4) | `tools/bench-look.mjs --gpu metal`, one round each, 1-min load under 3 at the start |
+| The page's build (load to built, bakes included) | 1.18 s (the demo's 1.50 s); the meadow's bake 147 ms (197) | `window.__buildMs`, Metal, preview build, one load each (2 m cover) |
+| Texture memory | 277.5 MB (the demo's 262.2): the fine cover for the bakes (27 MB) beside the frame's 2 m one | the bench's `textureMB` |
+| GPU frame p50, the bench's nine cameras (the demo's), first round (2 m cover) | close 9.1, 9.3, 9.6 ms (7.3, 7.1, 6.6); default 8.6, 9.6, 9.6 (9.2, 9.1, 9.4); wide 9.9, 10.1, 9.9 (12.6, 13.9, 12.4) | `tools/bench-look.mjs --gpu metal`, one round each, 1-min load under 3 at the start |
+| The close cameras (45 m), final data | 9.1, 9.2, 9.6 ms (the demo's 7.2, 7.0, 6.5) | `?benchr=45`, one round each, load 4.7 at the start |
+| The same, over the window's pure meadow (`?benchat=-150,100`) | 13.1, 13.0, 12.9 ms | the same |
+| The demo over its wheat field (`?benchat=50,48`) | 12.3, 12.4, 12.3 ms | the same |
+| Both with `?meadow=off`, at the start | the window 6.1–6.6 ms, the demo 5.6–5.7 | the same |
 | The demo page | pixel-identical to `origin/main` at the goldens' eight cameras | `tools/golden.mjs`, two preview builds |
 
-Stills (git-ignored, `output/austerlitz-a1/`): the window at 20 m, the default and the widest zoom round (100, 150)
-of the window, north up, the lit map view (`app/map.html`) at the same spots, and the pheasantry's orchard.
+**The close cameras' excess is the ground, not the compiler.** The close frame's cost follows how much of its ground
+grows the meadow's grass and crops: round the start (the bench's focus) the demo's hill grows grass on 0.39 of its
+ground and crops on 0.04 (the river and the formation zones grow none), the window's 0.40 and 0.24 (its green corn);
+over pure meadow the window costs 13 ms, and the demo itself 12.3 ms over its wheat. Without the meadow the gap is
+0.5–0.9 ms. A first cut of this fix (the fine warp in every per-frame cover read, the cover's whole pond outline as
+meadow) cost 12–13 ms at the start; the warp now runs in the bakes only, the frame reads a 2 m cover, and the water
+comes from the layers, back to 9.1–9.6 ms.
 
-The frame is over the stage's 0.5 ms bar at the close cameras (+1.9 to +3.0 ms: the scatter's pass 4.8 ms against
-3.8, the finishing passes 5.0 against 3.3, at the window's own ground under the demo's camera positions) and under
-it at the wide ones (−2.4 to −3.8: no water, fewer far trees in view). One round, not yet explained: A4 benches the
-windows at their own cameras.
+Stills (git-ignored, `output/austerlitz-a1/`): the window at 20 m, the default and the widest zoom round (100, 150)
+of the window, north up (`kobelnitz-look-*`; before the 1 m cover and its warp: `kobelnitz-before-*`), the lit map
+view (`app/map.html`) at the same spots (`kobelnitz-map-*`), and the pheasantry's orchard on both.
 
 ### Open questions
 
-- **The fields' edges at the closest zoom.** The cover's 2 m cells show as steps along a strip's slanted edge at
-  20 m (the demo's fields lie on the same grid; not compared side by side yet). The field generator in the language could give the
-  look polygons, painted at sub-cell edges; or the macro colour could warp the class edges more. For the owner, with
-  the field generator.
+- **The fields' edges at the closest zoom.** Fixed for the paint (1 m cover, the fine warp at the bake); the crops'
+  dark under-layer (the meadow map, from the cover's cells, unwarped) still shows faint 1 m steps at 20 m along a
+  green-corn strip. The field generator in the language could give the look polygons instead of cells.
