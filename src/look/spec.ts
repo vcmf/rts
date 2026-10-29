@@ -91,8 +91,10 @@ export const SPEC: Spec = {
     clearance: 6,
   },
   ground: { lo: 0, hi: 25 }, // the tile spans 0.4..20.3 m, the far ring 2.2..27.5 m; checked at load
-  texel: { shadow: 0.33, light: 0.5, ao: 4 },
-  sizes: { lightMap: 3072, aoCell: 3, riverMask: 2048, reflMask: 1536, aoTex: 768, grain: 512 },
+  // light: 0.52 m looked the same as 0.26 m at every zoom, the trunks' strips kept (1 m lost them; the owner,
+  // 2026-10-29, docs/plans/active/lightmap-half.md)
+  texel: { shadow: 0.33, light: 0.53, ao: 4 },
+  sizes: { lightMap: 1536, aoCell: 3, riverMask: 2048, reflMask: 1536, aoTex: 768, grain: 512 },
   minSpec: { maxTexture: 8192, bakeMB: 600 },
   depth: { near: 100, far: 1600 },
   shadowFade: 32,
