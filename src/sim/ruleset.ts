@@ -66,7 +66,6 @@ export interface FireDef {
   eye: number // eye height above the ground, metres
   sight: Record<string, number> // metres of a terrain class a sight line may cross (classes not named: any)
 }
-// loss-driven morale: morale relaxes toward quality less losses; the states follow it with hysteresis
 // the morale bar (docs/proposals/morale-bar-model.md), in points: level 2's bar holds 100
 export interface MoraleDef {
   level: number // a formation's level when the scenario gives none (1..6)
@@ -96,6 +95,15 @@ export interface MoraleDef {
 // an experience level (docs/proposals/morale-bar-model.md § 8): its name, the points to reach it, its bar's maximum,
 // and its effects as factors (owed men ÷ toughness; reload, change times and the square's reaction ×; hit chance ×
 // precision; pursuit ×)
+// experience's credits (docs/proposals/morale-bar-model.md § 7), points: a man struck, a second under fire (a man
+// lost in the last `window` seconds), a charge turned away, an enemy broken in front of it
+export interface PointsDef {
+  man: number
+  fire: number
+  window: number
+  repulse: number
+  broke: number
+}
 export interface LevelDef {
   name: string
   points: number
@@ -262,6 +270,7 @@ export interface Ruleset {
   fire: FireDef
   morale: MoraleDef
   levels: LevelDef[] // six, from recruits (1) up
+  points: PointsDef
   melee: MeleeDef
   sectors: SectorsDef
   // S1e-2: a side is broken at this share of its spawned men in the fight; at a time limit, shares within margin draw
@@ -649,6 +658,10 @@ export function compileRuleset(rs: Ruleset): Compiled {
     throw new Error(
       `ruleset ${rs.name}: levels must be six, their points rising from 0, their bars rising and above 0, their factors above 0`,
     )
+  }
+  const P = rs.points
+  if (!([P.man, P.fire, P.repulse, P.broke].every(v => v >= 0) && P.window > 0)) {
+    throw new Error(`ruleset ${rs.name}: points' credits must be 0 or more, their window above 0`)
   }
   if (!(Number.isInteger(M.level) && M.level >= 1 && M.level <= 6)) {
     throw new Error(`ruleset ${rs.name}: morale.level must be a level, 1..6`)

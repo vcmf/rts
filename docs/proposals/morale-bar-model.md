@@ -109,9 +109,10 @@ A router rallies as today (its run over, no enemy within `rally.safe`, no loss f
 ## 7. Experience: points and the level up
 
 - **Points come from fighting,** to a formation in the fight (not routing, rallying or shattered), in step 12:
-  - **men struck:** the expected men its fire (musketry, canister, roundshot) or its melee and impact take from the
-    enemy, after the target's toughness, × `points.man`; credited where the hits are owed, from the same expected
-    number (no draw of its own);
+  - **men struck:** the men its fire (musketry, canister, roundshot) or its melee and impact strike in the enemy,
+    after the target's toughness, × `points.man`; credited where the men are owed, with no draw of its own: the men
+    struck ÷ toughness (`oweByMen`, before its draw of the fraction), and for roundshot, which owes men block by block,
+    each block's expected men after toughness;
   - **under fire:** `points.fire` a second while it has lost a man in the last `points.window` seconds (10);
   - **a charge turned away:** `points.repulse` when a charger recoils from it;
   - **an enemy broken in front of it:** `points.broke` when an enemy routs that stands in its front (front weight at
@@ -230,7 +231,7 @@ and its men lost at once, and a smaller bar breaks on contact, with no melee to 
 
 - `test/morale.test.ts`: P-28 to P-37 on scripted battalions (the existing morale tests move onto the bar: the scale
   in § 8), and the reversed visiting order on the bar's state.
-- `test/experience.test.ts` (new): P-38 and P-39; each level's factors against level 2's (B-02 on a change's and
+- `test/experience.test.ts` (new): P-38 (a line's points over a minute's fire are `points.man` × the men it struck; a target's are `points.fire` for each tick within `points.window` of a loss; a square's `points.repulse` for a charge turned away; `points.broke` to a line with the broken enemy in its front and range, none on its flank, out of range or routing) and P-39; each level's factors against level 2's (B-02 on a change's and
   a Face about's time, exactly; C-02's reload on each new reload, within its jitter; precision and toughness on a
   line's and a battery's canister losses over the same seeds, within 0.05 of the ratio; E-05's reaction and E-08 and
   E-09's pursuit, exactly); P-40 in `test/ruleset.test.ts`.

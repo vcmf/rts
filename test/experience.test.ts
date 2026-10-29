@@ -11,6 +11,10 @@ import {
   CH_PURSUIT,
   M_TICK,
   outOfFight,
+  MS_ROUTING,
+  creditMen,
+  creditRepulse,
+  compileRuleset,
   type Command,
   type LevelDef,
   type Ruleset,
@@ -174,5 +178,103 @@ describe('pursue', () => {
       const ticks = s.w.f.chUntil[s.slot(cav)] - s.w.meta[M_TICK]
       expect(ticks).toBe(Math.round(napoleonic.types.cavalry.charge!.pursue * L[lv - 1].pursue * 20))
     }
+  })
+})
+
+const P = napoleonic.points
+describe('P-38: points', () => {
+  it('a line firing on a target of level 2 is credited points.man for each man it strikes', () => {
+    const s = new S()
+    const a = s.put({ fire: 'at will' })
+    const t = s.put({ side: 1, z: 50, heading: PI, bar: 10000 })
+    s.advance(60)
+    const struck = 400 - s.men(t)
+    expect(struck).toBeGreaterThan(20)
+    expect(s.w.f.pts[s.slot(a)] - L[1].points).toBeCloseTo(struck * P.man, 6)
+  })
+  it('a line losing men is credited points.fire a second while it lost one in the last points.window seconds', () => {
+    const s = new S()
+    s.put({ fire: 'at will', z: -30 })
+    const t = s.put({ side: 1, z: 50, heading: PI, bar: 10000 })
+    const i = s.slot(t)
+    let want = L[1].points
+    for (let n = 0; n < 60 * 20; n++) {
+      s.tick()
+      const f = s.w.f
+      if (f.lastLoss[i] > 0 && s.w.meta[M_TICK] - f.lastLoss[i] < P.window * 20) want += P.fire / 20
+    }
+    expect(want).toBeGreaterThan(L[1].points + 1)
+    expect(s.w.f.pts[i]).toBeCloseTo(want, 9)
+  })
+  it('a square is credited points.repulse for each charge it turns away', () => {
+    const s = new S()
+    const sq = s.put({ side: 1, z: 100, heading: PI, shape: 'square' })
+    const cav = s.put({ unit: 'cavalry', z: -150, men: 256 })
+    s.order({ type: 'charge', id: cav, target: sq })
+    s.until(() => s.w.f.chPhase[s.slot(cav)] !== 0, 120)
+    expect(s.w.f.blownUntil[s.slot(cav)]).toBeGreaterThan(s.w.meta[M_TICK])
+    expect(s.w.f.pts[s.slot(sq)]).toBe(L[1].points + P.repulse)
+  })
+  it('an enemy broken in front, in range, credits points.broke; not one on the flank, out of range, or to a router', () => {
+    const s = new S()
+    const e = s.put({ side: 1, z: 100, heading: PI, bar: 10000 })
+    const front = s.put({}) // 100 m in front of it
+    const flank = s.put({ x: 200, z: 100, heading: -PI / 2 }) // on its flank, facing it: it is in this one's front
+    const side = s.put({ x: 120, z: 100, heading: 0 }) // beside it, facing the same way: it on the flank
+    const far = s.put({ z: 100 - napoleonic.fire.maxRange - 50 })
+    const run = s.put({ x: -300, z: 100, heading: PI / 2 })
+    s.w.f.mstate[s.slot(run)] = MS_ROUTING
+    s.w.f.bar[s.slot(e)] = -100
+    s.tick()
+    expect(outOfFight(s.w.f.mstate[s.slot(e)])).toBe(true)
+    const got = [front, flank, side, far, run].map(h => s.w.f.pts[s.slot(h)] - L[1].points)
+    expect(got).toEqual([P.broke, P.broke, 0, 0, 0])
+  })
+  it('none to a formation out of the fight', () => {
+    const s = new S()
+    const h = s.put({})
+    const i = s.slot(h)
+    s.w.f.mstate[i] = MS_ROUTING
+    creditMen(s.w, i, 10)
+    creditRepulse(s.w, i)
+    expect(s.w.f.pts[i]).toBe(L[1].points)
+  })
+})
+
+describe('P-39: the level up', () => {
+  it('on the tick its points reach the next level’s: the level, the bar scaled and full, the cost written off', () => {
+    const s = new S()
+    const h = s.put({ bar: 90 })
+    const i = s.slot(h)
+    const f = s.w.f
+    f.bar[i] = 50
+    f.cost[i] = 20
+    f.pts[i] = L[2].points - 0.01
+    s.tick()
+    expect([f.level[i], f.up[i]]).toEqual([2, 0])
+    f.pts[i] = L[2].points
+    s.tick()
+    expect([f.level[i], f.up[i], f.cost[i], f.drill[i]]).toEqual([3, 1, 0, L[2].drill])
+    expect(f.barMax[i]).toBeCloseTo((90 * L[2].bar) / L[1].bar, 9)
+    expect(f.bar[i]).toBe(f.barMax[i])
+  })
+  it('at most one a battle; none past level 6; the level never falls', () => {
+    const s = new S()
+    const a = s.put({})
+    const b = s.put({ level: 6, x: 200 })
+    const f = s.w.f
+    f.pts[s.slot(a)] = 1e6
+    f.pts[s.slot(b)] = 1e6
+    s.advance(2)
+    expect([f.level[s.slot(a)], f.level[s.slot(b)]]).toEqual([3, 6])
+    f.pts[s.slot(a)] = 0
+    s.advance(1)
+    expect(f.level[s.slot(a)]).toBe(3)
+  })
+  it('the ruleset refuses negative credits and a window not above 0', () => {
+    for (const p of [{ man: -1 }, { fire: -0.1 }, { repulse: -1 }, { broke: -1 }, { window: 0 }]) {
+      expect(() => compileRuleset({ ...napoleonic, points: { ...P, ...p } })).toThrow(/points/)
+    }
+    expect(() => compileRuleset(napoleonic)).not.toThrow()
   })
 })

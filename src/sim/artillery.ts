@@ -43,6 +43,7 @@ import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
 import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
+import { creditMen } from './experience.ts'
 
 const sqrt = Math.sqrt
 // keyed draws: purpose tags
@@ -214,6 +215,7 @@ function cone(
         coneMask.subarray(coneJ[p] * MAX_COMPANIES, coneJ[p] * MAX_COMPANIES + MAX_COMPANIES),
         per[p],
         rs,
+        i,
       )
     }
   }
@@ -368,7 +370,10 @@ function ray(
         const e = bE[p]
         const m = bM[p]
         const area = 2 * G.bx[e] * (G.bz1[e] - G.bz0[e])
-        const lambda = len * R.width * (f.men[m] / area) * R.kill * Math.min(1, (2 * energy) / R.energy)
+        // the men owed after the target's toughness, credited to the gun as expected (experience.ts)
+        const lambda =
+          (len * R.width * (f.men[m] / area) * R.kill * Math.min(1, (2 * energy) / R.energy)) / levelOf(w, e).toughness
+        creditMen(w, i, lambda)
         let hits = Math.floor(lambda)
         if (nextUnit(rs) < lambda - hits) hits++
         if (hits) {

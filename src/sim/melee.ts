@@ -49,6 +49,7 @@ import {
   targetShape,
 } from './formation.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
+import { creditRepulse } from './experience.ts'
 import { marginWidth } from './claims.ts'
 import { enemyNear } from './morale.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
@@ -201,11 +202,11 @@ function strengthOf(w: World, i: number): number {
 }
 // λ men owed to battalion j's companies marked in `mask`: the whole part certain, a draw for the fraction, each
 // man to a marked company weighted by its men (as a volley's hits: oweByMen)
-function owe(w: World, j: number, mask: Uint8Array, lambda: number, rs: Uint32Array): void {
+function owe(w: World, j: number, mask: Uint8Array, lambda: number, rs: Uint32Array, by: number): void {
   if (!(lambda > 0)) return
   let n = Math.floor(lambda)
   if (nextUnit(rs) < lambda - n) n++
-  if (n) oweByMen(w, j, mask, n, rs)
+  if (n) oweByMen(w, j, mask, n, rs, by)
 }
 
 // the gap between battalions i and j, and the side of j that a charge from i would strike, as they stand (tests,
@@ -274,7 +275,7 @@ function rideDown(w: World, G: FireGeo, S: Melee, i: number, j: number, gap: num
   if (gap > lim) return
   const men = inContact(w, G, i, j, lim, S.mi)
   inContact(w, G, j, i, lim, S.mj)
-  owe(w, j, S.mj, M.rate * DT * men * strengthOf(w, i), rs)
+  owe(w, j, S.mj, M.rate * DT * men * strengthOf(w, i), rs, i)
 }
 /** Whether router j (with the claim grid on) has an enemy in the fight near it (`enemyNear`): the melee step looks. */
 const hunted = (w: World, j: number): boolean => w.claims && !!w.f.alive[j] && fleeing(w.f.mstate[j]) && enemyNear(w, j)
@@ -334,10 +335,11 @@ function endCharge(w: World, i: number, tick: number, blown: boolean): void {
 }
 // the charger turns away from battalion j: it rides charge.recoil metres straight away from it (kept on the map),
 // with a Face about first when the shape allows and the way is behind it (optional: if it fails, it rides as it
-// stands), when the pool has room; and it is blown
+// stands), when the pool has room; and it is blown. j is credited the charge turned away (experience.ts)
 function recoil(w: World, i: number, j: number, tick: number): void {
   const f = w.f
   const metres = typeOf(w, i).def.charge!.recoil
+  creditRepulse(w, j)
   clearOrders(w, i)
   endCharge(w, i, tick, true)
   let dx = f.x[i] - f.x[j]
@@ -439,7 +441,7 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
   const mom = Math.min(1, f.chRun[i] / ch.build)
   const men = inContact(w, G, i, j, M.contact, S.mi)
   inContact(w, G, j, i, M.contact, S.mj)
-  owe(w, j, S.mj, M.impact.kill * mom * men * (1 - bb), keyedStream(ks, seed, tick, h, j, K_IMPACT))
+  owe(w, j, S.mj, M.impact.kill * mom * men * (1 - bb), keyedStream(ks, seed, tick, h, j, K_IMPACT), i)
   sideOf(w, G, i, j, S.mi, side)
   S.shockTo[i] = j
   S.shockBy[i] += byWeights(M.impact.shock, side) * mom * (1 - bb)
@@ -493,7 +495,7 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
   const strike = (e: number) => {
     const men = inContact(w, G, i, e, lim, S.mi)
     inContact(w, G, e, i, lim, S.mj)
-    owe(w, e, S.mj, M.rate * DT * men * strengthOf(w, i), keyedStream(ks, seed, tick, h, e, K_MELEE))
+    owe(w, e, S.mj, M.rate * DT * men * strengthOf(w, i), keyedStream(ks, seed, tick, h, e, K_MELEE), i)
   }
   strike(j)
   for (let e = 0; e < MAX_FORMATIONS; e++) {

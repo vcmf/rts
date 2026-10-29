@@ -431,6 +431,9 @@ export const napoleonic: Ruleset = {
       pursue: 0.7,
     },
   ],
+  // a recruit line that wins a firefight like the calibration's (about 80 men struck, 9 minutes under fire, one enemy
+  // broken) gains about 100: level 2 in a battle or two
+  points: { man: 0.5, fire: 0.05, window: 10, repulse: 15, broke: 25 },
   // charges and melee (docs/plans/active/s1d2-charges.md): first guesses, tuned by tools/calibrate-charge.ts.
   // A charge's threat shakes the target at the test, its impact costs men and morale by its momentum and the
   // side it comes from, both cut by how far the target is braced (a square); melee kills per man in contact

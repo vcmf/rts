@@ -24,6 +24,7 @@ import { MAX_COMPANIES } from './ruleset.ts'
 import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
 import { buildFaces, threatWeights } from './sectors.ts'
+import { creditMen } from './experience.ts'
 
 const sqrt = Math.sqrt
 export const RETARGET_TICKS = 10 // targets are chosen every 0.5 s, staggered by slot (one tick in ten each)
@@ -532,14 +533,15 @@ function volley(
     const m = j * CS + q
     open[q] = f.men[m] > 0 && inArc(G, k, G.cx[m], G.cz[m], R) && sees(w, G, k, m) ? 1 : 0
   }
-  oweByMen(w, j, open, hits, rs)
+  oweByMen(w, j, open, hits, rs, i)
 }
 /**
- * n men struck in battalion j's companies marked in `mask`, owed after j's toughness (n ÷ toughness, the fraction
- * drawn from rs; no draw at toughness 1), each drawn from rs to a marked company weighted by its men (as they stood at
- * the start of the step): a volley's hits, a gun's, a charge's and a melee's losses (melee.ts).
+ * n men struck in battalion j's companies marked in `mask` by formation `by`, owed after j's toughness (n ÷ toughness,
+ * the fraction drawn from rs; no draw at toughness 1), each drawn from rs to a marked company weighted by its men (as
+ * they stood at the start of the step): a volley's hits, canister's, a charge's and a melee's losses (melee.ts). `by`
+ * is credited n ÷ toughness (experience.ts).
  */
-export function oweByMen(w: World, j: number, mask: ArrayLike<number>, n: number, rs: Uint32Array): void {
+export function oweByMen(w: World, j: number, mask: ArrayLike<number>, n: number, rs: Uint32Array, by: number): void {
   const f = w.f
   const CS = w.cr.maxC
   const C = typeOf(w, j).C
@@ -547,6 +549,7 @@ export function oweByMen(w: World, j: number, mask: ArrayLike<number>, n: number
   for (let q = 0; q < C; q++) if (mask[q]) tot += f.men[j * CS + q]
   if (!tot) return
   const t = levelOf(w, j).toughness
+  creditMen(w, by, n / t)
   if (t !== 1) {
     const x = n / t
     n = Math.floor(x)
