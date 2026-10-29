@@ -209,4 +209,10 @@ window.CAMPAIGN_1805 = {
     { name: 'STYRIA', lat: 47.35, lon: 15.1, angle: 0 },
     { name: 'CARINTHIA', lat: 46.75, lon: 13.6, angle: 0 },
   ],
+
+  // windows of finer heights (about 50 m) for the crisp close zoom: centre in degrees, half extents in metres
+  focus: [
+    { name: 'ulm', lat: 48.45, lon: 10.4, halfX: 70000, halfZ: 50000 },
+    { name: 'austerlitz', lat: 48.68, lon: 16.55, halfX: 80000, halfZ: 65000 },
+  ],
 }

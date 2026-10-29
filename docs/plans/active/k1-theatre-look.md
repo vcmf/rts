@@ -96,7 +96,17 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   edge; the ink projected at the same height, so roads and rivers drape over the ranges; the camera kept above the
   ground. The light reads a milder lift (×1.5, `?mountlight=`): lifted as much, the cast shadows swallowed the
   valleys. Ink behind a raised range still shows through it, and picking still reads the flat plane (K3). A frame,
-  GPU waited for, at 1600 × 900 on test machine A: 0.9 ms still, 7.3 ms with the ink redrawn. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  GPU waited for, at 1600 × 900 on test machine A: 0.9 ms still, 7.3 ms with the ink redrawn. Ninth (after `docs/research/epic-campaign-maps.md`; the owner: "it doesn't look epic enough … at close
+  zoom i want crisp details"): the slope light computed per pixel from the light's heights read bicubically (half
+  floats), so it stays sharp at any zoom; two windows of finer heights (50 m, Terrarium zoom 11: Ulm, 140 × 100 km,
+  and Vienna–Austerlitz, 160 × 130 km), written beside the theatre and loaded after the first frame, add their detail
+  to the light from about 6 px a km and to the contours from about 3; the contour sheets drawn per pixel every 100 m
+  (`?sheet=`), a lit rim toward the light and a shadow under the sheet above, from about 2 px a km; the cast shadow
+  thrown by the large forms only; faint cloud shadows drifting from the west (`?clouds=`); the camera tilting from
+  20° far out to 40° at the closest zoom (`?tilt=`), with a haze toward the top of the view (the top edge stays about
+  54° off straight down: no sky); the plate 8 km thick, its sides lit from the north-west, its shadow on the table.
+  Measured on test machine A, 1600 × 900: a frame 1.8 ms still, 6.5 ms with the ink. Up close, the 1 km mesh shows
+  its facets on the alpine skyline (a finer mesh near the camera: K3). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
