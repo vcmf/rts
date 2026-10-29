@@ -217,6 +217,36 @@ the ink redrawn (panning), the theatre's view and the Inn valley close up:
 The 150 fps target at 1080p is met with room. The fps meter in a headless browser reads low (throttled frames); in a
 visible window it is capped by the display.
 
+### The tiles' proof of concept (2026-10-29)
+
+The owner: "do 1 + 2 as a proof of concept, if it works we consider the prototype done". The close zoom was soft:
+250 m heights outside three 50 m windows, the light baked at 500 m, seams at the windows' edges. Now:
+
+- `tools/campaign-tiles.ts` bakes the theatre offline at **100 m** (the terrain tiles at zoom 10, 8001 × 5001 nodes):
+  the one shape and the lakes as the page builds them, and the sun's soft shadow and the sky's occlusion **at full
+  resolution**, on all cores; cut into 640 tiles of 256 × 256 nodes under scratch/campaign-tiles/ (216 MB, git-ignored),
+  with a meta file the page checks the parameters against. The bake: 62 s on the dev machine (i7-9700K, 8 cores),
+  26 s of it fetching and sampling the heights.
+- The shared parts: `tools/terrarium.ts` (the terrain tiles, from the theatre tool) and `tools/campaign-bake.ts`
+  (the shape, the lakes' distance, the light; tested in `test/campaign-bake.test.ts`), a TypeScript copy of the page's
+  steps, which the page still runs at load on its 250 m grid.
+- The page keeps its 250 m bake for the far zoom; from about 4 px a km it streams the tiles around the camera into a
+  **detail area** of 12 × 12 tiles (307 km), its texel a 100 m node: the light's slope from the 100 m shape (one
+  Catmull-Rom pass), the baked shadow and sky from the tiles, faded over 8 km to the area's edge and where a tile has
+  not loaded. The area moves when the camera's target goes more than two tiles from where it should start; tiles are
+  cached (320). The three 50 m windows are gone: the detail is the same everywhere, with no seams.
+- The fps meter shows the tiles cached.
+
+Measured on test machine A (still / with the ink redrawn): 1920 × 1080, the theatre 2.5 / 3.6 ms, close in the Inn
+valley with 144 tiles 2.2 / 2.0 ms, at Ulm 1.4 / 1.9 ms; 3840 × 2160 (FSR ×1.87) 3.2 / 4.7, 2.1 / 2.6, 2.3 / 2.5 ms.
+
+What the proof of concept leaves (for the main series): moving the area refills it and uploads about 75 MB (a hitch
+of some tens of ms every 50 km of panning up close: sub-rectangle uploads, a ring buffer); the 3D mesh still has a
+vertex every 500 m (faceted ridgelines up close: a mesh whose density follows the camera); the 250 m bake still runs
+at load (about 5 s: bake it offline too, as tiles at coarser levels); the page and the tool hold the same bake twice
+(one module once in the game's code); the tiles are 216 MB of base64 scripts (binary tiles, compressed, in the main
+series).
+
 ## Review rounds
 
 - **Round 1** (`/code-review high`): severe: every lake was simplified to two points (a closed ring's chord has no

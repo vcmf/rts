@@ -684,13 +684,13 @@ void main() {
 B.Effect.ShadersStore.printFragmentShader = `
 precision highp float;
 varying vec2 vW;
-uniform sampler2D uShape, uShapeL, uLight, uLines, uRivers, uLakes, uLakeD, uPaperT, uContourH, uFine0, uFine1, uFine2;
+uniform sampler2D uShape, uShapeL, uLight, uLines, uRivers, uLakes, uLakeD, uPaperT, uContourH, uDetailS, uDetailL;
 uniform sampler2D uClouds;
 uniform vec3 uShallow, uDeep;
-uniform vec2 uHalf, uTexel, uLightTexel, uLineTexel, uLakeTexel, uFineTexel0, uFineTexel1, uFineTexel2;
-uniform vec4 uFineRect0, uFineRect1, uFineRect2;
+uniform vec2 uHalf, uTexel, uLightTexel, uLineTexel, uLakeTexel, uDetailTexel;
+uniform vec4 uDetailRect;
 uniform vec3 uSun, uPaper, uTable, uWater, uKey, uSky, uRoad, uRoad2, uRiver, uContourInk, uContourMinor;
-uniform float uCellKm, uFineCellKm, uFineK, uSkyK, uLamp, uContour, uContourK, uTime, uCloudK, uHaze;
+uniform float uCellKm, uDetailCellKm, uDetailK, uSkyK, uLamp, uContour, uContourK, uTime, uCloudK, uHaze;
 uniform float uScreenH, uVert;
 
 /* a screen pixel's size in km: set first thing in main, read by the water's steps */
@@ -760,19 +760,16 @@ vec3 catmullRomGrad(sampler2D t, vec2 uv, vec2 texel) {
   return sum;
 }
 
-/* the finer heights minus the coarse ones, in metres, inside a window (x0, z0, x1, z1 in km), faded at its edge */
-float fineIn(sampler2D t, vec4 rect, vec2 texel, vec2 w) {
-  float edge = min(min(w.x - rect.x, rect.z - w.x), min(w.y - rect.y, rect.w - w.y));
-  if (edge <= 0.0) return 0.0;
-  vec2 uv = ((w - rect.xy) / uFineCellKm + 0.5) * texel;
-  /* faded over 20 km into the coarse ground, so the window's edge does not show as a seam */
-  return texture2D(t, uv).r * smoothstep(0.0, 20.0, edge);
+/* the detail area (the offline-baked 100 m tiles around the camera): its node uv at a point, and how much of it to
+   use there: the zoom's share, faded over 8 km to the area's edge, and only where its tiles have loaded (alpha) */
+vec2 detailUv(vec2 w) {
+  return ((w - uDetailRect.xy) / uDetailCellKm + 0.5) * uDetailTexel;
 }
-
-/* the finer windows' detail at a point, raised as the shape is (metres) */
-float fineH(vec2 w) {
-  return (fineIn(uFine0, uFineRect0, uFineTexel0, w) + fineIn(uFine1, uFineRect1, uFineTexel1, w) +
-          fineIn(uFine2, uFineRect2, uFineTexel2, w)) * uVert * uFineK;
+float detailK(vec2 w) {
+  if (uDetailK <= 0.0) return 0.0;
+  float edge = min(min(w.x - uDetailRect.x, uDetailRect.z - w.x), min(w.y - uDetailRect.y, uDetailRect.w - w.y));
+  if (edge <= 0.0) return 0.0;
+  return uDetailK * smoothstep(0.0, 8.0, edge) * texture2D(uDetailL, detailUv(w)).a;
 }
 
 /* the lake floor's steps at a point (metres below the sunk surface) */
@@ -782,9 +779,9 @@ float stepsH(vec2 w) {
 
 /* the slope of the shape the light falls on, in metres per km (x east, y north): the shape's own, up close from one
    Catmull-Rom pass and its derivative, further out (a cell under a pixel) by differences of four bilinear reads
-   across the pixel, which average what the pixel covers; then the water's steps and the finer windows' detail, by
-   differences, only where they are */
-vec2 slopeAt(vec2 w, float px) {
+   across the pixel, which average what the pixel covers; up close, in the detail area, the 100 m shape's slope by
+   the same Catmull-Rom pass instead; then the water's steps, by differences, only where they are */
+vec2 slopeAt(vec2 w, float px, float dk) {
   float far = smoothstep(0.8, 1.4, px / uCellKm);
   vec2 g = vec2(0.0);
   if (far < 1.0) g = catmullRomGrad(uShape, gridUv(w), uTexel).yz / uCellKm * (1.0 - far);
@@ -795,17 +792,12 @@ vec2 slopeAt(vec2 w, float px) {
     float hz = texture2D(uShapeL, gridUv(w + ez)).r - texture2D(uShapeL, gridUv(w - ez)).r;
     g += vec2(hx, hz) / (2.0 * px) * far;
   }
+  if (dk > 0.0) g = mix(g, catmullRomGrad(uDetailS, detailUv(w), uDetailTexel).yz / uDetailCellKm, dk);
   float e = max(px, 0.5 * uCellKm);
   vec2 ex = vec2(e, 0.0);
   vec2 ez = vec2(0.0, e);
   if (texture2D(uLakeD, gridUv(w)).r > -0.2) {
     g -= vec2(stepsH(w + ex) - stepsH(w - ex), stepsH(w + ez) - stepsH(w - ez)) / (2.0 * e);
-  }
-  if (uFineK > 0.0) {
-    float ef = max(px, 0.5 * uFineCellKm);
-    vec2 fx = vec2(ef, 0.0);
-    vec2 fz = vec2(0.0, ef);
-    g += vec2(fineH(w + fx) - fineH(w - fx), fineH(w + fz) - fineH(w - fz)) / (2.0 * ef);
   }
   return g;
 }
@@ -879,9 +871,12 @@ void main() {
 
   /* the light, per pixel, from the shape the surface is raised by: the warm sun on the slope, in its baked shadow,
      with cloud shadows drifting from the west; and the cool sky, in the baked share of it each point sees */
-  vec2 slope = slopeAt(vW, px);
+  float dk = detailK(vW);
+  vec2 slope = slopeAt(vW, px, dk);
   vec3 n = normalize(vec3(-slope.x, 1000.0, -slope.y));
   vec4 baked = bicubic4(uLight, (vW + uHalf) / (2.0 * uHalf) * (1.0 - uLightTexel) + 0.5 * uLightTexel, uLightTexel);
+  /* up close, the shadow and the sky baked offline at 100 m */
+  if (dk > 0.0) baked.rg = mix(baked.rg, bicubic4(uDetailL, detailUv(vW), uDetailTexel).rg, dk);
   float cloud = texture2D(uClouds, vW / 310.0 + uTime * vec2(0.0005, 0.00015)).r *
                 texture2D(uClouds, vW / 170.0 + vec2(0.37, 0.61) + uTime * vec2(0.0007, 0.0002)).r;
   float sunlit = baked.r * (1.0 - uCloudK * smoothstep(0.3, 0.55, cloud));
@@ -980,25 +975,6 @@ function byteTexture(data, w, h, format, mips) {
   return t;
 }
 
-/**
- * The finer heights of a focus window (tools/campaign-theatre.ts) as the detail the coarse grid misses: each fine
- * height minus the coarse heights read bilinearly at its node, in metres.
- */
-function fineDetailTexture(win) {
-  const text = atob(win.h);
-  const bytes = new Uint8Array(text.length);
-  for (let k = 0; k < text.length; k++) bytes[k] = text.charCodeAt(k);
-  const fine = despiked(new Int16Array(bytes.buffer), win.nx, win.nz);
-  const detail = new Float32Array(win.nx * win.nz);
-  for (let j = 0; j < win.nz; j++) {
-    for (let i = 0; i < win.nx; i++) {
-      const coarse = sampleGrid(heights, NX, NZ, CELL, win.x0 + i * win.cell, win.z0 + j * win.cell);
-      detail[j * win.nx + i] = (fine[j * win.nx + i] - coarse) * FINE;
-    }
-  }
-  return floatTexture(detail, win.nx, win.nz);
-}
-
 /** How high the map stands at a point (map metres), in km: the shape read bilinearly, as the vertex shader reads it. */
 function riseAt(x, z) {
   return sampleGrid(SHAPE, NX, NZ, CELL, x, z) / 1000;
@@ -1060,14 +1036,14 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
   attributes: ['position'],
   uniforms: [
     'worldViewProjection', 'uHalf', 'uTexel', 'uLightTexel', 'uLineTexel', 'uLakeTexel',
-    'uFineTexel0', 'uFineTexel1', 'uFineTexel2', 'uFineRect0', 'uFineRect1', 'uFineRect2',
+    'uDetailTexel', 'uDetailRect',
     'uSun', 'uPaper', 'uTable', 'uWater', 'uKey', 'uSky', 'uRoad', 'uRoad2', 'uRiver', 'uContourInk', 'uContourMinor',
-    'uCellKm', 'uFineCellKm', 'uFineK', 'uSkyK', 'uLamp', 'uContour', 'uContourK', 'uTime', 'uCloudK',
+    'uCellKm', 'uDetailCellKm', 'uDetailK', 'uSkyK', 'uLamp', 'uContour', 'uContourK', 'uTime', 'uCloudK',
     'uHaze', 'uScreenH', 'uVert', 'uShallow', 'uDeep',
   ],
   samplers: [
     'uShape', 'uShapeL', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uLakeD', 'uPaperT', 'uContourH',
-    'uFine0', 'uFine1', 'uFine2',
+    'uDetailS', 'uDetailL',
     'uClouds',
   ],
 });
@@ -1119,16 +1095,13 @@ material.setFloat('uHaze', 0);
 material.setFloat('uTime', 0);
 material.setFloat('uScreenH', engine.getRenderHeight());
 material.setFloat('uVert', VERT);
-material.setFloat('uFineK', 0);
-// the focus windows' finer detail: none until their files load (tools/campaign-theatre.ts writes them beside the
-// theatre's); a window off the map and a blank texture meanwhile
-const FINE_SLOTS = ['0', '1', '2'];
-material.setFloat('uFineCellKm', 0.05);
-for (const slot of FINE_SLOTS) {
-  material.setTexture('uFine' + slot, floatTexture(new Float32Array(1), 1, 1));
-  material.setVector4('uFineRect' + slot, new B.Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1));
-  material.setVector2('uFineTexel' + slot, new B.Vector2(1, 1));
-}
+material.setFloat('uDetailK', 0);
+// the close zoom's detail area: blank until the tiles load (loadTiles), its rectangle off the map meanwhile
+material.setTexture('uDetailS', floatTexture(new Float32Array(1), 1, 1));
+material.setTexture('uDetailL', byteTexture(new Uint8Array(4), 1, 1, B.Engine.TEXTUREFORMAT_RGBA));
+material.setVector4('uDetailRect', new B.Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1));
+material.setVector2('uDetailTexel', new B.Vector2(1, 1));
+material.setFloat('uDetailCellKm', 0.1);
 
 // the table: one flat quad the plate's thickness below the map; the plate's sides; the map, raised in the shader
 const table = B.MeshBuilder.CreateGround('table', { width: MAP_W + 2 * TABLE, height: MAP_H + 2 * TABLE }, scene);
@@ -1549,9 +1522,11 @@ function drawInk() {
   ink.setTransform(INK_DPR, 0, 0, INK_DPR, 0, 0);
   ink.clearRect(0, 0, innerWidth, innerHeight);
   const ppk = pxPerKm();
-  // by the zoom (screen pixels per km): the ordinary contours from about 1.2, the finer windows' detail from 2
+  // by the zoom (screen pixels per km): the ordinary contours from about 1.2
   material.setFloat('uContourK', sstep(1.2, 3, ppk));
-  material.setFloat('uFineK', sstep(2, 6, ppk));
+  // the 100 m tiles from about 4 px a km (a tile node 0.4 px), fully from 9
+  material.setFloat('uDetailK', sstep(4, 9, ppk));
+  wantDetail(ppk);
   const placed = [];
   // the ink stops at the neatline, as the print does
   ink.save();
@@ -1564,6 +1539,196 @@ function drawInk() {
   drawRiverNames(ppk, placed, rivers);
   ink.restore();
   drawScale(ppk);
+}
+
+/* =========================================================================
+   THE CLOSE ZOOM: the offline-baked 100 m tiles (tools/campaign-tiles.ts), streamed around the camera
+   ========================================================================= */
+// the detail area: AREA × AREA tiles around the camera's target, moved when the target leaves its middle; the tiles
+// decoded kept in a cache of TILE_CACHE, the oldest dropped; LOADS of them loading at once
+const AREA = 12;
+const TILE_CACHE = 320;
+const LOADS = 6;
+const DETAIL = {
+  meta: null,
+  base: '',
+  ox: -1,
+  oz: -1,
+  shape: null,
+  light: null,
+  texS: null,
+  texL: null,
+  cache: new Map(),
+  loading: new Set(),
+  failed: new Set(),
+  queue: [],
+  upload: false,
+  lastUpload: 0,
+};
+
+/** Whether the tiles were baked with this page's shape and light (else they would not match its 250 m bake). */
+function tilesMatch(meta) {
+  const p = meta.params || {};
+  const same = (a, b) => Math.abs(a - b) < 1e-6;
+  const params = same(p.vert, VERT) && same(p.fine, FINE) && same(p.mount, MOUNT);
+  const sun = same(p.sun, SUN_EL) && same(p.az, SUN_AZ) && same(p.soft, SUN_R);
+  const frame = same((meta.nx - 1) * meta.cell, 2 * halfX) && same((meta.nz - 1) * meta.cell, 2 * halfZ);
+  return params && sun && frame;
+}
+
+/**
+ * Loads the tiles' meta file (scratch/campaign-tiles/meta.js, beside the theatre's) and, if the tiles match this
+ * page, sets up the detail area. Without them the close zoom stays at the 250 m bake.
+ */
+function loadTiles() {
+  if (!window.__theatreUrl) return;
+  const base = new URL('campaign-tiles/', window.__theatreUrl).href;
+  const script = document.createElement('script');
+  script.src = base + 'meta.js';
+  script.onload = () => {
+    script.remove();
+    const meta = window.CAMPAIGN_TILES;
+    if (!meta || !tilesMatch(meta)) {
+      console.warn('campaign map: the tiles were baked with other parameters: run node tools/campaign-tiles.ts');
+      return;
+    }
+    DETAIL.meta = meta;
+    DETAIL.base = base;
+    setupDetail();
+    dirty = true;
+  };
+  script.onerror = () => {
+    script.remove();
+    console.info('campaign map: no tiles (node tools/campaign-tiles.ts): the close zoom stays at 250 m');
+  };
+  document.head.appendChild(script);
+}
+
+/** The detail area's arrays and textures: the shape (metres, float) and the light (R sun, G sky, A loaded). */
+function setupDetail() {
+  const n = AREA * DETAIL.meta.size;
+  DETAIL.shape = new Float32Array(n * n);
+  DETAIL.light = new Uint8Array(n * n * 4);
+  DETAIL.texS = exact(floatTexture(DETAIL.shape, n, n));
+  DETAIL.texL = byteTexture(DETAIL.light, n, n, B.Engine.TEXTUREFORMAT_RGBA);
+  material.setTexture('uDetailS', DETAIL.texS);
+  material.setTexture('uDetailL', DETAIL.texL);
+  material.setVector2('uDetailTexel', new B.Vector2(1 / n, 1 / n));
+  material.setFloat('uDetailCellKm', DETAIL.meta.cell / 1000);
+}
+
+/**
+ * Moves the detail area under the camera when it is close enough to use it (about 3 px a km and more) and its
+ * target has left the area's middle; queues the tiles the area needs, the nearest first.
+ */
+function wantDetail(ppk) {
+  const meta = DETAIL.meta;
+  if (!meta || ppk < 3) return;
+  const span = meta.size * meta.cell;
+  const ti = Math.floor((view.x * 1000 + halfX) / span);
+  const tj = Math.floor((view.z * 1000 + halfZ) / span);
+  // where the area should start (clamped to the map), moved only when that is more than two tiles from where it is:
+  // compared after the clamp, or at the map's edge the area would refill at every redraw
+  const half = AREA / 2;
+  const ox = clamp(ti - half, 0, Math.max(0, meta.tilesX - AREA));
+  const oz = clamp(tj - half, 0, Math.max(0, meta.tilesZ - AREA));
+  if (DETAIL.ox >= 0 && Math.abs(ox - DETAIL.ox) <= 2 && Math.abs(oz - DETAIL.oz) <= 2) return;
+  DETAIL.ox = ox;
+  DETAIL.oz = oz;
+  DETAIL.light.fill(0);
+  const x0 = -halfX + DETAIL.ox * span;
+  const z0 = -halfZ + DETAIL.oz * span;
+  const n = AREA * meta.size;
+  material.setVector4(
+    'uDetailRect',
+    new B.Vector4(x0 / 1000, z0 / 1000, (x0 + (n - 1) * meta.cell) / 1000, (z0 + (n - 1) * meta.cell) / 1000),
+  );
+  DETAIL.queue = [];
+  for (let j = DETAIL.oz; j < Math.min(meta.tilesZ, DETAIL.oz + AREA); j++) {
+    for (let i = DETAIL.ox; i < Math.min(meta.tilesX, DETAIL.ox + AREA); i++) {
+      const key = i + ',' + j;
+      if (DETAIL.cache.has(key)) blitTile(i, j, DETAIL.cache.get(key));
+      else if (!DETAIL.failed.has(key)) DETAIL.queue.push([i, j]);
+    }
+  }
+  DETAIL.queue.sort((a, b) => Math.hypot(b[0] - ti, b[1] - tj) - Math.hypot(a[0] - ti, a[1] - tj));
+  DETAIL.upload = true;
+  pumpTiles();
+}
+
+/** Starts loading the next queued tiles, up to LOADS at once (the queue's end is the nearest). */
+function pumpTiles() {
+  while (DETAIL.loading.size < LOADS && DETAIL.queue.length) {
+    const [i, j] = DETAIL.queue.pop();
+    const key = i + ',' + j;
+    if (DETAIL.loading.has(key) || DETAIL.cache.has(key)) continue;
+    DETAIL.loading.add(key);
+    const script = document.createElement('script');
+    script.src = `${DETAIL.base}t-${i}-${j}.js`;
+    const done = () => {
+      script.remove();
+      DETAIL.loading.delete(key);
+      pumpTiles();
+    };
+    script.onload = done;
+    script.onerror = () => {
+      DETAIL.failed.add(key);
+      done();
+    };
+    document.head.appendChild(script);
+  }
+}
+
+/** Decodes base64 into bytes. */
+function fromBase64(text) {
+  const raw = atob(text);
+  const bytes = new Uint8Array(raw.length);
+  for (let k = 0; k < raw.length; k++) bytes[k] = raw.charCodeAt(k);
+  return bytes;
+}
+
+/** A tile file's call: decodes it, keeps it in the cache (dropping the oldest) and copies it into the area. */
+window.__campaignTile = (i, j, shapeB64, lightB64) => {
+  const meta = DETAIL.meta;
+  if (!meta) return;
+  const s16 = new Uint16Array(fromBase64(shapeB64).buffer);
+  const shape = new Float32Array(s16.length);
+  for (let k = 0; k < shape.length; k++) shape[k] = s16[k] * meta.scale;
+  const tile = { shape, light: fromBase64(lightB64) };
+  const key = i + ',' + j;
+  DETAIL.cache.set(key, tile);
+  if (DETAIL.cache.size > TILE_CACHE) DETAIL.cache.delete(DETAIL.cache.keys().next().value);
+  if (i >= DETAIL.ox && i < DETAIL.ox + AREA && j >= DETAIL.oz && j < DETAIL.oz + AREA) {
+    blitTile(i, j, tile);
+    DETAIL.upload = true;
+  }
+};
+
+/** Copies a tile into the detail area's arrays, its light marked loaded (alpha 255). */
+function blitTile(i, j, tile) {
+  const size = DETAIL.meta.size;
+  const n = AREA * size;
+  const ox = (i - DETAIL.ox) * size;
+  const oz = (j - DETAIL.oz) * size;
+  for (let r = 0; r < size; r++) {
+    const row = (oz + r) * n + ox;
+    DETAIL.shape.set(tile.shape.subarray(r * size, (r + 1) * size), row);
+    for (let c = 0; c < size; c++) {
+      const o = (row + c) * 4;
+      DETAIL.light[o] = tile.light[(r * size + c) * 2];
+      DETAIL.light[o + 1] = tile.light[(r * size + c) * 2 + 1];
+      DETAIL.light[o + 3] = 255;
+    }
+  }
+}
+
+/** Uploads the detail area to the GPU when tiles came in, at most every 120 ms (an upload is about 75 MB). */
+function uploadDetail(now) {
+  if (!DETAIL.upload || now - DETAIL.lastUpload < 120) return;
+  DETAIL.texS.update(DETAIL.shape);
+  DETAIL.texL.update(DETAIL.light);
+  DETAIL.upload = false;
+  DETAIL.lastUpload = now;
 }
 
 /* =========================================================================
@@ -1590,7 +1755,8 @@ function countFrame(cpuMs) {
   if (!FPS.on || now - FPS.since < 500) return;
   document.getElementById('fpsN').textContent = Math.round((FPS.frames * 1000) / (now - FPS.since));
   const up = fsr && fsr.scaleFactor > 1 ? ` · FSR ×${fsr.scaleFactor.toFixed(2)}` : '';
-  document.getElementById('fpsD').textContent = `cpu ${(FPS.cpu / FPS.frames).toFixed(1)} ms${up}`;
+  const tiles = DETAIL.meta ? ` · tiles ${DETAIL.cache.size}${DETAIL.loading.size ? '+' : ''}` : '';
+  document.getElementById('fpsD').textContent = `cpu ${(FPS.cpu / FPS.frames).toFixed(1)} ms${up}${tiles}`;
   FPS.frames = 0;
   FPS.cpu = 0;
   FPS.since = now;
@@ -1601,6 +1767,7 @@ function countFrame(cpuMs) {
 engine.runRenderLoop(() => {
   const t = performance.now();
   material.setFloat('uTime', t / 1000);
+  uploadDetail(t);
   scene.render();
   if (dirty) {
     drawInk();
@@ -1626,6 +1793,7 @@ function bench(n = 60, withInk = true) {
 }
 
 window.__proto = {
+  detail: () => ({ tiles: DETAIL.cache.size, loading: DETAIL.loading.size, queued: DETAIL.queue.length }),
   upscale: () => (fsr ? fsr.scaleFactor : 1),
   view: () => ({ ...view }),
   setView(x, z, dist) {
@@ -1634,41 +1802,12 @@ window.__proto = {
   },
   bench,
 };
-/**
- * Loads the focus windows' finer heights (files beside the theatre's, written by tools/campaign-theatre.ts) after the
- * first frame, and binds each one's detail to a slot of the print shader. A window that does not load is skipped.
- */
-function loadFineWindows() {
-  if (!window.__theatreUrl || !Array.isArray(T.focus)) return;
-  window.__fineLoaded = 0;
-  T.focus.slice(0, FINE_SLOTS.length).forEach((focus, k) => {
-    if (!/^[\w.-]+\.js$/.test(focus.file)) return;
-    const script = document.createElement('script');
-    script.src = new URL(focus.file, window.__theatreUrl).href;
-    script.onload = () => {
-      const win = window.THEATRE_FINE && window.THEATRE_FINE[focus.name];
-      if (!win) return;
-      const slot = FINE_SLOTS[k];
-      const x1 = win.x0 + (win.nx - 1) * win.cell;
-      const z1 = win.z0 + (win.nz - 1) * win.cell;
-      material.setTexture('uFine' + slot, fineDetailTexture(win));
-      material.setVector4('uFineRect' + slot, new B.Vector4(win.x0 / 1000, win.z0 / 1000, x1 / 1000, z1 / 1000));
-      material.setVector2('uFineTexel' + slot, new B.Vector2(1 / win.nx, 1 / win.nz));
-      material.setFloat('uFineCellKm', win.cell / 1000);
-      window.__fineLoaded++;
-      dirty = true;
-    };
-    script.onerror = () => console.warn('campaign map: the finer heights of ' + focus.name + ' did not load');
-    document.head.appendChild(script);
-  });
-}
-
 // both faces: the river names are italic
 Promise.allSettled([
   document.fonts.load('16px "Instrument Serif"'),
   document.fonts.load('italic 16px "Instrument Serif"'),
 ]).then(() => {
-  loadFineWindows();
+  loadTiles();
   dirty = true;
   window.__readyMs = Math.round(performance.now() - t0);
 });

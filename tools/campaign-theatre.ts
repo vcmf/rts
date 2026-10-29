@@ -1,6 +1,6 @@
 // Builds the campaign map prototype's theatre (docs/plans/active/k1-theatre-look.md) from the hand-written data file
 // prototypes/campaign-1805.data.js, into a generated .js under scratch/ (git-ignored, never committed):
-//   window.THEATRE = { frame, cell, nx, nz, h, towns, regions, rivers, lakes, roads, focus, credit }
+//   window.THEATRE = { frame, cell, nx, nz, h, towns, regions, rivers, lakes, roads, credit }
 // - h: heights in whole metres on a `cell` grid (250 m by default) in a Lambert azimuthal equal-area projection
 //   centred on the frame, nodes from edge to edge, base64 of little-endian Int16, the south row first. From the AWS
 //   terrain tiles (Terrarium PNGs at zoom 9, about 200 m a pixel here; built from SRTM, GMTED2010 and EU-DEM), cached
@@ -11,9 +11,7 @@
 //   scratch/natural-earth/, clipped to the frame and projected; points as flat [x, z, x, z, ...] arrays in metres.
 // - roads: each road of the data file routed over the heights: the cheapest path on a 1 km grid, a slope costing
 //   more than its distance, lakes closed, then simplified and smoothed. Its length in metres comes with it.
-// - focus: the data file's windows of finer heights, each in a file of its own beside the theatre's
-//   (<out>-<name>.js, setting window.THEATRE_FINE[name] = { x0, z0, cell, nx, nz, h }, the same encoding), from the
-//   terrain tiles at zoom 11 (about 50 m here), so the page loads them after its first frame.
+// The finer, offline-baked tiles for the close zoom are tools/campaign-tiles.ts's, which reads this file.
 // The pure parts are tools/campaign-theatre-lib.ts.
 // Usage: node tools/campaign-theatre.ts [cell out]
 //   default: 250 scratch/campaign-1805.js (the cell must divide the frame's extents)
@@ -21,7 +19,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
-import { read as readPng } from './png.mjs'
 import {
   frameGrid,
   lineLength,
@@ -33,14 +30,10 @@ import {
   type Frame,
   type Pt,
 } from './campaign-theatre-lib.ts'
+import { cached, sampleGrid } from './terrarium.ts'
 
 const DATA_FILE = 'prototypes/campaign-1805.data.js'
-const TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium'
 const TILE_ZOOM = 9
-// the finer windows: their tiles' zoom and their grid, in metres
-const FINE_ZOOM = 11
-const FINE_CELL = 50
-const TILE_SIZE = 256
 const NE_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson'
 const NE_FILES = ['ne_10m_rivers_lake_centerlines', 'ne_10m_rivers_europe', 'ne_10m_lakes', 'ne_10m_lakes_europe']
 const CACHE = 'scratch'
@@ -54,7 +47,6 @@ interface Data {
   towns: { id: string; lat: number; lon: number }[]
   roads: [string, string, string][]
   regions: { lat: number; lon: number }[]
-  focus?: { name: string; lat: number; lon: number; halfX: number; halfZ: number }[]
 }
 type Projection = ReturnType<typeof projection>
 /** Heights on the frame's grid, in whole metres, the south row first. */
@@ -83,143 +75,12 @@ function loadData(): Data {
   return data
 }
 
-/** A file from the cache, or fetched and cached. */
-async function cached(file: string, url: string): Promise<Buffer> {
-  if (fs.existsSync(file)) return fs.readFileSync(file)
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`)
-  const bytes = Buffer.from(await res.arrayBuffer())
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, bytes)
-  return bytes
-}
-
-/** Degrees to the global Web Mercator pixel at a tile zoom, as [px, py]. */
-function mercatorPixel(lat: number, lon: number, zoom: number): [number, number] {
-  const world = TILE_SIZE * 2 ** zoom
-  const phi = (lat * Math.PI) / 180
-  const px = ((lon + 180) / 360) * world
-  const py = ((1 - Math.log(Math.tan(Math.PI / 4 + phi / 2)) / Math.PI) / 2) * world
-  return [px, py]
-}
-
-/** Fetches the terrain tiles at a zoom over the given pixel span, a few at a time, as a map from "tx,ty" to heights. */
-async function loadTiles(
-  zoom: number,
-  px0: number,
-  py0: number,
-  px1: number,
-  py1: number,
-): Promise<Map<string, Float32Array>> {
-  const keys: [number, number][] = []
-  for (let ty = Math.floor(py0 / TILE_SIZE); ty <= Math.floor(py1 / TILE_SIZE); ty++) {
-    for (let tx = Math.floor(px0 / TILE_SIZE); tx <= Math.floor(px1 / TILE_SIZE); tx++) keys.push([tx, ty])
-  }
-  const tiles = new Map<string, Float32Array>()
-  let next = 0
-  async function worker() {
-    while (next < keys.length) {
-      const [tx, ty] = keys[next++]
-      const rel = `${zoom}/${tx}/${ty}.png`
-      const png = readPng(await cached(path.join(CACHE, 'terrarium', rel), `${TILE_URL}/${rel}`))
-      const h = new Float32Array(TILE_SIZE * TILE_SIZE)
-      for (let k = 0; k < h.length; k++) {
-        const o = k * 4
-        h[k] = png.data[o] * 256 + png.data[o + 1] + png.data[o + 2] / 256 - 32768
-      }
-      tiles.set(`${tx},${ty}`, h)
-    }
-  }
-  await Promise.all(Array.from({ length: 8 }, worker))
-  console.log(`terrain: ${keys.length} tiles at zoom ${zoom}`)
-  return tiles
-}
-
-/** The height at a global pixel position, bilinear over the tiles' pixel centres. */
-function sampleTiles(tiles: Map<string, Float32Array>, px: number, py: number): number {
-  const fx = px - 0.5
-  const fy = py - 0.5
-  const x0 = Math.floor(fx)
-  const y0 = Math.floor(fy)
-  const u = fx - x0
-  const v = fy - y0
-  const at = (x: number, y: number) => {
-    const tile = tiles.get(`${Math.floor(x / TILE_SIZE)},${Math.floor(y / TILE_SIZE)}`)!
-    const ix = ((x % TILE_SIZE) + TILE_SIZE) % TILE_SIZE
-    const iy = ((y % TILE_SIZE) + TILE_SIZE) % TILE_SIZE
-    return tile[iy * TILE_SIZE + ix]
-  }
-  const top = at(x0, y0) * (1 - u) + at(x0 + 1, y0) * u
-  const bottom = at(x0, y0 + 1) * (1 - u) + at(x0 + 1, y0 + 1) * u
-  return top * (1 - v) + bottom * v
-}
-
-/**
- * Heights in whole metres on a grid of nx × nz nodes `step` metres apart from (x0, z0) in the map's metres, the south
- * row first, sampled from the terrain tiles at a zoom.
- */
-async function sampleGrid(
-  proj: Projection,
-  zoom: number,
-  x0: number,
-  z0: number,
-  step: number,
-  nx: number,
-  nz: number,
-) {
-  // the pixel span of the grid: its corners and edge midpoints, with a margin of two pixels
-  let px0 = Infinity
-  let py0 = Infinity
-  let px1 = -Infinity
-  let py1 = -Infinity
-  for (const fx of [0, 0.5, 1]) {
-    for (const fz of [0, 0.5, 1]) {
-      const [lat, lon] = proj.inverse(x0 + fx * (nx - 1) * step, z0 + fz * (nz - 1) * step)
-      const [px, py] = mercatorPixel(lat, lon, zoom)
-      px0 = Math.min(px0, px - 2)
-      py0 = Math.min(py0, py - 2)
-      px1 = Math.max(px1, px + 2)
-      py1 = Math.max(py1, py + 2)
-    }
-  }
-  const tiles = await loadTiles(zoom, px0, py0, px1, py1)
-  const h = new Int16Array(nx * nz)
-  for (let j = 0; j < nz; j++) {
-    for (let i = 0; i < nx; i++) {
-      const [lat, lon] = proj.inverse(x0 + i * step, z0 + j * step)
-      const [px, py] = mercatorPixel(lat, lon, zoom)
-      h[j * nx + i] = Math.round(sampleTiles(tiles, px, py))
-    }
-  }
-  return h
-}
-
 /** The heights on the frame's grid, in whole metres, the south row first. */
 async function buildHeights(frame: Frame, proj: Projection): Promise<Heights> {
   const { nx, nz } = frameGrid(frame, cell)
   const h = await sampleGrid(proj, TILE_ZOOM, -frame.halfX, -frame.halfZ, cell, nx, nz)
   return { nx, nz, h }
 }
-
-/**
- * A window of finer heights around a centre, its nodes FINE_CELL apart on the same lattice as the frame's grid (so
- * a coarse node is also a fine one), clipped to the frame.
- */
-async function buildWindow(frame: Frame, proj: Projection, win: NonNullable<Data['focus']>[number]) {
-  const [cx, cz] = proj.forward(win.lat, win.lon)
-  const snap = (v: number) => Math.round(v / cell) * cell
-  const x0 = Math.max(-frame.halfX, snap(cx - win.halfX))
-  const z0 = Math.max(-frame.halfZ, snap(cz - win.halfZ))
-  const x1 = Math.min(frame.halfX, snap(cx + win.halfX))
-  const z1 = Math.min(frame.halfZ, snap(cz + win.halfZ))
-  const nx = Math.round((x1 - x0) / FINE_CELL) + 1
-  const nz = Math.round((z1 - z0) / FINE_CELL) + 1
-  const h = await sampleGrid(proj, FINE_ZOOM, x0, z0, FINE_CELL, nx, nz)
-  return { x0, z0, cell: FINE_CELL, nx, nz, h: Buffer.from(h.buffer).toString('base64') }
-}
-
-/** The file of a window of finer heights, beside the theatre's. */
-const fineFile = (name: string) => out.replace(/\.js$/, '') + `-${name}.js`
 
 /** Points to a flat array of whole metres. */
 const flat = (points: Pt[]) => points.flatMap(([x, z]) => [Math.round(x), Math.round(z)])
@@ -332,18 +193,10 @@ async function main() {
     rivers: water.rivers,
     lakes: water.lakes.map(flat),
     roads,
-    focus: (data.focus ?? []).map(w => ({ name: w.name, file: path.basename(fineFile(w.name)) })),
     credit: 'Heights: AWS Terrain Tiles (SRTM, GMTED2010, EU-DEM © Copernicus). Water: Natural Earth.',
   }
   fs.mkdirSync(path.dirname(out), { recursive: true })
   fs.writeFileSync(out, `window.THEATRE = ${JSON.stringify(theatre)}\n`)
-  for (const win of data.focus ?? []) {
-    const fine = await buildWindow(frame, proj, win)
-    const file = fineFile(win.name)
-    const js = `window.THEATRE_FINE = window.THEATRE_FINE || {};\nwindow.THEATRE_FINE[${JSON.stringify(win.name)}] = `
-    fs.writeFileSync(file, `${js}${JSON.stringify(fine)}\n`)
-    console.log(`${file}: ${fine.nx} × ${fine.nz} nodes at ${FINE_CELL} m`)
-  }
   const ms = Math.round(performance.now() - t0)
   console.log(
     `${out}: ${heights.nx} × ${heights.nz} nodes at ${cell} m, heights ${lo} to ${hi} m, ${roads.length} roads`,
