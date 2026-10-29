@@ -35,7 +35,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 
 | Module | What |
 |---|---|
-| `src/look/spec.ts` | The world SPEC: sizes declared once, the rest derived (cells, the apron band, the camera footprint, the shader macros), and the invariants checked on derive: grids meet exactly, the tile holds play ⊕ margin, the far ring holds every view, no frame corner near the horizon (the closest zoom, 15 m, held out over high ground until the eye is the camera's clearance, 6 m, above it: `clearRadius`, decision 0051), yaw ≤ ±45°, bakes at their texel targets and within min-spec. The shadow map is sized from its fitted box at the texel target |
+| `src/look/spec.ts` | The world SPEC: sizes declared once, the rest derived (cells, the apron band, the camera footprint, the shader macros), and the invariants checked on derive: grids meet exactly, the tile holds play ⊕ margin, the far ring holds every view on flat ground, no frame corner near the horizon (the closest zoom, 15 m, held out over high ground until the eye is the camera's clearance, 6 m, above it: `clearRadius`, decision 0051); each world's ground against the camera at load (`groundOf`, `checkView`) and its focus on its ground (`FocusFollow`: below, "The camera on a world's ground"), yaw ≤ ±45°, bakes at their texel targets and within min-spec. The shadow map is sized from its fitted box at the texel target |
 | `src/look/world/author.ts` | The authoring formulas (`baseH`, the meander's generation, the trough and the carve). Run in Node by the build tool; the page uses them only for checks |
 | `tools/build-look-data.ts` | Builds `data/painted-world.lookdata`: the heightfield (tile plus `aoMargin`), the far ring's nodes, the river's samples, the bank normals (W2), the water data (W3, `src/look/world/water-data.ts`) and the cover (L5a, below); and each map window's `data/<map>-<window>.lookdata` (below; `--window <name>` builds one) (`--check` compares them all) |
 | `src/look/world/data.ts` | The look data's binary format (version 9): arrays, span grids (a grid's covered texels only) for the bank normals and the water data, the cover's runs, the roads' segments and grid, the world it holds (the demo or a map's window) and a map world's trees |
@@ -54,7 +54,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; 1536² over the tile, 0.52 m a texel, decision 0082; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
 | `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (the default with the generated trees; `?trees=cards` on the pack's; L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
-| `src/look/post.ts` | A pixel that is not a finite number is left out of the depth of field's downsample, or takes its neighbours' mean in the finishing pass (`?nanmark` shows it magenta, on half floats: `docs/plans/done/nan-guard.md`). The scene renders into a 4× MSAA target of 8 bits a channel, the depth of field's too (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`). The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; zoom 15 to 260 m, held out where the eye would come within 6 m of the ground under it, which from 41 m out it never does, the player's wanted zoom kept apart (`holdView` and `ZoomHold` in `src/look/spec.ts`, run before each frame: the wheel, the pinch, the slider and the tools set it, `zoomOf`, `__proto.zoom`) so the camera comes back in past a hill: decision 0051; frames wider than the checked 16:9 keep its horizontal field of view), with RTS controls (`rtsControls`: the arrows or WASD pan in the ground plane and Q, E turn, faster as it zooms out; a trackpad's two-finger swipe pans and its pinch zooms; a mouse wheel zooms; dragging turns and pans; the panel's Zoom slider follows), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b). On WebGL2 a last pass, `easu` (decision 0045): the screen from the chain's scale, a copy at 1, FSR 1's edge-adaptive upscale from 0.9 up (Babylon's, its gathers read once each), bilinear at the other scales, upscaled with the paper grain and a dither; the chain's passes sized by objects resized in place. |
+| `src/look/post.ts` | A pixel that is not a finite number is left out of the depth of field's downsample, or takes its neighbours' mean in the finishing pass (`?nanmark` shows it magenta, on half floats: `docs/plans/done/nan-guard.md`). The scene renders into a 4× MSAA target of 8 bits a channel, the depth of field's too (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`). The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; zoom 15 to 260 m, held out where the eye would come within 6 m of the ground under it (below `clearBelow` of the highest ground near the focus: on the demo never from 41 m out), the player's wanted zoom kept apart (`holdView` and `ZoomHold` in `src/look/spec.ts`, run before each frame: the wheel, the pinch, the slider and the tools set it, `zoomOf`, `__proto.zoom`) so the camera comes back in past a hill: decision 0051; frames wider than the checked 16:9 keep its horizontal field of view), with RTS controls (`rtsControls`: the arrows or WASD pan in the ground plane and Q, E turn, faster as it zooms out; a trackpad's two-finger swipe pans and its pinch zooms; a mouse wheel zooms; dragging turns and pans; the panel's Zoom slider follows), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b). On WebGL2 a last pass, `easu` (decision 0045): the screen from the chain's scale, a copy at 1, FSR 1's edge-adaptive upscale from 0.9 up (Babylon's, its gathers read once each), bilinear at the other scales, upscaled with the paper grain and a dither; the chain's passes sized by objects resized in place. |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop (and its readout, top right: over the last 120 frames the frame interval's median and slowest 5 %, the render's CPU time, the share of frames that missed their slot (past one and a half of the median); `docs/plans/done/frame-readout.md`), and the debug globals the checks read; `?bloom=0` opens with the bloom off; the render scale defaults to Auto (by zoom: 0.9, then 0.8 and 0.75 as the camera's radius passes 80 and 88 % of its range from 45 m (the range it was tuned on: the closer zoom keeps 0.9, decision 0051), 4 m of hysteresis each way: decision 0045, after 0036, which records why it is not driven by missed frames; on WebGL2 the canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (`post.scale`), its last pass (`easu` in `post.ts`) drawing the screen: FSR 1's EASU from 0.9 up and under 1, bilinear at the other scales, a copy at 1, the paper grain laid after an upscale, the dither before the 8-bit target and after the upscale; on WebGL1 the canvas is drawn smaller and stretched; `?upscale=bilinear` stretches at every scale; the paper grain stays in screen pixels; the check tools pin it to 1: `docs/plans/done/dynamic-scale.md`, `docs/plans/done/render-scale.md`); `?msaa=1|2|4`, `?far=off`, `?rt16`, `?nowide` are the frame-rate A/Bs (`docs/plans/done/wide-perf.md`) |
 | `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
 | `src/look/lab.ts` | Test objects the tools add: the readability guard's army blocks, the detail check's test hill |
@@ -81,11 +81,11 @@ and on.
 The look compiler (M4, `docs/plans/active/look-austerlitz-a1.md`; decision 0057: the map language is the one
 description of the ground) draws a window of a map file on the look page: a square the size of the demo world (the
 800 m tile, the 2600 m far ring, ±235 m of play, `SPEC` unchanged) round a named centre (`src/look/world/windows.ts`;
-Kobelnitz on Austerlitz, (−450, 350)). `tools/build-look-data.ts` compiles the map with the map engine
+Kobelnitz on Austerlitz, (−450, 350); the Pratzen, (700, 250)). `tools/build-look-data.ts` compiles the map with the map engine
 (`layersOf`, `maps/engine.ts`) and `src/look/world/from-map.ts` reads the window's layers into today's inputs:
 
-- the heights from the layers' nodes (bilinear, `heightOf`), taken down by the window's lowest node so it meets
-  `SPEC.ground.lo`; the window's far ring must lie inside the map;
+- the heights from the layers' nodes (bilinear, `heightOf`), taken down by the window's lowest node so it meets 0;
+  the window's far ring must lie inside the map;
 - the cover at 1 m cells (`MAP_COVER_CELL`, half the demo's 2 m), its ground, vegetation and built areas rasterised
   from the map's own shapes by apply's rules (`fineAreas`: the painting order, a ground area clearing the vegetation
   under it, an area's `clear` keep-offs, the lines' reach), not read off the layers' 2 m cells (the water and a
@@ -125,6 +125,33 @@ On a map world the demo's hand-placed copses, woods, hedgerows, extras, wheat la
 the bushes, stones and grass of the scatter stay (the look's own rule of what grows on which class). Not yet drawn
 (the plan's PRs b and c): the buildings (the village's ground only), the water (the streams' channels and the ponds'
 beds show dry), and the river's own features; `?armies` is the demo's only (A4).
+
+### The camera on a world's ground (A1b)
+
+The ground range is the world's, from its look data at load (`groundOf`, `src/look/spec.ts`; the old `SPEC.ground`,
+0 to 25 m, is gone): the heightfield's lowest and highest node, the far ring's lowest, and the range the focus keeps
+to. The camera's checks take it (`checkView`): the whole frame inside the far ring and no view held inside the ground,
+reckoned on planes at the drop from the focus to the ground (the focus anywhere in its range, the ground anywhere in
+the world's). The frame below the focus row inside the tile is marched on each world's own ground in the tests
+(`nearFrameOf`: its corners and the focus row's ends from views on the play area's edge; the planes' bound is far too
+loose on relief, 205 m on the Pratzen against the 165 m margin, where its ground gives 398.4 m of the tile's 400 m
+from the centre; the demo 392.6, Kobelnitz 392.0). `derive` keeps the camera's own checks on flat ground.
+
+- **The focus follows the ground** on a map world (`FocusFollow`, run by the hold each frame before it renders): the
+  orbit's target rises and falls with the mean of the ground over a small disc round it (`groundUnder`: 13 points out
+  to 15 % of the zoom, 3 to 30 m, so a ditch or a sunken road barely moves it), clamped to the ground in play, eased
+  up over 0.3 s (a pan up a ridge does not jolt; never more than 4 m under it, `FOLLOW.lag`) and followed down at
+  once (that mean falls smoothly; the focus is then never above it, which `nearFrameOf` assumes, with the lag). On a
+  frozen page (`?frozen`, the tools' views) it settles at once. A jump (a tool's new view, 10 m plus half the zoom in a frame) is
+  taken at once. The camera stays the top-down view (decision 0002), its yaw, pitch and zoom limits unchanged
+  (decision 0010). **The demo keeps its focus plane at 8 m** (`SPEC.camera.focusY`, its focus range one height), so
+  its camera and its goldens do not move (open question: `docs/plans/active/look-austerlitz-a1b.md`).
+- **The zoom's hold reads the rise near the focus** (decision 0051): it holds the zoom out only below `clearBelow` of
+  the highest ground within the eye's reach (`eyeReach`, 216 m) over the focus's height, from blocks of the
+  heightfield (14.3 m) and of the far ring (28.6 m, `maxGrid`), not the world's highest point over 8 m. The held
+  radius is the same wherever the old bound held; on the Pratzen's top the closest zoom (15 m) is not held.
+- The bench's cameras and pan keep the focus's height (the follow's); the look check (`tools/look-check.js`) checks the
+  drawn ground against the world's range (`window.GROUND`).
 
 ### The gameplay depth of field (decisions 0024, 0040)
 
