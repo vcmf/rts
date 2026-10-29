@@ -24,20 +24,20 @@ and the card shader:
 
 ## Approach (materials and an atlas, no full-screen filter)
 
-- **A painted atlas drawn on load** (`src/look/leaves.ts`, canvas paths, no committed texture): four clumps of
-  pointed, stylised leaves, each leaf filled with one of three tones (the inner ones darker, the outer lighter), a
-  darker edge so overlapping leaves part, and its own tilt written directly (each leaf leans out of its clump, and its
-  two halves lean apart along the midrib, so a leaf has a lit half and a shaded half). The same 1024² RGBA texture as
-  today (about 5.3 MB with mips), so no GPU memory is added; the oak picture stays for `?leaves=oak`.
-- **The card shader, under `LEAF_PAINT`**: up close the leaf's value spans more of the albedo and its tilt turns the
-  normal more; both fade with the mip level to today's flat mass, so the default and widest zooms keep their read.
-- **The owner's sheet** (2026-10-29, after the first stills): clumps of simple leaves, sparser than the oak sheet; the
-  owner generated `leaf-clumps-simple-greyscale-v1.png` (in the git-ignored design references: four rosettes of plain
-  pointed leaves, three flat values), committed as `data/leaf-clumps-simple-v1.png` and the default (`?leaves=simple`); the sheet is a swappable
-  input (`?leafpic=<url>`, or Shift-drop), read with a dome tilt per clump and a darker line between values.
-- **Variants for the owner to pick**: `?leaves=simple` (the owner's sheet), `?leaves=painted` (the interim: a rosette
-  of 38 pointed leaves drawn on load) and `?leaves=sprays` (pinnate sprays, closer to Tiny Glade's); `?leaves=oak`
-  keeps today's crowns.
+- **First round** (in git history, commits 63accf6e and 574d72cc): leaves drawn on load (`painted`, `sprays`), then
+  the owner's sheet of simple leaves, each leaf lit by a tilt of its own (its halves apart, its clump a dome). The
+  owner, of the stills: "a bit over complicated, and yet the texture is worse: basically you split a leaf in 2 halves
+  and let light make one lighter than the other, we don't need that." Tiny Glade's is a painting technique, layers: a
+  dark base, lighter leaves on top, highlight leaves on those, a 2D texture that already has depth; then the crown's
+  ordinary 3D shading over the whole.
+- **The layered sheet** (`?leaves=layered`, the default): the owner's sheet (`data/leaf-clumps-simple-v1.png`, the
+  owner's `leaf-clumps-simple-greyscale-v1.png` in the git-ignored design references) read as layers: its three values
+  the layer index (dark, mid, light), a share of the light leaves lifted to highlights, three of its clumps at 0.8 a
+  cell (smaller leaves); no tilt. `?leafpic=<url>` swaps the sheet.
+- **The card shader, under `LEAF_PAINT`**: each layer one flat tone of the crown's colour (cool dark to pale warm);
+  the crown's light decides how many upper layers show (the shade side its dark and mid, the lit side the highlights),
+  then the crown's ordinary light over it, a little lighter in shade than before. One texture read as before, no pass;
+  the layers fade with the mip level to the old mass.
 
 ## Acceptance
 
@@ -73,4 +73,4 @@ The frame interval (p50, the mean of the three yaws, ms), main (c2b90cd9) / the 
 
 ## Open questions
 
-- Which variant the owner keeps; the other is removed in a follow-up.
+- The layers' tones and how fast the light reveals them (`LEAF_LAYERS`, the 2.3 in `canopy.frag`): the owner's eye.
