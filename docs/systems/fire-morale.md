@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-11
 code: [src/sim/fire.ts, src/sim/morale.ts, src/sim/rng.ts, src/sim/tick.ts, src/rulesets/napoleonic.ts, src/scenarios/s1c-firefight.ts, tools/calibrate-fire.ts, test/fire.test.ts, test/morale.test.ts]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0018-battalion-of-400]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0018-battalion-of-400, 0080-melee-holds-cornered-routers-cut-down]
 ---
 
 # Fire and morale (S1c)
@@ -119,9 +119,15 @@ is later:
     when the shape allows and the way is behind it. That Face about is an *optional* order: if it fails
     (water behind it), the run goes on as it stands.
   - When its orders end, a router whose status says it halted at impassable ground is *halted*.
-    Otherwise it got where it was going, or as near as it could, and has *fled*: it stays.
+    Otherwise it got where it was going, or as near as it could, and has *fled*: it stays. With the claim
+    grid on (docs/plans/active/c1-claims.md), a run held by other formations' cells for `HELD` seconds is halted
+    too.
   - Only a halted router tries again: every 5 s, the next direction of a fan about the stored one (the
-    direction itself, then turned 60° each way, then 120°). After the fifth it stays, pinned.
+    direction itself, then turned 60° each way, then 120°). After the fifth it stays, pinned. With the claim
+    grid on, while an enemy is near it goes on trying the fan's directions in turn, since others may move
+    off its way.
+- **Cut down** (with the claim grid on): every enemy in the fight that reaches a router, running or not,
+  cuts it down as a pursuit does (decision 0080, docs/systems/melee.md).
 - **The run counter** advances only when the run's order was made, so a full order pool delays a run but
   uses up no direction.
 
@@ -259,4 +265,4 @@ scripted tests.
   is tested since S1c-4: a 400-man line reaches 46 m.)
 - **A router can be pinned.** Where every direction of the fan halts, or where the formation layer cannot
   march out (by the stream at x ≈ 57, z = −30 even an ordinary battalion halts within a metre), it
-  stays. Pathfinding, and routers as a loose crowd rather than a formation, are later.
+  stays (with the claim grid on, an enemy that reaches it cuts it down). Pathfinding, and routers as a loose crowd rather than a formation, are later.

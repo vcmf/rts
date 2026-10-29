@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-26
-code: [app/index.html, src/app/main.ts, src/app/battle.ts, src/app/battle-frame.ts, src/app/battle-link.ts, src/app/host.ts, src/app/sim-host.ts, src/app/sim-worker.ts, src/app/men-host.ts, src/app/men-worker.ts, src/app/tick-ring.ts, src/app/page-rules.ts, src/render/men.ts, src/render/men-clock.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, test/battle-thread.test.ts, test/orient.test.ts, test/page-rules.test.ts, tools/app-check.mjs, tools/bench-sim.ts, tools/preview.ts, tools/battle-report.ts]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
+last_reviewed: 2026-10-28
+code: [app/index.html, src/app/main.ts, src/app/battle.ts, src/app/battle-frame.ts, src/app/battle-link.ts, src/app/host.ts, src/app/sim-host.ts, src/app/sim-worker.ts, src/app/men-host.ts, src/app/men-worker.ts, src/app/tick-ring.ts, src/app/page-rules.ts, src/render/men.ts, src/render/men-clock.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, test/battle-thread.test.ts, test/orient.test.ts, test/page-rules.test.ts, tools/app-check.mjs, tools/bench-sim.ts, tools/preview.ts, tools/battle-report.ts, src/render/overlay.ts, src/app/timeline.ts, src/sim/geometry.ts, src/scenarios/bench.ts, test/battle-timeline.test.ts]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain, 0081-the-bench-timeline-in-the-battle]
 ---
 
 # The sim page (S1b)
@@ -176,12 +176,27 @@ classes, the river's water, its ford included; the buildings `denseWood`, the ru
 to the paths with water too deep to wade; no woods, the look tile having none), four battalions a side east of the river (battle threads PR 4a). The readout shows each side's share of its men
 in the fight and, once decided, the result.
 
+**The visual bench** (C0, `docs/plans/active/c0-bench.md`). D shows an overlay of what the sim tests where
+formations meet (`src/render/overlay.ts`, from `src/sim/geometry.ts`): each company's places' hull (dashed out of
+the fight), each bin's shaded by its lag, the pairs of companies of two formations within 5 m (grey friends, red
+enemies, orange a charge, thick a melee pair; an overlap of two formations in the fight filled red), the claim grid's
+cells (a scenario with claims), statuses, and each formation's queue. The panel picks its layers. The overlay draws
+the world the page reads: in the worker, a published frame's, whose claim grid (scratch no frame carries) the page
+builds again from the formations as they stand. Time: ¼× and ½× besides 1×–8×; `.` a tick on, `,` a tick back, G a
+time to go to (at most five minutes on at a press). They are the battle's (`Battle.goTo`, `stepTick`; decision 0081),
+wherever it runs: the world is restored from the last save (evenly spaced, 20 s to start with) and played on with the
+commands logged, an order given then branches the timeline (`src/app/timeline.ts`), and a tick played again that
+gives another world pauses the battle and says so. In the worker, going to a time is a jump in the tick ring: the men
+worker lays its men out again on the new world (a new soldier layer, its battalions' revisions on from the last's).
+The bench's cases (`src/scenarios/bench.ts`, `bench-…`) stand on the flat bench field (`maps/bench.ts`).
+
 **Hooks** (`window.APP`): `thread`, select, march, charge, form, order, `speed(s)`, `advance(seconds)` (pauses the
-clock and steps frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`, `session`, `mark(note)`,
-`replayHere()` (the session played again on the page's thread against the hash points the worker took: the
-browser's replay harness), `record(seconds)` (the frames' intervals, battle and draw times, long tasks and the
-worker's advances, for `tools/bench-sim.ts`). Those the worker answers (advance, hash, replay, session,
-replayHere, record) return promises; `tools/shot.mjs` evaluates steps in REPL mode, so they can be awaited.
+clock and steps frames at 30 Hz), `goTo(tick)`, `stepTick`, `overlay(on, layers)`, `overlaps`, view, `drawMs`,
+`mapMs`, `stats`, `hash`, `replay`, `session`, `mark(note)`, `replayHere()` (the session played again on the page's
+thread against the hash points the worker took: the browser's replay harness), `record(seconds)` (the frames'
+intervals, battle and draw times, long tasks and the worker's advances, for `tools/bench-sim.ts`). Those the battle
+answers (advance, goTo, stepTick, hash, replay, session, replayHere, record) return promises; `tools/shot.mjs`
+evaluates steps in REPL mode, so they can be awaited.
 
 ## Tunables
 

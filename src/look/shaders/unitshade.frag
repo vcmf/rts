@@ -18,5 +18,11 @@ void main(){
   #endif
   vec3 alb=groundSeason(groundAt(vW.xz,pxMacro()));
   vec3 lit=paint(alb,N,vW,occ,0.12,0.0,sh),dark=paint(alb,N,vW,occ,0.12,0.0,1.0);
-  gl_FragColor=vec4(clamp(dark/max(lit,vec3(1.0e-3)),0.0,1.0),1.0);
+  vec3 k=clamp(dark/max(lit,vec3(1.0e-3)),0.0,1.0);
+  #ifdef SH_DESAT
+  // its hue toward its own grey by SH_DESAT, its luminance kept (decision 0071): the shade of the ground's macro colour
+  // is bluer than a tree's painted shadow on the grass (a far redder ratio), so the soldiers' shadows took a blue cast
+  k=mix(k,vec3(dot(k,vec3(0.2126,0.7152,0.0722))),SH_DESAT);
+  #endif
+  gl_FragColor=vec4(k,1.0);
 }

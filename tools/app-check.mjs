@@ -3,8 +3,8 @@
 // exported replay back in Node: it must reproduce every hash the page took. The runs: the drill scenario
 // (orders, every panel button, screenshots), the 40-battalion bench (cost), the firefight to a rout, the
 // brigade to a break that spreads, the arms (the unit types changing shape), and the charge (a line caught
-// forming square breaks; a square holds), the guns (a battery fires roundshot on a column), and the look page's world
-// as a sim map (a side marching across it).
+// forming square breaks; a square holds), the guns (a battery fires roundshot on a column), the look page's world
+// as a sim map (a side marching across it), and the visual bench's X-09 (the overlay, going back and on in the worker).
 // Run `npm run build` first.
 // Usage: node tools/app-check.mjs [outDir]
 import { spawn } from 'node:child_process'
@@ -184,6 +184,25 @@ const guns = [
 // src/render/men.ts, flag 1 MAN_ALIVE)
 const ONMAP =
   '(M => [...APP.layer.units.values()].every(u => [...u.ids.subarray(0, u.n)].every(m => !(M.flags[m] & 1) || (Math.abs(M.x[m]) <= 600 && Math.abs(M.z[m]) <= 600))))(APP.layer.men)'
+// the visual bench (docs/plans/active/c0-bench.md): X-09 with the overlay on and an order to the column at 40 s; back
+// to 30 s, before the order, and on tick by tick to a later tick: the log's order is taken again, the hash there is the
+// one first seen, and the session (the order in its log) replays in Node. In the battle worker (decision 0081): the
+// time it is asked for is the worker's, the hooks promises
+const benchCase = [
+  ['wait', 1500],
+  READY,
+  [
+    'eval',
+    'APP.overlay(true); await APP.advance(40); APP.select([1]); APP.march(-60, -80, false); await APP.advance(60); window.H = [APP.w.meta[0], await APP.hash()]; await APP.advance(60); APP.view(-40, -20, 4); `BENCH overlaps ${APP.overlaps()} at tick ${APP.w.meta[0]}, ${APP.log.length} orders`',
+  ],
+  ['shot', 'bench-x09-overlay'],
+  [
+    'eval',
+    'await APP.goTo(600); while (APP.w.meta[0] < window.H[0]) await APP.stepTick(); `GOTO same ${(await APP.hash()) === window.H[1]}, orders ${APP.log.length}`',
+  ],
+  ['shot', 'bench-x09-back'],
+  REPLAY,
+]
 const battle = [
   ['wait', 1500],
   READY,
@@ -364,6 +383,13 @@ async function run(scenario, steps) {
     console.log('the battle let you select an enemy, side 1 did not advance, or it reached no result')
     return false
   }
+  if (
+    scenario === 'bench-x09-square-forming' &&
+    !(/BENCH overlaps \d+ at tick/.test(text) && /GOTO same true, orders 1/.test(text))
+  ) {
+    console.log('the bench did not report its overlaps, or going back to a tick did not give the same world')
+    return false
+  }
   if (scenario === 's1b-field' && (!panel || panel[1] !== panel[2] || panel[1] === '0')) {
     console.log('panel buttons did not each log one command')
     return false
@@ -385,7 +411,8 @@ try {
     (await run('s1d-charge', charge)) &&
     (await run('s1d-guns', guns)) &&
     (await run('s1e-battle', battle)) &&
-    (await run('look-cross', look))
+    (await run('look-cross', look)) &&
+    (await run('bench-x09-square-forming', benchCase))
 } finally {
   stop()
 }

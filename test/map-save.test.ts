@@ -1,0 +1,153 @@
+// The map editor's save on the dev server (docs/plans/done/m7-editor.md M7a, decision 0078): it writes only a
+// map file that still holds the text the page read.
+import { describe, it, expect } from 'vitest'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { createFrom, mayWrite, saveMapFile } from '../tools/map-save.ts'
+
+describe('M7b: a new map saved', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-create-'))
+  fs.mkdirSync(path.join(root, 'maps'))
+  it('creates the file with no base, and refuses to write over one already there', () => {
+    const file = path.join(root, 'maps', 'new.map.json')
+    expect(saveMapFile(root, { file: '/maps/new.map.json', base: null, text: 'made' })).toEqual({ ok: true })
+    expect(fs.readFileSync(file, 'utf8')).toBe('made')
+    expect(saveMapFile(root, { file: '/maps/new.map.json', base: null, text: 'again' })).toEqual({
+      ok: false,
+      status: 409,
+      current: 'made',
+    })
+    expect(fs.readFileSync(file, 'utf8')).toBe('made')
+  })
+  it('leaves no file and no temporary file when the create fails, and answers when the path cannot be read', () => {
+    fs.mkdirSync(path.join(root, 'maps', 'dir.map.json'))
+    const r = saveMapFile(root, { file: '/maps/dir.map.json', base: null, text: 'x' })
+    expect(r).toMatchObject({ ok: false, status: 500 })
+    expect(fs.readdirSync(path.join(root, 'maps')).filter(f => f.endsWith('.tmp'))).toEqual([])
+    const ro = path.join(root, 'ro')
+    fs.mkdirSync(path.join(ro, 'maps'), { recursive: true })
+    fs.chmodSync(path.join(ro, 'maps'), 0o555)
+    try {
+      expect(saveMapFile(ro, { file: '/maps/a.map.json', base: null, text: 'x' })).toMatchObject({
+        ok: false,
+        status: 500,
+      })
+      expect(fs.readdirSync(path.join(ro, 'maps'))).toEqual([])
+    } finally {
+      fs.chmodSync(path.join(ro, 'maps'), 0o755)
+    }
+  })
+  it('creates by an exclusive copy where the file system has no hard links, never over a file there', () => {
+    const tmp = path.join(root, 'maps', 'c.tmp')
+    const file = path.join(root, 'maps', 'c.map.json')
+    fs.writeFileSync(tmp, 'copied')
+    const noLinks = () => {
+      throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' })
+    }
+    createFrom(tmp, file, noLinks)
+    expect(fs.readFileSync(file, 'utf8')).toBe('copied')
+    fs.writeFileSync(tmp, 'again')
+    expect(() => createFrom(tmp, file, noLinks)).toThrow(/EEXIST|exists/)
+    expect(fs.readFileSync(file, 'utf8')).toBe('copied')
+  })
+  it('creates only a map file', () => {
+    expect(saveMapFile(root, { file: '/maps/../x.map.json', base: null, text: 'x' }).ok).toBe(false)
+    expect(fs.existsSync(path.join(root, 'x.map.json'))).toBe(false)
+  })
+})
+
+describe('M7a: the save on the dev server', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-save-'))
+  fs.mkdirSync(path.join(root, 'maps'))
+  const file = path.join(root, 'maps', 'm.map.json')
+  it('writes the new text over the base it was read from', () => {
+    fs.writeFileSync(file, 'old')
+    expect(saveMapFile(root, { file: '/maps/m.map.json', base: 'old', text: 'new' })).toEqual({ ok: true })
+    expect(fs.readFileSync(file, 'utf8')).toBe('new')
+    expect(fs.readdirSync(path.join(root, 'maps'))).toEqual(['m.map.json']) // no temporary file left
+  })
+  it('refuses when the file changed on disk since, and gives its text', () => {
+    fs.writeFileSync(file, 'by hand')
+    expect(saveMapFile(root, { file: '/maps/m.map.json', base: 'old', text: 'new' })).toEqual({
+      ok: false,
+      status: 409,
+      current: 'by hand',
+    })
+    expect(fs.readFileSync(file, 'utf8')).toBe('by hand')
+  })
+  it('refuses any other path, and a file that does not exist', () => {
+    for (const bad of [
+      '/maps/../package.json',
+      '/maps/kinds.json',
+      '/src/x.map.json',
+      '/maps/a/b.map.json',
+      'maps/m.map.json',
+    ]) {
+      expect(saveMapFile(root, { file: bad, base: '', text: '' }).ok).toBe(false)
+    }
+    expect(saveMapFile(root, { file: '/maps/none.map.json', base: '', text: 'x' }).ok).toBe(false)
+    expect(fs.existsSync(path.join(root, 'maps', 'none.map.json'))).toBe(false)
+  })
+})
+
+describe('M7a: a save that cannot write', () => {
+  it('reports the failure and leaves no temporary file', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-save-'))
+    const dir = path.join(root, 'maps')
+    fs.mkdirSync(dir)
+    fs.writeFileSync(path.join(dir, 'm.map.json'), 'old')
+    fs.chmodSync(dir, 0o555) // read-only: the temporary file cannot be made
+    try {
+      const r = saveMapFile(root, { file: '/maps/m.map.json', base: 'old', text: 'new' })
+      expect(r.ok).toBe(false)
+      expect(fs.readFileSync(path.join(dir, 'm.map.json'), 'utf8')).toBe('old')
+      expect(fs.readdirSync(dir)).toEqual(['m.map.json'])
+    } finally {
+      fs.chmodSync(dir, 0o755)
+    }
+  })
+})
+
+describe('M7a: only the map page may save', () => {
+  it("takes JSON from the server's own origin, or with no origin; refuses other sites and other types", () => {
+    const host = 'localhost:5173'
+    expect(mayWrite({ 'content-type': 'application/json', origin: 'http://localhost:5173', host })).toBe(true)
+    expect(mayWrite({ 'content-type': 'application/json; charset=utf-8', host })).toBe(true)
+    expect(mayWrite({ 'content-type': 'application/json', origin: 'https://evil.example', host })).toBe(false)
+    expect(mayWrite({ 'content-type': 'text/plain', origin: 'http://localhost:5173', host })).toBe(false)
+    expect(mayWrite({ origin: 'http://localhost:5173', host })).toBe(false)
+    expect(mayWrite({ 'content-type': 'application/json', origin: 'null', host })).toBe(false)
+  })
+})
+
+describe('M7a: a file with a byte order mark', () => {
+  it('compares without it (the page reads none) and writes none', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-save-'))
+    fs.mkdirSync(path.join(root, 'maps'))
+    const file = path.join(root, 'maps', 'm.map.json')
+    fs.writeFileSync(file, '﻿old')
+    expect(saveMapFile(root, { file: '/maps/m.map.json', base: 'old', text: 'new' })).toEqual({ ok: true })
+    expect(fs.readFileSync(file, 'utf8')).toBe('new')
+  })
+})
+
+describe('M7a: a save through a link, keeping the mode', () => {
+  it('writes the file a symbolic link names, and the hard-linked file in place, with its permissions', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-save-'))
+    fs.mkdirSync(path.join(root, 'maps'))
+    const real = path.join(root, 'real.map.json')
+    fs.writeFileSync(real, 'old')
+    fs.chmodSync(real, 0o640)
+    fs.symlinkSync(real, path.join(root, 'maps', 's.map.json'))
+    expect(saveMapFile(root, { file: '/maps/s.map.json', base: 'old', text: 'new' })).toEqual({ ok: true })
+    expect(fs.lstatSync(path.join(root, 'maps', 's.map.json')).isSymbolicLink()).toBe(true)
+    expect(fs.readFileSync(real, 'utf8')).toBe('new')
+    expect(fs.statSync(real).mode & 0o777).toBe(0o640)
+    const other = path.join(root, 'other.map.json')
+    fs.linkSync(real, path.join(root, 'maps', 'h.map.json'))
+    fs.linkSync(real, other)
+    expect(saveMapFile(root, { file: '/maps/h.map.json', base: 'new', text: 'newer' })).toEqual({ ok: true })
+    expect(fs.readFileSync(other, 'utf8')).toBe('newer')
+  })
+})

@@ -2,8 +2,12 @@
 // circle; the mouse selects and orders battalions. Every input becomes a command, stamped and logged by the battle,
 // so a session can be replayed. The battle runs in the battle worker and the page reads its published frames
 // (docs/plans/active/battle-threads.md, PR 3); without cross-origin isolation, or at ?thread=main, on this thread.
+// The visual bench (docs/plans/active/c0-bench.md): an overlay of what the sim tests, drawn from the world the page
+// reads; a tick on, a tick back and a time to go to, asked of the battle wherever it runs (decision 0081).
 import fieldUrl from '../../data/formation-field.simdata?url'
 import battleUrl from '../../data/battlefield.simdata?url'
+import benchUrl from '../../data/bench.simdata?url'
+import valleyUrl from '../../data/valley.simdata?url'
 import lookUrl from '../../data/painted-world.simdata?url'
 import {
   compileRuleset,
@@ -24,19 +28,23 @@ import {
   END_RESULTS,
   END_DRAW,
   fightShares,
+  formedOverlaps,
+  placeAll,
+  mkPlaced,
   type Command,
   type World,
-  type Dropped,
 } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
 import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS } from '../scenarios/page.ts'
+import { BENCH_CASES, CLAIM_CASES } from '../scenarios/bench.ts'
 import { MAN_ALIVE } from '../render/men.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
+import { Overlay, LAYERS, type Layer } from '../render/overlay.ts'
 import { startLink, type Seen } from './battle-link.ts'
-import { pruneSelection, runSpeed } from './page-rules.ts'
+import { pruneSelection, runSpeed, lastDropped, clockText as clock, parseTime } from './page-rules.ts'
 
-const SPEEDS = [0, 1, 2, 4, 8]
+const SPEEDS = [0, 0.25, 0.5, 1, 2, 4, 8]
 
 async function main(): Promise<void> {
   const asked = new URLSearchParams(location.search).get('scenario') ?? ''
@@ -47,6 +55,8 @@ async function main(): Promise<void> {
   const urls: Record<string, string> = {
     'formation-field': fieldUrl,
     battlefield: battleUrl,
+    bench: benchUrl,
+    valley: valleyUrl,
     'painted-world': lookUrl,
   }
   if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) {
@@ -79,8 +89,9 @@ async function main(): Promise<void> {
   let w: World = seen.w
   // the side you command (S1e-2): a scenario that names one lets you select only its formations; none, both
   const mine = (i: number): boolean => scenario.player === undefined || w.f.side[i] === scenario.player
-  const dropped: Dropped[] = link.dropped
   const map = new StaffMap(w, link.scene)
+  // the bench's overlay, on the world read (a published frame's: its claim grid built on the page)
+  let over = new Overlay(w, link.mode === 'worker')
   const t0 = performance.now()
   map.buildBase((a, b) => {
     const c = document.createElement('canvas')
@@ -89,6 +100,11 @@ async function main(): Promise<void> {
     return c
   })
   const buildMs = performance.now() - t0
+
+  // a bench case names itself under the panel's title
+  const bench = [...BENCH_CASES, ...CLAIM_CASES].find(c => c.scenario === scenario)
+  if (bench) document.getElementById('sub')!.textContent = bench.title
+  const lookAt = bench ? `look at ${bench.keys.map(clock).join(' · ')} (G)` : ''
 
   const mapC = document.getElementById('map') as HTMLCanvasElement
   const unitC = document.getElementById('units') as HTMLCanvasElement
@@ -100,6 +116,9 @@ async function main(): Promise<void> {
   let mapDirty = true
   let speed = 1
   let showSlots = false
+  // the bench's overlay (docs/plans/active/c0-bench.md): D shows it, the panel picks its layers
+  let overlay = false
+  const layersOn = new Set<Layer>(LAYERS)
   let paused = false
   let simMs = 0
   let drawMs = 0
@@ -143,12 +162,22 @@ async function main(): Promise<void> {
     simMs = simMs * 0.9 + ms * 0.1
     rec?.battleMs.push(ms)
   }
-  // the newest frame, and the selection pruned of formations gone
+  // the newest frame, and the selection pruned of formations gone; a divergence the battle found since (a tick
+  // played again gave another world: it paused there) pauses the page and says so
+  let warnings = 0
   const look = () => {
     seen = link.see()
     w = seen.w
     map.w = w
     pruneSelection(selected, selGen, w.f)
+    if (link.warnings !== warnings) {
+      warnings = link.warnings
+      paused = true
+      runAt()
+      note = link.warning
+      noteT = performance.now()
+      console.warn(link.warning)
+    }
   }
   // the speed the battle runs at: the panel's, or 0 while paused (P, or the headless checks' advance)
   const runAt = () => link.setSpeed(runSpeed(speed, paused, document.hidden))
@@ -162,6 +191,7 @@ async function main(): Promise<void> {
     }
     const a = performance.now()
     map.drawUnits(ug, view, seen.layer, selected, showSlots)
+    if (overlay) over.draw(ug, view, w, layersOn)
     const ms = performance.now() - a
     drawMs = drawMs * 0.9 + ms * 0.1
     rec?.drawMs.push(ms)
@@ -204,7 +234,7 @@ async function main(): Promise<void> {
   }
   for (const s of SPEEDS) {
     const b = document.createElement('button')
-    b.textContent = s ? `${s}×` : 'pause'
+    b.textContent = s ? `${s === 0.25 ? '¼' : s === 0.5 ? '½' : s}×` : 'pause'
     b.dataset.speed = String(s)
     b.onclick = () => setSpeed(s)
     speedsEl.append(b)
@@ -217,6 +247,76 @@ async function main(): Promise<void> {
       .forEach(e => e.classList.toggle('on', +e.dataset.speed! === s))
   }
   setSpeed(1)
+  const layersEl = document.getElementById('layers')!
+  for (const l of LAYERS) {
+    const b = document.createElement('button')
+    b.textContent = l
+    b.classList.add('on')
+    b.onclick = () => {
+      if (layersOn.has(l)) layersOn.delete(l)
+      else layersOn.add(l)
+      b.classList.toggle('on', layersOn.has(l))
+    }
+    layersEl.append(b)
+  }
+  // time for the bench: a tick on, a tick back, a time to go to, asked of the battle (it plays them as the first pass
+  // did, and pauses); the page pauses with it, and takes one request at a time (another while one is out is refused).
+  // The frame there is read, and drawn by the next animation frame: drawn here, every step of a scripted run waited on
+  // the browser's rendering of it. A failure leaves the battle where it was; the hooks reject with it
+  let timing = false
+  const timed = async (ask: () => Promise<void>): Promise<void> => {
+    if (timing) throw new Error('the bench is still going to a time')
+    timing = true
+    paused = true
+    runAt()
+    try {
+      await ask()
+    } finally {
+      timing = false
+      look()
+    }
+  }
+  const stepTick = () => timed(() => link.stepTick())
+  const goTo = (target: number) =>
+    timed(async () => {
+      const g = await link.goTo(target)
+      if (g.error) throw new Error(g.error)
+      // a new world: the overlay's places and contacts found again, on it
+      look()
+      over = new Overlay(seen.w, link.mode === 'worker')
+      if (g.capped) {
+        note = `went on five minutes, to ${clock(g.tick / TICK_HZ)}: G again to go on`
+        noteT = performance.now()
+      }
+    })
+  // the keys and buttons: a failure said on screen
+  const shown = (p: Promise<void>) =>
+    void p.catch((e: unknown) => {
+      note = e instanceof Error ? e.message : String(e)
+      noteT = performance.now()
+      console.error(e)
+    })
+  const askGoTo = () => {
+    const said = prompt('Go to a time (m:ss, or seconds)')
+    releaseHeld()
+    const sec = said ? parseTime(said) : null
+    if (sec === null) {
+      if (said?.trim()) {
+        note = `not a time: ${said.trim()} (m:ss, or seconds)`
+        noteT = performance.now()
+      }
+      return
+    }
+    shown(goTo(sec * TICK_HZ))
+  }
+  document.querySelectorAll<HTMLElement>('[data-time]').forEach(el => {
+    el.onclick = () =>
+      el.dataset.time === 'step'
+        ? shown(stepTick())
+        : el.dataset.time === 'back'
+          ? shown(goTo(w.meta[M_TICK] - 1))
+          : askGoTo()
+  })
   const orders: Record<string, (id: number) => Command> = {
     face: id => ({ type: 'face', id }),
     retire: id => ({ type: 'retire', id, metres: 30 }),
@@ -261,24 +361,24 @@ async function main(): Promise<void> {
   // M marks a moment of the playtest (docs/plans/active/s1e3-playtest.md): the prompt holds the page (and the
   // battle) while you say what happened; Cancel marks nothing, and says so on screen (a browser that suppresses
   // dialogs returns at once as if cancelled, so M is never silent). The report prints where everyone stood then
-  const marks: { tick: number; note: string }[] = []
   const mark = (text?: string) => {
     let said = text ?? null
     if (text === undefined) {
-      // the prompt blocks this thread, not the worker's: the battle is held while it is open, and runs again after
+      // the prompt blocks this thread, not the worker's: the battle is held while it is open (at the time it owed then:
+      // the frame shown, or a tick past it), marked there, and runs again after
       link.setSpeed(0)
       said = prompt('What happened here? (optional)')
+      if (said !== null) link.mark(said.trim(), w.meta[M_TICK])
       runAt()
       // the prompt swallowed the keyup and pointerup of anything held (space, a drag): let go of them
       releaseHeld()
-    }
+    } else if (said !== null) link.mark(said.trim(), w.meta[M_TICK])
     if (said === null) {
       note = 'mark cancelled: nothing marked'
       noteT = performance.now()
       return
     }
-    marks.push({ tick: w.meta[M_TICK], note: said.trim() })
-    note = `moment ${marks.length} marked`
+    note = 'moment marked'
     noteT = performance.now()
   }
 
@@ -458,6 +558,8 @@ async function main(): Promise<void> {
       space = true
       e.preventDefault()
       if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur()
+    } else if (e.metaKey || e.ctrlKey || e.altKey) {
+      // the page's keys, not with Cmd, Ctrl or Alt held (copy, print, switching tabs, minimising)
     } else if (e.key === 'p' || e.key === 'P') {
       paused = !paused
       runAt()
@@ -466,8 +568,12 @@ async function main(): Promise<void> {
       charging = false
     } else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
-    // not Cmd+M (minimise), nor a held key's repeats
-    else if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat) mark()
+    else if (e.key === 'd' || e.key === 'D') overlay = !overlay
+    else if (e.key === '.') shown(stepTick())
+    // going back once a press, not on a held key's repeats
+    else if (e.key === ',' && !e.repeat) shown(goTo(w.meta[M_TICK] - 1))
+    else if ((e.key === 'g' || e.key === 'G') && !e.repeat) askGoTo()
+    else if ((e.key === 'm' || e.key === 'M') && !e.repeat) mark()
   })
 
   function drawScale(): void {
@@ -503,9 +609,8 @@ async function main(): Promise<void> {
         )
       }
     }
-    // yours: the plan's refusals are not shown
-    let d: Dropped | undefined
-    for (let k = dropped.length - 1; k >= 0 && !d; k--) if (dropped[k].seq >= 0) d = dropped[k]
+    // yours (the plan's refusals are not shown), the last the world has reached
+    const d = lastDropped(link.dropped, w.meta[M_TICK])
     if (note && performance.now() - noteT < 3000) lines.push(note)
     // the battle (S1e-2): each side's men in the fight, as a share of those it spawned, and the result once decided
     const shares = fightShares(w)
@@ -531,12 +636,16 @@ async function main(): Promise<void> {
       head.join('\n') +
       '\n' +
       (lines.length ? lines.join('\n') : 'nothing selected') +
-      `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\n${costs()}\ndraw ${drawMs.toFixed(2)} ms · fps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
+      (lookAt ? '\n' + lookAt : '') +
+      `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · tick ${w.meta[M_TICK]} · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\n${costs()}\ndraw ${drawMs.toFixed(2)} ms · fps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
   }
-  // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce, as far as it has run:
-  // commands issued while paused wait for their tick and are left out
-  const replay = () => link.replay()
-  const session = async () => ({ ...(await replay()), marks: [...marks] })
+  // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce and the moments marked, as far as
+  // the world has reached: commands issued while paused wait for their tick and are left out
+  const session = () => link.session()
+  const replay = async () => {
+    const { replay: r, hashes } = await session()
+    return { replay: r, hashes }
+  }
   // the battle's cost on this page, and the worker's own when it runs there (ms, smoothed)
   function costs(): string {
     if (link.mode === 'main') return `sim + men ${simMs.toFixed(2)} ms`
@@ -556,9 +665,28 @@ async function main(): Promise<void> {
     thread,
     map,
     selected,
-    log: link.log,
-    hashes: link.hashes,
-    dropped,
+    get log() {
+      return link.log
+    },
+    get hashes() {
+      return link.hashes
+    },
+    get dropped() {
+      return link.dropped
+    },
+    // the bench: a time to go to and a tick on (promises: resolved with the frame there), the overlay, the overlaps
+    // of formed bodies at the world read
+    goTo,
+    stepTick,
+    overlay: (on: boolean, layers?: Layer[]) => {
+      overlay = on
+      if (layers) {
+        layersOn.clear()
+        for (const l of layers) layersOn.add(l)
+      }
+      draw()
+    },
+    overlaps: () => formedOverlaps(w, placeAll(w, mkPlaced(w))).length,
     select: (ids: number[]) => {
       selected.clear()
       for (const i of ids) if (mine(i)) choose(i)

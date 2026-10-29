@@ -1,9 +1,11 @@
 // The page's side of the battle (docs/plans/active/battle-threads.md, PRs 3 and 5): one interface whether the battle
 // runs in its workers (the sim worker, src/app/sim-host.ts, and the men worker, src/app/men-host.ts, whose frames the
 // page reads in shared memory) or, when the page cannot share memory with them (no cross-origin isolation, or
-// ?thread=main), on the page's own thread as before.
+// ?thread=main), on the page's own thread as before. The bench's time (going to a time, a tick on, marks: PR 7,
+// decision 0081) is the battle's in both.
 import {
   makeWorld,
+  DT,
   type Command,
   type SimData,
   type Compiled,
@@ -17,7 +19,8 @@ import {
 import { PAGE_SEED } from '../scenarios/page.ts'
 import { buildScene, type Scene } from '../render/scene.ts'
 import type { SoldierLayer } from '../render/soldiers.ts'
-import { Battle } from './battle.ts'
+import { Battle, applyTail, type GoneTo } from './battle.ts'
+import type { Mark } from './timeline.ts'
 import { FrameView, layoutFor, Slots, H_TICK_MS, H_STEP_MS, H_PUB_MS } from './battle-frame.ts'
 import type { ToSim, FromSim, SimRecording } from './sim-host.ts'
 import type { ToMen, FromMen, MenRecording } from './men-host.ts'
@@ -27,6 +30,13 @@ import { makeRing } from './tick-ring.ts'
 export interface Recording {
   sim: SimRecording
   men: MenRecording
+}
+
+/** The session as far as the world has reached: the replay, the hashes it must reproduce, the moments marked. */
+export interface Session {
+  replay: Replay
+  hashes: HashPoint[]
+  marks: Mark[]
 }
 
 /** What the page reads this frame. */
@@ -43,10 +53,14 @@ export interface BattleLink {
   readonly data: SimData
   // why the battle stopped (the worker failed), or null
   readonly failed: string | null
-  // the stamped log, the orders dropped and the hash points so far (the worker's, as far as they have arrived)
+  // the timeline's stamped log, orders dropped and hash points (the worker's, as far as they have arrived; after going
+  // back, a future the world has not reached again), and its divergences: how many, the last's words. Read them here
+  // each time: going to a time replaces the battle's lists on the page's thread
   readonly log: Stamped[]
   readonly dropped: Dropped[]
   readonly hashes: HashPoint[]
+  readonly warnings: number
+  readonly warning: string
   /** A real frame of `dt` seconds: on the main thread, the battle advances; in the worker it runs on its own. */
   frame(dt: number): void
   /** What to read and draw this frame: the newest frame published (held until the next call), or the battle itself
@@ -60,7 +74,13 @@ export interface BattleLink {
   setSpeed(speed: number): void
   /** `sec` seconds of game time at once, the clock then held until the next `setSpeed` (the headless checks). */
   advance(sec: number): Promise<void>
-  replay(): Promise<{ replay: Replay; hashes: HashPoint[] }>
+  /** The bench: to tick `tick` (Battle.goTo), resolved once a frame of it is there to read; the battle paused. */
+  goTo(tick: number): Promise<GoneTo>
+  /** The bench: one tick on, the battle paused; resolved once a frame of it is there to read. */
+  stepTick(): Promise<void>
+  /** A moment marked at tick `tick` (the one the player saw). */
+  mark(note: string, tick: number): void
+  session(): Promise<Session>
   hash(): Promise<string>
   /** The workers' costs (ms, smoothed): a tick (the sim worker's), the men's steps and publishing a frame (the men
    * worker's), per turn; zero on the main thread. */
@@ -74,9 +94,6 @@ export class MainLink implements BattleLink {
   readonly mode = 'main'
   readonly battle: Battle
   readonly scene: Scene
-  readonly log: Stamped[]
-  readonly dropped: Dropped[]
-  readonly hashes: HashPoint[]
   private readonly seen: Seen
   readonly data: SimData
   readonly failed = null
@@ -86,15 +103,30 @@ export class MainLink implements BattleLink {
     this.battle = new Battle(data, scenario, cr)
     this.battle.layer.orients = orients
     this.scene = this.battle.scene
-    this.log = this.battle.log
-    this.dropped = this.battle.dropped
-    this.hashes = this.battle.hashes
     this.seen = { w: this.battle.w, layer: this.battle.layer }
+  }
+  get log() {
+    return this.battle.log
+  }
+  get dropped() {
+    return this.battle.dropped
+  }
+  get hashes() {
+    return this.battle.hashes
+  }
+  get warnings() {
+    return this.battle.tl.warnings
+  }
+  get warning() {
+    return this.battle.tl.warning
   }
   frame(dt: number): void {
     this.battle.advance(dt)
   }
   see(): Seen {
+    // (going to a time gives the battle a new world and layer)
+    this.seen.w = this.battle.w
+    this.seen.layer = this.battle.layer
     return this.seen
   }
   orient(): void {
@@ -110,8 +142,17 @@ export class MainLink implements BattleLink {
     this.battle.advanceBy(sec)
     this.battle.speed = 0
   }
-  async replay() {
-    return this.battle.replay()
+  async goTo(tick: number) {
+    return this.battle.goTo(tick)
+  }
+  async stepTick() {
+    this.battle.stepTick()
+  }
+  mark(note: string, tick: number): void {
+    this.battle.mark(note, tick)
+  }
+  async session() {
+    return this.battle.session()
   }
   async hash() {
     return this.battle.hash()
@@ -131,6 +172,8 @@ export class WorkerLink implements BattleLink {
   readonly log: Stamped[] = []
   readonly dropped: Dropped[] = []
   readonly hashes: HashPoint[] = []
+  warnings = 0
+  warning = ''
   readonly data: SimData
   /** Why a worker stopped (null while they run): the page shows it; every request since fails with it. */
   failed: string | null = null
@@ -149,7 +192,8 @@ export class WorkerLink implements BattleLink {
 
   /** Starts the sim worker on the scenario (`key`: its key in BATTLE_SCENARIOS; `bytes`: the map's, `data` loaded from
    * them; `ruleset`: its name in src/rulesets/index.ts, the napoleonic one if none, `cr` compiled from it), then the
-   * men worker once the sim has written its first world; `ready` resolves at the first frame. */
+   * men worker once the sim has written its first world; `ready` resolves at the first frame. `claims`: the scenario
+   * claims cells (the claim grid's prototype), set on the frames' worlds so the overlay draws them. */
   constructor(
     sim: Worker,
     men: Worker,
@@ -159,6 +203,7 @@ export class WorkerLink implements BattleLink {
     key: string,
     ruleset?: string,
     orients = false,
+    claims = false,
   ) {
     this.sim = sim
     this.men = men
@@ -177,9 +222,11 @@ export class WorkerLink implements BattleLink {
       const m = e.data
       if (m.type === 'ready') this.toMen({ type: 'init', data: bytes, version: data.version, ring, ruleset, orients })
       else if (m.type === 'events') {
-        this.log.push(...m.log)
-        this.dropped.push(...m.dropped)
-        this.hashes.push(...m.hashes)
+        applyTail(this.log, m.log)
+        applyTail(this.dropped, m.dropped)
+        applyTail(this.hashes, m.hashes)
+        this.warnings = m.warnings
+        this.warning = m.warning
       } else if (m.type === 'reply') this.answer(m.id, m.value)
       else this.fail(`sim: ${m.message}`)
     }
@@ -188,6 +235,7 @@ export class WorkerLink implements BattleLink {
       if (m.type === 'slots') {
         const L = layoutFor(this.shape, m.cap)
         this.views = m.bufs.map(b => new FrameView(this.data, this.cr, this.shape.terrain, this.scene, b, L))
+        for (const v of this.views) v.w.claims = claims
         this.slots = new Slots(new Int32Array(m.ctl))
         this.seen = null
         this.onFirst()
@@ -257,11 +305,24 @@ export class WorkerLink implements BattleLink {
   async advance(sec: number): Promise<void> {
     // the sim advances (its men's clock at speed 0, its ticks logging departures only), then the men take its last
     // world and step to their places
-    await this.ask(id => this.toSim({ type: 'advance', id, sec }))
-    await this.ask(id => this.toMen({ type: 'advance', id, sec }))
+    const ran = await this.ask<number>(id => this.toSim({ type: 'advance', id, sec }))
+    await this.ask(id => this.toMen({ type: 'advance', id, sec: ran }))
   }
-  replay() {
-    return this.ask<{ replay: Replay; hashes: HashPoint[] }>(id => this.toSim({ type: 'replay', id }))
+  async goTo(tick: number): Promise<GoneTo> {
+    // the sim's jump, then the men laid out on it and a frame of it published
+    const gone = await this.ask<GoneTo>(id => this.toSim({ type: 'goTo', id, tick }))
+    await this.ask(id => this.toMen({ type: 'advance', id, sec: 0 }))
+    return gone
+  }
+  async stepTick(): Promise<void> {
+    await this.ask(id => this.toSim({ type: 'stepTick', id }))
+    await this.ask(id => this.toMen({ type: 'advance', id, sec: DT }))
+  }
+  mark(note: string, tick: number): void {
+    this.toSim({ type: 'mark', note, tick })
+  }
+  session() {
+    return this.ask<Session>(id => this.toSim({ type: 'session', id }))
   }
   hash() {
     return this.ask<string>(id => this.toSim({ type: 'hash', id }))
@@ -298,7 +359,7 @@ export interface LinkStart {
 export async function startLink(o: LinkStart): Promise<BattleLink> {
   if (o.workers) {
     const [sim, men] = o.workers()
-    const wl = new WorkerLink(sim, men, o.bytes, o.data, o.cr, o.key, o.ruleset, o.orients)
+    const wl = new WorkerLink(sim, men, o.bytes, o.data, o.cr, o.key, o.ruleset, o.orients, !!o.scenario.claims)
     try {
       await wl.ready()
       return wl

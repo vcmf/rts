@@ -1,0 +1,222 @@
+// The bench's timeline (docs/plans/active/c0-bench.md): going back to a tick, playing on from there with the orders
+// the log holds after it, and branching when a new order is given there. Pure functions over the sim, so the page's
+// glue stays thin and Node tests them (test/timeline.test.ts). Its rules:
+// - after every tick, however it was reached (played, stepped, gone to), the world holds every logged order stamped
+//   for its next tick, so the same tick is the same world;
+// - a tick played again should give the hash it gave the first time. If it does not (a sim that is not
+//   deterministic, which the bench's tests forbid), the timeline says so in `warning` and takes the new pass as the
+//   truth from that tick on: the hash points, saves and dropped orders past it are the new pass's. It never refuses to
+//   go on;
+// - an order given at tick t drops the log, the saves, the hash points, the marks and the dropped orders past t: a
+//   branch;
+// - saves stand at a whole number of `every` ticks; past MAX_SNAPS, `every` doubles and only the saves on it stay. A
+//   branch halves `every` again while the saves left allow, though the saves before the branch keep their spacing.
+//   The last RECENT hash ticks' worlds are kept too (the tick serializes the world to hash it anyway), so a tick back
+//   replays at most one hash interval;
+// - the page reads the timeline's arrays through `tl` each time: going to a time replaces them.
+import {
+  type World,
+  type Stamped,
+  type HashPoint,
+  type Dropped,
+  issue,
+  advanceTick,
+  reissue,
+  serialize,
+  M_TICK,
+  HASH_EVERY,
+} from '../sim/index.ts'
+
+/** The first interval between saves, in ticks (20 s). */
+export const SNAP_EVERY = 400
+/** At most this many saves (one of 40 battalions is about 2.5 MB). */
+export const MAX_SNAPS = 24
+/** The worlds of the last this many hash ticks, kept for going back a little. */
+export const RECENT = 10
+
+/** A moment the player marked (docs/plans/active/s1e3-playtest.md). */
+export interface Mark {
+  tick: number
+  note: string
+}
+/** A world kept to go back to: its tick, how much of the log it holds, its bytes. */
+interface Save {
+  tick: number
+  next: number
+  bytes: Uint8Array
+}
+
+/** The page's timeline: the log of the player's orders, how far the world has taken them, saves and what was seen. */
+export interface Timeline {
+  log: Stamped[]
+  next: number // the log's first entry the world has not been handed yet
+  every: number // ticks between saves
+  snaps: Save[]
+  recent: Save[]
+  hashes: HashPoint[]
+  dropped: Dropped[] // the orders the sim dropped, by tick, up to `reached`
+  marks: Mark[]
+  reached: number // the furthest tick played
+  warning: string // the last divergence found ('' if none)
+  warnings: number // how many divergences were found: a new one is one more
+  // moves on whenever the lists may have changed other than by growing (a cut, going to a time): their readers
+  // elsewhere (the sim worker's messages to the page: src/app/sim-host.ts) look again from the start then
+  cuts: number
+}
+
+/** An empty timeline. */
+export const mkTimeline = (): Timeline => ({
+  log: [],
+  next: 0,
+  every: SNAP_EVERY,
+  snaps: [],
+  recent: [],
+  hashes: [],
+  dropped: [],
+  marks: [],
+  reached: 0,
+  warning: '',
+  warnings: 0,
+  cuts: 0,
+})
+
+/**
+ * Keeps what the timeline holds up to tick `t`, forgets the rest, and halves the save interval while the saves left
+ * would still fit at half of it.
+ */
+function cut(tl: Timeline, t: number): void {
+  tl.cuts++
+  tl.snaps = tl.snaps.filter(s => s.tick <= t)
+  tl.recent = tl.recent.filter(s => s.tick <= t)
+  tl.hashes = tl.hashes.filter(h => h.tick <= t)
+  tl.dropped = tl.dropped.filter(d => d.tick <= t)
+  tl.reached = t
+  while (tl.every > SNAP_EVERY && Math.floor(t / (tl.every / 2)) <= MAX_SNAPS) tl.every /= 2
+}
+
+/** A pass that parts from the first at tick `t`: says so, and the timeline follows it from `t` on. */
+function diverge(tl: Timeline, t: number, why: string): void {
+  tl.warning = `timeline: ${why}; the timeline follows this pass from tick ${t}`
+  tl.warnings++
+  cut(tl, t - 1)
+}
+
+/** A new order from the player at the world's tick: drops what the timeline held past it (a branch), then logs it. */
+export function order(tl: Timeline, w: World, cmd: Parameters<typeof issue>[1]): Stamped {
+  const t = w.meta[M_TICK]
+  tl.log.length = tl.next
+  cut(tl, t)
+  tl.marks = tl.marks.filter(m => m.tick <= t)
+  const s = issue(w, cmd, tl.log)
+  tl.next = tl.log.length
+  return s
+}
+
+/** A moment marked at the world's tick. */
+export function mark(tl: Timeline, w: World, note: string): void {
+  tl.marks.push({ tick: w.meta[M_TICK], note })
+}
+
+/**
+ * Hands the world the logged orders stamped for its next tick, as a replay does (`reissue`, src/sim/replay.ts). An
+ * order the world numbers otherwise than the log did is a pass that has parted from the first: it takes the world's
+ * number in the log, and the timeline follows this pass from the order's tick.
+ */
+function feed(tl: Timeline, w: World): void {
+  for (;;) {
+    const k = reissue(w, tl.log, tl.next)
+    if (typeof k === 'number') {
+      tl.next = k
+      return
+    }
+    diverge(tl, k.tick, `at tick ${k.tick} the world numbered a logged order ${k.got}, the log ${k.expected}`)
+    tl.log[tl.next++] = w.pending[w.pending.length - 1]
+  }
+}
+
+/**
+ * Keeps the world as it stood at tick `t` (its bytes, as the tick hashed it, before the next tick's orders were
+ * handed: `next` is how much of the log they hold) among the saves and the recent ones.
+ */
+function keep(tl: Timeline, t: number, bytes: Uint8Array, next: number): void {
+  const save = { tick: t, next, bytes }
+  if (t % tl.every === 0 && !tl.snaps.some(s => s.tick === t)) {
+    const k = tl.snaps.findIndex(s => s.tick > t)
+    tl.snaps.splice(k < 0 ? tl.snaps.length : k, 0, save)
+    while (tl.snaps.length > MAX_SNAPS) {
+      tl.every *= 2
+      tl.snaps = tl.snaps.filter(s => s.tick % tl.every === 0)
+    }
+  }
+  tl.recent = tl.recent.filter(s => s.tick !== t && s.tick > t - RECENT * HASH_EVERY)
+  tl.recent.push(save)
+  tl.recent.sort((a, b) => a.tick - b.tick)
+}
+
+/**
+ * One tick of the page's world: the tick, its hash point (checked if it was taken before), its dropped orders, the
+ * next tick's logged orders, and the world kept on hash ticks.
+ */
+export function step(tl: Timeline, w: World): ReturnType<typeof advanceTick> {
+  const r = advanceTick(w)
+  if (r.hash !== null) {
+    // hash points stand every HASH_EVERY ticks from the first, so a point's index follows from its tick
+    const k = r.tick / HASH_EVERY - 1
+    if (k > tl.hashes.length) throw new Error(`timeline: no hash point before tick ${r.tick}`)
+    const had = tl.hashes[k]
+    if (had && had.hash !== r.hash) diverge(tl, r.tick, `tick ${r.tick} played again gave another world`)
+    if (!tl.hashes[k]) tl.hashes.push({ tick: r.tick, hash: r.hash, sections: [] })
+  }
+  if (r.tick > tl.reached) tl.dropped.push(...r.dropped)
+  tl.reached = Math.max(tl.reached, r.tick)
+  const held = tl.next
+  feed(tl, w)
+  if (r.bytes) keep(tl, r.tick, r.bytes, held)
+  return r
+}
+
+/** A fresh world for the scenario, handed the orders logged for its first tick. */
+export function begin(tl: Timeline, w: World): World {
+  tl.next = 0
+  feed(tl, w)
+  return w
+}
+
+/**
+ * The world at tick `T`, played on as the first pass was: `now` itself when it stands at `T`; else from the latest of
+ * `now` (a copy of it), a recent world and a save that stands at or before `T` (`load` makes a world of bytes, the
+ * scenario attached), or a fresh one. It works on copies of the timeline and of `now`, and changes `tl` only once the
+ * world is reached, so a failure leaves the page where it was.
+ */
+export function goTo(
+  tl: Timeline,
+  T: number,
+  fresh: () => World,
+  load: (bytes: Uint8Array) => World,
+  now?: World,
+): World {
+  if (now && now.meta[M_TICK] === T) return now
+  const c: Timeline = {
+    ...tl,
+    log: [...tl.log],
+    marks: [...tl.marks],
+    snaps: [...tl.snaps],
+    recent: [...tl.recent],
+    hashes: [...tl.hashes],
+    dropped: [...tl.dropped],
+  }
+  const saved = [...c.snaps, ...c.recent].filter(s => s.tick <= T).sort((a, b) => b.tick - a.tick)[0]
+  let w: World
+  if (now && now.meta[M_TICK] < T && (!saved || now.meta[M_TICK] >= saved.tick)) w = load(serialize(now))
+  else if (saved) {
+    w = load(saved.bytes)
+    // the save holds the log as far as it had been handed when the tick hashed the world: the orders for the next
+    // tick, logged then or later in that tick, are handed now
+    c.next = saved.next
+    feed(c, w)
+  } else w = begin(c, fresh())
+  while (w.meta[M_TICK] < T) step(c, w)
+  Object.assign(tl, c)
+  tl.cuts++
+  return w
+}

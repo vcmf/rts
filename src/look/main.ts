@@ -56,7 +56,18 @@ import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
-import { SHADOW_LOOK, applyLookParams, shadowModes, simpleShadowsDraw, stencilFor } from './shadow-look.ts'
+import {
+  SHADOW_LOOK,
+  applyContactParams,
+  applyStepParams,
+  applyFootSharpParams,
+  applyNearBandParams,
+  applyLookParams,
+  shadeDesat,
+  shadowModes,
+  simpleShadowsDraw,
+  stencilFor,
+} from './shadow-look.ts'
 
 declare global {
   interface Window {
@@ -504,6 +515,10 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dar
 // infantry (about 400 a battalion, decision 0018) that march up in column, deploy and fire on a scripted loop, drawn
 // as figures (src/look/units.ts); ?unitshadow=0: without their cast shadows (decision 0047's A/B). Not on the page by
 // default: the goldens and the look checks never see them
+// The uniforms are the era's, named by dye and resolved onto the figure's roles (world/dyes.ts, decision 0068). Test
+// switches (with ?armies): ?uniforms=all, each side's battalions wearing the scenario's reviewSides in turn;
+// ?uniforms=all-greatcoats, the same with every man in his greatcoat; ?dye=<dye>:<rrggbb>[;…] (bare, or '#' as
+// %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride)
 const armiesParam = params.get('armies')
 const unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
@@ -557,12 +572,28 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
 // <close>[,<far>] (far: decision 0049's unless given); ?ushfoot=<dark>,<core m>[,<far dark>,<far core m>], the contact
 // at the soles (its darkness, a share of the full shadow, and the core it holds over before turning to the tip's);
 // ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one; ?ushgain=<1..3>[,<far>],
-// the darkening's strength, foot and tip alike (1: as decision 0062 shipped it; by default 2,1.5, the owner's:
-// docs/plans/done/shadow-darker.md)
+// the darkening's strength, foot and tip alike (1, the default since decision 0071: as decision 0062 shipped it;
+// decision 0067's 2,1.5: docs/plans/done/shadow-darker.md)
+// the contact shadow (decision 0071; off since decision 0074): ?ushcontact=1 (0071's) or <pad m>,<dark>[,<soft>], the
+// oval under each man's feet (0: none); ?ushcontactat=root|stride|step, where it sits; ?ushcontactband=<r0>,<r1>, the
+// zoom band (m from the focus) it fades out over; ?ushdesat=<0..1>, the ground's shade turned toward its grey (0: as
+// before). The earlier pages: ?ushstep=0&ushcontact=1 is decision 0071's (main at 1093fdc3);
+// ?ushstep=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4 is decision 0067's
 // (src/look/shadow-look.ts parses them, a bad value an error at load)
 const shadowMode = shadowModes(params)
 const shadowLook = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
 const ushBand = applyLookParams(params, shadowLook.close, shadowLook.far).band
+const ushContact = applyContactParams(params)
+// the shape baked per animation step up close (decision 0074, docs/plans/done/step-shadows.md): ?ushstep=<steps a
+// clip>[,<facings>[,hold|blend]] (absent: 8,8,hold; 0: the shape averaged over each clip at every zoom, as before)
+const ushStep = applyStepParams(params)
+// ?ushfootk=<boost>[,<reach m>]: the per-step shape's feet darker and crisper, never past the ground's shade (absent:
+// 3,0.6; 1: none)
+const ushFootK = applyFootSharpParams(params)
+// ?ushnearband=<r0>,<r1>: the zoom band (m from the focus) where the per-step shape gives way to the averaged one
+// (absent: 60,100; ?ushcontactband is the oval's own, with ?ushcontact=1)
+const ushNearBand = applyNearBandParams(params)
+const ushDesat = shadeDesat(params)
 const uShadowSwitch = params.get('ushadowswitch')
 const smoothMove = bit('smoothmove')
 const decalLift = params.get('udecallift')
@@ -600,10 +631,18 @@ if (armiesParam !== null) {
   if (mats.webgl1) {
     throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
   }
-  const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt }, { RULESETS }, { ARMIES_DEMO }] = await Promise.all([
+  const [
+    { Units: UnitsC },
+    { decodeUnits },
+    { layout, facingAt },
+    { dressAll, dyeOverride, wearInTurn },
+    { RULESETS },
+    { ARMIES_DEMO },
+  ] = await Promise.all([
     import('./units.ts'),
     import('./units-data.ts'),
     import('./world/armies.ts'),
+    import('./world/dyes.ts'),
     import('../rulesets/index.ts'),
     import('../scenarios/armies-demo.ts'),
   ])
@@ -659,6 +698,13 @@ if (armiesParam !== null) {
     const q = riverQuery(x, z)
     return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z)
   }
+  const uniformsParam = params.get('uniforms')
+  if (uniformsParam !== null && uniformsParam !== 'all' && uniformsParam !== 'all-greatcoats') {
+    throw new Error(`?uniforms must be all or all-greatcoats, not ${uniformsParam}`)
+  }
+  const greatcoat = uniformsParam === 'all-greatcoats'
+  const uniforms = dressAll(era.uniforms, dyeOverride(params.get('dye'), era.dyes), { greatcoat })
+  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides)
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
   units = new UnitsC(
     scene,
@@ -667,8 +713,8 @@ if (armiesParam !== null) {
     [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])],
     decodeUnits(await r.arrayBuffer()),
     drill,
-    layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides),
-    era.uniforms,
+    uniformsParam === null ? placed : wearInTurn(placed, ARMIES_DEMO.reviewSides),
+    uniforms,
     () => S.t,
     { tinyPx: tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined },
   )
@@ -681,6 +727,11 @@ if (armiesParam !== null) {
   units.simpleFar = shadowMode.simpleFar
   units.simpleClose = shadowMode.simpleClose
   units.look = shadowLook
+  units.contact = ushContact
+  units.stepShadow = ushStep
+  units.stepExplicit = params.has('ushstep')
+  units.stepBand = ushNearBand
+  units.footSharp = ushFootK
   if (ushBand) units.lookBand = ushBand
   if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   units.groundMap = meadow !== null
@@ -688,7 +739,7 @@ if (armiesParam !== null) {
   // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
   // after the bounce map (the season, the shadows' switch, the grain) and when the occlusion's switch changes
   if (simpleShadowsDraw(params)) {
-    const shade = (units.shade = bakes.unitShade())
+    const shade = (units.shade = bakes.unitShade(ushDesat))
     let ao = S.ao
     scene.onBeforeRenderObservable.add(() => {
       if (S.ao !== ao) {
