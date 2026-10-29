@@ -86,7 +86,12 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   align with the slopes all the time … too grey, make the map lighter, whiter … only see the shadow texture at zoom
   from a certain threshold"): terraces of half the contour interval (100 m) from heights smoothed over one cell, the
   real relief smoothed over one cell; flat ground 0.96 of a whiter paper (`#f4f1e8`), lit slopes to pure white; the
-  shade's strength 0.45 over the whole theatre, rising to full from about 3 px a km (`?far=`). Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  shade's strength 0.45 over the whole theatre, rising to full from about 3 px a km (`?far=`). Seventh (the owner: "exaggerate, just like in total war campaign map, the mountains are big and
+  representative"): the relief's shape at about 6 km kept whole and its smaller detail halved (`?fine=`, the
+  research note's band smoothing in its simplest form), then heights above the lowlands lifted up to three times
+  where the wider region (about 12 km) stands from 500 to 1,600 m (`?mount=`): the plains stay flat, the ranges rise
+  as masses with long shadows. Still a flat plane: the mountains look big by their light, not by their shape on
+  screen. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast

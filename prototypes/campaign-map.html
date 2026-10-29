@@ -86,7 +86,8 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * shade comes to a warm black (0.88); ?terrace= the terraces' height in metres (half the contour interval; 0 off);
  * ?detail= the real relief mixed back over them (0.3); ?smooth= the real relief's smoothing in cells (1); ?contour=
  * the contour interval in metres (200); ?view=x,z,km the target in km from the centre, east and north, and the
- * camera distance; ?theatre= the generated file.
+ * camera distance; ?theatre= the generated file; ?mount= the mountains' extra lift (2; 0 true heights); ?fine=
+ * the relief's small detail kept (0.5).
  */
 'use strict';
 const t0 = performance.now();
@@ -234,13 +235,46 @@ const CONTOUR_INDEX = 5;
 const TERRACE = param('terrace', CONTOUR / 2, 0, 2000);
 const TERRACE_SMOOTH = 1;
 const DETAIL = param('detail', 0.3, 0, 1);
+// representative mountains, as a campaign map draws them: the relief's large-scale shape (heights averaged over a
+// square of half-width BIG_R cells, about 6 km across) kept whole and its smaller detail scaled by FINE, then the
+// heights above the lowlands lifted by up to MOUNT times more where the wider region (MOUNT_R cells) stands high:
+// the plains stay flat, the Alps tower and throw long shadows
+const BIG_R = 12;
+const FINE = param('fine', 0.5, 0, 1);
+const MOUNT = param('mount', 2, 0, 8);
+const MOUNT_R = 24;
+const MOUNT_FROM = 500;
+const MOUNT_TO = 1600;
 
 /**
- * The heights the light reads: the heights smoothed over TERRACE_SMOOTH cells snapped down to their TERRACE band,
- * each step softened over a cell either side so it is a steep bank rather than a cliff, with DETAIL of the real
- * heights smoothed over SMOOTH cells mixed back in. Without terraces, the smoothed real heights alone.
+ * The heights the light reads: the relief made representative (its large-scale shape whole, its detail scaled by
+ * FINE), terraced (smoothed over TERRACE_SMOOTH cells and snapped down to its TERRACE band, each step softened over a
+ * cell either side so it is a steep bank rather than a cliff, with DETAIL of it smoothed over SMOOTH cells mixed back
+ * in; without terraces, the smoothed heights alone), then lifted where the region stands high.
  */
 function terraced(h0) {
+  const big = boxMean(h0, NX, NZ, BIG_R);
+  const equalised = new Float32Array(h0.length);
+  for (let k = 0; k < h0.length; k++) equalised[k] = big[k] + (h0[k] - big[k]) * FINE;
+  return lifted(terracedFrom(equalised), h0);
+}
+
+/**
+ * The heights above the lowlands lifted by 1 + MOUNT · how high the wider region stands (from MOUNT_FROM to MOUNT_TO
+ * m, smoothly), so a mountain range rises as a mass while the plains stay as they are.
+ */
+function lifted(h, h0) {
+  if (!MOUNT) return h;
+  const region = boxMean(h0, NX, NZ, MOUNT_R);
+  let low = Infinity;
+  for (const v of h0) low = Math.min(low, v);
+  const out = new Float32Array(h.length);
+  for (let k = 0; k < h.length; k++) out[k] = low + (h[k] - low) * (1 + MOUNT * sstep(MOUNT_FROM, MOUNT_TO, region[k]));
+  return out;
+}
+
+/** The terraced heights of `h0` (see `terraced`): bands of TERRACE m, DETAIL of the smoothed heights mixed back. */
+function terracedFrom(h0) {
   const detail = SMOOTH ? boxMean(h0, NX, NZ, SMOOTH) : h0;
   if (!TERRACE) return detail;
   const field = boxMean(h0, NX, NZ, TERRACE_SMOOTH);
