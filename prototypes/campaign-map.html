@@ -258,8 +258,9 @@ const CONTOUR_INDEX = 5;
 // smoothed real heights is mixed back so a terrace is not a bare plateau. ?terrace=0 turns them off
 const TERRACE = param('terrace', 0, 0, 2000);
 // the contour sheets drawn per pixel, SHEET m apart (the contour interval: every step has its ink line), each
-// with a lit rim toward the light and a shadow under the sheet above (?sheet=0 off)
-const SHEET = param('sheet', CONTOUR, 0, 2000);
+// with a lit rim toward the light and a shadow under the sheet above. Off by default (the owner: they read as
+// shadows cast by the contour lines); ?sheet=200 to compare
+const SHEET = param('sheet', 0, 0, 2000);
 // the cast shadow is thrown by the large forms only: heights averaged over a square of half-width CAST_SMOOTH cells
 const CAST_SMOOTH = 6;
 // the plate's thickness in km, and the camera's tilt off straight down, in degrees, far and at the closest zoom
@@ -269,7 +270,7 @@ const TILT_NEAR = param('tilt', 40, 0, 55);
 // the cloud shadows drifting over the map: how dark (0 off)
 const CLOUDS = param('clouds', 0.12, 0, 0.5);
 // how much of the real relief's detail the light gets back up close
-const DETAIL_GAIN = param('crisp', 0.6, 0, 1.5);
+const DETAIL_GAIN = param('crisp', 0.8, 0, 1.5);
 const TERRACE_SMOOTH = 1;
 const DETAIL = param('detail', 0.3, 0, 1);
 // representative mountains, as a campaign map draws them: the relief's large-scale shape (heights averaged over a
@@ -548,6 +549,29 @@ float bicubic(sampler2D t, vec2 uv, vec2 texel) {
        + g1.y * (g0.x * texture2D(t, vec2(a.x, b.y)).r + g1.x * texture2D(t, vec2(b.x, b.y)).r);
 }
 
+/* a Catmull-Rom read of a single-channel texture: it passes through the texels (a B-spline blurs them by about half a
+   texel), sixteen taps at texel centres */
+float catmullRom(sampler2D t, vec2 uv, vec2 texel) {
+  vec2 p = uv / texel - 0.5;
+  vec2 f = fract(p);
+  vec2 base = (floor(p) + 0.5) * texel;
+  vec2 f2 = f * f;
+  vec2 f3 = f2 * f;
+  vec2 w0 = -0.5 * f3 + f2 - 0.5 * f;
+  vec2 w1 = 1.5 * f3 - 2.5 * f2 + 1.0;
+  vec2 w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f;
+  vec2 w3 = 0.5 * f3 - 0.5 * f2;
+  float sum = 0.0;
+  for (int j = 0; j < 4; j++) {
+    float wy = j == 0 ? w0.y : j == 1 ? w1.y : j == 2 ? w2.y : w3.y;
+    float y = base.y + float(j - 1) * texel.y;
+    float row = w0.x * texture2D(t, vec2(base.x - texel.x, y)).r + w1.x * texture2D(t, vec2(base.x, y)).r;
+    row += w2.x * texture2D(t, vec2(base.x + texel.x, y)).r + w3.x * texture2D(t, vec2(base.x + 2.0 * texel.x, y)).r;
+    sum += wy * row;
+  }
+  return sum;
+}
+
 /* the finer heights minus the coarse ones, in metres, inside a window (x0, z0, x1, z1 in km), faded at its edge */
 float fineIn(sampler2D t, vec4 rect, vec2 texel, vec2 w) {
   float edge = min(min(w.x - rect.x, rect.z - w.x), min(w.y - rect.y, rect.w - w.y));
@@ -563,12 +587,12 @@ float fineDetail(vec2 w) {
 
 /* the heights the light reads (representative, metres), exaggerated by uRZ */
 float lightH(vec2 w) {
-  return bicubic(uLightH, gridUv(w), uTexel);
+  return catmullRom(uLightH, gridUv(w), uTexel);
 }
 
 /* up close, the real detail the simplification removed and the finer windows' detail: lit at its true slope */
 float detailH(vec2 w) {
-  float h = uDetailK > 0.0 ? uDetailK * bicubic(uLightD, gridUv(w), uTexel) : 0.0;
+  float h = uDetailK > 0.0 ? uDetailK * catmullRom(uLightD, gridUv(w), uTexel) : 0.0;
   return h + fineDetail(w);
 }
 
@@ -1371,9 +1395,9 @@ function drawInk() {
   // the real heights for the contours and sheets only well in, from about 10 px a km (a 250 m bump 2.5 px): further
   // out their small bumps cross the sheet levels and dot the map with tiny rings
   material.setFloat('uNearK', sstep(10, 24, ppk));
-  // the light's real detail from about 3 px a km
-  material.setFloat('uDetailK', sstep(3, 8, ppk));
-  material.setFloat('uFineK', sstep(6, 14, ppk));
+  // the light's real detail from under 1 px a km, full from 3
+  material.setFloat('uDetailK', sstep(0.6, 3, ppk));
+  material.setFloat('uFineK', sstep(2, 6, ppk));
   // the sheets from about 2 px a km: further out they speckle the plains
   material.setFloat('uSheetK', sstep(1.6, 4, ppk));
   material.setFloat('uContourK', sstep(1.2, 3, ppk));

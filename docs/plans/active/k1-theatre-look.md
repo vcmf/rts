@@ -117,7 +117,11 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   contours, so every other step was a lit rim and a shadow with no line); up close, the light gets back the real
   relief's detail the simplification removed (0.6 of it, `?crisp=`, from about 3 px a km) and the finer windows'
   detail, both lit at their true slope (with the ×2 exaggeration and the mountain lift they turned the Alps black and
-  white); a third window of 50 m heights over the Inn valley (Innsbruck, 160 × 100 km); the sheets' shadow lighter. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
+  white); a third window of 50 m heights over the Inn valley (Innsbruck, 160 × 100 km); the sheets' shadow lighter. Then (the owner: "we still have some shadows casted from the contour lines, not good … even at crisp=1
+  at low zoom it still looks soft"): the sheets off by default (`?sheet=200` to compare): their rim and shadow read as
+  shadows cast by the lines; the light's heights read by Catmull-Rom (through the data; the cubic B-spline blurred
+  them by about half a cell); the real detail at 0.8 from under 1 px a km (full from 3), the 50 m windows from 2 px a
+  km (full from 6). A frame on test machine A at 1600 × 900: 3.2 ms still, 10.3 ms with the ink. Lakes are a mask at twice the heights' resolution (125 m), for smoother shores.
 - At the theatre's zoom it reads as a relief print: the Alps, the Bohemian ranges, the Black Forest and the Jura
   stand off the plains, and the plains carry the rivers, lakes, roads and towns. Closer (the Danube at Ulm, about
   20 km across the screen) the Swabian Jura and the moraines south of the Danube read well. In the Alps up close the cast
