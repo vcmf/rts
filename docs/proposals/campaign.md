@@ -232,7 +232,7 @@ The numbers and rules above are code in `src/campaign/` (exact maths, as the sim
 | Moving corps and couriers as tracks (timed waypoints, linear between) | `src/campaign/track.ts` |
 | Contact: the first moment two tracks come within the contact radius, exactly; a contact joins the battle whose zone it lies in, else starts one | `src/campaign/contact.ts` |
 | A courier caught where its road enters an enemy's zone; the help it brings | `src/campaign/courier.ts` |
-| The road network and the fastest route, ties by index | `src/campaign/roads.ts` |
+| The road network (a road's length its line's) and the fastest route, the same on every machine | `src/campaign/roads.ts` |
 | The day as a timeline, ordered by time, then id | `src/campaign/timeline.ts` |
 
 Contact is exact rather than tested at ticks: two corps closing on a road at 6 km/h cross a 1.5 km radius in

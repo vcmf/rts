@@ -34,10 +34,12 @@ the day's loop (orders, standing orders, the turn) comes later in the track. The
   between breakpoints the separation moves in a straight line, so contact is the first root of a quadratic.
   `battleFor` joins a contact to the first battle whose zone it lies in, or starts one.
 - **Couriers** (`courier.ts`): `ride` takes the courier along its route and loses it to the first enemy whose
-  contact zone it enters (by time, then index), where it enters it; `help` gives the head's and tail's arrival of the
-  corps that heard the call, at a forced march.
-- **Roads** (`roads.ts`): the graph of towns and roads; `fastestRoute` (Dijkstra, ties by index), `routePoints` its
-  line in the direction travelled.
+  contact zone it enters (by time, then index), where it enters it; a zone it starts in (the battle it is sent from)
+  catches it only if it comes back in after leaving (`firstExit`, then contact again); a route of one town delivers
+  at once. `help` gives the head's and tail's arrival of the corps that heard the call, at a forced march, and the
+  share of its strength with it (stragglers left behind); `inHelpRadius` whether an ally is in reach.
+- **Roads** (`roads.ts`): the graph of towns and roads; `fastestRoute` (Dijkstra, the heap ordered by distance, then
+  town; a road's length is its line's), `routePoints` its line in the direction travelled.
 - **Timeline** (`timeline.ts`): the day's events, played in the order of their time, then id; an event may queue
   later ones.
 

@@ -46,7 +46,8 @@ included, whatever the older code around it does.
   existing `.js`/`.mjs` tools, the generated `*.data.js` files and Blender's Python stay as they are until rewritten.
   Type-only imports are `import type`. In `src/sim/` and `src/rulesets/`, lint enforces the determinism rules
   (decision 0006: no inexact `Math`, `Map`, `Set`, wall-clock time or `Float32Array`) and the layer rules (decision
-  0005: the sim imports only the sim; a ruleset only the sim and rulesets), tested by `test/lint.test.ts`.
+  0005: the sim imports only the sim; a ruleset only the sim, the campaign and rulesets; the map engine and the campaign
+  only themselves and the sim's exact maths), tested by `test/lint.test.ts`.
 - **Tests**: behaviour Vitest can test comes with tests, and **every bug fix comes with a test that fails without the
   fix**. Logic buried in browser glue is pulled out into a pure function and tested there
   (`docs/plans/active/test-gaps.md`). Tests are fast, deterministic and check one behaviour each. Cost tests skip

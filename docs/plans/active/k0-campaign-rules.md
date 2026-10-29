@@ -46,7 +46,7 @@ only itself and `src/sim/num.ts`; era values are ruleset data, decision 0015)
   zone) or starts a new one.
 - `courier.ts`: a courier's trip along its route, caught or delivered; the help it brings: heard, under way, the
   head's and the tail's arrival.
-- `roads.ts`: the road graph and the fastest route between two towns (Dijkstra, ties broken by index).
+- `roads.ts`: the road graph and the fastest route between two towns (Dijkstra, the same on every machine).
 - `timeline.ts`: the day's events in a queue ordered by time, then by id, so a turn plays the same everywhere.
 
 Out of scope: the day's loop that ties them together (orders, standing orders, the turn), food, knowledge (K4 and
@@ -62,4 +62,21 @@ after); the map's code (K2a–K2d).
 
 ## Results
 
-Filled when built.
+- `src/campaign/`: rules, march, track, contact (`firstContact`, `firstExit`, `battleFor`), courier (`ride`, `help`,
+  `inHelpRadius`), roads (`fastestRoute`, `routePoints`, `roadLength`), timeline; the Napoleonic values in
+  `src/rulesets/napoleonic-campaign.ts`. 18 tests in `test/campaign-rules.test.ts`, among them the proposal's own: a
+  call 25 km away heard after 125 minutes, the help's head 560 minutes after the call (9 h 20), with 85 % of its
+  strength; two corps closing at 6 km/h meet at minute 285; a courier caught where it enters a zone, at 8.5 km.
+- The exact rules on `src/campaign/` by lint, one helper for it and the map engine (`exactArea` in
+  `eslint.config.js`), tested in `test/lint.test.ts`.
+
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe: a call for help was caught at its first minute (it starts inside the
+  zone of the enemy its corps is fighting); a route of one town (an ally in the same town) crashed `walk`; a window of
+  no length missed a contact already made. Fixed, each with a test: a courier is caught when it enters a zone, and by
+  the zone it starts in only on coming back (`firstExit`, exact); a one-town route delivers at once; contact is
+  checked at the window's start. With: a road's length is its line's (the route chosen and the time to walk it
+  agree); the graph prepared once and searched with a heap (the network will be Europe's); the docs' tie-break claim
+  corrected; the stragglers and the help radius used; the lint block shared with the map engine and tested; the
+  conventions and the index updated.

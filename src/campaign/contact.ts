@@ -19,8 +19,10 @@ function breakpoints(a: Track, b: Track, t0: number, t1: number): number[] {
  * |d0 + v·s|² ≤ r², a quadratic in s, whose first root is the moment of contact.
  */
 export function firstContact(a: Track, b: Track, radius: number, t0: number, t1: number): number | null {
-  const times = breakpoints(a, b, t0, t1)
+  if (t1 < t0) throw new RangeError(`firstContact: the window ends (${t1}) before it starts (${t0})`)
   const r2 = radius * radius
+  if (within(a, b, r2, t0)) return t0
+  const times = breakpoints(a, b, t0, t1)
   for (let k = 0; k < times.length - 1; k++) {
     const ts = times[k]
     const te = times[k + 1]
@@ -44,6 +46,44 @@ export function firstContact(a: Track, b: Track, radius: number, t0: number, t1:
     if (s >= 0 && s <= span) return ts + s
   }
   return null
+}
+
+/**
+ * The earliest time in [t0, t1] at which tracks a and b, within `radius` at t0, are no longer within it, or null if
+ * they stay within it: the later root of the same quadratic as firstContact's, the first interval where it falls.
+ */
+export function firstExit(a: Track, b: Track, radius: number, t0: number, t1: number): number | null {
+  if (t1 < t0) throw new RangeError(`firstExit: the window ends (${t1}) before it starts (${t0})`)
+  const r2 = radius * radius
+  const times = breakpoints(a, b, t0, t1)
+  for (let k = 0; k < times.length - 1; k++) {
+    const ts = times[k]
+    const te = times[k + 1]
+    const pa = positionAt(a, ts)
+    const pb = positionAt(b, ts)
+    const dx = pb.x - pa.x
+    const dz = pb.z - pa.z
+    if (dx * dx + dz * dz > r2) return ts
+    const qa = positionAt(a, te)
+    const qb = positionAt(b, te)
+    const span = te - ts
+    const vx = (qb.x - qa.x - dx) / span
+    const vz = (qb.z - qa.z - dz) / span
+    const qa2 = vx * vx + vz * vz
+    if (qa2 === 0) continue
+    const half = dx * vx + dz * vz
+    const disc = half * half - qa2 * (dx * dx + dz * dz - r2)
+    const s = (-half + Math.sqrt(Math.max(0, disc))) / qa2
+    if (s >= 0 && s < span) return ts + s
+  }
+  return null
+}
+
+/** Whether tracks a and b are within the radius (given squared) at time t. */
+export function within(a: Track, b: Track, r2: number, t: number): boolean {
+  const pa = positionAt(a, t)
+  const pb = positionAt(b, t)
+  return (pb.x - pa.x) * (pb.x - pa.x) + (pb.z - pa.z) * (pb.z - pa.z) <= r2
 }
 
 /** A battle being fought, as far as the contact rule reads it: where it is. */

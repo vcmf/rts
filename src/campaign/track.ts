@@ -33,6 +33,7 @@ export function positionAt(track: Track, t: number): { x: number; z: number } {
  * `speed` metres a minute, to its end.
  */
 export function walk(points: { x: number; z: number }[], startMin: number, speed: number): Track {
+  if (!points.length) throw new RangeError('walk: a route of no points')
   const track: Track = [{ t: startMin, x: points[0].x, z: points[0].z }]
   let t = startMin
   for (let k = 1; k < points.length; k++) {
