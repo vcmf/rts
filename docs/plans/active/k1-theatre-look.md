@@ -179,7 +179,9 @@ layer over the 3D view. Rebuilt on one principle, as the references are made (a 
 - **The camera** 30° far out to 45° at the closest zoom (`?tilt=`).
 
 Measured on test machine A: the bake 4.9–5.1 s at load (the light's rays and the line fields; K3 moves it offline),
-ready in about 6 s; a frame at 1600 × 900 2.3 ms still, 3.8 ms with the ink.
+ready in about 6 s; a frame at 1600 × 900 2.3 ms still, 3.8 ms with the ink. Then (the owner: "it looks awesome, though we don't have the warm yellow-orange light source anymore … at the top
+right", the Valdez print): the sun from the north-east (55°), 20° high, a warm orange (1.3, 0.98, 0.66); the lamp's
+fall-off 0.55, the sun warmer still on its side of the map and cooler on the far side.
 
 ## Review rounds
 

@@ -83,11 +83,12 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * rivers and roads are printed on the raised paper; towns and names are ink on a 2D canvas above.
  *
  * URL (defaults in brackets): ?vert= the shape raised (2.5); ?mount= mountain regions lifted on top, up to 1 + this
- * (1); ?fine= the relief's smaller detail kept (0.75); ?sun= the sun's height in degrees (28); ?az= its azimuth,
- * clockwise from north (315); ?soft= the sun's size in degrees, the shadows' softness (2.5); ?sky= the sky's share of
- * the light (0.62); ?lamp= the light's fall-off across the map (0.25); ?contour= the contour interval in metres (200);
- * ?tilt= the camera's tilt at the closest zoom, in degrees (45); ?clouds= the cloud shadows (0.15); ?view=x,z,km the
- * target in km from the centre, east and north, and the camera distance; ?theatre= the generated file.
+ * (1); ?fine= the relief's smaller detail kept (0.75); ?sun= the sun's height in degrees (20); ?az= its azimuth,
+ * clockwise from north (55: the top right); ?soft= the sun's size in degrees, the shadows' softness (2.5); ?sky= the
+ * sky's share of the light (0.62); ?lamp= the light's fall-off across the map, warmer on the sun's side (0.55);
+ * ?contour= the contour interval in metres (200); ?tilt= the camera's tilt at the closest zoom, in degrees (45);
+ * ?clouds= the cloud shadows (0.15); ?view=x,z,km the target in km from the centre, east and north, and the camera
+ * distance; ?theatre= the generated file.
  */
 'use strict';
 const t0 = performance.now();
@@ -183,12 +184,12 @@ const MESH_STEP = 2;
 // the light: a warm low sun (elevation SUN_EL, from the azimuth SUN_AZ, clockwise from north) whose disc is SUN_R
 // degrees across in the shadows, so they soften with distance; and a cool light from the whole sky, dimmed where the
 // ground sees less of it
-const SUN_EL = param('sun', 28, 3, 80);
-const SUN_AZ = param('az', 315, 0, 360);
+const SUN_EL = param('sun', 20, 3, 80);
+const SUN_AZ = param('az', 55, 0, 360);
 const SUN_R = param('soft', 2.5, 0.2, 15);
 const SKY = param('sky', 0.62, 0, 1);
 // the light falls off across the map from the sun's side, as from a lamp beside the table (0 even)
-const LAMP = param('lamp', 0.25, 0, 0.8);
+const LAMP = param('lamp', 0.55, 0, 0.9);
 // the contours: one every CONTOUR m from heights smoothed over CONTOUR_SMOOTH cells, an index line every
 // CONTOUR_INDEX lines
 const CONTOUR = param('contour', 200, 25, 2000);
@@ -755,11 +756,14 @@ void main() {
                 texture2D(uClouds, vW / 170.0 + vec2(0.37, 0.61) + uTime * vec2(0.0007, 0.0002)).r;
   float sunlit = baked.r * (1.0 - uCloudK * smoothstep(0.3, 0.55, cloud));
   /* the lamp: the light a little stronger on the sun's side of the map, weaker on the far side */
-  float lamp = 1.0 + uLamp * dot(vW / uHalf, normalize(uSun.xz)) * 0.5;
+  float side = dot(vW / uHalf, normalize(uSun.xz)) * 0.5;
+  float lamp = 1.0 + uLamp * side;
   float key = max(0.0, dot(n, uSun)) / uSun.y;
   float sky = baked.g * (0.55 + 0.45 * n.y);
   /* flat open ground in the sun comes out at about the paper's own tone */
-  vec3 light = uKey * key * sunlit * lamp * (1.0 - uSkyK) + uSky * sky * uSkyK;
+  /* the sun warmer toward its side of the map (a lamp low beside the table), the far side in a cooler light */
+  vec3 keyColour = uKey * mix(vec3(1.0), vec3(1.06, 0.96, 0.84), clamp(side * 2.0, -1.0, 1.0) * uLamp);
+  vec3 light = keyColour * key * sunlit * lamp * (1.0 - uSkyK) + uSky * sky * uSkyK;
   vec3 col = print * light;
   /* a soft shoulder: the brightest faces glow toward white instead of clipping */
   col = col / (1.0 + 0.18 * max(col - 1.0, 0.0));
@@ -961,8 +965,8 @@ material.setColor3('uPaper', B.Color3.FromArray(PAPER));
 material.setColor3('uTable', B.Color3.FromArray(hex('#cbc9cf')));
 material.setColor3('uWater', B.Color3.FromArray(hex('#3b78b0')));
 // the sun warm, the sky cool; with the sky's share, flat open ground in the sun comes to about 1
-material.setColor3('uKey', B.Color3.FromArray([1.12, 1.0, 0.84]));
-material.setColor3('uSky', B.Color3.FromArray([0.84, 0.92, 1.12]));
+material.setColor3('uKey', B.Color3.FromArray([1.3, 0.98, 0.66]));
+material.setColor3('uSky', B.Color3.FromArray([0.82, 0.88, 1.08]));
 material.setColor3('uRoad', B.Color3.FromArray(hex('#a3412c')));
 material.setColor3('uRoad2', B.Color3.FromArray(hex('#b8705a')));
 material.setColor3('uRiver', B.Color3.FromArray(hex('#2f6aa3')));
