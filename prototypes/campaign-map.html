@@ -77,22 +77,17 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 <script>
 /*
  * The campaign map prototype (docs/plans/active/k1-theatre-look.md; the look: docs/proposals/campaign-map.md).
- * The 1805 theatre as a lit relief print: the heights baked into a relief at load (the battle map lit view bake,
- * prototypes/staff-map.html, at a thousand times the scale), on parchment, in a 3D view tilted 30 to 60 degrees off
- * straight down (decision 0055). Rivers, roads, towns and names are ink on a 2D canvas above, redrawn when the
- * camera moves.
+ * The 1805 theatre as a relief model lit like a photograph of one: one shape (the real heights, their large forms
+ * kept and mountain regions lifted, raised VERT times) displaces the map's surface and is lit per pixel by a warm low
+ * sun and a cool sky, with the sun's soft shadows and the sky's occlusion baked from that same shape at load. Contours,
+ * rivers and roads are printed on the raised paper; towns and names are ink on a 2D canvas above.
  *
- * URL (defaults in brackets): ?rz= the heights exaggerated for the light (2); ?sun= the sun height in degrees (38);
- * ?floor= and ?top= the darkest and lightest relief tone against the paper (0.55, 1.3); ?base= flat ground's tone
- * (0.96); ?far= the shade's strength over the whole theatre (0.45, full up close); ?dark= how near the deepest
- * shade comes to the cool shadow ink (0.78);
- * ?terrace= the terraces' height in metres (half the contour interval; 0 off);
- * ?detail= the real relief mixed back over them (0.3); ?smooth= the real relief's smoothing in cells (1); ?contour=
- * the contour interval in metres (200); ?view=x,z,km the target in km from the centre, east and north, and the
- * camera distance; ?theatre= the generated file; ?mount= the mountains' extra lift (4; 0 true heights); ?fine=
- * the relief's small detail kept (0.5); ?rise= the map's 3D rise per km of those heights (4; 0 flat; above about 5
- * the ranges break into shards); ?grain= the slopes' streaked grain (0.2);
- * ?mountlight= the milder lift the light reads (1.5).
+ * URL (defaults in brackets): ?vert= the shape raised (2.5); ?mount= mountain regions lifted on top, up to 1 + this
+ * (1); ?fine= the relief's smaller detail kept (0.75); ?sun= the sun's height in degrees (28); ?az= its azimuth,
+ * clockwise from north (315); ?soft= the sun's size in degrees, the shadows' softness (2.5); ?sky= the sky's share of
+ * the light (0.62); ?lamp= the light's fall-off across the map (0.25); ?contour= the contour interval in metres (200);
+ * ?tilt= the camera's tilt at the closest zoom, in degrees (45); ?clouds= the cloud shadows (0.15); ?view=x,z,km the
+ * target in km from the centre, east and north, and the camera distance; ?theatre= the generated file.
  */
 'use strict';
 const t0 = performance.now();
@@ -153,13 +148,15 @@ if (theatreProblem()) {
   throw new Error('campaign map: ' + theatreProblem());
 }
 
+
 /* =========================================================================
-   THE THEATRE: the frame, its projection, the heights
+   THE THEATRE: the frame, its heights, and the one shape everything reads
    ========================================================================= */
 const { lat0, lon0, halfX, halfZ } = T.frame;
 const CELL = T.cell;
 const NX = T.nx;
 const NZ = T.nz;
+
 /**
  * A number from the URL, clamped to [lo, hi], or `fallback` when absent or not a number. A given 0 is kept (within
  * the range), unlike `Number(q) || fallback`.
@@ -169,21 +166,47 @@ function param(name, fallback, lo, hi) {
   return Number.isFinite(v) ? clamp(v, lo, hi) : fallback;
 }
 
-// the light's exaggeration of the heights (0 flattens the relief), and the sun's height in degrees
-const RELIEF_Z = param('rz', 2, 0, 20);
-const RELIEF_SUN = param('sun', 38, 2, 85);
-// the relief tone on the paper: no darker than SHADE_FLOOR, no lighter than SHADE_TOP; both kept off 1, which the
-// shader's soft knee divides by
-const SHADE_FLOOR = param('floor', 0.55, 0.3, 0.97);
-const SHADE_TOP = param('top', 1.3, 1.02, 1.8);
-// how far the deepest shade goes toward the warm black ink (1: all the way)
-const SHADE_DARK = param('dark', 0.78, 0, 1);
-// flat ground's tone against the paper: below 1, so the lit slopes have room to rise to near white above it
-const SHADE_BASE = param('base', 0.96, 0.5, 1);
-// the shade's strength at the theatre's zoom, rising to full as the camera closes in
-const SHADE_FAR = param('far', 0.45, 0, 1);
-// the light from the north-west, as on the battle map: x east, z north
-const NW = [-Math.SQRT1_2, Math.SQRT1_2];
+// the shape: the relief's large forms (about 6 km and up) kept whole and its smaller detail scaled by FINE; mountain
+// regions (where the land around, about 12 km, stands from MOUNT_FROM to MOUNT_TO m) lifted up to 1 + MOUNT times;
+// then the whole raised VERT times. The 3D surface and the light both read this one shape
+const BIG_R = 12;
+const FINE = param('fine', 0.75, 0, 1);
+const MOUNT = param('mount', 1, 0, 4);
+const MOUNT_R = 24;
+const MOUNT_FROM = 500;
+const MOUNT_TO = 1600;
+const VERT = param('vert', 2.5, 0, 8);
+// the shape flattens over the last EDGE_KM to the plate's edge, so the map lies on its table
+const EDGE_KM = 12;
+// the 3D mesh: a vertex every MESH_STEP cells
+const MESH_STEP = 2;
+// the light: a warm low sun (elevation SUN_EL, from the azimuth SUN_AZ, clockwise from north) whose disc is SUN_R
+// degrees across in the shadows, so they soften with distance; and a cool light from the whole sky, dimmed where the
+// ground sees less of it
+const SUN_EL = param('sun', 28, 3, 80);
+const SUN_AZ = param('az', 315, 0, 360);
+const SUN_R = param('soft', 2.5, 0.2, 15);
+const SKY = param('sky', 0.62, 0, 1);
+// the light falls off across the map from the sun's side, as from a lamp beside the table (0 even)
+const LAMP = param('lamp', 0.25, 0, 0.8);
+// the contours: one every CONTOUR m from heights smoothed over CONTOUR_SMOOTH cells, an index line every
+// CONTOUR_INDEX lines
+const CONTOUR = param('contour', 200, 25, 2000);
+const CONTOUR_SMOOTH = 3;
+const CONTOUR_INDEX = 5;
+// the plate's thickness in km, and the camera's tilt off straight down, in degrees, far and at the closest zoom
+const THICK = 8;
+const TILT_FAR = 30;
+const TILT_NEAR = param('tilt', 45, 0, 60);
+// the cloud shadows drifting over the map: how much of the sun they take (0 off)
+const CLOUDS = param('clouds', 0.15, 0, 0.6);
+
+// the sun's direction (x east, y up, z north), toward the sun
+const SUN = (() => {
+  const el = (SUN_EL * Math.PI) / 180;
+  const az = (SUN_AZ * Math.PI) / 180;
+  return [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
+})();
 
 /** The heights in metres, the south row first, decoded from the generated file. */
 function decodeHeights() {
@@ -252,153 +275,100 @@ function boxMean(h, nx, nz, r) {
   return out;
 }
 
-// the slope light is stored over LAMBERT_RANGE (1 on flat ground), wide enough that steep alpine slopes do not clip
-const LAMBERT_RANGE = [0.0, 1.8];
-// the cast shadow softens over this many metres of true height under the shadow line
-const RELIEF_SOFT = 120;
-// the slope light reads heights smoothed over a square of half-width SMOOTH cells (a first simplification: small
-// hills fade, large forms stay); the contours read heights smoothed over CONTOUR_SMOOTH cells, so they run as
-// generalised lines
-const SMOOTH = Math.round(param('smooth', 1, 0, 12));
-const CONTOUR_SMOOTH = 3;
-// the contours: one every CONTOUR m, an index line every CONTOUR_INDEX lines
-const CONTOUR = param('contour', 200, 25, 2000);
-const CONTOUR_INDEX = 5;
-// the terraces: the light reads heights snapped into bands TERRACE m tall (every height in a band lifted to its
-// floor, so low ground goes flat and the relief reads as stacked layers); half the contour interval, from heights
-// smoothed less than the contours', so the contour lines do not always sit on a terrace's bank; DETAIL of the
-// smoothed real heights is mixed back so a terrace is not a bare plateau. ?terrace=0 turns them off
-const TERRACE = param('terrace', 0, 0, 2000);
-// the contour sheets drawn per pixel, SHEET m apart (the contour interval: every step has its ink line), each
-// with a lit rim toward the light and a shadow under the sheet above. Off by default (the owner: they read as
-// shadows cast by the contour lines); ?sheet=200 to compare
-const SHEET = param('sheet', 0, 0, 2000);
-// the cast shadow is thrown by the large forms only: heights averaged over a square of half-width CAST_SMOOTH cells
-const CAST_SMOOTH = 6;
-// the plate's thickness in km, and the camera's tilt off straight down, in degrees, far and at the closest zoom
-const THICK = 8;
-const TILT_FAR = 30;
-const TILT_NEAR = param('tilt', 60, 0, 60);
-// the cloud shadows drifting over the map: how dark (0 off)
-const CLOUDS = param('clouds', 0.12, 0, 0.5);
-// the grain on the slopes: fine noise streaked downhill, like gullies (0 off)
-const GRAIN = param('grain', 0.2, 0, 0.8);
-// how much of the real relief's detail the light gets back up close
-const DETAIL_GAIN = param('crisp', 0.8, 0, 1.5);
-const TERRACE_SMOOTH = 1;
-const DETAIL = param('detail', 0.3, 0, 1);
-// representative mountains, as a campaign map draws them: the relief's large-scale shape (heights averaged over a
-// square of half-width BIG_R cells, about 6 km across) kept whole and its smaller detail scaled by FINE, then the
-// heights above the lowlands lifted by up to MOUNT times more where the wider region (MOUNT_R cells) stands high:
-// the plains stay flat, the Alps tower and throw long shadows
-const BIG_R = 12;
-const FINE = param('fine', 0.5, 0, 1);
-const MOUNT = param('mount', 4, 0, 12);
-// the light reads a milder lift than the 3D shape: lifted as much, the cast shadows would swallow the valleys
-const MOUNT_LIGHT = param('mountlight', 1.5, 0, 12);
-// the map raised in 3D by the same representative heights, RISE km of map for each km of them, smoothed over
-// DISP_SMOOTH cells (the mesh has a vertex about every km), fading to flat over the last RISE_EDGE km to the plate's
-// edge so the map still lies on its table
-const RISE = param('rise', 4, 0, 8);
-const DISP_SMOOTH = 3;
-const RISE_EDGE = 12;
-const MOUNT_R = 24;
-const MOUNT_FROM = 500;
-const MOUNT_TO = 1600;
-
 /**
- * The heights the light reads: the relief made representative (its large-scale shape whole, its detail scaled by
- * FINE), terraced (smoothed over TERRACE_SMOOTH cells and snapped down to its TERRACE band, each step softened over a
- * cell either side so it is a steep bank rather than a cliff, with DETAIL of it smoothed over SMOOTH cells mixed back
- * in; without terraces, the smoothed heights alone); `lifted` then raises it where the region stands high.
+ * The one shape, in metres above the lowest ground, raised VERT times: the large forms whole, the detail scaled by
+ * FINE, mountain regions lifted, flattened toward the plate's edge. The 3D surface is displaced by it and the light
+ * is computed from it, so what is lit is what is seen.
  */
-function terraced(h0) {
+function buildShape(h0) {
   const big = blur(h0, NX, NZ, BIG_R);
-  const equalised = new Float32Array(h0.length);
-  for (let k = 0; k < h0.length; k++) equalised[k] = big[k] + (h0[k] - big[k]) * FINE;
-  return terracedFrom(equalised);
-}
-
-/**
- * The heights above the lowlands lifted by 1 + gain · how high the wider region stands (from MOUNT_FROM to MOUNT_TO
- * m, smoothly), so a mountain range rises as a mass while the plains stay as they are.
- */
-function lifted(h, h0, gain) {
-  if (!gain) return h;
   const region = blur(h0, NX, NZ, MOUNT_R);
   let low = Infinity;
   for (const v of h0) low = Math.min(low, v);
-  const out = new Float32Array(h.length);
-  for (let k = 0; k < h.length; k++) out[k] = low + (h[k] - low) * (1 + gain * sstep(MOUNT_FROM, MOUNT_TO, region[k]));
-  return out;
-}
-
-/** The terraced heights of `h0` (see `terraced`): bands of TERRACE m, DETAIL of the smoothed heights mixed back. */
-function terracedFrom(h0) {
-  const detail = SMOOTH ? blur(h0, NX, NZ, SMOOTH) : h0;
-  if (!TERRACE) return detail;
-  const field = blur(h0, NX, NZ, TERRACE_SMOOTH);
-  const bands = new Float32Array(h0.length);
-  for (let k = 0; k < bands.length; k++) bands[k] = Math.floor(field[k] / TERRACE) * TERRACE;
-  const steps = blur(bands, NX, NZ, 1);
   const out = new Float32Array(h0.length);
-  for (let k = 0; k < out.length; k++) out[k] = steps[k] * (1 - DETAIL) + detail[k] * DETAIL;
-  return out;
-}
-
-/**
- * The shaded relief, baked once at load into RGBA bytes (`bytes`) the size of the grid, with the heights the light read
- * before their lift (`base`), the south row first: R the slope light
- * (Lambert over LAMBERT_RANGE), G the cast shadow (1 lit, 0 in shadow), B the exposure (0.5 even, lower in valleys,
- * higher on crests). The battle map bake (prototypes/staff-map.html, bakeRelief) at the theatre scale.
- *
- * Cast shadow, in one pass: walking from the light, each node carries the highest shadow line reaching it (the line
- * of its neighbour toward the light, dropped by the sun slope over one step, or its own height). On this grid the
- * north-west neighbour is (i - 1, j + 1), so the walk goes north to south, west to east.
- */
-function bakeRelief(h0) {
-  const base = terraced(h0);
-  const shaped = lifted(base, h0, MOUNT_LIGHT);
-  const h = new Float32Array(h0.length);
-  for (let k = 0; k < h.length; k++) h[k] = shaped[k] * RELIEF_Z;
-  const el = (RELIEF_SUN * Math.PI) / 180;
-  const drop = CELL * Math.SQRT2 * Math.tan(el);
-  const L = [NW[0] * Math.cos(el), Math.sin(el), NW[1] * Math.cos(el)];
-
-  // the cast shadow from the large forms
-  const castH = blur(h, NX, NZ, CAST_SMOOTH);
-  const lit = new Float32Array(NX * NZ);
-  const line = new Float32Array(NX * NZ);
-  for (let j = NZ - 1; j >= 0; j--) {
-    for (let i = 0; i < NX; i++) {
-      const k = j * NX + i;
-      const fromLight = i > 0 && j < NZ - 1 ? line[(j + 1) * NX + i - 1] - drop : -Infinity;
-      line[k] = Math.max(castH[k], fromLight);
-      lit[k] = 1 - sstep(0, 1, (fromLight - castH[k]) / (RELIEF_SOFT * Math.max(RELIEF_Z, 0.01)));
-    }
-  }
-
-  // exposure: how far a node stands above or below its surroundings, near (about 1.5 km) and wide (about 6 km)
-  const near = blur(shaped, NX, NZ, 6);
-  const wide = blur(shaped, NX, NZ, 24);
-
-  const out = new Uint8Array(NX * NZ * 4);
   for (let j = 0; j < NZ; j++) {
     for (let i = 0; i < NX; i++) {
       const k = j * NX + i;
-      const gx = (h[j * NX + Math.min(NX - 1, i + 1)] - h[j * NX + Math.max(0, i - 1)]) / (2 * CELL);
-      const gz = (h[Math.min(NZ - 1, j + 1) * NX + i] - h[Math.max(0, j - 1) * NX + i]) / (2 * CELL);
-      const nl = Math.hypot(gx, 1, gz);
-      const lambert = Math.max(0, (-gx * L[0] + L[1] - gz * L[2]) / nl) / L[1];
-      const exposed = 0.5 - ((near[k] - shaped[k]) * 0.0007 + (wide[k] - shaped[k]) * 0.00025);
-      const o = k * 4;
-      out[o] = Math.round(clamp((lambert - LAMBERT_RANGE[0]) / (LAMBERT_RANGE[1] - LAMBERT_RANGE[0]), 0, 1) * 255);
-      out[o + 1] = Math.round(lit[k] * 255);
-      out[o + 2] = Math.round(clamp(exposed, 0, 1) * 255);
-      out[o + 3] = 255;
+      const h = big[k] + (h0[k] - big[k]) * FINE - low;
+      const lift = 1 + MOUNT * sstep(MOUNT_FROM, MOUNT_TO, region[k]);
+      const edgeKm = (Math.min(i, NX - 1 - i, j, NZ - 1 - j) * CELL) / 1000;
+      out[k] = Math.max(0, h) * lift * VERT * sstep(0, EDGE_KM, edgeKm);
     }
   }
-  return { bytes: out, base, shaped };
+  return out;
+}
+
+/** Bilinear read of a grid (nx × nz nodes `cell` m apart from the frame's south-west corner) at map metres. */
+function sampleGrid(g, nx, nz, cell, x, z) {
+  const fx = clamp((x + halfX) / cell, 0, nx - 1.001);
+  const fz = clamp((z + halfZ) / cell, 0, nz - 1.001);
+  const i = Math.floor(fx);
+  const j = Math.floor(fz);
+  const u = fx - i;
+  const v = fz - j;
+  const k = j * nx + i;
+  const top = g[k] * (1 - u) + g[k + 1] * u;
+  const bottom = g[k + nx] * (1 - u) + g[k + nx + 1] * u;
+  return top * (1 - v) + bottom * v;
+}
+
+/** Every `step`-th node of a grid, as a coarser grid. */
+function decimate(g, nx, nz, step) {
+  const cx = Math.floor((nx - 1) / step) + 1;
+  const cz = Math.floor((nz - 1) / step) + 1;
+  const out = new Float32Array(cx * cz);
+  for (let j = 0; j < cz; j++) for (let i = 0; i < cx; i++) out[j * cx + i] = g[j * step * nx + i * step];
+  return { g: out, nx: cx, nz: cz };
+}
+
+/**
+ * The light that does not change: baked once from the shape on a grid of half its resolution, as RGBA bytes, the
+ * south row first.
+ * R, the sun's shadow: from each node a ray walks toward the sun in growing steps (to about 60 km); the sun is a
+ * disc SUN_R degrees across, so a ridge just grazing the ray dims it in part, and the penumbra widens with the
+ * distance to the ridge, as a real shadow's does.
+ * G, the open sky: in eight directions, the highest horizon within about 9 km; the sky a node sees is the mean of
+ * one minus the sine of those horizon angles, so valley floors and gullies darken (ambient occlusion).
+ */
+function bakeLight(shape) {
+  const { g, nx, nz } = decimate(shape, NX, NZ, 2);
+  const cell = CELL * 2;
+  const out = new Uint8Array(nx * nz * 4);
+  const tanEl = Math.tan((SUN_EL * Math.PI) / 180);
+  const tanR = Math.tan(((SUN_R / 2) * Math.PI) / 180);
+  const sunXZ = [SUN[0], SUN[2]].map(v => v / Math.hypot(SUN[0], SUN[2]));
+  const sunSteps = [];
+  for (let d = 400; d < 60000; d *= 1.18) sunSteps.push(d);
+  const dirs = [];
+  for (let a = 0; a < 8; a++) dirs.push([Math.cos((a * Math.PI) / 4), Math.sin((a * Math.PI) / 4)]);
+  const skySteps = [300, 700, 1300, 2200, 3600, 5800, 9000];
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const k = j * nx + i;
+      const x = -halfX + i * cell;
+      const z = -halfZ + j * cell;
+      const h = g[k];
+      let sun = 1;
+      for (const d of sunSteps) {
+        const hs = sampleGrid(g, nx, nz, cell, x + sunXZ[0] * d, z + sunXZ[1] * d);
+        const clear = (h + d * tanEl - hs) / d;
+        sun = Math.min(sun, clamp(0.5 + (0.5 * clear) / tanR, 0, 1));
+        if (sun <= 0) break;
+      }
+      let sky = 0;
+      for (const [dx, dz] of dirs) {
+        let horizon = 0;
+        for (const d of skySteps) {
+          horizon = Math.max(horizon, (sampleGrid(g, nx, nz, cell, x + dx * d, z + dz * d) - h) / d);
+        }
+        sky += 1 - horizon / Math.hypot(1, horizon);
+      }
+      out[k * 4] = Math.round(sun * sun * (3 - 2 * sun) * 255);
+      out[k * 4 + 1] = Math.round((sky / dirs.length) * 255);
+      out[k * 4 + 3] = 255;
+    }
+  }
+  return { data: out, nx, nz };
 }
 
 /**
@@ -428,6 +398,79 @@ function bakeLakes(maxTextureSize) {
   const data = new Uint8Array(w * h);
   for (let k = 0; k < data.length; k++) data[k] = rgba[k * 4];
   return { data, w, h };
+}
+
+// the line textures hold, per cell, the offset to the nearest point of a line, up to LINE_REACH cells either way
+const LINE_REACH = 6;
+
+/**
+ * Roads and rivers as offset fields over the frame, one cell a texel, the south row first, so the print shader drapes
+ * them on the raised ground and draws them crisp at any width. For each kind of line (high road, country road, river
+ * of rank 6 or larger) a texel holds the vector from its centre to the nearest point of such a line, in cells, each
+ * axis mapped from -LINE_REACH..LINE_REACH to 0..255. The vector to a straight line is linear in the position, so a
+ * bilinear read gives the exact distance between texels (a distance, V-shaped across the line, does not: the line
+ * broke into dots). Returns two RGBA byte arrays: the high roads (R, G) and country roads (B, A), and the rivers
+ * (R, G).
+ */
+function bakeLines() {
+  const w = NX - 1;
+  const h = NZ - 1;
+  const kinds = [0, 1, 2].map(() => ({
+    d: new Float32Array(w * h).fill(Infinity),
+    ox: new Float32Array(w * h).fill(LINE_REACH),
+    oz: new Float32Array(w * h).fill(LINE_REACH),
+  }));
+  /** Updates the nearest offsets around one segment (in cells), in the texels within reach of it. */
+  const segment = (field, ax, az, bx, bz) => {
+    const i0 = Math.max(0, Math.floor(Math.min(ax, bx) - LINE_REACH));
+    const i1 = Math.min(w - 1, Math.ceil(Math.max(ax, bx) + LINE_REACH));
+    const j0 = Math.max(0, Math.floor(Math.min(az, bz) - LINE_REACH));
+    const j1 = Math.min(h - 1, Math.ceil(Math.max(az, bz) + LINE_REACH));
+    const dx = bx - ax;
+    const dz = bz - az;
+    const l2 = dx * dx + dz * dz || 1e-9;
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const px = i + 0.5;
+        const pz = j + 0.5;
+        const t = clamp(((px - ax) * dx + (pz - az) * dz) / l2, 0, 1);
+        const ox = ax + t * dx - px;
+        const oz = az + t * dz - pz;
+        const d = Math.hypot(ox, oz);
+        const k = j * w + i;
+        if (d < field.d[k]) {
+          field.d[k] = d;
+          field.ox[k] = ox;
+          field.oz[k] = oz;
+        }
+      }
+    }
+  };
+  /** A line of map metres, in cells from the frame's south-west corner. */
+  const line = (field, p) => {
+    for (let k = 2; k < p.length; k += 2) {
+      segment(
+        field,
+        (p[k - 2] + halfX) / CELL, (p[k - 1] + halfZ) / CELL,
+        (p[k] + halfX) / CELL, (p[k + 1] + halfZ) / CELL,
+      );
+    }
+  };
+  for (const r of T.roads) line(kinds[r.kind === 'high' ? 0 : 1], r.p);
+  for (const r of T.rivers) if (r.rank <= 6) line(kinds[2], r.p);
+  const byte = v => Math.round(clamp((v / LINE_REACH) * 0.5 + 0.5, 0, 1) * 255);
+  const roads = new Uint8Array(w * h * 4);
+  const rivers = new Uint8Array(w * h * 4);
+  for (let k = 0; k < w * h; k++) {
+    roads[k * 4] = byte(kinds[0].ox[k]);
+    roads[k * 4 + 1] = byte(kinds[0].oz[k]);
+    roads[k * 4 + 2] = byte(kinds[1].ox[k]);
+    roads[k * 4 + 3] = byte(kinds[1].oz[k]);
+    rivers[k * 4] = byte(kinds[2].ox[k]);
+    rivers[k * 4 + 1] = byte(kinds[2].oz[k]);
+    rivers[k * 4 + 3] = 255;
+  }
+  return { roads, rivers, w, h };
 }
 
 /** A tileable paper grain: mottling, fibres and specks around mid grey (the shader colours it). */
@@ -491,384 +534,6 @@ function paperCanvas() {
   return c;
 }
 
-/* =========================================================================
-   THE PRINT: one plane in km, the map in the middle and the table around it
-   ========================================================================= */
-const canvas = document.getElementById('c');
-const GL_DPR = Math.min(2, window.devicePixelRatio || 1);
-const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: false }, false);
-engine.setHardwareScalingLevel(1 / GL_DPR);
-const scene = new B.Scene(engine);
-scene.clearColor = new B.Color4(0.8, 0.79, 0.81, 1);
-scene.skipPointerMovePicking = true;
-
-const MAP_W = (2 * halfX) / 1000;
-const MAP_H = (2 * halfZ) / 1000;
-// the table runs this far past the map on every side, in km
-const TABLE = 900;
-
-B.Effect.ShadersStore.printVertexShader = `
-precision highp float;
-attribute vec3 position;
-uniform mat4 worldViewProjection;
-uniform sampler2D uDisp;
-uniform vec2 uHalf, uTexel;
-uniform float uCellKm, uRise, uEdge;
-varying vec2 vW;
-void main() {
-  vW = position.xz;
-  /* raised by the representative heights, flat at the plate edge and on the table beyond it */
-  vec2 uv = ((position.xz + uHalf) / uCellKm + 0.5) * uTexel;
-  float fade = smoothstep(0.0, uEdge, min(uHalf.x - abs(position.x), uHalf.y - abs(position.z)));
-  float y = position.y + texture2D(uDisp, uv).r / 1000.0 * uRise * fade;
-  gl_Position = worldViewProjection * vec4(position.x, y, position.z, 1.0);
-}`;
-
-B.Effect.ShadersStore.printFragmentShader = `
-precision highp float;
-varying vec2 vW;
-uniform sampler2D uRelief, uLakes, uPaperT, uHeight, uLightH, uLightD, uRealH, uFine0, uFine1, uFine2, uClouds;
-uniform vec2 uHalf, uTexel, uLakeTexel, uLightXZ, uFineTexel0, uFineTexel1, uFineTexel2;
-uniform vec4 uFineRect0, uFineRect1, uFineRect2;
-uniform vec3 uSun;
-uniform float uCellKm, uFineCellKm, uRZ, uFineK, uNearK, uDetailK, uSheetK, uContourK, uSheet;
-uniform float uTime, uCloudK, uHaze, uScreenH, uGrain;
-uniform vec3 uPaper, uTable, uWater, uShadowInk, uHighlight, uGlow, uContourInk, uContourMinor;
-uniform float uFloor, uTop, uContour, uDark, uBase, uShadeK;
-
-float rectDist(vec2 p, vec2 extent) {
-  vec2 d = abs(p) - extent;
-  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-}
-
-/* the frame grid: node i at the centre of texel i */
-vec2 gridUv(vec2 w) {
-  return ((w + uHalf) / uCellKm + 0.5) * uTexel;
-}
-
-/* a smooth cubic B-spline read of all four channels, from four bilinear taps */
-vec4 bicubic4(sampler2D t, vec2 uv, vec2 texel) {
-  vec2 p = uv / texel - 0.5;
-  vec2 f = fract(p);
-  p = floor(p);
-  vec2 w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;
-  vec2 w1 = (3.0 * f * f * f - 6.0 * f * f + 4.0) / 6.0;
-  vec2 w3 = f * f * f / 6.0;
-  vec2 w2 = 1.0 - w0 - w1 - w3;
-  vec2 g0 = w0 + w1;
-  vec2 g1 = w2 + w3;
-  vec2 a = (p - 1.0 + w1 / g0 + 0.5) * texel;
-  vec2 b = (p + 1.0 + w3 / g1 + 0.5) * texel;
-  return g0.y * (g0.x * texture2D(t, vec2(a.x, a.y)) + g1.x * texture2D(t, vec2(b.x, a.y)))
-       + g1.y * (g0.x * texture2D(t, vec2(a.x, b.y)) + g1.x * texture2D(t, vec2(b.x, b.y)));
-}
-
-/* a smooth cubic B-spline read of a single-channel texture, from four bilinear taps */
-float bicubic(sampler2D t, vec2 uv, vec2 texel) {
-  vec2 p = uv / texel - 0.5;
-  vec2 f = fract(p);
-  p = floor(p);
-  vec2 w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;
-  vec2 w1 = (3.0 * f * f * f - 6.0 * f * f + 4.0) / 6.0;
-  vec2 w3 = f * f * f / 6.0;
-  vec2 w2 = 1.0 - w0 - w1 - w3;
-  vec2 g0 = w0 + w1;
-  vec2 g1 = w2 + w3;
-  vec2 a = (p - 1.0 + w1 / g0 + 0.5) * texel;
-  vec2 b = (p + 1.0 + w3 / g1 + 0.5) * texel;
-  return g0.y * (g0.x * texture2D(t, vec2(a.x, a.y)).r + g1.x * texture2D(t, vec2(b.x, a.y)).r)
-       + g1.y * (g0.x * texture2D(t, vec2(a.x, b.y)).r + g1.x * texture2D(t, vec2(b.x, b.y)).r);
-}
-
-/* a Catmull-Rom read of a single-channel texture: it passes through the texels (a B-spline blurs them by about half a
-   texel), sixteen taps at texel centres */
-float catmullRom(sampler2D t, vec2 uv, vec2 texel) {
-  vec2 p = uv / texel - 0.5;
-  vec2 f = fract(p);
-  vec2 base = (floor(p) + 0.5) * texel;
-  vec2 f2 = f * f;
-  vec2 f3 = f2 * f;
-  vec2 w0 = -0.5 * f3 + f2 - 0.5 * f;
-  vec2 w1 = 1.5 * f3 - 2.5 * f2 + 1.0;
-  vec2 w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f;
-  vec2 w3 = 0.5 * f3 - 0.5 * f2;
-  float sum = 0.0;
-  for (int j = 0; j < 4; j++) {
-    float wy = j == 0 ? w0.y : j == 1 ? w1.y : j == 2 ? w2.y : w3.y;
-    float y = base.y + float(j - 1) * texel.y;
-    float row = w0.x * texture2D(t, vec2(base.x - texel.x, y)).r + w1.x * texture2D(t, vec2(base.x, y)).r;
-    row += w2.x * texture2D(t, vec2(base.x + texel.x, y)).r + w3.x * texture2D(t, vec2(base.x + 2.0 * texel.x, y)).r;
-    sum += wy * row;
-  }
-  return sum;
-}
-
-/* the finer heights minus the coarse ones, in metres, inside a window (x0, z0, x1, z1 in km), faded at its edge */
-float fineIn(sampler2D t, vec4 rect, vec2 texel, vec2 w) {
-  float edge = min(min(w.x - rect.x, rect.z - w.x), min(w.y - rect.y, rect.w - w.y));
-  if (edge <= 0.0) return 0.0;
-  vec2 uv = ((w - rect.xy) / uFineCellKm + 0.5) * texel;
-  return texture2D(t, uv).r * smoothstep(0.0, 4.0, edge);
-}
-
-float fineDetail(vec2 w) {
-  return (fineIn(uFine0, uFineRect0, uFineTexel0, w) + fineIn(uFine1, uFineRect1, uFineTexel1, w) +
-          fineIn(uFine2, uFineRect2, uFineTexel2, w)) * uFineK;
-}
-
-/* the heights the light reads (representative, metres), exaggerated by uRZ */
-float lightH(vec2 w) {
-  return catmullRom(uLightH, gridUv(w), uTexel);
-}
-
-/* up close, the real detail the simplification removed and the finer windows' detail: lit at its true slope */
-float detailH(vec2 w) {
-  float h = uDetailK > 0.0 ? uDetailK * catmullRom(uLightD, gridUv(w), uTexel) : 0.0;
-  return h + fineDetail(w);
-}
-
-/* the heights the contours and sheets read: generalised far, the real ones (and the finer detail) up close */
-float contourH(vec2 w) {
-  float generalised = texture2D(uHeight, gridUv(w)).r;
-  if (uNearK <= 0.0) return generalised;
-  return mix(generalised, bicubic(uRealH, gridUv(w), uTexel) + fineDetail(w), uNearK);
-}
-
-void main() {
-  vec2 uv = gridUv(vW);
-  float g1 = texture2D(uPaperT, vW / 3.0).r;
-  float g2 = texture2D(uPaperT, vW / 31.0 + 0.37).r;
-  float g3 = texture2D(uPaperT, vW / 170.0 + 0.71).r;
-  float grain = 0.93 + (g1 - 0.5) * 0.2 + (g2 - 0.5) * 0.12 + (g3 - 0.5) * 0.07;
-  float haze = uHaze * smoothstep(0.45, 1.0, gl_FragCoord.y / uScreenH);
-
-  float d = rectDist(vW, uHalf);
-  if (d > 0.0) {
-    /* the table, and the thick plate shadow thrown to the south-east */
-    float sd = rectDist(vW - vec2(14.0, -14.0), uHalf);
-    float shadow = 1.0 - smoothstep(-10.0, 34.0, sd);
-    vec3 table = uTable * (0.97 + (g2 - 0.5) * 0.08 + (g3 - 0.5) * 0.06);
-    table *= 1.0 - 0.38 * shadow;
-    gl_FragColor = vec4(mix(table, uTable, haze), 1.0);
-    return;
-  }
-
-  vec3 paper = uPaper * grain;
-  /* a thin worn border inside the neatline */
-  paper *= mix(vec3(0.88, 0.88, 0.9), vec3(1.0), smoothstep(0.6, 3.0, -d));
-
-  /* the light per pixel: the slope of the representative heights (a smooth cubic read, with the finer detail up
-     close), the cast shadow of the large forms and the exposure baked */
-  float px = max(length(fwidth(vW)), 1e-4);
-  float e = max(px, mix(0.5 * uCellKm, 0.5 * uFineCellKm, uFineK));
-  vec2 ex = vec2(e, 0.0);
-  vec2 ez = vec2(0.0, e);
-  float hx = (lightH(vW + ex) - lightH(vW - ex)) * uRZ + (detailH(vW + ex) - detailH(vW - ex));
-  float hz = (lightH(vW + ez) - lightH(vW - ez)) * uRZ + (detailH(vW + ez) - detailH(vW - ez));
-  vec3 n = normalize(vec3(-hx, 2000.0 * e, -hz));
-  float lambert = max(0.0, dot(n, uSun)) / uSun.y;
-  /* the baked cast shadow and exposure, read smoothly: bilinear, the shadow edges stepped along the 250 m grid */
-  vec3 R = bicubic4(uRelief, uv, uTexel).rgb;
-  float sunlit = R.g;
-  float exposed = R.b * 2.0 - 1.0;
-  float v = lambert * mix(0.6, 1.0, sunlit) * (1.0 + 0.3 * exposed);
-  /* grain: fine noise streaked downhill (gullies), at two scales, stronger on steep ground, faded where it would
-     shimmer (under about 1.5 px a period); applied to the colour below, after the tone knee, which flattened it */
-  float grainK = 0.0;
-  {
-    float slope = length(vec2(hx, hz)) / (2000.0 * e);
-    vec2 down = vec2(hx, hz) / max(length(vec2(hx, hz)), 1e-6);
-    vec2 across = vec2(-down.y, down.x);
-    vec2 q = vec2(dot(vW, across), dot(vW, down));
-    /* the level of detail set by hand: the streak frame turns with the slope from pixel to pixel, so the automatic
-       one saw huge derivatives and read the flat top mip */
-    /* the smooth cloud noise (256 texels a tile), streaked: cells of about 300 m across the slope, 2 km down it, and a
-       finer octave three times smaller */
-    float lod1 = log2(max(1.0, px * 0.2 * 256.0));
-    float lod2 = log2(max(1.0, px * 0.6 * 256.0));
-    float n1 = textureLod(uClouds, q * vec2(0.2, 0.03), lod1).r;
-    float n2 = textureLod(uClouds, q * vec2(0.6, 0.09) + 0.41, lod2).r;
-    float g = ((n1 - 0.5) * 0.6 + (n2 - 0.5) * 0.4 * (1.0 - smoothstep(0.15, 0.4, px * 2.0))) * 3.5;
-    float steep = smoothstep(0.03, 0.25, slope);
-    grainK = uGrain * clamp(g, -1.0, 1.0) * mix(0.25, 1.0, steep) * (1.0 - smoothstep(0.5, 1.2, px));
-  }
-  /* a soft knee toward the floor and the top: steep ground keeps its gradation instead of a flat tone */
-  float dv = v - 1.0;
-  v = dv < 0.0 ? 1.0 - (1.0 - uFloor) * (1.0 - exp(dv / (1.0 - uFloor)))
-               : 1.0 + (uTop - 1.0) * (1.0 - exp(-dv / (uTop - 1.0)));
-  /* flat ground a mid tone of the paper; the shade runs from it to a warm black ink, the lit slopes up to near white */
-  vec3 base = paper * uBase;
-  float shade = pow(clamp((1.0 - v) / (1.0 - uFloor), 0.0, 1.0), 1.15);
-  float light = pow(clamp((v - 1.0) / (uTop - 1.0), 0.0, 1.0), 0.8);
-  /* cold paper, cool shade, warm light: the lit slopes turn a warm yellow, the brightest faces glow orange */
-  vec3 lit = mix(mix(base, uHighlight, light), uGlow, 0.65 * pow(light, 2.5));
-  vec3 col = v < 1.0 ? mix(base, uShadowInk, shade * uDark * uShadeK) : lit;
-  /* the grain: lighter flecks in the shade, darker in the light */
-  col = clamp(col * (1.0 + grainK), 0.0, 1.0);
-
-  /* the contour sheets, per pixel at any zoom: a pixel whose ground toward the light lies on a lower sheet is on the
-     lit rim of its own; one whose ground toward the light lies on a higher sheet is in that sheet's shadow */
-  float hc = contourH(vW);
-  if (uSheet > 0.0) {
-    float sheet = floor(hc / uSheet);
-    float crowd = (1.0 - smoothstep(0.05, 0.14, fwidth(hc / uSheet))) * uSheetK;
-    float rim = floor(contourH(vW + uLightXZ * 1.5 * px) / uSheet);
-    float over = floor(contourH(vW + uLightXZ * 3.0 * px) / uSheet);
-    if (over > sheet) col *= 1.0 - 0.16 * crowd;
-    else if (rim < sheet) col = mix(col, uHighlight, 0.45 * crowd);
-  }
-
-  /* contours: a thin line every uContour metres, a stronger index line every fifth, in dark ink; each fades where its
-     lines would crowd on screen */
-  float f1 = hc / uContour;
-  float f5 = f1 / ${CONTOUR_INDEX.toFixed(1)};
-  float w1 = fwidth(f1);
-  float w5 = fwidth(f5);
-  float l1 = 1.0 - smoothstep(0.5, 1.3, abs(fract(f1 + 0.5) - 0.5) / max(w1, 1e-5));
-  float l5 = 1.0 - smoothstep(1.0, 2.1, abs(fract(f5 + 0.5) - 0.5) / max(w5, 1e-5));
-  l1 *= 1.0 - smoothstep(0.06, 0.16, w1);
-  l5 *= 1.0 - smoothstep(0.08, 0.2, w5);
-  /* far out only the index lines, fainter: half-faded lines on steep uplands read as crumbs */
-  /* the ordinary lines thin and a muted grey, every fifth (the index line) thicker in dark orange */
-  col = mix(col, uContourMinor, 0.5 * l1 * uContourK * (1.0 - l5));
-  col = mix(col, uContourInk, mix(0.4, 0.9, uContourK) * l5);
-
-  /* lakes: a flat wash sunk below the shore, the bank toward the light shading the water */
-  vec2 luv = (vW + uHalf) / (2.0 * uHalf);
-  vec2 lx = vec2(uLakeTexel.x, 0.0);
-  vec2 lz = vec2(0.0, uLakeTexel.y);
-  /* a smooth cubic read, so the 125 m mask does not show its steps up close */
-  float w = bicubic(uLakes, luv, uLakeTexel);
-  if (w > 0.01) {
-    vec2 gW = vec2(texture2D(uLakes, luv + lx).r - texture2D(uLakes, luv - lx).r,
-                   texture2D(uLakes, luv + lz).r - texture2D(uLakes, luv - lz).r);
-    vec2 nw = gW / max(length(gW), 1e-4);
-    float bank = smoothstep(0.02, 0.3, length(gW));
-    vec3 wash = mix(paper, uWater, 0.88);
-    wash *= 1.0 - 0.3 * clamp(dot(nw, -uLightXZ), 0.0, 1.0) * bank;
-    col = mix(col, wash, smoothstep(0.15, 0.6, w));
-  }
-
-  /* cloud shadows drifting slowly from the west */
-  /* two scales, crossed, so the tile never repeats visibly */
-  float cloud = texture2D(uClouds, vW / 310.0 + uTime * vec2(0.0005, 0.00015)).r *
-                texture2D(uClouds, vW / 170.0 + vec2(0.37, 0.61) + uTime * vec2(0.0007, 0.0002)).r;
-  col *= 1.0 - uCloudK * smoothstep(0.3, 0.55, cloud);
-
-  /* haze toward the top of the view, as the camera tilts up close */
-  gl_FragColor = vec4(mix(col, uPaper * 0.97, haze), 1.0);
-}`;
-
-/* the plate's sides: paper lit by the map's one light, darker below */
-B.Effect.ShadersStore.sideVertexShader = `
-precision highp float;
-attribute vec3 position;
-attribute vec3 normal;
-uniform mat4 worldViewProjection;
-varying vec3 vN;
-varying float vY;
-void main() {
-  vN = normal;
-  vY = position.y;
-  gl_Position = worldViewProjection * vec4(position, 1.0);
-}`;
-
-B.Effect.ShadersStore.sideFragmentShader = `
-precision highp float;
-varying vec3 vN;
-varying float vY;
-uniform vec3 uPaper;
-uniform vec2 uLightXZ;
-uniform float uThick;
-void main() {
-  float lit = 0.62 + 0.38 * max(0.0, dot(normalize(vN.xz + 1e-5), uLightXZ));
-  float low = mix(0.82, 1.0, clamp(vY / uThick + 1.0, 0.0, 1.0));
-  /* the top face lies just under the map's edge: paper, so it never shows as specks where they meet */
-  gl_FragColor = vec4(vN.y > 0.5 ? uPaper : uPaper * lit * low, 1.0);
-}`;
-
-// one float's bits, shared by every call of toHalf (allocating per value cost seconds over the grid)
-const HALF_F32 = new Float32Array(1);
-const HALF_U32 = new Uint32Array(HALF_F32.buffer);
-
-/** A number as the bits of a half float (IEEE 754 binary16), rounded to nearest; heights of a few km lose under 2 m. */
-function toHalf(v) {
-  HALF_F32[0] = v;
-  const x = HALF_U32[0];
-  const sign = (x >>> 16) & 0x8000;
-  const exp = ((x >>> 23) & 0xff) - 127 + 15;
-  const mant = x & 0x7fffff;
-  if (exp <= 0) return sign;
-  if (exp >= 31) return sign | 0x7c00;
-  // added, not or-ed: a mantissa rounding up to 1024 carries into the exponent (or-ed, 511.9 m read as 256)
-  return sign | ((exp << 10) + ((mant + 0x1000) >> 13));
-}
-
-/**
- * The contour field (heights smoothed over CONTOUR_SMOOTH cells), as a half-float single-channel texture for the
- * contours: 8 bits
- * would step every 16 m over the theatre's 4 km and draw the lines in stairs. Bilinear, no mips (half floats are not
- * always renderable, which mip generation needs); the contour lines fade by their own screen density instead.
- */
-function contourTexture(smooth) {
-  const half = new Uint16Array(smooth.length);
-  for (let k = 0; k < half.length; k++) half[k] = toHalf(smooth[k]);
-  const t = B.RawTexture.CreateRTexture(
-    half, NX, NZ, scene, false, false, B.Texture.BILINEAR_SAMPLINGMODE, B.Engine.TEXTURETYPE_HALF_FLOAT,
-  );
-  t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
-  return t;
-}
-
-/** How far the map rises above the plate, in metres of representative height above the lowest, smoothed. */
-function displacement(shaped) {
-  let low = Infinity;
-  for (const v of shaped) low = Math.min(low, v);
-  const above = new Float32Array(shaped.length);
-  for (let k = 0; k < above.length; k++) above[k] = shaped[k] - low;
-  return blur(above, NX, NZ, DISP_SMOOTH);
-}
-
-/**
- * The detail the simplification removed: the real heights minus their simplified form (before any lift), scaled by
- * DETAIL_GAIN. Not lifted: lifted, and exaggerated for the light on top, it turned every alpine slope black or white.
- */
-function lightDetail(h0, base) {
-  const out = new Float32Array(h0.length);
-  for (let k = 0; k < out.length; k++) out[k] = (h0[k] - base[k]) * DETAIL_GAIN;
-  return out;
-}
-
-/** Heights in metres as a float single-channel texture (bilinear, clamped, no mips: see contourTexture). */
-function halfTexture(values, w, h) {
-  // 32-bit floats where the GPU filters them: the light's heights are lifted to about 10 km, where a half float steps
-  // every 8 m and the light draws the steps as rows of dots
-  if (engine.getCaps().textureFloatLinearFiltering) {
-    const t = B.RawTexture.CreateRTexture(
-      Float32Array.from(values), w, h, scene, false, false, B.Texture.BILINEAR_SAMPLINGMODE, B.Engine.TEXTURETYPE_FLOAT,
-    );
-    t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
-    return t;
-  }
-  const half = new Uint16Array(values.length);
-  for (let k = 0; k < half.length; k++) half[k] = toHalf(values[k]);
-  const t = B.RawTexture.CreateRTexture(
-    half, w, h, scene, false, false, B.Texture.BILINEAR_SAMPLINGMODE, B.Engine.TEXTURETYPE_HALF_FLOAT,
-  );
-  t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
-  return t;
-}
-
-/**
- * A texture read only at its texel centres (by catmullRom in the print shader), switched to nearest sampling: the
- * GPU's bilinear filter rounds the coordinates, so a centre read mixed in a little of a neighbour, and the slope
- * light drew that as specks on steep ground.
- */
-function exact(t) {
-  t.updateSamplingMode(B.Texture.NEAREST_SAMPLINGMODE);
-  return t;
-}
-
 /** A tileable soft noise for the cloud shadows: three octaves of periodic value noise, grey in 0..255. */
 function cloudCanvas() {
   const N = 256;
@@ -901,9 +566,289 @@ function cloudCanvas() {
   return c;
 }
 
+/* =========================================================================
+   THE PRINT: the raised map, its plate and the table
+   ========================================================================= */
+const canvas = document.getElementById('c');
+const GL_DPR = Math.min(2, window.devicePixelRatio || 1);
+const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: false }, false);
+engine.setHardwareScalingLevel(1 / GL_DPR);
+const scene = new B.Scene(engine);
+scene.clearColor = new B.Color4(0.8, 0.79, 0.81, 1);
+scene.skipPointerMovePicking = true;
+
+const MAP_W = (2 * halfX) / 1000;
+const MAP_H = (2 * halfZ) / 1000;
+// the table runs this far past the map on every side, in km
+const TABLE = 900;
+
+B.Effect.ShadersStore.printVertexShader = `
+precision highp float;
+attribute vec3 position;
+uniform mat4 worldViewProjection;
+uniform sampler2D uShape;
+uniform vec2 uHalf, uTexel;
+uniform float uCellKm;
+varying vec2 vW;
+void main() {
+  vW = position.xz;
+  /* the map raised by the shape; the table (outside the frame) stays where it is */
+  vec2 uv = ((position.xz + uHalf) / uCellKm + 0.5) * uTexel;
+  bool onMap = abs(position.x) <= uHalf.x && abs(position.z) <= uHalf.y;
+  float y = position.y + (onMap ? texture2D(uShape, uv).r / 1000.0 : 0.0);
+  gl_Position = worldViewProjection * vec4(position.x, y, position.z, 1.0);
+}`;
+
+B.Effect.ShadersStore.printFragmentShader = `
+precision highp float;
+varying vec2 vW;
+uniform sampler2D uShape, uLight, uLines, uRivers, uLakes, uPaperT, uContourH, uFine0, uFine1, uFine2, uClouds;
+uniform vec2 uHalf, uTexel, uLightTexel, uLineTexel, uLakeTexel, uFineTexel0, uFineTexel1, uFineTexel2;
+uniform vec4 uFineRect0, uFineRect1, uFineRect2;
+uniform vec3 uSun, uPaper, uTable, uWater, uKey, uSky, uRoad, uRoad2, uRiver, uContourInk, uContourMinor;
+uniform float uCellKm, uFineCellKm, uFineK, uSkyK, uLamp, uContour, uContourK, uLineK, uTime, uCloudK, uHaze;
+uniform float uScreenH, uVert;
+
+float rectDist(vec2 p, vec2 extent) {
+  vec2 d = abs(p) - extent;
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+
+/* the frame grid: node i at the centre of texel i */
+vec2 gridUv(vec2 w) {
+  return ((w + uHalf) / uCellKm + 0.5) * uTexel;
+}
+
+/* a smooth cubic B-spline read of all four channels, from four bilinear taps */
+vec4 bicubic4(sampler2D t, vec2 uv, vec2 texel) {
+  vec2 p = uv / texel - 0.5;
+  vec2 f = fract(p);
+  p = floor(p);
+  vec2 w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;
+  vec2 w1 = (3.0 * f * f * f - 6.0 * f * f + 4.0) / 6.0;
+  vec2 w3 = f * f * f / 6.0;
+  vec2 w2 = 1.0 - w0 - w1 - w3;
+  vec2 g0 = w0 + w1;
+  vec2 g1 = w2 + w3;
+  vec2 a = (p - 1.0 + w1 / g0 + 0.5) * texel;
+  vec2 b = (p + 1.0 + w3 / g1 + 0.5) * texel;
+  return g0.y * (g0.x * texture2D(t, vec2(a.x, a.y)) + g1.x * texture2D(t, vec2(b.x, a.y)))
+       + g1.y * (g0.x * texture2D(t, vec2(a.x, b.y)) + g1.x * texture2D(t, vec2(b.x, b.y)));
+}
+
+/* a Catmull-Rom read of a single-channel texture: it passes through the texels, sixteen taps at texel centres */
+float catmullRom(sampler2D t, vec2 uv, vec2 texel) {
+  vec2 p = uv / texel - 0.5;
+  vec2 f = fract(p);
+  vec2 base = (floor(p) + 0.5) * texel;
+  vec2 f2 = f * f;
+  vec2 f3 = f2 * f;
+  vec2 w0 = -0.5 * f3 + f2 - 0.5 * f;
+  vec2 w1 = 1.5 * f3 - 2.5 * f2 + 1.0;
+  vec2 w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f;
+  vec2 w3 = 0.5 * f3 - 0.5 * f2;
+  float sum = 0.0;
+  for (int j = 0; j < 4; j++) {
+    float wy = j == 0 ? w0.y : j == 1 ? w1.y : j == 2 ? w2.y : w3.y;
+    float y = base.y + float(j - 1) * texel.y;
+    float row = w0.x * texture2D(t, vec2(base.x - texel.x, y)).r + w1.x * texture2D(t, vec2(base.x, y)).r;
+    row += w2.x * texture2D(t, vec2(base.x + texel.x, y)).r + w3.x * texture2D(t, vec2(base.x + 2.0 * texel.x, y)).r;
+    sum += wy * row;
+  }
+  return sum;
+}
+
+/* the finer heights minus the coarse ones, in metres, inside a window (x0, z0, x1, z1 in km), faded at its edge */
+float fineIn(sampler2D t, vec4 rect, vec2 texel, vec2 w) {
+  float edge = min(min(w.x - rect.x, rect.z - w.x), min(w.y - rect.y, rect.w - w.y));
+  if (edge <= 0.0) return 0.0;
+  vec2 uv = ((w - rect.xy) / uFineCellKm + 0.5) * texel;
+  return texture2D(t, uv).r * smoothstep(0.0, 4.0, edge);
+}
+
+/* the shape (metres of the raised map), with the finer windows' detail up close, raised as the shape is */
+float shapeH(vec2 w) {
+  float h = catmullRom(uShape, gridUv(w), uTexel);
+  if (uFineK > 0.0) {
+    float fine = fineIn(uFine0, uFineRect0, uFineTexel0, w) + fineIn(uFine1, uFineRect1, uFineTexel1, w) +
+                 fineIn(uFine2, uFineRect2, uFineTexel2, w);
+    h += fine * uVert * uFineK;
+  }
+  return h;
+}
+
+/* a line of a line texture (two channels: the offset to the nearest point of the line), drawn crisp: its half width
+   in km */
+float lineMask(vec2 offset, float halfKm, float pxKm) {
+  float d = length(offset * 2.0 - 1.0) * ${(LINE_REACH * CELL / 1000).toFixed(4)};
+  return 1.0 - smoothstep(halfKm - 0.6 * pxKm, halfKm + 0.6 * pxKm, d);
+}
+
+void main() {
+  vec2 uv = gridUv(vW);
+  float g1 = texture2D(uPaperT, vW / 3.0).r;
+  float g2 = texture2D(uPaperT, vW / 31.0 + 0.37).r;
+  float g3 = texture2D(uPaperT, vW / 170.0 + 0.71).r;
+  float grain = 0.95 + (g1 - 0.5) * 0.16 + (g2 - 0.5) * 0.1 + (g3 - 0.5) * 0.06;
+  float haze = uHaze * smoothstep(0.45, 1.0, gl_FragCoord.y / uScreenH);
+
+  float d = rectDist(vW, uHalf);
+  if (d > 0.0) {
+    /* the table, and the plate shadow thrown away from the sun */
+    vec2 away = -normalize(uSun.xz);
+    float sd = rectDist(vW - away * 18.0, uHalf);
+    float shadow = 1.0 - smoothstep(-10.0, 40.0, sd);
+    vec3 table = uTable * (0.97 + (g2 - 0.5) * 0.08 + (g3 - 0.5) * 0.06);
+    table *= 1.0 - 0.38 * shadow;
+    gl_FragColor = vec4(mix(table, uTable, haze), 1.0);
+    return;
+  }
+
+  /* the paper, with a thin worn border inside the neatline */
+  vec3 paper = uPaper * grain;
+  paper *= mix(vec3(0.88, 0.88, 0.9), vec3(1.0), smoothstep(0.6, 3.0, -d));
+
+  /* the ink printed on it, before the light: contours, rivers and roads, lakes; the light then falls on the print */
+  float px = max(length(fwidth(vW)), 1e-4);
+  vec3 print = paper;
+
+  /* contours from the smoothed heights: the ordinary lines thin and a muted grey, every fifth (the index line)
+     thicker in dark orange; each fades where its lines would crowd on screen */
+  float hc = texture2D(uContourH, uv).r;
+  float f1 = hc / uContour;
+  float f5 = f1 / ${CONTOUR_INDEX.toFixed(1)};
+  float w1 = fwidth(f1);
+  float w5 = fwidth(f5);
+  float l1 = 1.0 - smoothstep(0.5, 1.3, abs(fract(f1 + 0.5) - 0.5) / max(w1, 1e-5));
+  float l5 = 1.0 - smoothstep(1.0, 2.1, abs(fract(f5 + 0.5) - 0.5) / max(w5, 1e-5));
+  l1 *= 1.0 - smoothstep(0.06, 0.16, w1);
+  l5 *= 1.0 - smoothstep(0.08, 0.2, w5);
+  print = mix(print, uContourMinor, 0.45 * l1 * uContourK * (1.0 - l5));
+  print = mix(print, uContourInk, mix(0.4, 0.85, uContourK) * l5);
+
+  /* lakes: a flat blue wash */
+  vec2 luv = (vW + uHalf) / (2.0 * uHalf);
+  float lake = smoothstep(0.15, 0.6, bicubic4(uLakes, luv, uLakeTexel).r);
+  print = mix(print, mix(paper, uWater, 0.85), lake);
+
+  /* rivers and roads on the ground, from about 3 px a km (further out they are ink above the map) */
+  if (uLineK > 0.0) {
+    vec4 R = texture2D(uLines, luv);
+    float river = lineMask(texture2D(uRivers, luv).rg, max(0.05, 0.9 * px), px);
+    float road = lineMask(R.rg, max(0.035, 0.85 * px), px);
+    float road2 = lineMask(R.ba, max(0.025, 0.6 * px), px);
+    print = mix(print, uRiver, 0.85 * river * uLineK);
+    print = mix(print, uRoad2, 0.8 * road2 * uLineK);
+    print = mix(print, uRoad, 0.95 * road * uLineK);
+  }
+
+  /* the light, per pixel, from the shape the surface is raised by: the warm sun on the slope, in its baked shadow,
+     with cloud shadows drifting from the west; and the cool sky, in the baked share of it each point sees */
+  float e = max(px, mix(0.5 * uCellKm, 0.5 * uFineCellKm, uFineK));
+  vec2 ex = vec2(e, 0.0);
+  vec2 ez = vec2(0.0, e);
+  float hx = shapeH(vW + ex) - shapeH(vW - ex);
+  float hz = shapeH(vW + ez) - shapeH(vW - ez);
+  vec3 n = normalize(vec3(-hx, 2000.0 * e, -hz));
+  vec4 baked = bicubic4(uLight, (vW + uHalf) / (2.0 * uHalf) * (1.0 - uLightTexel) + 0.5 * uLightTexel, uLightTexel);
+  float cloud = texture2D(uClouds, vW / 310.0 + uTime * vec2(0.0005, 0.00015)).r *
+                texture2D(uClouds, vW / 170.0 + vec2(0.37, 0.61) + uTime * vec2(0.0007, 0.0002)).r;
+  float sunlit = baked.r * (1.0 - uCloudK * smoothstep(0.3, 0.55, cloud));
+  /* the lamp: the light a little stronger on the sun's side of the map, weaker on the far side */
+  float lamp = 1.0 + uLamp * dot(vW / uHalf, normalize(uSun.xz)) * 0.5;
+  float key = max(0.0, dot(n, uSun)) / uSun.y;
+  float sky = baked.g * (0.55 + 0.45 * n.y);
+  /* flat open ground in the sun comes out at about the paper's own tone */
+  vec3 light = uKey * key * sunlit * lamp * (1.0 - uSkyK) + uSky * sky * uSkyK;
+  vec3 col = print * light;
+  /* a soft shoulder: the brightest faces glow toward white instead of clipping */
+  col = col / (1.0 + 0.18 * max(col - 1.0, 0.0));
+  col = min(col, vec3(1.0));
+
+  /* haze toward the top of the view, as the camera tilts up close */
+  gl_FragColor = vec4(mix(col, uPaper * 0.97, haze), 1.0);
+}`;
+
+/* the plate's sides: paper lit by the map's sun, darker below */
+B.Effect.ShadersStore.sideVertexShader = `
+precision highp float;
+attribute vec3 position;
+attribute vec3 normal;
+uniform mat4 worldViewProjection;
+varying vec3 vN;
+varying float vY;
+void main() {
+  vN = normal;
+  vY = position.y;
+  gl_Position = worldViewProjection * vec4(position, 1.0);
+}`;
+
+B.Effect.ShadersStore.sideFragmentShader = `
+precision highp float;
+varying vec3 vN;
+varying float vY;
+uniform vec3 uPaper;
+uniform vec2 uLightXZ;
+uniform float uThick;
+void main() {
+  float lit = 0.55 + 0.45 * max(0.0, dot(normalize(vN.xz + 1e-5), uLightXZ));
+  float low = mix(0.8, 1.0, clamp(vY / uThick + 1.0, 0.0, 1.0));
+  /* the top face lies just under the map's edge: paper, so it never shows as specks where they meet */
+  gl_FragColor = vec4(vN.y > 0.5 ? uPaper : uPaper * lit * low, 1.0);
+}`;
+
+// one float's bits, shared by every call of toHalf (allocating per value cost seconds over the grid)
+const HALF_F32 = new Float32Array(1);
+const HALF_U32 = new Uint32Array(HALF_F32.buffer);
+
+/** A number as the bits of a half float (IEEE 754 binary16), rounded to nearest; heights of a few km lose under 2 m. */
+function toHalf(v) {
+  HALF_F32[0] = v;
+  const x = HALF_U32[0];
+  const sign = (x >>> 16) & 0x8000;
+  const exp = ((x >>> 23) & 0xff) - 127 + 15;
+  const mant = x & 0x7fffff;
+  if (exp <= 0) return sign;
+  if (exp >= 31) return sign | 0x7c00;
+  // added, not or-ed: a mantissa rounding up to 1024 carries into the exponent (or-ed, 511.9 m read as 256)
+  return sign | ((exp << 10) + ((mant + 0x1000) >> 13));
+}
+
+/**
+ * Heights in metres as a float single-channel texture: 32-bit where the GPU filters them (the raised shape reaches
+ * about 10 km, where a half float steps every 8 m and the light draws the steps as rows of dots), else half floats.
+ * Bilinear, clamped, no mips (float textures are not always renderable, which mip generation needs).
+ */
+function floatTexture(values, w, h) {
+  const full = engine.getCaps().textureFloatLinearFiltering;
+  const data = full ? Float32Array.from(values) : Uint16Array.from(values, toHalf);
+  const type = full ? B.Engine.TEXTURETYPE_FLOAT : B.Engine.TEXTURETYPE_HALF_FLOAT;
+  const t = B.RawTexture.CreateRTexture(data, w, h, scene, false, false, B.Texture.BILINEAR_SAMPLINGMODE, type);
+  t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+  return t;
+}
+
+/**
+ * A texture read only at its texel centres (by catmullRom in the print shader), switched to nearest sampling: the
+ * GPU's bilinear filter rounds the coordinates, so a centre read mixed in a little of a neighbour, and the light drew
+ * that as specks on steep ground.
+ */
+function exact(t) {
+  t.updateSamplingMode(B.Texture.NEAREST_SAMPLINGMODE);
+  return t;
+}
+
+/** A raw RGBA or single-channel byte texture, clamped, bilinear; mipmapped (trilinear) when `mips`. */
+function byteTexture(data, w, h, format, mips) {
+  const mode = mips ? B.Texture.TRILINEAR_SAMPLINGMODE : B.Texture.BILINEAR_SAMPLINGMODE;
+  const t = new B.RawTexture(data, w, h, format, scene, mips, false, mode);
+  t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+  return t;
+}
+
 /**
  * The finer heights of a focus window (tools/campaign-theatre.ts) as the detail the coarse grid misses: each fine
- * height minus the coarse heights read bilinearly at its node, in metres, a half-float texture.
+ * height minus the coarse heights read bilinearly at its node, in metres.
  */
 function fineDetailTexture(win) {
   const text = atob(win.h);
@@ -912,142 +857,139 @@ function fineDetailTexture(win) {
   const fine = despiked(new Int16Array(bytes.buffer), win.nx, win.nz);
   const detail = new Float32Array(win.nx * win.nz);
   for (let j = 0; j < win.nz; j++) {
-    const fz = clamp((win.z0 + j * win.cell + halfZ) / CELL, 0, NZ - 1.001);
-    const cj = Math.floor(fz);
-    const v = fz - cj;
     for (let i = 0; i < win.nx; i++) {
-      const fx = clamp((win.x0 + i * win.cell + halfX) / CELL, 0, NX - 1.001);
-      const ci = Math.floor(fx);
-      const u = fx - ci;
-      const k = cj * NX + ci;
-      const top = heights[k] * (1 - u) + heights[k + 1] * u;
-      const bottom = heights[k + NX] * (1 - u) + heights[k + NX + 1] * u;
-      detail[j * win.nx + i] = (fine[j * win.nx + i] - (top * (1 - v) + bottom * v)) * DETAIL_GAIN;
+      const coarse = sampleGrid(heights, NX, NZ, CELL, win.x0 + i * win.cell, win.z0 + j * win.cell);
+      detail[j * win.nx + i] = (fine[j * win.nx + i] - coarse) * FINE;
     }
   }
-  return halfTexture(detail, win.nx, win.nz);
+  return floatTexture(detail, win.nx, win.nz);
+}
+
+/** How high the map stands at a point (map metres), in km: the shape read bilinearly, as the vertex shader reads it. */
+function riseAt(x, z) {
+  return sampleGrid(SHAPE, NX, NZ, CELL, x, z) / 1000;
 }
 
 /**
- * How high the map stands at a point (map metres), in km: the displacement read bilinearly, as the vertex shader
- * reads it, times RISE, faded to the plate's edge. The ink is projected at this height so it lies on the raised map.
+ * The map's surface: a grid of vertices MESH_STEP cells apart over the frame, flat (the vertex shader raises it), as
+ * a Babylon mesh with positions in km and 32-bit indices.
  */
-function riseAt(x, z) {
-  const fx = clamp((x + halfX) / CELL, 0, NX - 1.001);
-  const fz = clamp((z + halfZ) / CELL, 0, NZ - 1.001);
-  const i = Math.floor(fx);
-  const j = Math.floor(fz);
-  const u = fx - i;
-  const v = fz - j;
-  const k = j * NX + i;
-  const top = DISP[k] * (1 - u) + DISP[k + 1] * u;
-  const bottom = DISP[k + NX] * (1 - u) + DISP[k + NX + 1] * u;
-  const edge = Math.min(halfX - Math.abs(x), halfZ - Math.abs(z)) / 1000;
-  return ((top * (1 - v) + bottom * v) / 1000) * RISE * sstep(0, RISE_EDGE, edge);
-}
-
-/** A raw RGBA or single-channel texture, clamped, mipmapped (trilinear), so it does not shimmer when minified. */
-function rawTexture(data, w, h, format) {
-  const t = new B.RawTexture(data, w, h, format, scene, true, false, B.Texture.TRILINEAR_SAMPLINGMODE);
-  t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE;
-  return t;
+function mapMesh() {
+  const nx = Math.floor((NX - 1) / MESH_STEP) + 1;
+  const nz = Math.floor((NZ - 1) / MESH_STEP) + 1;
+  const stepKm = (MESH_STEP * CELL) / 1000;
+  const positions = new Float32Array(nx * nz * 3);
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const o = (j * nx + i) * 3;
+      positions[o] = -MAP_W / 2 + i * stepKm;
+      positions[o + 2] = -MAP_H / 2 + j * stepKm;
+    }
+  }
+  const indices = new Uint32Array((nx - 1) * (nz - 1) * 6);
+  let o = 0;
+  for (let j = 0; j < nz - 1; j++) {
+    for (let i = 0; i < nx - 1; i++) {
+      const a = j * nx + i;
+      // wound clockwise seen from above: Babylon is left-handed, and culls the other winding as back faces
+      indices.set([a, a + 1, a + nx, a + 1, a + nx + 1, a + nx], o);
+      o += 6;
+    }
+  }
+  const mesh = new B.Mesh('print', scene);
+  const vd = new B.VertexData();
+  vd.positions = positions;
+  vd.indices = indices;
+  vd.applyToMesh(mesh, false);
+  // raised in the shader, beyond the flat bounding box Babylon culls by
+  mesh.alwaysSelectAsActiveMesh = true;
+  return mesh;
 }
 
 const heights = decodeHeights();
 
 const tBake = performance.now();
-// the heights smoothed for the contours
-const contourField = blur(heights, NX, NZ, CONTOUR_SMOOTH);
-const { bytes: reliefBytes, base: representative, shaped: lightHeights } = bakeRelief(heights);
-const DISP = displacement(lifted(representative, heights, MOUNT));
+const SHAPE = buildShape(heights);
+const lightBake = bakeLight(SHAPE);
 const maxTextureSize = engine.getCaps().maxTextureSize;
 if (Math.max(NX, NZ) > maxTextureSize) throw new Error(`the theatre grid (${NX} × ${NZ}) passes this GPU's textures`);
 const lakes = bakeLakes(maxTextureSize);
+const lines = bakeLines();
+// the heights smoothed for the contours
+const contourField = blur(heights, NX, NZ, CONTOUR_SMOOTH);
 window.__bakeMs = Math.round(performance.now() - tBake);
 
-// cold white paper, the light warm (the owner's Valdez print: design/campaign/refs/sources.txt)
+// cold white paper, a warm sun and a cool sky (the owner's Valdez print: design/campaign/refs/sources.txt)
 const PAPER = hex('#eceef1');
 const material = new B.ShaderMaterial('print', scene, 'print', {
   attributes: ['position'],
   uniforms: [
-    'worldViewProjection', 'uHalf', 'uTexel', 'uLakeTexel', 'uCellKm', 'uLightXZ',
-    'uRise', 'uEdge', 'uPaper', 'uTable', 'uWater', 'uShadowInk', 'uHighlight', 'uGlow', 'uContourInk', 'uContourMinor',
-    'uFloor', 'uTop', 'uContour', 'uDark', 'uBase', 'uShadeK',
+    'worldViewProjection', 'uHalf', 'uTexel', 'uLightTexel', 'uLineTexel', 'uLakeTexel',
     'uFineTexel0', 'uFineTexel1', 'uFineTexel2', 'uFineRect0', 'uFineRect1', 'uFineRect2',
-    'uSun', 'uFineCellKm', 'uRZ', 'uFineK', 'uNearK',
-    'uSheet', 'uGrain', 'uDetailK', 'uSheetK', 'uContourK', 'uTime', 'uCloudK', 'uHaze', 'uScreenH',
+    'uSun', 'uPaper', 'uTable', 'uWater', 'uKey', 'uSky', 'uRoad', 'uRoad2', 'uRiver', 'uContourInk', 'uContourMinor',
+    'uCellKm', 'uFineCellKm', 'uFineK', 'uSkyK', 'uLamp', 'uContour', 'uContourK', 'uLineK', 'uTime', 'uCloudK',
+    'uHaze', 'uScreenH', 'uVert',
   ],
   samplers: [
-    'uRelief', 'uLakes', 'uPaperT', 'uHeight', 'uDisp', 'uLightH', 'uLightD', 'uRealH', 'uFine0', 'uFine1', 'uFine2',
-    'uClouds',
+    'uShape', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uPaperT', 'uContourH', 'uFine0', 'uFine1', 'uFine2', 'uClouds',
   ],
 });
-material.setTexture('uRelief', rawTexture(reliefBytes, NX, NZ, B.Engine.TEXTUREFORMAT_RGBA));
-material.setTexture('uHeight', contourTexture(contourField));
-material.setTexture('uLakes', rawTexture(lakes.data, lakes.w, lakes.h, B.Engine.TEXTUREFORMAT_LUMINANCE));
+material.setTexture('uShape', exact(floatTexture(SHAPE, NX, NZ)));
+material.setTexture('uLight', byteTexture(lightBake.data, lightBake.nx, lightBake.nz, B.Engine.TEXTUREFORMAT_RGBA));
+material.setTexture('uLines', byteTexture(lines.roads, lines.w, lines.h, B.Engine.TEXTUREFORMAT_RGBA));
+material.setTexture(
+  'uRivers', byteTexture(lines.rivers, lines.w, lines.h, B.Engine.TEXTUREFORMAT_RGBA),
+);
+material.setTexture('uLakes', byteTexture(lakes.data, lakes.w, lakes.h, B.Engine.TEXTUREFORMAT_LUMINANCE, true));
+material.setTexture('uContourH', floatTexture(contourField, NX, NZ));
 const paperTex = new B.DynamicTexture('paper', paperCanvas(), scene, true);
 paperTex.update();
 paperTex.wrapU = paperTex.wrapV = B.Texture.WRAP_ADDRESSMODE;
 material.setTexture('uPaperT', paperTex);
-material.setVector2('uHalf', new B.Vector2(MAP_W / 2, MAP_H / 2));
-material.setVector2('uTexel', new B.Vector2(1 / NX, 1 / NZ));
-material.setVector2('uLakeTexel', new B.Vector2(1 / lakes.w, 1 / lakes.h));
-material.setFloat('uCellKm', CELL / 1000);
-material.setVector2('uLightXZ', new B.Vector2(NW[0], NW[1]));
-material.setColor3('uPaper', B.Color3.FromArray(PAPER));
-material.setColor3('uTable', B.Color3.FromArray(hex('#cbc9cf')));
-material.setColor3('uWater', B.Color3.FromArray(hex('#3b78b0')));
-material.setColor3('uShadowInk', B.Color3.FromArray(hex('#4a4656')));
-material.setColor3('uGlow', B.Color3.FromArray(hex('#f2a35e')));
-material.setColor3('uContourInk', B.Color3.FromArray(hex('#93421c')));
-material.setColor3('uContourMinor', B.Color3.FromArray(hex('#8b8a92')));
-material.setFloat('uDark', SHADE_DARK);
-material.setFloat('uBase', SHADE_BASE);
-material.setFloat('uShadeK', 1);
-material.setColor3('uHighlight', B.Color3.FromArray(hex('#fff1d6')));
-material.setFloat('uFloor', SHADE_FLOOR);
-material.setFloat('uTop', SHADE_TOP);
-material.setFloat('uContour', CONTOUR);
-
-material.setTexture('uDisp', halfTexture(DISP, NX, NZ));
-material.setTexture('uLightH', exact(halfTexture(lightHeights, NX, NZ)));
-// the real relief's detail the simplification removed: added up close
-material.setTexture('uLightD', exact(halfTexture(lightDetail(heights, representative), NX, NZ)));
-material.setTexture('uRealH', halfTexture(heights, NX, NZ));
 const cloudTex = new B.DynamicTexture('clouds', cloudCanvas(), scene, true);
 cloudTex.update();
 cloudTex.wrapU = cloudTex.wrapV = B.Texture.WRAP_ADDRESSMODE;
 material.setTexture('uClouds', cloudTex);
+material.setVector2('uHalf', new B.Vector2(MAP_W / 2, MAP_H / 2));
+material.setVector2('uTexel', new B.Vector2(1 / NX, 1 / NZ));
+material.setVector2('uLightTexel', new B.Vector2(1 / lightBake.nx, 1 / lightBake.nz));
+material.setVector2('uLineTexel', new B.Vector2(1 / lines.w, 1 / lines.h));
+material.setVector2('uLakeTexel', new B.Vector2(1 / lakes.w, 1 / lakes.h));
+material.setFloat('uCellKm', CELL / 1000);
+material.setVector3('uSun', new B.Vector3(...SUN));
+material.setColor3('uPaper', B.Color3.FromArray(PAPER));
+material.setColor3('uTable', B.Color3.FromArray(hex('#cbc9cf')));
+material.setColor3('uWater', B.Color3.FromArray(hex('#3b78b0')));
+// the sun warm, the sky cool; with the sky's share, flat open ground in the sun comes to about 1
+material.setColor3('uKey', B.Color3.FromArray([1.12, 1.0, 0.84]));
+material.setColor3('uSky', B.Color3.FromArray([0.84, 0.92, 1.12]));
+material.setColor3('uRoad', B.Color3.FromArray(hex('#a3412c')));
+material.setColor3('uRoad2', B.Color3.FromArray(hex('#b8705a')));
+material.setColor3('uRiver', B.Color3.FromArray(hex('#2f6aa3')));
+material.setColor3('uContourInk', B.Color3.FromArray(hex('#93421c')));
+material.setColor3('uContourMinor', B.Color3.FromArray(hex('#8b8a92')));
+material.setFloat('uSkyK', SKY);
+material.setFloat('uLamp', LAMP);
+material.setFloat('uContour', CONTOUR);
+material.setFloat('uContourK', 0);
+material.setFloat('uLineK', 0);
 material.setFloat('uCloudK', CLOUDS);
-material.setFloat('uRZ', RELIEF_Z);
-material.setFloat('uSheet', SHEET);
 material.setFloat('uHaze', 0);
 material.setFloat('uTime', 0);
 material.setFloat('uScreenH', engine.getRenderHeight());
-material.setFloat('uNearK', 0);
-material.setFloat('uSheetK', 0);
-material.setFloat('uDetailK', 0);
-material.setFloat('uGrain', GRAIN);
-material.setFloat('uContourK', 0);
+material.setFloat('uVert', VERT);
 material.setFloat('uFineK', 0);
-(() => {
-  const el = (RELIEF_SUN * Math.PI) / 180;
-  material.setVector3('uSun', new B.Vector3(NW[0] * Math.cos(el), Math.sin(el), NW[1] * Math.cos(el)));
-})();
 // the focus windows' finer detail: none until their files load (tools/campaign-theatre.ts writes them beside the
 // theatre's); a window off the map and a blank texture meanwhile
 const FINE_SLOTS = ['0', '1', '2'];
 material.setFloat('uFineCellKm', 0.05);
 for (const slot of FINE_SLOTS) {
-  material.setTexture('uFine' + slot, halfTexture(new Float32Array(1), 1, 1));
+  material.setTexture('uFine' + slot, floatTexture(new Float32Array(1), 1, 1));
   material.setVector4('uFineRect' + slot, new B.Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1));
   material.setVector2('uFineTexel' + slot, new B.Vector2(1, 1));
 }
-material.setFloat('uRise', RISE);
-material.setFloat('uEdge', RISE_EDGE);
 
-// the table: one flat quad the plate's thickness below the map; the plate's sides; the map: a vertex about every km,
-// raised in the vertex shader
+// the table: one flat quad the plate's thickness below the map; the plate's sides; the map, raised in the shader
 const table = B.MeshBuilder.CreateGround('table', { width: MAP_W + 2 * TABLE, height: MAP_H + 2 * TABLE }, scene);
 table.position.y = -THICK;
 table.material = material;
@@ -1056,20 +998,16 @@ const sideMaterial = new B.ShaderMaterial('side', scene, 'side', {
   uniforms: ['worldViewProjection', 'uPaper', 'uLightXZ', 'uThick'],
 });
 sideMaterial.setColor3('uPaper', B.Color3.FromArray(hex('#e2e3e7')));
-sideMaterial.setVector2('uLightXZ', new B.Vector2(NW[0], NW[1]));
+sideMaterial.setVector2('uLightXZ', new B.Vector2(SUN[0], SUN[2]).normalize());
 sideMaterial.setFloat('uThick', THICK);
 const sides = B.MeshBuilder.CreateBox('sides', { width: MAP_W, height: THICK - 0.02, depth: MAP_H }, scene);
 sides.position.y = -THICK / 2 - 0.02;
 sides.material = sideMaterial;
-const plane = B.MeshBuilder.CreateGround(
-  'print', { width: MAP_W, height: MAP_H, subdivisionsX: Math.round(MAP_W), subdivisionsY: Math.round(MAP_H) }, scene,
-);
+const plane = mapMesh();
 plane.material = material;
-// raised in the shader, beyond the flat bounding box Babylon culls by
-plane.alwaysSelectAsActiveMesh = true;
 
 /* =========================================================================
-   CAMERA: tilted 30 degrees off straight down far out, 60 up close (?tilt=), north up; pan by drag, zoom to the cursor
+   CAMERA: tilted 30 degrees off straight down far out, 45 up close (?tilt=), north up; pan by drag, zoom to the cursor
    ========================================================================= */
 /** The camera's tilt off straight down for a distance (km): TILT_FAR far out, TILT_NEAR at the closest zoom. */
 function tiltFor(dist) {
@@ -1282,8 +1220,11 @@ function riverWidth(rank, ppk) {
   return base * clamp(0.7 + ppk * 0.12, 0.7, 1.8);
 }
 
-/** Rivers as fine blue-grey ink, widening with their rank; `screen` holds each shown river's runs of screen points. */
-function drawRivers(ppk, screen) {
+/**
+ * Rivers as fine blue ink above the map, faded by `alpha` (up close they are printed on the ground instead);
+ * `screen` holds each shown river's runs of screen points, for its name.
+ */
+function drawRivers(ppk, screen, alpha) {
   ink.lineJoin = 'round';
   ink.lineCap = 'round';
   ink.strokeStyle = RIVER_INK;
@@ -1291,16 +1232,22 @@ function drawRivers(ppk, screen) {
     const w = riverWidth(r.rank, ppk);
     if (!w) return;
     screen[k] = screenLine(r.p);
+    if (alpha <= 0.01) return;
     ink.lineWidth = w;
-    ink.globalAlpha = 0.85;
+    ink.globalAlpha = 0.85 * alpha;
     traceRuns(screen[k]);
     ink.stroke();
   });
   ink.globalAlpha = 1;
 }
 
-/** Roads in red ink: high roads solid, country roads thinner and dashed; a pale casing so they sit on the relief. */
-function drawRoads(ppk) {
+/**
+ * Roads in red ink above the map, faded by `alpha` (up close they are printed on the ground instead): high roads
+ * solid, country roads thinner and dashed; a pale casing so they sit on the relief.
+ */
+function drawRoads(ppk, alpha) {
+  if (alpha <= 0.01) return;
+  ink.globalAlpha = alpha;
   const scale = clamp(0.75 + ppk * 0.1, 0.75, 1.7);
   ink.lineJoin = 'round';
   ink.lineCap = 'round';
@@ -1322,6 +1269,7 @@ function drawRoads(ppk) {
     });
   }
   ink.setLineDash([]);
+  ink.globalAlpha = 1;
 }
 
 // the zoom (screen pixels per km) from which a town of each size is shown
@@ -1472,17 +1420,12 @@ function drawInk() {
   ink.setTransform(INK_DPR, 0, 0, INK_DPR, 0, 0);
   ink.clearRect(0, 0, innerWidth, innerHeight);
   const ppk = pxPerKm();
-  // the shade's strength by the zoom (screen pixels per km): SHADE_FAR over the whole theatre, full from about 3
-  material.setFloat('uShadeK', lerp(SHADE_FAR, 1, sstep(0.9, 3, ppk)));
-  // the real heights for the contours and sheets only well in, from about 10 px a km (a 250 m bump 2.5 px): further
-  // out their small bumps cross the sheet levels and dot the map with tiny rings
-  material.setFloat('uNearK', sstep(10, 24, ppk));
-  // the light's real detail from under 1 px a km, full from 3
-  material.setFloat('uDetailK', sstep(0.6, 3, ppk));
-  material.setFloat('uFineK', sstep(2, 6, ppk));
-  // the sheets from about 2 px a km: further out they speckle the plains
-  material.setFloat('uSheetK', sstep(1.6, 4, ppk));
+  // by the zoom (screen pixels per km): the ordinary contours from about 1.2, the finer windows' detail from 2, the
+  // rivers and roads printed on the ground (draped over the relief) instead of inked above it from 3 to 5
   material.setFloat('uContourK', sstep(1.2, 3, ppk));
+  material.setFloat('uFineK', sstep(2, 6, ppk));
+  const onGround = sstep(3, 5, ppk);
+  material.setFloat('uLineK', onGround);
   const placed = [];
   // the ink stops at the neatline, as the print does
   ink.save();
@@ -1491,8 +1434,8 @@ function drawInk() {
   // each shown river's screen points, projected once for its line and its name
   const rivers = [];
   drawRegions(ppk);
-  drawRivers(ppk, rivers);
-  drawRoads(ppk);
+  drawRivers(ppk, rivers, 1 - onGround);
+  drawRoads(ppk, 1 - onGround);
   drawTowns(ppk, placed);
   drawRiverNames(ppk, placed, rivers);
   ink.restore();
@@ -1504,7 +1447,7 @@ function drawInk() {
    ========================================================================= */
 document.getElementById('meta').innerHTML =
   `Lambert equal-area ${lat0}° N ${lon0}° E · ${NX - 1} × ${NZ - 1} cells of ${CELL} m<br>` +
-  `relief ×${RELIEF_Z} for the light · sun ${RELIEF_SUN}° from the north-west<br>` +
+  `relief raised ×${VERT} · sun ${SUN_EL}° high from ${SUN_AZ}°<br>` +
   `${D.towns.length} towns · ${T.roads.length} roads, routed over the heights`;
 document.getElementById('credit').textContent = T.credit;
 

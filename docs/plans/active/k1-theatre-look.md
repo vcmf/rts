@@ -156,6 +156,31 @@ Out of scope: armies, orders and turns (K2); the offline bake (K3); a checked da
   still, 6.5 ms with the ink. The page draws only when the view changes. The ink (rivers and labels on a 2D canvas) is
   the cost; it moves to the GPU with K3.
 
+### The rebuild (2026-10-29)
+
+The owner, on the last tuned look: "huhu it looks weak for us". The causes, not the tuning: the 3D shape and the light
+read different heights (lifted ×4 and ×1.5, the detail added to one only), so light and form did not match; the 1 km
+mesh stretched into shards at that height and tilt; the grain was a pattern, not detail; the lines floated on a 2D
+layer over the 3D view. Rebuilt on one principle, as the references are made (a model lit once, as a photograph):
+
+- **One shape** (`buildShape`): the real heights, their large forms (about 6 km) whole and the rest at 0.75
+  (`?fine=`), mountain regions lifted up to ×2 (`?mount=`), all raised ×2.5 (`?vert=`), flat over the last 12 km to
+  the plate's edge. The surface is displaced by it and the light is computed from it.
+- **A mesh at 500 m** (a vertex every two cells, 1.6 million), wound for Babylon's left-handed culling.
+- **Light like a render**: a warm sun 28° high from the north-west (`?sun=`, `?az=`) and a cool sky light (`?sky=`,
+  0.62 of the light), the sky dimmed by **ambient occlusion** and the sun by **soft shadows**, both baked from the shape
+  at load on a 500 m grid (`bakeLight`): the shadow by a ray toward a sun disc 2.5° across (`?soft=`), its penumbra
+  widening with the distance to the ridge; the occlusion from the horizon in eight directions within about 9 km. A
+  slight fall-off of the light across the map from the sun's side (`?lamp=`). No grain, no tone curve tricks: the
+  print (paper, contours, lakes, rivers, roads) is multiplied by the light.
+- **Lines on the ground**: rivers and roads printed on the raised paper from about 3 px a km (2D ink further out), so
+  they follow the relief and hide behind ridges; stored as offset fields (the vector to the nearest point of a line,
+  linear, so a bilinear read gives the exact distance; a blurred line, then a distance, broke into dots).
+- **The camera** 30° far out to 45° at the closest zoom (`?tilt=`).
+
+Measured on test machine A: the bake 4.9–5.1 s at load (the light's rays and the line fields; K3 moves it offline),
+ready in about 6 s; a frame at 1600 × 900 2.3 ms still, 3.8 ms with the ink.
+
 ## Review rounds
 
 - **Round 1** (`/code-review high`): severe: every lake was simplified to two points (a closed ring's chord has no
