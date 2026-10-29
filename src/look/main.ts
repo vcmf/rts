@@ -233,8 +233,8 @@ if (reliefK > 0) {
   relief = { tex, k: reliefK }
 }
 const grain0 = makeGrainCanvas(null)
-// ?midtone=0|1|2 or per class (u2,b1,n1,g0): how wide the ramp turns from light to shade (src/look/midtone.ts,
-// docs/plans/active/soft-midtone.md); 0 or none is main's
+// ?midtone=0|1|2 or per class (u3,b2,n2,g0): how wide the ramp turns from light to shade (src/look/midtone.ts,
+// decision 0084); none is the default, u3,b2,n2,g0; 0 the hard bands from before it
 const midtone = parseMidtone(params.get('midtone'))
 const mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [
   ...softDefines(soft),

@@ -191,7 +191,7 @@ vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
 #if defined(DETAIL)&&!defined(DETAIL_L0)
 #define DETAIL_ON
 #endif
-// THE MID TONE (docs/plans/active/soft-midtone.md, decision 0084, proposed): how wide the ramp turns from light to
+// THE MID TONE (docs/plans/active/soft-midtone.md, decision 0084): how wide the ramp turns from light to
 // shade, by the material's class, set by the page (?midtone, src/look/midtone.ts: MIDn_U units, _B buildings,
 // _N the nature meshes, _G the ground). MID1: soft band edges, the mid a little lighter. MID2: a wide mid tone, the
 // light wrapped round the form. MID3 (units only): the figure's turn, the mid spread over most of the side turned from
@@ -344,6 +344,13 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   float l=ndlR+gr*0.55*jitter+(blot-0.5)*0.3*jitter-sh*1.25-(1.0-occ)*0.55;
   #endif
   float cl=cloud(wp);   // a shade below (cloudShade, for units their white-balanced share), not a drop of the light
+  #ifdef MID3
+  // the figure's turn on a near-white coat (light and of little chroma): main's bands and shadow, its shade being what
+  // parts it from the snow (the guard; a white coat on snow still falls under the bar: #268). Declared before the
+  // band's paths so a KEEP_HUE material with DETAIL compiles
+  float wc=max(alb.r,max(alb.g,alb.b))-min(alb.r,min(alb.g,alb.b));
+  float wh=smoothstep(0.45,0.70,dot(alb,LUMA))*(1.0-smoothstep(0.20,0.35,wc));
+  #endif
   #ifdef DETAIL_ON
   // the band edges keep their width but never get narrower than the light's change across two pixels (no aliasing)
   #ifdef DETAIL_SAB_STEP
@@ -367,12 +374,9 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   // band; here they pass through the mid, the back turned straight from the sun and a cast shadow (sh) still the
   // shadow
   float t=smoothstep(-0.95,0.10,l)*0.55+smoothstep(0.15,0.55,l)*0.45;
-  // a near-white coat (light and of little chroma: the Austrians' #E8E2D2 is about 0.76 and 0.17, linear) keeps main's
-  // bands: its shade is what parts it from the snow (the guard: a white coat on snow fell under its bar)
-  float wh=smoothstep(0.45,0.70,dot(alb,LUMA))*(1.0-smoothstep(0.20,0.35,max(alb.r,max(alb.g,alb.b))-min(alb.r,min(alb.g,alb.b))));
   t=mix(t,smoothstep(-0.10,-0.02,l)*0.55+smoothstep(0.30,0.38,l)*0.45,wh);
   #elif defined(MID2)
-  float t=smoothstep(-0.29,0.09,l)*0.55+smoothstep(0.11,0.49,l)*0.45;   // the wide mid tone: edges 0.38 wide, the shade's a little lower
+  float t=smoothstep(-0.29,0.09,l)*0.55+smoothstep(0.11,0.49,l)*0.45;   // the wide mid tone: edges 0.38, shade lower
   #elif defined(MID1)
   float t=smoothstep(-0.18,0.06,l)*0.55+smoothstep(0.22,0.46,l)*0.45;   // soft band edges: 0.24 wide, main's centres
   #else

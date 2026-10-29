@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-29
 code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/trodden.ts, src/look/world/arms.ts, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/arms.test.ts]
-decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline]
+decisions: [0084-a-soft-mid-tone-on-figures-and-buildings, 0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline]
 ---
 
 # The look page (Track E, L0)
@@ -332,16 +332,21 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
   (0.4) of the texture's own.
 - **Band edges:** never narrower than two pixels' change of the light value (`fwidth`) nor than 0.12 of it, baked
   shadows included: where they step within a pixel the edge comes out about two pixels soft.
-- **The mid tone's switch** (`?midtone=0|1|2`, or per class `u2,b1,n1,g0`: the units, the buildings, the nature
-  meshes, the ground; `src/look/midtone.ts`, decision 0084, proposed, `docs/plans/active/soft-midtone.md`): 1 widens
-  every band edge to 0.24 (the ground's floor to 0.24) and lightens the mid a little; 2 wraps the light a little round
-  the form (`(ndl+0.2)/1.2`), widens the edges to 0.38 (the ground's floor to 0.36), lightens the mid more and lifts
-  the shadow band 10 % toward it (but on units: a white coat on snow fell under the guard's bar). 3, units only (`u3`), the figure's
-  turn: the low sun leaves the sides a top-down camera sees on a figure at a light of about −0.55, deep in the shadow band
-  of every other mode, so u3 spreads shadow-to-mid over −0.95..0.10 and mid-to-lit over 0.15..0.55, the shadow colour
-  20 % deeper to keep the coats' value against the ground, a near-white coat on main's bands (its shade parts it from
-  the snow). Defines per class (`MIDn_U` …), so 0 compiles main's ramp; never on the crowns
-  (`SOFT_RAMP`).
+- **The mid tone** (decision 0084, `src/look/midtone.ts`, `docs/plans/active/soft-midtone.md`): how wide the band edges
+  are, by material class, routed in `paint()` by defines (`MIDn_U`, `MIDn_B`, `MIDn_N`, `MIDn_G`). The default is
+  `u3,b2,n2,g0`; `?midtone=0|1|2` sets every class, `?midtone=u3,b2,n2,g0` each (0 the bands before it, edges 0.08
+  wide). 1 widens every band edge to 0.24 (the ground's floor to 0.24) and lightens the mid a little; 2 wraps the light
+  a little round the form (`(ndl+0.2)/1.2`), widens the edges to 0.38 (the ground's floor to 0.36), lightens the mid
+  more and lifts the shadow band 10 % toward it (not on units). 3, units only, the figure's turn: the low sun leaves
+  the sides a top-down camera sees on a figure at a light of about −0.55, deep in the shadow band of the other modes,
+  so u3 spreads shadow-to-mid over −0.95..0.10 and mid-to-lit over 0.15..0.55, the shadow colour 20 % deeper to keep
+  the coats' value against the ground, a near-white coat on the old bands (its shade parts it from the snow; #268).
+  The classes: **u**, every `KEEP_HUE` material (the figures, the guns, the flags, the guard's blocks; taken before
+  the ground's test); **b**, `building.frag` (`PAINT_BUILDING`); **n**, `nature.frag` but its far crowns
+  (`PAINT_NATURE`: the trunks, the stones, the pack's mesh foliage); **g**, every `DETAIL_ON` material: the terrain
+  and the water (the shore band), not under WebGL1's `DETAIL_L0`. None of them: the crowns (`SOFT_RAMP`), the meadow's
+  clumps (`meadow.frag`), the simple shadows' shade (`unitshade.frag`): those keep the old ramp whatever the switch,
+  harmless with the ground at 0.
 - **The band follows the light** (`docs/plans/done/ground-light.md`): on the ground the band is chosen from the sun's
   angle, the cast shadow and the occlusion, with only a small grain wobble (0.2 of the grain) at its edges; the
   grain and its 21 m blotches vary the value inside a band. Before, the grain chose the band too, and near an edge

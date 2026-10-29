@@ -47,7 +47,7 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0019](0019-shading-data-from-authored-surface.md) | Shading data finer than the heightfield comes from the authored surface | proposed |
 | [0020](0020-track-m-on-an-epic-branch.md) | The map engine is Track M, built on an epic branch | accepted |
 | [0021](0021-two-metre-map-cell.md) | Every map grid is built on one 2 m cell | accepted |
-| [0022](0022-soft-ramp-for-foliage.md) | Foliage crowns are painted with a soft ramp | accepted |
+| [0022](0022-soft-ramp-for-foliage.md) | Foliage crowns are painted with a soft ramp (amended by 0084) | accepted |
 | [0024](0024-blur-as-player-option.md) | Depth of field in gameplay is a player option, on by default | accepted |
 | [0025](0025-review-by-kind-of-pr.md) | Review rounds by kind of PR: code as before, docs one round at most, research none | accepted |
 | [0026](0026-crops-under-a-soldiers-chest.md) | Standing crops are drawn under a soldier's chest | accepted |
@@ -106,4 +106,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0080](0080-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | accepted |
 | [0081](0081-the-bench-timeline-in-the-battle.md) | The bench's timeline lives in the battle, wherever it runs; its overlay is a view on the page | accepted |
 | [0082](0082-light-map-at-half-a-metre.md) | The baked light map at about half a metre a texel (1536² over the 800 m tile, the target 0.53 m) | accepted |
-| [0084](0084-a-soft-mid-tone-on-every-surface.md) | A soft mid tone between light and shade on every surface (`?midtone`) | proposed |
+| [0084](0084-a-soft-mid-tone-on-figures-and-buildings.md) | A soft mid tone on the figures, the buildings and the nature meshes (amends 0022) | accepted |
