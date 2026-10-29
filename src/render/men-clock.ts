@@ -1,4 +1,4 @@
-// When the soldier layer steps (docs/plans/active/battle-threads.md, PR 1): in rounds of MEN_HZ a real second,
+// When the soldier layer steps (docs/plans/done/battle-threads.md, PR 1): in rounds of MEN_HZ a real second,
 // whatever the frame rate (the art bible's 12 fps), each round split into one sub-step per group of battalions,
 // spread evenly over the round. A group's sub-step covers the game time since its last one. The steering holds
 // only up to MEN_DT of game time a step: above it halted men near trunks jitter (measured: test/soldiers.test.ts at

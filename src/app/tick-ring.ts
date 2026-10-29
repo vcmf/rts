@@ -1,4 +1,4 @@
-// The ticks from the sim worker to the men worker (docs/plans/active/battle-threads.md, PR 5): after every tick the
+// The ticks from the sim worker to the men worker (docs/plans/done/battle-threads.md, PR 5): after every tick the
 // sim worker writes the world's columns into one of RING slots of shared memory, stamped with the tick; the
 // formations that left the field into a log of departures, which a reader that falls behind still reads whole; and
 // the game clock, stamped with its tick, into a header. The men worker takes the ticks in order, each copied into its

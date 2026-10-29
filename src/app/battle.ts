@@ -1,4 +1,4 @@
-// The battle as the sim page runs it (docs/plans/active/battle-threads.md, PRs 3, 5 and 7): the sim at 20 Hz of game
+// The battle as the sim page runs it (docs/plans/done/battle-threads.md, PRs 3, 5 and 7): the sim at 20 Hz of game
 // time, the soldier layer on its clock (src/render/men-clock.ts), and the bench's timeline (src/app/timeline.ts: the
 // stamped log, the hash points, the orders dropped, marks, and the saves going to a time uses; decision 0081). The page
 // runs it whole when it cannot share memory with workers (src/app/battle-link.ts); the sim worker runs it without its

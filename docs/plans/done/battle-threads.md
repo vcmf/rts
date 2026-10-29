@@ -1,11 +1,13 @@
 ---
-status: active
-last_reviewed: 2026-10-27
+status: done
+last_reviewed: 2026-10-29
 ---
 
 # Plan: the battle's threads
 
-**Experimental.** The design is `docs/proposals/battle-threads.md`; decision 0048 (proposed) adopts it. The owner
+**Done** (2026-10-29): every PR below met its acceptance or was measured as not needed (PR 6, decision 0072);
+decision 0048 is accepted. **Experimental** while it ran: the design is `docs/proposals/battle-threads.md`; decision
+0048 adopts it. The owner
 (2026-10-22): "well document our plan and our design ... we throw away once implemented and tested if it does not
 work out"; and soldiers move **stepped at 12 fps**, poses and positions together (the art bible). Each PR states its
 measurement and its stop criterion: if one is met, the work stops and decision 0048 is rejected.

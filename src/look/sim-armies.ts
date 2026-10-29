@@ -1,4 +1,4 @@
-// The look page's armies played by the sim (docs/plans/active/battle-threads.md, PR 4b; the page at ?sim): the
+// The look page's armies played by the sim (docs/plans/done/battle-threads.md, PR 4b; the page at ?sim): the
 // battle on the look world's sim map (maps/painted-world.ts) in the battle's workers (src/app/battle-link.ts), or on
 // the page when it cannot share memory with them. The page lays its battalions out as the script does
 // (src/look/world/armies.ts layout) and spawns them by commands, so a session still replays: each advances in its

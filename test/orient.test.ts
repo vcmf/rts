@@ -1,4 +1,4 @@
-// The men's ways and gaits (docs/plans/active/battle-threads.md, PR 4c): the soldier layer works them out for a
+// The men's ways and gaits (docs/plans/done/battle-threads.md, PR 4c): the soldier layer works them out for a
 // battalion whose revision moved (SoldierLayer.orient), the published frame carries them, and they are what the look
 // page used to work out itself: his velocity's way when he marches, at rest his place's.
 import { describe, it, expect } from 'vitest'

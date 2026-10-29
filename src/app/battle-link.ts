@@ -1,4 +1,4 @@
-// The page's side of the battle (docs/plans/active/battle-threads.md, PRs 3 and 5): one interface whether the battle
+// The page's side of the battle (docs/plans/done/battle-threads.md, PRs 3 and 5): one interface whether the battle
 // runs in its workers (the sim worker, src/app/sim-host.ts, and the men worker, src/app/men-host.ts, whose frames the
 // page reads in shared memory) or, when the page cannot share memory with them (no cross-origin isolation, or
 // ?thread=main), on the page's own thread as before. The bench's time (going to a time, a tick on, marks: PR 7,

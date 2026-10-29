@@ -1,4 +1,4 @@
-// The sim page's frame bench (docs/plans/active/battle-threads.md, PR 3): a bench scenario marching, in headless Chrome
+// The sim page's frame bench (docs/plans/done/battle-threads.md, PR 3): a bench scenario marching, in headless Chrome
 // on the machine's GPU with no vsync and no frame-rate limit (frame times are the page's own, as tools/bench-look.mjs
 // measures), on the production build. Records `sec` seconds through the page's APP.record and prints, mean, p99 and
 // max: the frame interval, the page's battle time per frame (stepping the battle on the page, or reading the held

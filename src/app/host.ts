@@ -1,4 +1,4 @@
-// What the battle's workers share (docs/plans/active/battle-threads.md, PRs 3 and 5): a bare message port (a browser
+// What the battle's workers share (docs/plans/done/battle-threads.md, PRs 3 and 5): a bare message port (a browser
 // worker's `self`, or Node's worker_threads in the tests), a timer loop, and one rule for errors: an error anywhere
 // stops the worker for good, its loop and its requests alike, and is said to the page.
 

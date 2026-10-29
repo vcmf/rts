@@ -1,11 +1,11 @@
 ---
-status: draft
+status: accepted
 last_reviewed: 2026-10-22
 ---
 
 # The battle's threads: a worker, soldiers stepped at 12 fps
 
-**Experimental.** Decision 0048 (proposed) adopts this design; the plan is `docs/plans/active/battle-threads.md`. If
+**Experimental.** Decision 0048 (proposed) adopts this design; the plan is `docs/plans/done/battle-threads.md`. If
 the plan's measurements fail, the decision is rejected and this design thrown away (the owner, 2026-10-22). It
 refines `docs/proposals/sim-design.md` §16 (the worker and the snapshot); where they differ, this proposal says why.
 

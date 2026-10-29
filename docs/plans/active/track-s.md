@@ -36,7 +36,7 @@ Track M's does.
 Then S2 (`docs/proposals/sim-design.md` §17): vision as a core rule (Track M's fog of war needs it), smoke, commanders, the compact 2 m grids (Track M's
 maps over about 2 km need them), and issues #35, #36 and #38. S3 brings the brigade AI (`docs/proposals/ai.md`).
 The battle in a worker (decision 0048) is not Track S's: it runs on its own epic stacked on this one
-(`docs/plans/active/battle-threads.md`, the owner, 2026-10-26).
+(`docs/plans/done/battle-threads.md`, the owner, 2026-10-26).
 
 S1f-1 and S1f-2 come after U1–U7: the reacting plan is better written once the units it orders behave by the model. S1f-3 and S1f-4 are the model's U8 and U9. The order can change after each phase; each plan says why if it does.
 

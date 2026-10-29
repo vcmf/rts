@@ -1,4 +1,4 @@
-// The men worker (docs/plans/active/battle-threads.md, PR 5): the soldier layer on its own copy of the world, the
+// The men worker (docs/plans/done/battle-threads.md, PR 5): the soldier layer on its own copy of the world, the
 // ticks taken from the tick ring (src/app/tick-ring.ts) in order and each followed by the layer's sync, its clock run
 // at the sim's speed, and the page's published frames (src/app/battle-frame.ts, as PR 3 published them). A jump in
 // the ring (the battle went to a time: PR 7) lays the men out again on its world, with a new layer.

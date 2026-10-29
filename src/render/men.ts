@@ -1,4 +1,4 @@
-// The soldier layer's men as a structure of arrays (docs/plans/active/battle-threads.md, PR 2): one index per man,
+// The soldier layer's men as a structure of arrays (docs/plans/done/battle-threads.md, PR 2): one index per man,
 // stable while he is on the field (a man who falls keeps his, flagged, for his cross; nothing is compacted; a man
 // who leaves the field frees his for a newcomer), so the arrays can move to shared memory for the battle worker
 // (PR 3). Readers take the arrays from `Men` each time they read, never keeping them across an `add`: a full store
