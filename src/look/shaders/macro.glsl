@@ -91,6 +91,16 @@ vec3 wear(vec3 c,vec4 cv,Grain g){
   float w=1.0-smoothstep(0.5,4.0,cv.w+(g.wear-0.5)*3.0);
   return cv.x>1.5?c:mix(c,vec3(0.56,0.53,0.45),w*(0.3+0.4*g.wearDab));}
 // the class lookup's point, pushed by the grain's soft blotches (±1.5 m) so a class edge wanders like a painted one
+#ifdef RELIEF
+// THE RELIEF'S TONE (src/look/relief.ts; ?relief, src/look/main.ts): R the hillshade, G the crest, 0.5 flat; lighter
+// turned to the sun and on a crest, darker turned away and in a valley, which is also a little cooler; uReliefK its
+// strength. Baked into the macro colour (src/look/macro.ts); the shader arm's colour (groundAt) and the live roads'
+// and yards' paint (shore.glsl) take it too, so they match the ground beside them
+uniform sampler2D uRelief;uniform float uReliefK;
+vec3 reliefTone(vec3 c,vec2 xz){vec2 r=(texture2D(uRelief,xz/FAR_W+0.5).rg-0.5)*2.0;
+  c*=clamp(1.0+uReliefK*(0.9*r.x+0.25*r.y),0.7,1.3);   // (never so dark a valley turns black)
+  return mix(c,c*vec3(0.9,0.96,1.06),uReliefK*0.6*max(0.0,-r.y));}
+#endif
 vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*COVER_WARP;}
 // The class colour's warp (macro(), and the views that show its classes). A map world's cover is finer than the demo's
 // (src/look/world/from-map.ts, MAP_COVER_CELL): there a second, fine warp (blotches 2.5 m across, COVER_FINE) breaks a
@@ -391,7 +401,11 @@ vec3 groundAt(vec2 xz,float px){
   #elif defined(MACRO_BAKE)
   return bakeOnce(xz).rgb;
   #elif defined(MACRO_SHADER)
+  #ifdef RELIEF
+  return reliefTone(macroOnce(xz,px).rgb,xz);
+  #else
   return macroOnce(xz,px).rgb;
+  #endif
   #elif defined(MACRO_FLAT)
   float k=coverAt(xz).x;
   #ifdef MACRO_SAB_ONECLASS

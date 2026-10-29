@@ -338,7 +338,8 @@ export function ringsOf(f: Feature): Pt[][] {
 
 /**
  * Fills the cells whose centres lie inside `rings` (even-odd over every ring, so holes stay out) with `value`: a scan
- * of each row's crossings. `rings` in window metres; the grid `n`² cells of `cell` m from (x0, x0).
+ * of each row's crossings. `rings` in window metres; the grid `n`² cells of `cell` m from (x0, x0); `skip`: a cell
+ * centre (window metres) left as it is (an area's keep-offs).
  */
 export function fillRings(
   rings: readonly Pt[][],

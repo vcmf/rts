@@ -116,7 +116,8 @@ Kobelnitz on Austerlitz, (−450, 350)). `tools/build-look-data.ts` compiles the
 take the sun too evenly to read as hills, so the macro colour's bakes multiply in a soft hillshade (the heights over
 the far ring at 4 m, smoothed, their slopes as if four times steeper, lit from the sun) and a crest-and-valley tone
 (the ground against its mean over about 60 m: crests lighter, valleys darker and a little cooler), baked once with
-the colour (`RELIEF`, `reliefTone` in `src/look/macro.ts`; static light: no cost a frame). 1 on a map world by
+the colour (`RELIEF`, `reliefTone` in `src/look/shaders/macro.glsl`; static light), and the same tone on the shader
+arm's colour and on the live roads' and yards' paint (`shore.glsl`), so they match the ground beside them. 1 on a map world by
 default, 2 stronger; off on the demo unless asked (`?relief=1` to judge it there).
 
 The page loads that window's data (`windowOf`; an unknown name throws, and so does a file holding another world).

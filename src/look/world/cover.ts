@@ -488,11 +488,10 @@ export function fieldAt(g: CoverGrid, x: number, z: number): number {
 /**
  * A finer cover (a map world's, src/look/world/from-map.ts) on coarser cells of `cell` m, for the page's per-frame
  * shaders (the same size as the demo's; the macro colour's bakes read the fine one: src/look/macro.ts). Each coarse
- * texel takes the least wear of its k × k fine cells, so its wear is never more than the ground's own distance to a
- * line plus a fine cell's half diagonal (the roads' gate, SPEC.road.near, allows a coarse cell's; tested in
- * `test/look-from-map.test.ts`), and its class, field and furrow from the fine cell holding that least wear: on a
- * road, a track or the village before any other at wear 0 (their ground is worn 0), else the cell just past its
- * centre. A cover already that coarse comes back as it is.
+ * texel takes its class, field and furrow from the fine cell just past its centre (so a road's class spreads no wider
+ * than its cells), and the least wear of its k × k fine cells, so its wear is never more than the ground's own distance
+ * to a line plus a fine cell's half diagonal (the roads' gate, SPEC.road.near, allows a coarse cell's; tested in
+ * `test/look-from-map.test.ts`). A cover already that coarse comes back as it is.
  */
 export function coarsenCover(g: CoverGrid, cell: number): CoverGrid {
   const k = Math.round(cell / g.cell)
@@ -500,19 +499,14 @@ export function coarsenCover(g: CoverGrid, cell: number): CoverGrid {
   const n = Math.round(g.n / k)
   const tex = new Uint8Array(n * n * 4)
   const h = k >> 1
-  const trodden = (o: number) => g.tex[o] === COVER.road || g.tex[o] === COVER.track || g.tex[o] === COVER.village
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
-      let best = ((j * k + h) * g.n + i * k + h) * 4
+      const at = ((j * k + h) * g.n + i * k + h) * 4
+      const o = (j * n + i) * 4
+      tex.set(g.tex.subarray(at, at + 4), o)
       for (let q = 0; q < k; q++) {
-        for (let p = 0; p < k; p++) {
-          const o = ((j * k + q) * g.n + i * k + p) * 4
-          const w = g.tex[o + 3]
-          const bw = g.tex[best + 3]
-          if (w < bw || (w === 0 && bw === 0 && trodden(o) && !trodden(best))) best = o
-        }
+        for (let p = 0; p < k; p++) tex[o + 3] = Math.min(tex[o + 3], g.tex[((j * k + q) * g.n + i * k + p) * 4 + 3])
       }
-      tex.set(g.tex.subarray(best, best + 4), (j * n + i) * 4)
     }
   }
   return { n, cell: g.cell * k, x0: g.x0, z0: g.z0, tex }

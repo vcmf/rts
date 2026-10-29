@@ -253,22 +253,21 @@ describe('the cover classes', () => {
 })
 
 describe('the coarse cover', () => {
-  it('takes the least wear of each block, a trodden cell first at wear 0, else the cell past its centre', () => {
+  it('takes the class from the cell past its centre and the least wear of its block', () => {
     const n = 4
     const tex = new Uint8Array(n * n * 4)
     for (let c = 0; c < n * n; c++) [tex[c * 4], tex[c * 4 + 3]] = [COVER.wheat, 50]
-    // block (0, 0): even wears, its centre's cell (1, 1) taken; block (1, 0): the cell at (2, 1) worn least
+    // block (0, 0): its centre's cell (1, 1) gives the field's id; block (1, 0): the cell at (2, 1) worn least
     tex[(1 * n + 1) * 4 + 1] = 9
     tex[(1 * n + 2) * 4 + 3] = 20
-    // block (0, 1): a field and a track both at wear 0: the track
+    // block (0, 1): a track off its centre: the centre's class kept, the track's wear 0 taken
+    tex[(2 * n + 0) * 4] = COVER.track
     tex[(2 * n + 0) * 4 + 3] = 0
-    tex[(3 * n + 1) * 4] = COVER.track
-    tex[(3 * n + 1) * 4 + 3] = 0
     const g = coarsenCover({ n, cell: 1, x0: -2, z0: -2, tex }, 2)
     expect([g.n, g.cell, g.x0, g.z0]).toEqual([2, 2, -2, -2])
     expect([g.tex[1], g.tex[3]]).toEqual([9, 50])
     expect(g.tex[7]).toBe(20)
-    expect([g.tex[8], g.tex[11]]).toEqual([COVER.track, 0])
+    expect([g.tex[8], g.tex[11]]).toEqual([COVER.wheat, 0])
     expect(coarsenCover(g, 2)).toBe(g)
   })
 })
@@ -436,7 +435,7 @@ describe("the areas by apply's rules", () => {
             [-15, 50],
           ],
         ],
-        clear: [{ id: 'lane' }],
+        clear: [{ id: 'lane' }, { id: 'hedge' }],
       },
       {
         id: 'glade',
@@ -457,6 +456,14 @@ describe("the areas by apply's rules", () => {
         line: [
           [-60, -33],
           [60, 41],
+        ],
+      },
+      {
+        id: 'hedge',
+        kind: 'barrier.hedge',
+        line: [
+          [-40, 30],
+          [20, -30],
         ],
       },
       {
@@ -498,6 +505,7 @@ describe("the areas by apply's rules", () => {
     expect(name(A.veg[at(10, 5)])).toBe('glade')
     expect(name(A.veg[at(-30, 0)])).toBe('wood')
     expect(name(A.veg[at(-20, -8.3)])).not.toBe('wood') // on the lane
+    expect(name(A.veg[at(-10.3, 0.3)])).not.toBe('wood') // on the hedge
     expect(name(A.veg[at(0, 53)])).toBe('reeds')
     expect(name(A.built[at(-50, -50)])).toBe('redoubt')
     expect(differ).toBe(0)

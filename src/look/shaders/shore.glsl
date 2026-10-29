@@ -212,6 +212,9 @@ vec3 pavePaint(vec3 c,vec2 xz,int i){
   float lod=(1.0-smoothstep(0.07,0.22,pxMacro()))*step(0.5,uRoadOn);
   if(lod>0.0){vec2 t=texM(uRoadGrit,xz/PAVE_M,PAVE_M).gb-0.5;p=mix(p,(PAVE_MEAN+(PAVE_U*t.x+PAVE_V*t.y)*PAVE_KEEP)*bl,lod);}
   #endif
+  #ifdef RELIEF
+  p=reliefTone(p,xz);   // (the ground under it is toned: macro.glsl)
+  #endif
   return mix(c,p,k);}
 #endif
 vec3 roadPaint(vec3 c,vec2 xz){
@@ -229,7 +232,8 @@ vec3 roadPaint(vec3 c,vec2 xz){
   if(cv0.x>4.5&&cv0.x<5.5){float m=cv0.z*(255.0/3.14159265);if(m>YARD_ALL-0.5)c=pavePaint(c,xz,m>YARD_BASE-0.5?int(m-YARD_BASE+0.5):-1);}
   #endif
   if(cv0.w>ROAD_GATE)return c;   // (most of the tile, before the warp: ROAD_NEAR and the warp's reach, src/look/spec.ts)
-  float jn,dist,past,ot,dusty;vec4 r=roadAt(coverWarp(xz),jn,dist,past,ot,dusty);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
+  float jn,dist,past,ot,dusty;vec4 r=roadAt(coverWarp(xz),jn,dist,past,ot,dusty);
+  float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
   // the patterns laid along the road (by s) give way at a junction, where s jumps from one line to the other, to the
   // same patterns laid in the world (by xz)
   float wobS=(mValue(vec2(s/4.0,7.3))-0.5)*1.6+(mValue(vec2(s/1.1,2.1))-0.5)*0.7,wobW=(mValue(xz/4.0+7.3)-0.5)*1.6+(mValue(xz/1.1+2.1)-0.5)*0.7;
@@ -256,6 +260,9 @@ vec3 roadPaint(vec3 c,vec2 xz){
   // a map's way across the arable (its segments' flag 8: tools/build-look-data.ts): the summer's dust over its earth,
   // so it reads as a way against the ploughed land beside it, not as one more furrowed strip
   col=mix(col,col*vec3(1.16,1.14,1.1)+vec3(0.03),dusty);
+  #ifdef RELIEF
+  col=reliefTone(col,xz);   // (the ground beside it is toned: macro.glsl)
+  #endif
   return mix(c,col,inside);}
 #else
 vec3 roadPaint(vec3 c,vec2 xz){return c;}

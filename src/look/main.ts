@@ -223,11 +223,34 @@ const grassDefines =
         ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`),
       ]
     : []
+// ?relief=0|1|2: the relief's painted tone (src/look/relief.ts): 0 off, 1 the map worlds' default, 2 stronger; off
+// on the demo unless asked (its hill reads by its own slopes). Baked into the macro colour; the shader arm's colour and
+// the live roads' and yards' paint take it too (RELIEF on every painted material: src/look/shaders/macro.glsl)
+const reliefParam = params.get('relief')
+if (reliefParam !== null && !['0', '1', '2'].includes(reliefParam)) {
+  throw new Error(`?relief must be 0, 1 or 2, not ${reliefParam}`)
+}
+const reliefK = RELIEF_K[reliefParam === null ? (onMap ? 1 : 0) : Number(reliefParam)]
+let relief: { tex: RawTexture; k: number } | null = null
+if (reliefK > 0) {
+  const f = reliefField(groundAt, D.spec.far, [SUN.x, SUN.y, SUN.z])
+  const tex = RawTexture.CreateRGBATexture(f.tex, f.n, f.n, scene, false, false, Texture.BILINEAR_SAMPLINGMODE)
+  tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE
+  relief = { tex, k: reliefK }
+}
 const grain0 = makeGrainCanvas(null)
 const mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [
   ...softDefines(soft),
+  ...(relief ? ['#define RELIEF'] : []),
   ...(meadowOn ? ['#define MEADOW', ...grassDefines] : []),
 ])
+if (relief) {
+  const { tex, k } = relief
+  mats.bindAll(m => {
+    m.setTexture('uRelief', tex)
+    m.setFloat('uReliefK', k)
+  })
+}
 const keptGrains = new Set([mats.grain]) // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
 const waterT0 = performance.now()
@@ -474,20 +497,6 @@ const meadowMap = meadowOn
 // twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
 // at the SPEC's lines). The marched depth, not the eased one (no lag as the camera zooms in), the last frame's (none
 // yet: it bakes)
-// ?relief=0|1|2: the relief's painted tone in the macro colour (src/look/relief.ts), baked with it: off, the map
-// worlds' default, stronger; off on the demo unless asked (its hill reads by its own slopes)
-const reliefParam = params.get('relief')
-if (reliefParam !== null && !['0', '1', '2'].includes(reliefParam)) {
-  throw new Error(`?relief must be 0, 1 or 2, not ${reliefParam}`)
-}
-const reliefK = RELIEF_K[reliefParam === null ? (onMap ? 1 : 0) : Number(reliefParam)]
-let relief: { tex: RawTexture; k: number } | null = null
-if (reliefK > 0) {
-  const f = reliefField(groundAt, D.spec.far, [SUN.x, SUN.y, SUN.z])
-  const tex = RawTexture.CreateRGBATexture(f.tex, f.n, f.n, scene, false, false, Texture.BILINEAR_SAMPLINGMODE)
-  tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE
-  relief = { tex, k: reliefK }
-}
 const macro = buildMacro(
   scene,
   mats,

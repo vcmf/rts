@@ -58,19 +58,12 @@ const BAKE_FS = `#extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec2 vUV;uniform vec4 uRect;uniform float uTexel;
 #include<painter>
 #include<shore>
-#ifdef RELIEF
-// the relief's tone (src/look/relief.ts): R the hillshade, G the crest, 0.5 flat; lighter turned to the sun and on a
-// crest, darker turned away and in a valley, which is also a little cooler. uReliefK: its strength (?relief)
-uniform sampler2D uRelief;uniform float uReliefK;
-vec3 reliefTone(vec3 c,vec2 xz){vec2 r=(texture2D(uRelief,xz/FAR_W+0.5).rg-0.5)*2.0;
-  c*=clamp(1.0+uReliefK*(0.9*r.x+0.25*r.y),0.7,1.3);   // (never so dark a valley turns black)
-  return mix(c,c*vec3(0.9,0.96,1.06),uReliefK*0.6*max(0.0,-r.y));}
-#endif
 void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=bakeTexel(xz,uTexel);
-  if(uTexel<1.0)gl_FragColor.rgb=roadPaint(gl_FragColor.rgb,xz);
+  // (the relief's tone before the roads: their paint tones its own colour, as on the live ground: shore.glsl)
   #ifdef RELIEF
   gl_FragColor.rgb=reliefTone(gl_FragColor.rgb,xz);
   #endif
+  if(uTexel<1.0)gl_FragColor.rgb=roadPaint(gl_FragColor.rgb,xz);
 }`
 // Arm 5's pass (L5b): a four-quadrant Kuwahara filter over a finished bake (uSrc, nearest, uN² texels) into the
 // bake's target, uR texels a side (at most KUWAHARA_MAX). Each texel takes the mean colour of the quadrant whose
