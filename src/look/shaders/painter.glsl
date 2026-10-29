@@ -191,6 +191,46 @@ vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
 #if defined(DETAIL)&&!defined(DETAIL_L0)
 #define DETAIL_ON
 #endif
+// THE MID TONE (docs/plans/active/soft-midtone.md, decision 0084, proposed): how wide the ramp turns from light to
+// shade, by the material's class, set by the page (?midtone, src/look/midtone.ts: MIDn_U units, _B buildings,
+// _N the nature meshes, _G the ground). MID1: soft band edges, the mid a little lighter. MID2: a wide mid tone, the
+// light wrapped round the form. Neither on the crowns (SOFT_RAMP: their own ramp, decision 0022). Neither: main's bands
+#ifndef SOFT_RAMP
+#ifdef KEEP_HUE
+#ifdef MID1_U
+#define MID1
+#endif
+#ifdef MID2_U
+#define MID2
+#endif
+#else
+#ifdef DETAIL_ON
+#ifdef MID1_G
+#define MID1
+#endif
+#ifdef MID2_G
+#define MID2
+#endif
+#else
+#ifdef PAINT_BUILDING
+#ifdef MID1_B
+#define MID1
+#endif
+#ifdef MID2_B
+#define MID2
+#endif
+#endif
+#ifdef PAINT_NATURE
+#ifdef MID1_N
+#define MID1
+#endif
+#ifdef MID2_N
+#define MID2
+#endif
+#endif
+#endif
+#endif
+#endif
 uniform vec2 uGrainMean;    // the means of the grain's R and G channels: the renormalisations' centres
 uniform float uPixA;        // the angle of one pixel of a 1080-line frame, from the camera's vertical field of view
 float pSky=1.0;            // the ground sky occlusion (the light map G) for paint(), set by the ground materials only
@@ -288,6 +328,9 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #ifdef SOFT_RAMP
   ndlR=(ndl+0.45)/1.45;   // the crowns as volumes (L7b): light wraps round a mass of leaves (the ramp only, not the rim)
   #endif
+  #ifdef MID2
+  ndlR=(ndl+0.20)/1.20;   // the wide mid tone: the light wraps a little round the form (less than round a crown)
+  #endif
   #ifdef DETAIL_ON
   // the ground: the band follows the light (the sun, the cast shadow, the occlusion), the grain only wobbling its edge,
   // and the grain blotches go to the value below: near a band edge they made islands of the darker band
@@ -301,12 +344,22 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #ifdef DETAIL_SAB_STEP
   float t=step(-0.06,l)*0.55+step(0.34,l)*0.45;                          // sabotage: hard band edges
   #else
+  #ifdef MID2
+  float bw=max(0.36,2.0*fwidth(l));   // the wide mid tone: the edges three times as wide
+  #elif defined(MID1)
+  float bw=max(0.24,2.0*fwidth(l));   // soft band edges: twice as wide
+  #else
   float bw=max(0.12,2.0*fwidth(l));
+  #endif
   float t=smoothstep(-0.06-bw*0.5,-0.06+bw*0.5,l)*0.55+smoothstep(0.34-bw*0.5,0.34+bw*0.5,l)*0.45;
   #endif
   #else
   #ifdef SOFT_RAMP
   float t=smoothstep(-0.40,0.0,l)*0.55+smoothstep(0.06,0.40,l)*0.45;   // the crowns as volumes (L7b): the same three colours, blended
+  #elif defined(MID2)
+  float t=smoothstep(-0.29,0.09,l)*0.55+smoothstep(0.11,0.49,l)*0.45;   // the wide mid tone: edges 0.38 wide, the shade's a little lower
+  #elif defined(MID1)
+  float t=smoothstep(-0.18,0.06,l)*0.55+smoothstep(0.22,0.46,l)*0.45;   // soft band edges: 0.24 wide, main's centres
   #else
   float t=smoothstep(-0.10,-0.02,l)*0.55+smoothstep(0.30,0.38,l)*0.45;   // shadow | mid | light, grain-broken edges
   #endif
@@ -328,6 +381,11 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   mid=clamp(mix(vec3(dot(mid,vec3(0.3,0.59,0.11))),mid,1.3),0.0,1.0);   // the crowns turning side keeps its colour (L7b)
   #endif
   vec3 lt=alb*sunC*mix(1.16,1.02,snow)+liftC*(1.0-snow);
+  #ifdef MID2
+  shc=mix(shc,mid,0.10);mid=mix(mid,lt,0.22);   // the wide mid tone: lighter, the shadow lifted toward it (its cool hue kept)
+  #elif defined(MID1)
+  mid=mix(mid,lt,0.12);                          // soft band edges: the mid a little lighter
+  #endif
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
   #ifdef BOUNCE
   vec3 bc=pBounce;   // its full hue on units too: the eye balances on the main light (the sun), not on a bounce off coloured ground

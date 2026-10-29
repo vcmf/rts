@@ -305,6 +305,12 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
   (0.4) of the texture's own.
 - **Band edges:** never narrower than two pixels' change of the light value (`fwidth`) nor than 0.12 of it, baked
   shadows included: where they step within a pixel the edge comes out about two pixels soft.
+- **The mid tone's switch** (`?midtone=0|1|2`, or per class `u2,b1,n1,g0`: the units, the buildings, the nature
+  meshes, the ground; `src/look/midtone.ts`, decision 0084, proposed, `docs/plans/active/soft-midtone.md`): 1 widens
+  every band edge to 0.24 (the ground's floor to 0.24) and lightens the mid a little; 2 wraps the light a little round
+  the form (`(ndl+0.2)/1.2`), widens the edges to 0.38 (the ground's floor to 0.36), lightens the mid more and lifts
+  the shadow band 10 % toward it. Defines per class (`MIDn_U` …), so 0 compiles main's ramp; never on the crowns
+  (`SOFT_RAMP`).
 - **The band follows the light** (`docs/plans/done/ground-light.md`): on the ground the band is chosen from the sun's
   angle, the cast shadow and the occlusion, with only a small grain wobble (0.2 of the grain) at its edges; the
   grain and its 21 m blotches vary the value inside a band. Before, the grain chose the band too, and near an edge
