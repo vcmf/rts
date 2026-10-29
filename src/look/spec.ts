@@ -91,8 +91,9 @@ export const SPEC: Spec = {
     clearance: 6,
   },
   ground: { lo: 0, hi: 25 }, // the tile spans 0.4..20.3 m, the far ring 2.2..27.5 m; checked at load
-  texel: { shadow: 0.33, light: 0.5, ao: 4 },
-  sizes: { lightMap: 3072, aoCell: 3, riverMask: 2048, reflMask: 1536, aoTex: 768, grain: 512 },
+  // light: 0.52 m looked the same as 0.26 m at every zoom, the trunks' strips kept (decision 0082)
+  texel: { shadow: 0.33, light: 0.53, ao: 4 },
+  sizes: { lightMap: 1536, aoCell: 3, riverMask: 2048, reflMask: 1536, aoTex: 768, grain: 512 },
   minSpec: { maxTexture: 8192, bakeMB: 600 },
   depth: { near: 100, far: 1600 },
   shadowFade: 32,
@@ -192,6 +193,8 @@ export const nearReachOf = (s: Spec): number =>
 
 // the road segments a cell of the roads' grid lists (src/look/world/data.ts, the shader's roadAt)
 export const ROAD_SLOTS = 16
+// the fine warp's reach on a map world's finer cover, m (about ±0.9 m: the blotches span about ±0.3 of it)
+export const COVER_FINE = 3
 export function derive(s: Spec = SPEC): Derived {
   const bad: string[] = []
   const cell = s.tile / s.tileSub
@@ -342,6 +345,10 @@ export function derive(s: Spec = SPEC): Derived {
       `#define ROAD_GATE ${roadGate.toFixed(3)}`,
       `#define ROAD_EDGE ${s.road.edge.toFixed(3)}`,
       `#define COVER_WARP ${s.macro.warp.toFixed(3)}`,
+      // a map world's finer cover (src/look/world/from-map.ts, MAP_COVER_CELL) takes a fine warp too, so a slanted
+      // class edge wanders instead of stepping by its cells (macro.glsl, coverWarp); the demo's cover cells are these
+      `#define COVER_CELL ${s.macro.cover.toFixed(3)}`,
+      `#define COVER_FINE ${COVER_FINE.toFixed(3)}`,
       // amp: the grain's deviation, as a fraction of the texture's own; minCos: the incidence's floor (the pixel angle
       // is the uniform uPixA: it follows the camera's field of view)
       `#define DETAIL_MINCOS ${s.detail.minCos.toFixed(3)}`,
@@ -363,6 +370,26 @@ export function derive(s: Spec = SPEC): Derived {
 // a bake's memory, MB: RGBA8 unless given (the min-spec budget counts every resident bake)
 export const bakeMB = (w: number, h: number, bytesPerTexel = 4): number => (w * h * bytesPerTexel) / (1024 * 1024)
 
+/** The resident bakes' memory, MB, with a w × h shadow map: every render target also holds a 4-byte depth buffer
+ *  (the shadow map, the light map and the soldiers' shade, the latter the light map's size). */
+export function bakesMB(d: Derived, w: number, h: number): number {
+  const s = d.spec
+  return (
+    2 * bakeMB(w, h) +
+    // the light map and the soldiers' shade (bakes.ts unitShade, its size, made under ?armies)
+    4 * bakeMB(s.sizes.lightMap, s.sizes.lightMap) +
+    bakeMB(s.sizes.aoTex, s.sizes.aoTex) +
+    bakeMB(s.sizes.riverMask, s.sizes.riverMask) +
+    bakeMB(s.sizes.reflMask, s.sizes.reflMask) +
+    bakeMB(d.bankN, d.bankN) +
+    bakeMB(d.waterN, d.waterN) + // the bank normals and the water data (no mips: src/look/span-texture.ts)
+    bakeMB((d.roadN * ROAD_SLOTS) / 4, d.roadN, 16) +
+    bakeMB(s.minSpec.maxTexture, 1, 16) + // the roads grid and at most a row of segments (RGBA float)
+    ((bakeMB(d.macroN, d.macroN) + bakeMB(d.macroFarN, d.macroFarN)) * 4) / 3 +
+    bakeMB(s.far / s.macro.cover, s.far / s.macro.cover) // the macro colour (mipmapped) and the cover grid
+  )
+}
+
 // The shadow map, sized from the fitted box (known only once the ground is built): each side at the texel target.
 // The texel target holds on the ground: light-space y lies in the sun's vertical plane, where one texel covers
 // 1/sin(elevation) times as much ground, so that side is finer by sin(elevation).
@@ -373,19 +400,7 @@ export function shadowMapSize(d: Derived, boxW: number, boxH: number, sunSinElev
   if (w > s.minSpec.maxTexture || h > s.minSpec.maxTexture) {
     throw new Error(`world spec: bake: shadow map ${w}×${h} > ${s.minSpec.maxTexture}² (min-spec)`)
   }
-  // the two render targets also hold a depth buffer each (4 bytes a texel)
-  const mb =
-    2 * bakeMB(w, h) +
-    2 * bakeMB(s.sizes.lightMap, s.sizes.lightMap) +
-    bakeMB(s.sizes.aoTex, s.sizes.aoTex) +
-    bakeMB(s.sizes.riverMask, s.sizes.riverMask) +
-    bakeMB(s.sizes.reflMask, s.sizes.reflMask) +
-    bakeMB(d.bankN, d.bankN) +
-    bakeMB(d.waterN, d.waterN) + // the bank normals and the water data (no mips: src/look/span-texture.ts)
-    bakeMB((d.roadN * ROAD_SLOTS) / 4, d.roadN, 16) +
-    bakeMB(s.minSpec.maxTexture, 1, 16) + // the roads grid and at most a row of segments (RGBA float)
-    ((bakeMB(d.macroN, d.macroN) + bakeMB(d.macroFarN, d.macroFarN)) * 4) / 3 +
-    bakeMB(s.far / s.macro.cover, s.far / s.macro.cover) // the macro colour (mipmapped) and the cover grid
+  const mb = bakesMB(d, w, h)
   if (mb > s.minSpec.bakeMB) {
     throw new Error(`world spec: bake: ${mb.toFixed(0)} MB of bakes > ${s.minSpec.bakeMB} MB (min-spec)`)
   }

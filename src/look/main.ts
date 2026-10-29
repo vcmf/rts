@@ -29,7 +29,8 @@ import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
 import { D, TUNED_R, checkGround } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
-import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS } from './world/data.ts'
+import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS, type LookWorld } from './world/data.ts'
+import { windowFile, windowOf, type LookWindow } from './world/windows.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { buildTerrain, splitGround } from './terrain.ts'
@@ -42,12 +43,20 @@ const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', {
   import: 'default',
   eager: true,
 })
+// the map worlds' look data by file (data/<map>-<window>.lookdata, src/look/world/windows.ts): ?map&window picks one
+// (a glob takes a literal pattern; the page reads only the files the windows name: windowFile)
+const WINDOW_DATA = import.meta.glob<string>('../../data/*-*.lookdata', {
+  query: '?url',
+  import: 'default',
+  eager: true,
+})
 import { buildWater } from './water.ts'
+import { RELIEF_K, reliefField } from './relief.ts'
 import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
 import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
-import { BUILDINGS, YARD_ALL, YARD_BASE, onPaving, paveShape } from './world/buildings.ts'
-import { COVER } from './world/cover.ts'
+import { BUILDINGS, YARD_ALL, YARD_BASE, onPaving, paveShape, type Building } from './world/buildings.ts'
+import { COVER, coarsenCover } from './world/cover.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
@@ -80,11 +89,22 @@ if (!window.NATURE) {
     '<p style="padding:30px">nature-pack.data.js missing: run <code>node tools/obj-to-js.mjs</code></p>'
   throw new Error('no nature data')
 }
-// the world's data, built offline (tools/build-look-data.ts, decision 0012): the heightfield, the far ring, the river
-const res = await fetch(LOOK_URL)
-if (!res.ok) throw new Error(`look data: ${res.status} ${res.statusText} for ${LOOK_URL}`)
+// the world's data, built offline (tools/build-look-data.ts, decision 0012): the heightfield, the far ring, the river;
+// the demo's, or a map's window by ?map=<map>&window=<name> (docs/plans/active/look-austerlitz-a1.md)
+const lookWindow = windowOf(new URLSearchParams(location.search))
+const lookUrl = lookWindow ? WINDOW_DATA[`../../${windowFile(lookWindow)}`] : LOOK_URL
+if (!lookUrl) throw new Error(`look data: no ${windowFile(lookWindow!)}: run node tools/build-look-data.ts`)
+const res = await fetch(lookUrl)
+if (!res.ok) throw new Error(`look data: ${res.status} ${res.statusText} for ${lookUrl}`)
 const look = decodeLook(await res.arrayBuffer())
 checkLookData(D, look)
+checkWorld(look.world, lookWindow)
+// a map's window: no hand-placed copses, zones or buildings (the demo's), its trees from its data
+const onMap = look.world.kind === 'map'
+const worldBuildings: readonly Building[] = onMap ? [] : BUILDINGS
+// the cover the per-frame shaders read (and the road split, which must class its triangles as they paint): a map
+// world's coarsened to the spec's cells (src/look/world/cover.ts, coarsenCover); the macro colour's bakes read the fine
+const frameCover = coarsenCover(look.cover, D.spec.macro.cover)
 setRiver(look.river)
 setHeightfield(look.hf, look.far, D.spec.tile / 2)
 {
@@ -100,6 +120,13 @@ setHeightfield(look.hf, look.far, D.spec.tile / 2)
   checkGround(D.spec, lo, hi, farLo)
 }
 const canvas = document.getElementById('c') as HTMLCanvasElement
+
+/** Throws unless the look data holds the world the page asked for (a stale or misnamed file draws the wrong one). */
+function checkWorld(world: LookWorld, win: LookWindow | null): void {
+  const want = win ? `${win.map} ${win.name} at ${win.x}, ${win.z}` : 'the demo'
+  const got = world.kind === 'map' ? `${world.map} ${world.window} at ${world.x}, ${world.z}` : 'the demo'
+  if (want !== got) throw new Error(`look data: it holds ${got}, the page asked for ${want}: rebuild it`)
+}
 // the stencil: on the scene's target alone while the soldiers' simple shadows draw (?stencil=scene, the default), the
 // engine's own (?stencil=all) or none (?stencil=0): stencilFor (src/look/shadow-look.ts)
 const stencilAt = stencilFor(new URLSearchParams(location.search))
@@ -196,11 +223,34 @@ const grassDefines =
         ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`),
       ]
     : []
+// ?relief=0|1|2: the relief's painted tone (src/look/relief.ts): 0 off, 1 the map worlds' default, 2 stronger; off
+// on the demo unless asked (its hill reads by its own slopes). Baked into the macro colour; the shader arm's colour and
+// the live roads' and yards' paint take it too (RELIEF on every painted material: src/look/shaders/macro.glsl)
+const reliefParam = params.get('relief')
+if (reliefParam !== null && !['0', '1', '2'].includes(reliefParam)) {
+  throw new Error(`?relief must be 0, 1 or 2, not ${reliefParam}`)
+}
+const reliefK = RELIEF_K[reliefParam === null ? (onMap ? 1 : 0) : Number(reliefParam)]
+let relief: { tex: RawTexture; k: number } | null = null
+if (reliefK > 0) {
+  const f = reliefField(groundAt, D.spec.far, [SUN.x, SUN.y, SUN.z])
+  const tex = RawTexture.CreateRGBATexture(f.tex, f.n, f.n, scene, false, false, Texture.BILINEAR_SAMPLINGMODE)
+  tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE
+  relief = { tex, k: reliefK }
+}
 const grain0 = makeGrainCanvas(null)
 const mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [
   ...softDefines(soft),
+  ...(relief ? ['#define RELIEF'] : []),
   ...(meadowOn ? ['#define MEADOW', ...grassDefines] : []),
 ])
+if (relief) {
+  const { tex, k } = relief
+  mats.bindAll(m => {
+    m.setTexture('uRelief', tex)
+    m.setFloat('uReliefK', k)
+  })
+}
 const keptGrains = new Set([mats.grain]) // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
 const waterT0 = performance.now()
@@ -268,7 +318,7 @@ if (!mats.webgl1) {
   })
   // the buildings' paving (docs/plans/done/buildings.md; shore.glsl, pavePaint): the buildings' shapes, on every
   // material that paints the roads; the cobbles ride in the grit (its G and B), their mean until it has loaded
-  const shapes = BUILDINGS.map(paveShape)
+  const shapes = worldBuildings.map(paveShape)
   if (shapes.length > 16) {
     throw new Error(`buildings: ${shapes.length} paved yards, the shader takes 16 (shore.glsl, pavePaint)`)
   }
@@ -276,7 +326,7 @@ if (!mats.webgl1) {
   // changed would paint one building's shape under another's yard, silently. Each building's centre texel names it
   {
     const C = look.cover
-    BUILDINGS.forEach((b, bi) => {
+    worldBuildings.forEach((b, bi) => {
       const i = Math.floor((b.x - C.x0) / C.cell)
       const j = Math.floor((b.z - C.z0) / C.cell)
       const o = (j * C.n + i) * 4
@@ -364,6 +414,7 @@ const nature = buildNature(
   meadowOn,
   treeSet.has('one'),
   treeSet.has('gen') ? { season: season0, clumpVolume: params.get('clumpvol') !== 'off' } : null,
+  onMap ? look.trees : null,
 )
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 {
@@ -382,10 +433,13 @@ if (bldbounceParam !== null && bldbounceParam !== '0') throw new Error(`?bldboun
 // WebGL1's always: the bake's reads are GLSL ES 3's); ?bldbounce=0: without the ground's bounce on their walls
 const bldBaked = bldlmParam === null && !mats.webgl1
 // (the runtime path without the bounce, as main had it: it computed the bounce and never added it)
-const buildings = buildBuildings(scene, mats, nature.canopy, {
-  baked: bldBaked,
-  bounce: bldBaked && bldbounceParam === null,
-})
+const buildings = buildBuildings(
+  scene,
+  mats,
+  nature.canopy,
+  { baked: bldBaked, bounce: bldBaked && bldbounceParam === null },
+  worldBuildings,
+)
 const bakes = buildBakes(
   scene,
   mats,
@@ -443,10 +497,22 @@ const meadowMap = meadowOn
 // twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
 // at the SPEC's lines). The marched depth, not the eased one (no lag as the camera zooms in), the last frame's (none
 // yet: it bakes)
-const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, {
-  reach: RINGS[0].band[3],
-  shows: () => !focusDist || ((pixA * D.spec.detail.lines) / sceneH()) * focusDist < 2 * STROKE_FOOT,
-})
+const macro = buildMacro(
+  scene,
+  mats,
+  frameCover,
+  meadowOn,
+  roadTex,
+  grassDefines,
+  flowTex,
+  meadowMap?.map ?? null,
+  {
+    reach: RINGS[0].band[3],
+    shows: () => !focusDist || ((pixA * D.spec.detail.lines) / sceneH()) * focusDist < 2 * STROKE_FOOT,
+  },
+  look.cover,
+  relief,
+)
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) {
@@ -478,7 +544,7 @@ if (roadTex) {
   // closest zooms; with the paving's split and its gate the buildings cost about 0.35 ms at the village's closest, from
   // 1.25: docs/plans/done/buildings.md); ?split=0 (above): the live shader
   // with the paving on the whole tile, the A/B (its share all paved)
-  const sg = splitParam === '0' ? null : splitGround(terrain, look.cover)
+  const sg = splitParam === '0' ? null : splitGround(terrain, frameCover)
   const split = sg?.material ?? live
   groundShare = sg?.share ?? [1, 0, 0]
   // (the materials the ground draws with: all three split, the live and the baked unsplit)
@@ -621,6 +687,8 @@ if (
 // ?sim: the armies played by the sim, not the script (battle threads PR 4b; needs ?armies)
 const simParam = params.has('sim')
 if (simParam && armiesParam === null) throw new Error('?sim plays the armies: give ?armies=<battalions a side> too')
+// (a window's armies: stage A4 of docs/plans/active/look-austerlitz-a1.md's plan)
+if (onMap && armiesParam !== null) throw new Error("?armies is the demo world's: a map window has none yet")
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 40)) {
   throw new Error(
     `?armies must be 1 to 40 battalions a side (the demo map holds 40: docs/plans/active/armies-32k.md), not ${armiesParam}`,

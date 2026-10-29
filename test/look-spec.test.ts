@@ -8,6 +8,7 @@ import {
   TUNED_R,
   ZoomHold,
   bakeMB,
+  bakesMB,
   checkGround,
   clearBelow,
   clearRadius,
@@ -303,6 +304,31 @@ describe('world spec', () => {
       expect(() => derive(with_(f))).toThrow(msg)
     })
   }
+  it("bakes the light map at its texel target, about 0.5 m (no finer than the trunks' strips need)", () => {
+    const texel = SPEC.tile / SPEC.sizes.lightMap
+    expect(texel).toBeLessThanOrEqual(SPEC.texel.light)
+    expect(texel).toBeGreaterThan(0.45)
+    expect(() =>
+      derive(
+        with_(s => {
+          s.sizes.lightMap = Math.floor(s.tile / s.texel.light) - 1
+        }),
+      ),
+    ).toThrow(/light map texel/)
+  })
+  it("counts the light map and the soldiers' shade in the bake budget, each with its depth buffer", () => {
+    const at = (n: number) =>
+      bakesMB(
+        derive(
+          with_(s => {
+            s.sizes.lightMap = n
+          }),
+        ),
+        1000,
+        1000,
+      )
+    expect(at(3072) - at(1536)).toBeCloseTo(4 * (bakeMB(3072, 3072) - bakeMB(1536, 1536)), 9)
+  })
   it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {
     const d = derive(SPEC)
     const sin = 0.45
