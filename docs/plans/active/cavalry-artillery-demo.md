@@ -261,7 +261,9 @@ against `?cavalry=0`.
   with `lodGaps` (test/lod-coverage.ts: the share of the nearest LOD's cells a lighter LOD leaves uncovered, back
   faces culled, 41 views from 16° to 90° at the baked steps): near 6.4 % → 1.4 %, far 35 % → 5 % (the infantryman's
   0.3 % and 9 %); the battery, welded too, far 17 % → 6 %. Before and after at 20 m forced, 40 and 63 m:
-  `near-fix/`. Cost: +1.23 / +0.96 / +0.89 ms at 20 / 40 / 63 m (repeated: +1.24,
+  `near-fix/`; the owner: "it's good now i like it". Cost of the cavalry over none (GPU frame p50, the bench at
+  `?benchat=50,-25&benchr=20,40,63`, Metal, 3 rounds alternated from a load of 3 or less; the two runs spoiled by a
+  load spike dropped): +1.09 / +0.74 / +0.84 ms at 20 / 40 / 63 m (before: +1.23 / +0.96 / +0.89); textures +20 MB. Cost: +1.23 / +0.96 / +0.89 ms at 20 / 40 / 63 m (repeated: +1.24,
   +0.96, +0.88). The owner approved the look (wide crops at 20, 40, 63 m: `horses-lighter/`).
 - **Sooner switches** (1.5 and 1.6 m) do not help at 20 m (+1.23, +1.62) and cost more at 40 and 63 m.
 - **20 m is still +1.2 ms**; with the nearest LOD off it is +0.99 (`horses-lighter/trot-20-c-nonearest.png`,
@@ -269,7 +271,8 @@ against `?cavalry=0`.
 
 ## Open questions (the owner's)
 
-- The cavalry at 20 m (+1.2 ms with the nearest LOD, +0.99 without it): the nearest LOD off for the horses?
+- The cavalry at 20 m (+1.09 ms with the nearest LOD since the remeshed LODs; +0.99 without it, measured before
+  them): the nearest LOD off for the horses?
 - A spread figure's shadow is as long as the sun casts it; up close the infantryman's is shortened to 0.7 (0062's
   close look). Bake the arms' per-step shape at the close length (a jump at 100 m), or keep them true?
 - The battery's firing cycle in 8 bins: more bins for long clips (a list a role) would step the gunners' shadows.
