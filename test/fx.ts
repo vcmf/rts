@@ -3,8 +3,8 @@
 //
 // The default ruleset is `small`: the Napoleonic ruleset with the S1a–S1c block (4 companies of 9 files × 3
 // ranks, 100 men). The terrain-mechanics tests were placed for battalions that size at spots along the
-// stream; the engine code they test does not depend on the block. The shipped block (6 × 23 × 3, 400 men,
-// decision 0018) and the ceiling (6 × 45 × 3) are tested in test/scale.test.ts, and the scenarios, goldens,
+// stream; the engine code they test does not depend on the block. The shipped block (4 × 20 × 3, 240 figures,
+// decision 0076) and the ceiling (4 × 45 × 3) are tested in test/scale.test.ts, and the scenarios, goldens,
 // calibration and cost benches use the shipped ruleset.
 import fs from 'node:fs'
 import path from 'node:path'
@@ -74,16 +74,33 @@ export function openBattlefield(rs: Ruleset = napoleonic): Terrain {
   return t
 }
 // (its morale reaches are S1c-2's: they scale with the frontage, napoleonic.ts)
+// The S1a block, at S1c's distances: the musket's 250 m and its hit table, and the rally's 250 m, which the
+// mechanics tests on this field (the crest, the stream, the woods) were placed for before the division scale moved
+// the shipped ones (docs/proposals/division-scale.md § 3); the shipped numbers are the scenarios', the goldens' and the
+// calibrations'
 export const small: Ruleset = {
   ...withBlock(napoleonic, 'infantry', { companies: 4, files: 9, bins: 3 }),
   name: `${napoleonic.name}, the S1a block`,
+  fire: {
+    ...napoleonic.fire,
+    maxRange: 250,
+    pRange: [
+      [0, 0.06],
+      [50, 0.04],
+      [100, 0.019],
+      [150, 0.008],
+      [200, 0.004],
+      [250, 0],
+    ],
+  },
   morale: {
     ...napoleonic.morale,
     contagion: { ...napoleonic.morale.contagion, front: 200, back: 100 },
     support: { ...napoleonic.morale.support, reach: 100 },
+    rally: { ...napoleonic.morale.rally, safe: 250 },
   },
 }
-// the ceiling (decision 0018): companies of 45 files, 810 places
+// the ceiling (decision 0018): sections of 45 files, 540 places
 export { ceiling } from '../src/rulesets/napoleonic.ts'
 export const cr: Compiled = compileRuleset(small)
 export const shipped: Compiled = compileRuleset(napoleonic) // the scenarios' ruleset

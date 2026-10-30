@@ -48,7 +48,7 @@ fraction of a real division's front. The distances are set instead by what the p
 | Light infantry long range | 160 | none | U5 |
 | Canister (`artillery.cone.range`) | 300 | 300 | unchanged (the owner: 250–300) |
 | Roundshot (`artillery.ray.range`) | 1,000 | 800 | |
-| The guns' minimum (`artillery.min`) | 20 | none | inside it the guns do not fire (§ 4) |
+| The guns' minimum (`artillery.min`) | 15 (the owner: bayonet range) | none | inside it the guns do not fire (§ 4) |
 
 - **The hit chance by range** (`fire.pRange`) is today's table with its distances × 0.4 (250 → 100): the same chance at
   the same share of the range, so a firefight at 40 m is today's at 100 m.
@@ -57,7 +57,7 @@ fraction of a real division's front. The distances are set instead by what the p
 
 ## 4. The guns' minimum range
 
-An enemy whose nearest company is within `artillery.min` (20 m) of a piece's muzzle is among the guns: no piece of the
+An enemy whose nearest company is within `artillery.min` (15 m, bayonet range) of a piece's muzzle is among the guns: no piece of the
 battery fires at all (at any target), its detachments fight as a melee does. Between the minimum and canister's range
 it fires canister, beyond it roundshot, as today.
 
@@ -70,7 +70,8 @@ Each distance in the ruleset belongs to one of three groups, and moves with its 
 
 | Group | Factor | Distances |
 |---|---|---|
-| **Fire** (a range or within one) | × 0.4 | `fire.pRange`; the melee's `refuge.alert` (200 → 80); the charge's `gallopAt` (150 → 60), `test` (60 → 25), `build` (50 → 20), `recoil` (80 → 35); `morale.rally.safe` (250 → 100) |
+| **Fire** (a range or within one) | × 0.4 | `fire.pRange`; `morale.rally.safe` (250 → 100) |
+| **The charge** (a pace and a time) | unchanged | the charge's `gallopAt`, `test`, `build`, `recoil`; the melee's `refuge.alert`: the paces and the clock are unchanged (below), so a charge's distances, its speeds by its times, are too |
 | **The unit** (a frontage or a spacing) | × 0.58 (54 / 93) | `morale.contagion.front`, `.back` (560, 280 → 325, 163); `morale.support.reach` (280 → 163) |
 | **The guns and the ground** | unchanged | canister; `sectors.reach` (300: no threat farther than canister); `morale.leave`; the terrain's and the movement's numbers |
 
@@ -79,6 +80,11 @@ belongs to the battle's time scale (the campaign proposal's open question 8, #23
 
 - **P-57:** every ruleset distance is its group's factor × today's, to the metre (the table above); the guards that read
   distances hold.
+
+**The charge's distances, measured** (2026-10-30). Scaled × 0.4 with the musket (a test at 25 m), the charge's test
+came closer to its impact, the shocks had less time to wear off between them, and two regiments charging each other
+both broke at the impact in a third of the runs (the cavalry case 81/19 against its 30–70% target). Kept as they
+were, every charge target holds (§ 7). The charge belongs to the paces and the clock, which this step leaves alone.
 
 ## 6. What it keeps
 
@@ -136,3 +142,31 @@ belongs to the battle's time scale (the campaign proposal's open question 8, #23
 4. The docs (`docs/systems/fire-morale.md`, `docs/systems/melee.md`, `docs/systems/artillery.md`,
    `docs/systems/formations.md`), the goldens, `/code-review
    high`, the PR.
+
+## 11. Results (PR B, 2026-10-30)
+
+- **Fire** (`node tools/calibrate-fire.ts 30`): every check passes with no number tuned: at 40 m the weaker line breaks
+  in a median 9.2 min at 20% losses; at 20 m in 4.5 min; at 80 m none breaks in 20 min. C-02 (0.42 of the recruit's
+  losses), H-04 (holds 15.1 min) and G-06 (2.48) hold. The 3v3 brigade: its weaker side's first break at 10.2 min,
+  but now one line out 3 minutes later where all three went before (reported, no target).
+- **Charges** (`node tools/calibrate-charge.ts 60`, the charge's distances unchanged, § 5): every target passes:
+  the square holds, the line breaks 78%, the flank 98%, cavalry against cavalry 62/38. The column, which has no target,
+  now forms square in time and turns most charges away.
+- **The S1e battle:** both fronts drawn in toward their middle by the width's ratio (0.58), side 1's halt and close at
+  52 m and 28 m (× 0.4), its close at 700 s: side 1's at 17.2 minutes at the page's seed (15.2–17.0 on seven more,
+  one decided at the limit); the valley plays the same battle.
+- **The bench:** every case scaled by 0.58 about the field's centre in its builder (`BENCH_SCALE`), with the depths
+  that must not shrink (X-16, X-17's regiment 9 m behind; X-14's columns 30 m apart) written so. Five cases that the
+  tests listed as failing now pass (X-11's rally, the visiting order of X-15, X-16, X-17, X-20); Q-02's charge now
+  depends on the slots' order (#187).
+- **Artillery** (`node tools/calibrate-artillery.ts 30`): the line (12% in 10 minutes, none breaks), canister (70 of
+  240 in 3 minutes, all break) and the crest hold; two column targets do not: it loses 1.8 times the line's men (the
+  target 2) and none breaks in 10 minutes (the target 30%). Half the pieces (4), and a column of 240 two sections
+  deep where S1c's was three, so a ball crosses fewer ranks. Not tuned here: PR C's attack column is a dense block 12
+  ranks deep (`docs/proposals/formations.md` § 2), which the ball's geometry strikes far harder.
+- **Full strengths** in one place for scenarios and tests, read from the ruleset's blocks, and the width's ratio:
+  `src/scenarios/sizes.ts`.
+- **The cost benches** keep their figures: 66 units of 240 (15,840) and every formation slot, 128 units (30,720:
+  32,000 would need 134, over `MAX_FORMATIONS`).
+- **The look page** builds its armies on the shipped infantry and cavalry; its tests (armies, arms, battle-thread)
+  expect the old blocks and are the look track's to move (the owner, 2026-10-30).

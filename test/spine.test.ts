@@ -28,6 +28,7 @@ import {
   type Command,
 } from '../src/sim/index.ts'
 import { s1aDrill, s1aOrders } from '../src/scenarios/s1a-drill.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { data, shipped as cr, dataBytes, Sim } from './fx.ts'
 import { buildSimData } from '../tools/build-sim-data.ts'
@@ -70,7 +71,7 @@ describe('S1a acceptance: golden hashes, replays, saves', () => {
     expect(dropped).toEqual(['no such formation'])
     expect(statuses.has(1)).toBe(true) // B halted at the stream
     expect(shapes.size).toBeGreaterThanOrEqual(4) // A: line, column, square, march
-    expect(menOf(w, 0)).toBe(387)
+    expect(menOf(w, 0)).toBe(FULL.infantry - 13)
   })
   it('a replay from the log reproduces every hash; a changed command is caught at the next hash point', () => {
     expect(play(run.replay, data, cr, s1aDrill, run.hashes)).toBeNull()

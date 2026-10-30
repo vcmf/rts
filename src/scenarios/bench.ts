@@ -4,6 +4,7 @@
 // (no infantry assault, no loose bodies, no passage of lines yet), so the bench first shows today's behaviour.
 import type { World, Scenario, PlanStep, PlanCommand } from '../sim/index.ts'
 import { issue, PI } from '../sim/index.ts'
+import { FULL, WIDTH_RATIO } from './sizes.ts'
 
 /** A bench case: its scenario, how long it plays, where the page frames it, and the moments worth looking at. */
 export interface BenchCase {
@@ -33,6 +34,14 @@ type Spawn = {
 const step = (at: number, unit: number, cmd: PlanCommand): PlanStep => ({ at, unit, cmd })
 const move = (x: number, z: number, append = false): PlanCommand => ({ type: 'move', points: [[x, z]], append })
 
+// the cases were placed for S1c's battalions of 400, 93 m wide; at the division scale (240, about 54 m:
+// docs/proposals/division-scale.md § 8) every position, move and view is scaled by the width's ratio about the
+// field's centre, so formations meet as they did
+export const BENCH_SCALE = WIDTH_RATIO
+const K = BENCH_SCALE
+const scaled = (c: PlanCommand): PlanCommand =>
+  c.type === 'move' ? { ...c, points: c.points.map(([x, z]) => [x * K, z * K] as [number, number]) } : c
+
 // a case's setup: each side's rear (south for side 0, north for side 1, so routers run away from the action unless a
 // case says otherwise), then its formations in spawn order (the plan's unit numbers), all holding their fire
 function bench(
@@ -51,16 +60,22 @@ function bench(
   const setup = (w: World) => {
     rears.forEach(([x, z], side) => issue(w, { type: 'side', side, x, z }))
     for (const s of spawns) {
-      const men = s.men ?? (s.unit === 'cavalry' ? 256 : s.unit === 'battery' ? 96 : 400)
-      issue(w, { type: 'debug-spawn', ...s, men, fire: 'hold' })
+      const men = s.men ?? FULL[(s.unit ?? 'infantry') as keyof typeof FULL]
+      issue(w, { type: 'debug-spawn', ...s, x: s.x * K, z: s.z * K, men, fire: 'hold' })
     }
   }
   return {
     id,
     title,
-    scenario: { name: `bench-${id}`, map: 'bench', setup, plan, minutes: seconds / 60 },
+    scenario: {
+      name: `bench-${id}`,
+      map: 'bench',
+      setup,
+      plan: plan.map(p => ({ ...p, cmd: scaled(p.cmd) })),
+      minutes: seconds / 60,
+    },
     seconds,
-    view,
+    view: [view[0] * K, view[1] * K, view[2]],
     keys,
   }
 }
@@ -270,12 +285,13 @@ export const BENCH_CASES: BenchCase[] = [
     Array.from({ length: 40 }, (_, k): Spawn => {
       const g = Math.floor(k / 10)
       const r = (k % 10) - 4.5
-      // west, east, south and north groups, each marching to the far side
+      // west, east, south and north groups, each marching to the far side; 52 m apart, 30 m at the bench's scale,
+      // so the 27 m columns stand clear of each other
       const [x, z, heading] = [
-        [-260, r * 45, E],
-        [260, r * 45 + 20, W],
-        [r * 45 + 10, -260, N],
-        [r * 45 - 10, 260, S],
+        [-260, r * 52, E],
+        [260, r * 52 + 20, W],
+        [r * 52 + 10, -260, N],
+        [r * 52 - 10, 260, S],
       ][g]
       return { side: g % 2, x, z, heading, shape: COL }
     }),
@@ -283,10 +299,10 @@ export const BENCH_CASES: BenchCase[] = [
       const g = Math.floor(k / 10)
       const r = (k % 10) - 4.5
       const [x, z] = [
-        [240, r * 45],
-        [-240, r * 45 + 20],
-        [r * 45 + 10, 240],
-        [r * 45 - 10, -240],
+        [240, r * 52],
+        [-240, r * 52 + 20],
+        [r * 52 + 10, 240],
+        [r * 52 - 10, -240],
       ][g]
       return step(1, k, move(x, z))
     }),
@@ -298,13 +314,14 @@ export const BENCH_CASES: BenchCase[] = [
     'x15-melee-holds',
     'X-15: a veteran regiment charges a raw one at the halt; the melee holds until one breaks',
   ),
+  // just behind: 9 m behind the raw one, a depth the bench's scale leaves alone (40 + 9 / K)
   charged('x16-friend-behind', 'X-16: as X-15, with a friendly regiment standing just behind the raw one', [
-    { side: 1, x: 0, z: 49, heading: S, shape: LINE, unit: CAV },
+    { side: 1, x: 0, z: 40 + 9 / K, heading: S, shape: LINE, unit: CAV },
   ]),
   charged(
     'x17-enemy-behind',
     'X-17: as X-15, with an enemy regiment just behind the raw one: broken, it has no way out and is cut down',
-    [{ side: 0, x: 0, z: 49, heading: N, shape: LINE, unit: CAV }],
+    [{ side: 0, x: 0, z: 40 + 9 / K, heading: N, shape: LINE, unit: CAV }],
     0,
     RAW17,
   ),
@@ -369,7 +386,8 @@ export const BENCH_CASES: BenchCase[] = [
       { side: 0, x: -100, z: -100, heading: E, shape: COL },
       { side: 1, x: 0, z: 150, heading: S, shape: LINE, unit: CAV },
     ],
-    [step(1, 0, move(100, -100)), step(1, 0, move(100, 40, true)), step(1, 1, move(0, 0)), step(70, 1, move(0, 280))],
+    // the regiment rides off beyond refuge.alert (200 m, not scaled) of the battalion's way
+    [step(1, 0, move(100, -100)), step(1, 0, move(100, 40, true)), step(1, 1, move(0, 0)), step(70, 1, move(0, 400))],
     700,
     [0, -20, 2.5],
     [40, 120, 300, 600],

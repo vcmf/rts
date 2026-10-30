@@ -5,9 +5,10 @@
 // page's: a battery and a battalion a side.
 import type { World, Scenario, SimData, Compiled } from '../sim/index.ts'
 import { issue, makeWorld, advanceTick, menOf, outOfFight, PI } from '../sim/index.ts'
+import { FULL } from './sizes.ts'
 
-export const GUNS = 96
-export const INF = 400
+export const GUNS = FULL.battery
+export const INF = FULL.infantry
 export const GUN_CASES = ['line', 'column', 'canister', 'crest'] as const
 export type GunCase = (typeof GUN_CASES)[number]
 const NE = PI / 4

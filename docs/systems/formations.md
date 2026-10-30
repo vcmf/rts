@@ -30,7 +30,9 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
 
 ## Constraints
 
-- **Decisions 0007 and 0018:** the battalion is the unit (about 400 men since 0018). The sim keeps the **men per company**, never a soldier.
+- **Decisions 0007, 0018 and 0076:** a unit stands for a division since 0076 (240 figures, a figure for 25 men;
+  `docs/proposals/division-scale.md`); its companies are sections, how fire, sight and losses are reckoned. The sim
+  keeps the **figures per section**, never a soldier.
   Which slots are filled follows from the counts by one rule (`occupied`); `filledSlots` keeps each
   battalion's list, rebuilt only when the men per company, the shape it fills or the lean change (S1c-5):
   - files from the centre outward, ranks front first;
@@ -73,9 +75,9 @@ The Napoleonic types (`docs/plans/active/s1d1-unit-types.md`):
 
 | Type | Block | Shapes | Paces |
 |---|---|---|---|
-| Infantry (decision 0018) | 6 companies of 23 files × 3 ranks, 414 places; 8 bins a company; a line about 93 m | line, square (four faces, front and rear first: 2, 1, 2, 1), column of divisions, column of route | ordinary, route step |
-| Cavalry regiment | 4 squadrons of 32 files × 2 ranks, 256 places; 1 m a file, 3 m a rank; a line about 157 m | line, column of squadrons at half distance, column of route by fours (each squadron a column of twos, horses 3 m apart: a `step`) | walk; the march at the trot |
-| Foot battery | 8 pieces, each a detachment of 4 files × 3 ranks (96 men); one bin a piece | unlimbered (16 m apart), limbered (18 m apart on the trail) | by hand; the walk |
+| Line infantry (decision 0076, a division: a figure for 25 men) | 4 sections of 20 files × 3 ranks, 240 places; 8 bins a section; a line about 54 m | line, square (four faces, front and rear first: 2, 1, 2, 1), column of divisions, column of route | ordinary, route step |
+| Light cavalry | 2 squadrons of 20 files × 2 ranks, 80 places; 1 m a file, 3 m a rank; a line about 41 m | line, column of squadrons at half distance, column of route by fours (each squadron a column of twos, horses 3 m apart: a `step`) | walk; the march at the trot |
+| Foot battery | 4 pieces, each a detachment of 4 files × 3 ranks (48 figures); one bin a piece | unlimbered (16 m apart), limbered (18 m apart on the trail) | by hand; the walk |
 
 `compileRuleset` indexes it and precomputes, per type, its slot tables, and per shape:
 - the straight layout;

@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest'
 import { root } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
-import { BENCH_CASES, CLAIM_CASES, type BenchCase } from '../src/scenarios/bench.ts'
+import { BENCH_CASES, CLAIM_CASES, BENCH_SCALE, type BenchCase } from '../src/scenarios/bench.ts'
 import {
   loadSimData,
   compileRuleset,
@@ -78,16 +78,17 @@ export function watched(c: BenchCase, seconds?: number): { first: number; w: Wor
   return { first, w }
 }
 
-/** The moves a formation has queued, as [x, z]. */
+/** The moves a formation has queued, as [x, z] in its case's own coordinates (before the bench's scale). */
 export const moves = (w: World, i: number): [number, number][] => {
   const out: [number, number][] = []
   for (let n = w.f.ordHead[i]; n >= 0; n = w.ord.next[n]) {
-    if (w.ord.type[n] === O_MOVE) out.push([w.ord.x[n], w.ord.z[n]])
+    if (w.ord.type[n] === O_MOVE) out.push([w.ord.x[n] / BENCH_SCALE, w.ord.z[n] / BENCH_SCALE])
   }
   return out
 }
-/** Whether formation `i` stands within `d` m of (x, z), in m. */
-export const near = (w: World, i: number, x: number, z: number, d: number) => Math.hypot(w.f.x[i] - x, w.f.z[i] - z) < d
+/** Whether formation `i` stands within `d` m of (x, z), a point in its case's own coordinates (scaled as the case). */
+export const near = (w: World, i: number, x: number, z: number, d: number) =>
+  Math.hypot(w.f.x[i] - x * BENCH_SCALE, w.f.z[i] - z * BENCH_SCALE) < d
 
 /**
  * The state but for which pool entries the orders took: the pool is served in visiting order, so two orders made in
@@ -155,7 +156,6 @@ export const OVERLAP_TODAY = new Set([
   'x07-threading',
   'x08-wheel-into-friend',
   'x09-square-forming',
-  'x11-rally-in-a-friend', // the router runs to the map's edge and rallies there, inside the friend that stands there
   'x13-passage-of-lines',
   'x14-forty-crossing',
   'x16-friend-behind', // the veteran pursues the router through the regiment behind it
@@ -166,11 +166,8 @@ export const OVERLAP_TODAY = new Set([
 // regiments charging each other, or one pursuing a router, depend on their slots today (#187)
 export const ORDER_TODAY = new Set([
   'x01-clash',
-  'x15-melee-holds',
-  'x16-friend-behind',
-  'x17-enemy-behind',
+  'q02-charge-in-a-chain', // at the division scale the charge's result follows the slots' order too
   'x18-flank-charge',
-  'x20-brigade-lines',
 ])
 
 /** The plain cases' invariants, the `k`th of `n` shares. */

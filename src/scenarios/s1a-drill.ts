@@ -4,6 +4,7 @@
 // the external (logged) commands of the recorded run.
 import type { World, Command, Scenario } from '../sim/index.ts'
 import { issue, makeHandle, KIND_FORMATION } from '../sim/index.ts'
+import { FULL } from './sizes.ts'
 
 export const S1A_DRILL = 's1a-drill'
 const A = makeHandle(KIND_FORMATION, 0, 0)
@@ -11,7 +12,7 @@ const B = makeHandle(KIND_FORMATION, 1, 0)
 
 function setup(w: World): void {
   // a drill, not a fight: both hold their fire (S1c), so the drill tests the formations alone
-  issue(w, { type: 'debug-spawn', side: 0, x: -45, z: 10, heading: 0, shape: 'line', men: 400, fire: 'hold' })
+  issue(w, { type: 'debug-spawn', side: 0, x: -45, z: 10, heading: 0, shape: 'line', men: FULL.infantry, fire: 'hold' })
   issue(w, {
     type: 'debug-spawn',
     side: 1,
@@ -19,7 +20,7 @@ function setup(w: World): void {
     z: -40,
     heading: 1.5707963267948966,
     shape: 'line',
-    men: 380,
+    men: 220,
     fire: 'hold',
   })
   issue(w, { type: 'move', id: A, points: [[-45, 100]], append: false }) // through the wood

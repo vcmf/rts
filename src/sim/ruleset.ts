@@ -212,6 +212,8 @@ export interface ArtilleryDef {
   ahead: number
   ray: RayDef
   cone: ConeDef
+  // metres: with an enemy in the fight this near a muzzle, no piece fires (the enemy is among the guns)
+  min: number
 }
 // a unit type (S1d-1): its block, its shapes and their change times. A formation is of one type for life
 export interface UnitType {
@@ -276,6 +278,7 @@ export interface SectorsDef {
 }
 export interface Ruleset {
   name: string
+  menPerFigure: number // the men a figure stands for (decision 0076: 25); the page's, no rule reads it
   types: Record<string, UnitType> // the first is the default
   pace: Record<string, number>
   q: Record<string, Record<string, number>>
@@ -568,6 +571,9 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   }
   let artillery: TypeTable['artillery'] = null
   if (u.artillery) {
+    if (!(u.artillery.min >= 0 && u.artillery.min < Infinity)) {
+      throw new Error(`${at}: artillery.min must be finite and ≥ 0`)
+    }
     const A = u.artillery
     const from = new Uint8Array(S)
     for (const n of A.shapes) {

@@ -69,6 +69,42 @@ export function mayShoot(w: World, i: number): boolean {
   )
 }
 
+/**
+ * Whether battery i's guns are overrun (docs/proposals/division-scale.md § 4): a company of an enemy in the fight
+ * whose block comes within the type's `min` metres of a piece's muzzle (its nearest man, not its centre), so no
+ * piece fires. A formation whose blocks all lie farther (its reach from its anchor) is not looked at.
+ */
+export function overrun(w: World, G: FireGeo, i: number): boolean {
+  const f = w.f
+  const CS = w.cr.maxC
+  const A = typeOf(w, i).def.artillery!
+  const r2 = A.min * A.min
+  for (let c = 0, C = typeOf(w, i).C; c < C; c++) {
+    const k = i * CS + c
+    if (f.men[k] <= 0) continue
+    const mx = G.ox[k] + G.fx[k] * A.ahead
+    const mz = G.oz[k] + G.fz[k] * A.ahead
+    for (let e = 0; e < MAX_FORMATIONS; e++) {
+      if (!f.alive[e] || f.side[e] === f.side[i] || outOfFight(f.mstate[e])) continue
+      const far = G.reach[e] + A.min
+      if ((f.x[e] - mx) * (f.x[e] - mx) + (f.z[e] - mz) * (f.z[e] - mz) > far * far) continue
+      for (let q = 0, Q = typeOf(w, e).C; q < Q; q++) {
+        const m = e * CS + q
+        if (f.men[m] <= 0) continue
+        // the muzzle in the block's frame (across, ahead), and its distance to the block's rectangle
+        const dx = mx - G.ox[m]
+        const dz = mz - G.oz[m]
+        const lx = dx * G.ca[m] + dz * G.sa[m]
+        const lz = -dx * G.sa[m] + dz * G.ca[m]
+        const ox = Math.max(Math.abs(lx) - G.bx[e], 0)
+        const oz = Math.max(G.bz0[e] - lz, lz - G.bz1[e], 0)
+        if (ox * ox + oz * oz <= r2) return true
+      }
+    }
+  }
+  return false
+}
+
 // step 9
 export function artilleryStep(w: World): void {
   const f = w.f
@@ -91,6 +127,11 @@ export function artilleryStep(w: World): void {
     const i = rev ? N - 1 - n : n
     if (!f.alive[i] || !mayShoot(w, i)) continue
     const U = typeOf(w, i)
+    if (overrun(w, G, i)) {
+      // silent among the enemy: no piece keeps a target, so each chooses afresh once it may fire again
+      for (let c = 0; c < U.C; c++) f.target[i * CS + c] = 0
+      continue
+    }
     const A = U.def.artillery!
     const h = handleOf(w, i)
     const RE = reachOf(w, i)

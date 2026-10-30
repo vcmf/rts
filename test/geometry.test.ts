@@ -21,6 +21,7 @@ import {
   PI,
   type World,
 } from '../src/sim/index.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 
 const data = loadSimData(new Uint8Array(fs.readFileSync(path.join(root, 'data/bench.simdata'))), MAP_VERSIONS.bench)
 const cr = compileRuleset(napoleonic)
@@ -29,7 +30,7 @@ const cr = compileRuleset(napoleonic)
 function world(spawns: { side: number; x: number; z: number; heading: number; shape: string; unit?: string }[]): World {
   const w = makeWorld(data, cr, 1)
   for (const s of spawns) {
-    const men = s.unit === 'cavalry' ? 256 : s.unit === 'battery' ? 96 : 400
+    const men = FULL[(s.unit ?? 'infantry') as keyof typeof FULL]
     issue(w, { type: 'debug-spawn', ...s, men, fire: 'hold' })
   }
   advanceTick(w)

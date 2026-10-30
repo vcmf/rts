@@ -3,6 +3,7 @@
 // river, 300 m apart, holding their fire (the map's check: a battle runs on it, its replay reproduced).
 import type { World, Scenario } from '../sim/index.ts'
 import { issue } from '../sim/index.ts'
+import { FULL } from './sizes.ts'
 
 // the look world's sim data (data/painted-world.simdata, built from data/painted-world.lookdata): a rebuilt one
 // fails to load until this is updated
@@ -18,7 +19,7 @@ function cross(w: World): void {
         z: side ? 150 : -150,
         heading: side ? Math.PI : 0,
         shape: 'column',
-        men: 400,
+        men: FULL.infantry,
         fire: 'hold',
       })
     }

@@ -1,11 +1,12 @@
 // Unit types (S1d-1, docs/plans/active/s1d1-unit-types.md): the cavalry regiment and the foot battery move,
 // change shape, wheel, Face about, keep to their ground and take fire on the same engine as the battalion;
-// and formations of different types (6, 4 and 8 companies) share the world's rows without touching each
+// and formations of different types (4, 2 and 4 sections) share the world's rows without touching each
 // other's. Most cases stand on an open, level field painted for the test.
 import { describe, it, expect } from 'vitest'
 import { Sim, data, small, openBattlefield, OPEN_DATA } from './fx.ts'
 import { levelled } from '../src/scenarios/s1c-firefight.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 import {
   buildTerrain,
   rebuildImpassable,
@@ -41,19 +42,19 @@ function box(t: Terrain, x0: number, x1: number, z0: number, z1: number, set: (k
 }
 const sim = (t = openBattlefield(), rs: Ruleset = napoleonic) => new Sim(1, rs, t, OPEN)
 const UNITS = [
-  ['infantry', 400],
-  ['cavalry', 250],
-  ['battery', 96],
+  ['infantry', FULL.infantry],
+  ['cavalry', FULL.cavalry],
+  ['battery', FULL.battery],
 ] as const
 
 describe('the types compile', () => {
   it("the strides are the largest type's; each type keeps its own counts and shapes", () => {
     expect(crN.types.map(U => [U.name, U.C, U.NB, U.slots])).toEqual([
-      ['infantry', 6, 48, 414],
-      ['cavalry', 4, 32, 256],
-      ['battery', 8, 8, 96],
+      ['infantry', 4, 32, 240],
+      ['cavalry', 2, 10, 80],
+      ['battery', 4, 4, 48],
     ])
-    expect([crN.maxC, crN.maxNB, crN.maxSlots]).toEqual([8, 48, 414])
+    expect([crN.maxC, crN.maxNB, crN.maxSlots]).toEqual([4, 32, 240])
     expect(crN.types.map(U => U.shapes.map(L => L.name))).toEqual([
       ['line', 'square', 'column', 'march'],
       ['line', 'column', 'march'],
@@ -80,9 +81,9 @@ describe('spawning', () => {
   it("takes the type's start shape when none is given, its slots as the most men; refuses an unknown type", () => {
     const s = sim()
     // '': no shape named
-    const c = s.spawn(-100, -100, 0, '', 250, 0, 'cavalry')
-    const b = s.spawn(-100, 0, 0, '', 96, 0, 'battery')
-    expect([s.shape(c), s.men(c), s.shape(b), s.men(b)]).toEqual(['line', 250, 'limbered', 96])
+    const c = s.spawn(-100, -100, 0, '', FULL.cavalry, 0, 'cavalry')
+    const b = s.spawn(-100, 0, 0, '', FULL.battery, 0, 'battery')
+    expect([s.shape(c), s.men(c), s.shape(b), s.men(b)]).toEqual(['line', FULL.cavalry, 'limbered', FULL.battery])
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, men: 97, unit: 'battery' })
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, men: 10, unit: 'dragoons' })
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, shape: 'square', men: 100, unit: 'cavalry' })
@@ -91,7 +92,7 @@ describe('spawning', () => {
   })
   it('a regiment cannot form square: the order is refused and it keeps its shape', () => {
     const s = sim()
-    const h = s.spawn(-100, -100, 0, 'line', 250, 0, 'cavalry')
+    const h = s.spawn(-100, -100, 0, 'line', FULL.cavalry, 0, 'cavalry')
     s.order({ type: 'form', id: h, shape: 'square' })
     expect(s.dropped.at(-1)!.reason).toBe('no such shape')
     expect(s.shape(h)).toBe('line')
@@ -151,11 +152,11 @@ describe('paces and ground', () => {
   }
   it("each type moves at its shape's pace times its ground on open ground", () => {
     const got = {
-      cavLine: speed('cavalry', 'line', 250),
-      cavMarch: speed('cavalry', 'march', 250),
-      limbered: speed('battery', 'limbered', 96),
-      unlimbered: speed('battery', 'unlimbered', 96),
-      infLine: speed('infantry', 'line', 400),
+      cavLine: speed('cavalry', 'line', FULL.cavalry),
+      cavMarch: speed('cavalry', 'march', FULL.cavalry),
+      limbered: speed('battery', 'limbered', FULL.battery),
+      unlimbered: speed('battery', 'unlimbered', FULL.battery),
+      infLine: speed('infantry', 'line', FULL.infantry),
     }
     console.log('m/s on open ground', got)
     expect(got.cavLine).toBeCloseTo(1.7, 1)
@@ -166,8 +167,8 @@ describe('paces and ground', () => {
   })
   it('in woods a regiment goes at 0.45 of its open pace, a battalion in column at 0.7', () => {
     const woods = field((t, cls) => t.cls.fill(cls('woods')))
-    const cav = speed('cavalry', 'column', 250, woods)
-    const inf = speed('infantry', 'column', 400, woods)
+    const cav = speed('cavalry', 'column', FULL.cavalry, woods)
+    const inf = speed('infantry', 'column', FULL.infantry, woods)
     expect(cav / 1.7).toBeCloseTo(0.45, 2)
     expect(inf / 0.9).toBeCloseTo(0.7, 2)
   })
@@ -190,10 +191,16 @@ describe('paces and ground', () => {
         t.cls[k] = cls('hedge')
       }),
     )
-    expect(into('battery', 'limbered', 96, wood)).toMatchObject({ status: 'halted: impassable ground', wet: 0 })
-    expect(into('battery', 'limbered', 96, hedge)).toMatchObject({ status: 'halted: impassable ground', wet: 0 })
-    expect(into('cavalry', 'column', 250, hedge)).toEqual({ status: '', z: 40, wet: 0 })
-    expect(into('infantry', 'column', 400, hedge)).toEqual({ status: '', z: 40, wet: 0 })
+    expect(into('battery', 'limbered', FULL.battery, wood)).toMatchObject({
+      status: 'halted: impassable ground',
+      wet: 0,
+    })
+    expect(into('battery', 'limbered', FULL.battery, hedge)).toMatchObject({
+      status: 'halted: impassable ground',
+      wet: 0,
+    })
+    expect(into('cavalry', 'column', FULL.cavalry, hedge)).toEqual({ status: '', z: 40, wet: 0 })
+    expect(into('infantry', 'column', FULL.infantry, hedge)).toEqual({ status: '', z: 40, wet: 0 })
   })
   it('water: horses wade 1 m where infantry and guns cannot; infantry wades 0.8 m where guns cannot', () => {
     const deep = (d: number) =>
@@ -204,20 +211,23 @@ describe('paces and ground', () => {
       )
     const d1 = deep(1.0)
     const d08 = deep(0.8)
-    expect(into('cavalry', 'column', 250, d1)).toEqual({ status: '', z: 40, wet: 0 })
-    expect(into('infantry', 'column', 400, d1)).toMatchObject({ status: 'halted: impassable ground', wet: 0 })
-    expect(into('battery', 'limbered', 96, d1)).toMatchObject({ status: 'halted: impassable ground', wet: 0 })
-    expect(into('infantry', 'column', 400, d08)).toEqual({ status: '', z: 40, wet: 0 })
-    expect(into('battery', 'limbered', 96, d08)).toMatchObject({ status: 'halted: impassable ground', wet: 0 })
+    expect(into('cavalry', 'column', FULL.cavalry, d1)).toEqual({ status: '', z: 40, wet: 0 })
+    expect(into('infantry', 'column', FULL.infantry, d1)).toMatchObject({ status: 'halted: impassable ground', wet: 0 })
+    expect(into('battery', 'limbered', FULL.battery, d1)).toMatchObject({ status: 'halted: impassable ground', wet: 0 })
+    expect(into('infantry', 'column', FULL.infantry, d08)).toEqual({ status: '', z: 40, wet: 0 })
+    expect(into('battery', 'limbered', FULL.battery, d08)).toMatchObject({
+      status: 'halted: impassable ground',
+      wet: 0,
+    })
   })
-  it('a column of route by fours with only its last horses in water, 180–192 m back, is wet (its places reach three times a block)', () => {
+  it('a column of route by fours with only its last horses in water, 52–56 m back, is wet (its places reach three times a block)', () => {
     const t = field(t =>
-      box(t, -180, 180, -35, -30, k => {
+      box(t, -180, 180, 94, 98, k => {
         t.depth[k] = 2
       }),
     )
     const s = sim(t)
-    const h = s.spawn(-100, 150, 0, 'march', 250, 0, 'cavalry')
+    const h = s.spawn(-100, 150, 0, 'march', FULL.cavalry, 0, 'cavalry')
     expect(s.placesInDeep(h)).toBeGreaterThan(0)
     expect(s.wet(h)).toBe(true)
   })
@@ -227,7 +237,7 @@ describe('paces and ground', () => {
       ['march', 'line', 'march'],
     ] as const) {
       const s = sim()
-      const h = s.spawn(-100, 150, 0, from, 250, 0, 'cavalry')
+      const h = s.spawn(-100, 150, 0, from, FULL.cavalry, 0, 'cavalry')
       s.order({ type: 'form', id: h, shape: via })
       s.advance(60)
       const before = s.places(h)
@@ -243,25 +253,24 @@ describe('paces and ground', () => {
     }
   })
   it('a change into the column of route by fours is refused when its places, longer than the change, would reach water', () => {
-    // the column's last horses stand 192 m behind the anchor; the change, in the block's 1 m spacing, reaches
-    // about 161 m: water 180–185 m back stops only the column's places
+    // the column's last horses stand 57 m behind the anchor; the change, in the block's spacing, reaches less far:
+    // water 52–56 m back stops only the column's places
     const t = field(t =>
-      box(t, -180, 180, -35, -30, k => {
+      box(t, -180, 180, 94, 98, k => {
         t.depth[k] = 2
       }),
     )
     const s = sim(t)
-    const h = s.spawn(-100, 150, 0, 'column', 250, 0, 'cavalry')
+    const h = s.spawn(-100, 150, 0, 'column', FULL.cavalry, 0, 'cavalry')
     s.order({ type: 'form', id: h, shape: 'march' })
     expect(s.status(h)).toBe('cannot form: impassable ground')
     expect(s.shape(h)).toBe('column')
     const s2 = sim()
-    const h2 = s2.spawn(-100, 150, 0, 'column', 250, 0, 'cavalry')
+    const h2 = s2.spawn(-100, 150, 0, 'column', FULL.cavalry, 0, 'cavalry')
     s2.order({ type: 'form', id: h2, shape: 'march' })
     s2.until(() => s2.busy(h2), 100)
     expect(s2.shape(h2)).toBe('march')
-    // 189: 250 men leave a squadron's last file empty
-    expect(150 - Math.min(...s2.places(h2).map(p => p[1]))).toBeGreaterThan(185)
+    expect(150 - Math.min(...s2.places(h2).map(p => p[1]))).toBeGreaterThan(55)
   })
 })
 
@@ -281,8 +290,8 @@ describe('under fire', () => {
     melee: { ...small.melee, refuge: { ...small.melee.refuge, alert: 0 } },
   }
   for (const [unit, shape, men] of [
-    ['cavalry', 'line', 250],
-    ['battery', 'unlimbered', 96],
+    ['cavalry', 'line', FULL.cavalry],
+    ['battery', 'unlimbered', FULL.battery],
   ] as const) {
     it(`a ${unit} loses men, never fires, breaks and routs`, () => {
       const t = buildTerrain(levelled(data), compileRuleset(rs))
@@ -317,9 +326,9 @@ describe('types side by side', () => {
   it("rows strided by the largest type: no type reads or writes another's", () => {
     const s = sim()
     const hs = [
-      s.spawn(-120, -140, 0, 'column', 400, 0, 'infantry'),
-      s.spawn(-40, -140, 0, 'line', 250, 0, 'cavalry'),
-      s.spawn(-120, 40, 0, 'unlimbered', 96, 0, 'battery'),
+      s.spawn(-120, -140, 0, 'column', FULL.infantry, 0, 'infantry'),
+      s.spawn(-40, -140, 0, 'line', FULL.cavalry, 0, 'cavalry'),
+      s.spawn(-120, 40, 0, 'unlimbered', FULL.battery, 0, 'battery'),
     ]
     const brute = (i: number) => {
       const g = typeOf(s.w, i).geo
@@ -356,6 +365,6 @@ describe('types side by side', () => {
       for (let c = U.C; c < crN.maxC; c++) expect(s.w.f.men[i * crN.maxC + c]).toBe(0)
     }
     expect(checks).toBe(27)
-    expect(hs.map(h => s.men(h))).toEqual([400 - 21, 250 - 21, 96 - 21])
+    expect(hs.map(h => s.men(h))).toEqual([FULL.infantry - 21, FULL.cavalry - 21, FULL.battery - 21])
   })
 })

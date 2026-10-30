@@ -81,9 +81,9 @@ describe('the S1c-5 shortcuts', () => {
     const s = new Sim(1, napoleonic)
     const shapes = Object.keys(napoleonic.types.infantry.formations)
     const hs = [
-      s.spawn(-60, -150, 0, 'line', 400),
-      s.spawn(-60, -60, 0, 'column', 397),
-      s.spawn(-60, 40, 0, 'march', 250),
+      s.spawn(-60, -150, 0, 'line', 240),
+      s.spawn(-60, -60, 0, 'column', 237),
+      s.spawn(-60, 40, 0, 'march', 150),
     ]
     let checks = 0
     const check = () => {
@@ -115,11 +115,12 @@ describe('the S1c-5 shortcuts', () => {
 
   // the gate asks of trial poses (a step, a turn, halved), so the battalions march to the bank and the test
   // shifts and turns them by up to 15 m and 0.5 rad around where they stand, onto the water and off it
-  for (const [name, rs, unit, men] of [
-    ['battalions of 400', napoleonic, 'infantry', 400],
-    ['battalions of 810', ceiling, 'infantry', 810],
-    ['a regiment', napoleonic, 'cavalry', 250],
-    ['a battery', napoleonic, 'battery', 96],
+  // `off`: how far west of the bank each starts, so about a fifth of its poses reach the water
+  for (const [name, rs, unit, men, off] of [
+    ['units of 240', napoleonic, 'infantry', 240, 20],
+    ['units of 540', ceiling, 'infantry', 540, 35],
+    ['a regiment', napoleonic, 'cavalry', 80, 35],
+    ['a battery', napoleonic, 'battery', 48, 35],
   ] as const) {
     it(`the gate's wet bins, ${name} at the stream in every shape and changing shape: as a scan of every man`, () => {
       let compared = 0
@@ -134,7 +135,7 @@ describe('the S1c-5 shortcuts', () => {
         for (const hd of [90, 60, 120]) {
           const s = new Sim(1, rs)
           const z = -120 + hd
-          const x = STREAM_X(z) - 35
+          const x = STREAM_X(z) - off
           const f = s.w.f
           const h = s.spawn(x, z, 0, shape, men, 0, unit)
           s.cmd({

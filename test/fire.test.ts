@@ -45,7 +45,7 @@ import {
   type Terrain,
 } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { levelled, runFirefight, s1cFirefight } from '../src/scenarios/s1c-firefight.ts'
+import { levelled, ANCHOR, runFirefight, s1cFirefight } from '../src/scenarios/s1c-firefight.ts'
 
 // X, Z: the S1a–S1c firefight strip, where these tests place 100-man lines (the scenario's own holds 400-man lines)
 const FIGHT_X = -50
@@ -609,22 +609,25 @@ describe('determinism', () => {
     }
     expect(hex(hashWorld(w2))).toBe(hex(hashWorld(w)))
   })
-  longIt('the calibration at 100 m, five seeds: times to break and losses match the golden table', () => {
-    const file = path.join(root, 'test', 'golden', 's1c-calibration.json')
-    const cr = shipped
-    const table = [1, 2, 3, 4, 5].map(seed => {
-      const r = runFirefight(lev, cr, seed, 100, 24000)
-      return [seed, r.first, r.tick, r.lossA, r.lossB]
-    })
-    if (process.env.UPDATE_GOLDEN) fs.writeFileSync(file, JSON.stringify({ ruleset: hex(cr.hash), table }) + '\n')
-    const golden = JSON.parse(fs.readFileSync(file, 'utf8'))
-    expect(golden.ruleset).toBe(hex(cr.hash))
-    expect(table).toEqual(golden.table)
-    for (const [, first, tick, , lossB] of table) {
-      expect(first).toBe(1)
-      expect(tick / 1200).toBeGreaterThan(4)
-      expect(tick / 1200).toBeLessThan(16)
-      expect(lossB).toBeGreaterThanOrEqual(12)
-    }
-  })
+  longIt(
+    'the calibration at 40 m (the C-01 anchor), five seeds: times to break and losses match the golden table',
+    () => {
+      const file = path.join(root, 'test', 'golden', 's1c-calibration.json')
+      const cr = shipped
+      const table = [1, 2, 3, 4, 5].map(seed => {
+        const r = runFirefight(lev, cr, seed, ANCHOR, 24000)
+        return [seed, r.first, r.tick, r.lossA, r.lossB]
+      })
+      if (process.env.UPDATE_GOLDEN) fs.writeFileSync(file, JSON.stringify({ ruleset: hex(cr.hash), table }) + '\n')
+      const golden = JSON.parse(fs.readFileSync(file, 'utf8'))
+      expect(golden.ruleset).toBe(hex(cr.hash))
+      expect(table).toEqual(golden.table)
+      for (const [, first, tick, , lossB] of table) {
+        expect(first).toBe(1)
+        expect(tick / 1200).toBeGreaterThan(4)
+        expect(tick / 1200).toBeLessThan(16)
+        expect(lossB).toBeGreaterThanOrEqual(12)
+      }
+    },
+  )
 })

@@ -23,6 +23,7 @@ import { Battle } from '../src/app/battle.ts'
 import { FrameView, layoutFor, writeFrame, capFor, Slots } from '../src/app/battle-frame.ts'
 import { WorkerLink } from '../src/app/battle-link.ts'
 import { makeRing, RingWriter, RingReader, RING, accSince } from '../src/app/tick-ring.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 
 const data = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)
 const cr = compileRuleset(napoleonic)
@@ -413,14 +414,15 @@ describe('the battle in a worker thread', () => {
     const { link, stop } = startLink('s1b-field')
     try {
       await link.ready()
-      // 2,400 men, the first slots room for 4,096: five battalions more outgrow them
-      for (let k = 0; k < 5; k++) {
-        link.command({ type: 'debug-spawn', side: 0, x: -150 + 40 * k, z: -140, heading: 0, shape: 'column', men: 400 })
+      // 1,440 men (six units of 240), the first slots room for 4,096: twelve units more outgrow them
+      for (let k = 0; k < 12; k++) {
+        const [x, z] = [-150 + 50 * (k % 6), -140 + 40 * Math.floor(k / 6)]
+        link.command({ type: 'debug-spawn', side: 0, x, z, heading: 0, shape: 'column', men: FULL.infantry })
       }
       await link.advance(1)
       const layer = link.see().layer
-      expect([layer.men.n, layer.units.size]).toEqual([4400, 11])
-      expect([...layer.units.values()].every(u => u.n === 400)).toBe(true)
+      expect([layer.men.n, layer.units.size]).toEqual([1440 + 12 * FULL.infantry, 18])
+      expect([...layer.units.values()].every(u => u.n === FULL.infantry)).toBe(true)
     } finally {
       await stop()
     }

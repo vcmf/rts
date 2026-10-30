@@ -8,6 +8,7 @@ import { MAN_ALIVE, MAN_LEFT } from '../src/render/men.ts'
 import { MenClock, MEN_DT, MEN_GROUPS, MEN_HZ, MEN_ROUNDS } from '../src/render/men-clock.ts'
 import { occupied, advanceTick, MS_SHATTERED, type Meter } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 
 /** A battalion's men as they stand now, copied out of the layer's arrays (a test's view, allocating); `id`: the
  * man's index there, to read him again later. */
@@ -140,9 +141,9 @@ describe('the soldier layer follows the sim', () => {
       expect(p.layer.units.get(p.sim.slot(h))!.figure).toBe(unit === 'cavalry' ? 'mounted' : 'crewed')
       return { move, change, after }
     }
-    const walk = run('cavalry', 'line', 250, 'column', 46)
-    const trot = run('cavalry', 'march', 250, 'line', 101)
-    const guns = run('battery', 'limbered', 96, 'unlimbered', 91)
+    const walk = run('cavalry', 'line', FULL.cavalry, 'column', 46)
+    const trot = run('cavalry', 'march', FULL.cavalry, 'line', 101)
+    const guns = run('battery', 'limbered', FULL.battery, 'unlimbered', 91)
     console.log('slot error', { walk, trot, guns })
     for (const e of [walk.move, trot.move, guns.move]) expect(e.mean).toBeLessThan(1)
     expect(walk.move.max).toBeLessThan(1)
@@ -181,7 +182,7 @@ describe('who stands where', () => {
   it('a battalion that leaves the field takes its men with it: none is left as fallen, and newcomers take their places in the arrays', () => {
     // a column of route with its tail at the battlefield's southern edge, shattered: it leaves at the next tick
     const p = new Play(new Sim(1, napoleonic, openBattlefield(), OPEN_DATA))
-    const h = p.sim.spawn(0, -505, 0, 'march', 400)
+    const h = p.sim.spawn(0, -548, 0, 'march', FULL.infantry)
     p.frames(1)
     const before = crosses(p.layer)
     const n = p.layer.men.n
@@ -190,7 +191,7 @@ describe('who stands where', () => {
     expect(p.sim.slot(h)).toBe(-1)
     expect(p.layer.units.size).toBe(0)
     expect(crosses(p.layer)).toBe(before)
-    p.sim.spawn(0, 0, 0, 'line', 400)
+    p.sim.spawn(0, 0, 0, 'line', FULL.infantry)
     p.frames(0.2)
     expect([p.layer.men.n, crosses(p.layer)]).toEqual([n, before])
   })
@@ -394,15 +395,16 @@ describe('the soldier clock', () => {
 
 describe("the men's arrays", () => {
   // battle threads PR 2 moved the men from objects into arrays (src/render/men.ts) without changing a step: every
-  // man's position, velocity, slot and state, hashed bit for bit, as PR 1's objects left them (45b0b42e). A
-  // deliberate change to the steering or the slot matching changes it: check the goldens above, then update it
+  // man's position, velocity, slot and state, hashed bit for bit, as PR 1's objects left them (45b0b42e; fb2d2119
+  // since the division scale's units). A deliberate change to the steering, the slot matching or the units changes it:
+  // check the goldens above, then update it
   it('the men stand where they stood as objects: a march into the wood, a square, a firefight, a Face about, at 1× and 8×', () => {
     const p = new Play(new Sim(1, napoleonic))
     const E = Math.PI / 2
-    const a = p.sim.spawn(-60, -100, E, 'line', 400, 0)
-    p.sim.spawn(0, -100, -E, 'line', 300, 1)
-    const c = p.sim.spawn(-45, 55 - 30 - 12, 0, 'column', 400, 0)
-    const d = p.sim.spawn(-120, 60, 0, 'line', 250, 1)
+    const a = p.sim.spawn(-60, -100, E, 'line', 240, 0)
+    p.sim.spawn(-20, -100, -E, 'line', 180, 1)
+    const c = p.sim.spawn(-45, 55 - 30 - 12, 0, 'column', 240, 0)
+    const d = p.sim.spawn(-120, 60, 0, 'line', 150, 1)
     p.sim.order({ type: 'move', id: c, points: [[-45, 55 + 30 + 14]], append: false })
     p.sim.order({ type: 'form', id: d, shape: 'square' })
     for (let k = 0; k < 600; k++) p.frame(1 / 60)
@@ -426,20 +428,20 @@ describe("the men's arrays", () => {
         dead += 1 - alive
       }
     }
-    expect({ hash: h.toString(16), men: M.n, dead }).toEqual({ hash: '45b0b42e', men: 1350, dead: 9 })
+    expect({ hash: h.toString(16), men: M.n, dead }).toEqual({ hash: 'fb2d2119', men: 810, dead: 3 })
   })
 })
 
 describe('the soldier groups', () => {
   it('share the battalions out by their men, each group stepping only its own', () => {
     const p = new Play(new Sim(1, napoleonic))
-    const sizes = [400, 400, 400, 400, 200, 200, 200, 200, 100, 100]
+    const sizes = [240, 240, 240, 240, 120, 120, 120, 120, 60, 60]
     sizes.forEach((men, k) => p.sim.spawn(-120 + (k % 5) * 40, -100 + Math.floor(k / 5) * 60, 0, 'line', men))
     p.frames(1)
     const load = new Array(MEN_GROUPS).fill(0)
     for (const u of p.layer.units.values()) load[u.group] += u.n
-    expect(Math.max(...load)).toBe(400)
-    expect(Math.min(...load)).toBeGreaterThanOrEqual(200)
+    expect(Math.max(...load)).toBe(240)
+    expect(Math.min(...load)).toBeGreaterThanOrEqual(120)
     // a step of group g moves no man of another group
     const others = [...p.layer.units.values()].filter(u => u.group !== 3)
     const before = others.map(u => snapshot(p.layer, u).map(m => [m.x, m.z]))
@@ -456,7 +458,7 @@ describe('the soldier groups', () => {
     for (let k = 0; k < 6; k++) p.sim.spawn(-120 + k * 40, -100, 0, 'line', 100 + 50 * k)
     p.frames(1)
     const was = new Map([...p.layer.units.values()].map(u => [u.i, u.group]))
-    p.sim.spawn(-120, 0, 0, 'line', 400)
+    p.sim.spawn(-120, 0, 0, 'line', FULL.infantry)
     p.frames(1)
     const now = [...p.layer.units.values()]
     expect(now.filter(u => was.has(u.i)).every(u => u.group === was.get(u.i))).toBe(true)
@@ -466,7 +468,8 @@ describe('the soldier groups', () => {
 })
 
 // timing budgets: skipped on CI, whose shared runners are too noisy for millisecond budgets. The benches use
-// the shipped ruleset: 40 battalions of 400 (decision 0018), in columns so they fit the 360 m field. Firing at
+// the shipped ruleset: 66 units of 240 (decision 0076; 15,840 figures, the 16,000 of S1c-5's 40 battalions of 400),
+// in columns so they fit the 360 m field. Firing at
 // the halt meets the 4 ms budget for sim and soldier layer together (S1c-5: 0.7 ms). With all 16,000 men
 // marching, sim and layer together hold MARCH_BUDGET and the layer on its clock LAYER_BUDGET, each the measured
 // cost with a margin, so neither can grow unnoticed. vitest runs this code about 40% slower than plain Node (the
@@ -478,14 +481,14 @@ const MARCH_BUDGET = 3.5
 const LAYER_BUDGET = 2.5
 describe.skipIf(process.env.CI)('cost', () => {
   const shipped = () => new Sim(1, napoleonic)
-  it('40 battalions of 400 firing (20 a side in column, fronts 100 m apart): sim and soldier layer per frame; the fire step per tick reported', () => {
+  it('66 units of 240 firing (33 a side in column, fronts 40 m apart): sim and soldier layer per frame; the fire step per tick reported', () => {
     const p = new Play(shipped())
     const E = Math.PI / 2
-    for (let row = 0; row < 5; row++) {
-      for (let r = 0; r < 4; r++) {
-        const z = -150 + row * 60
-        p.sim.spawn(-115 - r * 20, z, E, 'column', 400, 0)
-        p.sim.spawn(-15 + r * 20, z, -E, 'column', 400, 1)
+    for (let row = 0; row < 11; row++) {
+      for (let r = 0; r < 3; r++) {
+        const z = -165 + row * 30
+        p.sim.spawn(-90 - r * 15, z, E, 'column', FULL.infantry, 0)
+        p.sim.spawn(-50 + r * 15, z, -E, 'column', FULL.infantry, 1)
       }
     }
     p.frames(20)
@@ -508,19 +511,19 @@ describe.skipIf(process.env.CI)('cost', () => {
     for (let n = 0; n < 200; n++) advanceTick(p.sim.w, meter)
     const fired = [...p.sim.w.f.volleyTick].filter(t => t > 0).length
     console.log(
-      `40 × 400 firing: ${windows.map(x => x.toFixed(2)).join(' / ')} ms per frame; per tick: ${Object.entries(per)
+      `66 × 240 firing: ${windows.map(x => x.toFixed(2)).join(' / ')} ms per frame; per tick: ${Object.entries(per)
         .map(([s, ms]) => `${s} ${(ms / 200).toFixed(3)}`)
         .join(', ')} ms; the fire step's worst tick ${worst['8 fire'].toFixed(2)} ms; ${fired} companies have fired`,
     )
     expect(fired).toBeGreaterThan(20)
     expect(Math.min(...windows)).toBeLessThan(FRAME_BUDGET)
   })
-  it('40 battalions of 400 changing shape and marching: sim and soldier layer per 1/60 s frame; 40 × 800 reported', () => {
-    const run = (sim: Sim, men: number) => {
+  it('66 units of 240 changing shape and marching: sim and soldier layer per 1/60 s frame; 40 × 540 reported', () => {
+    const run = (sim: Sim, men: number, n: number) => {
       const p = new Play(sim)
       const shapes = Object.keys(p.sim.w.cr.rs.types.infantry.formations)
-      for (let k = 0; k < 40; k++) {
-        const h = p.sim.spawn(-120 + (k % 7) * 25, -80 + Math.floor(k / 7) * 40, 0, 'column', men)
+      for (let k = 0; k < n; k++) {
+        const h = p.sim.spawn(-150 + (k % 11) * 30, -80 + Math.floor(k / 11) * 40, 0, 'column', men)
         p.sim.cmd({ type: 'form', id: h, shape: shapes[k % shapes.length] })
         p.sim.cmd({ type: 'move', id: h, points: [[p.sim.x(h), p.sim.z(h) + 40]], append: true })
       }
@@ -536,11 +539,11 @@ describe.skipIf(process.env.CI)('cost', () => {
         layer.push(p.layerMs / 120)
       }
       const f = (x: number[]) => x.map(v => v.toFixed(2)).join(' / ')
-      console.log(`40 × ${men}: ${f(windows)} ms per frame (sim + soldiers), the soldiers ${f(layer)}`)
+      console.log(`${n} × ${men}: ${f(windows)} ms per frame (sim + soldiers), the soldiers ${f(layer)}`)
       return { ms: Math.min(...windows), layer: Math.min(...layer) }
     }
-    const r = run(shipped(), 400)
-    run(new Sim(1, ceiling), 800)
+    const r = run(shipped(), FULL.infantry, 66)
+    run(new Sim(1, ceiling), 540, 40)
     expect(r.ms).toBeLessThan(MARCH_BUDGET)
     expect(r.layer).toBeLessThan(LAYER_BUDGET)
   })
