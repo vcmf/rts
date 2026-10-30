@@ -26,7 +26,10 @@ export function positionsAt(track: Track, times: number[]): { x: number; z: numb
   const out: { x: number; z: number }[] = []
   let k = 1
   for (const t of times) {
-    while (k < track.length && track[k].t < t) k++
+    while (k < track.length && track[k].t < t) {
+      if (track[k].t <= track[k - 1].t) throw new RangeError('positionsAt: a track whose times do not rise')
+      k++
+    }
     if (t <= track[0].t || k >= track.length) {
       const w = t <= track[0].t ? track[0] : track[track.length - 1]
       out.push({ x: w.x, z: w.z })
@@ -46,6 +49,7 @@ export function positionsAt(track: Track, times: number[]): { x: number; z: numb
  */
 export function walk(points: { x: number; z: number }[], startMin: number, speed: number): Track {
   if (!points.length) throw new RangeError('walk: a route of no points')
+  if (!(speed > 0)) throw new RangeError(`walk: a speed of ${speed}`)
   const track: Track = [{ t: startMin, x: points[0].x, z: points[0].z }]
   let t = startMin
   for (let k = 1; k < points.length; k++) {

@@ -84,7 +84,7 @@ describe('contact', () => {
   })
 
   it('fits a battle’s zone inside its map', () => {
-    // the ruleset's 2.5 km on a 6 km map; half the side on a smaller one, never under the contact radius
+    // the ruleset's 2.5 km on a 6 km map; half the side on a smaller one
     expect(zoneFor(rules, 6000)).toBe(2500)
     expect(zoneFor(rules, 4000)).toBe(2000)
     expect(zoneFor(rules, 2000)).toBe(1000)
@@ -95,6 +95,16 @@ describe('contact', () => {
     const battles = [{ x: 0, z: 0, zoneM: 2500 }]
     expect(battleFor(battles, 3900, 0)).toBe(-1)
     expect(battleFor(battles, 3900, 0, [0, -1])).toBe(0)
+  })
+
+  it('refuses a contact between two corps each held by a battle of its own', () => {
+    const battles = [
+      { x: 0, z: 0, zoneM: 2500 },
+      { x: 5000, z: 0, zoneM: 2500 },
+    ]
+    expect(() => battleFor(battles, 2500, 0, [0, 1])).toThrow(RangeError)
+    expect(battleFor(battles, 2500, 0, [1, 1])).toBe(1)
+    expect(() => battleFor(battles, 2500, 0, [3])).toThrow(RangeError)
   })
 
   it('joins the nearest battle when zones overlap', () => {
@@ -315,6 +325,39 @@ describe('the roads', () => {
     // an enemy 500 m off: caught there, unless it is the one the sender's corps is fighting
     expect(ride(rules, here, 30, [standing(10500, 0)]).delivered).toBe(false)
     expect(ride(rules, here, 30, [standing(10500, 0)], [0])).toEqual({ delivered: true, atMin: 30 })
+  })
+
+  it('sets a road’s ends on its towns, so routes join exactly', () => {
+    const towns = [
+      { x: 0, z: 0 },
+      { x: 10000, z: 0 },
+    ]
+    const n = network({
+      towns,
+      roads: [
+        {
+          a: 0,
+          b: 1,
+          points: [
+            { x: 0.6, z: 0 },
+            { x: 10000, z: 0.8 },
+          ],
+        },
+      ],
+    })
+    expect(n.roads[0].points).toEqual(towns)
+    expect(n.lengths[0]).toBe(10000)
+  })
+
+  it('refuses a track whose times do not rise, and a walk at no speed', () => {
+    const halted = [
+      { t: 0, x: 0, z: 0 },
+      { t: 10, x: 100, z: 0 },
+      { t: 10, x: 200, z: 0 },
+      { t: 20, x: 300, z: 0 },
+    ]
+    expect(() => positionAt(halted, 15)).toThrow(RangeError)
+    expect(() => walk(along(0, 1000), 0, 0)).toThrow(RangeError)
   })
 
   it('refuses roads that do not meet at their towns', () => {

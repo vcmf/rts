@@ -97,13 +97,21 @@ export function zoneFor(rules: CampaignRules, mapSideM: number): number {
 
 /**
  * The battle a contact at (x, z) joins. A contact with a corps already fighting joins that corps' battle (pass the
- * battles its two corps are in, -1 for a free one): no corps is in two battles, wherever in its zone it stands.
+ * battles its two corps are in, -1 for a free one): no corps is in two battles, wherever in its zone it stands. Two
+ * corps each held by a battle of its own do not engage each other (engaged corps are held for the rest of the day):
+ * asking for their contact is an error.
  * Otherwise, of the battles whose zone holds the contact, the nearest (the lowest index on a tie), or -1 when it
  * lies in none and starts a battle of its own (Plancenoit was part of Waterloo; Wavre, 15 km away, was not).
  */
 export function battleFor(battles: BattleSite[], x: number, z: number, engagedIn: readonly number[] = []): number {
   const already = engagedIn.filter(k => k >= 0)
-  if (already.length) return Math.min(...already)
+  for (const k of already) {
+    if (!Number.isInteger(k) || k >= battles.length) throw new RangeError(`battleFor: no battle ${k}`)
+  }
+  if (already.length > 1 && already.some(k => k !== already[0])) {
+    throw new RangeError('battleFor: two corps each held by a battle of its own do not engage each other')
+  }
+  if (already.length) return already[0]
   let best = -1
   let bestD2 = Infinity
   for (let k = 0; k < battles.length; k++) {

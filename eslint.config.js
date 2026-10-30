@@ -71,7 +71,7 @@ const commentWidth = {
 }
 
 // the exact-number rules (decision 0006), shared by every folder whose results must match across JS engines: the
-// sim and its rulesets, and the map engine (docs/proposals/map-engine.md §4)
+// sim and its rulesets, the map engine (docs/proposals/map-engine.md §4) and the campaign (exactArea, below)
 const exactProperties = [
   ...banned.map(property => ({
     object: 'Math',

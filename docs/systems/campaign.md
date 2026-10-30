@@ -34,8 +34,8 @@ the day's loop (orders, standing orders, the turn) comes later in the track. The
   between breakpoints the separation moves in a straight line, so contact is the first root of a quadratic (a pair
   exactly on the radius counts as the arithmetic rounds: the same on every machine). `zoneFor` gives a battle's zone
   (the ruleset's radius, at most half its map's side, so it lies in its map); `battleFor` joins a contact with a corps
-  already fighting to that corps' battle (no corps is in two battles), else to the nearest battle whose zone holds
-  it, or starts one.
+  already fighting to that corps' battle (no corps is in two battles; two corps each held by a battle of its own do
+  not engage each other), else to the nearest battle whose zone holds it, or starts one.
 - **Couriers** (`courier.ts`): `ride` takes the courier along its route and loses it to the first enemy (by time,
   then index) within whose zone it comes, where it does; the enemies its corps is fighting (`engaged`) never catch
   it; a route of one town (the ally in the same town) arrives at once unless an enemy not engaged with the sender

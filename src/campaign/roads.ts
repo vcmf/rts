@@ -44,7 +44,6 @@ export function roadLength(road: Road): number {
  * each road's length.
  */
 export interface Network {
-  towns: number
   places: { x: number; z: number }[]
   roads: Road[]
   touching: number[][]
@@ -67,14 +66,20 @@ export function network(graph: RoadGraph): Network {
       throw new RangeError(`road ${k}: its line does not run from town ${r.a} to town ${r.b}`)
     }
   })
-  const roads = graph.roads.map(r => ({ a: r.a, b: r.b, points: r.points.map(p => ({ x: p.x, z: p.z })) }))
+  // copied, each end set on its town's place: roads then join exactly, and a route's length is its line's
+  const roads = graph.roads.map(r => {
+    const points = r.points.map(p => ({ x: p.x, z: p.z }))
+    points[0] = { ...graph.towns[r.a] }
+    points[points.length - 1] = { ...graph.towns[r.b] }
+    return { a: r.a, b: r.b, points }
+  })
   const touching: number[][] = Array.from({ length: n }, () => [])
   roads.forEach((r, k) => {
     touching[r.a].push(k)
     touching[r.b].push(k)
   })
   const places = graph.towns.map(t => ({ x: t.x, z: t.z }))
-  return { towns: n, places, roads, touching, lengths: Float64Array.from(roads, roadLength) }
+  return { places, roads, touching, lengths: Float64Array.from(roads, roadLength) }
 }
 
 /**
@@ -86,11 +91,11 @@ export function network(graph: RoadGraph): Network {
 export function fastestRoute(net: Network, from: number, to: number): Route | null {
   const { touching, lengths } = net
   for (const t of [from, to]) {
-    if (!Number.isInteger(t) || t < 0 || t >= net.towns) throw new RangeError(`fastestRoute: no town ${t}`)
+    if (!Number.isInteger(t) || t < 0 || t >= net.places.length) throw new RangeError(`fastestRoute: no town ${t}`)
   }
-  const dist = new Float64Array(net.towns).fill(Infinity)
-  const viaRoad = new Int32Array(net.towns).fill(-1)
-  const done = new Uint8Array(net.towns)
+  const dist = new Float64Array(net.places.length).fill(Infinity)
+  const viaRoad = new Int32Array(net.places.length).fill(-1)
+  const done = new Uint8Array(net.places.length)
   const queue = new Timeline<null>()
   dist[from] = 0
   queue.push({ t: 0, id: from, data: null })

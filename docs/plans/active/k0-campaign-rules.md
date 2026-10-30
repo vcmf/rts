@@ -64,7 +64,7 @@ after); the map's code (K2a–K2d).
 
 - `src/campaign/`: rules, march, track, contact (`firstContact`, `zoneFor`, `battleFor`), courier (`ride`, `help`,
   `inHelpRadius`), answers (`answers`), roads (`network`, `fastestRoute`, `routePoints`, `roadLength`), timeline;
-  the Napoleonic values in `src/rulesets/napoleonic-campaign.ts`. 31 tests in `test/campaign-rules.test.ts`, among
+  the Napoleonic values in `src/rulesets/napoleonic-campaign.ts`. 34 tests in `test/campaign-rules.test.ts`, among
   them the proposal's own: a call 25 km away heard after 125 minutes, the help's head 560 minutes after the call
   (9 h 20), with 25/35 of the day's 15 % left behind; two corps closing at 6 km/h meet at minute 285; a courier
   caught where it enters a zone, at 8.5 km; a chain of calls among eight corps that ends.
@@ -122,3 +122,10 @@ After the redesign:
   with a corps already fighting joins that corps' battle (`battleFor(…, engagedIn)`), and the zone is back to at
   most half the map's side. With: a ruleset's `./` imports may not climb out (tested); intervals made lazily, the
   zero-length window plain; the courier and help test split, one behaviour each.
+- **Round 3**: no severe issue. Fixed: two corps each held by a battle of its own do not engage each other
+  (`battleFor` refuses it; a rule from "engaged corps are held for the rest of the day"); a road's ends are set on its
+  towns' places, so routes join exactly and a route's length is its line's; tracks whose times do not rise and walks
+  at no speed refused; stale battle indices refused; `Network.towns` dropped for `places.length`; comments. Left: the
+  search allocates its arrays per query (a scratch buffer on the network when Europe's network comes, K6). Review
+  stops here (`AGENTS.md`, Workflow).
+
