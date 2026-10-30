@@ -66,10 +66,15 @@ handover (G4).
 ## Results
 
 - The look: the owner's eye on the shots in `scratch/g2/` (2026-10-30): ×3 chosen over ×2; the woods taken out.
-- The light's bake on Austerlitz (1501 × 1501 nodes, every second one baked) in the page's worker: 0.85 to 0.97 s
-  (the dev Mac, Chrome, the dev server, a load of 15 to 40 from other sessions); in Node 1.8 to 2.8 s under the same
-  load. The cache's hash of the heights: 10 ms. An edit that leaves the heights as they were bakes nothing.
-- The frame: FRAME.
+- The light's bake on Austerlitz (1501 × 1501 nodes, every second one baked) in the page's worker, on the preview
+  build: 0.77 to 0.78 s, against M6a's relief bake 0.39 to 0.40 s (two rounds each, the dev Mac, Chrome on Metal, a load
+  of 4.4 from other sessions: the owner allowed up to 5). On the dev server under a load of 15 to 40: 0.85 to 0.97 s;
+  in Node 1.8 to 2.8 s. An edit that leaves the heights, the sun and z as they were bakes nothing (the cache compares a
+  kept copy of the heights).
+- The frame, on the same preview builds in a 1920 × 1080 window: 60 frames at each of three views (the whole map, the Pratzen,
+  Satschan), each forced to finish by a one-pixel read; the median 3.1 to 5.0 ms for G2 against 3.3 to 4.2 ms for the
+  epic (90th percentile 3.7 to 5.9 against 4.3 to 5.9). The two rounds disagree by more than the two builds do: no
+  difference measurable at this load, both far under the 6.7 ms of 150 fps.
 
 ## Open questions
 

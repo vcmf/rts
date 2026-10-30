@@ -39,8 +39,9 @@ its worker bakes and its float heights stand.
   (G4) changes no light, and the campaign's zoom into a battle can stay in one look.
 - Good: a soft shadow and the sky's occlusion read the hollows, sunken roads and stream valleys that the hard shadow
   cut as black shapes.
-- Good: the bake on every second node of a 3 km map takes about a second in the worker (the dev Mac, measured in the
-  G2 plan).
+- Good: the bake on every second node of a 3 km map takes 0.8 s in the page's worker, against M6a's 0.4 s, and an
+  edit that leaves the heights as they were bakes nothing; the frame is unchanged within the measurement's noise
+  (about 4 ms at 1080p; the dev Mac, the G2 plan's Results).
 - Bad: the light is baked for one sun; a sun that moves with the day (the campaign map's open question) needs a rebake
   or several bakes blended.
 - Bad: the shade is darker than the readability bound of #141 asks (the darkest about 0.6 of the paper); a floor

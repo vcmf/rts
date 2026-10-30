@@ -24,7 +24,7 @@ export function sunFrom(x: number, y: number, z: number, size: number): Sun {
 // the 3D world's sun (src/look/sun.ts: north-west, about 27° high), so the light does not turn at the zoom's handover
 // (the owner, 2026-10-30: docs/plans/active/track-g.md); its disc 2.5° across, as Track K's
 export const SUN: Sun = sunFrom(...SUN_TOWARD, 2.5)
-// the light's bake on every LIGHT_STEP-th node: 4 m, about 1 s for a 3 km map in the page's worker (G2, measured, the
+// the light's bake on every LIGHT_STEP-th node: 4 m, 0.8 s for a 3 km map in the page's worker (G2, measured, the
 // G2 plan's Results); the slope's light
 // is the shader's, per pixel, from the 2 m heights
 export const LIGHT_STEP = 2
