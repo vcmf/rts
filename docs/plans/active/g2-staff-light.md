@@ -79,7 +79,10 @@ handover (G4).
 3. The houses: their shadows come from their true wall heights while the ground's light reads its heights ×3, and a
    house in a hill's baked shadow is drawn in full light (its boxes do not read the light texture). To settle with the
    3D world's houses (G4).
-4. The water is K1's blue in every season: M6a's pale winter wash is gone, and on a winter map (Austerlitz) the deep
+4. The water's face is flat, but the bake reads its bed: a pond or a stream takes its banks' shadow and less sky, as
+   K1's basins sunk into the model do (a 1.5 m pond is a 4.5 m basin to the light). In the shots the owner has seen;
+   to keep or to light flat (the bake on the water's level) by the owner's eye.
+5. The water is K1's blue in every season: M6a's pale winter wash is gone, and on a winter map (Austerlitz) the deep
    blue is near the armies' saturation. The owner has seen it in the G2 shots and asked no change; checked with the armies (G4).
 
 ## Review
@@ -104,3 +107,12 @@ Round 2 (10 findings, 1 severe):
 - kept: the light over the ink at a floor of 0 (the owner's look, K1's; open question 1, checked with the armies); the
   houses (open question 3); the ray's steps far out (a work shades a node d metres away only if its height ×3 rises
   d × tan(26°) above it: at 200 m about 30 m, which no work on a battlefield is).
+
+Round 3 (9 findings, none severe; fixed or answered, then stopped, the third round):
+- fixed: the cache's hash missed an edit that only flips heights' signs (a raise turned into a lower, tested): it
+  compares a kept copy of the heights now; a disc under 1° stepped every cell out to a kilometre (the disc 1° at
+  least); `?sky=`, `?lamp=`, `?floor=` kept within 0..1 (a sky past 1 turned the divisor negative); the bake's per-node
+  arrays gone; the houses' shadows from the ground's clamped sun, not a 5° floor of their own; the bake's time comment
+  (the worker's, not Node's); the view's header;
+- answered: the water shaded from its bed (K1's basins; open question 4); the frame (Results, measured once the code
+  is final).

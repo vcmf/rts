@@ -107,6 +107,14 @@ describe('G2: the light bake', () => {
     expect(bake(h, N, N, 2, sunAt(90), 1, 3).data).toEqual(bakeLight(h, N, N, 2, sunAt(90), 1, 3).data)
     expect(baked).toBe(4)
   })
+  it('the light cache sees an edit that only flips the heights\' signs (a raise turned into a lower)', () => {
+    const bake = lightCache()
+    const h = new Float64Array(N * N)
+    for (let j = 35; j <= 45; j++) for (let i = 35; i <= 44; i++) h[j * N + i] = 5 // an even count of nodes
+    bake(h, N, N, 2, SUN, 1, 1)
+    for (let j = 35; j <= 45; j++) for (let i = 35; i <= 44; i++) h[j * N + i] = -5
+    expect(bake(h, N, N, 2, SUN, 1, 1).data).toEqual(bakeLight(h, N, N, 2, SUN, 1, 1).data)
+  })
   it("a pit's floor sees less of the sky than the ground round it", () => {
     const pit = Float64Array.from(block, v => -v)
     const L = lit(pit, SUN)

@@ -24,7 +24,8 @@ export function sunFrom(x: number, y: number, z: number, size: number): Sun {
 // the 3D world's sun (src/look/sun.ts: north-west, about 27° high), so the light does not turn at the zoom's handover
 // (the owner, 2026-10-30: docs/plans/active/track-g.md); its disc 2.5° across, as Track K's
 export const SUN: Sun = sunFrom(...SUN_TOWARD, 2.5)
-// the light's bake on every LIGHT_STEP-th node: 4 m, about 1 s for a 3 km map in Node (G2, measured); the slope's light
+// the light's bake on every LIGHT_STEP-th node: 4 m, about 1 s for a 3 km map in the page's worker (G2, measured, the
+// G2 plan's Results); the slope's light
 // is the shader's, per pixel, from the 2 m heights
 export const LIGHT_STEP = 2
 export const RELIEF = {
@@ -37,11 +38,12 @@ const SUN_REACH = 5000 // m: the farthest a ray toward the sun looks for what sh
 export const WATER_FULL = 1.5 // m: the depth the mask stores as 1
 
 /**
- * A sun the bake and the shader can light by (the page's ?sun= and ?soft= take any number): its disc 0.1° to 20°
- * across, its lower rim at least half a degree above the horizon, its middle at most 89.5° high.
+ * A sun the bake and the shader can light by (the page's ?sun= and ?soft= take any number): its disc 1° to 20°
+ * across (a smaller one would step the bake's rays a cell at a time out to a kilometre), its lower rim at least half
+ * a degree above the horizon, its middle at most 89.5° high.
  */
 export function clampSun(sun: Sun): Sun {
-  const size = Math.min(20, Math.max(0.1, sun.size))
+  const size = Math.min(20, Math.max(1, sun.size))
   return { el: Math.min(89.5, Math.max(size / 2 + 0.5, sun.el)), az: sun.az, size }
 }
 
@@ -100,8 +102,9 @@ export function bakeLight(
   // across, not jumped
   const sunSteps: number[] = []
   for (let d = cell; d <= reach + cell; d += Math.max(cell, 2 * tanR * d)) sunSteps.push(d)
-  const dirs: [number, number][] = []
-  for (let a = 0; a < 8; a++) dirs.push([Math.cos((a * Math.PI) / 4), Math.sin((a * Math.PI) / 4)])
+  const dirX = new Float64Array(8)
+  const dirZ = new Float64Array(8)
+  for (let a = 0; a < 8; a++) [dirX[a], dirZ[a]] = [Math.cos((a * Math.PI) / 4), Math.sin((a * Math.PI) / 4)]
   // the heights at a point (m from the grid's first node), bilinear, the edges repeated
   const at = (x: number, z: number) => {
     const fx = Math.min(nx - 1.001, Math.max(0, x / cell))
@@ -118,8 +121,10 @@ export function bakeLight(
   const out = new Uint8Array(bnx * bnz * 4)
   for (let bj = 0; bj < bnz; bj++) {
     for (let bi = 0; bi < bnx; bi++) {
-      const [i, j] = [bi * step, bj * step]
-      const [x, z] = [i * cell, j * cell]
+      const i = bi * step
+      const j = bj * step
+      const x = i * cell
+      const z = j * cell
       const h0 = h[j * nx + i]
       let lit = 1
       for (const d of sunSteps) {
@@ -129,14 +134,16 @@ export function bakeLight(
         if (lit <= 0) break
       }
       let sky = 0
-      for (const [dx, dz] of dirs) {
+      for (let a = 0; a < 8; a++) {
+        const dx = dirX[a]
+        const dz = dirZ[a]
         let horizon = 0
         for (const d of SKY_STEPS) horizon = Math.max(horizon, (at(x + dx * d, z + dz * d) - h0) / d)
         sky += 1 - horizon / Math.hypot(1, horizon)
       }
       const o = (bj * bnx + bi) * 4
       out[o] = Math.round(sstep(0, 1, lit) * 255)
-      out[o + 1] = Math.round((sky / dirs.length) * 255)
+      out[o + 1] = Math.round((sky / 8) * 255)
       out[o + 3] = 255
     }
   }
@@ -152,18 +159,19 @@ export function lightCache(
   bake = bakeLight,
 ): (heights: Float64Array, nx: number, nz: number, cell: number, sun: Sun, step: number, z: number) => LightBake {
   let key = ''
+  let kept = new Float64Array(0)
   let last: LightBake | null = null
   return (heights, nx, nz, cell, sun, step, z) => {
-    // FNV-1a over the heights' bits: 10 ms for a 3 km map (measured, Node, the dev Mac), against a second for the bake
-    const w = new Uint32Array(heights.buffer, heights.byteOffset, heights.length * 2)
-    let f = 0x811c9dc5
-    for (let k = 0; k < w.length; k++) f = Math.imul(f ^ w[k], 0x01000193)
-    const k = [nx, nz, cell, sun.el, sun.az, sun.size, step, z, f >>> 0].join(',')
-    if (!last || k !== key) {
+    // the heights compared with a kept copy, exactly (a hash missed edits that only flip signs)
+    const k = [nx, nz, cell, sun.el, sun.az, sun.size, step, z].join(',')
+    let same = !!last && k === key && kept.length === heights.length
+    for (let i = 0; same && i < heights.length; i++) same = kept[i] === heights[i]
+    if (!same) {
       last = bake(heights, nx, nz, cell, sun, step, z)
       key = k
+      kept = Float64Array.from(heights)
     }
-    return { ...last, data: last.data.slice() }
+    return { ...last!, data: last!.data.slice() }
   }
 }
 

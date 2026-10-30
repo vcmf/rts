@@ -109,8 +109,8 @@ void main() {
 
   /* the light, falling on the print: the warm sun on the slope (per pixel, from the node heights raised uZ times, as
      the bake's), in its baked soft shadow, a little stronger on the sun's side of the map (a lamp beside the table);
-     the cool sky in its baked share, less on a steep face; the water lies flat, and so does the ground past the map's
-     edge (its heights there are the edge's, held). Divided by what flat open ground gets, so that comes out in the
+     the cool sky in its baked share, less on a steep face; the water's face lies flat but takes the bake's shadow and
+     sky from its bed, a basin sunk into the model as K1's; the ground past the map's edge lies flat. Divided by what flat open ground gets, so that comes out in the
      paper's own tone: the faces toward the sun warmer, the shade cooler */
   {
     /* the differences one-sided within a cell of the map's edge (the heights past it are held, which would halve

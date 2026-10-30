@@ -1,8 +1,8 @@
 // The lit map view (docs/plans/active/m6-lit-view.md, M6a; decisions 0055, 0058): a compiled map drawn as the lit
 // map on its own canvas with Babylon, as one flat plane over the map's extent seen through a camera that leans a
-// little off straight down. The relief, the woods and the water come from the bakes (./bake.ts), the contours from the
-// node heights. It draws on demand (render), and projects world points to the screen and back for what the page draws
-// over it.
+// little off straight down. The light (the sun's soft shadow, the sky; decision 0090) and the water come from the bakes
+// (./bake.ts), the slope's light and the contours from the node heights; no woods are drawn for now (G2). It draws on
+// demand (render), and projects world points to the screen and back for what the page draws over it.
 import { Engine } from '@babylonjs/core/Engines/engine.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { Scene } from '@babylonjs/core/scene.js'
@@ -222,9 +222,11 @@ export class LitView {
 
   /** Sets the light's settings (G2: tuned by eye from the page's URL); an absent one takes the view's own. */
   setTuning(t: LitTuning): void {
-    this.material.setFloat('uSkyK', t.sky ?? SKY_K)
-    this.material.setFloat('uLamp', t.lamp ?? LAMP)
-    this.material.setFloat('uFloor', t.floor ?? 0)
+    // each within 0..1: a sky's share past 1 turns the light's divisor negative
+    const unit = (v: number | undefined, d: number) => Math.min(1, Math.max(0, v ?? d))
+    this.material.setFloat('uSkyK', unit(t.sky, SKY_K))
+    this.material.setFloat('uLamp', unit(t.lamp, LAMP))
+    this.material.setFloat('uFloor', unit(t.floor, 0))
   }
 
   // a canvas's pixels as an RGBA texture (the paper's: kept for the view's life)
@@ -353,7 +355,7 @@ export class LitView {
     if (!houses.length) return
     const [lx, lz] = sunXZ(this.sun)
     // a wall's shadow is its height over the tangent of the sun's height
-    const cast = 1 / Math.tan((Math.max(5, this.sun.el) * Math.PI) / 180)
+    const cast = 1 / Math.tan((this.sun.el * Math.PI) / 180) // the ground's sun, clampSun's
     const pos: number[] = []
     const col: number[] = []
     const idx: number[] = []
