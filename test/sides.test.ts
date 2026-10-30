@@ -75,8 +75,26 @@ describe('the plan', () => {
       map: 'battlefield',
       plan,
       setup: (w: World) => {
-        issue(w, { type: 'debug-spawn', side: 0, x: 0, z: -200, heading: 0, shape: 'line', men: FULL.infantry, fire: 'hold' })
-        issue(w, { type: 'debug-spawn', side: 1, x: 200, z: 200, heading: PI, shape: 'line', men: FULL.infantry, fire: 'hold' })
+        issue(w, {
+          type: 'debug-spawn',
+          side: 0,
+          x: 0,
+          z: -200,
+          heading: 0,
+          shape: 'line',
+          men: FULL.infantry,
+          fire: 'hold',
+        })
+        issue(w, {
+          type: 'debug-spawn',
+          side: 1,
+          x: 200,
+          z: 200,
+          heading: PI,
+          shape: 'line',
+          men: FULL.infantry,
+          fire: 'hold',
+        })
       },
     }
     const cr = compileRuleset(napoleonic)
@@ -189,7 +207,16 @@ describe('the plan', () => {
       men: FULL.cavalry,
       fire: 'hold',
     })
-    s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: 0, shape: 'line', men: FULL.infantry, fire: 'at will' })
+    s.cmd({
+      type: 'debug-spawn',
+      side: 1,
+      x: 0,
+      z: 100,
+      heading: 0,
+      shape: 'line',
+      men: FULL.infantry,
+      fire: 'at will',
+    })
     // infantry 100 m off its rear face
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 200, heading: PI, shape: 'line', men: FULL.infantry, fire: 'hold' })
     s.tick()
@@ -302,7 +329,16 @@ describe('the plan', () => {
     const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)
     attachScenario(s.w, { plan })
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: -100, heading: 0, shape: 'line', men: FULL.infantry, fire: 'hold' })
-    s.cmd({ type: 'debug-spawn', side: 1, unit: 'cavalry', x: 0, z: 200, heading: PI, shape: 'line', men: FULL.cavalry })
+    s.cmd({
+      type: 'debug-spawn',
+      side: 1,
+      unit: 'cavalry',
+      x: 0,
+      z: 200,
+      heading: PI,
+      shape: 'line',
+      men: FULL.cavalry,
+    })
     s.tick()
     s.advance(1)
     expect(s.w.f.chTarget[1]).toBe(unitHandle(0))
