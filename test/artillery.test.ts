@@ -37,6 +37,7 @@ import {
   type SimData,
   type World,
 } from '../src/sim/index.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 
 const PI = Math.PI
 const NE = PI / 4
@@ -103,7 +104,7 @@ class W {
   ): number {
     const slot = this.w.free[this.w.meta[1] - 1]
     const U = this.w.cr.types[unit ? this.w.cr.typeIndex(unit) : 0]
-    this.order({ type: 'debug-spawn', side, x, z, heading, shape, men: men ?? Math.min(400, U.slots), unit, fire })
+    this.order({ type: 'debug-spawn', side, x, z, heading, shape, men: men ?? U.slots, unit, fire })
     return makeHandle(KIND_FORMATION, slot, this.w.f.gen[slot])
   }
   i(h: number): number {
@@ -157,7 +158,7 @@ describe('who fires', () => {
     const a = pair('unlimbered')
     a.s.run(40)
     expect(a.s.fired(a.b)).toBe(true)
-    expect(a.s.men(a.t)).toBeLessThan(400)
+    expect(a.s.men(a.t)).toBeLessThan(FULL.infantry)
     const l = pair('limbered')
     l.s.run(40)
     expect(l.s.fired(l.b)).toBe(false)
@@ -176,7 +177,7 @@ describe('who fires', () => {
     const friend = s.spawn(0, -20, -20, NE, 'line')
     s.spawn(1, 60, 60, SW, 'line')
     s.run(60)
-    expect(s.men(friend)).toBe(400)
+    expect(s.men(friend)).toBe(FULL.infantry)
     // the middle pieces, whose line the friend stands across, are silent
     const C = s.w.cr.maxC
     const i = s.i(b)
@@ -185,10 +186,10 @@ describe('who fires', () => {
   it('reloads slower with its crew thinned: half the men, twice the time', () => {
     const one = (men: number) => {
       const s = new W(withGuns({ spread: 0, short: 0 }, { reloadJitter: 0 }))
-      const b = s.spawn(0, -100, -100, NE, 'unlimbered', 'battery', 'at will', men * 8)
+      const b = s.spawn(0, -100, -100, NE, 'unlimbered', 'battery', 'at will', men * 4)
       s.spawn(1, 60, 60, SW, 'line')
       const i = s.i(b)
-      s.w.f.reload.fill(0, i * s.w.cr.maxC, i * s.w.cr.maxC + 8)
+      s.w.f.reload.fill(0, i * s.w.cr.maxC, i * s.w.cr.maxC + 4)
       s.run(1)
       return s.w.f.reload[i * s.w.cr.maxC]
     }
@@ -202,7 +203,7 @@ describe('the ball', () => {
   it('on level ground runs past its aim point (the first graze) and on', () => {
     const s = new W(withGuns({ spread: 0, short: 0, energy: 250 }))
     const b = s.spawn(0, -150, -150, NE, 'unlimbered', 'battery')
-    const [x, z] = shootRay(s.w, s.i(b), 3, ...diag(-100))
+    const [x, z] = shootRay(s.w, s.i(b), 1, ...diag(-100))
     const d = Math.hypot(x + 150, z + 150)
     expect(d).toBeGreaterThan(70)
     // its energy, less flight and its grazes
@@ -213,32 +214,35 @@ describe('the ball', () => {
       const s = new W(aimed, ground({ s: -40, h: 4, slope }))
       const b = s.spawn(0, -150, -150, NE, 'unlimbered', 'battery')
       const t = men ? s.spawn(1, ...diag(30), SW, 'column') : 0
-      const [x, z] = shootRay(s.w, s.i(b), 3, ...(men ? centre(s, t) : diag(20)))
+      const [x, z] = shootRay(s.w, s.i(b), 1, ...(men ? centre(s, t) : diag(20)))
       return { stop: (x + z) / Math.SQRT2, hit: men ? s.owed(t) : 0 }
     }
     expect(shot(0.6, false).stop).toBeLessThan(-40) // buried in the ridge's face
     const over = shot(0.15, true)
-    const open = (() => {
-      const s = new W()
+    // the same ball over open ground strikes the column (summed over seeds: a ball strikes few of a unit of 240)
+    const open = [1, 2, 3, 4, 5, 6, 7, 8].reduce((a, seed) => {
+      const s = new W(aimed, ground(), seed)
       const b = s.spawn(0, -150, -150, NE, 'unlimbered', 'battery')
       const t = s.spawn(1, ...diag(30), SW, 'column')
-      shootRay(s.w, s.i(b), 3, ...centre(s, t))
-      return s.owed(t)
-    })()
+      shootRay(s.w, s.i(b), 1, ...centre(s, t))
+      return a + s.owed(t)
+    }, 0)
     expect(over.stop).toBeGreaterThan(30)
     expect(over.hit).toBe(0)
     expect(open).toBeGreaterThan(0)
   })
   it('a column end-on loses more to one ball than a line frontally; a line enfiladed more than frontally', () => {
     // one ball from the battery's middle piece at the battalion's first company's centre, over several seeds
+    // a deadly ball (kill 1), so the counts show the geometry rather than the draws
     const one = (shape: string, heading: number, seed: number) => {
-      const s = new W(aimed, ground(), seed)
+      const s = new W(withGuns({ spread: 0, short: 0, kill: 1 }), ground(), seed)
       const b = s.spawn(0, -150, -150, NE, 'unlimbered', 'battery')
       const t = s.spawn(1, 0, 0, heading, shape)
-      shootRay(s.w, s.i(b), 3, ...centre(s, t))
+      shootRay(s.w, s.i(b), 1, ...centre(s, t))
       return s.owed(t)
     }
-    const sum = (shape: string, h: number) => [1, 2, 3, 4, 5, 6, 7, 8].reduce((a, seed) => a + one(shape, h, seed), 0)
+    const seeds = Array.from({ length: 32 }, (_, k) => k + 1)
+    const sum = (shape: string, h: number) => seeds.reduce((a, seed) => a + one(shape, h, seed), 0)
     const column = sum('column', SW)
     const line = sum('line', SW)
     const enfiladed = sum('line', SW + PI / 2)
@@ -250,7 +254,7 @@ describe('the ball', () => {
       const s = new W(withGuns({ spread: 0, short: 0, energy: 300, kill: 1 }))
       const b = s.spawn(0, -150, -150, NE, 'unlimbered', 'battery')
       const t = men ? s.spawn(1, ...diag(-120), SW, 'column') : 0
-      const [x, z] = shootRay(s.w, s.i(b), 3, ...(men ? centre(s, t) : diag(-120)))
+      const [x, z] = shootRay(s.w, s.i(b), 1, ...(men ? centre(s, t) : diag(-120)))
       return Math.hypot(x + 150, z + 150)
     }
     expect(go(true)).toBeLessThan(go(false) - 20)
@@ -260,7 +264,7 @@ describe('the ball', () => {
     const b = s.spawn(0, -150, -150, NE, 'unlimbered', 'battery')
     const t = s.spawn(1, ...diag(-100), SW, 'line')
     const friend = s.spawn(0, ...diag(-40), SW, 'column')
-    shootRay(s.w, s.i(b), 3, ...centre(s, t, 3))
+    shootRay(s.w, s.i(b), 1, ...centre(s, t, 2))
     expect(s.owed(friend)).toBeGreaterThan(0)
   })
   it("a battery's pieces fire rays beyond the cone's range, canister inside it", () => {
@@ -271,7 +275,7 @@ describe('the ball', () => {
       s.run(40)
       const i = s.i(b)
       const C = s.w.cr.maxC
-      return [...s.w.f.shotKind.slice(i * C, i * C + 8)].filter(k => k).map(k => k)[0]
+      return [...s.w.f.shotKind.slice(i * C, i * C + 4)].filter(k => k).map(k => k)[0]
     }
     expect([kind(140), kind(50)]).toEqual([SHOT_RAY, SHOT_CONE])
   })
@@ -338,7 +342,7 @@ describe('determinism', () => {
       script(w, c => issue(w, c))
       advanceTick(w)
     }
-    expect(menOf(w, 1)).toBeLessThan(400) // the guns struck the column
+    expect(menOf(w, 1)).toBeLessThan(FULL.infantry) // the guns struck the column
     const w2 = deserialize(serialize(w), data, cr)
     while (w.meta[M_TICK] < 2600) {
       advanceTick(w)

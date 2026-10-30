@@ -18,12 +18,13 @@ import {
   type FireGeo,
   type Faces,
 } from '../src/sim/index.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 
 const FIELD = openBattlefield()
 const D = Math.PI / 180
 
 // a world with one formation of `shape` at the origin facing north (+z), and its geometry and faces built
-function one(shape: string, men = 400, unit?: string, settle = 1) {
+function one(shape: string, men: number = FULL.infantry, unit?: string, settle = 1) {
   const s = new Sim(1, napoleonic, FIELD, OPEN_DATA)
   const h = s.spawn(0, 0, 0, shape, men, 0, unit)
   s.advance(settle)
@@ -50,8 +51,8 @@ describe('the face (§ 2)', () => {
     const { s, j, F } = one('line')
     const [L, R] = [F.L[2 * j], F.R[2 * j]]
     expect(F.kind[j]).toBe(FACE_ONE)
-    expect(R - L).toBeGreaterThan(90)
-    // the two left-hand companies lose their men
+    expect(R - L).toBeGreaterThan(50)
+    // the two left-hand sections lose their men
     const CS = s.w.cr.maxC
     s.w.f.men[j * CS] = 0
     s.w.f.men[j * CS + 1] = 0
@@ -88,13 +89,13 @@ describe('the face (§ 2)', () => {
 
 describe('the weight of a point (§ 3)', () => {
   const shapes: [string, number, string | undefined][] = [
-    ['line', 400, undefined],
-    ['column', 400, undefined],
-    ['march', 400, undefined],
-    ['square', 400, undefined],
-    ['line', 256, 'cavalry'],
-    ['unlimbered', 96, 'battery'],
-    ['limbered', 96, 'battery'],
+    ['line', FULL.infantry, undefined],
+    ['column', FULL.infantry, undefined],
+    ['march', FULL.infantry, undefined],
+    ['square', FULL.infantry, undefined],
+    ['line', FULL.cavalry, 'cavalry'],
+    ['unlimbered', FULL.battery, 'battery'],
+    ['limbered', FULL.battery, 'battery'],
   ]
   it('P-4: each weight in 0..1, summing to 1, for every kind', () => {
     for (const [shape, men, unit] of shapes) {
@@ -184,9 +185,9 @@ describe('the weight of a point (§ 3)', () => {
     const at = sampler(111)
     for (let n = 0; n < 1000; n++) expect(wt(s.w, j, at(-200, 200), at(-200, 200))).toEqual([1, 0, 0])
   })
-  it('P-12 (A-04): 60° off the centre of a 93 m line, within 90 m, is front', () => {
+  it('P-12 (A-04): 60° off the centre of a 54 m line, within 50 m, is front', () => {
     const { s, j } = one('line')
-    for (const r of [20, 50, 90]) expect(wt(s.w, j, r * Math.sin(60 * D), r * Math.cos(60 * D))[0]).toBe(1)
+    for (const r of [20, 35, 50]) expect(wt(s.w, j, r * Math.sin(60 * D), r * Math.cos(60 * D))[0]).toBe(1)
   })
   it('P-13: a march column is front ahead of its head, flank abreast of its body, rear behind its tail', () => {
     const { s, j, F } = one('march')
@@ -200,9 +201,9 @@ describe('the weight of a point (§ 3)', () => {
 
 describe('the weight of a threat (§ 4)', () => {
   // formation j, a line at the origin facing north, and a threat formation of `shape` at (x, z) heading h
-  function pair(x: number, z: number, h: number, shape = 'line', unit?: string, men = 400) {
+  function pair(x: number, z: number, h: number, shape = 'line', unit?: string, men: number = FULL.infantry) {
     const s = new Sim(1, napoleonic, FIELD, OPEN_DATA)
-    const a = s.spawn(0, 0, 0, 'line', 400, 0)
+    const a = s.spawn(0, 0, 0, 'line', FULL.infantry, 0)
     const b = s.spawn(x, z, h, shape, men, 1, unit)
     const { G } = built(s.w)
     return { s, G, j: s.slot(a), i: s.slot(b) }
@@ -220,19 +221,19 @@ describe('the weight of a threat (§ 4)', () => {
   it('P-14: a line straight ahead within the width is front 1; at contact a block over the end in proportion', () => {
     const a = pair(0, 100, Math.PI)
     for (const p of each(a.s, a.G, a.j, a.i)) expect(p[0]).toBe(1)
-    // a squadron line 2 m ahead, offset so its last squadron overlaps the end by part of its width
-    const b = pair(60, 6, Math.PI, 'line', 'cavalry', 256)
+    // a squadron line 2 m ahead, offset so its second squadron overlaps the end by part of its width
+    const b = pair(20, 6, Math.PI, 'line', 'cavalry', FULL.cavalry)
     const ws = each(b.s, b.G, b.j, b.i).map(p => p[0])
     expect(Math.min(...ws)).toBeLessThan(1)
     expect(Math.max(...ws)).toBe(1)
   })
   it('P-15: a squadron striking a line end at right angles is flank', () => {
     // cavalry in line facing west, its line of squadrons along z, its front 1 m beyond the line's east end
-    const { s, G, j, i } = pair(0, 0, -Math.PI / 2, 'line', 'cavalry', 256)
+    const { s, G, j, i } = pair(0, 0, -Math.PI / 2, 'line', 'cavalry', FULL.cavalry)
     const R = buildFaces(s.w, G).R[2 * j]
     s.w.f.x[i] = R + 2
-    // its squadrons stand 21 m and 63 m either side of its anchor: the third one's centre on the line's mid-depth
-    s.w.f.z[i] = (buildFaces(s.w, G).F[2 * j] + buildFaces(s.w, G).B[2 * j]) / 2 - 21
+    // its two squadrons stand 10.5 m either side of its anchor: the second one's centre on the line's mid-depth
+    s.w.f.z[i] = (buildFaces(s.w, G).F[2 * j] + buildFaces(s.w, G).B[2 * j]) / 2 - 10.5
     const G2 = built(s.w).G
     // the squadron whose frontage crosses the line's depth, beside its end, is flank; those ahead or behind are not
     const flanks = each(s, G2, j, i).map(p => p[1])
@@ -245,7 +246,7 @@ describe('the weight of a threat (§ 4)', () => {
       const x = at(-120, 120)
       const z = at(12, 80)
       const h = at(0, 2 * Math.PI)
-      const a = pair(x, z, h, 'line', 'cavalry', 256)
+      const a = pair(x, z, h, 'line', 'cavalry', FULL.cavalry)
       const p = each(a.s, a.G, a.j, a.i)
       const t = at(0, 2 * Math.PI)
       a.s.w.f.x[a.i] += 0.1 * Math.sin(t)
@@ -258,8 +259,8 @@ describe('the weight of a threat (§ 4)', () => {
     expect(worst).toBeLessThanOrEqual(0.05)
   })
   it('P-17: the same weights every run', () => {
-    const a = pair(70, 30, 2.4, 'line', 'cavalry', 256)
-    const b = pair(70, 30, 2.4, 'line', 'cavalry', 256)
+    const a = pair(70, 30, 2.4, 'line', 'cavalry', FULL.cavalry)
+    const b = pair(70, 30, 2.4, 'line', 'cavalry', FULL.cavalry)
     expect(each(a.s, a.G, a.j, a.i)).toEqual(each(b.s, b.G, b.j, b.i))
   })
 })

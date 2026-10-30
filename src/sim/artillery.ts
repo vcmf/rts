@@ -69,6 +69,34 @@ export function mayShoot(w: World, i: number): boolean {
   )
 }
 
+/**
+ * Whether battery i's guns are overrun (docs/proposals/division-scale.md § 4): an enemy company in the fight within
+ * the type's `min` metres of a piece's muzzle, so no piece fires.
+ */
+export function overrun(w: World, G: FireGeo, i: number): boolean {
+  const f = w.f
+  const CS = w.cr.maxC
+  const A = typeOf(w, i).def.artillery!
+  const r2 = A.min * A.min
+  for (let c = 0, C = typeOf(w, i).C; c < C; c++) {
+    const k = i * CS + c
+    if (f.men[k] <= 0) continue
+    const mx = G.ox[k] + G.fx[k] * A.ahead
+    const mz = G.oz[k] + G.fz[k] * A.ahead
+    for (let e = 0; e < MAX_FORMATIONS; e++) {
+      if (!f.alive[e] || f.side[e] === f.side[i] || outOfFight(f.mstate[e])) continue
+      for (let q = 0, Q = typeOf(w, e).C; q < Q; q++) {
+        const m = e * CS + q
+        if (f.men[m] <= 0) continue
+        const dx = G.cx[m] - mx
+        const dz = G.cz[m] - mz
+        if (dx * dx + dz * dz <= r2) return true
+      }
+    }
+  }
+  return false
+}
+
 // step 9
 export function artilleryStep(w: World): void {
   const f = w.f
@@ -89,7 +117,7 @@ export function artilleryStep(w: World): void {
   const rev = w.scratch.reverse === true
   for (let n = 0; n < N; n++) {
     const i = rev ? N - 1 - n : n
-    if (!f.alive[i] || !mayShoot(w, i)) continue
+    if (!f.alive[i] || !mayShoot(w, i) || overrun(w, G, i)) continue
     const U = typeOf(w, i)
     const A = U.def.artillery!
     const h = handleOf(w, i)

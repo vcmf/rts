@@ -1,10 +1,10 @@
-// The fire and morale calibration (docs/plans/active/s1c-fire-morale.md): two 400-man lines on levelled
-// ground at 50, 100 and 200 m, with bars of 114 and 71 (C-01), run to the first rout or 20 minutes over many
-// seeds, in worker threads. Prints each range's times to break, losses at the break, how often the stronger
-// line broke first, and what its losses cost and its shocks at the break, against the targets. Also
-// (docs/plans/active/s1c2-morale-machine.md) a 3v3 brigade's contagion, reported without targets, and the
-// levels' cases (docs/proposals/morale-bar-model.md § 13): C-02 level 3 against level 1 at 100 m; H-04 level 5
-// against two of level 2; G-06 how long level 6 and level 2 stand one-sided fire at 50 m.
+// The fire and morale calibration (docs/plans/active/s1c-fire-morale.md): two lines of 240 on levelled ground at
+// 20, 40 and 80 m (S1c's 50, 100 and 200 m at the division scale, × 0.4), with bars of 114 and 71 (C-01), run to the
+// first rout or 20 minutes over many seeds, in worker threads. Prints each range's times to break, losses at the
+// break, how often the stronger line broke first, and what its losses cost and its shocks at the break, against the
+// targets. Also (docs/plans/active/s1c2-morale-machine.md) a 3v3 brigade's contagion, reported without targets, and
+// the levels' cases (docs/proposals/morale-bar-model.md § 13): C-02 level 3 against level 1 at 40 m; H-04 level 5
+// against two of level 2; G-06 how long level 6 and level 2 stand one-sided fire at 20 m.
 // Usage: node tools/calibrate-fire.ts [seeds=100]
 import fs from 'node:fs'
 import os from 'node:os'
@@ -32,9 +32,9 @@ import {
   type BrigadeResult,
 } from '../src/scenarios/s1c-firefight.ts'
 
-// the 1v1 at three ranges; the 100 m row again without the wavering fall-back (S1c-2: its share of the
-// result); and a 3v3 brigade at 100 m (reported, no target), watched for 3 minutes after its first break
-const RANGES = [50, 100, 200]
+// the 1v1 at three ranges, and a 3v3 brigade at 40 m (reported, no target), watched for 3 minutes after its first
+// break
+const RANGES = [20, 40, 80]
 // 20 minutes; 3 minutes, in ticks
 const MAX = 20 * 60 * 20
 const WINDOW = 20 * 180
@@ -57,35 +57,35 @@ interface Line {
 }
 const E = Math.PI / 2
 const LEVEL_CASES: Record<string, { lines: Line[]; max: number }> = {
-  // C-02: a veteran line against a recruit line at 100 m
+  // C-02: a veteran line against a recruit line at 40 m
   'C-02': {
     lines: [
-      { side: 0, dx: -50, dz: 0, level: 3 },
-      { side: 1, dx: 50, dz: 0, level: 1 },
+      { side: 0, dx: -20, dz: 0, level: 3 },
+      { side: 1, dx: 20, dz: 0, level: 1 },
     ],
     max: MAX,
   },
-  // H-04: an Old Guard's neighbour, level 5, against two line battalions side by side 100 m off
+  // H-04: an Old Guard's neighbour, level 5, against two line units side by side 40 m off
   'H-04': {
     lines: [
-      { side: 0, dx: -50, dz: 0, level: 5 },
-      { side: 1, dx: 50, dz: -57, level: 2 },
-      { side: 1, dx: 50, dz: 57, level: 2 },
+      { side: 0, dx: -20, dz: 0, level: 5 },
+      { side: 1, dx: 20, dz: -33, level: 2 },
+      { side: 1, dx: 20, dz: 33, level: 2 },
     ],
     max: MAX,
   },
-  // G-06: how long a line holding fire stands a shooter that never breaks, 50 m off: level 6, and level 2
+  // G-06: how long a line holding fire stands a shooter that never breaks, 20 m off: level 6, and level 2
   'G-06 level 6': {
     lines: [
-      { side: 0, dx: -25, dz: 0, level: 6, hold: true },
-      { side: 1, dx: 25, dz: 0, level: 2, bar: 1e6 },
+      { side: 0, dx: -10, dz: 0, level: 6, hold: true },
+      { side: 1, dx: 10, dz: 0, level: 2, bar: 1e6 },
     ],
     max: 3 * MAX,
   },
   'G-06 level 2': {
     lines: [
-      { side: 0, dx: -25, dz: 0, level: 2, hold: true },
-      { side: 1, dx: 25, dz: 0, level: 2, bar: 1e6 },
+      { side: 0, dx: -10, dz: 0, level: 2, hold: true },
+      { side: 1, dx: 10, dz: 0, level: 2, bar: 1e6 },
     ],
     max: 3 * MAX,
   },
@@ -145,7 +145,7 @@ if (!isMainThread) {
   const jobs: Job[] = []
   for (const range of RANGES) for (let seed = 1; seed <= seeds; seed++) jobs.push({ range, seed, kind: 'fight' })
   for (let seed = 1; seed <= seeds; seed++) {
-    jobs.push({ range: 100, seed, kind: 'brigade' })
+    jobs.push({ range: 40, seed, kind: 'brigade' })
     for (const name of Object.keys(LEVEL_CASES)) jobs.push({ range: 0, seed, kind: 'levels', name })
   }
   const n = Math.max(1, Math.min(os.availableParallelism() - 1, 12))
@@ -199,7 +199,7 @@ if (!isMainThread) {
   const spread = bw.map(b => (b.last - b.tick) / 20)
   const outs = [0, 1, 2, 3].map(k => bw.filter(b => b.outB === k).length)
   console.log(
-    `\nbrigade 3v3 at 100 m: weaker side broke first ${bw.length}, stronger first ${brig.filter(b => b.first === 0).length}, both at once ${brig.filter(b => b.first === 2).length}, none ${brig.filter(b => b.first < 0).length}; first break ${min(q(bt, 0.1))} / ${min(q(bt, 0.5))} / ${min(q(bt, 0.9))} min; weaker lines out 3 min later (1 / 2 / 3): ${outs.slice(1).join(' / ')}; first to last break ${q(spread, 0.1)} / ${q(spread, 0.5)} / ${q(spread, 0.9)} s; stronger lines out: ${brig.reduce((a, b) => a + b.outA, 0)}`,
+    `\nbrigade 3v3 at 40 m: weaker side broke first ${bw.length}, stronger first ${brig.filter(b => b.first === 0).length}, both at once ${brig.filter(b => b.first === 2).length}, none ${brig.filter(b => b.first < 0).length}; first break ${min(q(bt, 0.1))} / ${min(q(bt, 0.5))} / ${min(q(bt, 0.9))} min; weaker lines out 3 min later (1 / 2 / 3): ${outs.slice(1).join(' / ')}; first to last break ${q(spread, 0.1)} / ${q(spread, 0.5)} / ${q(spread, 0.9)} s; stronger lines out: ${brig.reduce((a, b) => a + b.outA, 0)}`,
   )
   // the levels: who broke first, when, and the losses at the break (medians)
   const lv = (name: string) => lev.filter(r => r.name === name)
@@ -243,7 +243,7 @@ if (!isMainThread) {
     `C-02: the veteran's losses over the recruit's at the break, median ${c02ratio.toFixed(2)}; G-06: level 6 stands ${g06.toFixed(2)} times as long as level 2`,
   )
   const at = (range: number) => out.filter(o => o.range === range && o.kind === 'fight').map(o => o.r)
-  const r100 = at(100)
+  const r100 = at(40)
   const w100 = r100.filter(r => r.first === 1)
   const med =
     q(
@@ -270,14 +270,14 @@ if (!isMainThread) {
       'G-06: level 6 stands 2–3 times the fire of level 2 (median time to break; each breaks in at least 90%)',
       g06 >= 2 && g06 <= 3 && ['G-06 level 6', 'G-06 level 2'].every(n => broke(n).length >= 0.9 * lv(n).length),
     ],
-    ['100 m: median time to break 6–10 min', med >= 6 && med <= 10],
-    ['100 m: weaker losses at break 12–25% (median)', lmed >= 12 && lmed <= 25],
-    ['100 m: stronger breaks first in at most 15%', r100.filter(r => r.first === 0).length <= 0.15 * r100.length],
-    ['200 m: no break in 20 min in at least 95%', at(200).filter(r => r.first < 0).length >= 0.95 * at(200).length],
+    ['40 m: median time to break 6–10 min', med >= 6 && med <= 10],
+    ['40 m: weaker losses at break 12–25% (median)', lmed >= 12 && lmed <= 25],
+    ['40 m: stronger breaks first in at most 15%', r100.filter(r => r.first === 0).length <= 0.15 * r100.length],
+    ['80 m: no break in 20 min in at least 95%', at(80).filter(r => r.first < 0).length >= 0.95 * at(80).length],
     [
-      '50 m: median time to break under 5 min',
+      '20 m: median time to break under 5 min',
       q(
-        at(50)
+        at(20)
           .filter(r => r.first >= 0)
           .map(r => r.tick),
         0.5,

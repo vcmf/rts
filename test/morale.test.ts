@@ -43,6 +43,7 @@ import {
   type Dropped,
 } from '../src/sim/index.ts'
 import { levelled, brigade } from '../src/scenarios/s1c-firefight.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 
 const E = Math.PI / 2
 const lev = levelled(data)
@@ -384,10 +385,20 @@ describe('a wavering battalion keeps fighting (decision 0087)', () => {
 describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
   const PI = Math.PI
   const D = napoleonic.morale.drain
-  // a battalion spawned on the open field with the shipped ruleset (a line of 400 holding its fire unless told)
+  // a unit spawned on the open field with the shipped ruleset (a line of 240 holding its fire unless told)
   const put = (s: Sim, side: number, x: number, z: number, heading: number, extra: Partial<Command> = {}): number => {
     const slot = s.w.free[s.w.meta[M_FREE] - 1]
-    s.cmd({ type: 'debug-spawn', side, x, z, heading, shape: 'line', men: 400, fire: 'hold', ...extra } as Command)
+    s.cmd({
+      type: 'debug-spawn',
+      side,
+      x,
+      z,
+      heading,
+      shape: 'line',
+      men: FULL.infantry,
+      fire: 'hold',
+      ...extra,
+    } as Command)
     s.tick()
     expect(s.w.f.alive[slot]).toBe(1)
     return slot
@@ -402,8 +413,8 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
   }
   // a line at the origin facing north (+z), side 0
   const line = (s: Sim, extra: Partial<Command> = {}) => put(s, 0, 0, 0, 0, extra)
-  const cav = { unit: 'cavalry', men: 256 } as Partial<Command>
-  const guns = (shape: string) => ({ unit: 'battery', men: 96, shape }) as Partial<Command>
+  const cav = { unit: 'cavalry', men: FULL.cavalry } as Partial<Command>
+  const guns = (shape: string) => ({ unit: 'battery', men: FULL.battery, shape }) as Partial<Command>
 
   it('P-22: a steady line with an enemy on its flank stands at 71 points, still steady; one behind it, 43: shaken', () => {
     const settle = (x: number, z: number, heading: number) => {
@@ -413,10 +424,10 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
       s.advance(120)
       return [effectiveBar(s.w, j, 0), MORALE_STATES[s.w.f.mstate[j]]]
     }
-    const [mf, sf] = settle(150, 0, -PI / 2)
+    const [mf, sf] = settle(60, 0, -PI / 2)
     expect(mf).toBeCloseTo(100 - D.flank, 9)
     expect(sf).toBe('steady')
-    const [mr, sr] = settle(0, -120, 0)
+    const [mr, sr] = settle(0, -48, 0)
     expect(mr).toBeCloseTo(100 - D.rear, 9)
     expect(sr).toBe('shaken')
   })
@@ -425,7 +436,7 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
     for (const b of [34, 14]) {
       const s = field()
       const j = line(s)
-      put(s, 1, 0, -120, 0)
+      put(s, 1, 0, -48, 0)
       s.w.f.bar[j] = b
       s.advance(1)
       expect(s.w.f.drain[j]).toBe(D.rear)
@@ -437,13 +448,13 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
   it('P-21: two threats on one flank drain no more than the worse of them', () => {
     const one = drainOf(s => {
       const j = line(s)
-      put(s, 1, 150, 0, -PI / 2)
+      put(s, 1, 60, 0, -PI / 2)
       return j
     })
     const two = drainOf(s => {
       const j = line(s)
-      put(s, 1, 150, 0, -PI / 2)
-      put(s, 1, 250, 0, -PI / 2)
+      put(s, 1, 60, 0, -PI / 2)
+      put(s, 1, 90, 0, -PI / 2)
       return j
     })
     expect(one).toBe(D.flank)
@@ -453,22 +464,22 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
     expect(
       drainOf(s => {
         const j = line(s)
-        put(s, 1, 0, 120, PI)
+        put(s, 1, 0, 48, PI)
         return j
       }),
     ).toBe(0)
     expect(
       drainOf(s => {
         const j = line(s, { shape: 'square' })
-        put(s, 1, 0, -120, 0)
-        put(s, 1, 150, 0, -PI / 2)
+        put(s, 1, 0, -48, 0)
+        put(s, 1, 60, 0, -PI / 2)
         return j
       }),
     ).toBe(0)
   })
   it("P-25: a march across an enemy line's front within its range drains; screened by friends, out of range, or with the enemy facing away, nothing", () => {
-    // side 0's column of route marches east 150 m north of side 1's line, which faces it
-    const march = (extra: (s: Sim) => void = () => {}, z = 150, heading = PI) =>
+    // side 0's column of route marches east 60 m north of side 1's line, which faces it
+    const march = (extra: (s: Sim) => void = () => {}, z = 60, heading = PI) =>
       drainOf(s => {
         const j = put(s, 0, 0, z, PI / 2, { shape: 'march' })
         put(s, 1, 0, 0, heading === PI ? 0 : heading)
@@ -477,11 +488,11 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
       })
     expect(march()).toBeGreaterThan(0.9 * D.flank)
     // a friendly line between them blocks every ray
-    expect(march(s => put(s, 0, 0, 75, PI))).toBe(0)
+    expect(march(s => put(s, 0, 0, 30, PI))).toBe(0)
     // beyond the enemy's range (and 300 m)
     expect(march(() => {}, 360)).toBe(0)
     // the enemy faces away
-    expect(march(() => {}, 150, 0.0001 + PI)).toBe(0)
+    expect(march(() => {}, 60, 0.0001 + PI)).toBe(0)
   })
   it('P-25: behind a crest, nothing; on level ground, the same enemy on its flank drains', () => {
     // the rise at x ≈ −13 hides lines 150 m apart (fire's test of sight): a 100-man line at x = 25 facing north, its
@@ -504,9 +515,9 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
   it("P-25: musketry with one ray of three clear of the target's friends still drains", () => {
     const s = field()
     const j = line(s)
-    const e = put(s, 1, 150, 0, -PI / 2)
+    const e = put(s, 1, 60, 0, -PI / 2)
     // a small friend between them, across two of the three rays from the enemy's company nearest the target
-    put(s, 0, 120, -8, PI, { men: 60 })
+    put(s, 0, 48, -3, PI, { men: 60 })
     s.tick()
     const G = blockGeometry(s.w)
     const CS = s.w.cr.maxC

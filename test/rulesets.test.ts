@@ -59,7 +59,7 @@ describe('compileRuleset refuses', () => {
           line: { ...inf.formations.line, place: g => inf.formations.line.place(g).slice(1) },
         },
       }),
-      /5 placements for 6 companies/,
+      /3 placements for 4 companies/,
     ],
     [
       'a charge from a shape it does not have',
@@ -78,7 +78,7 @@ describe('compileRuleset refuses', () => {
     ],
     [
       'a charge that gallops before its test',
-      withType('cavalry', { ...cav, charge: { ...cav.charge!, gallopAt: 40 } }),
+      withType('cavalry', { ...cav, charge: { ...cav.charge!, gallopAt: 20 } }),
       /gallopAt ≥ test > melee.contact/,
     ],
     ['a charge with no build-up', withType('cavalry', { ...cav, charge: { ...cav.charge!, build: 0 } }), /build > 0/],
@@ -91,7 +91,7 @@ describe('compileRuleset refuses', () => {
     ],
     [
       'canister that reaches as far as the ball',
-      withType('battery', { ...bat, artillery: { ...bat.artillery!, cone: { ...bat.artillery!.cone, range: 800 } } }),
+      withType('battery', { ...bat, artillery: { ...bat.artillery!, cone: { ...bat.artillery!.cone, range: 1000 } } }),
       /cone.range < ray.range/,
     ],
     [

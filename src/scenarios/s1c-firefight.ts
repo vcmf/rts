@@ -1,4 +1,4 @@
-// The S1c scenarios (docs/plans/active/s1c-fire-morale.md): two lines of 400 exchange fire across open ground
+// The S1c scenarios (docs/plans/active/s1c-fire-morale.md): two lines of 240 exchange fire across open ground
 // on the formation field (centred at x −120, z 120, in the north-west, west of the wood; S1c-4 moved them
 // there from the southern strip, too narrow for a 93 m line), the second of lower quality. Each side's
 // rear is set, so a router runs away from the fight. `firefight` makes one at any range; `runFirefight` runs
@@ -7,10 +7,11 @@
 // fire model's numbers are tuned apart from what the ground does to them.
 import type { World, Scenario, SimData, Compiled } from '../sim/index.ts'
 import { issue, makeWorld, advanceTick, menOf, outOfFight } from '../sim/index.ts'
+import { FULL } from './sizes.ts'
 
 export const FIGHT_Z = 120
 export const FIGHT_X = -120
-export const MEN = 400
+export const MEN = FULL.infantry
 // the two lines' bars (docs/proposals/morale-bar-model.md § 8): the old qualities 0.8 and 0.65 on the bar's scale,
 // 100 × (q − 0.4) / 0.35, so only morale separates them (C-01)
 export const STRONG = 114
@@ -21,7 +22,7 @@ const E = 1.5707963267948966
 // variant it was not recorded on (replay.ts checks the name)
 function scenarioName(base: string, range: number, qa: number, qb: number): string {
   const q = qa === STRONG && qb === WEAK ? '' : `-b${qa}-${qb}`
-  return range === 100 && !q ? base : `${base}-${range}${q}`
+  return range === ANCHOR && !q ? base : `${base}-${range}${q}`
 }
 // each side's rear: side 0 runs west, side 1 east
 function setSides(w: World): void {
@@ -57,7 +58,10 @@ export function firefight(range: number, qa = STRONG, qb = WEAK): Scenario {
     },
   }
 }
-export const s1cFirefight = firefight(100)
+// the C-01 anchor at the division scale: 40 m, the share of musket range S1c's 100 m was of 250
+// (docs/proposals/division-scale.md § 7)
+export const ANCHOR = 40
+export const s1cFirefight = firefight(ANCHOR)
 
 // the same field with its heightfield levelled to 0 (classes and water kept): not a replayable data set
 export const levelled = (d: SimData): SimData => ({
@@ -116,13 +120,13 @@ export function runFirefight(
   }
 }
 
-// three lines a side, BRIGADE_GAP apart centre to centre (a 93 m line and a 20 m interval;
-// docs/plans/active/s1c2-morale-machine.md): the inner lines have both flanks secured, the outer ones one; a
-// break shocks its neighbours. Three lines need 319 m: the field's western band (x −175..−75, z −170..150)
-// holds them, west of the wood, and the lines see each other across it
+// three lines a side, BRIGADE_GAP apart centre to centre (a 54 m line and an 11 m interval, S1c-2's 113 m by the
+// unit's width, docs/proposals/division-scale.md § 5): the inner lines have both flanks secured, the outer ones one;
+// a break shocks its neighbours. The field's western band (x −175..−75, z −170..150) holds them, west of the wood,
+// and the lines see each other across it
 export const BRIGADE_X = -125
 export const BRIGADE_Z = -10
-export const BRIGADE_GAP = 113
+export const BRIGADE_GAP = 65
 export function brigade(range: number, qa = STRONG, qb = WEAK): Scenario {
   return {
     name: scenarioName('s1c-brigade', range, qa, qb),
@@ -148,7 +152,7 @@ export function brigade(range: number, qa = STRONG, qb = WEAK): Scenario {
     },
   }
 }
-export const s1cBrigade = brigade(100)
+export const s1cBrigade = brigade(ANCHOR)
 
 // first: the side whose battalion broke first (−1: none; 2: both in the same tick); tick: when; then,
 // `window` ticks after it, how many of each side are out of the fight and the tick of the last break. Every

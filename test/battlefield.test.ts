@@ -20,6 +20,7 @@ import {
   MS_ROUTING,
   MS_SHATTERED,
 } from '../src/sim/index.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 
 const cr = compileRuleset(napoleonic)
 const T = buildTerrain(battleData, cr)
@@ -56,25 +57,25 @@ describe('the map', () => {
 describe('the edge (#37)', () => {
   it("a line, a regiment's line and a battery marching at the edge halt with every place on the map", () => {
     for (const [unit, shape, men] of [
-      ['infantry', 'line', 400],
-      ['cavalry', 'line', 256],
-      ['battery', 'unlimbered', 96],
+      ['infantry', 'line', FULL.infantry],
+      ['cavalry', 'line', FULL.cavalry],
+      ['battery', 'unlimbered', FULL.battery],
     ] as const) {
       // facing north-east into the corner: its anchor's goal is on the map, its
       // south-eastern flank would cross the edge
       const s = sim()
       const h = s.spawn(420, 420, Math.PI / 4, shape, men, 0, unit)
       s.order({ type: 'move', id: h, points: [[598, 598]], append: false })
-      // a battery's pieces go by hand, 0.3 m/s
-      s.until(() => s.busy(h), 900)
+      // a battery's pieces go by hand, 0.3 m/s: about 250 m to the edge
+      s.until(() => s.busy(h), 1500)
       expect(s.status(h)).toBe('halted: impassable ground')
       expect(s.places(h).every(([x, z]) => Math.abs(x) <= 600 && Math.abs(z) <= 600)).toBe(true)
     }
   })
   it('a change of shape that would put places off the map is refused', () => {
     const s = sim()
-    // a column of route reaches about 96 m back: off the map
-    const h = s.spawn(0, -590, 0, 'line', 400)
+    // a column of route reaches about 48 m back: off the map
+    const h = s.spawn(0, -590, 0, 'line', FULL.infantry)
     s.order({ type: 'form', id: h, shape: 'march' })
     expect(s.status(h)).toBe('cannot form: impassable ground')
     expect(s.shape(h)).toBe('line')
@@ -84,14 +85,14 @@ describe('the edge (#37)', () => {
 describe('leaving the field', () => {
   it('a shattered battalion that reaches the edge is removed and its men counted to its side; a router there stays', () => {
     const s = sim()
-    const gone = s.spawn(-200, -500, 0, 'line', 400)
-    const stays = s.spawn(200, -500, 0, 'line', 400)
+    const gone = s.spawn(-200, -500, 0, 'line', FULL.infantry)
+    const stays = s.spawn(200, -500, 0, 'line', FULL.infantry)
     s.order({ type: 'side', side: 0, x: 0, z: -1 })
-    s.order({ type: 'debug-kill', id: gone, men: 220 }) // under half its strength: it shatters when it breaks
+    s.order({ type: 'debug-kill', id: gone, men: 130 }) // under half its strength: it shatters when it breaks
     for (const h of [gone, stays]) s.order({ type: 'debug-morale', id: h, bar: -100 })
     s.until(() => s.slot(gone) >= 0, 180)
     expect(formationSlot(s.w, gone)).toBe(-1)
-    expect(s.w.sides.left[0]).toBe(180)
+    expect(s.w.sides.left[0]).toBe(FULL.infantry - 130)
     expect(s.slot(stays)).toBeGreaterThanOrEqual(0)
     expect(s.w.f.mstate[s.slot(stays)]).toBe(MS_ROUTING)
   })
@@ -129,7 +130,7 @@ describe('the S1e scenario', () => {
 describe('along the edge', () => {
   it('a column of route turning along the edge into a corner keeps every place on the map', () => {
     const s = sim()
-    const h = s.spawn(560, 300, 0, 'march', 400)
+    const h = s.spawn(560, 300, 0, 'march', FULL.infantry)
     let off = 0
     s.order({
       type: 'move',
@@ -149,14 +150,14 @@ describe('along the edge', () => {
     expect(s.x(h)).toBeLessThan(560)
   })
   it('a shattered formation leaves when any company reaches the edge, not only its anchor', () => {
-    // a column of route facing north with its tail at the southern edge: its anchor stands about 90 m in
+    // a column of route facing north with its tail at the southern edge: its anchor stands about 48 m in
     const s = sim()
-    const h = s.spawn(0, -505, 0, 'march', 400)
+    const h = s.spawn(0, -548, 0, 'march', FULL.infantry)
     const i = s.slot(h)
     expect(Math.min(...s.places(h).map(([, z]) => z))).toBeLessThan(-590)
     s.w.f.mstate[i] = MS_SHATTERED
     s.tick()
     expect(formationSlot(s.w, h)).toBe(-1)
-    expect(s.w.sides.left[0]).toBe(400)
+    expect(s.w.sides.left[0]).toBe(FULL.infantry)
   })
 })

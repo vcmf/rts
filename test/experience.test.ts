@@ -19,6 +19,7 @@ import {
   type LevelDef,
   type Ruleset,
 } from '../src/sim/index.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 
 const PI = Math.PI
 const FIELD = openBattlefield()
@@ -34,16 +35,25 @@ const only = (k: Factor, v: number): Ruleset => {
 }
 
 type Spawn = Extract<Command, { type: 'debug-spawn' }>
-// a full formation of the unit: 400 men, a battery its slots
-const menOf = (s: Sim, unit?: string): number =>
-  unit === 'battery' ? s.w.cr.types.find(t => t.def.artillery)!.slots : 400
+// a full formation of the unit (src/scenarios/sizes.ts)
+const menOf = (s: Sim, unit?: string): number => FULL[(unit ?? 'infantry') as keyof typeof FULL]
 class S extends Sim {
   constructor(seed = 1, rs: Ruleset = napoleonic) {
     super(seed, rs, FIELD, OPEN_DATA)
   }
   put(c: Partial<Spawn>): number {
     const slot = this.w.free[this.w.meta[1] - 1]
-    this.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, shape: 'line', men: 400, fire: 'hold', ...c })
+    this.cmd({
+      type: 'debug-spawn',
+      side: 0,
+      x: 0,
+      z: 0,
+      heading: 0,
+      shape: 'line',
+      men: FULL.infantry,
+      fire: 'hold',
+      ...c,
+    })
     this.tick()
     return makeHandle(KIND_FORMATION, slot, this.w.f.gen[slot])
   }
@@ -83,7 +93,7 @@ describe('reload', () => {
     const s = new S()
     const art = unit === 'battery'
     const sh = s.put({ level: lv, unit, shape: art ? 'unlimbered' : 'line', men: menOf(s, unit), fire: 'at will' })
-    s.put({ side: 1, z: art ? 200 : 100, heading: PI, bar: 10000 })
+    s.put({ side: 1, z: art ? 200 : 40, heading: PI, bar: 10000 })
     const i = s.slot(sh)
     const CS = s.w.cr.maxC
     const C = s.w.cr.types[s.w.f.type[i]].C
@@ -124,9 +134,9 @@ const losses = (rs: Ruleset, shooter: number, target: number, unit?: string): nu
     const s = new S(seed, rs)
     const art = unit === 'battery'
     s.put({ level: shooter, unit, shape: art ? 'unlimbered' : 'line', men: menOf(s, unit), fire: 'at will' })
-    const t = s.put({ level: target, side: 1, z: art ? 150 : 50, heading: PI, bar: 10000 })
+    const t = s.put({ level: target, side: 1, z: art ? 150 : 20, heading: PI, bar: 10000 })
     s.advance(sec)
-    sum += 400 - s.men(t)
+    sum += FULL.infantry - s.men(t)
   }
   return sum
 }
@@ -139,7 +149,7 @@ describe('precision and toughness', () => {
       `${what}: hits × the shooter’s precision; men owed ÷ the target’s toughness`,
       () => {
         const base = losses(napoleonic, 2, 2, unit)
-        expect(base).toBeGreaterThan(200)
+        expect(base).toBeGreaterThan(100)
         for (const v of [0.85, 1.25]) expect(losses(only('precision', v), 6, 2, unit) / base).toBeCloseTo(v, 1)
         for (const v of [0.9, 1.4]) expect(losses(only('toughness', v), 2, 6, unit) / base).toBeCloseTo(1 / v, 1)
       },
@@ -153,7 +163,7 @@ describe('react', () => {
     for (const lv of [1, 2, 4]) {
       const s = new S()
       const ln = s.put({ level: lv, side: 1, z: 100, heading: PI })
-      const cav = s.put({ unit: 'cavalry', z: -170, men: 256 })
+      const cav = s.put({ unit: 'cavalry', z: -170, men: FULL.cavalry })
       s.order({ type: 'charge', id: cav, target: ln })
       s.until(() => !s.w.f.alertAt[s.slot(ln)], 60)
       const t0 = s.t
@@ -171,7 +181,7 @@ describe('pursue', () => {
         melee: { ...napoleonic.melee, refuge: { ...napoleonic.melee.refuge, alert: 0 } },
       })
       const foe = s.put({ side: 1, z: 60, heading: PI, bar: 20 })
-      const cav = s.put({ level: lv, unit: 'cavalry', z: -100, men: 256, bar: 10000 })
+      const cav = s.put({ level: lv, unit: 'cavalry', z: -100, men: FULL.cavalry, bar: 10000 })
       s.order({ type: 'charge', id: cav, target: foe })
       s.until(() => s.w.f.chPhase[s.slot(cav)] !== CH_PURSUIT, 120)
       expect(outOfFight(s.w.f.mstate[s.slot(foe)])).toBe(true)
@@ -186,16 +196,16 @@ describe('P-38: points', () => {
   it('a line firing on a target of level 2 is credited points.man for each man it strikes', () => {
     const s = new S()
     const a = s.put({ fire: 'at will' })
-    const t = s.put({ side: 1, z: 50, heading: PI, bar: 10000 })
+    const t = s.put({ side: 1, z: 20, heading: PI, bar: 10000 })
     s.advance(60)
-    const struck = 400 - s.men(t)
-    expect(struck).toBeGreaterThan(20)
+    const struck = FULL.infantry - s.men(t)
+    expect(struck).toBeGreaterThan(5)
     expect(s.w.f.pts[s.slot(a)] - L[1].points).toBeCloseTo(struck * P.man, 6)
   })
   it('a line losing men is credited points.fire a second while it lost one in the last points.window seconds', () => {
     const s = new S()
-    s.put({ fire: 'at will', z: -30 })
-    const t = s.put({ side: 1, z: 50, heading: PI, bar: 10000 })
+    s.put({ fire: 'at will', z: -12 })
+    const t = s.put({ side: 1, z: 20, heading: PI, bar: 10000 })
     const i = s.slot(t)
     let want = L[1].points
     for (let n = 0; n < 60 * 20; n++) {
@@ -209,7 +219,7 @@ describe('P-38: points', () => {
   it('a square is credited points.repulse for each charge it turns away', () => {
     const s = new S()
     const sq = s.put({ side: 1, z: 100, heading: PI, shape: 'square' })
-    const cav = s.put({ unit: 'cavalry', z: -150, men: 256 })
+    const cav = s.put({ unit: 'cavalry', z: -150, men: FULL.cavalry })
     s.order({ type: 'charge', id: cav, target: sq })
     s.until(() => s.w.f.chPhase[s.slot(cav)] !== 0, 120)
     expect(s.w.f.blownUntil[s.slot(cav)]).toBeGreaterThan(s.w.meta[M_TICK])
@@ -217,12 +227,12 @@ describe('P-38: points', () => {
   })
   it('an enemy broken in front, in range, credits points.broke; not one on the flank, out of range, or to a router', () => {
     const s = new S()
-    const e = s.put({ side: 1, z: 100, heading: PI, bar: 10000 })
-    const front = s.put({}) // 100 m in front of it
-    const flank = s.put({ x: 200, z: 100, heading: -PI / 2 }) // on its flank, facing it: it is in this one's front
-    const side = s.put({ x: 120, z: 100, heading: 0 }) // beside it, facing the same way: it on the flank
-    const far = s.put({ z: 100 - napoleonic.fire.maxRange - 50 })
-    const run = s.put({ x: -300, z: 100, heading: PI / 2 })
+    const e = s.put({ side: 1, z: 40, heading: PI, bar: 10000 })
+    const front = s.put({}) // 40 m in front of it
+    const flank = s.put({ x: 80, z: 40, heading: -PI / 2 }) // on its flank, facing it: it is in this one's front
+    const side = s.put({ x: 65, z: 40, heading: 0 }) // beside it, facing the same way: it on the flank
+    const far = s.put({ z: 40 - napoleonic.fire.maxRange - 50 })
+    const run = s.put({ x: -120, z: 40, heading: PI / 2 })
     s.w.f.mstate[s.slot(run)] = MS_ROUTING
     s.w.f.bar[s.slot(e)] = -100
     s.tick()
@@ -307,8 +317,8 @@ describe('roundshot', () => {
       const fr = s.put({ x: 110, z: 600, bar: 10000 })
       const en = s.put({ side: 1, z: 600, heading: PI, bar: 10000 })
       s.advance(120)
-      friends += 400 - s.men(fr)
-      foes += 400 - s.men(en)
+      friends += FULL.infantry - s.men(fr)
+      foes += FULL.infantry - s.men(en)
       credited += s.w.f.pts[s.slot(b)] - L[1].points
     }
     expect(friends).toBeGreaterThan(0)

@@ -14,7 +14,6 @@ import {
   RP_HALTED,
   menOf,
   M_TICK,
-  TICK_HZ,
   type Compiled,
   type World,
 } from '../src/sim/index.ts'
@@ -126,32 +125,40 @@ describe('with claims: a melee holds', () => {
     expect(w.f.z[0]).toBeGreaterThan(80)
   })
   it('X-17: a router with an enemy just behind it, held on every way out, is cut down where it stands', () => {
-    let pinned = -1
+    // at the division scale (80 horses) it is cut down before it has tried every way out (the next case slows that)
+    let broke = -1
     let menThen = 0
     const w = play(caseOf('x17-enemy-behind-claims'), {
       every: 1,
       each: w => {
-        if (pinned >= 0 || !w.f.alive[0] || !noWay(w)) return
-        pinned = w.meta[M_TICK]
+        if (broke >= 0 || !w.f.alive[0] || w.f.mstate[0] < MS_ROUTING) return
+        broke = w.meta[M_TICK]
         menThen = menOf(w, 0)
       },
     })
-    // held 2 s, then the fan's four other directions, one every 5 s
-    expect(pinned / TICK_HZ).toBeGreaterThan(29.4 + 20)
+    expect(broke).toBeGreaterThan(0)
     expect(menThen).toBeGreaterThan(0)
     // no one leaves the field: it is cut down where it stands
     expect(w.sides.left[1]).toBe(0)
     expect(w.f.alive[0] ? menOf(w, 0) : 0).toBeLessThan(menThen / 2)
   })
   it('X-17: a router held on every way out runs once its way clears', () => {
-    // the regiment just behind it is gone (its men struck off, reaped that tick) once every way has been tried
+    // the regiment just behind it is gone (its men struck off, reaped that tick) once every way has been tried. At
+    // the division scale (80 horses) it is broken at the melee's start and cut down at a tenth of the rate, so it
+    // lives to try every way out (held 2 s, then the fan's four other directions, one every 5 s)
     let at = -1
     let far = 0
+    let broken = false
     play(caseOf('x17-enemy-behind-claims'), {
+      rules: compileRuleset({ ...napoleonic, melee: { ...napoleonic.melee, rate: napoleonic.melee.rate / 10 } }),
       seconds: 120,
       every: 1,
       each: w => {
         if (!w.f.alive[0]) return
+        if (!broken && w.f.foe[0]) {
+          w.f.bar[0] = -100
+          broken = true
+        }
         if (at >= 0) far = Math.max(far, w.f.z[0])
         if (at >= 0 || !noWay(w)) return
         at = w.meta[M_TICK]

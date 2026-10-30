@@ -65,7 +65,7 @@ rotation.
 
 **Target:**
 - the preferred battalion, else the current one, else the enemy whose nearest *visible* company in the arc
-  (`fire.arc`) and range (`fire.maxRange`, centre to centre) is nearest. Candidates are taken by their
+  (`fire.arc`) and range (`fire.maxRange`, centre to centre: 100 m at the division scale, the owner's) is nearest. Candidates are taken by their
   nearest company in arc, a bound that stops the search once it passes the best found;
 - the sight line: the heightfield stays below it (eyes at `fire.eye`, sampled every 2 m), and it crosses
   no more of a class than `fire.sight` allows (woods 40 m, dense wood 15 m);
@@ -281,8 +281,8 @@ written off. The level never falls.
 - **`tools/calibrate-fire.ts`:** 100 seeds at 50, 100 and 200 m on levelled ground, checked against the
   plan's targets; a 3v3 brigade's contagion (reported); the levels' cases (C-02 level 3 against level 1, H-04
   level 5 against two of level 2, G-06 how long level 6 and level 2 stand one-sided fire), checked against
-  morale-bar-model § 13. Lines of 400 (S1c-4): the 100 m median is 9.1 min on the bar (8.5 before U2), at 20%
-  losses.
+  morale-bar-model § 13. At the division scale (lines of 240, `docs/proposals/division-scale.md`) the cases stand at
+  20, 40 and 80 m (S1c's 50, 100 and 200 × 0.4): the 40 m median is 9.2 min, at 20% losses.
 - **`npm run check:app`:** plays the firefight on the page to a rout, and the brigade until a break
   spreads, and replays both in Node.
 

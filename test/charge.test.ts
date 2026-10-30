@@ -33,6 +33,7 @@ import {
   KIND_FORMATION,
   type Ruleset,
 } from '../src/sim/index.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 
 const PI = Math.PI
 const crN = compileRuleset(napoleonic)
@@ -64,10 +65,10 @@ class S extends Sim {
     return makeHandle(KIND_FORMATION, slot, this.w.f.gen[slot])
   }
   inf(x: number, z: number, heading: number, side = 1, shape = 'line', quality?: number): number {
-    return this.put({ side, x, z, heading, shape, men: 400 }, quality)
+    return this.put({ side, x, z, heading, shape, men: FULL.infantry }, quality)
   }
   cav(x: number, z: number, heading: number, side = 0, shape = 'line', quality?: number): number {
-    return this.put({ side, unit: 'cavalry', x, z, heading, shape, men: 256 }, quality)
+    return this.put({ side, unit: 'cavalry', x, z, heading, shape, men: FULL.cavalry }, quality)
   }
   // the reasons the command was dropped, applied now
   why(c: Parameters<Sim['cmd']>[0]): string[] {
@@ -146,8 +147,8 @@ describe('the charge', () => {
     const k = u.inf(0, 40, PI - 0.5, 1)
     const ga = gapBetween(u.w, u.slot(e), u.slot(k))
     expect(ga).toBeGreaterThan(0)
-    // its near end swings 22 m closer
-    expect(ga).toBeLessThan(40 - 20)
+    // its near end swings 13 m closer (a 54 m line turned 0.5 rad)
+    expect(ga).toBeLessThan(40 - 10)
   })
   it('the side struck, as weights (front, flank, rear); a battalion changing shape has no front', () => {
     const s = new S()
@@ -171,10 +172,11 @@ describe('the charge', () => {
       expect(gapBetween(s.w, s.slot(a), s.slot(t))).toBeCloseTo(1, 2)
       return sideStruck(s.w, s.slot(a), s.slot(t))[0]
     }
+    // two squadrons of 20 m: offset 10 m, the eastern one reaches half past the target's end; offset 25 m, it is wholly
+    // past it and reads flank, the western one front
     expect(front(0)).toBe(1)
-    expect(front(20)).toBeCloseTo(0.84, 1)
-    expect(Math.abs(front(20) - 0.84)).toBeLessThan(0.03)
-    expect(Math.abs(front(30) - 0.78)).toBeLessThan(0.03)
+    expect(Math.abs(front(10) - 0.81)).toBeLessThan(0.03)
+    expect(Math.abs(front(25) - 0.5)).toBeLessThan(0.03)
   })
   it('braced: a square 1, a line 0; partly while forming square, less as it leaves it', () => {
     const s = new S()
@@ -285,12 +287,14 @@ describe('the impact', () => {
     return { lost, cl, run: s.f(cav, 'chRun') }
   }
   it('costs the target by momentum; a standing target costs the charger nothing', () => {
-    const far = impact(150)
-    const near = impact(12)
-    // whole men, drawn: at impact.kill 0.06 the near charge's 4 are half the far one's 8
-    expect(far.lost).toBeGreaterThanOrEqual(2 * near.lost)
-    expect(far.lost).toBeGreaterThan(5)
-    expect([far.cl, near.cl]).toEqual([0, 0])
+    // whole men, drawn, summed over seeds: 80 horses put about 40 in contact, so one impact costs a few men
+    const seeds = [1, 2, 3, 4, 5, 6, 7, 8]
+    const far = seeds.map(k => impact(150, k))
+    const near = seeds.map(k => impact(12, k))
+    const sum = (a: { lost: number }[]) => a.reduce((t, r) => t + r.lost, 0)
+    expect(sum(far)).toBeGreaterThanOrEqual(2 * sum(near))
+    expect(sum(far)).toBeGreaterThan(5)
+    expect([...far, ...near].every(r => r.cl === 0)).toBe(true)
   })
   it('a wavering square may be broken into; a steady one is not', () => {
     const rs = withMelee({ refuse: 0, breach: 1 })

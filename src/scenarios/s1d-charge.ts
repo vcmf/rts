@@ -1,5 +1,5 @@
-// The S1d-2 scenarios (docs/plans/active/s1d2-charges.md): a cavalry regiment of 256 charges a battalion of 400,
-// or another regiment. `chargeFight` sets up one case on an open, level field (the calibration paints one, so the
+// The S1d-2 scenarios (docs/plans/active/s1d2-charges.md): a light cavalry unit of 80 charges a line infantry unit of
+// 240, or another regiment. `chargeFight` sets up one case on an open, level field (the calibration paints one, so the
 // stream and the wood do not decide it: tools/calibrate-charge.ts, the tests) and `runCharge` runs it; `s1dCharge`
 // is the page's: a regiment against a battalion in line and one in square on the formation field.
 import type { World, Scenario, SimData, Compiled, Terrain } from '../sim/index.ts'
@@ -14,9 +14,10 @@ import {
   CH_NONE,
   PI,
 } from '../sim/index.ts'
+import { FULL } from './sizes.ts'
 
-export const CAV = 256
-export const INF = 400
+export const CAV = FULL.cavalry
+export const INF = FULL.infantry
 // the cases: a battalion in square, in line or in column charged from the front from about 270 m; a line
 // charged in the flank from about 150 m; two regiments charging each other from about 340 m
 export const CASES = ['square', 'line', 'column', 'flank', 'cavalry'] as const

@@ -1,20 +1,20 @@
-// The 400-man battalion and the ceiling (decision 0018, docs/plans/active/s1c4-battalion-scale.md): the
-// shipped block (6 companies of 23 files × 3 ranks) and the ceiling (45 files, 810 men) drill, gate and
-// re-pack like the small block the terrain tests use, past the old 32-bit masks (48 and 90 bins, 69 and 135
-// slots a company).
+// The shipped block and the ceiling (decision 0076, docs/proposals/division-scale.md; first decision 0018): the
+// shipped block (4 sections of 20 files × 3 ranks, 240 figures) and the ceiling (45 files, 540) drill, gate and
+// re-pack like the small block the terrain tests use, past the old 32-bit masks (60 slots a section, 135 for the
+// ceiling).
 import { describe, it, expect } from 'vitest'
 import { Sim, ceiling, STREAM_X, openBattlefield, OPEN_DATA } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { removeMan, anyWet, wetBins, aimOf, type Ruleset, withBlock } from '../src/sim/index.ts'
 import { mkBits, hasBit } from '../src/sim/bits.ts'
 
-const SHIPPED = { rs: napoleonic, men: 400 }
-const CEILING = { rs: ceiling, men: 810 }
+const SHIPPED = { rs: napoleonic, men: 240 }
+const CEILING = { rs: ceiling, men: 540 }
 const both = [
-  ['400', SHIPPED],
-  ['810', CEILING],
+  ['240', SHIPPED],
+  ['540', CEILING],
 ] as const
-// the battlefield, levelled and open: room for every shape of a battalion of 810 (the 360 m field's edge holds them)
+// the battlefield, levelled and open: room for every shape of a unit of 540 (the 360 m field's edge holds them)
 const roomy = (rs: Ruleset): Sim => new Sim(1, rs, openBattlefield(rs), OPEN_DATA)
 const companies = (n: number): Ruleset =>
   withBlock({ ...napoleonic, name: `${n} companies` }, 'infantry', { companies: n })
@@ -43,10 +43,10 @@ describe('the blocks', () => {
     }
     console.log('closest places', worst)
   })
-  it('the shipped block holds 414 men and the ceiling 810; one more is refused', () => {
+  it('the shipped block holds 240 figures and the ceiling 540; one more is refused', () => {
     for (const [rs, n] of [
-      [napoleonic, 414],
-      [ceiling, 810],
+      [napoleonic, 240],
+      [ceiling, 540],
     ] as const) {
       const s = new Sim(1, rs)
       s.spawn(-60, -60, 0, 'line', n)
@@ -137,37 +137,38 @@ describe.each(both)('battalions of %s', (_, { rs, men }) => {
 })
 
 describe('bins past 32', () => {
-  it("a line with only its eastern company over the stream reports that company's bins, all past bit 32", () => {
-    const s = new Sim(1, napoleonic)
+  it("a line with only its eastern section over the stream reports that section's bins, all past bit 32", () => {
+    // the ceiling's line (4 sections of 15 bins): its eastern section's bins are 45..59
+    const s = new Sim(1, ceiling)
     const z = 40
-    const h = s.spawn(STREAM_X(z) - 52, z, 0, 'line', 400)
+    const h = s.spawn(STREAM_X(z) - 70, z, 0, 'line', 540)
     const i = s.slot(h)
     const B = s.w.cr.types[0].geo.bins
     expect(anyWet(s.w, i)).toBe(false)
-    s.w.f.x[i] += 10 // the eastern company's files over the water (a probe: no tick runs)
+    s.w.f.x[i] += 14 // the eastern section's files over the water (a probe: no tick runs)
     const wet = wetBins(s.w, i, mkBits(s.w.cr.maxNB))
     const set: number[] = []
     for (let j = 0; j < s.w.cr.maxNB; j++) if (hasBit(wet, j)) set.push(j)
     expect(set.length).toBeGreaterThan(0)
-    expect(Math.min(...set)).toBeGreaterThanOrEqual(4 * B) // companies 4 and 5: bins 32..47
+    expect(Math.min(...set)).toBeGreaterThanOrEqual(3 * B) // section 3: bins 45..59
   })
 })
 
-describe('friendly cover at 400', () => {
-  // a 400-man line reaches 46 m from its anchor: a sight line more than 40 m from a friend's anchor can still
-  // cross its outer company, so the cover cull must use each battalion's extent (fire.ts, FireGeo.reach; the
-  // fix had no failing test while battalions reached under 40 m)
-  it('a friend 45 m off the axis covers the company behind its outer company (a third of its rays clear, two thirds with a 40 m cull)', () => {
-    const s = new Sim(1, napoleonic)
+describe('friendly cover at the ceiling', () => {
+  // the ceiling's line reaches about 60 m from its anchor: a sight line more than 40 m from a friend's anchor can
+  // still cross its outer section, so the cover cull must use each unit's extent (fire.ts, FireGeo.reach; the
+  // shipped line of 240 reaches 27 m, under any such cull)
+  it('a friend 60 m off the axis covers the section behind its outer section', () => {
+    const s = new Sim(1, ceiling)
     const E = Math.PI / 2
     const z = 0
-    const a = s.spawn(-120, z, E, 'line', 400, 0)
-    s.spawn(-20, z, -E, 'line', 400, 1)
-    s.spawn(-100, z + 45, E, 'line', 400, 0)
+    const a = s.spawn(-120, z, E, 'line', 540, 0)
+    s.spawn(-40, z, -E, 'line', 540, 1)
+    s.spawn(-100, z + 60, E, 'line', 540, 0)
     s.advance(40)
     const i = s.slot(a)
     const frames = s.companyFrames(a)
-    const covered = frames.map((f, c) => c).filter(c => frames[c].z > 1 && frames[c].z < 12)
+    const covered = frames.map((f, c) => c).filter(c => frames[c].z > 1 && frames[c].z < 20)
     expect(covered.length).toBeGreaterThan(0)
     for (const c of covered) expect(aimOf(s.w, i, c).share).toBeLessThan(0.5)
   })

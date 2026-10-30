@@ -7,11 +7,12 @@
 import { type Ruleset, type UnitType, type Geometry, type Placement, rot2, withBlock } from '../sim/ruleset.ts'
 import { PI } from '../sim/num.ts'
 
-// the French battalion after 1808: six companies (four fusilier, grenadiers, voltigeurs) of 23 files × 3 ranks,
-// 414 places for a battalion of about 400 (decision 0018); a bin is about 3 files
+// a division (decision 0076: a figure stands for 25 men): 240 figures in 4 sections of 20 files × 3 ranks, about
+// 54 m wide in line; the sections are how fire, sight and losses are reckoned, not companies the player sees
+// (docs/proposals/division-scale.md § 2); a bin is 2–3 files
 const geometry: Geometry = {
-  companies: 6,
-  files: 23,
+  companies: 4,
+  files: 20,
   ranks: 3,
   fileSpacing: 0.65,
   rankSpacing: 0.85,
@@ -113,17 +114,17 @@ const infantry: UnitType = {
   refuge: 'square', // formed against cavalry (the standing behaviour, docs/systems/melee.md)
 }
 
-// a cavalry regiment of four squadrons, each 32 files × 2 ranks (256 places, about 250 troopers): a trooper's
-// frontage 1 m, a horse and the gap behind it 3 m, the squadrons 10 m apart; a bin is 4 files
+// light cavalry of a corps (decision 0076): 80 figures in 2 squadrons of 20 files × 2 ranks: a figure's frontage
+// 1 m, a horse and the gap behind it 3 m, the squadrons 10 m apart; a bin is 4 files
 const horseGeometry: Geometry = {
-  companies: 4,
-  files: 32,
+  companies: 2,
+  files: 20,
   ranks: 2,
   fileSpacing: 1.0,
   rankSpacing: 3.0,
   minSpacing: 0.8,
   accordionGap: 1.0,
-  bins: 8,
+  bins: 5,
 }
 const SQ_GAP = 10
 const cavalry: UnitType = {
@@ -191,10 +192,10 @@ const cavalry: UnitType = {
   },
 }
 
-// a foot battery of 8 pieces (6 guns, 2 howitzers), each a detachment of 4 files × 3 ranks (12 men; 96 in all)
-// as a company, the piece itself drawn ahead of it; one bin per piece
+// a corps' battery (decision 0076): 4 guns, each a detachment of 4 files × 3 ranks (12 figures; 48 in all) as a
+// section, the piece itself drawn ahead of it; one bin per piece
 const gunGeometry: Geometry = {
-  companies: 8,
+  companies: 4,
   files: 4,
   ranks: 3,
   fileSpacing: 1.0,
@@ -242,12 +243,13 @@ const battery: UnitType = {
     crew: 12,
     crewSlow: 3,
     ahead: 2,
+    min: 15, // bayonet range: inside it the gunners fight for their pieces (docs/proposals/division-scale.md § 4)
     ray: {
-      range: 800,
+      range: 1000,
       step: 2,
       muzzle: 1.0,
       speed: 430,
-      energy: 900,
+      energy: 1100,
       graze: 60,
       restitution: 0.3,
       bury: 0.25,
@@ -273,6 +275,7 @@ const battery: UnitType = {
 
 export const napoleonic: Ruleset = {
   name: 'Napoleonic',
+  menPerFigure: 25, // decision 0076: a unit is a division, a figure 25 men
   types: { infantry, cavalry, battery },
   // paces in m/s: infantry ordinary and route step; cavalry walk, trot and the charge's gallop;
   // a battery at the walk limbered, by hand unlimbered
@@ -338,14 +341,14 @@ export const napoleonic: Ruleset = {
   // break the weaker in 6–10 minutes (docs/proposals/sim-design.md §8; tools/calibrate-fire.ts)
   fire: {
     arc: 0.75,
-    maxRange: 250,
+    maxRange: 100,
     pRange: [
       [0, 0.06],
-      [50, 0.04],
-      [100, 0.019],
-      [150, 0.008],
-      [200, 0.004],
-      [250, 0],
+      [20, 0.04],
+      [40, 0.019],
+      [60, 0.008],
+      [80, 0.004],
+      [100, 0],
     ],
     reload: 25,
     reloadJitter: 0.2,
@@ -370,11 +373,11 @@ export const napoleonic: Ruleset = {
     // the rest of the machine (docs/plans/active/s1c2-morale-machine.md)
     // the reaches scale with the frontage (S1c-4): 2.8 times S1c-2's, set for 100-man lines 40 m apart in a
     // brigade, so a 400-man line 113 m from its neighbour feels the same shock and support
-    contagion: { shock: 43, front: 560, back: 280 },
+    contagion: { shock: 43, front: 325, back: 163 },
     // an enemy on its flank presses a steady line (100 → 71, still steady); one behind it makes it shaken (43)
     drain: { flank: 29, rear: 57 },
-    support: { bonus: 11, reach: 280, arc: 0.7853981633974483 },
-    rally: { safe: 250, calm: 20, time: 30, cut: 0.25, share: 0.5, max: 2 },
+    support: { bonus: 11, reach: 163, arc: 0.7853981633974483 },
+    rally: { safe: 100, calm: 20, time: 30, cut: 0.25, share: 0.5, max: 2 },
     shatter: 0.5,
     leave: 12, // S1e-1: shattered formations that reach the map's edge leave the field
   },
@@ -464,7 +467,7 @@ export const napoleonic: Ruleset = {
   // for rallied battalions far off counting as in the fight (#180)
   end: { broken: 0.65, margin: 0.05 },
 }
-// the ceiling (decision 0018): the same ruleset with companies of 45 files, 810 places (tests, cost benches)
+// the ceiling (decision 0018): the same ruleset with sections of 45 files, 540 places (tests, cost benches)
 export const ceiling: Ruleset = withBlock({ ...napoleonic, name: `${napoleonic.name}, the ceiling` }, 'infantry', {
   files: 45,
   bins: 15,

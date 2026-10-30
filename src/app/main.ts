@@ -596,7 +596,7 @@ async function main(): Promise<void> {
         const U = typeOf(w, i)
         const s = U.shapes[w.f.shape[i]].name + (w.f.trans[i] ? ' → ' + U.shapes[w.f.tShape[i]].name : '')
         lines.push(
-          `#${i} ${U.name} · ${s} · ${menOf(w, i)} men · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`,
+          `#${i} ${U.name} · ${s} · ${menOf(w, i) * w.cr.rs.menPerFigure} men (${menOf(w, i)} figures) · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`,
         )
         const fight = w.f.foe[i]
           ? ' · in melee'
@@ -612,7 +612,7 @@ async function main(): Promise<void> {
         const next = lv < L.length ? ` · ${pts} of ${L[lv].points} points` : ` · ${pts} points`
         const up = w.f.up[i] ? ' (up this battle)' : ''
         lines.push(
-          `   ${MORALE_STATES[w.f.mstate[i]]} · level ${lv} ${L[lv - 1].name}${up}${next} · bar ${effectiveBar(w, i, w.f.flanks[i]).toFixed(0)} of ${w.f.barMax[i].toFixed(0)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`,
+          `   ${MORALE_STATES[w.f.mstate[i]]} · level ${lv} ${L[lv - 1].name}${up}${next} · bar ${effectiveBar(w, i, w.f.flanks[i]).toFixed(0)} of ${w.f.barMax[i].toFixed(0)} · lost ${(w.f.startMen[i] - menOf(w, i)) * w.cr.rs.menPerFigure} men · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`,
         )
       }
     }

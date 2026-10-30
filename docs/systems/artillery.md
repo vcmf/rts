@@ -64,6 +64,8 @@ step 11 casualties   the owed men fall
 - **The muzzle** stands `ahead` metres ahead of the detachment's front rank.
 - **One type, one fire:** a type has musketry (`fires`) or artillery, not both; they share a company's reload and
   target, and the ruleset is refused otherwise.
+- **Among the guns** (the division scale, `artillery.min`, 15 m: bayonet range): with an enemy company in the fight
+  within it of a piece's muzzle, no piece fires (`overrun`).
 - **The shot:** inside `cone.range` of the company aimed at, the cone; beyond it, the ray.
 
 **The cone:**
@@ -124,8 +126,8 @@ second.
 
 ## Open questions
 
-- **The field is 360 m:** the calibration's long range is about 400 m, corner to corner, not the 800 m a
-  6-pounder reached. Longer ranges wait for the S1e map.
+- **The field is 360 m:** the calibration's long range is about 400 m, corner to corner, not the 1 km a ball reaches
+  at the division scale (`docs/proposals/division-scale.md`). Longer ranges wait for the S1e map.
 - **Sight decides more than the ball does:** on the rolling formation field a battery below a crest cannot see
   over it, and does not fire. The page scenario puts its battery on the hill. Whether batteries need an eye
   height above a man's is for S1e's playtests.
