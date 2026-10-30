@@ -54,7 +54,9 @@ Out of scope: the woods (after the campaign map's); the 3D world's buildings (G3
 1. Shadows on the buildings themselves: a wall toward the sun takes the ground's shadow a cell out from its foot over
    its whole height, and a roof none (its height is not in the mask): a tall church wall beside a low house's shadow
    goes dark to its top, a low roof in a church's shadow stays lit. A height per cell in the mask would settle both.
-2. The buildings' sky occlusion on the ground (a street between two rows of houses sees less sky): not baked at 8 m;
+2. A building's shadow past the map's edge stops there (the mask ends with the cells; M6b's decal ran on over the
+   paper).
+3. The buildings' sky occlusion on the ground (a street between two rows of houses sees less sky): not baked at 8 m;
    a darkening near walls if the owner asks.
 
 ## Review
@@ -67,5 +69,16 @@ Round 1 (`/code-review high`, 10 findings, 2 taken as severe):
   `standing` run once, in the worker, its buildings sent to the page; a compile error in the buildings' shader
   reported; the engine's stencil (the decal's) gone; stale comments; the plan's tones; `clampSun` once;
 - kept: the shadows on the buildings themselves (open question 1).
+
+Round 2 (9 findings, 2 severe):
+- fixed, severe: a cell across a shaded wall counted its footprint's samples lit, a pale line at the wall's foot (the
+  share of the open samples only; tested); another building's shadow held on a roofed footprint bled into its sunlit
+  side (every roofed footprint left out, not the caster's alone; tested);
+- fixed: the footprint's swept copy dropped (it lies within the footprint and the walls' quads); a negative `bz` cast
+  toward the sun (clamped in the bake; tested) and its default in one constant (`BUILDING_BZ`); the mask's G tested; a
+  ruin's inner faces lit as its outer ones (the normal turned toward the camera); no roof vertices for a ruin;
+- answered: the bake's cost: 10 to 18 ms on Austerlitz's 126 standing buildings, 116 ms at a 5° diagonal sun and
+  `?bz=3` (Node, the dev Mac, a load of 18), so no row scan; a shadow past the map's edge stops at it (open question
+  2); a tone a vertex in four floats (kept: the boxes are a few thousand vertices).
 
 `?bz=`: the owner's choice, 1 first (2026-10-30).

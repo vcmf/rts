@@ -41,6 +41,9 @@ export const WATER_FULL = 1.5 // m: the depth the mask stores as 1
 // m: the longest shadow a building casts (a low ?sun= or a large ?bz= would sweep it across the map, and its bake
 // with it)
 const SHADOW_REACH = 100
+// the buildings' shadows cast from their wall heights raised this many times: their true heights (the owner, G2b:
+// 1 first; ?bz= to try others)
+export const BUILDING_BZ = 1
 
 /**
  * A sun the bake and the shader can light by (the page's ?sun= and ?soft= take any number): its disc 1° to 20°
@@ -195,57 +198,81 @@ export function lightCache(
 }
 
 /**
- * The buildings' shadows on the ground (G2b, decision 0090): each standing building's footprint swept away from the sun
- * as far as its wall, `bz` times its height (the owner's choice by eye), casts it at the sun's height (at most
- * SHADOW_REACH), as each cell's share of the sun they take (0 none, 1 all), from 2 × 2 samples a cell. The swept shape
- * is a quad along every wall from its foot to the shadow's end (a courtyard's walls shade it too), and for a roofed
- * building its footprint's copy there. A roofed building's own footprint is left out (its box covers it, and the
- * texture's filter would bleed it into the sun past its walls); a ruin's floor is open ground, shaded by its walls.
- * The cells' mask carries it (G); the light's bake, on 8 m nodes, is too coarse for a house.
+ * The buildings' shadows on the ground (G2b, decision 0090): each standing building's walls swept away from the sun as
+ * far as they cast, `bz` times their height (the owner's choice by eye, BUILDING_BZ by default) at the sun's height
+ * (at most SHADOW_REACH), as each cell's share of the sun they take (0 none, 1 all), from 2 × 2 samples a cell. The
+ * swept shape is a quad along every wall from its foot to the shadow's end (a courtyard's walls shade it too; the
+ * footprint's own copy there lies within the footprint and those quads). Every roofed building's footprint is left out
+ * of the share: its box covers it, and the texture's filter would bleed a shadow held there past its walls into the
+ * sun, or a footprint counted lit into the shade. A ruin's floor is open ground, shaded by its walls. The cells' mask
+ * carries it (G); the light's bake, on 8 m nodes, is too coarse for a house.
  */
 export function bakeBuildingShadows(
   houses: Standing[],
   grid: { x0: number; z0: number; cell: number; nx: number; nz: number },
   sun: Sun,
-  bz = 1,
+  bz = BUILDING_BZ,
 ): Float32Array {
   const { x0, z0, cell, nx, nz } = grid
+  const SAMPLES = [0.25, 0.25, 0.75, 0.25, 0.25, 0.75, 0.75, 0.75]
+  const sampleAt = (i: number, j: number, q: number): Pt => [
+    x0 + (i + SAMPLES[2 * q]) * cell,
+    z0 + (j + SAMPLES[2 * q + 1]) * cell,
+  ]
+  // a cell's box over the map's cells
+  const box = (xs: number[], zs: number[]) => [
+    Math.max(0, Math.floor((Math.min(...xs) - x0) / cell)),
+    Math.min(nx - 1, Math.floor((Math.max(...xs) - x0) / cell)),
+    Math.max(0, Math.floor((Math.min(...zs) - z0) / cell)),
+    Math.min(nz - 1, Math.floor((Math.max(...zs) - z0) / cell)),
+  ]
+  // the samples under a roofed building, a bit each (1 << q), over every building
+  const under = new Uint8Array(nx * nz)
+  for (const h of houses) {
+    if (!h.roof) continue
+    const [outer, ...holes] = h.rings
+    const [i0, i1, j0, j1] = box(
+      outer.map(p => p[0]),
+      outer.map(p => p[1]),
+    )
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        for (let q = 0; q < 4; q++) {
+          const p = sampleAt(i, j, q)
+          if (inRing(outer, p) && !holes.some(r => inRing(r, p))) under[j * nx + i] |= 1 << q
+        }
+      }
+    }
+  }
   const out = new Float32Array(nx * nz)
   const lit = clampSun(sun)
   const [lx, lz] = sunXZ(lit)
   const cast = 1 / Math.tan((lit.el * Math.PI) / 180)
   for (const h of houses) {
-    const reach = Math.min(SHADOW_REACH, h.height * bz * cast)
+    const reach = Math.min(SHADOW_REACH, h.height * Math.max(0, bz) * cast)
     const [dx, dz] = [-lx * reach, -lz * reach]
-    const [outer, ...holes] = h.rings
-    const inFoot = (p: Pt) => inRing(outer, p) && !holes.some(r => inRing(r, p))
     const quads = h.rings.flatMap(ring =>
       ring.map((a, k): Pt[] => {
         const b = ring[(k + 1) % ring.length]
         return [a, b, [b[0] + dx, b[1] + dz], [a[0] + dx, a[1] + dz]]
       }),
     )
-    const xs = outer.flatMap(p => [p[0], p[0] + dx])
-    const zs = outer.flatMap(p => [p[1], p[1] + dz])
-    const i0 = Math.max(0, Math.floor((Math.min(...xs) - x0) / cell))
-    const i1 = Math.min(nx - 1, Math.floor((Math.max(...xs) - x0) / cell))
-    const j0 = Math.max(0, Math.floor((Math.min(...zs) - z0) / cell))
-    const j1 = Math.min(nz - 1, Math.floor((Math.max(...zs) - z0) / cell))
+    const [i0, i1, j0, j1] = box(
+      h.rings[0].flatMap(p => [p[0], p[0] + dx]),
+      h.rings[0].flatMap(p => [p[1], p[1] + dz]),
+    )
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
-        let n = 0
-        for (const [u, v] of [
-          [0.25, 0.25],
-          [0.75, 0.25],
-          [0.25, 0.75],
-          [0.75, 0.75],
-        ]) {
-          const p: Pt = [x0 + (i + u) * cell, z0 + (j + v) * cell]
-          if (h.roof && inFoot(p)) continue
-          if ((h.roof && inFoot([p[0] - dx, p[1] - dz])) || quads.some(q => inRing(q, p))) n++
-        }
         const k = j * nx + i
-        out[k] = Math.max(out[k], n / 4)
+        let open = 0
+        let shaded = 0
+        for (let q = 0; q < 4; q++) {
+          if (under[k] & (1 << q)) continue
+          open++
+          const p = sampleAt(i, j, q)
+          if (quads.some(r => inRing(r, p))) shaded++
+        }
+        if (open) out[k] = Math.max(out[k], shaded / open)
       }
     }
   }

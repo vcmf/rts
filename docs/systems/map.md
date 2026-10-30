@@ -468,7 +468,7 @@ scale below 1); the test map's real heights and its sim compile.
 `test/render-lit-bake.test.ts` (M6a, G2): the light on flat ground (in the sun, open to the sky), a block's shadow
 away from the sun at every azimuth, its length from the sun's height, its edge softer with a larger disc, a pit's
 floor seeing less sky than its rim, the highest ground's soft edge kept, a narrow bank's whole shadow, a sun on the
-horizon or with no disc clamped, the cache baking again only on a change, (G2b) a building's shadow away from the sun as long as its wall casts, none toward the sun or beside it, from a height raised `bz` times, a courtyard shaded in part, a cell the shadow's end crosses shaded in part, every second node the same light as every node there, the
+horizon or with no disc clamped, the cache baking again only on a change, (G2b) a building's shadow away from the sun as long as its wall casts, none toward the sun or beside it, from a height raised `bz` times, a courtyard shaded in part, a cell the shadow's end crosses shaded in part, none on any roofed footprint, a cell across a shaded wall in full, a ruin's floor by its walls, a negative `bz` none, the mask's G, every second node the same light as every node there, the
 default sun the 3D world's; the cells' mask with its yards;
 (M6b) a way's field, its square ends and its cells' gate, the widths `waysOf` takes from `lineReach`, the contract
 (every cell's kind at its centre on stair-steps, saddles, one-cell lines and diagonals), a cell field's 0 on the

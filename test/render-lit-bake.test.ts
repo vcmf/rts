@@ -183,6 +183,24 @@ describe("G2b: the buildings' shadows on the ground", () => {
     expect(at(s, 35, 30)).toBe(0) // under its roof
     expect(at(s, 41, 30)).toBe(0) // the cell its sunlit wall crosses
   })
+  it("in full at the cell its shaded wall crosses (its footprint's samples left out of the share, not counted lit)", () => {
+    // the west wall at x = 30.9, the shadow west of it: the cell from 30 to 32 is in shadow wherever it is open ground
+    const s = bakeBuildingShadows([house([square(30.9, 25, 40.9, 35)], 6)], grid, east)
+    expect(at(s, 31, 30)).toBe(1)
+  })
+  it("none on another roofed building's footprint either (no rim bled into its sunlit side)", () => {
+    // a low house B west of a tall one A, in A's shadow: B's footprint holds none of it, the ground beyond B does
+    const a = house([square(40, 25, 50, 35)], 8)
+    const b = house([square(30.9, 25, 36.9, 35)], 3)
+    const s = bakeBuildingShadows([a, b], grid, east)
+    expect(at(s, 33, 30)).toBe(0)
+    expect(at(s, 37, 30)).toBe(1)
+    expect(at(s, 29, 30)).toBe(1)
+  })
+  it('falls away from the sun whatever bz it is given (a negative one is none)', () => {
+    const s = bakeBuildingShadows([house([square(30, 25, 40, 35)], 6)], grid, east, -1)
+    expect(at(s, 43, 30)).toBe(0)
+  })
   it("a roofless ruin's walls shade its floor in part, not the whole of it", () => {
     // a 10 m ruin 3 m high: its east wall's shadow covers 5.2 m of the floor, the west half is lit
     const s = bakeBuildingShadows([house([square(30, 25, 40, 35)], 3, false)], grid, east)
@@ -218,6 +236,19 @@ describe('M6a: the cell mask', () => {
     expect([...m.slice(0, 4)]).toEqual([0, 0, 0, 0])
     expect([...m.slice(4, 8)]).toEqual([0, 0, 0, 255]) // the village's yard
     expect([...m.slice(8, 12)]).toEqual([128, 0, 255, 0])
+  })
+  it("carries the buildings' shadows in G, as a share of 255", () => {
+    const L = {
+      nx: 2,
+      nz: 1,
+      water: new Uint8Array(2),
+      depth: new Float32Array(2),
+      table: [] as Resolved[],
+      built: new Uint16Array(2),
+      ground: new Uint16Array(2),
+    }
+    const m = bakeMasks(L as unknown as Parameters<typeof bakeMasks>[0], Float32Array.from([0.5, 1]))
+    expect([m[1], m[5]]).toEqual([128, 255])
   })
 })
 

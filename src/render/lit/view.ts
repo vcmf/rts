@@ -191,6 +191,7 @@ export class LitView {
           'uPaper',
           'uKey',
           'uSkyC',
+          'uEye',
         ],
         samplers: ['uLight', 'uMask'],
       },
@@ -373,13 +374,15 @@ export class LitView {
       const outline = bridged(h.rings)
       const tris = triangulate(outline)
       // the roof, flat at the wall's height; a roofless house (a ruin, burnt) is its walls alone
-      const top = pos.length / 3
-      for (const [x, z] of outline) {
-        pos.push(x, h.height, z)
-        nrm.push(0, 1, 0)
-        col.push(tone, tone, tone, 1)
+      if (h.roof) {
+        const top = pos.length / 3
+        for (const [x, z] of outline) {
+          pos.push(x, h.height, z)
+          nrm.push(0, 1, 0)
+          col.push(tone, tone, tone, 1)
+        }
+        for (const [a, b, c] of tris) idx.push(top + a, top + c, top + b)
       }
-      if (h.roof) for (const [a, b, c] of tris) idx.push(top + a, top + c, top + b)
       // the walls of every ring, a quad an edge, each with its outward normal (a counter-clockwise ring's, (ez, -ex);
       // a courtyard's faces inward, its ring counter-clockwise too, so its normal is flipped): the shader lights it
       h.rings.forEach((ring, r) => {
@@ -460,6 +463,7 @@ export class LitView {
     const fwd = new Vector3(0, -Math.sin(pitch), Math.cos(pitch))
     this.camera.position = new Vector3(v.cx, 0, v.cz).subtract(fwd.scale(dist))
     this.camera.rotation.set(pitch, 0, 0)
+    this.houseMaterial.setVector3('uEye', this.camera.position)
     this.camera.minZ = Math.max(0.5, dist * 0.05)
     this.camera.maxZ = dist * 20
     // the overlays' near limit: a twentieth of the distance, where a point still projects to a few screens at most

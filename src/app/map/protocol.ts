@@ -19,7 +19,7 @@ export interface CompileRequest {
   // the map view's own (SUN, RELIEF.z) when absent
   sun?: Sun
   z?: number
-  // the buildings' shadows cast from their wall heights raised bz times (G2b); 1 when absent
+  // the buildings' shadows cast from their wall heights raised bz times (G2b); BUILDING_BZ when absent
   bz?: number
 }
 export type LayerName = (typeof LAYER_NAMES)[number]

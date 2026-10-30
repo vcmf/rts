@@ -8,6 +8,7 @@ import { apply, LAYER_NAMES } from '../../map/apply.ts'
 import { draft } from '../../map/draft.ts'
 import {
   bakeBuildingShadows,
+  BUILDING_BZ,
   bakeInk,
   bakeMasks,
   clampSun,
@@ -78,7 +79,7 @@ self.onmessage = (e: MessageEvent<CompileRequest | OverlayRequest>) => {
     return
   }
   try {
-    compile(seq, map, cat, mine, clampSun(sun ?? SUN), Math.max(0, z ?? RELIEF.z), Math.max(0, bz ?? 1))
+    compile(seq, map, cat, mine, clampSun(sun ?? SUN), Math.max(0, z ?? RELIEF.z), Math.max(0, bz ?? BUILDING_BZ))
   } catch (err) {
     fail('', `the compiler failed: ${(err as Error).message} (a bug, or a catalogue the validator does not check)`)
   }
