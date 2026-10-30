@@ -43,7 +43,7 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0015](0015-era-generic-engine.md) | The engine is era-generic, from antiquity to the Napoleonic era | accepted |
 | [0016](0016-typescript-toolchain.md) | Game code in strict TypeScript, tested with Vitest, linted with ESLint, versions pinned | accepted |
 | [0017](0017-paint-on-units-by-screen-size.md) | Paint on units follows their size on screen | proposed |
-| [0018](0018-battalion-of-400.md) | Battalions of about 400 soldiers, one figure each; the engine reaches 800 | accepted |
+| [0018](0018-battalion-of-400.md) | Battalions of about 400 soldiers, one figure each; the engine reaches 800 | superseded by 0076 |
 | [0019](0019-shading-data-from-authored-surface.md) | Shading data finer than the heightfield comes from the authored surface | proposed |
 | [0020](0020-track-m-on-an-epic-branch.md) | The map engine is Track M, built on an epic branch | accepted |
 | [0021](0021-two-metre-map-cell.md) | Every map grid is built on one 2 m cell | accepted |
@@ -100,6 +100,7 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0073](0073-modern-works-mended-from-their-surroundings.md) | Modern works are mended out of real relief by rebuilding the ground from what lies around them | accepted |
 | [0074](0074-soldier-shadow-per-step.md) | The soldiers' shadow from their pose up close, baked per animation step; no contact oval (amends 0062, supersedes 0071's oval) | accepted |
 | [0075](0075-arms-share-the-units-pipeline.md) | The cavalry and the artillery share the units pipeline; a figure on more than its root measures its shadow from its contacts (amends 0062, 0074) | proposed |
+| [0076](0076-a-unit-is-a-division.md) | A unit stands for a division: 240 figures for line infantry, a figure 25 men; a corps is 8–10 units (supersedes 0018) | accepted |
 | [0077](0077-a-pond-levels-at-its-lower-bank.md) | A pond with no level of its own levels at its lower bank; a dam is drawn, never implied | accepted |
 | [0078](0078-editor-writes-the-intent-file-in-place.md) | The editor edits the intent file in the page and saves only what changed, through the dev server | accepted |
 | [0079](0079-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |
@@ -110,3 +111,5 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0085](0085-upright-meadow-and-wheat-fill.md) | The meadow's grass upright and shorter, the wheat filled (`?grassup`, `?wheatfill`; amends 0041's clumps) | accepted |
 | [0086](0086-the-back-exposed.md) | The back exposed: a pressure while it lasts, not a retreat detected (supersedes 0080's retreat shock) | accepted |
 | [0087](0087-wavering-keeps-fighting.md) | A wavering battalion keeps fighting: no automatic fall-back | accepted |
+| [0088](0088-campaign-on-roads.md) | A campaign of armies on roads, moved at once; battles come from it | proposed |
+| [0089](0089-maps-sized-by-the-front.md) | Battle maps sized by the armies' front: 2 to 4 km a side; Austerlitz 3 km (amends 0061 and 0070) | accepted |

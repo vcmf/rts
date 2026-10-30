@@ -58,6 +58,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 - [`proposals/unit-scenarios.md`](proposals/unit-scenarios.md): the situations the unit model must get right, each with its expected outcome and what the sim does today. *(draft)*
 - [`proposals/map-engine.md`](proposals/map-engine.md): the map engine: a closed JSON language (one feature shape, dotted kinds from a catalogue of presets, five layers), its generator, compilers in Node and the browser, square grids, the draft and rendered views, Track M's phases. *(draft)*
 - [`proposals/ai.md`](proposals/ai.md): the enemy AI: layers, influence maps, utility scores, lookahead with the sim, honest difficulty; built after pathfinding. *(draft)*
+- [`proposals/campaign.md`](proposals/campaign.md): the campaign: armies on roads moved at once, contact and battle, couriers for help, what the campaign hands to the battle. *(draft)*
 - [`proposals/figure-animation.md`](proposals/figure-animation.md): animated figures: the simulation owns timing, clips are fitted to its phases by bindings checked at build time; the figure files and registry. *(accepted)*
 
 ## Plans
