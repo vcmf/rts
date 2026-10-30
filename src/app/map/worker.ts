@@ -165,6 +165,7 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles, sun
     z,
     masks: masks.buffer as ArrayBuffer,
     ink: ink.buffer as ArrayBuffer,
+    houses,
     ms: { validate: t1 - t0, apply: t2 - t1, draw: t3 - t2, bake: t4 - t3, ground: tg },
   }
   ;(self as unknown as Worker).postMessage(reply, [

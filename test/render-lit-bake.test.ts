@@ -178,6 +178,17 @@ describe("G2b: the buildings' shadows on the ground", () => {
     expect(at(s, 42, 30)).toBe(1)
     expect(at(s, 37, 30)).toBe(0)
   })
+  it('none on its own footprint, so its sunlit side keeps the sun to the wall (no rim bled by the filter)', () => {
+    const s = bakeBuildingShadows([house([square(30.9, 25, 40.9, 35)], 6)], grid, east)
+    expect(at(s, 35, 30)).toBe(0) // under its roof
+    expect(at(s, 41, 30)).toBe(0) // the cell its sunlit wall crosses
+  })
+  it("a roofless ruin's walls shade its floor in part, not the whole of it", () => {
+    // a 10 m ruin 3 m high: its east wall's shadow covers 5.2 m of the floor, the west half is lit
+    const s = bakeBuildingShadows([house([square(30, 25, 40, 35)], 3, false)], grid, east)
+    expect(at(s, 37, 30)).toBe(1)
+    expect(at(s, 31, 30)).toBe(0)
+  })
   it('partly at a cell its edge crosses: four samples a cell', () => {
     // a wall 9 · tan 30° high: its shadow ends at x = 21, so the cell from 20 to 22 has half its samples in it
     const s = bakeBuildingShadows([house([square(30, 25, 40, 35)], 9 * Math.tan(Math.PI / 6))], grid, east)

@@ -38,6 +38,9 @@ export const RELIEF = {
 const SKY_STEPS = [4, 8, 16, 32, 64, 128, 256]
 const SUN_REACH = 5000 // m: the farthest a ray toward the sun looks for what shades a node
 export const WATER_FULL = 1.5 // m: the depth the mask stores as 1
+// m: the longest shadow a building casts (a low ?sun= or a large ?bz= would sweep it across the map, and its bake
+// with it)
+const SHADOW_REACH = 100
 
 /**
  * A sun the bake and the shader can light by (the page's ?sun= and ?soft= take any number): its disc 1° to 20°
@@ -193,10 +196,12 @@ export function lightCache(
 
 /**
  * The buildings' shadows on the ground (G2b, decision 0090): each standing building's footprint swept away from the sun
- * as far as its wall, `bz` times its height (the owner's choice by eye), casts it at the sun's height, as each cell's
- * share of the sun they take (0 none, 1 all), from 2 × 2 samples a cell. The swept shape is the footprint, its copy at
- * the shadow's end and a quad along every wall between them (a courtyard's walls shade it too). The cells' mask carries
- * it (G); the light's bake, on 8 m nodes, is too coarse for a house.
+ * as far as its wall, `bz` times its height (the owner's choice by eye), casts it at the sun's height (at most
+ * SHADOW_REACH), as each cell's share of the sun they take (0 none, 1 all), from 2 × 2 samples a cell. The swept shape
+ * is a quad along every wall from its foot to the shadow's end (a courtyard's walls shade it too), and for a roofed
+ * building its footprint's copy there. A roofed building's own footprint is left out (its box covers it, and the
+ * texture's filter would bleed it into the sun past its walls); a ruin's floor is open ground, shaded by its walls.
+ * The cells' mask carries it (G); the light's bake, on 8 m nodes, is too coarse for a house.
  */
 export function bakeBuildingShadows(
   houses: Standing[],
@@ -206,10 +211,11 @@ export function bakeBuildingShadows(
 ): Float32Array {
   const { x0, z0, cell, nx, nz } = grid
   const out = new Float32Array(nx * nz)
-  const [lx, lz] = sunXZ(clampSun(sun))
-  const cast = 1 / Math.tan((clampSun(sun).el * Math.PI) / 180)
+  const lit = clampSun(sun)
+  const [lx, lz] = sunXZ(lit)
+  const cast = 1 / Math.tan((lit.el * Math.PI) / 180)
   for (const h of houses) {
-    const reach = h.height * bz * cast
+    const reach = Math.min(SHADOW_REACH, h.height * bz * cast)
     const [dx, dz] = [-lx * reach, -lz * reach]
     const [outer, ...holes] = h.rings
     const inFoot = (p: Pt) => inRing(outer, p) && !holes.some(r => inRing(r, p))
@@ -235,7 +241,8 @@ export function bakeBuildingShadows(
           [0.75, 0.75],
         ]) {
           const p: Pt = [x0 + (i + u) * cell, z0 + (j + v) * cell]
-          if (inFoot(p) || inFoot([p[0] - dx, p[1] - dz]) || quads.some(q => inRing(q, p))) n++
+          if (h.roof && inFoot(p)) continue
+          if ((h.roof && inFoot([p[0] - dx, p[1] - dz])) || quads.some(q => inRing(q, p))) n++
         }
         const k = j * nx + i
         out[k] = Math.max(out[k], n / 4)

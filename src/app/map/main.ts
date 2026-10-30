@@ -13,7 +13,6 @@ import type { OverlaySpec } from '../../render/lit/overlays.ts'
 import { demFileNames } from '../../map/dem.ts'
 import { LitView, TILT } from '../../render/lit/view.ts'
 import { RELIEF, SUN, type Sun } from '../../render/lit/bake.ts'
-import { standing } from '../../render/lit/houses.ts'
 import { lineLength, pointAt } from '../../map/geometry.ts'
 import { Editor } from './editor.ts'
 import { ovalRing } from './edit.ts'
@@ -231,7 +230,7 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
     })
     fillOverlays(r.units)
     requestOverlay()
-    lit?.setHouses(standing(r.map.features, r.table, new Uint16Array(r.layers.built), r))
+    lit?.setHouses(r.houses)
     labels = namesOf(r)
     // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
     current = {

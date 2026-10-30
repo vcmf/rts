@@ -47,8 +47,6 @@ const CONTOUR_MINOR = '#a9a7ae'
 const CONTOUR_INDEX = '#d08450'
 const LINE = ['#2b2824', '#2b2824', '#2b2824', '#363c45']
 const BARRIER = '#3a4528' // hedges and walls, a dark olive
-// the houses (the prototype's bakeHouses): dark warm roofs, a church darker, the faces away from the sun at 0.62 of
-// the roof, the faces toward it at 0.85; a soft shadow away from the sun, as long as the sun's height casts the wall
 // the buildings' tone, a share of the paper's colour: the ground's paper with its grain is about 0.93 of it, so a
 // house is a little darker (the owner, G2b: "cold white, maybe a tiny bit darker"), a church a little more
 const HOUSE_TONE = 0.88
@@ -121,12 +119,7 @@ export class LitView {
     this.canvas = canvas
     // doNotHandleContextLost: Babylon would otherwise keep every texture's source bytes to restore a lost context
     // (144 MB at 6 km); a lost context is reported (onLost) and the page recompiles
-    this.engine = new Engine(
-      canvas,
-      true,
-      { preserveDrawingBuffer: true, stencil: true, doNotHandleContextLost: true },
-      false,
-    )
+    this.engine = new Engine(canvas, true, { preserveDrawingBuffer: true, doNotHandleContextLost: true }, false)
     if (this.engine.webGLVersion < 2) {
       this.engine.dispose()
       throw new Error('the lit map view needs WebGL2 (decision 0046)')
@@ -324,8 +317,8 @@ export class LitView {
   }
 
   /**
-   * Resolves once the plane's shader and textures are ready to draw (the first frame after setMap may not be); rejects
-   * after `ms` with the shader's compile error, if any.
+   * Resolves once the plane's and the buildings' shaders and textures are ready to draw (the first frame after setMap
+   * may not be); rejects after `ms` with a shader's compile error, if any.
    */
   ready(ms = 10000): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -333,7 +326,8 @@ export class LitView {
       const poll = () => {
         if (this.scene.isReady()) resolve()
         else if (performance.now() - t0 > ms) {
-          const e = this.material.getEffect()?.getCompilationError()
+          // the plane's shader or the buildings' (G2b), whichever failed
+          const e = this.lit.map(m => m.getEffect()?.getCompilationError()).find(Boolean)
           reject(new Error(`the lit view did not get ready${e ? `: ${e}` : ''}`))
         } else setTimeout(poll, 16)
       }
@@ -363,7 +357,7 @@ export class LitView {
 
   /**
    * Stands the map's houses on the paper (M6b, `standing`): each footprint (its rings, m) raised to its wall height,
-   * its roof flat, its faces lit by the map's light, and a soft shadow away from the light, as the prototype's bake.
+   * its roof flat, its faces lit by the ground's light (houses.frag); its shadow is the worker's (the cells' mask).
    */
   setHouses(houses: Standing[]): void {
     for (const h of this.houses) h.dispose()
