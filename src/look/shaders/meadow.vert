@@ -83,12 +83,22 @@ void main(){
   // larger and denser up close only (the owner judged them there): whole to CLOSE_ZOOM.x m of the camera from the focus,
   // the default by CLOSE_ZOOM.y, on the inner rings (the outer ring clumps are a few pixels: there it was fill, not look)
   float nearK=big*step(uCell,1.5)*(1.0-smoothstep(CLOSE_ZOOM.x,CLOSE_ZOOM.y,length(uCamPos-uFocus)));
+  // (and across the middle ring's band out, where the outer ring's plain clumps fade in, its look fades to theirs: no
+  // seam between a wide, dense carpet and the sparse outer clumps, decision 0085)
+  if(uCell>0.75)nearK*=1.0-GRASS_RING_FADE*smoothstep(uBand.z,uBand.w,d);
   #endif
+  vec2 cc=crop?coverCell(root):vec2(0.0);   // (a crop's class and field id)
   float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c);
+  #ifdef WHEAT_FILL
+  // (the wheat's fill, decision 0085: the standing wheat, class 6, none thinned out by the clump field, so no bare
+  // earth between its clumps; the green crop and stubble as before)
+  bool wheat=crop&&cc.x>5.5&&cc.x<6.5;
+  if(wheat)keep=m.a*band;
+  #endif
   #if defined(GRASS_FLOW)&&!defined(GRASS_NO_DENSE)
   // denser (the owner, 2026-10-17): fewer clumps thinned between the patches, on the inner rings only (the outer ring's
   // clumps are a few pixels: denser there was fill, not look), as the default under the snow of winter
-  if(!crop)keep=m.g*band*mix(mix(0.45,0.8,nearK),1.0,c);
+  if(!crop)keep=m.g*band*mix(mix(0.45,GRASS_DENSE,nearK),1.0,c);   // (GRASS_DENSE: the look's, ?grassup)
   #endif
   float grow=smoothstep(h2-0.12,h2+0.12,keep);
   // nothing where nothing grows (the smoothstep above is over 0 at a growth of 0 for a low hash, and the height factor
@@ -102,11 +112,15 @@ void main(){
   // its footprint narrower than grass, and under the grass height in the grass proportions (a crop lower than grass
   // stays upright, not a flat splat), each
   // field a shade apart, as the ground paints it (cellColour in macro.glsl)
-  if(crop){vec2 cc=coverCell(root);cr=cropLook(cc.x,h3);cr.yzw*=cc.y>0.5?0.94+0.12*fract(cc.y*0.6180339):1.0;
+  if(crop){cr=cropLook(cc.x,h3);cr.yzw*=cc.y>0.5?0.94+0.12*fract(cc.y*0.6180339):1.0;
     hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*min(0.7,cr.x/uHeight);}
   else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*grassSeasonK(uSeason),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;
     #if defined(GRASS_FLOW)&&!defined(GRASS_NO_BIG)
     hgt=min(hgt*mix(1.0,GRASS_TALL,nearK),HEIGHT_MAX);fp*=mix(1.0,GRASS_WIDE,nearK);   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
+    #endif
+    #ifdef GRASS_FLOW
+    // (the look's carpet, ?grassup: shorter on every ring, as the default under the snow)
+    hgt*=mix(1.0,GRASS_SHORT,big);
     #endif
   }
   #ifdef TRAMPLE
@@ -120,7 +134,11 @@ void main(){
   vec3 p=vec3(position.x*fp,position.y*hgt,position.z*fp);p.xz=vec2(ca*p.x-sa*p.z,sa*p.x+ca*p.z);
   // a crop's stalks stand straight (docs/plans/done/crop-depth.md): a blade's spread drawn in toward its root's
   // axis as it rises (the grass clump fans out), and barely any lean
+  #ifdef WHEAT_FILL
+  if(crop)p.xz*=(wheat?WHEAT_FILL_WIDE:CROP_WIDE)/(1.0+CROP_FAN*aV);   // (the wheat's fill: wider at its root)
+  #else
   if(crop)p.xz*=CROP_WIDE/(1.0+CROP_FAN*aV);
+  #endif
   #ifdef TRAMPLE
   // (pressed: the trodden blades splay out flat)
   p.xz*=1.0+1.2*trod*aV;
@@ -133,6 +151,8 @@ void main(){
   #else
   vec3 fl=flowTex(root);
   #endif
+  // upright (?grassup, docs/plans/active/grass-upright.md): the clump's own fan partly undone, as a crop's is
+  if(!crop)p.xz/=1.0+GRASS_FAN_UNDO*big*CROP_FAN*aV;
   if(!crop)p.xz+=mix((vec2(h5,h6)-0.5)*0.25,fl.xy*mix(LEAN_MIN,LEAN_MAX,fl.z)*p.y/max(hgt,0.05)+(vec2(h5,h6)-0.5)*LEAN_JITTER,big)*p.y;   // (as the default under the snow)
   else p.xz+=(vec2(h5,h6)-0.5)*0.06*p.y;
   #else
