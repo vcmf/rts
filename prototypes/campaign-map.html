@@ -96,9 +96,10 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
  * sky's share of the light (0.62); ?lamp= the light's fall-off across the map, warmer on the sun's side (0.55);
  * ?contour= the contour interval in metres (200); ?tilt= the camera's tilt at the closest zoom, in degrees (45);
  * ?clouds= the cloud shadows (0.15); ?view=x,z,km the target in km from the centre, east and north, and the camera
- * distance; ?theatre= the generated file; ?stepkm= the water's steps, km apart from the shore (0.7); ?steps= how
- * many (6; 0 a flat sunk level); ?upscale=off|<factor> the FSR 1 upscale on high-resolution screens; ?fps=0 hides
- * the frame rate.
+ * distance; ?theatre= the generated file; ?woods= the forests' green (0.8); ?woodfrom= the
+ * tree cover from which a forest is printed (0.6); ?stepkm= the water's steps, km apart
+ * from the shore (0.7); ?steps= how many (6; 0 a flat sunk level); ?upscale=off|<factor> the FSR 1 upscale on
+ * high-resolution screens; ?fps=0 hides the frame rate.
  */
 'use strict';
 const t0 = performance.now();
@@ -211,6 +212,11 @@ const TILT_FAR = 30;
 const TILT_NEAR = param('tilt', 45, 0, 60);
 // the cloud shadows drifting over the map: how much of the sun they take (0 off)
 const CLOUDS = param('clouds', 0.15, 0, 0.6);
+// how strongly the forests are printed green (0 none)
+const WOODS = param('woods', 0.8, 0, 1);
+// the forests generalised: the tree cover (smoothed by the tools) printed where it passes WOOD_FROM (so only the large,
+// dense forests: ?woodfrom= lower shows more)
+const WOOD_FROM = param('woodfrom', 0.6, 0.05, 0.95);
 // the water, sunk into the model as stepped basins (the owner's Black Sea model): the lake floor first SINK m of the
 // shape below the shore, then a step of STEP m every STEP_KM from the shore, at most BANDS steps (?steps=0: one level)
 const SINK = 70;
@@ -224,6 +230,15 @@ const SUN = (() => {
   const az = (SUN_AZ * Math.PI) / 180;
   return [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
 })();
+
+/** The tree cover a node (0–255, the south row first) from the generated file, or none when it has no forests. */
+function decodeForest() {
+  if (!T.forest) return new Uint8Array(NX * NZ);
+  // smoothed by the tool (its forestBoxM), as the tiles are
+  const bytes = fromBase64(T.forest);
+  if (bytes.length !== NX * NZ) throw new Error('theatre forests: ' + bytes.length + ' values, expected ' + NX * NZ);
+  return bytes;
+}
 
 /** The heights in metres, the south row first, decoded from the generated file. */
 function decodeHeights() {
@@ -685,6 +700,9 @@ B.Effect.ShadersStore.printFragmentShader = `
 precision highp float;
 varying vec2 vW;
 uniform sampler2D uShape, uShapeL, uLight, uLines, uRivers, uLakes, uLakeD, uPaperT, uContourH, uDetailS, uDetailL;
+uniform sampler2D uForest;
+uniform vec3 uWood;
+uniform float uWoodK;
 uniform sampler2D uClouds;
 uniform vec3 uShallow, uDeep;
 uniform vec2 uHalf, uTexel, uLightTexel, uLineTexel, uLakeTexel, uDetailTexel;
@@ -837,6 +855,19 @@ void main() {
   float px = max(length(fwidth(vW)), 1e-4);
   gPx = px;
   vec3 print = paper;
+  /* how much of the detail area (the 100 m tiles) to use here: read once, for the forests and the light */
+  float dk = detailK(vW);
+
+  /* forests: printed green on the paper, before the light (the sun, the shadows and the sky fall on them as on the
+     rest), from the tree cover at 250 m, or at 100 m from the tiles up close; their edges crisp at any zoom */
+  {
+    float cover = texture2D(uForest, uv).r;
+    if (dk > 0.0) cover = mix(cover, texture2D(uDetailL, detailUv(vW)).b, dk);
+    float edge = max(0.04, fwidth(cover));
+    float wood = smoothstep(${WOOD_FROM.toFixed(2)} - edge, ${WOOD_FROM.toFixed(2)} + edge, cover);
+    vec3 green = uWood * (0.9 + (g2 - 0.5) * 0.25 + (g1 - 0.5) * 0.12);
+    print = mix(print, green, wood * uWoodK);
+  }
 
   /* contours from the smoothed heights: the ordinary lines thin and a muted grey, every fifth (the index line)
      thicker in dark orange; each fades where its lines would crowd on screen */
@@ -871,7 +902,6 @@ void main() {
 
   /* the light, per pixel, from the shape the surface is raised by: the warm sun on the slope, in its baked shadow,
      with cloud shadows drifting from the west; and the cool sky, in the baked share of it each point sees */
-  float dk = detailK(vW);
   vec2 slope = slopeAt(vW, px, dk);
   vec3 n = normalize(vec3(-slope.x, 1000.0, -slope.y));
   vec4 baked = bicubic4(uLight, (vW + uHalf) / (2.0 * uHalf) * (1.0 - uLightTexel) + 0.5 * uLightTexel, uLightTexel);
@@ -1039,10 +1069,10 @@ const material = new B.ShaderMaterial('print', scene, 'print', {
     'uDetailTexel', 'uDetailRect',
     'uSun', 'uPaper', 'uTable', 'uWater', 'uKey', 'uSky', 'uRoad', 'uRoad2', 'uRiver', 'uContourInk', 'uContourMinor',
     'uCellKm', 'uDetailCellKm', 'uDetailK', 'uSkyK', 'uLamp', 'uContour', 'uContourK', 'uTime', 'uCloudK',
-    'uHaze', 'uScreenH', 'uVert', 'uShallow', 'uDeep',
+    'uHaze', 'uScreenH', 'uVert', 'uShallow', 'uDeep', 'uWood', 'uWoodK',
   ],
   samplers: [
-    'uShape', 'uShapeL', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uLakeD', 'uPaperT', 'uContourH',
+    'uShape', 'uShapeL', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uLakeD', 'uPaperT', 'uContourH', 'uForest',
     'uDetailS', 'uDetailL',
     'uClouds',
   ],
@@ -1076,6 +1106,12 @@ material.setColor3('uPaper', B.Color3.FromArray(PAPER));
 material.setColor3('uTable', B.Color3.FromArray(hex('#cbc9cf')));
 material.setColor3('uWater', B.Color3.FromArray(hex('#3b78b0')));
 material.setColor3('uShallow', B.Color3.FromArray(hex('#a9d0ec')));
+// the woods' green (the owner's Reno print: a bright yellow-green in the sun) and how much of it is printed (?woods=)
+material.setColor3('uWood', B.Color3.FromArray(hex('#97c158')));
+material.setFloat('uWoodK', WOODS);
+// no mips: averaged forest and field would fall under the print threshold and the forests shrink as the camera pulls
+// back; the cover is smooth enough (a box of 1.5 km) not to shimmer when minified
+material.setTexture('uForest', byteTexture(decodeForest(), NX, NZ, B.Engine.TEXTUREFORMAT_LUMINANCE, false));
 material.setColor3('uDeep', B.Color3.FromArray(hex('#2b67b0')));
 material.setTexture('uLakeD', floatTexture(LAKE_D, NX, NZ));
 // the sun warm, the sky cool; with the sky's share, flat open ground in the sun comes to about 1
@@ -1573,7 +1609,8 @@ function tilesMatch(meta) {
   const params = same(p.vert, VERT) && same(p.fine, FINE) && same(p.mount, MOUNT);
   const sun = same(p.sun, SUN_EL) && same(p.az, SUN_AZ) && same(p.soft, SUN_R);
   const frame = same((meta.nx - 1) * meta.cell, 2 * halfX) && same((meta.nz - 1) * meta.cell, 2 * halfZ);
-  return params && sun && frame;
+  // three bytes a node: the sun, the sky and the tree cover (older tiles had two), smoothed as the theatre's
+  return params && sun && frame && p.bytes === 3 && p.woodBoxM === T.forestBoxM;
 }
 
 /**
@@ -1589,7 +1626,10 @@ function loadTiles() {
     script.remove();
     const meta = window.CAMPAIGN_TILES;
     if (!meta || !tilesMatch(meta)) {
-      console.warn('campaign map: the tiles were baked with other parameters: run node tools/campaign-tiles.ts');
+      // a theatre built before the forests cannot match any tiles: it is the one to build again
+      const theatre = 'tools/campaign-theatre.ts, then tools/campaign-tiles.ts';
+      const stale = !T.forestBoxM ? theatre : 'tools/campaign-tiles.ts';
+      console.warn('campaign map: the tiles do not match this page and its theatre: run node ' + stale);
       return;
     }
     DETAIL.meta = meta;
@@ -1604,7 +1644,10 @@ function loadTiles() {
   document.head.appendChild(script);
 }
 
-/** The detail area's arrays and textures: the shape (metres, float) and the light (R sun, G sky, A loaded). */
+/**
+ * The detail area's arrays and textures: the shape (metres, float) and the light (R sun, G sky, B tree cover, A
+ * loaded).
+ */
 function setupDetail() {
   const n = AREA * DETAIL.meta.size;
   DETAIL.shape = new Float32Array(n * n);
@@ -1715,8 +1758,9 @@ function blitTile(i, j, tile) {
     DETAIL.shape.set(tile.shape.subarray(r * size, (r + 1) * size), row);
     for (let c = 0; c < size; c++) {
       const o = (row + c) * 4;
-      DETAIL.light[o] = tile.light[(r * size + c) * 2];
-      DETAIL.light[o + 1] = tile.light[(r * size + c) * 2 + 1];
+      DETAIL.light[o] = tile.light[(r * size + c) * 3];
+      DETAIL.light[o + 1] = tile.light[(r * size + c) * 3 + 1];
+      DETAIL.light[o + 2] = tile.light[(r * size + c) * 3 + 2];
       DETAIL.light[o + 3] = 255;
     }
   }

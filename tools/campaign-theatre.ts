@@ -1,6 +1,6 @@
 // Builds the campaign map prototype's theatre (docs/plans/active/k1-theatre-look.md) from the hand-written data file
 // prototypes/campaign-1805.data.js, into a generated .js under scratch/ (git-ignored, never committed):
-//   window.THEATRE = { frame, cell, nx, nz, h, towns, regions, rivers, lakes, roads, credit }
+//   window.THEATRE = { frame, cell, nx, nz, h, forest, forestBoxM, towns, regions, rivers, lakes, roads, credit }
 // - h: heights in whole metres on a `cell` grid (250 m by default) in a Lambert azimuthal equal-area projection
 //   centred on the frame, nodes from edge to edge, base64 of little-endian Int16, the south row first. From the AWS
 //   terrain tiles (Terrarium PNGs at zoom 9, about 200 m a pixel here; built from SRTM, GMTED2010 and EU-DEM), cached
@@ -31,6 +31,7 @@ import {
   type Pt,
 } from './campaign-theatre-lib.ts'
 import { cached, sampleGrid } from './terrarium.ts'
+import { forestField, resampleField, WOOD_BOX_M, WORLDCOVER_CREDIT } from './worldcover.ts'
 
 const DATA_FILE = 'prototypes/campaign-1805.data.js'
 const TILE_ZOOM = 9
@@ -188,12 +189,17 @@ async function main() {
     nx: heights.nx,
     nz: heights.nz,
     h: Buffer.from(heights.h.buffer).toString('base64'),
+    // the tree cover a node, 0–255, the south row first: the frame's one forest field (made here, cached, read again
+    // by the tiles), resampled to this grid (tools/worldcover.ts)
+    forest: Buffer.from(resampleField(await forestField(frame, proj), cell, heights.nx, heights.nz)).toString('base64'),
+    forestBoxM: WOOD_BOX_M,
     towns: Object.fromEntries([...towns].map(([id, p]) => [id, p.map(Math.round)])),
     regions: data.regions.map(r => proj.forward(r.lat, r.lon).map(Math.round)),
     rivers: water.rivers,
     lakes: water.lakes.map(flat),
     roads,
-    credit: 'Heights: AWS Terrain Tiles (SRTM, GMTED2010, EU-DEM © Copernicus). Water: Natural Earth.',
+    credit:
+      'Heights: AWS Terrain Tiles (SRTM, GMTED2010, EU-DEM © Copernicus). Water: Natural Earth. ' + WORLDCOVER_CREDIT,
   }
   fs.mkdirSync(path.dirname(out), { recursive: true })
   fs.writeFileSync(out, `window.THEATRE = ${JSON.stringify(theatre)}\n`)
