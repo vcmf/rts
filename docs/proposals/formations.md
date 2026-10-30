@@ -39,10 +39,10 @@ Total War, Lines of Battle, Scourge of War, Grand Tactician and Ultimate General
 | **Roundshot** | from the geometry: a ball through a deep block strikes more men (already so) | | | | |
 | **Morale shocks taken** | 1 | 1.25 | 0.75 | 0.8 | 1.25 |
 | **Melee and assault** | 1 | 0.7 | 1.4; may assault | 0.6; cannot charge | 0.5 |
-| **Against cavalry** | fires; ridden down in the flank | the same, worse (the flank shock × 1.25) | partly braced (0.3) | braced: most charges turn away | helpless |
+| **Against cavalry** | fires; ridden down in the flank | the same, worse (the flank shock × 1.25) | second best, head on (§ 2a) | braced: most charges turn away | helpless |
 | **Flank exposure** (U1) | 1.8 | 2.2 | 1.2 | none | 1.5 |
 | **Flanked from** (U1, the sector blend) | about 80° off its front | about 80° | about 40° | never | about 60° |
-| **Pace** | ordinary; halts to dress in rough ground | ordinary, slower to wheel | ordinary, does not halt to dress | cannot move | route step (fastest) |
+| **Pace** | ordinary; halts to dress in rough ground | ordinary, slower to wheel | ordinary, does not halt to dress | cannot move (the owner) | route step (fastest) |
 
 Notes:
 - **Fire:** a 3-rank line fires about two-thirds of its muskets (its third rank is useless, history § Line); the
@@ -56,6 +56,21 @@ Notes:
 - **Melee and assault** multiplies melee strength and the assault's shock (U3's `assault.column` becomes this row).
 - **Flanked from:** today every shape's sector blend is 45°; per shape, a column is flanked from about 40° off its
   axis, a line only from about 80° (Lines of Battle's limits: column 38°, line 79°).
+
+## 2a. Bracing by the side struck (the owner: the column is second best against cavalry, head on)
+
+Bracing (`bracedOf`, `docs/systems/melee.md`) gives the charge its chance to turn away, and cuts its impact and its
+losses. Today a shape is braced or not; here it is braced by the side the charge strikes (its weights, U1):
+
+| Side struck | Square | Attack column | Line | Thin line | March column |
+|---|---|---|---|---|---|
+| Front | 1 | 0.5 | 0 | 0 | 0 |
+| Flank | 1 | 0.25, the flank's shock × 0.7 (a dense block) | 0 | 0, the flank's shock × 1.25 | 0 |
+| Rear | 1 | 0 | 0 | 0 | 0 |
+
+A column struck head on turns about half the charges away and takes half the impact; from the side it is tougher
+than a line, far weaker than a square; from behind as open as any. Its weakness is the guns and the muskets (hits
+taken × 1.3; roundshot through its depth; its own fire 0.3).
 
 ## 3. Changing formation
 
@@ -90,15 +105,21 @@ Notes:
 | B-19 | An attack column takes a line's fire in its flank | Enfiladed through its depth; its morale breaks (the Guard and the 52nd at Waterloo) |
 | B-20 | A column fights through rough ground against a line | The column keeps its pace and order; the line halts to dress |
 
-## 5. Questions for the owner
+## 5. The unit's info box (the owner: for us to debug first)
 
-1. **How strong:** these are clear, Total War-sized differences (20–50%). Subtler numbers would read less well.
-2. **The square:** immobile, as in Total War and Grand Tactician, or crawling very slowly, as it could historically?
-   Immobile is simpler and clearer.
-3. **The column against cavalry:** partly braced (0.3), as history suggests (hard to break from the front), or
-   nothing, so only the square counters cavalry?
-4. **Ordre mixte** (lines and columns mixed, a Napoleonic favourite): a sixth formation between line and column on
-   every row, or not for now? Not for now is simpler.
-5. **The thin line** needs nations in the ruleset: a British line infantry type that has it. Only the British, as the
-   owner said.
-6. **Statuses on the page** (flanked, supported, changing, under fire): part of this work, or the page's later?
+One box for the selected unit, showing every number the sim uses on it, as Total War's unit card does:
+- **who:** formation and fire mode, figures (× 25 men), level and its points toward the next;
+- **morale:** the bar, effective and maximum, the shocks and the drain on it, the flanks secured, the state;
+- **strengths:** toughness, musket fire (formation × precision × reload), melee strength, hits taken;
+- **ranges:** long, close and bayonet, and the distance to the nearest enemy;
+- **threats:** each enemy that threatens it and from which side (front, flank, rear, by weight), under fire, changing
+  (with its progress), in melee.
+
+It replaces the page's one-line summary for the selected unit; statuses for players come later.
+
+## 6. The owner's answers (2026-10-30), and what is open
+
+- The square cannot move. The column is second best against cavalry, head on (§ 2a), and weak to guns and muskets.
+  Ordre mixte is deferred. The info box (§ 5) comes first, for debugging. The thin line is the British only.
+- **Open:** the bracing numbers of § 2a; the size of the modifiers (Total War-sized, 20–50%, unless the owner wants
+  them subtler).
