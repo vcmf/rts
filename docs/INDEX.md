@@ -39,6 +39,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 - [`systems/sides.md`](systems/sides.md): your side, the scenario's plan for the other, and the end of a battle (S1e-2).
 - [`systems/map.md`](systems/map.md): the map engine: the kinds catalogue, the validator, resolution, the 2 m layers and water, the draft page, the sim compiler, the map CLI (Track M, M1, M2).
 - [`systems/campaign.md`](systems/campaign.md): the campaign's models (march, contact, couriers, roads, timeline), exact and tested (K0).
+- [`systems/campaign-map.md`](systems/campaign-map.md): the campaign map's bake (the shape, the lakes, the light, the forests) and its binary tiles with a manifest (K2a).
 - More appear as systems are built; see [`systems/README.md`](systems/README.md).
 
 ## Proposals (designs before building)
@@ -65,6 +66,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/track-k.md`](plans/active/track-k.md) (Track K: the campaign: the look prototyped (K1), the rules (K0), the map in the game's code (K2a–K2d), the theatre as data (K3), the play (K4–K6), the `epic/campaign` branch),
   [`plans/active/k0-campaign-rules.md`](plans/active/k0-campaign-rules.md) (K0: the campaign's rules as a design, its models as code),
   [`plans/active/k1b-forests.md`](plans/active/k1b-forests.md) (K1b: forests printed green on the campaign map, a prototype),
+  [`plans/active/k2a-bake.md`](plans/active/k2a-bake.md) (K2a: the campaign map's bake in the game's code, binary tiles),
   [`plans/active/k1-theatre-look.md`](plans/active/k1-theatre-look.md) (K1: the 1805 theatre in the lit style, a prototype),
   [`plans/active/c0-bench.md`](plans/active/c0-bench.md) (C0: the visual bench, its overlay, time controls and cases),
   [`plans/active/ci-faster-tests.md`](plans/active/ci-faster-tests.md) (CI's tests and coverage in three shards each, the bench split in five files),

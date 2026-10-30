@@ -31,7 +31,8 @@ import {
   type Pt,
 } from './campaign-theatre-lib.ts'
 import { cached, sampleGrid } from './terrarium.ts'
-import { forestField, resampleField, WOOD_BOX_M, WORLDCOVER_CREDIT } from './worldcover.ts'
+import { resampleField, WOOD_BOX_M } from '../src/render/campaign/bake.ts'
+import { forestField, WORLDCOVER_CREDIT } from './worldcover.ts'
 
 const DATA_FILE = 'prototypes/campaign-1805.data.js'
 const TILE_ZOOM = 9

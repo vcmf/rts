@@ -8,7 +8,8 @@ last_reviewed: 2026-10-29
 What is built of the campaign (the campaign proposal (PR #234); Track K, `docs/plans/active/track-k.md`): its rules as
 pure, deterministic models in `src/campaign/`, tested in `test/campaign-rules.test.ts`. Nothing plays a turn yet:
 the day's loop (orders, standing orders, the turn) comes later in the track. The map's look is the K1 prototype
-(`prototypes/campaign-map.html`); it moves into the game's code in K2a–K2d.
+(`prototypes/campaign-map.html`); it moves into the game's code in K2a–K2d, its bake and tiles first
+(`docs/systems/campaign-map.md`).
 
 ## Rules and their values
 

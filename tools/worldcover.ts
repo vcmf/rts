@@ -4,14 +4,13 @@
 // copies of itself; only one reduced level is read, tile by tile, by range requests (the header first), and cached
 // under scratch/worldcover/: about 5 MB a file at about 70 m a pixel, where the full file is about 100 MB.
 // Its tree-cover class (10) is sampled onto a grid in the theatre's projection as a coverage, 0 to 255.
-// forestField: one field for the whole frame, made once: the cover at 100 m, smoothed before it is printed (the large
-// forests stay, the farm copses fade) by three box means of WOOD_BOX_M either side, cached under scratch/worldcover/.
-// The tiles (100 m) use it as is, the theatre (250 m) resamples it (resampleField): one source, so the two layers
-// agree where the tiles fade in.
+// forestField: one field for the whole frame, made once: the cover at 100 m, smoothed before it is printed
+// (src/render/campaign/bake.ts, smoothCover), cached under scratch/worldcover/. Every grid of the map resamples it
+// (resampleField): one source, so the levels agree where they meet.
 import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
-import { boxMean } from './campaign-bake.ts'
+import { FIELD_CELL, smoothCover, WOOD_BOX_M, type ForestField } from '../src/render/campaign/bake.ts'
 import type { Frame, projection } from './campaign-theatre-lib.ts'
 
 const BASE = 'https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map'
@@ -22,9 +21,6 @@ const HEADER_BYTES = 65536
 const TREES = 10
 // the level read: the one closest to (and not coarser than) this many pixels across a 3° file
 const LEVEL_PX = 4500
-export const WOOD_BOX_M = 500
-// the forest field's cell, in metres: the tiles' (tools/campaign-tiles.ts)
-export const FIELD_CELL = 100
 // downloads: files read side by side, and each file's tiles
 const FILES_AT_ONCE = 2
 const TILES_AT_ONCE = 8
@@ -173,17 +169,6 @@ async function pool<T>(jobs: (() => Promise<T>)[], n: number): Promise<T[]> {
   }
   await Promise.all(Array.from({ length: Math.min(n, jobs.length) }, worker))
   return out
-}
-
-/**
- * The cover smoothed for printing: three box means of WOOD_BOX_M either side, in metres (a forest smaller than about
- * the box fades, a large one keeps its core). The grid's cell must divide WOOD_BOX_M.
- */
-export function smoothCover(cover: Uint8Array, nx: number, nz: number, cell: number): Uint8Array {
-  const r = WOOD_BOX_M / cell
-  if (!Number.isInteger(r)) throw new RangeError(`smoothCover: a cell of ${cell} m does not divide ${WOOD_BOX_M} m`)
-  const smooth = boxMean(boxMean(boxMean(cover, nx, nz, r), nx, nz, r), nx, nz, r)
-  return Uint8Array.from(smooth, v => Math.round(v))
 }
 
 /** The file name of the 3° WorldCover file whose south-west corner is (lat, lon). */
@@ -335,14 +320,6 @@ async function forestCover(
   return out
 }
 
-/** The forest field: the smoothed cover, 0–255, on a grid of nx × nz nodes `cell` metres apart, the south row first. */
-export interface ForestField {
-  cell: number
-  nx: number
-  nz: number
-  cover: Uint8Array
-}
-
 /**
  * The forest field of a frame centred on (lat0, lon0), from edge to edge: the cover at FIELD_CELL (2 × 2 samples a
  * node), smoothed (smoothCover). Made once and cached, its parameters in the file's name; the theatre makes it first,
@@ -362,28 +339,4 @@ export async function forestField(frame: Frame, proj: Projection): Promise<Fores
   fs.mkdirSync(CACHE, { recursive: true })
   fs.writeFileSync(file, field.cover)
   return field
-}
-
-/**
- * The field on another grid over the same frame (nx × nz nodes `cell` metres apart from the same south-west corner):
- * bilinear between the field's nodes, held at its edge. Where a node falls on one of the field's, it is that node's
- * value, so the two layers agree.
- */
-export function resampleField(field: ForestField, cell: number, nx: number, nz: number): Uint8Array {
-  const out = new Uint8Array(nx * nz)
-  const at = (i: number, j: number) => field.cover[Math.min(field.nz - 1, j) * field.nx + Math.min(field.nx - 1, i)]
-  for (let j = 0; j < nz; j++) {
-    const fz = (j * cell) / field.cell
-    const j0 = Math.floor(fz)
-    const v = fz - j0
-    for (let i = 0; i < nx; i++) {
-      const fx = (i * cell) / field.cell
-      const i0 = Math.floor(fx)
-      const u = fx - i0
-      const south = at(i0, j0) * (1 - u) + at(i0 + 1, j0) * u
-      const north = at(i0, j0 + 1) * (1 - u) + at(i0 + 1, j0 + 1) * u
-      out[j * nx + i] = Math.round(south * (1 - v) + north * v)
-    }
-  }
-  return out
 }
