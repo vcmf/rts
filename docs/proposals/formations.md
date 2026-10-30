@@ -117,6 +117,30 @@ One box for the selected unit, showing every number the sim uses on it, as Total
 
 It replaces the page's one-line summary for the selected unit; statuses for players come later.
 
+## 5a. How the code holds it (the owner: structured so every number can be tuned later)
+
+Every number in §§ 2, 2a and 3 is ruleset data, read through one place, so tuning never touches the sim's rules.
+
+- **One table, a row per shape:** each unit type's shape gets a `traits` block in the ruleset (`src/rulesets/
+  napoleonic.ts`): `fire`, `hitsTaken` (front, flank, rear: today's `exposure` and the kind's `fire.depth` folded in),
+  `shockTaken`, `melee` (today's `melee.strength` by kind folded in), `assault`, `brace` (front, flank, rear),
+  `flankShock`, `flankFrom` (the sector blend's angle), `moves`, `charges`. A field left out is neutral (1, or the
+  rule's default), so a new formation or a new ruleset names only what differs.
+- **Compiled once:** `compileRuleset` turns the rows into flat typed arrays indexed by type and shape (as the change
+  times are today), so the hot loops read an array, never an object, and determinism is unchanged (decision 0006:
+  multiplications of data, no new maths).
+- **One accessor:** `src/sim/traits.ts` gives a formation's traits as they stand, and is the only place that knows a
+  change is under way: the blend while changing (§ 3: the lower morale row, the higher hits taken, bracing by
+  progress) is written once, there. Fire, artillery, melee, morale, sectors and movement read it; none reads a
+  shape's name or a kind to decide a strength.
+- **Guards:** each field's range is checked when the ruleset is compiled (multipliers above 0, bracing in 0..1, a
+  square's `moves` false, a shape that `charges` has the fix bayonets mode), so a bad tune is refused, not played.
+- **The same numbers everywhere:** the info box (§ 5) reads the accessor, so what it shows is what the sim uses.
+  A report tool (`tools/formations-report.ts`) prints the table from the ruleset, and the calibrations and tests take
+  a ruleset variant (`{ ...napoleonic, ... }`), so a tune is tried without editing the shipped one.
+- **The first step is a pure refactor:** today's per-shape and per-kind numbers move into the table with the same
+  values, proven by the goldens not changing; the new values come after, each with its scenario.
+
 ## 6. The owner's answers (2026-10-30), and what is open
 
 - The square cannot move. The column is second best against cavalry, head on (§ 2a), and weak to guns and muskets.
