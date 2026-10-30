@@ -32,10 +32,11 @@ the resampling).
 
 `src/render/campaign/tiles.ts` (decision 0094): a level cut into tiles of 256 × 256 nodes, each one binary file,
 deflated. A 16-byte header (`CMPT`, the version, the level, the column and row, the size, the planes), then the
-shape as Uint16 in 0.5 m steps, each row as differences from the node before, then a byte plane each for the sun,
-the sky and the forest. Nodes past the level's grid repeat its edge. `packTile` and `unpackTile` work on raw bytes;
-`inflate` uses the platform's `DecompressionStream`; `cutTile` takes a tile from a level's bake. Tested in
-`test/campaign-tiles.test.ts`.
+shape as Uint16 in 0.5 m steps above the level's base (-70 m: the lakes sink below the lowest ground), each row as
+differences from the node before, then a byte plane each for the sun, the sky and the forest. Nodes past the level's
+grid repeat its edge. `packTile` refuses a place past the header's range; `unpackTile` takes the place it was asked
+for and refuses a tile of another; `inflate` uses the platform's `DecompressionStream`; `cutTile` takes a tile from a
+level's bake, `levelLayout` says how a level is cut. Tested in `test/campaign-tiles.test.ts`.
 
 `tools/campaign-tiles.ts` bakes and writes them under `scratch/campaign/` (git-ignored):
 
@@ -44,10 +45,14 @@ the sky and the forest. Nodes past the level's grid repeat its edge. `packTile` 
 | `l0` | 250 m | 3201 × 2001 | 104 | 18 MB |
 | `l1` | 100 m | 8001 × 5001 | 640 | 91 MB |
 
-with `manifest.json`: the format's version, the frame, the bake's parameters, the levels (cell, nodes, tiles, the
-shape's step, the tiles' path) and the credit. The build takes 79 s on 8 cores (the i7-9700K of the owner's WSL
-machine): 11 s for `l0`, 67 s for `l1`, most of it the light. It also writes the 100 m level as the prototype's
-base64 tiles (280 MB) under `scratch/campaign-tiles/`, from the same bake.
+with `manifest.json`: its own format's version, the frame, every parameter the bake depends on (the shape's, the
+theatre's lowest ground, the sun's, the lakes', the forests'), the levels (cell, nodes, tiles, the shape's step and
+base, the heights' zoom, the tiles' path) and the credit. Each level's grid must span the frame exactly (its cell
+divides it, or the tool stops). The far level's heights are the theatre's own. Every output is built beside the last
+one and swapped in whole when the run succeeds: a failed run leaves the last build as it was. The build takes 63 s on
+8 cores (the i7-9700K of the owner's WSL machine): 6 s for `l0`, 55 s for `l1`, most of it the light; the tiles are
+deflated on the thread pool. It also writes the 100 m level as the prototype's base64 tiles (280 MB) under
+`scratch/campaign-tiles/`, from the same bake, their shape held at zero as the prototype expects.
 
 The tools around it: `tools/campaign-theatre.ts` (the theatre's data, its 250 m heights, the forest field),
 `tools/worldcover.ts` (the forests' source), `tools/terrarium.ts` (the heights' source).

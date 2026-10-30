@@ -54,10 +54,22 @@ compressed tile levels with a manifest. The page that draws them is K2b.
   640 tiles in one Node thread).
 - Sizes, the 1805 theatre: the 100 m level 91 MB (the prototype's base64: 280 MB; raw: 210 MB), the 250 m level
   18 MB.
-- The build: 79 s on 8 cores (the owner's WSL machine, an i7-9700K): 11 s for the 250 m level, 67 s for the 100 m
-  one, most of it the light.
-- Tests: `test/campaign-tiles.test.ts` (9), `test/campaign-bake.test.ts` (one more: the bands give the bytes of one
+- The build: 63 s on 8 cores (the owner's WSL machine, an i7-9700K): 6 s for the 250 m level (the theatre's own
+  heights), 55 s for the 100 m one, most of it the light.
+- Tests: `test/campaign-tiles.test.ts` (13), `test/campaign-bake.test.ts` (one more: the bands give the bytes of one
   pass), `test/worldcover.test.ts` (unchanged, its smoothing and resampling now from the bake module).
+
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe: the shape was stored from zero, so a lake sunk below the lowest ground
+  lost its bed (18,413 nodes of the 100 m level) while its light kept it: the shape now stands above the level's base
+  (-70 m, the deepest a lake sinks), in the manifest; a level's grid rounded where the frame was not a whole number
+  of cells: `frameGrid` refuses it now, the forest field's too; a failed build left new tiles under the last
+  manifest: each output is built beside the last and swapped in whole; the manifest's parameters left out some the
+  bake depends on: all of them now, the lowest ground with them. With: `packTile` refuses a place past the header,
+  `unpackTile` refuses a tile of another place than the one asked for; the forest field loaded once and the far
+  level's heights the theatre's own; one `levelLayout`; the tiles deflated on the thread pool; the manifest's format
+  apart from the tiles'. The prototype's tiles unchanged, byte for byte.
 
 ## Open questions
 

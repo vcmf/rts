@@ -15,15 +15,16 @@ into the game's code (`docs/plans/active/k2a-bake.md`); the game is served, so i
 ## Decision
 
 We will store each tile as one small binary file (`src/render/campaign/tiles.ts`):
-- a 16-byte header (a magic, the format's version, the level, the tile's column and row, its size, its planes), so
-  a tile read from the wrong place or of another version is refused, not drawn;
-- **planar** channels: the shape as Uint16 in a fixed step (0.5 m), then a byte plane each for the sun, the sky and
+- a 16-byte header (a magic, the format's version, the level, the tile's column and row, its size, its planes); the
+  reader is told which tile it asked for, so a tile of another place or another version is refused, not drawn;
+- **planar** channels: the shape as Uint16 in a fixed step (0.5 m) above the level's base (below the lowest ground:
+  the lakes sink under it), then a byte plane each for the sun, the sky and
   the forest; each plane is uploaded as is, and planes of one kind deflate better than interleaved bytes;
 - the shape's rows as **differences from the node before** (modulo 2^16): relief is smooth, so the numbers are small;
 - the whole tile **deflated** (zlib's format): Node's zlib writes it, the browser's own `DecompressionStream`
   reads it, so no decoder ships;
-- a **manifest** (`manifest.json`) beside the levels: the format, the frame, the bake's parameters and the levels'
-  grids; the page uses tiles only when their parameters match its own.
+- a **manifest** (`manifest.json`) beside the levels, of its own format version: the frame, every parameter the bake
+  depends on and the levels' grids; the page uses tiles only when their parameters match its own.
 
 ## Consequences
 

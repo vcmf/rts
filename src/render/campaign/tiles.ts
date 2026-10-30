@@ -6,14 +6,17 @@
 // A tile, little-endian:
 //   0  'CMPT'                     4  version (1)        5  level        6  column (u16)   8  row (u16)
 //   10 size, nodes a side (u16)   12 byte planes (3)    13 three bytes, 0
-//   16 the shape: size × size Uint16 in the level's `scale` metres, each row as differences from the node before it
-//      (modulo 2^16; the row's first node as is): relief is smooth, so the numbers are small and deflate well
+//   16 the shape: size × size Uint16, in the level's `scale` metres above its `base` (the manifest's), each row as
+//      differences from the node before it (modulo 2^16; the row's first node as is): relief is smooth, so the
+//      numbers are small and deflate well
 //   then the planes, size × size bytes each: the sun (0 shadow to 255 lit), the sky (its open share), the forest
 // Rows run south to north, nodes west to east; nodes past the level's grid repeat its edge.
 import type { Grid } from './bake.ts'
 
 export const TILE_MAGIC = 'CMPT'
 export const TILE_VERSION = 1
+// the manifest's own format, apart from the tiles' (a field added to one need not refuse the other)
+export const MANIFEST_FORMAT = 1
 const HEADER = 16
 const PLANES = 3
 
@@ -37,8 +40,11 @@ export interface Level {
   size: number
   tilesX: number
   tilesZ: number
-  // the shape's step, in metres
+  // the shape's step and the height its zero stands for, in metres (lakes sink below the lowest ground)
   scale: number
+  base: number
+  // the terrain tiles' zoom the level's heights were sampled at
+  zoom: number
   // a tile's path relative to the manifest, its column and row as {i} and {j}
   path: string
 }
@@ -53,9 +59,19 @@ export interface Manifest {
   credit: string
 }
 
-/** A tile's bytes, before compression. */
+/** A tile's bytes, before compression. Throws on a plane of the wrong length or a place past the header's range. */
 export function packTile(tile: Tile): Uint8Array {
   const n = tile.size * tile.size
+  for (const [name, value, max] of [
+    ['level', tile.level, 0xff],
+    ['column', tile.column, 0xffff],
+    ['row', tile.row, 0xffff],
+    ['size', tile.size, 0xffff],
+  ] as const) {
+    if (!Number.isInteger(value) || value < 0 || value > max) {
+      throw new RangeError(`packTile: a ${name} of ${value}, past 0 to ${max}`)
+    }
+  }
   for (const [name, plane] of [
     ['shape', tile.shape],
     ['sun', tile.sun],
@@ -87,8 +103,18 @@ export function packTile(tile: Tile): Uint8Array {
   return bytes
 }
 
-/** A tile from its bytes (inflated). Throws on another format, version or length. */
-export function unpackTile(bytes: Uint8Array): Tile {
+/** Where a tile was asked for: its level, column and row. */
+export interface TilePlace {
+  level: number
+  column: number
+  row: number
+}
+
+/**
+ * A tile from its bytes (inflated), fetched for `place`. Throws on another format, version or length, and on a tile
+ * of another place (a misnamed file would otherwise be drawn where it does not belong).
+ */
+export function unpackTile(bytes: Uint8Array, place: TilePlace): Tile {
   if (bytes.length < HEADER) throw new RangeError(`unpackTile: ${bytes.length} bytes, shorter than the header`)
   const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3])
   if (magic !== TILE_MAGIC) throw new Error(`unpackTile: not a campaign tile (${JSON.stringify(magic)})`)
@@ -108,11 +134,20 @@ export function unpackTile(bytes: Uint8Array): Tile {
       shape[k] = value
     }
   }
+  const level = bytes[5]
+  const column = view.getUint16(6, true)
+  const row = view.getUint16(8, true)
+  if (level !== place.level || column !== place.column || row !== place.row) {
+    throw new Error(
+      `unpackTile: the tile of level ${level}, column ${column}, row ${row} where ` +
+        `level ${place.level}, column ${place.column}, row ${place.row} was asked for`,
+    )
+  }
   const planes = HEADER + n * 2
   return {
-    level: bytes[5],
-    column: view.getUint16(6, true),
-    row: view.getUint16(8, true),
+    level,
+    column,
+    row,
     size,
     shape,
     sun: bytes.slice(planes, planes + n),
@@ -129,11 +164,17 @@ export interface LevelBake {
   forest: Uint8Array
 }
 
+/** How a level's grid is cut: `size` nodes a tile, tilesX × tilesZ tiles (the last ones padded with the edge). */
+export function levelLayout(nx: number, nz: number, size: number) {
+  return { size, tilesX: Math.ceil(nx / size), tilesZ: Math.ceil(nz / size) }
+}
+
 /**
- * The tile at (column, row) of a level, `size` nodes a side, cut from its bake: the shape in `scale` metres (below
- * zero held at zero, above the Uint16 range refused), nodes past the grid repeating its edge.
+ * The tile at (column, row) of a level, `size` nodes a side, cut from its bake: the shape in `scale` metres above
+ * `base` (below it held at it, above the Uint16 range refused), nodes past the grid repeating its edge.
  */
-export function cutTile(bake: LevelBake, level: number, column: number, row: number, size: number, scale: number) {
+export function cutTile(bake: LevelBake, place: TilePlace, size: number, scale: number, base: number): Tile {
+  const { level, column, row } = place
   const { nx, nz } = bake.grid
   const n = size * size
   const tile: Tile = {
@@ -151,8 +192,10 @@ export function cutTile(bake: LevelBake, level: number, column: number, row: num
     for (let i = 0; i < size; i++) {
       const g = gj * nx + Math.min(nx - 1, column * size + i)
       const k = j * size + i
-      const steps = Math.round(Math.max(0, bake.shape[g]) / scale)
-      if (steps > 0xffff) throw new RangeError(`cutTile: a shape of ${bake.shape[g]} m past ${0xffff * scale} m`)
+      const steps = Math.round(Math.max(0, bake.shape[g] - base) / scale)
+      if (steps > 0xffff) {
+        throw new RangeError(`cutTile: a shape of ${bake.shape[g]} m past ${base + 0xffff * scale} m`)
+      }
       tile.shape[k] = steps
       tile.sun[k] = bake.light[g * 2]
       tile.sky[k] = bake.light[g * 2 + 1]

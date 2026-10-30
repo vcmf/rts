@@ -11,7 +11,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { FIELD_CELL, smoothCover, WOOD_BOX_M, type ForestField } from '../src/render/campaign/bake.ts'
-import type { Frame, projection } from './campaign-theatre-lib.ts'
+
+export type { ForestField }
+import { frameGrid, type Frame, type projection } from './campaign-theatre-lib.ts'
 
 const BASE = 'https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map'
 const CACHE = 'scratch/worldcover'
@@ -326,8 +328,7 @@ async function forestCover(
  * the tiles then read it.
  */
 export async function forestField(frame: Frame, proj: Projection): Promise<ForestField> {
-  const nx = Math.round((2 * frame.halfX) / FIELD_CELL) + 1
-  const nz = Math.round((2 * frame.halfZ) / FIELD_CELL) + 1
+  const { nx, nz } = frameGrid(frame, FIELD_CELL)
   const key = [frame.lat0, frame.lon0, frame.halfX, frame.halfZ, FIELD_CELL, WOOD_BOX_M, LEVEL_PX].join('_')
   const file = path.join(CACHE, `field-${key}.bin`)
   if (fs.existsSync(file)) {
