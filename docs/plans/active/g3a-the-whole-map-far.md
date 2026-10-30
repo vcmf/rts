@@ -74,7 +74,7 @@ panning (G3e).
 - Pan from edge to edge on both windows (`tools/shot.mjs`): no error, the coarse map everywhere, the window's detail
   where it is; shots in `scratch/g3a/` of the tile's edge (no seam in the light), the map's edge (the paper) and a view
   1 km from the tile.
-- The frame at the widest zoom over the ring, measured on the preview build under the bench lock (`bench-look.mjs`),
+- The frame at the widest zoom over the ring, measured on the preview build under the bench lock (`tools/bench-look.mjs`),
   against the window's today.
 - The look checks pass on the windows as today (the guard, `detail-check`, `water-check`, `water-look-check`).
 
