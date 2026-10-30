@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-30
 ---
 
-# 0090 The staff map is lit as a model under the 3D world's sun and the sky, in the campaign map's palette (amends 0064)
+# 0090 The staff map is lit as a model under the 3D world's sun and the sky, in the campaign map's palette (amends 0064 and 0065)
 
 ## Context
 
@@ -29,13 +29,16 @@ We will light the staff map as a model:
   nothing is raised.
 - **The buildings are part of the landscape** (G2b, the owner): the paper's tone a little darker, lit by the same
   light (the sun on each face, in the hills' baked shadow and sky where they stand); their shadows on the ground are
-  the sun's share they take, under the same sky, not a decal of their own: the footprint swept away from the sun as far
-  as its wall casts, on the 2 m cells (the light's 8 m nodes are too coarse for a house).
+  the ground's light with the sun's share taken out, under the same sky, not a brown decal: the walls swept away from
+  the sun as far as they cast, drawn as geometry over the plane, multiplying it, darkening each pixel once (a share on
+  the cells, tried first, blurred every edge into a rim through the texture's filter).
 - **The palette** is the campaign map's: a cold white paper, a warm sun, a cool sky, grey contours with orange index
   lines, the water stepped from a pale to a deep blue by its depth.
 
 This amends 0064's "relief (slope light, cast shadow, exposure)" and "one of the grid's 8 directions"; its flat plane,
-its worker bakes and its float heights stand.
+its worker bakes and its float heights stand. It amends 0065's houses (the prototype's dark warm roofs and faces, the
+shadow a translucent decal): they stand as boxes still, and their shadows are still their footprints swept from the
+sun, drawn once a pixel by the stencil; their tone and light are the ground's.
 
 ## Consequences
 

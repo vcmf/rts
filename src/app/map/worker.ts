@@ -7,8 +7,6 @@ import { expand } from '../../map/expand.ts'
 import { apply, LAYER_NAMES } from '../../map/apply.ts'
 import { draft } from '../../map/draft.ts'
 import {
-  bakeBuildingShadows,
-  BUILDING_BZ,
   bakeInk,
   bakeMasks,
   clampSun,
@@ -51,7 +49,7 @@ self.onmessage = (e: MessageEvent<CompileRequest | OverlayRequest>) => {
     ;(self as unknown as Worker).postMessage(reply, rgba ? [rgba] : [])
     return
   }
-  const { seq, mapText, kindsText, files, sun, z, bz } = e.data
+  const { seq, mapText, kindsText, files, sun, z } = e.data
   const fail = (path: string, message: string) =>
     (self as unknown as Worker).postMessage({
       seq,
@@ -79,7 +77,7 @@ self.onmessage = (e: MessageEvent<CompileRequest | OverlayRequest>) => {
     return
   }
   try {
-    compile(seq, map, cat, mine, clampSun(sun ?? SUN), Math.max(0, z ?? RELIEF.z), Math.max(0, bz ?? BUILDING_BZ))
+    compile(seq, map, cat, mine, clampSun(sun ?? SUN), Math.max(0, z ?? RELIEF.z))
   } catch (err) {
     fail('', `the compiler failed: ${(err as Error).message} (a bug, or a catalogue the validator does not check)`)
   }
@@ -105,7 +103,7 @@ function held(files: CompileRequest['files']): { files: MapFiles; missing: strin
   return { files: out, missing }
 }
 
-function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles, sun: Sun, z: number, bz: number): void {
+function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles, sun: Sun, z: number): void {
   const t0 = performance.now()
   const issues = validate(map, cat)
   if (issues.length) {
@@ -128,9 +126,8 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles, sun
   const img = draft(L)
   const t3 = performance.now()
   const light = bakeLightCached(L.height, L.nx + 1, L.nz + 1, L.cell, sun, LIGHT_STEP, z)
-  const grid = { x0: L.x0, z0: L.z0, cell: L.cell, nx: L.nx, nz: L.nz }
-  const houses = standing(ex.map.features, L.table, L.built, grid)
-  const masks = bakeMasks(L, bakeBuildingShadows(houses, grid, sun, bz))
+  const houses = standing(ex.map.features, L.table, L.built, { x0: L.x0, z0: L.z0, cell: L.cell, nx: L.nx, nz: L.nz })
+  const masks = bakeMasks(L)
   const ink = bakeInk(L, waysOf(ex.map.features, L.table))
   const t4 = performance.now()
   // the overlays' ground, read before the layers go to the page

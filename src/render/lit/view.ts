@@ -15,14 +15,15 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Season } from '../../map/schema.ts'
-import { INK_RANGE, sunXZ, type LightBake, type Sun } from './bake.ts'
+import { BUILDING_BZ, INK_RANGE, SUN, sunXZ, type LightBake, type Sun } from './bake.ts'
 import { paperCanvas } from './paper.ts'
-import { bridged, triangulate, type Standing } from './houses.ts'
+import { bridged, shadowQuads, triangulate, type Standing } from './houses.ts'
 import LIT_VS from './shaders/lit.vert?raw'
 import LIT_FS from './shaders/lit.frag?raw'
 import LIGHT from './shaders/light.glsl?raw'
 import HOUSES_VS from './shaders/houses.vert?raw'
 import HOUSES_FS from './shaders/houses.frag?raw'
+import SHADOWS_FS from './shaders/shadows.frag?raw'
 
 const FOV = 0.52 // rad, vertical (the prototype's)
 // the overlays' near limit, as a share of the camera's distance to the centre: a ground point nearer the camera's
@@ -50,6 +51,7 @@ const BARRIER = '#3a4528' // hedges and walls, a dark olive
 // the buildings' tone, a share of the paper's colour: the ground's paper with its grain is about 0.93 of it, so a
 // house is a little darker (the owner, G2b: "cold white, maybe a tiny bit darker"), a church a little more
 const HOUSE_TONE = 0.88
+const SHADOW_Y = 0.05 // m: the buildings' shadows over the paper
 const CHURCH_TONE = 0.83
 const SEASON_AT: Record<Season, number> = { spring: 0, summer: 0, autumn: 1.5, winter: 3 }
 
@@ -97,10 +99,10 @@ export class LitView {
   private readonly camera: FreeCamera
   private readonly material: ShaderMaterial
   private readonly houseMaterial: ShaderMaterial
-  // the materials the ground's light falls on: the plane's and the buildings'
-  private get lit(): ShaderMaterial[] {
-    return [this.material, this.houseMaterial]
-  }
+  private readonly shadowMaterial: ShaderMaterial
+  // the materials the ground's light falls on: the plane's, the buildings' and their shadows' (G2b)
+  private readonly lit: ShaderMaterial[]
+  private sun: Sun = SUN // the compile's (setMap), the map's own until then: the buildings' shadows are cast by it
   private plane: Mesh | null = null
   private houses: Mesh[] = []
   private overlay: RawTexture | null = null
@@ -119,7 +121,12 @@ export class LitView {
     this.canvas = canvas
     // doNotHandleContextLost: Babylon would otherwise keep every texture's source bytes to restore a lost context
     // (144 MB at 6 km); a lost context is reported (onLost) and the page recompiles
-    this.engine = new Engine(canvas, true, { preserveDrawingBuffer: true, doNotHandleContextLost: true }, false)
+    this.engine = new Engine(
+      canvas,
+      true,
+      { preserveDrawingBuffer: true, stencil: true, doNotHandleContextLost: true },
+      false,
+    )
     if (this.engine.webGLVersion < 2) {
       this.engine.dispose()
       throw new Error('the lit map view needs WebGL2 (decision 0046)')
@@ -169,34 +176,58 @@ export class LitView {
       },
     )
     this.material.backFaceCulling = false
-    // the buildings, lit by the ground's light (G2b): the light's uniforms and textures set on both materials (lit)
+    // the buildings, lit by the ground's light, and their shadows on the ground in it (G2b): the light's uniforms and
+    // textures set on all three materials (lit)
+    const light = [
+      'uX0Z0',
+      'uSize',
+      'uNodes',
+      'uLightNodes',
+      'uCell',
+      'uDatum',
+      'uZ',
+      'uLightStep',
+      'uSkyK',
+      'uLamp',
+      'uFloor',
+      'uSun',
+      'uPaper',
+      'uKey',
+      'uSkyC',
+    ]
     this.houseMaterial = new ShaderMaterial(
       'houses',
       this.scene,
       { vertexSource: HOUSES_VS, fragmentSource: HOUSES_FS.replace('#include <light>', LIGHT) },
       {
         attributes: ['position', 'normal', 'color'],
-        uniforms: [
-          'world',
-          'viewProjection',
-          'uX0Z0',
-          'uSize',
-          'uLightNodes',
-          'uCell',
-          'uLightStep',
-          'uSkyK',
-          'uLamp',
-          'uFloor',
-          'uSun',
-          'uPaper',
-          'uKey',
-          'uSkyC',
-          'uEye',
-        ],
-        samplers: ['uLight', 'uMask'],
+        uniforms: ['world', 'viewProjection', ...light, 'uEye'],
+        samplers: ['uHeight', 'uLight'],
       },
     )
     this.houseMaterial.backFaceCulling = false
+    // the shadows multiply the frame (dst × src), each pixel once however many overlap there: the first marks the
+    // stencil, the others fail it
+    this.shadowMaterial = new ShaderMaterial(
+      'house-shadows',
+      this.scene,
+      { vertexSource: LIT_VS, fragmentSource: SHADOWS_FS.replace('#include <light>', LIGHT) },
+      {
+        attributes: ['position'],
+        uniforms: ['world', 'viewProjection', ...light],
+        samplers: ['uHeight', 'uLight'],
+        needAlphaBlending: true,
+      },
+    )
+    this.shadowMaterial.alphaMode = Constants.ALPHA_MULTIPLY
+    this.shadowMaterial.disableDepthWrite = true
+    this.shadowMaterial.stencil.enabled = true
+    this.shadowMaterial.stencil.func = Constants.NOTEQUAL
+    this.shadowMaterial.stencil.funcRef = 1
+    this.shadowMaterial.stencil.opStencilDepthPass = Constants.REPLACE
+    this.shadowMaterial.backFaceCulling = false
+    this.lit = [this.material, this.houseMaterial, this.shadowMaterial]
+    this.houseMaterial.setVector3('uEye', this.camera.position)
     const paper = paperCanvas()
     const t = this.rgba(paper, Texture.TRILINEAR_SAMPLINGMODE, true)
     t.wrapU = t.wrapV = Texture.WRAP_ADDRESSMODE
@@ -273,35 +304,35 @@ export class LitView {
     )
     const rgba = Constants.TEXTUREFORMAT_RGBA
     const linear = Texture.BILINEAR_SAMPLINGMODE
-    this.material.setTexture('uHeight', height)
     const light = tex(m.light.data, m.light.nx, m.light.nz, rgba, linear)
     // neither the mask nor the ink's fields mipmapped: averaged, a brook or a hedge two cells wide would vanish from
     // the far view, and the water's depth would part from its fill (docs/plans/active/m6-lit-view.md, open: a
     // min-filtered mip chain for the far view)
-    const mask = tex(m.masks, m.nx, m.nz, rgba, linear)
+    this.material.setTexture('uMask', tex(m.masks, m.nx, m.nz, rgba, linear))
     this.material.setTexture('uInk', tex(m.ink, m.nx, m.nz, rgba, linear))
     this.material.setFloat('uInkRange', INK_RANGE)
     this.material.setTexture('uFlatT', tex(m.flat.rgba, m.flat.w, m.flat.h, rgba, Texture.NEAREST_SAMPLINGMODE))
     // toward the sun, x east, y up, z north
+    this.sun = m.sun
     const [sx, sz] = sunXZ(m.sun)
     const el = (m.sun.el * Math.PI) / 180
     const s = SEASON_AT[m.season]
     for (const mat of this.lit) {
+      mat.setTexture('uHeight', height)
+      mat.setVector2('uNodes', new Vector2(m.nx + 1, m.nz + 1))
+      mat.setFloat('uDatum', m.datum)
+      mat.setFloat('uZ', m.z)
       mat.setTexture('uLight', light)
       mat.setVector2('uLightNodes', new Vector2(m.light.nx, m.light.nz))
       mat.setFloat('uLightStep', m.light.step)
-      mat.setTexture('uMask', mask)
       mat.setVector2('uX0Z0', new Vector2(m.x0, m.z0))
       mat.setVector2('uSize', new Vector2(W, H))
       mat.setFloat('uCell', m.cell)
       mat.setVector3('uSun', new Vector3(sx * Math.cos(el), Math.sin(el), sz * Math.cos(el)))
       mat.setColor3('uPaper', seasonColour(PAPER, s))
     }
-    this.material.setVector2('uNodes', new Vector2(m.nx + 1, m.nz + 1))
     this.grid = { nx: m.nx, nz: m.nz }
     this.setOverlay(null) // the last map's overlay is not this one's
-    this.material.setFloat('uDatum', m.datum)
-    this.material.setFloat('uZ', m.z)
     this.material.setColor3('uLine', seasonColour(LINE, s))
     this.material.setColor3('uBarrier', Color3.FromHexString(BARRIER))
     this.material.setFloat('uFlat', this.flat)
@@ -358,9 +389,9 @@ export class LitView {
 
   /**
    * Stands the map's houses on the paper (M6b, `standing`): each footprint (its rings, m) raised to its wall height,
-   * its roof flat, its faces lit by the ground's light (houses.frag); its shadow is the worker's (the cells' mask).
+   * its roof flat, its faces lit by the ground's light (houses.frag), its shadow on the ground in it (shadows.frag).
    */
-  setHouses(houses: Standing[]): void {
+  setHouses(houses: Standing[], bz = BUILDING_BZ): void {
     for (const h of this.houses) h.dispose()
     this.houses = []
     if (!houses.length) return
@@ -370,11 +401,11 @@ export class LitView {
     const idx: number[] = []
     for (const h of houses) {
       const tone = h.church ? CHURCH_TONE : HOUSE_TONE
-      // the footprint less its courtyards as one ring, triangulated: the roof
-      const outline = bridged(h.rings)
-      const tris = triangulate(outline)
-      // the roof, flat at the wall's height; a roofless house (a ruin, burnt) is its walls alone
+      // the roof, flat at the wall's height, the footprint less its courtyards as one ring, triangulated; a roofless
+      // house (a ruin, burnt) is its walls alone
       if (h.roof) {
+        const outline = bridged(h.rings)
+        const tris = triangulate(outline)
         const top = pos.length / 3
         for (const [x, z] of outline) {
           pos.push(x, h.height, z)
@@ -404,7 +435,18 @@ export class LitView {
         }
       })
     }
-    // their shadows on the ground are the worker's (bakeBuildingShadows, the cells' mask), in the ground's light
+    // their shadows on the ground: the walls swept away from the sun (shadowQuads), over the paper with no depth
+    // against it, in the ground's light (shaders/shadows.frag)
+    const { xz, tris } = shadowQuads(houses, this.sun, bz)
+    const shade: number[] = []
+    for (let k = 0; k < xz.length; k += 2) shade.push(xz[k], SHADOW_Y, xz[k + 1])
+    const shadow = new Mesh('house-shadows', this.scene)
+    const sd = new VertexData()
+    sd.positions = shade
+    sd.indices = tris
+    sd.applyToMesh(shadow)
+    shadow.material = this.shadowMaterial
+    shadow.renderingGroupId = 1
     const boxes = new Mesh('houses', this.scene)
     const bd = new VertexData()
     bd.positions = pos
@@ -414,7 +456,7 @@ export class LitView {
     bd.applyToMesh(boxes)
     boxes.material = this.houseMaterial
     boxes.renderingGroupId = 2
-    this.houses = [boxes]
+    this.houses = [shadow, boxes]
     for (const h of this.houses) h.setEnabled(!this.flat)
   }
 

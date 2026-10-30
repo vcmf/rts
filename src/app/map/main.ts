@@ -230,7 +230,7 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
     })
     fillOverlays(r.units)
     requestOverlay()
-    lit?.setHouses(r.houses)
+    lit?.setHouses(r.houses, bzAsked)
     labels = namesOf(r)
     // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
     current = {
@@ -299,7 +299,7 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
   if (mine !== seq) return
   for (const [name, f] of Object.entries(files)) if (f.bytes) sentVersion.set(name, f.version)
   worker.postMessage(
-    { seq: mine, mapText, kindsText, files, sun: sunAsked, z: zAsked, bz: bzAsked } satisfies CompileRequest,
+    { seq: mine, mapText, kindsText, files, sun: sunAsked, z: zAsked } satisfies CompileRequest,
     Object.values(files).flatMap(f => (f.bytes ? [f.bytes] : [])),
   )
 }

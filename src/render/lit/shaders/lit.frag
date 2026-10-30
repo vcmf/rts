@@ -8,8 +8,7 @@ precision highp float;
 varying vec3 vW;
 uniform sampler2D uHeight;   // the node heights, m above the datum: one float a node, read by texelFetch
 uniform sampler2D uLight;    // R the sun's soft shadow (1 lit), G the open sky (1 all of it), on every uLightStep-th node
-uniform sampler2D uMask;     // R the water's depth (0..1), G the buildings' shadows' share of the sun, B the water,
-                             // A the yards, on the cells
+uniform sampler2D uMask;     // R the water's depth (0..1), B the water, A the yards, on the cells (G unused)
 uniform sampler2D uInk;      // the ink's distance fields on the cells: R ways (their shapes), G water, B barriers, A woods
                              // (their cells), signed m
 uniform sampler2D uPaperT, uFlatT;
@@ -26,17 +25,6 @@ uniform vec3 uPaper, uKey, uSkyC, uShallow, uDeep, uContourMinor, uContourIndex,
 float hair(float sd) {
   float px = sd / max(fwidth(sd), 1e-5);
   return 1.0 - smoothstep(0.5, 1.3, abs(px));
-}
-
-// the height at a point, bilinear between the four nodes round it (m above sea level)
-float heightAt(vec2 xz) {
-  vec2 u = (xz - uX0Z0) / uCell;
-  vec2 i = clamp(floor(u), vec2(0.0), uNodes - 2.0);
-  vec2 f = clamp(u - i, 0.0, 1.0);
-  ivec2 a = ivec2(i);
-  float h00 = texelFetch(uHeight, a, 0).r, h10 = texelFetch(uHeight, a + ivec2(1, 0), 0).r;
-  float h01 = texelFetch(uHeight, a + ivec2(0, 1), 0).r, h11 = texelFetch(uHeight, a + ivec2(1, 1), 0).r;
-  return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y) + uDatum;
 }
 
 void main() {
@@ -116,20 +104,9 @@ void main() {
      sky from its bed, a basin sunk into the model as K1's; the ground past the map's edge lies flat. Divided by what flat open ground gets, so that comes out in the
      paper's own tone: the faces toward the sun warmer, the shade cooler */
   {
-    /* the differences one-sided within a cell of the map's edge (the heights past it are held, which would halve
-       the slope there) */
-    float gx = 0.0, gz = 0.0;
-    if (inside > 0.0) {   /* past the map's edge the ground is flat: no height to read */
-      vec2 lo = uX0Z0, hi = uX0Z0 + (uNodes - 1.0) * uCell;
-      vec2 p0 = clamp(vW.xz - uCell, lo, hi), p1 = clamp(vW.xz + uCell, lo, hi);
-      gx = (heightAt(vec2(p1.x, vW.z)) - heightAt(vec2(p0.x, vW.z))) / max(p1.x - p0.x, 1e-3) * uZ;
-      gz = (heightAt(vec2(vW.x, p1.y)) - heightAt(vec2(vW.x, p0.y))) / max(p1.y - p0.y, 1e-3) * uZ;
-    }
-    vec3 n = normalize(mix(vec3(-gx, 1.0, -gz), vec3(0.0, 1.0, 0.0), max(waterA, 1.0 - inside)));
-    vec2 ln = (vW.xz - uX0Z0) / (uCell * uLightStep);   /* light node i at the centre of texel i */
-    vec2 B = mix(vec2(1.0), texture2D(uLight, (ln + 0.5) / uLightNodes).rg, inside);
-    /* the buildings' shadows take their share of the sun (M.g, G2b), the hills' baked shadow the rest */
-    mapC = litBy(mapC, lightOf(n, vW.xz, B.r * (1.0 - M.g), B.g));
+    vec3 n = normalize(mix(groundNormal(vW.xz, inside), vec3(0.0, 1.0, 0.0), waterA));
+    vec2 B = bakedAt(vW.xz, inside);
+    mapC = litBy(mapC, lightOf(n, vW.xz, B.r, B.g));
   }
 
   vec3 col = mapC * (0.93 + (g1 - 0.5) * 0.16 + (fine - 0.5) * 0.12);   /* the paper's grain */

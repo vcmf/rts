@@ -24,10 +24,12 @@ swept away from the sun as its shadow: a second light, apart from G2's baked sun
   as flat ground, a wall by how it faces the sun), in the hills' baked shadow and sky read at the building's place
   (the light texture), the sky less on a wall (as a steep face), divided by flat ground's light, the same floor and
   soft shoulder. A house in a hill's shadow is in shadow; the walls away from the sun take the sky alone.
-- **Their shadow on the ground:** not a decal any more. The worker sweeps each standing building's footprint away
-  from the sun (as the decal did) and writes it into the cells' mask (its unused G channel, at 2 m), as a share of the
-  sun; the shader multiplies the baked sun (B.r) by it, so a building's shadow is the hills' shade, the same tone,
-  under the sky. The light's bake stays on 8 m nodes: a house (about 10 m) is too small for it.
+- **Their shadow on the ground:** not a brown decal. Each building's walls swept away from the sun
+  (`shadowQuads`, `src/render/lit/houses.ts`), drawn over the plane as geometry with a shader of the ground's light
+  (`shaders/shadows.frag`): it multiplies the frame by the ground's light with the sun's share taken out over the
+  ground's light with it, so a building's shadow is the hills' shade on the same ground, its edges the walls' own;
+  the stencil darkens each pixel once. (First built as a share of the sun on the 2 m cells, in the mask: redesigned,
+  Review.)
 - **The shadow's length:** from the building's wall height, at most 100 m. The ground's light reads its heights ×3 (`RELIEF.z`);
   whether a building's shadow is cast from its true height or ×3 too is the owner's call by eye: `?bz=` (default 1, its
   true height), shots of both.
@@ -37,9 +39,9 @@ Out of scope: the woods (after the campaign map's); the 3D world's buildings (G3
 
 ## Acceptance
 
-- The shadow mask tested (`test/render-lit-bake.test.ts` or `test/render-lit-houses.test.ts`): a house's shadow
-  away from the sun, its length from its height and the sun's, none toward the sun, a courtyard's own shadow, a
-  roofless ruin's walls only.
+- The shadows tested (`test/render-lit-houses.test.ts`): a house's shadow away from the sun, its length from its
+  height and the sun's, none toward the sun, `bz` and its cap, terraced houses as one shadow, a courtyard's own shadow,
+  a roofless ruin's floor by its walls.
 - Screenshots of Sokolnitz and Pratze close up, before and after, `?bz=1` and `?bz=3`, in `scratch/g2/`; the owner's
   eye.
 - The page check (`tools/map-page-check.mjs`) passes: a save redraws within a second.
@@ -51,12 +53,9 @@ Out of scope: the woods (after the campaign map's); the 3D world's buildings (G3
 
 ## Open questions
 
-1. Shadows on the buildings themselves: a wall toward the sun takes the ground's shadow a cell out from its foot over
-   its whole height, and a roof none (its height is not in the mask): a tall church wall beside a low house's shadow
-   goes dark to its top, a low roof in a church's shadow stays lit. A height per cell in the mask would settle both.
-2. A building's shadow past the map's edge stops there (the mask ends with the cells; M6b's decal ran on over the
-   paper).
-3. The buildings' sky occlusion on the ground (a street between two rows of houses sees less sky): not baked at 8 m;
+1. Shadows on the buildings themselves: another building's shadow falls on the ground only, not on a wall or a roof
+   (a low roof in a church's shadow stays lit).
+2. The buildings' sky occlusion on the ground (a street between two rows of houses sees less sky): not baked at 8 m;
    a darkening near walls if the owner asks.
 
 ## Review
@@ -82,3 +81,13 @@ Round 2 (9 findings, 2 severe):
   2); a tone a vertex in four floats (kept: the boxes are a few thousand vertices).
 
 `?bz=`: the owner's choice, 1 first (2026-10-30).
+
+Round 3 (10 findings, 2 severe): where two shadows met inside a cell they made a half-lit stripe (terraced houses along
+their party wall); the footprints left out of the share bled a lit rim into the shade at a shaded wall's foot. A third
+round with severe findings: **redesigned** (AGENTS.md). Every round had found one edge of the same flaw: a polygon's
+shadow kept as a share on 2 m cells and read through a bilinear filter smears every edge (a sunlit wall, a shaded
+wall, a party wall, the map's edge), and leaving footprints out only moved the smear. The shadows are geometry again
+(M6b's swept footprints, the stencil), lit as the ground: exact edges, overlaps darkened once, past the map's edge
+onto the paper. The mask's G channel is unused again. Also from round 3: decision 0090 amends 0065 (the houses' look);
+the camera's place set before the first frame; the roof triangulated only when there is one. The round count
+restarts.
