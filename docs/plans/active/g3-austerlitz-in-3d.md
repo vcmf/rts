@@ -34,7 +34,7 @@ at 16 m (188 × 188 nodes, about 70,000 triangles), and past its edge the paper.
 **Data: CPU parts per tile at build time, GPU parts per tile at run time.**
 - Per tile, built in Node from the map's files (the heights, the cover, the roads, the water data, the yards and
   buildings, the trees): the look compiler's window build, cut to 400 m, written as tile files. Built locally and in
-  CI, not committed (an owner question, below).
+  CI, not committed (the owner's choice).
 - Per tile, baked on the GPU as a tile comes in, one bake a frame: the fine light (0.5 m, decision 0082), the bounce,
   the macro colour, the buildings' light, the water's bank normals.
 - For the whole map, baked once at build time at 2 m: the terrain's sun shadow and the sky's occlusion (G2's
@@ -83,10 +83,7 @@ seen in 3D, coarse, and the camera free over it.
   277 MB for one window: to measure.
 - **Track E's work in flight** on the same files: merge conflicts, and the look's goldens and benches move.
 
-## Open questions for the owner
+## The owner's answers (2026-10-30)
 
-1. **The tile data:** built locally and in CI from the map's files, not committed (about 25–50 MB for 3 km, an
-   estimate scaled from the look plan's 50–100 MB for 6 km)? Recommended.
-2. **The static light invariant's wording** (above).
-3. **G3a first** (the whole map coarse, the detail in one window), or straight to tiles (G3b)? Recommended: G3a first,
-   it is visible within a PR or two and settles the far ring, the camera and the coarse light.
+All three as recommended: the tile data built locally and in CI, not committed; the static light invariant in the
+wording above; G3a first.
