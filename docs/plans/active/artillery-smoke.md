@@ -273,9 +273,10 @@ volumetrics or ray marching; the formations' cap kept over every card; the far-z
   terraces, a blocky camouflage; the gentle emboss of values does not.
 - **Front and back**: the cards drawn back to front (`depthOrder`: the ring's live puffs' middles at the shader's clock,
   an insertion sort each frame into a second buffer, only the live ones drawn); with dense cores an unsorted blend put a
-  back card's lit top over a front card. **2** adds one lobe a strung puff (`BODY_LAYERS`: a lit top up and to one
-  side, a shaded underbelly low on the other, in turn; set off by shares of the puff's radius, so they grow apart with
-  it): 8 cards a shot for 4. Fewer, bigger, denser cards over many translucent ones (the fill is the cost).
+  back card's lit top over a front card. **2** adds one lobe to each of the first two strung puffs, the muzzle's cloud
+  and the next (`BODY_LAYERS`: a lit top up and to one side, a shaded underbelly low on the other; set off by shares
+  of the puff's radius, so they grow apart with it): 6 cards a shot for 4 (first built with a lobe on all four, 8
+  cards: about twice the budget at 25 m, below). Fewer, bigger, denser cards over many translucent ones (the fill is the cost).
 
 **Stills** (`output/armies-review/29-gun-smoke-volume/`, not in git: its compare page, side by side or space to cycle
 0 → 1 → 2; 25, 40, 90, 150 m at 66 s and 40 m at 64 s; one volley's life every 2 s, `seq-sheet.png` and a gif a
@@ -283,7 +284,28 @@ variant; the refs). Read: 1 and 2 turn the flat white patches into rounded, lit 
 underside; 2 is fuller and rounder, its far puffs more of a cloud; the crews and the cavalry riding through still read
 (the cap); at 90 and 150 m soft shaded masses, no camouflage pattern.
 
-**Cost**: COST_PLACEHOLDER
+**Cost**: `?armies=20&firehold=1&bench=smokebody&benchat=60,-43&benchr=25,40,90,150` (the built page, Metal,
+1920 × 1080; `body0`, `body1`, `body2`, `noarmsmoke` alternated in one page, each camera's arms run forward and back;
+three rounds each started at a 1-min load ≤ 3 under the bench lock; the arms' share = body less `noarmsmoke`, GPU frame
+p50, ms):
+  - First built uploading the sorted cards every frame: bodies 1 and 2 cost +3.2 to +6.5 ms of GPU frame at every view
+    (one round), their draws' own share (`other`) only +0.1 to +0.6: the buffer's update waiting on the frame before,
+    on Metal. Uploaded only when the drawn list changes now.
+  - With 4 lobes (8 cards a shot; three rounds): body 1 +0.12 to +0.80, body 2 +0.40 to +1.09 (25 m, yaw −45°).
+  - As built (body 2 with 2 lobes; three rounds; ranges over the rounds):
+
+    | view (m) | body 0 (today) | body 1 | body 2 |
+    |---|---|---|---|
+    | 25 | +0.17 to +0.52 | +0.43 to +0.71 | +0.73 to +1.04 |
+    | 40 | −0.02 to +0.40 | +0.12 to +0.51 | +0.46 to +0.58 |
+    | 90 | −0.16 to +0.71 | −0.09 to +0.45 | +0.19 to +0.49 |
+    | 150 | +0.03 to +0.31 | +0.12 to +1.03 (one camera, one round: noise) | +0.30 to +0.76 |
+
+  Body 1 keeps about the budget (≤ ~0.5 ms) but at 25 m on the battery (+0.6 to 0.7); body 2 is about +0.5 from 40 m
+  out and +0.75 to 1.0 at 25 m, over it. The fill of the denser, longer-held cores at the closest view is the cost;
+  the fallbacks if the owner picks 2: the lobes on the muzzle's cloud only, or the half-resolution smoke target (the
+  musket plan's Out). Today's (body 0) measured here +0.0 to +0.7, the earlier round's +0.16 to +0.39: this
+  machine's noise between days.
 
 ## Open questions for the owner
 

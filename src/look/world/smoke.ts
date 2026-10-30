@@ -391,11 +391,12 @@ export interface BodyLook {
   layers: readonly [number, number]
 }
 /** the variants: 0 the cards as approved (2026-10-29), 1 painted as volumes, 2 that and a lobe more round each of the
- *  strung puffs (the cloud's top or its underbelly, in turn) */
+ *  first two strung puffs, the muzzle's cloud and the next (its top, the other's underbelly; four lobes cost about
+ *  twice the budget at 25 m, plan's round 2) */
 export const BODY_LOOKS: readonly BodyLook[] = [
   { light: 0, layers: [0, 0] },
   { light: 1, layers: [0, 0] },
-  { light: 1, layers: [1, 4] },
+  { light: 1, layers: [1, 2] },
 ]
 /** ?smokebody=0|1|2: the big clouds' body (BODY_LOOKS; absent: 0); a bad value throws */
 export function smokeBody(params: URLSearchParams): number {

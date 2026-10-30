@@ -1166,8 +1166,8 @@ and `?lookat` without `?armies` throw, naming it.
 - **The draw order**: the muskets' smoke first, then each arm's (one draw each, in that order; unsorted within, as
   the muskets': one colour family), except an arm's cards with a body's light (`?smokebody=1|2`, below): those
   back to front.
-- **Memory**: the rings, 64 B a puff (the muskets' 1,512 puffs at 20 a side: 97 KB; the guns' 384 with room for the
-  lobes: 25 KB, and as much again for their sorted copy; on the GPU and the CPU; all 16 floats used: the last two a
+- **Memory**: the rings, 64 B a puff (the muskets' 1,512 puffs at 20 a side: 97 KB; the guns' 288 with room for the
+  lobes: 18 KB, and as much again for their sorted copy; on the GPU and the CPU; all 16 floats used: the last two a
   lobe's place in its cloud), and the mask, 256 KB, one for all.
 
 ### The guns' smoke (with `?armies`; decision 0083, proposed)
@@ -1207,10 +1207,11 @@ shared (`SmokeMask`, drawn once a frame before the smokes).
   through a soft mid tone (decision 0084) from a warm white to a pale cool shade, the underside cooler and deeper,
   the core deeper in the shade than the rim, a faint warm rim on the sun's side; the thin veils lit as before. Drawn
   back to front (`depthOrder`, pure, tested: the live puffs' middles as the vertex shader moves them, an insertion
-  sort, only they drawn: `thinInstanceCount`), the dense cores needing it. **2**, that and a lobe round each strung
-  puff (`BODY_LAYERS`, `bodyLayer`: a lit top up and to one side, a shaded underbelly low on the other, in turn; set
+  sort, only they drawn: `thinInstanceCount`; uploaded only when the list changes, an upload every frame cost 3.5 ms
+  of GPU frame on Metal), the dense cores needing it. **2**, that and a lobe round the first two strung puffs
+  (`BODY_LAYERS`, `bodyLayer`: a lit top up and to one side, a shaded underbelly low on the other, in turn; set
   off by shares of the puff's radius as it grows, born and carried with it, the vertex shader shading a lobe by how
-  far below its puff it lies): eight cards a shot for four, front and back. The formations' cap stays over each card.
+  far below its puff it lies): six cards a shot for four, front and back. The formations' cap stays over each card.
   `?bench=smokebody` measures `body0`, `body1`, `body2` and `noarmsmoke` in one page (`Smoke.setBody`: the ring
   rebuilt with the body's lobes).
 
