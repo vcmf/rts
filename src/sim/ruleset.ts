@@ -4,7 +4,6 @@
 // layout, bins, accordion pairs and half-turn symmetry.
 import { cos, sin, PI, exp } from './num.ts'
 import { fnv1a } from './hash.ts'
-import { DT } from './time.ts'
 
 // a company in the battalion frame
 export interface Placement {
@@ -34,8 +33,32 @@ export interface FormationDef {
   // a trail shape's spacing of files and ranks when it is not the block's (a column of route of horses, nose
   // to tail): its places only; a change into or out of it passes through the block's spacing
   step?: { file: number; rank: number }
-  braced?: boolean // proof against a charge from any side (the square; S1d-2)
+  allRound?: boolean // no flank: every side a front (the square)
+  traits?: TraitsDef // its strengths and weaknesses; none: neutral
   place(g: Geometry): Placement[]
+}
+// a shape's compiled traits (TypeTable.traits), a row of T_LEN per shape, read through src/sim/traits.ts: hits taken
+// from the front, from the flank and the rear as multiples of it, whether those two are given, melee, brace, and
+// whether it has no flank
+export const T_HITS = 0
+export const T_FLANK = 1
+export const T_REAR = 2
+export const T_SIDED = 3
+export const T_MELEE = 4
+export const T_BRACE = 5
+export const T_ROUND = 6 // 1: no flank, every side a front (the shape's allRound)
+export const T_LEN = 7
+/**
+ * A shape's strengths and weaknesses (docs/proposals/formations.md § 5a), multipliers read through
+ * src/sim/traits.ts; a field left out is neutral.
+ */
+export interface TraitsDef {
+  // hits taken from musketry and canister: from its front (how easy a target it is), and from its flank and its rear
+  // as multiples of the front's (each ≥ 1: fire from the front is never the worst; docs/proposals/sectors-model.md
+  // § 5); none: 1
+  hits?: { front?: number; flank?: number; rear?: number }
+  melee?: number // its strength in melee
+  brace?: number // 0..1: how far it is proof against a charge (the square 1; S1d-2)
 }
 export interface TerrainDef {
   g: Record<string, number>
@@ -58,38 +81,59 @@ export interface FireDef {
   reloadJitter: number
   firingRanks: number // the front ranks that fire
   misfire: number // share of rounds that do not go off
-  depth: Record<string, number> // how easy a target is to hit, by its kind
   state: Record<string, number> // how well a battalion fires, by morale state (steady, shaken, wavering)
   cohesion: number // fire falls by this share at full disorder
   eye: number // eye height above the ground, metres
   sight: Record<string, number> // metres of a terrain class a sight line may cross (classes not named: any)
 }
-// loss-driven morale: morale relaxes toward quality less losses; the states follow it with hysteresis
+// the morale bar (docs/proposals/morale-bar-model.md), in points: level 2's bar holds 100
 export interface MoraleDef {
-  quality: number // a battalion's quality when the scenario gives none (0..1)
-  // weights of the share of men lost, and of men lost recently
-  losses: number
-  recent: number
-  recentTime: number // seconds over which recent losses decay (e-folding)
-  relaxTime: number // seconds for morale to close 63% of the gap to its target
-  // [enter below, leave at or above]
+  level: number // a formation's level when the scenario gives none (1..6)
+  loss: number // points the whole spawn strength costs; a man lost costs loss / start
+  regen: number // points a second the bar recovers in the fight, up to its maximum less what its losses cost
+  scar: number // the share of its losses' cost a bar never recovers (0..1)
+  // shares of the bar's maximum: [enter below, leave at or above]
   shaken: [number, number]
   wavering: [number, number]
-  rout: number // routs below this
   routPace: number // a router's pace, times its shape's
   // S1c-2 (docs/plans/active/s1c2-morale-machine.md)
-  // a friend's break: the morale lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
+  // a friend's break: the points lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
   contagion: { shock: number; front: number; back: number }
-  // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
+  // the back exposed (decision 0086): points off the effective bar per weight of flank and of rear of the worst enemy
+  // that can hurt it (docs/proposals/sectors-model.md § 5)
+  drain: { flank: number; rear: number }
+  // per secured flank: points on the effective bar; a friend within reach metres and arc radians of the left or right
+  // axis
   support: { bonus: number; reach: number; arc: number }
-  // a wavering battalion without orders Retires `metres` once its morale has fallen by more than `rate` a second for
-  // `after` seconds
-  fallback: { metres: number; after: number; rate: number }
-  // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
-  rally: { safe: number; calm: number; time: number; cost: number; max: number }
+  // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; its maximum cut by the share
+  // cut, its bar refilled to the share `share` of it; rallies allowed
+  rally: { safe: number; calm: number; time: number; cut: number; share: number; max: number }
   shatter: number // a router below this share of its spawn strength shatters
   // a shattered formation with any corner of a company block this near the map's edge (metres) leaves the field
   leave: number
+}
+// an experience level (docs/proposals/morale-bar-model.md § 8): its name, the points to reach it, its bar's maximum,
+// and its effects as factors (owed men ÷ toughness; reload, change times and the square's reaction ×; hit chance ×
+// precision; pursuit ×)
+// experience's credits (docs/proposals/morale-bar-model.md § 7), points: a man struck, a second under fire (a man
+// lost in the last `window` seconds), a charge turned away, an enemy broken in front of it
+export interface PointsDef {
+  man: number
+  fire: number
+  window: number
+  repulse: number
+  broke: number
+}
+export interface LevelDef {
+  name: string
+  points: number
+  bar: number
+  toughness: number
+  reload: number
+  precision: number
+  drill: number
+  react: number
+  pursue: number
 }
 // a type that charges (S1d-2, docs/systems/melee.md): the shapes it charges from, its paces (the approach
 // until gallopAt metres from the target, then the gallop), the metres of gallop for full momentum, the gap at
@@ -121,8 +165,9 @@ export interface MeleeDef {
   hold: number
   threat: Quarters
   impact: { kill: number; shock: Quarters }
+  // the shock of a charge striking a battalion already in melee with another, by the side it strikes (decision 0080)
+  second: { flank: number; rear: number }
   rate: number
-  strength: Record<string, number>
   cohesion: number
   refuse: number
   breach: number
@@ -182,6 +227,7 @@ export interface UnitType {
   charge?: ChargeDef // it charges (S1d-2)
   refuge?: string // the shape it forms against a charging enemy (S1d-2, the standing behaviour)
   artillery?: ArtilleryDef // it fires shot (S1d-3)
+  traits?: TraitsDef // its shapes' traits where a shape names none (a shape's own override them, field by field)
 }
 /** how a unit looks, as the renderer paints it (docs/plans/active/armies-demo.md): resolved from its Dress (decision
  *  0068, src/look/world/dyes.ts). Its colours by the figure's colour roles (tools/bake-figure.py:
@@ -219,6 +265,15 @@ export interface Dress {
   far?: 'coat' | 'own'
 }
 
+// where a threat stands to a formation (docs/proposals/sectors-model.md § 8): the blend's centre T and half-width H on
+// the angle measure (45°, 35° to 55°), the corner's length (metres), the slices a threat's block is cut into, and the
+// farthest an enemy presses on a battalion's morale (metres between their nearest companies)
+export interface SectorsDef {
+  blend: { T: number; H: number }
+  corner: number
+  slices: number
+  reach: number
+}
 export interface Ruleset {
   name: string
   types: Record<string, UnitType> // the first is the default
@@ -235,7 +290,10 @@ export interface Ruleset {
   dressTime: number
   fire: FireDef
   morale: MoraleDef
+  levels: LevelDef[] // six, from recruits (1) up
+  points: PointsDef
   melee: MeleeDef
+  sectors: SectorsDef
   // S1e-2: a side is broken at this share of its spawned men in the fight; at a time limit, shares within margin draw
   end: { broken: number; margin: number }
 }
@@ -285,6 +343,7 @@ export interface TypeTable {
   shapes: ShapeLayout[]
   shapeIndex(name: string): number
   changeTime: Float64Array // [from·S + to]
+  traits: Float64Array // [shape·T_LEN + field] (src/sim/traits.ts)
   start: number // the spawn's shape
   // the shapes it charges from (1 by shape) and its paces' indices; null: it does not charge
   charge: { from: Uint8Array; approach: number; pace: number } | null
@@ -309,14 +368,10 @@ export interface Compiled {
   presets: string[]
   presetIndex(name: string): number
   slope: Float64Array // 401 entries over rise/run −1..1
-  depthByKind: Float64Array // fire: the target's depth factor, by kind
   sightByClass: Float64Array // fire: metres of each terrain class a sight line may cross (Infinity: any)
   cosArc: number // fire: cos of the arc's half-angle
   stateFactor: Float64Array // fire: by morale state (steady, shaken, wavering; a router does not fire)
-  recentDecay: number // morale: recent losses' factor per tick
-  relax: number // morale: the share of the gap to its target closed per tick
   supportCos: number // morale: cos of the support arc
-  strengthByKind: Float64Array // melee: strength by kind
 }
 
 // the morale states that fire, in MS_* order (world.ts)
@@ -362,7 +417,8 @@ function rulesetHash(rs: Ruleset): number {
             !!d.trail,
             !!d.closeAcross,
             d.step ?? null,
-            !!d.braced,
+            !!d.allRound,
+            d.traits ?? null,
             d.place(geo),
           ]
         }),
@@ -374,6 +430,7 @@ function rulesetHash(rs: Ruleset): number {
       u.charge ?? null,
       u.refuge ?? '',
       u.artillery ?? null,
+      u.traits ?? null,
     ]
   })
   const text = JSON.stringify([
@@ -391,7 +448,10 @@ function rulesetHash(rs: Ruleset): number {
     rs.dressTime,
     rs.fire,
     rs.morale,
+    rs.levels,
+    rs.points,
     rs.melee,
+    rs.sectors,
     rs.end,
   ])
   return fnv1a(new TextEncoder().encode(text))
@@ -418,6 +478,31 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     if (d.roadPace && !paces.includes(d.roadPace)) {
       throw new Error(`${at}: shape ${n}'s roadPace ${d.roadPace} is not one of the paces`)
     }
+    const T = traitsOf(u, n)
+    // a flank or rear under 1 would make fire from the front the worst
+    if (
+      T.hits &&
+      !(
+        (T.hits.front ?? 1) > 0 &&
+        (T.hits.front ?? 1) < Infinity &&
+        (T.hits.flank ?? 1) >= 1 &&
+        (T.hits.rear ?? 1) >= 1 &&
+        (T.hits.flank ?? 1) + (T.hits.rear ?? 1) < Infinity
+      )
+    ) {
+      throw new Error(`${at}: shape ${n}'s hits must be finite, the front above 0, the flank and rear ≥ 1`)
+    }
+    if (T.melee !== undefined && !(T.melee > 0 && T.melee < Infinity)) {
+      throw new Error(`${at}: shape ${n}'s melee must be finite and above 0`)
+    }
+    if (T.brace !== undefined && !(T.brace >= 0 && T.brace <= 1)) {
+      throw new Error(`${at}: shape ${n}'s brace must be in 0..1`)
+    }
+    // a shape proof against a charge from every side has no flank; one with no flank has no flank's or rear's hits
+    if (T.brace === 1 && !d.allRound) throw new Error(`${at}: shape ${n} is fully braced but not allRound`)
+    if (d.allRound && (T.hits?.flank !== undefined || T.hits?.rear !== undefined)) {
+      throw new Error(`${at}: shape ${n} is allRound: it has no flank's or rear's hits`)
+    }
   }
   // a change time naming a shape it has not would be ignored, and the default taken in silence (#156)
   for (const [k, v] of Object.entries(u.changeTime)) {
@@ -432,6 +517,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   }
   const shapes: ShapeLayout[] = names.map(n => layout(g, u.formations, n, kinds, paces))
   const S = names.length
+  const traits = compileTraits(u, names)
   const changeTime = new Float64Array(S * S)
   for (let a = 0; a < S; a++) {
     for (let b = 0; b < S; b++) changeTime[a * S + b] = u.changeTime[names[a] + '>' + names[b]] ?? u.defaultChangeTime
@@ -477,7 +563,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     charge = { from, approach, pace }
   }
   const refuge = u.refuge === undefined ? -1 : names.indexOf(u.refuge)
-  if (u.refuge !== undefined && (refuge < 0 || !u.formations[u.refuge].braced)) {
+  if (u.refuge !== undefined && (refuge < 0 || (traitsOf(u, u.refuge).brace ?? 0) < 1)) {
     throw new Error(`${at}: its refuge ${u.refuge} is not one of its braced shapes`)
   }
   let artillery: TypeTable['artillery'] = null
@@ -531,6 +617,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     shapes,
     shapeIndex: n => names.indexOf(n),
     changeTime,
+    traits,
     start,
     charge,
     refuge,
@@ -578,7 +665,6 @@ export function compileRuleset(rs: Ruleset): Compiled {
     }
   }
   byName('fire.sight', rs.fire.sight, classes, 'a terrain class')
-  byName('fire.depth', rs.fire.depth, kinds, 'a kind of the terrain table')
   byName('disorder.scale', rs.disorder.scale, kinds, 'a kind of the terrain table')
   const paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const typeNames = Object.keys(rs.types)
@@ -592,7 +678,6 @@ export function compileRuleset(rs: Ruleset): Compiled {
     const a = sl + 0.05 < 0 ? -(sl + 0.05) : sl + 0.05
     slope[i] = Math.min(1, rs.slopeK * expNeg(3.5 * (a - 0.05)))
   }
-  const depthByKind = new Float64Array(kinds.map(k => rs.fire.depth[k] ?? 1))
   const sightByClass = new Float64Array(Object.keys(rs.terrain).map(c => rs.fire.sight[c] ?? Infinity))
   for (const s of FIRING_STATES) {
     if (!(s in rs.fire.state)) throw new Error(`ruleset ${rs.name}: fire.state has no ${s}`)
@@ -605,12 +690,64 @@ export function compileRuleset(rs: Ruleset): Compiled {
       throw new Error(`ruleset ${rs.name}: a wading limit names ${k}, not a kind of the terrain table`)
     }
   }
-  // one friend's break must not rout a steady battalion of default quality on its own (s1c-plan-review L2)
   const M = rs.morale
-  if (M.contagion.shock > 0.6 * (M.quality - M.rout)) {
+  const L = rs.levels
+  if (!(
+    L.length === 6 &&
+    L[0].points === 0 &&
+    L.every((l, k) => k === 0 || (l.points > L[k - 1].points && l.bar > L[k - 1].bar)) &&
+    L.every(l => l.bar > 0 && [l.toughness, l.reload, l.precision, l.drill, l.react, l.pursue].every(v => v > 0))
+  )) {
     throw new Error(
-      `ruleset ${rs.name}: morale.contagion.shock over 0.6 of the gap from the default quality to the rout`,
+      `ruleset ${rs.name}: levels must be six, their points rising from 0, their bars rising and above 0, their factors above 0`,
     )
+  }
+  const P = rs.points
+  if (!([P.man, P.fire, P.repulse, P.broke].every(v => v >= 0) && P.window > 0)) {
+    throw new Error(`ruleset ${rs.name}: points' credits must be 0 or more, their window above 0`)
+  }
+  if (!(Number.isInteger(M.level) && M.level >= 1 && M.level <= 6)) {
+    throw new Error(`ruleset ${rs.name}: morale.level must be a level, 1..6`)
+  }
+  // one shock must not rout a steady battalion of level 2 on its own (s1c-plan-review L2;
+  // docs/proposals/morale-bar-model.md § 9): contagion and a second enemy's charge. A charge's own threat and impact
+  // are left out: a charge into a flank is meant to break a line
+  const most = 0.6 * L[1].bar
+  if (M.contagion.shock > most) {
+    throw new Error(`ruleset ${rs.name}: morale.contagion.shock over 0.6 of level 2's bar`)
+  }
+  // nor a second enemy's charge (decision 0080)
+  const sec = rs.melee.second
+  if (!(sec.flank >= 0 && sec.rear >= 0 && Math.max(sec.flank, sec.rear) <= most)) {
+    throw new Error(`ruleset ${rs.name}: melee.second must be ≥ 0 and at most 0.6 of level 2's bar`)
+  }
+  if (!(
+    M.wavering[0] > 0 &&
+    M.wavering[0] < M.wavering[1] &&
+    M.wavering[1] <= M.shaken[0] &&
+    M.shaken[0] < M.shaken[1] &&
+    M.shaken[1] <= 1
+  )) {
+    throw new Error(
+      `ruleset ${rs.name}: morale needs 0 < wavering.enter < wavering.back ≤ shaken.enter < shaken.back ≤ 1`,
+    )
+  }
+  if (!(M.scar >= 0 && M.scar <= 1 && M.regen >= 0 && M.loss > 0)) {
+    throw new Error(`ruleset ${rs.name}: morale needs scar in 0..1, regen ≥ 0 and loss > 0`)
+  }
+  // a rallied formation is never wavering at once
+  if (!(M.rally.share > M.wavering[1] && M.rally.share <= 1 && M.rally.cut >= 0 && M.rally.cut < 1)) {
+    throw new Error(`ruleset ${rs.name}: morale.rally needs share above wavering's way back and at most 1, cut in 0..1`)
+  }
+  const SC = rs.sectors
+  if (!(SC.blend.H > 0 && SC.blend.T - SC.blend.H > 0 && SC.blend.T + SC.blend.H < 1)) {
+    throw new Error(`ruleset ${rs.name}: sectors.blend must lie inside the angle measure's 0..1 (0 < T − H, T + H < 1)`)
+  }
+  if (!(SC.corner > 0 && Number.isInteger(SC.slices) && SC.slices >= 1 && SC.reach > 0 && SC.reach < Infinity)) {
+    throw new Error(`ruleset ${rs.name}: sectors needs corner > 0, a whole number of slices ≥ 1 and a finite reach > 0`)
+  }
+  if (!(M.drain.flank >= 0 && M.drain.rear >= 0 && M.drain.flank + M.drain.rear < Infinity)) {
+    throw new Error(`ruleset ${rs.name}: morale.drain must be finite and ≥ 0`)
   }
   if (!(M.rally.max >= 0 && M.rally.max < 255)) {
     throw new Error(`ruleset ${rs.name}: morale.rally.max must be 0..254 (the break count is a byte)`)
@@ -619,11 +756,6 @@ export function compileRuleset(rs: Ruleset): Compiled {
     throw new Error(
       `ruleset ${rs.name}: morale.support.arc must be in (0, π/2]: wider, a friend ahead would count as a flank`,
     )
-  }
-  for (const k of Object.keys(rs.melee.strength)) {
-    if (!kinds.includes(k)) {
-      throw new Error(`ruleset ${rs.name}: melee.strength names ${k}, not a kind of the terrain table`)
-    }
   }
   let maxC = 0
   let maxNB = 0
@@ -647,18 +779,40 @@ export function compileRuleset(rs: Ruleset): Compiled {
     paceSpeed,
     presets,
     slope,
-    depthByKind,
     sightByClass,
     cosArc: cos(rs.fire.arc),
     stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])),
-    recentDecay: exp(-DT / rs.morale.recentTime),
-    relax: 1 - exp(-DT / rs.morale.relaxTime),
     supportCos: cos(rs.morale.support.arc),
-    strengthByKind: new Float64Array(kinds.map(k => rs.melee.strength[k] ?? 1)),
     presetIndex: n => presets.indexOf(n),
   }
 }
 const expNeg = (x: number): number => exp(-x)
+/** Each shape's traits as a flat row (src/sim/traits.ts's fields), neutral where the ruleset says nothing. */
+function compileTraits(u: UnitType, names: string[]): Float64Array {
+  const out = new Float64Array(names.length * T_LEN)
+  names.forEach((n, s) => {
+    const t = traitsOf(u, n)
+    const o = s * T_LEN
+    out[o + T_HITS] = t.hits?.front ?? 1
+    out[o + T_FLANK] = t.hits?.flank ?? 1
+    out[o + T_REAR] = t.hits?.rear ?? 1
+    out[o + T_SIDED] = t.hits?.flank !== undefined || t.hits?.rear !== undefined ? 1 : 0
+    out[o + T_MELEE] = t.melee ?? 1
+    out[o + T_BRACE] = t.brace ?? 0
+    out[o + T_ROUND] = u.formations[n].allRound ? 1 : 0
+  })
+  return out
+}
+/** Shape n of type u's traits: its own, field by field over its type's (`UnitType.traits`). */
+function traitsOf(u: UnitType, n: string): TraitsDef {
+  const a = u.traits ?? {}
+  const b = u.formations[n].traits ?? {}
+  return {
+    hits: a.hits || b.hits ? { ...a.hits, ...b.hits } : undefined,
+    melee: b.melee ?? a.melee,
+    brace: b.brace ?? a.brace,
+  }
+}
 const nonNegative = (v: number): boolean => v >= 0 && v < Infinity
 // the names in first-seen order, each once (the sim keeps no Set: index-ordered arrays only)
 const unique = (a: string[]): string[] => a.filter((v, i) => a.indexOf(v) === i)

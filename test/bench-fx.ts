@@ -30,12 +30,15 @@ const cr = compileRuleset(napoleonic)
 /** The bench case (plain or with claims) of that id. */
 export const caseOf = (id: string): BenchCase => [...BENCH_CASES, ...CLAIM_CASES].find(c => c.id === id)!
 
-/** Plays a case for `seconds` (its own length by default), calling `each` every `every` ticks. */
+/**
+ * Plays a case for `seconds` (its own length by default), calling `each` every `every` ticks; under `rules`, else the
+ * shipped ruleset.
+ */
 export function play(
   c: BenchCase,
-  opts: { seconds?: number; reverse?: boolean; every?: number; each?: (w: World) => void } = {},
+  opts: { seconds?: number; reverse?: boolean; every?: number; each?: (w: World) => void; rules?: typeof cr } = {},
 ): World {
-  const w = makeWorld(data, cr, 1)
+  const w = makeWorld(data, opts.rules ?? cr, 1)
   if (opts.reverse) {
     w.scratch.reverse = true
     w.scratch.reverseMoves = true
@@ -147,7 +150,6 @@ export const BIG = new Set(['x14-forty-crossing', 'x14-forty-crossing-claims'])
 // today formations pass through each other: these cases overlap (and C1–C3 make them pass)
 export const OVERLAP_TODAY = new Set([
   'x02-meet',
-  'x03-brigade-charge', // the charging regiment rides on into the regiments it meets
   'x05-into-friend',
   'x06-three-on-a-gap',
   'x07-threading',

@@ -6,7 +6,18 @@
 import { describe, it, expect } from 'vitest'
 import { longIt } from './fx.ts'
 import { caseOf, play, watched, moves, near } from './bench-fx.ts'
-import { typeOf, MS_ROUTING, RP_HALTED, menOf, M_TICK, TICK_HZ, type World } from '../src/sim/index.ts'
+import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import {
+  compileRuleset,
+  typeOf,
+  MS_ROUTING,
+  RP_HALTED,
+  menOf,
+  M_TICK,
+  TICK_HZ,
+  type Compiled,
+  type World,
+} from '../src/sim/index.ts'
 
 // forty battalions: five minutes is enough for their paths to cross
 describe('invariant 1: no two formed bodies overlap', () => {
@@ -60,9 +71,10 @@ const noWay = (w: World): boolean => w.f.mstate[0] >= MS_ROUTING && w.f.routPhas
 // with a friend (X-16) or an enemy (X-17) just behind the raw one. Played to its end: where the watched stood when
 // the raw one's (slot 0's) melee began and at its last tick in it (a break, or a fall-back after it, faces it about),
 // and when it broke
-function untilRout(id: string, watch = [0, 1]) {
+function untilRout(id: string, watch = [0, 1], rules?: Compiled) {
   const out = { melee: -1, rout: -1, z: [] as number[][], at: [] as number[][] }
   play(caseOf(id), {
+    rules,
     every: 1,
     each: w => {
       if (out.melee < 0 && w.f.foe[0]) {
@@ -82,17 +94,26 @@ describe('with claims: a melee holds', () => {
   for (const [id, watch] of [
     ['x15-melee-holds-claims', [0, 1]],
     ['x16-friend-behind-claims', [0, 1]],
-    ['x17-enemy-behind-claims', [0, 1]],
     ['x19-offset-lines-claims', [0, 1]],
     ['x20-brigade-lines-claims', [0, 1, 2, 3]],
   ] as const) {
     it(`${id}: nobody gives ground; the raw regiment stands where the melee found it until it ends`, () => {
       const a = id === 'x15-melee-holds-claims' ? open() : untilRout(id, [...watch])
       expect(a.melee).toBeGreaterThan(0)
-      expect(a.rout).toBeGreaterThan(a.melee)
+      // a melee: the raw one breaks after it began, or the two part with neither broken (X-19 since the bar)
+      if (a.rout >= 0) expect(a.rout).toBeGreaterThan(a.melee)
       watch.forEach((_, k) => a.at[k].forEach((v, d) => expect(v).toBeCloseTo(a.z[k][d], 6)))
     })
   }
+  it('x17-enemy-behind-claims, without the drain: nobody gives ground with an enemy just behind', () => {
+    // with it, the enemy behind drains the raw regiment to shaken (decision 0086) and the impact breaks it at contact,
+    // with no melee to hold (its router's cases are below); without it, the melee holds as decision 0080 says
+    const quiet = compileRuleset({ ...napoleonic, morale: { ...napoleonic.morale, drain: { flank: 0, rear: 0 } } })
+    const a = untilRout('x17-enemy-behind-claims', [0, 1], quiet)
+    expect(a.melee).toBeGreaterThan(0)
+    expect(a.rout).toBeGreaterThan(a.melee)
+    a.at.forEach((p, k) => p.forEach((v, d) => expect(v).toBeCloseTo(a.z[k][d], 6)))
+  })
   it('X-18: the broken regiment runs clear of the regiment it fought', () => {
     // the pair once stood in each other's cores, and the router, still on its foe's cells, could not move off them
     let broke = false

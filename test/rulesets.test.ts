@@ -2,7 +2,17 @@
 // that breaks it, with a message naming what is wrong; the ruleset hash moves with the rules; and the shipped
 // ruleset's own data holds together (names that point at nothing).
 import { describe, it, expect } from 'vitest'
-import { compileRuleset, buildTerrain, MAX_COMPANIES, type Ruleset, type UnitType } from '../src/sim/index.ts'
+import {
+  compileRuleset,
+  buildTerrain,
+  MAX_COMPANIES,
+  T_LEN,
+  T_HITS,
+  T_FLANK,
+  T_MELEE,
+  type Ruleset,
+  type UnitType,
+} from '../src/sim/index.ts'
 import { napoleonic, ceiling } from '../src/rulesets/napoleonic.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
 import { data } from './fx.ts'
@@ -133,7 +143,7 @@ describe('compileRuleset refuses', () => {
     ],
     [
       "a friend's break strong enough to rout a steady battalion on its own",
-      { ...N, morale: { ...N.morale, contagion: { ...N.morale.contagion, shock: 0.25 } } },
+      { ...N, morale: { ...N.morale, contagion: { ...N.morale.contagion, shock: 61 } } },
       /contagion.shock over 0.6/,
     ],
     [
@@ -147,9 +157,42 @@ describe('compileRuleset refuses', () => {
       /support.arc must be in/,
     ],
     [
-      'a melee strength for a kind the terrain table has not',
-      { ...N, melee: { ...N.melee, strength: { ...N.melee.strength, camel: 2 } } },
-      /melee.strength names camel/,
+      'a melee strength not above 0',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { melee: 0 } } },
+      }),
+      /shape line's melee must be finite and above 0/,
+    ],
+    [
+      'a fully braced shape with a flank',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, square: { ...inf.formations.square, allRound: false } },
+      }),
+      /shape square is fully braced but not allRound/,
+    ],
+    [
+      "an allRound shape with a flank's hits, which would never apply",
+      withType('infantry', {
+        ...inf,
+        formations: {
+          ...inf.formations,
+          square: {
+            ...inf.formations.square,
+            traits: { ...inf.formations.square.traits, hits: { front: 1.6, flank: 1.3 } },
+          },
+        },
+      }),
+      /shape square is allRound: it has no flank's or rear's hits/,
+    ],
+    [
+      'a brace outside 0..1',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, square: { ...inf.formations.square, traits: { brace: 1.5 } } },
+      }),
+      /shape square's brace must be in 0..1/,
     ],
     [
       'a shape whose pace is not a pace (#156)',
@@ -216,9 +259,12 @@ describe('compileRuleset refuses', () => {
       /fire.sight.woods is -1/,
     ],
     [
-      'a target depth that is not a number',
-      { ...N, fire: { ...N.fire, depth: { ...N.fire.depth, line: NaN } } },
-      /fire.depth.line is NaN/,
+      'hits from the front that are not a number',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { hits: { front: NaN } } } },
+      }),
+      /shape line's hits must be finite/,
     ],
     [
       'a disorder scale below 0',
@@ -231,9 +277,12 @@ describe('compileRuleset refuses', () => {
       /fire.sight names jungle/,
     ],
     [
-      'a target depth for a kind the terrain table has not',
-      { ...N, fire: { ...N.fire, depth: { ...N.fire.depth, camel: 1 } } },
-      /fire.depth names camel/,
+      "hits from a flank under the front's",
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { hits: { front: 1, flank: 0.9 } } } },
+      }),
+      /shape line's hits must be finite, the front above 0, the flank and rear ≥ 1/,
     ],
     [
       'a disorder scale for a kind the terrain table has not',
@@ -261,6 +310,27 @@ describe('the terrain refuses', () => {
     void __
     const rs = { ...N, terrain, fire: { ...N.fire, sight } }
     expect(() => buildTerrain(data, compileRuleset(rs))).toThrow(/terrain class woods not in ruleset/)
+  })
+})
+
+describe("a shape's traits (docs/proposals/formations.md § 5a)", () => {
+  // the compiled row of shape n of type t
+  const row = (rs: Ruleset, t: string, n: string) => {
+    const U = compileRuleset(rs).types[Object.keys(rs.types).indexOf(t)]
+    const s = U.shapes.findIndex(sh => sh.name === n)
+    return U.traits.slice(s * T_LEN, s * T_LEN + T_LEN)
+  }
+  it("are the type's where the shape names none, and the shape's own field by field over them", () => {
+    const line = row(N, 'cavalry', 'line')
+    expect([line[T_HITS], line[T_FLANK], line[T_MELEE]]).toEqual([1.3, 1.2, 1.6])
+    const own = withType('cavalry', {
+      ...cav,
+      formations: { ...cav.formations, line: { ...cav.formations.line, traits: { hits: { front: 2 }, melee: 2 } } },
+    })
+    const a = row(own, 'cavalry', 'line')
+    const b = row(own, 'cavalry', 'column')
+    expect([a[T_HITS], a[T_FLANK], a[T_MELEE]]).toEqual([2, 1, 2])
+    expect([b[T_HITS], b[T_MELEE]]).toEqual([1.3, 1.6])
   })
 })
 

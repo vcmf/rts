@@ -55,15 +55,23 @@ const infantry: UnitType = {
       kind: 'line',
       pace: 'ordinary',
       closeAcross: true,
+      traits: { hits: { front: 1.0, flank: 1.8, rear: 1.2 } }, // enfiladed, the ball runs down the files
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * (BW(g) + g.fileSpacing), z: 0, rot: 0, face: 0 })),
     },
     // the companies over four faces, facing out (square, above)
-    square: { kind: 'column', pace: 'ordinary', braced: true, place: square },
+    square: {
+      kind: 'column',
+      pace: 'ordinary',
+      allRound: true,
+      traits: { hits: { front: 1.6 }, brace: 1 },
+      place: square,
+    },
     // column of divisions: two companies wide, one division behind another (an odd last company centred;
     // 0 − keeps the first division at +0)
     column: {
       kind: 'column',
       pace: 'ordinary',
+      traits: { hits: { front: 1.6, flank: 1.2, rear: 1.1 } },
       place: g =>
         each(g, c => ({
           x: c === g.companies - 1 && g.companies % 2 ? 0 : ((c % 2) - 0.5) * (BW(g) + g.fileSpacing),
@@ -78,6 +86,7 @@ const infantry: UnitType = {
       pace: 'ordinary',
       roadPace: 'routeStep',
       trail: true,
+      traits: { hits: { front: 1.6, flank: 1.5, rear: 1.0 } },
       place: g =>
         each(g, c => ({ x: ((g.ranks - 1) * g.rankSpacing) / 2, z: -c * (BW(g) + 1.0), rot: -PI / 2, face: 0 })),
     },
@@ -124,12 +133,14 @@ const cavalry: UnitType = {
     line: {
       kind: 'horse',
       pace: 'walk',
+      traits: { hits: { flank: 1.2, rear: 1.1 } },
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * (BW(g) + SQ_GAP), z: 0, rot: 0, face: 0 })),
     },
     // column of squadrons at half distance: each squadron half its frontage behind the one ahead
     column: {
       kind: 'horse',
       pace: 'walk',
+      traits: { hits: { flank: 1.2, rear: 1.1 } },
       place: g => each(g, c => ({ x: 0, z: -c * ((g.ranks - 1) * g.rankSpacing + BW(g) / 2), rot: 0, face: 0 })),
     },
     // column of route by fours at the trot: each squadron's block turned along the road as a column of twos,
@@ -139,6 +150,7 @@ const cavalry: UnitType = {
       kind: 'horse',
       pace: 'trot',
       trail: true,
+      traits: { hits: { flank: 1.5, rear: 1.0 } },
       step: { file: 3.0, rank: 1.0 },
       place: g =>
         each(g, c => ({
@@ -163,6 +175,7 @@ const cavalry: UnitType = {
   start: 'line',
   fires: false,
   figure: 'mounted',
+  traits: { hits: { front: 1.3 }, melee: 1.6 }, // every shape: a horseman is a large target, and strong in melee
   // the charge (docs/systems/melee.md): at the trot, the gallop over the last 150 m (the research: 50–200
   // paces), full weight after 50 m of it; blown for two minutes after, recoiling 80 m from a square
   charge: {
@@ -197,6 +210,7 @@ const battery: UnitType = {
     unlimbered: {
       kind: 'guns',
       pace: 'manhandle',
+      traits: { hits: { flank: 1.5, rear: 1.0 } },
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * 16, z: 0, rot: 0, face: 0 })),
     },
     // on the move: piece, limber and team one behind the other on the trail, 18 m apart, at the walk
@@ -204,6 +218,7 @@ const battery: UnitType = {
       kind: 'guns',
       pace: 'gunWalk',
       trail: true,
+      traits: { hits: { flank: 1.5, rear: 1.0 } },
       place: g => each(g, c => ({ x: 0, z: -c * 18, rot: 0, face: 0 })),
     },
   },
@@ -215,6 +230,7 @@ const battery: UnitType = {
   start: 'limbered',
   fires: false, // no musketry: its pieces fire shot
   figure: 'crewed',
+  traits: { hits: { front: 0.4 }, melee: 0.3 }, // every shape: the detachment spread round its piece; weak in melee
   // roundshot and canister (docs/systems/artillery.md): a 6-pounder's ball at about 430 m/s, effective to about
   // 800 m with its grazes; canister inside 300 m (the research: 200–350 m). First guesses, tuned by
   // tools/calibrate-artillery.ts
@@ -335,48 +351,113 @@ export const napoleonic: Ruleset = {
     reloadJitter: 0.2,
     firingRanks: 2,
     misfire: 0.15,
-    // a horseman is a large target; a detachment stands spread round its piece
-    depth: { line: 1.0, column: 1.6, skirmish: 0.5, horse: 1.3, guns: 0.4 },
     state: { steady: 1.0, shaken: 0.85, wavering: 0.6 },
     cohesion: 0.5,
     eye: 1.6,
     sight: { woods: 40, denseWood: 15 },
   },
+  // the morale bar (docs/proposals/morale-bar-model.md § 8), in points: today's numbers × 100 / 0.35, the margin of the
+  // old default quality (0.75) over the rout (0.4) being level 2's bar of 100
   morale: {
-    quality: 0.75,
-    losses: 1.25,
-    recent: 3,
-    recentTime: 10,
-    relaxTime: 20,
-    shaken: [0.6, 0.65],
-    wavering: [0.5, 0.55],
-    rout: 0.4,
+    level: 2,
+    loss: 357, // level 2 breaks at 28% losses, as the old average line did
+    regen: 2, // shocks wear off in the fight, under fire too: the old relax recovered a contagion shock at about 2 a
+    // second at first
+    scar: 1, // losses are never recovered
+    shaken: [0.6, 0.7],
+    wavering: [0.3, 0.45],
     routPace: 2,
     // the rest of the machine (docs/plans/active/s1c2-morale-machine.md)
     // the reaches scale with the frontage (S1c-4): 2.8 times S1c-2's, set for 100-man lines 40 m apart in a
     // brigade, so a 400-man line 113 m from its neighbour feels the same shock and support
-    contagion: { shock: 0.15, front: 560, back: 280 },
-    support: { bonus: 0.04, reach: 280, arc: 0.7853981633974483 },
-    fallback: { metres: 15, after: 3, rate: 0.0005 },
-    rally: { safe: 250, calm: 20, time: 30, cost: 0.1, max: 2 },
+    contagion: { shock: 43, front: 560, back: 280 },
+    // an enemy on its flank presses a steady line (100 → 71, still steady); one behind it makes it shaken (43)
+    drain: { flank: 29, rear: 57 },
+    support: { bonus: 11, reach: 280, arc: 0.7853981633974483 },
+    rally: { safe: 250, calm: 20, time: 30, cut: 0.25, share: 0.5, max: 2 },
     shatter: 0.5,
     leave: 12, // S1e-1: shattered formations that reach the map's edge leave the field
   },
+  // experience (docs/proposals/morale-bar-model.md § 8): first guesses
+  levels: [
+    {
+      name: 'Recruits',
+      points: 0,
+      bar: 70,
+      toughness: 0.9,
+      reload: 1.12,
+      precision: 0.85,
+      drill: 1.3,
+      react: 2.5,
+      pursue: 2,
+    },
+    { name: 'Line', points: 100, bar: 100, toughness: 1, reload: 1, precision: 1, drill: 1, react: 1, pursue: 1 },
+    {
+      name: 'Veterans',
+      points: 300,
+      bar: 120,
+      toughness: 1.1,
+      reload: 0.92,
+      precision: 1.1,
+      drill: 0.85,
+      react: 1,
+      pursue: 0.8,
+    },
+    {
+      name: 'Young Guard',
+      points: 700,
+      bar: 140,
+      toughness: 1.2,
+      reload: 0.88,
+      precision: 1.15,
+      drill: 0.8,
+      react: 0.5,
+      pursue: 0.7,
+    },
+    {
+      name: 'Middle Guard',
+      points: 1500,
+      bar: 160,
+      toughness: 1.3,
+      reload: 0.84,
+      precision: 1.2,
+      drill: 0.75,
+      react: 0.5,
+      pursue: 0.7,
+    },
+    {
+      name: 'Old Guard',
+      points: 3100,
+      bar: 180,
+      toughness: 1.4,
+      reload: 0.8,
+      precision: 1.25,
+      drill: 0.7,
+      react: 0.5,
+      pursue: 0.7,
+    },
+  ],
+  // a recruit line that wins a firefight like the calibration's (about 80 men struck, 9 minutes under fire, one enemy
+  // broken) gains about 100: level 2 in a battle or two
+  points: { man: 0.5, fire: 0.05, window: 10, repulse: 15, broke: 25 },
   // charges and melee (docs/plans/active/s1d2-charges.md): first guesses, tuned by tools/calibrate-charge.ts.
   // A charge's threat shakes the target at the test, its impact costs men and morale by its momentum and the
   // side it comes from, both cut by how far the target is braced (a square); melee kills per man in contact
   melee: {
     contact: 2,
     hold: 3,
-    threat: { front: 0.12, flank: 0.25, rear: 0.3 },
-    impact: { kill: 0.12, shock: { front: 0.2, flank: 0.35, rear: 0.4 } },
+    threat: { front: 34, flank: 71, rear: 86 }, // points
+    impact: { kill: 0.06, shock: { front: 57, flank: 100, rear: 114 } },
+    second: { flank: 43, rear: 57 }, // under the guard: 0.6 × level 2's 100
     rate: 0.01,
-    strength: { line: 1.0, column: 1.0, skirmish: 0.5, horse: 1.6, guns: 0.3 },
     cohesion: 0.5,
     refuse: 0.9,
     breach: 0.3,
     refuge: { alert: 200, closing: 1, react: 2, hold: 30 }, // the square against cavalry
   },
+  // where a threat stands (docs/proposals/sectors-model.md § 8): 45°, blended 35° to 55°; a metre's corner; eight
+  // slices; no threat farther than the canister's range
+  sectors: { blend: { T: 0.5, H: 0.088 }, corner: 1, slices: 8, reach: 300 },
   // the end of a battle (S1e-2): a side with 35% of its men out of the fight is broken (S1e-3: at half,
   // a side whose first line had routed fought on; its rallied battalions stood at the map's edge for the rest);
   // at a time limit, shares in the fight within 5 points are a draw. It is every Napoleonic scenario's, and makes up

@@ -16,7 +16,8 @@ import { serialize } from './serialize.ts'
 import { fnv1a } from './hash.ts'
 import { buildClaims, claimFormation, claimOrder } from './claims.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
-import { moraleStep } from './morale.ts'
+import { moraleStep, threatPass } from './morale.ts'
+import { experienceStep } from './experience.ts'
 import { meleeStep, standingStep } from './melee.ts'
 import { artilleryStep } from './artillery.ts'
 import { planStep, endStep, checkPlan } from './plan.ts'
@@ -124,12 +125,16 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     const men = w.scratch.menNow ?? (w.scratch.menNow = new Int32Array(MAX_FORMATIONS))
     // final for the tick: the morale pass reads them
     for (let i = 0; i < MAX_FORMATIONS; i++) men[i] = w.f.alive[i] ? menOf(w, i) : 0
+    // the back exposed: every battalion's drain, read before any morale changes
+    threatPass(w)
     // a test switch visits them in reverse: contagion and support read only state fixed before the step
     const rev = w.scratch.reverse === true
     for (let k = 0; k < MAX_FORMATIONS; k++) {
       const i = rev ? MAX_FORMATIONS - 1 - k : k
       if (w.f.alive[i]) moraleStep(w, i, lost[i])
     }
+    // experience (docs/proposals/morale-bar-model.md § 7): the seconds under fire, the enemies broken, the level ups
+    experienceStep(w)
   })
   // 13: the end (S1e-2); smoke: S2
   step('13 the end', () => {

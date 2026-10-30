@@ -28,7 +28,7 @@ type Spawn = {
   shape: string
   unit?: string
   men?: number
-  quality?: number
+  bar?: number // the bar's maximum, points (docs/proposals/morale-bar-model.md)
 }
 const step = (at: number, unit: number, cmd: PlanCommand): PlanStep => ({ at, unit, cmd })
 const move = (x: number, z: number, append = false): PlanCommand => ({ type: 'move', points: [[x, z]], append })
@@ -70,14 +70,15 @@ const COL = 'column'
 const CAV = 'cavalry'
 
 // the melee's cases (C1, step 4): a veteran regiment charges a raw one at the halt, from 160 m, the veteran `dx`
-// metres to the east; `extra` stand beside them
-function charged(id: string, title: string, extra: Spawn[] = [], dx = 0): BenchCase {
+// metres to the east; `extra` stand beside them. The raw one's bar is 145 (U2): the bar takes the impact's men lost at
+// once, with its shock, and a smaller one breaks on contact, with no melee to hold
+function charged(id: string, title: string, extra: Spawn[] = [], dx = 0, raw = 145): BenchCase {
   return bench(
     id,
     title,
     [
-      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
-      { side: 0, x: dx, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
+      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, bar: raw },
+      { side: 0, x: dx, z: -120, heading: N, shape: LINE, unit: CAV, bar: 157 },
       ...extra,
     ],
     [step(1, 1, { type: 'charge', target: 0 })],
@@ -87,6 +88,8 @@ function charged(id: string, title: string, extra: Spawn[] = [], dx = 0): BenchC
   )
 }
 
+// X-17's raw regiment breaks a little sooner, with men enough to run once its way clears (bench.test.ts)
+const RAW17 = 130
 export const BENCH_CASES: BenchCase[] = [
   bench(
     'x01-clash',
@@ -208,7 +211,7 @@ export const BENCH_CASES: BenchCase[] = [
       { side: 0, x: 0, z: -50, heading: N, shape: LINE },
       { side: 0, x: 0, z: 50, heading: N, shape: LINE },
     ],
-    [step(1, 0, { type: 'debug-morale', quality: 0 })],
+    [step(1, 0, { type: 'debug-morale', bar: -100 })],
     150,
     [0, -20, 2.5],
     [40, 80],
@@ -224,7 +227,7 @@ export const BENCH_CASES: BenchCase[] = [
       { side: 0, x: 0, z: 150, heading: N, shape: LINE },
       { side: 0, x: 0, z: 295, heading: N, shape: LINE },
     ],
-    [step(1, 0, { type: 'debug-morale', quality: 0 }), step(15, 0, { type: 'debug-morale', quality: 0.75 })],
+    [step(1, 0, { type: 'debug-morale', bar: -100 })], // its bar's maximum is untouched: it may rally
     150,
     [0, 230, 3],
     [40, 100],
@@ -240,7 +243,7 @@ export const BENCH_CASES: BenchCase[] = [
       { side: 0, x: 0, z: -100, heading: S, shape: 'unlimbered', unit: 'battery' },
       { side: 0, x: 0, z: -20, heading: N, shape: 'square' },
     ],
-    [step(1, 0, { type: 'debug-morale', quality: 0 })],
+    [step(1, 0, { type: 'debug-morale', bar: -100 })],
     240,
     [0, -40, 3],
     [80, 160],
@@ -302,14 +305,16 @@ export const BENCH_CASES: BenchCase[] = [
     'x17-enemy-behind',
     'X-17: as X-15, with an enemy regiment just behind the raw one: broken, it has no way out and is cut down',
     [{ side: 0, x: 0, z: 49, heading: N, shape: LINE, unit: CAV }],
+    0,
+    RAW17,
   ),
   bench(
     'x18-flank-charge',
     'X-18: a veteran regiment charges a steady one at the halt; a second regiment charges it in its east flank',
     [
-      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.9 },
-      { side: 0, x: 0, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
-      { side: 0, x: 170, z: 42, heading: W, shape: COL, unit: CAV, quality: 0.6 },
+      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV, bar: 145 },
+      { side: 0, x: 0, z: -120, heading: N, shape: LINE, unit: CAV, bar: 157 },
+      { side: 0, x: 170, z: 42, heading: W, shape: COL, unit: CAV, bar: 57 },
     ],
     [step(1, 1, { type: 'charge', target: 0 }), step(20, 2, { type: 'charge', target: 0 })],
     90,
@@ -321,10 +326,10 @@ export const BENCH_CASES: BenchCase[] = [
     'x20-brigade-lines',
     'X-20: two raw regiments abreast, each charged by a veteran regiment',
     [
-      { side: 1, x: -80, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
-      { side: 1, x: 82, z: 40, heading: S, shape: LINE, unit: CAV, quality: 0.75 },
-      { side: 0, x: -80, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
-      { side: 0, x: 82, z: -120, heading: N, shape: LINE, unit: CAV, quality: 0.95 },
+      { side: 1, x: -80, z: 40, heading: S, shape: LINE, unit: CAV, bar: 145 },
+      { side: 1, x: 82, z: 40, heading: S, shape: LINE, unit: CAV, bar: 145 },
+      { side: 0, x: -80, z: -120, heading: N, shape: LINE, unit: CAV, bar: 157 },
+      { side: 0, x: 82, z: -120, heading: N, shape: LINE, unit: CAV, bar: 157 },
     ],
     [step(1, 2, { type: 'charge', target: 0 }), step(1, 3, { type: 'charge', target: 1 })],
     90,
@@ -373,7 +378,7 @@ export const BENCH_CASES: BenchCase[] = [
     'q04-rout-in-a-chain',
     'Q-04: moves queued; the battalion broken by debug-morale',
     [{ side: 0, x: -150, z: -100, heading: E, shape: COL }],
-    [step(1, 0, move(150, -100)), step(1, 0, move(150, 100, true)), step(20, 0, { type: 'debug-morale', quality: 0 })],
+    [step(1, 0, move(150, -100)), step(1, 0, move(150, 100, true)), step(20, 0, { type: 'debug-morale', bar: -100 })],
     150,
     [0, -50, 2],
     [25, 60],
@@ -386,6 +391,44 @@ export const BENCH_CASES: BenchCase[] = [
     200,
     [0, 0, 2],
     [25, 120],
+  ),
+  // the sectors' cases (U1, docs/plans/active/u1-sectors.md): a line at the origin facing north, and an enemy where
+  // its front, flank and rear meet; the overlay's Sectors layer shows each formation's front, flank and rear
+  bench(
+    's01-enfilade',
+    'S-01: a line fired on from its flank by a line at right angles to it, 120 m off its east end',
+    [
+      { side: 0, x: 0, z: 0, heading: N, shape: LINE },
+      { side: 1, x: 170, z: -20, heading: W, shape: LINE },
+    ],
+    [step(1, 1, { type: 'fire', mode: 'at will' })],
+    120,
+    [60, -10, 2.5],
+    [10, 60],
+  ),
+  bench(
+    's02-end-of-a-line',
+    'S-02: an enemy ahead of one end of a long line, then walked round to its flank',
+    [
+      { side: 0, x: 0, z: 0, heading: N, shape: LINE },
+      { side: 1, x: 70, z: 90, heading: S, shape: COL },
+    ],
+    [step(10, 1, move(140, 30)), step(10, 1, move(140, -40, true))],
+    150,
+    [40, 20, 2],
+    [5, 40, 90],
+  ),
+  bench(
+    's03-across-the-front',
+    "S-03: a column of route crossing a line's front at 150 m",
+    [
+      { side: 0, x: 0, z: 0, heading: N, shape: LINE },
+      { side: 1, x: -220, z: 150, heading: E, shape: 'march' },
+    ],
+    [step(1, 1, move(220, 150))],
+    200,
+    [0, 80, 1.6],
+    [20, 80, 140],
   ),
 ]
 

@@ -58,14 +58,15 @@ export type Command =
       heading: number
       shape?: string
       men: number
-      quality?: number
+      level?: number // 1..6; 0 or left out: the ruleset's
+      bar?: number // the bar's maximum, points; 0 or left out: its level's
       fire?: string
       unit?: string
     }
   | { type: 'fire'; id: Handle; mode: string; target?: Handle }
   | { type: 'side'; side: number; x: number; z: number }
   | { type: 'debug-kill'; id: Handle; men: number }
-  | { type: 'debug-morale'; id: Handle; quality: number }
+  | { type: 'debug-morale'; id: Handle; bar: number }
   | { type: 'charge'; id: Handle; target: Handle }
   // what `issue` stamps in place of a command it cannot take (an unknown type, malformed waypoints): dropped with
   // its reason when applied, and saved and replayed like any other (#155)
@@ -181,8 +182,9 @@ function apply(w: World, c: Command, player = true): string {
     if (c.men <= 0 || c.men > U.slots) return 'no room for those men'
     if (!inside(w, c.x, c.z)) return 'outside the map'
     if (Math.abs(c.heading) > 4 * PI) return 'heading out of range'
-    const q = c.quality === undefined || c.quality === -1 ? cr.rs.morale.quality : c.quality // −1: the ruleset's
-    if (q < 0 || q > 1) return 'no such quality'
+    const level = c.level || cr.rs.morale.level
+    if (!Number.isInteger(level) || level < 1 || level > cr.rs.levels.length) return 'no such level'
+    if (!((c.bar ?? 0) >= 0 && (c.bar ?? 0) < Infinity)) return 'no such bar'
     const mode = FIRE_MODES.indexOf(c.fire ?? FIRE_MODES[FIRE_AT_WILL])
     if (mode < 0) return 'no such fire mode'
     if (w.meta[M_FREE] === 0) return 'no free formation slot'
@@ -192,7 +194,6 @@ function apply(w: World, c: Command, player = true): string {
     f.type[i] = type
     f.shape[i] = shape
     f.style[i] = cr.presetIndex(cr.rs.start.orders)
-    f.drill[i] = 1
     f.x[i] = c.x
     f.z[i] = c.z
     f.heading[i] = c.heading
@@ -204,7 +205,7 @@ function apply(w: World, c: Command, player = true): string {
     w.sides.spawned[c.side] += c.men
     resetTrail(w, i)
     spawnFire(w, i)
-    spawnMorale(w, i, q)
+    spawnMorale(w, i, level, c.bar || undefined)
     f.fireMode[i] = mode
     return ''
   }
@@ -304,9 +305,10 @@ function apply(w: World, c: Command, player = true): string {
       f.style[i] = p
       return ''
     }
-    case 'debug-morale': // the quality its morale relaxes toward (scripted morale tests)
-      if (c.quality < 0 || c.quality > 1) return 'no such quality'
-      f.quality[i] = c.quality
+    case 'debug-morale': // its bar, points (scripted morale tests): well below 0 (the tests' −100) routs it on its
+      // next morale step; near 0, that step's recovery and support may keep it
+      if (!Number.isFinite(c.bar)) return 'no such bar'
+      f.bar[i] = c.bar
       return ''
     case 'fire': {
       const m = FIRE_MODES.indexOf(c.mode)

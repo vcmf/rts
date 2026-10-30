@@ -171,15 +171,15 @@ The same sector reading is used everywhere it matters:
 A square, all faces, is always struck in front (A-06). For charges and morale, a march column is struck as in the
 flank from either side and in the rear from behind: never in front but at its head. Its fire exposure follows its
 own row below. A formation changing shape has no
-front: it is struck as in the flank, or the rear from behind, as today (`quarter` in `src/sim/melee.ts`), and its
-morale drains read it the same way. Its fire exposure is that of the shape its change is nearer to, by progress,
-read as from its flank; a shape with no flank value (the square, skirmish order) uses its front.
+front: it is struck as in the flank, or the rear from behind (`src/sim/sectors.ts`), and its morale drains read it
+the same way. Its fire exposure is that of the shape it is changing from, read as from its flank or rear; a shape
+with no flank value (the square, skirmish order) uses its front.
 
 ### Exposure by shape
 
 A shape's exposure is how many hits a given amount of fire does to it: the shape's base, times its sector's factor.
 It replaces today's depth factor by kind (`fire.depth`): each shape's base is its kind's value there, so the front is
-today's. First guesses for the sector factors:
+today's. (Done: each shape's `traits.hits`, `docs/proposals/formations.md` § 5a.) First guesses for the sector factors:
 
 | Shape | Base | Front | Flank | Rear | Why |
 |---|---|---|---|---|---|
@@ -244,11 +244,10 @@ against cavalry under fire is the period's central dilemma (L-01).
 - turning costs time (Face about 3 s; a change front tens of seconds).
 
 A battalion that marches across an enemy's front, or turns its back to retire under fire, pays all four (A-10,
-F-06). **A retreat ordered within an enemy's fire range** costs more: a one-off morale shock when it starts, besides
-its back to the enemy (it cannot fire, and fire strikes it as in the rear). A retreat is any ordered move that turns
-its back on an enemy in the fight within fire range: a Retire, or a Face about and a move. The shock is for turning
-the back on the player's order: the wavering fall-back, the morale's own reaction, does not pay it. From a melee there is no retiring
-at all (§ Collision).
+F-06). **The back exposed** (decision 0086): a battalion whose flank or back is turned to an enemy that can hurt it
+(that could fire on it, in range with a clear line, or charge it) is drained for as long as it stays so, whatever
+orders turned it. A redeployment in the open within the enemy's reach costs nerve; behind a screen of friends, or beyond
+range, nothing. From a melee there is no retiring at all (§ Collision).
 
 ## Experience
 
@@ -388,7 +387,7 @@ with the status "wavering: will not advance":
 - **toward an enemy:** the step's direction is within 60° of the direction to an enemy in the fight within fire
   range (`fire.maxRange`), so at least half the step closes on it. A march across an enemy's front is not dropped,
   and is punished by the sectors instead (A-10);
-- **then:** it fires if it may, and the wavering fall-back applies to it as today (it has no orders);
+- **then:** it fires if it may, and stays where it is: there is no fall-back (decision 0087);
 - **dropped, not held:** nothing resumes on its own; the player orders it forward again once it has recovered;
 - **charges and assaults:** a wavering formation cannot be ordered to charge (refused: "wavering"), and a charge it
   is making is dropped by this rule until it reaches its test distance. From the test on, the test decides
@@ -457,22 +456,25 @@ fires into its flank is a tactic the rules already allow, and the AI may use it.
 
 ## Morale
 
-**The bar.** Each formation has a morale bar from 0 to its level's maximum. It replaces today's 0..1 value that
-relaxes toward a target (`docs/systems/fire-morale.md`). It is simpler to read and to tune, and the level's
-maximum is what makes a veteran stand longer.
+**The bar.** Each formation has a morale bar from 0 to its level's maximum. It replaced (U2) the 0..1 value that
+relaxed toward a target. It is simpler to read and to tune, and the level's maximum is what makes a veteran stand
+longer. The sim's exact model is `docs/proposals/morale-bar-model.md`, built in U2; where it departs from this
+section (its § 10, the owner's choices), the notes below say so.
 
 - **What empties it:**
-  - **losses:** each man lost costs points (`morale.perMan`, scaled by the formation's spawn strength, so a
-    battalion's bar measures a share of it), plus a burst term for many men lost in a few seconds;
+  - **losses:** each man lost costs points (`morale.loss` over the formation's spawn strength, so a battalion's
+    bar measures a share of it), at once (U2: no burst term; the bar works as hit points);
   - **shocks:** a charge's threat and impact, a friend's break nearby (contagion), as today, in points;
-  - **drains,** per second while their cause stands: a threat in the flank or rear (G-04; the rear's is larger),
-    fire it cannot answer (G-09), the guns (D-04).
-- **What fills it:** it recovers slowly, at `morale.regen` points a second, when it has lost no men for
-  `morale.calm` seconds. It recovers up to a ceiling: its maximum less a share of what its losses have cost, so a
-  battalion that has lost a third of its men does not come back to a full bar. Supports (secured flanks, today; a
-  commander near, S2) raise the recovery rate.
+  - **drains** while their cause stands: a threat in the flank or rear (G-04; the rear's is larger). U2 keeps
+    U1's drain as a pressure on the effective bar, down to the wavering threshold, not points a second; fire it
+    cannot answer (G-09) and the guns (D-04) act through their losses.
+- **What fills it:** it recovers at `morale.regen` points a second while in the fight, under fire too (U2: no
+  `calm` wait). It recovers up to a ceiling: its maximum less what its losses have cost, so losses never come back
+  and only shocks wear off. Supports (secured flanks; a commander near, S2) add to the effective bar (U2), not to the
+  rate.
 - **The states** come from the share of the bar left, with a little hysteresis: steady above 60%, shaken above
-  30%, wavering below it (fires worse, falls back, will not advance). **At 0 it flees:** it routs, as today.
+  30%, wavering below it (fires worse, will not advance; it does not fall back, decision 0087). **At 0 it flees:**
+  it routs.
 - **Rally:** a router out of danger rallies as today (no enemy within `rally.safe`, no loss for `rally.calm`).
   - Like today's rally (which counts losses from its men now, `baseMen`), it writes off what its losses so far have
     cost: its ceiling is its maximum again.
@@ -485,10 +487,10 @@ maximum is what makes a veteran stand longer.
     shaken (the upper edge of the hysteresis), so a rallied battalion is never wavering at once.
   - A battalion that routs more than `rally.max` times, or below half its spawn strength, shatters, as today
     (G-08).
-- **The guard:** the ruleset is refused if one contagion shock together with a minute of every drain at its largest
-  could empty a fresh bar of level 1. Today's guard does the same for a lone shock.
+- **The guard:** the ruleset is refused if one shock could take more than 0.6 of level 2's bar (U2: the drains
+  cannot empty a bar, so the guard is the lone shock's).
 
-The scale: at level 2, `perMan` is set so a battalion breaks at about the share of losses today's average line
+The scale: at level 2, `loss` is set so a battalion breaks at about the share of losses today's average line
 does. A level 6 battalion's bar is 1.8 times as big and its toughness 1.4, so it stands about 2.5 times the fire
 (G-06).
 
@@ -631,10 +633,10 @@ braced against missiles, cavalry and elephants as tags.
 
 | System | Today | The model |
 |---|---|---|
-| Sectors | charges only, read from the target's centre | one reading, from the face's nearest end, blended, used by fire, charges and morale |
-| Fire | in arc or not; depth by kind | the share that bears; exposure by shape and sector; cover; precision; first volley; fire discipline |
+| Sectors | since U1, one reading from the face's nearest end, blended, used by fire, charges and morale (`docs/proposals/sectors-model.md`) | one reading, from the face's nearest end, blended, used by fire, charges and morale |
+| Fire | in arc or not; exposure by shape and sector (U1) | the share that bears; exposure by shape and sector; cover; precision; first volley; fire discipline |
 | Quality | morale's base only | six levels with a table of effects; points and a level up during a battle |
-| Morale | a 0..1 value relaxing toward quality less losses | a bar per level, emptied by losses, shocks and drains, flees at 0 |
+| Morale | a 0..1 value relaxing toward quality less losses and the back exposed's drain (U1) | a bar per level, emptied by losses, shocks and drains, flees at 0 |
 | Infantry | one type | line and light categories, the Guard as levels 4–6; skirmish order; the assault |
 | Cavalry | one type | heavy and light; lancers; pursuit by level |
 | Artillery | pieces are companies of the battery | pieces apart from crews; guns taken; the last salvo; the guns' drain; horse artillery |
@@ -657,11 +659,11 @@ units they order behave this way. U8 and U9 are Track S's pathfinding and group 
 
 | Phase | What | Scenarios |
 |---|---|---|
-| **U1** | Sectors: one reading for fire, charges and morale; exposure by shape and sector; the share that bears; flank and rear drains; the retreat's shock and the flank shock on a battalion in melee | A-01 to A-10, B-08, C-06, G-04 |
+| **U1** | Sectors: one reading for fire, charges and morale; exposure by shape and sector; flank and rear drains (the back exposed); the flank shock on a battalion in melee | A-01 to A-07, A-09, A-10, B-08, C-06, G-04, E-16 |
 | **U2** | Experience and the morale bar: six levels, their table, points and a level up; the bar replaces today's morale value; toughness | B-02, C-01, C-02, E-05, E-08, E-09, G-01, G-05, G-06, G-08, H-01, H-04, H-05 |
-| **U3** | Closing: engagement states, changes under fire, the wavering rule, fire discipline, the first volley, the assault; the firearm and melee modes | B-03, C-03 to C-05, E-15, F-01 to F-07, L-05 |
+| **U3** | Closing: engagement states, changes under fire, the wavering rule, fire discipline, the first volley, the assault; the firearm and melee modes; the share that bears and canister's exposure per formation | B-03, C-03 to C-05, E-15, F-01 to F-07, L-05 |
 | **U4** | Guns: the guns' drain, the last salvo, pieces apart from crews, guns taken, gunners sheltering | B-06, D-04 to D-08, G-09, L-03, L-04 |
-| **U5** | Categories: light infantry and skirmish order, heavy and light cavalry, horse artillery, the bonus table | B-07, C-07, D-10, E-06, E-07, E-10, E-11, E-12, K-01 to K-05, L-07 |
+| **U5** | Categories: light infantry and skirmish order, heavy and light cavalry, horse artillery, the bonus table | A-08, B-07, C-07, D-10, E-06, E-07, E-10, E-11, E-12, K-01 to K-05, L-07 |
 | **U6** | Collision, with the orders and their queue, by its own proposal: enemies, friends, loose bodies, the clash | I-06 to I-09, G-07 |
 | **U7** | Ground with Track M: walls, buildings, barriers' crossings, cover; the 2 m margin bug | C-10, C-11, E-13, E-14, I-13, I-14, M-06 |
 | **U8** | Pathfinding (S1f-3): A*, time-sliced, march column on turns | J-01 to J-04, J-06, J-07 |

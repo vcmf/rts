@@ -103,8 +103,10 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0077](0077-a-pond-levels-at-its-lower-bank.md) | A pond with no level of its own levels at its lower bank; a dam is drawn, never implied | accepted |
 | [0078](0078-editor-writes-the-intent-file-in-place.md) | The editor edits the intent file in the page and saves only what changed, through the dev server | accepted |
 | [0079](0079-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |
-| [0080](0080-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | accepted |
+| [0080](0080-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | superseded in part by 0086 |
 | [0081](0081-the-bench-timeline-in-the-battle.md) | The bench's timeline lives in the battle, wherever it runs; its overlay is a view on the page | accepted |
 | [0082](0082-light-map-at-half-a-metre.md) | The baked light map at about half a metre a texel (1536² over the 800 m tile, the target 0.53 m) | accepted |
 | [0084](0084-a-soft-mid-tone-on-figures-and-buildings.md) | A soft mid tone on the figures, the buildings and the nature meshes (amends 0022) | accepted |
 | [0085](0085-upright-meadow-and-wheat-fill.md) | The meadow's grass upright and shorter, the wheat filled (`?grassup`, `?wheatfill`; amends 0041's clumps) | accepted |
+| [0086](0086-the-back-exposed.md) | The back exposed: a pressure while it lasts, not a retreat detected (supersedes 0080's retreat shock) | accepted |
+| [0087](0087-wavering-keeps-fighting.md) | A wavering battalion keeps fighting: no automatic fall-back | accepted |

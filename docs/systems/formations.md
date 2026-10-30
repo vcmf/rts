@@ -1,7 +1,7 @@
 ---
 status: current
-last_reviewed: 2026-10-11
-code: [src/sim/formation.ts, src/sim/ruleset.ts, src/sim/terrain.ts, src/rulesets/napoleonic.ts, test/formations.test.ts, test/types.test.ts]
+last_reviewed: 2026-10-28
+code: [src/sim/formation.ts, src/sim/sectors.ts, src/sim/ruleset.ts, src/sim/terrain.ts, src/rulesets/napoleonic.ts, test/formations.test.ts, test/sectors.test.ts, test/types.test.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0012-heightfield-authority, 0015-era-generic-engine]
 ---
 
@@ -58,8 +58,10 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
 first is the default), each with:
 - its block geometry: companies, files, ranks, spacings, the minimum spacing, the accordion gap, bins per
   company;
-- its shapes as company placements, with kind, pace, road pace, `trail`, `closeAcross` and, for a trail
-  shape, an optional `step`: the spacing of its places' files and ranks when it is not the block's (a column
+- its shapes as company placements, with kind, pace, road pace, `trail`, `closeAcross`, `allRound` (no flank: the
+  square), its `traits` (hits taken from the front, the flank and the rear, melee strength, bracing; read through
+  `src/sim/traits.ts`, `docs/proposals/formations.md` § 5a) and, for a trail shape, an
+  optional `step`: the spacing of its places' files and ranks when it is not the block's (a column
   of route of horses, nose to tail);
 - its change times, the shape a spawn takes, and whether it fires by company (S1c's musketry).
 
@@ -85,11 +87,20 @@ It refuses, with a message naming what is wrong, a ruleset the world could not r
 them a name that points at nothing (#156): a shape's `pace` or `roadPace` that is not a pace, a change time that does
 not name two of the type's shapes, and a terrain class that gives some kind no speed; and values out of their range:
 a pace not > 0, a change time not ≥ 0, a q table for no pace or with a factor not > 0, a pace's q table leaving out
-the ground of some class (it would read as 1), and `fire.sight`, `fire.depth` or `disorder.scale` naming no class or
-kind or giving a value not a finite number ≥ 0. That terrain only slows (a factor ≤ 1) is a convention of the
+the ground of some class (it would read as 1), and `fire.sight` or `disorder.scale` naming no class or kind or giving a
+value not a finite number ≥ 0; a shape's traits out of range (hits from the front not above 0, from the flank or
+the rear under the front's, melee not above 0, a brace outside 0..1), and a refuge not fully braced. That terrain only slows (a factor ≤ 1) is a convention of the
 shipped data, checked there, not a rule of the engine.
 
 The ruleset's hash is recorded in the world, the replays and the saves.
+
+**The face** (U1, `src/sim/sectors.ts`, `docs/proposals/sectors-model.md` § 2). Each tick, from the placed
+blocks, each formation's face: a formed shape's front is the box of its companies in its own frame (front and rear
+edges, left and right ends); an `allRound` shape (the square) is all front; a trail shape (a march column) has its head
+company's frame for its front and its tail's for its rear; a formation changing shape has no front. A point, or a
+threat's block, has weights (front, flank, rear) that sum to 1 on that face, read alike by fire, charges and morale:
+front within about 35° of straight ahead from the face's nearer end, flank past 55°, a blend between; the rear the
+same behind; `sectors` in the ruleset holds the blend, the corner, the slices and the reach. Scratch, not state.
 
 **Types in the world.** A formation stores its type (`f.type`), and `f.shape` indexes its type's shapes. The
 per-company and per-bin rows of the world are strided by the most of any type (`cr.maxC`, `cr.maxNB`,

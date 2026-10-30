@@ -1,23 +1,22 @@
-// Morale (docs/plans/active/s1c-fire-morale.md, docs/plans/active/s1c2-morale-machine.md; docs/proposals/
-// sim-design.md §10), loss-driven: each tick a battalion's morale closes part of the gap to its target, its
-// quality less the weighted share of men lost and of men lost recently, plus a bonus for each secured flank.
-// Being fired at does not move it, nor does disorder (a march through a wood would shake a battalion no
-// enemy can see); men falling do, and so does a friend breaking nearby (contagion, a shock in the next
-// tick), and so do a charge's threat and impact (the melee step's shocks, docs/systems/melee.md). The state
-// follows the morale with hysteresis.
+// Morale (docs/proposals/morale-bar-model.md; before it docs/plans/active/s1c-fire-morale.md and
+// docs/plans/active/s1c2-morale-machine.md), a bar in points with its level's maximum. Men lost empty it, and so do
+// shocks: a friend breaking nearby (contagion, in the next tick) and a charge's threat and impact (the melee step's,
+// docs/systems/melee.md). In the fight it recovers the shocks, never the losses. Being fired at does not move it, nor
+// does disorder (a march through a wood would shake a battalion no enemy can see). The states read its effective level,
+// the bar with each secured flank's support, less the back exposed, as a share of its maximum, with hysteresis; at 0
+// or less it routs.
 //
 // A battalion that routs drops its orders and runs; the run's direction is fixed at the break (its side's
 // rear, else away from the nearest enemy, else straight back), and its phase is kept: running, halted at
 // impassable ground (or, with claims, by others), or fled. Only a halted router tries again, the next direction of a
 // fan about the stored one. Enemies that reach a router cut it down (the melee step). A router
-// whose run has ended, safe and calm, rallies: its losses so far are written off and its quality drops. A
+// whose run has ended, safe and calm, rallies: its losses so far are written off and its maximum is cut. A
 // battalion that breaks too often, or routs below half strength, shatters and runs for good. A wavering
-// battalion left without orders, its morale still falling and the enemy in front of it, falls back once (not
-// in melee: it ends by a rout, docs/systems/melee.md).
+// battalion keeps fighting until it recovers or routs (decision 0087): nothing moves it back by itself.
 //
 // Everything one battalion reads of another (its state, whether it broke, its men) was fixed before this
-// step began, so no outcome depends on the order battalions are visited in. One thing does: routs and
-// fall-backs take orders from the shared pool in visiting order, so two in the same tick get different
+// step began, so no outcome depends on the order battalions are visited in. One thing does: routs take orders
+// from the shared pool in visiting order, so two in the same tick get different
 // pool entries (and the lower slot is served first when the pool runs short), as tick.ts says.
 import {
   type World,
@@ -36,6 +35,7 @@ import {
   RP_HALTED,
   RP_FLED,
   outOfFight,
+  typeOf,
 } from './world.ts'
 import {
   allocOrder,
@@ -47,13 +47,13 @@ import {
   setOnMap,
   ST_HALTED,
   ST_BLOCKED,
-  RETIRE,
-  fillRetire,
   cutChange,
 } from './formation.ts'
 import { formedFits, freeSpot } from './claims.ts'
+import { blockGeometry, inArc, sees, screenShare, sqDist, reachOf, type FireGeo } from './fire.ts'
+import { buildFaces, threatWeights } from './sectors.ts'
 import { sin, cos, PI } from './num.ts'
-import { TICK_HZ, DT } from './time.ts'
+import { DT, TICK_HZ } from './time.ts'
 
 const RUN = 800 // how far a router is sent, metres (kept on the map)
 // the runs: the stored direction first, then turned from it by these angles, one every RETRY ticks while the
@@ -83,14 +83,35 @@ export function enemyNear(w: World, i: number): boolean {
 // nearest enemy in the fight (its distance, and the unit vector from it to the battalion)
 const near = { shock: 0, left: 0, right: 0, enemy: Infinity, ax: 0, az: 0 }
 
+/**
+ * Formation i's effective bar (docs/proposals/morale-bar-model.md § 4), points: its bar, plus support.bonus for each
+ * secured flank, less the back exposed's drain, which takes it down to the wavering threshold at most. `flanks` is
+ * its secured flanks (0..2).
+ */
+export function effectiveBar(w: World, i: number, flanks: number): number {
+  const f = w.f
+  const M = w.cr.rs.morale
+  const e0 = f.bar[i] + M.support.bonus * flanks
+  return e0 - Math.min(f.drain[i], Math.max(0, e0 - M.wavering[0] * f.barMax[i]))
+}
+/**
+ * Formation i's effective bar as a share of its maximum, for the page: 0 at the rout, 1 full; with the flanks its
+ * last morale step secured.
+ */
+export function moraleShare(w: World, i: number): number {
+  return effectiveBar(w, i, w.f.flanks[i]) / w.f.barMax[i]
+}
+
 // step 12 for battalion i, after its casualties (`lost`, step 11)
 export function moraleStep(w: World, i: number, lost: number): void {
   const f = w.f
   const M = w.cr.rs.morale
   const now = w.meta[M_TICK] + 1
-  const base = Math.max(1, f.baseMen[i])
   const start = Math.max(1, f.startMen[i])
-  f.recent[i] = f.recent[i] * w.cr.recentDecay + lost
+  // losses (§ 3): each man costs loss / start points, never recovered
+  const c = (lost * M.loss) / start
+  f.bar[i] -= c
+  f.cost[i] += c
   // the melee step's shocks (a charge's threat and impact): taken with contagion
   const owedShock = f.shockIn[i]
   f.shockIn[i] = 0
@@ -103,18 +124,15 @@ export function moraleStep(w: World, i: number, lost: number): void {
     return
   }
   survey(w, i, now)
-  // the losses term counts from baseMen (written off at a rally); recent losses are a share of the spawn strength
-  const target =
-    f.quality[i] -
-    (M.losses * (base - men)) / base -
-    (M.recent * f.recent[i]) / start +
-    M.support.bonus * (near.left + near.right)
-  const was = f.morale[i]
-  f.morale[i] += (target - f.morale[i]) * w.cr.relax
-  if (s !== MS_ROUTING) f.morale[i] -= near.shock + owedShock // routing and shattered (returned above) are not shocked
-  // falling: down by more than fallback.rate a second (the relax's slow crawl toward a fixed target is not)
-  f.falling[i] = was - f.morale[i] > M.fallback.rate * DT ? f.falling[i] + 1 : 0
-  const m = f.morale[i]
+  // recovery (§ 3): in the fight, up to its maximum less what its losses cost (scar of it)
+  if (s !== MS_ROUTING && s !== MS_RALLYING) {
+    const ceiling = f.barMax[i] - M.scar * f.cost[i]
+    if (f.bar[i] < ceiling) f.bar[i] = Math.min(ceiling, f.bar[i] + M.regen * DT)
+  }
+  if (s !== MS_ROUTING) f.bar[i] -= near.shock + owedShock // routing and shattered (returned above) are not shocked
+  f.flanks[i] = near.left + near.right
+  const e = effectiveBar(w, i, f.flanks[i])
+  const m = e / f.barMax[i]
   if (s === MS_ROUTING) {
     if (men < M.shatter * f.startMen[i]) f.mstate[i] = MS_SHATTERED
     // its run has ended (a run was made, and it is not running: a full order pool can leave a router
@@ -122,17 +140,16 @@ export function moraleStep(w: World, i: number, lost: number): void {
     else if (
       f.runs[i] > 0 &&
       f.routPhase[i] !== RP_RUNNING &&
-      f.quality[i] - M.rally.cost >= M.wavering[0] &&
       now - f.lastLoss[i] >= M.rally.calm * TICK_HZ &&
       near.enemy > M.rally.safe
     ) {
-      rally(w, i, now, men)
+      rally(w, i, now)
       return
     }
     routStep(w, i)
     return
   }
-  if (m < M.rout) {
+  if (e <= 0) {
     rout(w, i, now, men)
     return
   }
@@ -177,22 +194,98 @@ export function moraleStep(w: World, i: number, lost: number): void {
   if (next === s && s === MS_WAVERING && m >= M.wavering[1]) next = MS_SHAKEN
   if (next === s && s === MS_SHAKEN && m >= M.shaken[1]) next = MS_STEADY
   f.mstate[i] = next
-  if (next !== MS_WAVERING) f.fellBack[i] = 0
-  else if (
-    !f.fellBack[i] &&
-    f.ordHead[i] < 0 &&
-    !f.trans[i] &&
-    !f.foe[i] &&
-    f.falling[i] >= M.fallback.after * TICK_HZ &&
-    enemyAhead(w, i)
-  ) {
-    fallBack(w, i)
-  }
 }
-// the nearest enemy in the fight is within fire range and in front of the battalion (within 90° of its
-// heading): a Retire, back from its own facing, then takes it away from that enemy, not toward it
-function enemyAhead(w: World, i: number): boolean {
-  return near.enemy <= w.cr.rs.fire.maxRange && near.ax * sin(w.f.heading[i]) + near.az * cos(w.f.heading[i]) < 0
+
+const wt = new Float64Array(3)
+/**
+ * The drain enemy e presses on battalion j's morale target (docs/proposals/sectors-model.md § 6): flank × drain.flank
+ * + rear × drain.rear, the weights (front, flank, rear) of e's company nearest j on j's face, if e can hurt j; else 0.
+ * It can when it is in the fight, not in melee and not changing shape, its company and j's nearest (centre to
+ * centre; ties to the lower) are within sectors.reach metres, and either it fires from its shape and that company
+ * has j's in its arc and range, in sight, unscreened (a ray of three clear of j's friends for musketry, all three for
+ * a battery), or it can charge now (from its shape, not blown) within melee.refuge.alert metres, its centre ray clear.
+ * G must be this tick's geometry and faces.
+ */
+export function drainBy(w: World, G: FireGeo, e: number, j: number): number {
+  const f = w.f
+  const CS = w.cr.maxC
+  if (!f.alive[e] || f.side[e] === f.side[j] || outOfFight(f.mstate[e]) || f.foe[e] || f.trans[e]) return 0
+  // the blocks of each reach G.reach from its anchor
+  const ax = f.x[e] - f.x[j]
+  const az = f.z[e] - f.z[j]
+  const reach = w.cr.rs.sectors.reach
+  if (Math.sqrt(ax * ax + az * az) - G.reach[e] - G.reach[j] > reach) return 0
+  let ke = -1
+  let kj = -1
+  let d2 = Infinity
+  for (let p = 0, Ce = typeOf(w, e).C; p < Ce; p++) {
+    const k = e * CS + p
+    if (f.men[k] <= 0) continue
+    for (let q = 0, Cj = typeOf(w, j).C; q < Cj; q++) {
+      const m = j * CS + q
+      if (f.men[m] <= 0) continue
+      const dd = sqDist(G, k, m)
+      if (dd < d2) {
+        d2 = dd
+        ke = k
+        kj = m
+      }
+    }
+  }
+  if (ke < 0 || d2 > reach * reach) return 0
+  threatWeights(w, G, j, e, ke, wt)
+  const D = w.cr.rs.morale.drain
+  const press = wt[1] * D.flank + wt[2] * D.rear
+  if (press <= 0) return 0
+  const U = typeOf(w, e)
+  const shape = f.shape[e]
+  if (U.def.fires || U.artillery?.from[shape]) {
+    const share = () => screenShare(w, G, ke, kj, f.side[j])
+    if (
+      inArc(G, ke, G.cx[kj], G.cz[kj], reachOf(w, e)) &&
+      sees(w, G, ke, kj) &&
+      (U.artillery ? share() === 1 : share() > 0)
+    ) {
+      return press
+    }
+  }
+  if (
+    U.charge?.from[shape] &&
+    f.blownUntil[e] <= w.meta[M_TICK] + 1 &&
+    d2 <= w.cr.rs.melee.refuge.alert * w.cr.rs.melee.refuge.alert &&
+    screenShare(w, G, ke, kj, f.side[j], true) === 1
+  ) {
+    return press
+  }
+  return 0
+}
+/**
+ * Step 12's threats (docs/proposals/sectors-model.md § 6): each battalion's drain, the worst of the enemies that can
+ * hurt it (`drainBy`), into the world's scratch, from the state as the casualties left it and before any battalion's
+ * morale changes, so the order they are visited in changes nothing. A battalion out of the fight has none. The
+ * geometry is the tick's when the fire step built one (its faces rebuilt for the men now standing), else built here.
+ */
+export function threatPass(w: World): void {
+  const f = w.f
+  const N = MAX_FORMATIONS
+  const D = f.drain
+  D.fill(0)
+  let any = false
+  for (let j = 0; j < N && !any; j++) if (f.alive[j] && !outOfFight(f.mstate[j]) && enemyNear(w, j)) any = true
+  if (!any) return
+  const tick = w.meta[M_TICK] + 1
+  let G: FireGeo
+  if (w.scratch.fireGeoTick === tick) {
+    G = w.scratch.fireGeo!
+    buildFaces(w, G)
+  } else {
+    G = blockGeometry(w)
+    w.scratch.fireGeoTick = tick
+  }
+  for (let j = 0; j < N; j++) {
+    if (!f.alive[j] || outOfFight(f.mstate[j])) continue
+    for (let e = 0; e < N; e++) D[j] = Math.max(D[j], drainBy(w, G, e, j))
+  }
 }
 
 // what battalion i reads of the others, all from before this step's morale: the contagion shock of friends
@@ -266,7 +359,6 @@ function rout(w: World, i: number, now: number, men: number): void {
   }
   f.routs[i] = Math.min(255, f.routs[i] + 1)
   f.brokeTick[i] = now
-  f.fellBack[i] = 0
   f.mstate[i] = f.routs[i] > M.rally.max || men < M.shatter * f.startMen[i] ? MS_SHATTERED : MS_ROUTING
   f.routX[i] = rx
   f.routZ[i] = rz
@@ -327,54 +419,42 @@ function run(w: World, i: number): void {
   }
   appendOrder(w, i, n)
 }
-// a router rallies where it stands: the losses so far are written off (the losses term counts from the men
-// it has now) and its quality drops, so it comes back brittle; it re-forms for rally.time before it takes
-// orders again. Only a battalion whose quality, less the cost, is still wavering or better may rally: one
-// below would break again at once
-function rally(w: World, i: number, now: number, men: number): void {
+// a router rallies where it stands (docs/proposals/morale-bar-model.md § 6): what its losses cost is written off, its
+// maximum is cut by rally.cut for the battle, so it comes back brittle, and its bar refills to rally.share of it; it
+// re-forms for rally.time before it takes orders again
+function rally(w: World, i: number, now: number): void {
   const f = w.f
   const M = w.cr.rs.morale
   clearOrders(w, i)
   f.status[i] = 0
   f.blockedFor[i] = 0
   f.routPhase[i] = RP_NONE
-  f.fellBack[i] = 0
-  f.quality[i] = Math.max(0, f.quality[i] - M.rally.cost)
-  f.baseMen[i] = men
-  f.recent[i] = 0
-  f.morale[i] = f.quality[i]
+  f.barMax[i] *= 1 - M.rally.cut
+  f.bar[i] = M.rally.share * f.barMax[i]
+  f.cost[i] = 0
   f.mstate[i] = MS_RALLYING
   f.since[i] = now
 }
-// the wavering fall-back: the Retire drill (formation.ts), made only when the pool has room for all of it.
-// It falls back from an enemy in front of it (enemyAhead); with none, a break mid-Retire would run 'straight
-// back' from the turned heading
-function fallBack(w: World, i: number): void {
-  if (ordersFree(w) < RETIRE.length) return
-  for (let k = 0; k < RETIRE.length; k++) {
-    const n = allocOrder(w, RETIRE[k])
-    fillRetire(w, n, k, w.cr.rs.morale.fallback.metres)
-    appendOrder(w, i, n)
-  }
-  w.f.status[i] = 0
-  w.f.blockedFor[i] = 0
-  w.f.fellBack[i] = 1
-}
-
-// a new battalion: morale at its quality, steady
-export function spawnMorale(w: World, i: number, quality: number): void {
+/**
+ * A new formation (docs/proposals/morale-bar-model.md § 2): at `level` (1..6), with its level's points; its bar full
+ * at `bar` points, or its level's bar when `bar` is not given; steady.
+ */
+export function spawnMorale(w: World, i: number, level: number, bar?: number): void {
   const f = w.f
-  const men = menOf(w, i)
-  f.quality[i] = quality
-  f.morale[i] = quality
+  const L = w.cr.rs.levels[level - 1]
+  f.level[i] = level
+  f.drill[i] = L.drill
+  f.pts[i] = L.points
+  f.up[i] = 0
+  f.barMax[i] = bar ?? L.bar
+  f.bar[i] = f.barMax[i]
+  f.cost[i] = 0
+  f.drain[i] = 0
+  f.flanks[i] = 0
   f.mstate[i] = MS_STEADY
-  f.startMen[i] = men
-  f.baseMen[i] = men
-  f.recent[i] = 0
+  f.startMen[i] = menOf(w, i)
   f.brokeTick[i] = -1
   f.lastLoss[i] = 0
   f.since[i] = 0
-  f.falling[i] = 0
-  f.fellBack[i] = 0
   f.routs[i] = 0
 }

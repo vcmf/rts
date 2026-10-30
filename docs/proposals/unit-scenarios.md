@@ -22,15 +22,15 @@ Times are battle time; the page plays at 2× by default.
 | Id | Situation | Should | Model | Today |
 |---|---|---|---|---|
 | A-01 | Two lines face each other at 100 m | Both fire their full front; neither has a flank exposed | Sectors, fire | yes |
-| A-02 | A line fires into another line's flank from 100 m (enfilade) | The target loses men faster than to frontal fire, takes a flank-threat pressure on its morale, and cannot reply until it changes front | Sectors, fire, morale | no (no fire by sector) |
-| A-03 | A line is fired on from its rear | Worse than A-02 for morale; it must Face about (3 s) before replying | Sectors, morale | no |
-| A-04 | An enemy stands ahead of one end of a long line, 60° off its centre | It counts as in front: the sector is read from the nearest end of the front, not the centre | Sectors | no (centre angle) |
-| A-05 | An enemy stands exactly on the 45° border between front and flank | No cliff: moving it 1 m changes the effect by a little, not a step | Sectors (the blend) | no |
-| A-06 | A square is attacked from any side | Always the front: a square has no flank or rear | Sectors, shapes | partly (bracing turns charges away, but a charge reads the side struck from the square's centre, so a breached square takes a flank or rear shock) |
-| A-07 | A column of attack is fired on from its flank | Worse than its own frontal fire, but by less than a line's enfilade worsens a line's (the column is deep, not long) | Sectors, fire | no |
+| A-02 | A line fires into another line's flank from 100 m (enfilade) | The target loses men faster than to frontal fire, takes a flank-threat pressure on its morale, and cannot reply until it changes front | Sectors, fire, morale | yes (U1) |
+| A-03 | A line is fired on from its rear | Worse than A-02 for morale; it must Face about (3 s) before replying | Sectors, morale | yes (U1) |
+| A-04 | An enemy stands ahead of one end of a long line, 60° off its centre | It counts as in front: the sector is read from the nearest end of the front, not the centre | Sectors | yes (U1) |
+| A-05 | An enemy stands exactly on the 45° border between front and flank | No cliff: moving it 1 m changes the effect by a little, not a step | Sectors (the blend) | yes (U1) |
+| A-06 | A square is attacked from any side | Always the front: a square has no flank or rear | Sectors, shapes | yes (U1: a square is all front) |
+| A-07 | A column of attack is fired on from its flank | Worse than its own frontal fire, but by less than a line's enfilade worsens a line's (the column is deep, not long) | Sectors, fire | yes (U1) |
 | A-08 | Skirmishers are approached from their flank | Little flank penalty: open order has no rigid flank; their weakness is cavalry, from anywhere | Sectors, shapes | no (no skirmish order) |
-| A-09 | A battery is approached from its flank | Its guns cannot bear; turning them (change front) takes time; the approach is the battery's worst case | Sectors, artillery | partly (arc only) |
-| A-10 | A battalion marches across an enemy line's front at 150 m, in column of route | It is exposed: the enemy fires into its flank, it cannot reply, its morale takes the flank pressure; the player should not do this | Sectors, closing, movement | partly (it is fired on, frontally) |
+| A-09 | A battery is approached from its flank | Its guns cannot bear; turning them (change front) takes time; the approach is the battery's worst case | Sectors, artillery | partly (U1: struck harder and drained from its flank; turning its guns is U9) |
+| A-10 | A battalion marches across an enemy line's front at 150 m, in column of route | It is exposed: the enemy fires into its flank, it cannot reply, its morale takes the flank pressure; the player should not do this | Sectors, closing, movement | yes (U1) |
 
 ## B. Formations and drill
 
@@ -57,7 +57,7 @@ Times are battle time; the page plays at 2× by default.
 | C-04 | A recruit line (level 1) ordered to hold fire while an enemy advances | It cannot hold: it opens fire on its own at long range (about 150 m), wasting its first volley | Fire discipline | no |
 | C-05 | A veteran line holding fire until 60 m | Its first volley is the best of the fight (carefully loaded, at short range) | Fire discipline, first volley | no |
 | C-06 | A line fires on a square | A square is a dense target: it suffers, and fires back with one face only | Fire, shapes | yes (the square is of kind `column`: depth 1.6) |
-| C-07 | A line fires on skirmishers | Few hits: a small, spread target | Fire, shapes | no (no skirmish order; `fire.depth` has a skirmish kind that no shape uses) |
+| C-07 | A line fires on skirmishers | Few hits: a small, spread target | Fire, shapes | no (no skirmish order yet; its hits would be the shape's `traits.hits`) |
 | C-08 | A second line behind the first | It cannot fire through the first | Fire | yes |
 | C-09 | A wavering line keeps firing | It fires worse (state factor) and falls back if the losses continue | Fire, morale | yes |
 | C-10 | Fire into a wood | The men in the wood are seen to 40 m and take fewer hits (cover) | Fire, ground | partly (sight, no cover) |
@@ -98,6 +98,7 @@ Times are battle time; the page plays at 2× by default.
 | E-13 | Cavalry charges through or into woods, a village, over a hedge | Refused or broken up: no gallop over such ground; disorder | Charges, ground | partly (terrain slows) |
 | E-14 | Cavalry charges uphill | Slower, less momentum | Charges, ground | partly (slope slows) |
 | E-15 | A melee between two infantry battalions | Rare and short: one side usually breaks before or soon after contact | Infantry assault, melee | no |
+| E-16 | A second enemy charges a battalion already in melee with another | It is shaken again, more from its rear than its flank, nothing more from its front (decision 0080) | Charges, sectors, melee | yes (U1) |
 
 ## F. Closing with the enemy (the assault)
 
@@ -118,7 +119,7 @@ Times are battle time; the page plays at 2× by default.
 | G-01 | A battalion loses men in a firefight | Its bar empties and it flees: level 2 at about the share of losses today's average line breaks at; higher levels later | Morale bar | partly (no bar) |
 | G-02 | A friend breaks next to a wavering battalion | It may break too (contagion) | Morale | yes |
 | G-03 | Both flanks covered by friends | Holds longer than alone | Morale | yes |
-| G-04 | An enemy appears on its flank (no fire yet) | Morale pressure: a threatened flank is felt before the first shot | Morale, sectors | no |
+| G-04 | An enemy appears on its flank (no fire yet) | Morale pressure: a threatened flank is felt before the first shot | Morale, sectors | yes (U1) |
 | G-05 | A veteran battalion beside a breaking recruit one | The same shock is a smaller share of its bigger bar | Morale bar, experience | no |
 | G-06 | The Old Guard (level 6) watches the army break | Holds longest; it is the last to go, and its break is the army's (later: an army-wide shock) | Morale, experience | no |
 | G-07 | A router passes through a friendly battalion | Costs the friend cohesion and a little morale | Morale, collision | no (formations pass through) |

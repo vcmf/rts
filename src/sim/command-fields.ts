@@ -32,10 +32,10 @@ export const REFUSALS = [
 export type Refusal = (typeof REFUSALS)[number]
 export const MAX_POINTS = 64
 
-// id: a handle; int: a count or a side (both int32); cm: a position or a length, to 1 cm; ang: an angle or a
-// direction, to 0.1 mrad; quality: 0..1 to 0.1 mrad, −1 for none given (the ruleset's), another negative refused
-// when applied; str: a string; bool: a flag; pts: 1..MAX_POINTS [x, z] pairs, to 1 cm; reason: one of REFUSALS
-export type FieldKind = 'id' | 'int' | 'cm' | 'ang' | 'quality' | 'str' | 'bool' | 'pts' | 'reason'
+// id: a handle; int: a count, a side or a level (int32); cm: a position, a length or a bar's points, to 0.01; ang: an
+// angle or a direction, to 0.1 mrad; str: a string; bool: a flag; pts: 1..MAX_POINTS [x, z] pairs, to 1 cm; reason: one
+// of REFUSALS
+export type FieldKind = 'id' | 'int' | 'cm' | 'ang' | 'str' | 'bool' | 'pts' | 'reason'
 export interface Field {
   name: string
   kind: FieldKind
@@ -57,12 +57,13 @@ export const COMMAND_FIELDS: Record<CommandType | 'refused', readonly Field[]> =
     F('heading', 'ang'),
     F('shape', 'str', ''), // '': the type's start
     F('men', 'int'),
-    F('quality', 'quality', -1),
+    F('level', 'int', 0), // 0: the ruleset's
+    F('bar', 'cm', 0), // 0: its level's
     F('fire', 'str', FIRE_MODES[0]),
     F('unit', 'str', ''), // '': the ruleset's first type
   ],
   'debug-kill': [F('id', 'id'), F('men', 'int')],
-  'debug-morale': [F('id', 'id'), F('quality', 'ang')],
+  'debug-morale': [F('id', 'id'), F('bar', 'cm')],
   fire: [F('id', 'id'), F('mode', 'str'), F('target', 'id', 0)],
   side: [F('side', 'int'), F('x', 'ang'), F('z', 'ang')],
   charge: [F('id', 'id'), F('target', 'id')],
@@ -110,7 +111,6 @@ function check(kind: FieldKind, v: unknown): { v: unknown } | Refusal {
       return isInt32(v) ? { v } : 'malformed command'
     case 'cm':
     case 'ang':
-    case 'quality':
       return isFiniteNumber(v) ? { v } : 'malformed command'
     case 'str':
       return typeof v === 'string' ? { v: wellFormedString(v) } : 'malformed command'
@@ -183,8 +183,6 @@ function quantiseField(kind: FieldKind, v: unknown): unknown {
       return quantise(v as number)
     case 'ang':
       return qa(v as number)
-    case 'quality':
-      return v === -1 ? -1 : (v as number) < 0 ? -2 : qa(v as number)
     case 'bool':
       return !!v
     case 'pts':

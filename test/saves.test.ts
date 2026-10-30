@@ -56,12 +56,13 @@ const ONE_OF_EACH: Record<(typeof COMMAND_TYPES)[number], Command> = {
     heading: 1.25,
     shape: 'square',
     men: 77,
-    quality: 0.55,
+    level: 3,
+    bar: 43.5,
     fire: 'hold',
     unit: 'infantry',
   },
   'debug-kill': { type: 'debug-kill', id: h(6), men: 9 },
-  'debug-morale': { type: 'debug-morale', id: h(6), quality: 0.3 },
+  'debug-morale': { type: 'debug-morale', id: h(6), bar: 30.25 },
   charge: { type: 'charge', id: h(7), target: h(8) },
 }
 
@@ -160,7 +161,7 @@ describe('saves: what crosses', () => {
       expect(normaliseCommand(structuredClone(n))).toEqual(n)
     }
     const spawn = normaliseCommand({ type: 'debug-spawn', side: 0, x: 1, z: 2, heading: 0, men: 10 })
-    expect(spawn).toMatchObject({ quality: -1, shape: '', fire: 'at will', unit: '' })
+    expect(spawn).toMatchObject({ level: 0, bar: 0, shape: '', fire: 'at will', unit: '' })
   })
   it('a save with a command that is not canonical refuses it when loaded, as issue would', () => {
     const w = makeWorld(data, cr, 1)

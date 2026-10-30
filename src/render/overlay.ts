@@ -1,9 +1,10 @@
 // The visual bench's overlay (docs/plans/active/c0-bench.md): over the staff map, what the sim tests where
 // formations meet. Each company's block and each bin as the hull of its places (the places the footprint gate tests,
 // from src/sim/geometry.ts), bins shaded by their lag, the pairs of companies that touch, each formation's status and
-// its queue of orders. It reads the world at its tick, never writes to it, and is drawn only while it is on. On a
-// published frame's world (the battle in its workers: decision 0081) the claim grid, scratch no frame carries, is
-// built again here from the formations as they stand.
+// its queue of orders, and each formation's sectors (front, flank, rear; docs/proposals/sectors-model.md). It reads the
+// world at its tick, never writes to it, and is drawn only while it is on. On a published frame's world (the battle in
+// its workers: decision 0081) the claim grid, scratch no frame carries, is built again here from the formations as
+// they stand.
 import {
   type World,
   type Placed,
@@ -27,12 +28,19 @@ import {
   O_CHARGE,
   sheltering,
   SLOTS,
+  MAX_FORMATIONS,
+  blockGeometry,
+  pointWeights,
+  FACE_ALL,
+  FACE_TRAIL,
+  type Faces,
+  type FireGeo,
   buildClaims,
 } from '../sim/index.ts'
 import { toS, type View } from './map.ts'
 
 /** The overlay's layers, each toggled on the panel. */
-export const LAYERS = ['cells', 'blocks', 'strips', 'contacts', 'statuses', 'orders'] as const
+export const LAYERS = ['cells', 'sectors', 'blocks', 'strips', 'contacts', 'statuses', 'orders'] as const
 export type Layer = (typeof LAYERS)[number]
 
 // how near two companies of different formations are drawn as touching (metres)
@@ -47,6 +55,15 @@ const INK = {
   label: '#211f1c',
   order: 'rgba(40,90,60,.9)',
 }
+// the sectors' colours: front, flank, rear
+const SECTOR_RGB = [
+  [60, 140, 70],
+  [220, 160, 40],
+  [190, 50, 40],
+]
+// how far round each formation's blocks its sectors are drawn (metres), and the most samples a side
+const SECTOR_RING = 90
+const SECTOR_SAMPLES = 64
 // the claim grid's cells by side: [margin, core]
 const CELL_INK: [string, string][] = [
   ['rgba(52,95,140,.10)', 'rgba(52,95,140,.28)'],
@@ -67,6 +84,10 @@ export class Overlay {
   // mostly looked at paused)
   private at = -1
   private near: Contact[] | null = null
+  // the sectors' geometry and faces, built into a scratch of the overlay's own (the world's is only read), at a tick
+  private shadow: World['scratch'] = {}
+  private geo: { G: FireGeo; F: Faces } | null = null
+  private wt = new Float64Array(3)
   // the worlds drawn are copies (published frames), whose claim grid is built here; else the sim's own is read. The
   // tick each copy's grid was built at by this overlay (the page makes a new one after going to a time: a copy's grid
   // from before it may be another branch's at the same tick)
@@ -83,6 +104,7 @@ export class Overlay {
     if (this.at !== w.meta[M_TICK]) {
       placeAll(w, this.P)
       this.near = null
+      this.geo = null
       this.at = w.meta[M_TICK]
     }
     // a frame's world (each slot its own scratch) builds its grid once a tick: every formation claimed afresh where
@@ -96,6 +118,7 @@ export class Overlay {
     const P = this.P
     const near = (this.near ??= on.has('contacts') ? contacts(w, P, NEAR) : null) ?? []
     if (on.has('cells')) this.cells(g, v, w)
+    if (on.has('sectors')) this.sectors(g, v, w)
     if (on.has('strips')) this.strips(g, v, w, P)
     if (on.has('contacts')) this.overlaps(g, v, w, P, near)
     if (on.has('blocks')) this.blocks(g, v, w, P)
@@ -126,6 +149,40 @@ export class Overlay {
       const o = (first >> 1) - 1
       g.fillStyle = cores > 1 ? 'rgba(200,30,20,.35)' : (CELL_INK[w.f.side[o]]?.[core] ?? 'rgba(0,0,0,.1)')
       g.fillRect(sx - s / 2, sy - s / 2, s, s)
+    }
+  }
+
+  /**
+   * Each formation's sectors: a grid of points round its blocks, each coloured by its weights (front green, flank
+   * amber, rear red; the blends between), and each face's box outlined (a trail's head and tail boxes).
+   */
+  private sectors(g: CanvasRenderingContext2D, v: View, w: World): void {
+    const view = { ...w, scratch: this.shadow }
+    if (!this.geo) {
+      const G = blockGeometry(view) // builds the faces too
+      this.geo = { G, F: view.scratch.faces! }
+    }
+    const { G, F } = this.geo
+    for (let j = 0; j < MAX_FORMATIONS; j++) {
+      if (!w.f.alive[j]) continue
+      const r = G.reach[j] + SECTOR_RING
+      const step = Math.max(3, (2 * r) / SECTOR_SAMPLES)
+      const size = step * v.k
+      for (let x = w.f.x[j] - r; x <= w.f.x[j] + r; x += step) {
+        for (let z = w.f.z[j] - r; z <= w.f.z[j] + r; z += step) {
+          if ((x - w.f.x[j]) ** 2 + (z - w.f.z[j]) ** 2 > r * r) continue
+          const [sx, sy] = toS(v, x, z)
+          if (sx < -size || sy < -size || sx > v.W + size || sy > v.H + size) continue
+          const p = pointWeights(view, j, x, z, this.wt)
+          const c = [0, 1, 2].map(n => Math.round(SECTOR_RGB.reduce((sum, rgb, q) => sum + rgb[n] * p[q], 0)))
+          g.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},.16)`
+          g.fillRect(sx - size / 2, sy - size / 2, size, size)
+        }
+      }
+      if (F.kind[j] === FACE_ALL) continue
+      g.strokeStyle = 'rgba(40,110,55,.9)'
+      g.lineWidth = 2
+      for (const q of F.kind[j] === FACE_TRAIL ? [2 * j, 2 * j + 1] : [2 * j]) faceBox(g, v, F, q)
     }
   }
 
@@ -301,4 +358,18 @@ function hullPath(g: CanvasRenderingContext2D, v: View, P: Placed, pts: number[]
   g.moveTo(h[0][0], h[0][1])
   for (let k = 1; k < h.length; k++) g.lineTo(h[k][0], h[k][1])
   g.closePath()
+}
+
+/**
+ * Frame q's box (docs/proposals/sectors-model.md, § 2): its corners from the frame's across and along back to the
+ * world.
+ */
+function faceBox(g: CanvasRenderingContext2D, v: View, F: Faces, q: number): void {
+  const at = (x: number, y: number) => toS(v, F.ox[q] + x * F.c[q] + y * F.s[q], F.oz[q] - x * F.s[q] + y * F.c[q])
+  g.beginPath()
+  const pts = [at(F.L[q], F.B[q]), at(F.R[q], F.B[q]), at(F.R[q], F.F[q]), at(F.L[q], F.F[q])]
+  g.moveTo(pts[0][0], pts[0][1])
+  for (const [px, py] of pts.slice(1)) g.lineTo(px, py)
+  g.closePath()
+  g.stroke()
 }

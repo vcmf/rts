@@ -19,12 +19,9 @@ import {
   hashWorld,
   hex,
   issue,
-  bracedOf,
+  braceOf,
   gapBetween,
   sideStruck,
-  Q_FRONT,
-  Q_FLANK,
-  Q_REAR,
   CH_CLOSING,
   CH_TESTED,
   CH_PURSUIT,
@@ -45,21 +42,32 @@ const FIELD = openBattlefield()
 const withMelee = (m: Partial<Ruleset['melee']>): Ruleset => ({ ...napoleonic, melee: { ...napoleonic.melee, ...m } })
 const noSquare = withMelee({ refuge: { ...napoleonic.melee.refuge, alert: 0 } })
 
+// a bar on the old quality's scale, 100 × (q − 0.4) / 0.35 (morale-bar-model § 8): above 0.75, a full bar that size;
+// below it, level 2's bar set down to it, the gap counted as losses already paid for so it never recovers past it (the
+// old quality did not move): a line spawned under the thresholds is shaken or wavering as it was
+const QBAR = 0.75
+const qbar = (q: number) => (100 * (q - 0.4)) / 0.35
+
 class S extends Sim {
   constructor(seed = 1, rs: Ruleset = napoleonic) {
     super(seed, rs, FIELD, OPEN)
   }
-  inf(x: number, z: number, heading: number, side = 1, shape = 'line', quality?: number): number {
+  private put(c: Record<string, unknown>, quality?: number): number {
     const slot = this.w.free[this.w.meta[1] - 1]
-    this.cmd({ type: 'debug-spawn', side, x, z, heading, shape, men: 400, fire: 'hold', quality })
+    const bar = quality !== undefined && quality > QBAR ? qbar(quality) : undefined
+    this.cmd({ type: 'debug-spawn', fire: 'hold', bar, ...c } as Parameters<Sim['cmd']>[0])
     this.tick()
+    if (quality !== undefined && quality < QBAR) {
+      this.w.f.bar[slot] = qbar(quality)
+      this.w.f.cost[slot] = this.w.f.barMax[slot] - qbar(quality)
+    }
     return makeHandle(KIND_FORMATION, slot, this.w.f.gen[slot])
   }
+  inf(x: number, z: number, heading: number, side = 1, shape = 'line', quality?: number): number {
+    return this.put({ side, x, z, heading, shape, men: 400 }, quality)
+  }
   cav(x: number, z: number, heading: number, side = 0, shape = 'line', quality?: number): number {
-    const slot = this.w.free[this.w.meta[1] - 1]
-    this.cmd({ type: 'debug-spawn', side, unit: 'cavalry', x, z, heading, shape, men: 256, fire: 'hold', quality })
-    this.tick()
-    return makeHandle(KIND_FORMATION, slot, this.w.f.gen[slot])
+    return this.put({ side, unit: 'cavalry', x, z, heading, shape, men: 256 }, quality)
   }
   // the reasons the command was dropped, applied now
   why(c: Parameters<Sim['cmd']>[0]): string[] {
@@ -141,30 +149,47 @@ describe('the charge', () => {
     // its near end swings 22 m closer
     expect(ga).toBeLessThan(40 - 20)
   })
-  it('the side struck: front, flank and rear; a battalion changing shape has no front', () => {
+  it('the side struck, as weights (front, flank, rear); a battalion changing shape has no front', () => {
     const s = new S()
     const t = s.inf(0, 0, 0, 1)
     const a = s.cav(0, 80, PI)
     const b = s.cav(120, -5, -PI / 2)
     const c = s.cav(0, -80, 0)
-    expect([a, b, c].map(h => sideStruck(s.w, s.slot(h), s.slot(t)))).toEqual([Q_FRONT, Q_FLANK, Q_REAR])
+    const [fa, fb, fc] = [a, b, c].map(h => sideStruck(s.w, s.slot(h), s.slot(t)))
+    expect(fa).toEqual([1, 0, 0])
+    expect(fb[1]).toBeGreaterThan(0.99)
+    expect(fc).toEqual([0, 0, 1])
     s.order({ type: 'form', id: t, shape: 'column' })
-    expect(sideStruck(s.w, s.slot(a), s.slot(t))).toBe(Q_FLANK)
+    expect(sideStruck(s.w, s.slot(a), s.slot(t))[0]).toBe(0)
+  })
+  it('P-19: lines meeting square on are struck in front; offset, the squadron over the end reads mostly flank', () => {
+    // X-19: two regiments' lines a metre apart, the charger's offset dx metres to the east
+    const front = (dx: number) => {
+      const s = new S()
+      const t = s.cav(0, 0, 0, 1)
+      const a = s.cav(dx, 4, PI, 0)
+      expect(gapBetween(s.w, s.slot(a), s.slot(t))).toBeCloseTo(1, 2)
+      return sideStruck(s.w, s.slot(a), s.slot(t))[0]
+    }
+    expect(front(0)).toBe(1)
+    expect(front(20)).toBeCloseTo(0.84, 1)
+    expect(Math.abs(front(20) - 0.84)).toBeLessThan(0.03)
+    expect(Math.abs(front(30) - 0.78)).toBeLessThan(0.03)
   })
   it('braced: a square 1, a line 0; partly while forming square, less as it leaves it', () => {
     const s = new S()
     const sq = s.inf(-80, 0, 0, 1, 'square')
     const ln = s.inf(80, 0, 0, 1)
-    expect(bracedOf(s.w, s.slot(sq))).toBe(1)
-    expect(bracedOf(s.w, s.slot(ln))).toBe(0)
+    expect(braceOf(s.w, s.slot(sq))).toBe(1)
+    expect(braceOf(s.w, s.slot(ln))).toBe(0)
     s.order({ type: 'form', id: ln, shape: 'square' })
     s.order({ type: 'form', id: sq, shape: 'line' })
     const into: number[] = []
     const out: number[] = []
     for (let k = 0; k < 6; k++) {
       s.advance(5)
-      into.push(bracedOf(s.w, s.slot(ln)))
-      out.push(bracedOf(s.w, s.slot(sq)))
+      into.push(braceOf(s.w, s.slot(ln)))
+      out.push(braceOf(s.w, s.slot(sq)))
     }
     for (let k = 1; k < 6; k++) {
       expect(into[k]).toBeGreaterThan(into[k - 1])
@@ -173,8 +198,8 @@ describe('the charge', () => {
     expect(into[5]).toBeLessThan(1)
     expect(out[5]).toBeGreaterThan(0)
     s.advance(120)
-    expect(bracedOf(s.w, s.slot(ln))).toBe(1)
-    expect(bracedOf(s.w, s.slot(sq))).toBe(0)
+    expect(braceOf(s.w, s.slot(ln))).toBe(1)
+    expect(braceOf(s.w, s.slot(sq))).toBe(0)
   })
 })
 
@@ -262,8 +287,9 @@ describe('the impact', () => {
   it('costs the target by momentum; a standing target costs the charger nothing', () => {
     const far = impact(150)
     const near = impact(12)
-    expect(far.lost).toBeGreaterThan(2 * near.lost)
-    expect(far.lost).toBeGreaterThan(10)
+    // whole men, drawn: at impact.kill 0.06 the near charge's 4 are half the far one's 8
+    expect(far.lost).toBeGreaterThanOrEqual(2 * near.lost)
+    expect(far.lost).toBeGreaterThan(5)
     expect([far.cl, near.cl]).toEqual([0, 0])
   })
   it('a wavering square may be broken into; a steady one is not', () => {
@@ -404,7 +430,7 @@ describe('the square against cavalry (standing behaviour)', () => {
       near(s => {
         const c = s.cav(0, -170, 0)
         s.order({ type: 'side', side: 0, x: 0, z: 1 })
-        s.order({ type: 'debug-morale', id: c, quality: 0 })
+        s.order({ type: 'debug-morale', id: c, bar: -100 })
         s.until(() => !s.out(c), 60)
         s.advance(40)
       }),
@@ -454,6 +480,66 @@ describe('the square against cavalry (standing behaviour)', () => {
   })
 })
 
+describe('a second enemy (decision 0080, E-16)', () => {
+  // a line of the old quality 1 (bar 171) charged in front by a regiment of the same; once they are in melee, a second
+  // regiment charges its rear (or, with `alone`, only the second charges; with `forming`, the line forms square from
+  // the start and the second, nearer, strikes while it is still changing). The line's bar on the tick the second
+  // strikes, how far it was braced on the tick before, and the state after
+  const e16 = (rs: Ruleset, alone = false, rev = false, forming = false) => {
+    const s = new S(2, rs)
+    s.w.scratch.reverse = rev
+    const t = s.inf(0, 0, 0, 1, 'line', 1)
+    if (forming) s.order({ type: 'form', id: t, shape: 'square' })
+    const a = s.cav(0, 70, PI, 0, 'line', 1)
+    const b = s.cav(0, forming ? -60 : -110, 0)
+    if (!alone) {
+      s.charge(a, t)
+      s.until(() => !s.f(t, 'foe'), 60)
+      expect(s.f(t, 'foe')).not.toBe(0)
+    }
+    s.charge(b, t)
+    let braced = 0
+    s.until(() => {
+      if (s.f(b, 'foe')) return false
+      braced = braceOf(s.w, s.slot(t))
+      return s.f(b, 'chPhase') !== 0
+    }, 60)
+    if (!alone) expect(s.f(t, 'foe')).toBe(a)
+    const morale = s.f(t, 'bar')
+    expect(s.f(b, 'foe')).toBe(t)
+    s.advance(20)
+    const f = s.w.f
+    return { morale, braced, state: JSON.stringify([f.x, f.z, f.men, f.bar, f.mstate, f.foe].map(v => [...v])) }
+  }
+  // no threat at the test, which would break the line before the second strikes (the impact's shock alone)
+  const quiet = withMelee({ ...noSquare.melee, threat: { front: 0, flank: 0, rear: 0 } })
+  const none = withMelee({ ...quiet.melee, second: { flank: 0, rear: 0 } })
+  it('P-20: a charge into the rear of a battalion already in melee shakes it again, by the side it strikes', () => {
+    const diff = e16(quiet).morale - e16(none).morale
+    expect(diff).toBeLessThan(0)
+    // the regiment is wider than the line: its squadrons over the ends strike partly in the flank
+    expect(-diff).toBeGreaterThan(0.9 * napoleonic.melee.second.flank)
+    expect(-diff).toBeLessThanOrEqual(napoleonic.melee.second.rear + 1e-9)
+    // not in melee when it struck: no second shock
+    expect(e16(quiet, true).morale).toBe(e16(none, true).morale)
+  })
+  it('P-20: a battalion partly braced, forming square, takes the second shock cut by its bracing as the impact is', () => {
+    const q = e16(quiet, false, false, true)
+    const n = e16(none, false, false, true)
+    expect(q.braced).toBeGreaterThan(0.05)
+    expect(q.morale - n.morale).toBeLessThan(0)
+    expect(n.morale - q.morale).toBeLessThanOrEqual((1 - q.braced) * napoleonic.melee.second.rear + 1e-9)
+  })
+  it('P-20: the same in the reversed visiting order', () => {
+    expect(e16(quiet, false, true)).toEqual(e16(quiet))
+  })
+  it('P-20: the ruleset refuses a second shock that could rout a steady battalion of level 2 alone', () => {
+    const sec = napoleonic.melee.second
+    expect(Math.max(sec.flank, sec.rear)).toBeLessThanOrEqual(0.6 * napoleonic.levels[1].bar)
+    expect(() => compileRuleset(withMelee({ second: { flank: 43, rear: 61 } }))).toThrow(/melee.second/)
+  })
+})
+
 describe('determinism', () => {
   // the order pool is served in visiting order (tick.ts), so two pursuits begun in one tick take different entries:
   // the formations' state is compared, not the hash
@@ -469,7 +555,7 @@ describe('determinism', () => {
       s.advance(90)
       const f = s.w.f
       return JSON.stringify(
-        [f.x, f.z, f.heading, f.men, f.morale, f.mstate, f.foe, f.chPhase, f.chRun, f.shockIn].map(a => [...a]),
+        [f.x, f.z, f.heading, f.men, f.bar, f.mstate, f.foe, f.chPhase, f.chRun, f.shockIn].map(a => [...a]),
       )
     }
     expect(go(true)).toBe(go(false))
