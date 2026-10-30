@@ -8,7 +8,7 @@
 // broken (end.broken); the battle is decided at 40 minutes otherwise.
 import type { World, Scenario, PlanStep } from '../sim/index.ts'
 import { issue, PI } from '../sim/index.ts'
-import { FULL } from './sizes.ts'
+import { FULL, WIDTH_RATIO } from './sizes.ts'
 
 // one formation: its type, shape, men, place and heading, and its part in the battle. Units are numbered in spawn
 // order, SOUTH then NORTH; the plan finds them by part
@@ -32,8 +32,7 @@ const GUNNERS = 3
 // across the front, at the division scale: S1e-3's places for battalions 93 m wide, drawn in toward the front's middle
 // (x −80) by the width's ratio, so units about 54 m wide still stand shoulder to shoulder and face each other
 // (docs/proposals/division-scale.md § 8)
-const ACROSS = 0.58
-const across = (x: number): number => -80 + (x + 80) * ACROSS
+const across = (x: number): number => -80 + (x + 80) * WIDTH_RATIO
 const inf = (shape: string, x: number, z: number, a: number, part: 'first' | 'second'): Row => ({
   unit: 'infantry',
   shape,
@@ -117,12 +116,12 @@ const FIRST = lines('first')
 const SECOND = lines('second')
 const REGIMENT = units(NORTH, S1, 'regiment')[0].id
 const YOUR_BATTERY = units(SOUTH, 0, 'battery')[0].id
-// side 1's plan (S1e-3): its first line sets off at once straight down to the stream's north bank (each battalion
-// clear of the hedge at x 110), wades it, halts about 130 m from your first line to dress, then closes to about
-// 70 m (the centre's two cross the hedge in front of your line at z −135 slowly, and fight from about z −150).
+// side 1's plan (S1e-3, at the division scale): its first line sets off at once straight down to the stream's north
+// bank (each unit clear of the hedge at x 110), wades it, crosses the hedge at z −135 on its way (the centre's two,
+// slowly), halts about 52 m from your first line to dress (DRESS_Z), then closes to about 28 m (CLOSE_Z) at 700 s.
 // Its second line follows in column behind the centre and halts on the north bank, clear of the stream and the
-// marsh (z 40), and at 15 minutes wades over and comes up to about 25 m behind the centre's two, the far side of
-// the hedge they crossed, to fill the line as it breaks. Its regiment charges your battery and rides back
+// marsh (z 40), and at 15 minutes wades over and comes up just behind the fighting line (WAVE_Z), to fill it as it
+// breaks. Its regiment charges your battery and rides back
 // at a set time (once its rest is over): a charge ends by clearing its orders, so a move queued after it is lost,
 // and a charge still running then is cut short. The ride back is given again twice, 2 and 4 minutes later: in
 // melee at the first, the move waits for the melee's end, and a melee that ends in a pursuit or a recoil clears it

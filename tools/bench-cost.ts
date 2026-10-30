@@ -1,8 +1,9 @@
-// The cost benches outside vitest, split by part (S1c-5): 40 battalions marching through every shape, or
-// 40 firing at the halt, at 400 men (or the ceiling's 800), on the formation field, in 120 Hz frames at a game
-// speed. Prints ms per tick for the sim, the soldier layer's ms per frame (stepped on its clock as the page does,
-// src/render/men-clock.ts: mean and p99) and its syncs, and the hash. Run with --cpu-prof to profile.
-// Usage: node tools/bench-cost.ts [march|fire] [400|800] [frames=1440] [warm-up seconds=2] [speed=1]
+// The cost benches outside vitest, split by part (S1c-5; test/soldiers.test.ts's, at the division scale): 66 units
+// marching through every shape, or 66 firing at the halt, at 240 figures (or the ceiling's 540, 40 of them), on the
+// formation field, in 120 Hz frames at a game speed. Prints ms per tick for the sim, the soldier layer's ms per frame
+// (stepped on its clock as the page does, src/render/men-clock.ts: mean and p99) and its syncs, and the hash. Run with
+// --cpu-prof to profile.
+// Usage: node tools/bench-cost.ts [march|fire] [240|540] [frames=1440] [warm-up seconds=2] [speed=1]
 import fs from 'node:fs'
 import {
   loadSimData,
@@ -21,9 +22,10 @@ import { napoleonic, ceiling } from '../src/rulesets/napoleonic.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer } from '../src/render/soldiers.ts'
 import { MenClock } from '../src/render/men-clock.ts'
+import { FULL } from '../src/scenarios/sizes.ts'
 
 const mode = process.argv[2] ?? 'march'
-const men = Number(process.argv[3] ?? 400)
+const men = Number(process.argv[3] ?? FULL.infantry)
 const frames = Number(process.argv[4] ?? 1440)
 const warm = Number(process.argv[5] ?? 2)
 const speed = Number(process.argv[6] ?? 1)
@@ -46,16 +48,17 @@ const spawn = (x: number, z: number, heading: number, side = 0) => {
 }
 if (mode === 'fire') {
   const E = Math.PI / 2
-  for (let row = 0; row < 5; row++) {
-    for (let r = 0; r < 4; r++) {
-      const z = -150 + row * 60
-      spawn(-115 - r * 20, z, E, 0)
-      spawn(-15 + r * 20, z, -E, 1)
+  for (let row = 0; row < 11; row++) {
+    for (let r = 0; r < 3; r++) {
+      const z = -165 + row * 30
+      spawn(-90 - r * 15, z, E, 0)
+      spawn(-50 + r * 15, z, -E, 1)
     }
   }
 } else {
   const shapes = Object.keys(rs.types.infantry.formations)
-  for (let k = 0; k < 40; k++) spawn(-120 + (k % 7) * 25, -80 + Math.floor(k / 7) * 40, 0)
+  const n = rs === napoleonic ? 66 : 40
+  for (let k = 0; k < n; k++) spawn(-150 + (k % 11) * 30, -80 + Math.floor(k / 11) * 40, 0)
   slots.forEach((i, k) => {
     const id = makeHandle(KIND_FORMATION, i, w.f.gen[i])
     cmd({ type: 'form', id, shape: shapes[k % shapes.length] })
@@ -106,5 +109,5 @@ const sorted = [...tStep].sort((a, b) => a - b)
 const stepMean = sorted.reduce((a, b) => a + b, 0) / frames
 const stepP99 = sorted[Math.floor(frames * 0.99)]
 console.log(
-  `${mode} 40 × ${men} at ${speed}×: ${(total / frames).toFixed(2)} ms per 120 Hz frame; sim ${(tSim / ticks).toFixed(2)} ms per tick, sync ${(tSync / frames).toFixed(2)} ms and step ${stepMean.toFixed(2)} (p99 ${stepP99.toFixed(2)}) ms per frame; hash ${(tHash / 10).toFixed(2)} ms`,
+  `${mode} ${slots.length} × ${men} at ${speed}×: ${(total / frames).toFixed(2)} ms per 120 Hz frame; sim ${(tSim / ticks).toFixed(2)} ms per tick, sync ${(tSync / frames).toFixed(2)} ms and step ${stepMean.toFixed(2)} (p99 ${stepP99.toFixed(2)}) ms per frame; hash ${(tHash / 10).toFixed(2)} ms`,
 )

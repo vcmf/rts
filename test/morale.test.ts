@@ -42,7 +42,7 @@ import {
   type Command,
   type Dropped,
 } from '../src/sim/index.ts'
-import { levelled, brigade } from '../src/scenarios/s1c-firefight.ts'
+import { levelled, brigade, ANCHOR } from '../src/scenarios/s1c-firefight.ts'
 import { FULL } from '../src/scenarios/sizes.ts'
 
 const E = Math.PI / 2
@@ -574,10 +574,10 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
 })
 
 describe('determinism', () => {
-  // long (11.5 s) but not longIt: the brigade scenario's only test, the only one to reach its first rout (tick 13701)
+  // long but not longIt: the brigade scenario's only test, the only one to reach its first rout (tick 11377)
   it('the brigade: its replay reproduces', () => {
     const cr = shipped
-    const sc = brigade(100)
+    const sc = brigade(ANCHOR)
     const run = record(lev, cr, sc, 2, 14000, () => {})
     expect(play(run.replay, lev, cr, sc, run.hashes)).toBeNull()
   })

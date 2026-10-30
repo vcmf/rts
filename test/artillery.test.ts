@@ -26,6 +26,8 @@ import {
   shootRay,
   shootCone,
   blockGeometry,
+  overrun,
+  MS_ROUTING,
   formationSlot,
   makeHandle,
   KIND_FORMATION,
@@ -196,6 +198,46 @@ describe('who fires', () => {
     expect(one(12)).toBeGreaterThan(23)
     expect(one(12)).toBeLessThan(25)
     expect(one(6) / one(12)).toBeCloseTo(2, 1)
+  })
+})
+
+describe('among the guns (docs/proposals/division-scale.md § 4, P-56)', () => {
+  // a battery at the origin facing north, a line of the enemy facing it `d` m ahead of its anchor; a router or a friend
+  // instead with `extra`. Whether it fires in 20 s, and whether it counts as overrun
+  const at = (d: number, extra: Partial<{ side: number; rout: boolean }> = {}) => {
+    const s = new W()
+    const b = s.spawn(0, 0, 0, 0, 'unlimbered', 'battery', 'at will')
+    const e = s.spawn(extra.side ?? 1, 0, d, PI, 'line')
+    if (extra.rout) s.w.f.mstate[s.i(e)] = MS_ROUTING
+    const over = overrun(s.w, blockGeometry(s.w), s.i(b))
+    s.run(20)
+    return { over, fired: s.fired(b) }
+  }
+  it('an enemy whose nearest man is within `min` of a muzzle silences every piece; beyond it the battery fires', () => {
+    const A = napoleonic.types.battery.artillery!
+    // the line's front rank stands about half a rank ahead of its anchor, the muzzles `ahead` m in front of the pieces
+    expect(at(A.ahead + A.min - 2)).toEqual({ over: true, fired: false })
+    expect(at(A.ahead + A.min + 8)).toEqual({ over: false, fired: true })
+  })
+  it("it reads the enemy's nearest man, not its centre: a squadron's edge 12 m from the end piece", () => {
+    // the battery's pieces 16 m apart (the eastern at x 24); a squadron line facing it, its western squadron's edge
+    // in front of that piece and its centre 10 m east of it
+    const s = new W()
+    const b = s.spawn(0, 0, 0, 0, 'unlimbered', 'battery', 'at will')
+    const e = s.spawn(1, 49, 15.5, PI, 'line', 'cavalry')
+    const G = blockGeometry(s.w)
+    const A = napoleonic.types.battery.artillery!
+    const CS = s.w.cr.maxC
+    const k = s.i(b) * CS + 3
+    const [mx, mz] = [G.ox[k] + G.fx[k] * A.ahead, G.oz[k] + G.fz[k] * A.ahead]
+    const centres = [0, 1].map(q => Math.hypot(G.cx[s.i(e) * CS + q] - mx, G.cz[s.i(e) * CS + q] - mz))
+    expect(Math.min(...centres)).toBeGreaterThan(A.min)
+    expect(overrun(s.w, G, s.i(b))).toBe(true)
+  })
+  it('a router there, or a friend, does not count', () => {
+    const A = napoleonic.types.battery.artillery!
+    expect(at(A.ahead + A.min - 2, { rout: true }).over).toBe(false)
+    expect(at(A.ahead + A.min - 2, { side: 0 }).over).toBe(false)
   })
 })
 

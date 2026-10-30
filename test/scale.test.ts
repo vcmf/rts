@@ -173,3 +173,22 @@ describe('friendly cover at the ceiling', () => {
     for (const c of covered) expect(aimOf(s.w, i, c).share).toBeLessThan(0.5)
   })
 })
+
+describe('the division scale’s distances (docs/proposals/division-scale.md § 5, P-57)', () => {
+  it('each distance is its group’s: the fire’s × 0.4, the unit’s × 0.58, the charge’s, the guns’ and the ground’s unchanged', () => {
+    const N = napoleonic
+    const A = N.types.battery.artillery!
+    const C = N.types.cavalry.charge!
+    // the fire's: S1c's 250 m and its table, × 0.4; the rally's 250 m
+    expect(N.fire.maxRange).toBe(100)
+    expect(N.fire.pRange.map(([d]) => d)).toEqual([0, 50, 100, 150, 200, 250].map(d => d * 0.4))
+    expect(N.morale.rally.safe).toBe(100)
+    // the unit's: S1c-4's reaches (560, 280, 280) by the width, rounded
+    expect([N.morale.contagion.front, N.morale.contagion.back, N.morale.support.reach]).toEqual([325, 163, 163])
+    // the charge's, unchanged (a pace and a time)
+    expect([C.gallopAt, C.test, C.build, C.recoil, N.melee.refuge.alert]).toEqual([150, 60, 50, 80, 200])
+    // the guns': canister unchanged, roundshot 1 km, the guns' minimum at bayonet range
+    expect([A.cone.range, A.ray.range, A.min]).toEqual([300, 1000, 15])
+    expect(N.sectors.reach).toBe(300)
+  })
+})

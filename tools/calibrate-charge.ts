@@ -1,4 +1,4 @@
-// The charge calibration (docs/plans/active/s1d2-charges.md): a regiment of 256 charges a battalion of 400 in
+// The charge calibration (docs/plans/active/s1d2-charges.md): a light cavalry unit of 80 charges a line unit of 240 in
 // square, in line, in column and in the flank, and two regiments charge each other, on an open, level field,
 // for 3 minutes (5 for the regiments) over many seeds, in worker threads. Prints each case's outcomes and checks
 // them against the plan's targets.

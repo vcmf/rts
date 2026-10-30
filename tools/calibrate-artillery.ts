@@ -1,4 +1,4 @@
-// The artillery calibration (docs/plans/active/s1d3-artillery.md): a battery of 8 pieces fires on a battalion of 400
+// The artillery calibration (docs/plans/active/s1d3-artillery.md): a battery of 4 pieces fires on a line unit of 240
 // that holds its fire, on levelled ground (the crest case on a ridge), over many seeds in worker threads: in line
 // and in column end-on at about 400 m, in line at 150 m (canister), and in line behind a crest. Prints each case's
 // losses and breaks and checks them against the plan's targets. (The crest hides the battalion from the guns, so

@@ -337,8 +337,9 @@ export const napoleonic: Ruleset = {
   },
   faceTime: 3,
   dressTime: 30,
-  // fire: the hit chances are not historical rates: they are calibrated so two 100-man lines at 100 m
-  // break the weaker in 6–10 minutes (docs/proposals/sim-design.md §8; tools/calibrate-fire.ts)
+  // fire: the hit chances are not historical rates: they are calibrated so two lines at the C-01 anchor (40 m at
+  // the division scale, S1c's 100 m × 0.4) break the weaker in 6–10 minutes (docs/proposals/sim-design.md §8;
+  // tools/calibrate-fire.ts); the range and the table are S1c's × 0.4 (docs/proposals/division-scale.md § 3)
   fire: {
     arc: 0.75,
     maxRange: 100,
@@ -371,8 +372,8 @@ export const napoleonic: Ruleset = {
     wavering: [0.3, 0.45],
     routPace: 2,
     // the rest of the machine (docs/plans/active/s1c2-morale-machine.md)
-    // the reaches scale with the frontage (S1c-4): 2.8 times S1c-2's, set for 100-man lines 40 m apart in a
-    // brigade, so a 400-man line 113 m from its neighbour feels the same shock and support
+    // the reaches scale with the frontage: S1c-4's for 400-man lines 113 m apart in a brigade, × 0.58 at the
+    // division scale (units about 54 m wide, 65 m apart: docs/proposals/division-scale.md § 5)
     contagion: { shock: 43, front: 325, back: 163 },
     // an enemy on its flank presses a steady line (100 → 71, still steady); one behind it makes it shaken (43)
     drain: { flank: 29, rear: 57 },

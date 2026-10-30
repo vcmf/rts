@@ -438,7 +438,6 @@ function rulesetHash(rs: Ruleset): number {
   })
   const text = JSON.stringify([
     rs.name,
-    rs.menPerFigure,
     types,
     rs.pace,
     rs.q,

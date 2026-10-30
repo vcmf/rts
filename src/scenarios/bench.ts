@@ -4,7 +4,7 @@
 // (no infantry assault, no loose bodies, no passage of lines yet), so the bench first shows today's behaviour.
 import type { World, Scenario, PlanStep, PlanCommand } from '../sim/index.ts'
 import { issue, PI } from '../sim/index.ts'
-import { FULL } from './sizes.ts'
+import { FULL, WIDTH_RATIO } from './sizes.ts'
 
 /** A bench case: its scenario, how long it plays, where the page frames it, and the moments worth looking at. */
 export interface BenchCase {
@@ -37,7 +37,7 @@ const move = (x: number, z: number, append = false): PlanCommand => ({ type: 'mo
 // the cases were placed for S1c's battalions of 400, 93 m wide; at the division scale (240, about 54 m:
 // docs/proposals/division-scale.md § 8) every position, move and view is scaled by the width's ratio about the
 // field's centre, so formations meet as they did
-export const BENCH_SCALE = 0.58
+export const BENCH_SCALE = WIDTH_RATIO
 const K = BENCH_SCALE
 const scaled = (c: PlanCommand): PlanCommand =>
   c.type === 'move' ? { ...c, points: c.points.map(([x, z]) => [x * K, z * K] as [number, number]) } : c

@@ -159,7 +159,13 @@ were, every charge target holds (§ 7). The charge belongs to the paces and the 
   that must not shrink (X-16, X-17's regiment 9 m behind; X-14's columns 30 m apart) written so. Five cases that the
   tests listed as failing now pass (X-11's rally, the visiting order of X-15, X-16, X-17, X-20); Q-02's charge now
   depends on the slots' order (#187).
-- **Full strengths** in one place for scenarios and tests: `src/scenarios/sizes.ts`.
+- **Artillery** (`node tools/calibrate-artillery.ts 30`): the line (12% in 10 minutes, none breaks), canister (70 of
+  240 in 3 minutes, all break) and the crest hold; two column targets do not: it loses 1.8 times the line's men (the
+  target 2) and none breaks in 10 minutes (the target 30%). Half the pieces (4), and a column of 240 two sections
+  deep where S1c's was three, so a ball crosses fewer ranks. Not tuned here: PR C's attack column is a dense block 12
+  ranks deep (`docs/proposals/formations.md` § 2), which the ball's geometry strikes far harder.
+- **Full strengths** in one place for scenarios and tests, read from the ruleset's blocks, and the width's ratio:
+  `src/scenarios/sizes.ts`.
 - **The cost benches** keep their figures: 66 units of 240 (15,840) and every formation slot, 128 units (30,720:
   32,000 would need 134, over `MAX_FORMATIONS`).
 - **The look page** builds its armies on the shipped infantry and cavalry; its tests (armies, arms, battle-thread)
