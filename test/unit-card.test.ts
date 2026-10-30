@@ -18,6 +18,16 @@ describe('the info box', () => {
     expect(card).toContain('shock taken × 0.75 · flank shock × 0.70')
     expect(card).toMatch(/#\d+ infantry at 6\d m: flank 1\.00/)
   })
+  it('while changing shape, shows what the sim uses: the higher of the two hits, the bracing by progress', () => {
+    const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)
+    const h = s.spawn(0, 0, 0, 'line', FULL.infantry, 0)
+    s.order({ type: 'form', id: h, shape: 'square' })
+    s.advance(45)
+    const card = unitCard(s.w, s.slot(h)).join('\n')
+    expect(card).toMatch(/line → square \((4\d|5\d)%\)/)
+    expect(card).toContain('hits taken the higher of 1.00 front, × 1.80 flank, × 1.20 rear and 1.40 every side')
+    expect(card).toMatch(/braced 0\.[45]\d front, 0\.[45]\d flank, 0\.[45]\d rear/)
+  })
   it('says a square cannot move, and its hits taken are the same on every side', () => {
     const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)
     const sq = s.spawn(0, 0, 0, 'square', FULL.infantry, 0)

@@ -1634,11 +1634,13 @@ function formationStep(w: World, i: number): void {
     startChange(w, i, s)
     return
   }
-  // a shape that cannot move (the square, formed against cavalry with a move still to make) stands, keeping its moves
-  // and wheels for the shape it forms back into; one out of the fight runs or re-forms whatever its shape
+  // a shape that cannot move (the square): formed against cavalry (autoFrom), it stands, keeping its moves and wheels
+  // for the shape it forms back into; else the move is dropped and its orders go on (a later form). One out of the
+  // fight runs or re-forms whatever its shape
   if ((type === O_MOVE || type === O_WHEEL) && !movesOf(w, i) && !outOfFight(f.mstate[i])) {
     f.vx[i] = 0
     f.vz[i] = 0
+    if (!f.autoFrom[i]) shiftOrder(w, i)
     lagSettle(w, i)
     return
   }

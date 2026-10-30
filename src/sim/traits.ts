@@ -42,9 +42,11 @@ export function hitsTaken(w: World, G: FireGeo, k: number, j: number): number {
   const b = f.trans[j] ? f.tShape[j] * T_LEN : a
   if (!T[a + T_SIDED] && !T[b + T_SIDED]) return Math.max(T[a + T_HITS], T[b + T_HITS])
   threatWeights(w, G, j, Math.floor(k / w.cr.maxC), k, wt)
-  const by = (o: number) => T[o + T_HITS] * (wt[0] + wt[1] * T[o + T_FLANK] + wt[2] * T[o + T_REAR])
-  return a === b ? by(a) : Math.max(by(a), by(b))
+  return a === b ? sidedHits(T, a) : Math.max(sidedHits(T, a), sidedHits(T, b))
 }
+// the hits taken of the shape whose row starts at o, by the side weights in wt
+const sidedHits = (T: Float64Array, o: number): number =>
+  T[o + T_HITS] * (wt[0] + wt[1] * T[o + T_FLANK] + wt[2] * T[o + T_REAR])
 
 /** Formation i's melee strength from its shape (before its disorder and its morale state, melee.ts). */
 export const meleeOf = (w: World, i: number): number => traitOf(w, i, T_MELEE)

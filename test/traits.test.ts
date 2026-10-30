@@ -59,9 +59,12 @@ describe('moves', () => {
     s.tick()
     expect(s.dropped.slice(n).map(d => d.reason)).toEqual(['cannot move in this shape'])
   })
-  it("keeps a scenario's plan's move to a square, for the shape it forms next", () => {
+  it("a scenario's plan's move to a square: refused, unless it shelters against cavalry and will form back", () => {
     const s = sim(still)
     const h = s.spawn(0, 0, 0, 'square', FULL.infantry)
+    const i = s.slot(h)
+    expect(applyNow(s.w, { type: 'move', id: h, append: false, points: [[0, 100]] })).toBe('cannot move in this shape')
+    s.w.f.autoFrom[i] = s.w.cr.types[s.w.f.type[i]].shapeIndex('line') + 1
     expect(applyNow(s.w, { type: 'move', id: h, append: false, points: [[0, 100]] })).toBe('')
     const z = s.z(h)
     s.advance(5)
@@ -76,16 +79,21 @@ describe('moves', () => {
     s.advance(20)
     expect(Math.abs(s.z(h) - z)).toBeGreaterThan(10)
   })
-  it('a shape that cannot move, handed a move (as the square against cavalry keeps one), stands and keeps it', () => {
-    const s = sim(still)
-    const h = s.spawn(0, 0, 0, 'line', FULL.infantry)
-    s.order({ type: 'move', id: h, append: false, points: [[0, 100]] })
-    const i = s.slot(h)
-    s.w.f.shape[i] = s.w.cr.types[s.w.f.type[i]].shapeIndex('square')
-    const z = s.z(h)
-    s.advance(10)
-    expect(s.z(h)).toBe(z)
-    expect(s.orders(h)).toBe(1)
+  it('a square against cavalry keeps a move for the shape it forms back into; one without drops it, its orders go on', () => {
+    for (const sheltering of [true, false]) {
+      const s = sim(still)
+      const h = s.spawn(0, 0, 0, 'line', FULL.infantry)
+      const i = s.slot(h)
+      const U = s.w.cr.types[s.w.f.type[i]]
+      s.order({ type: 'move', id: h, append: false, points: [[0, 100]] })
+      s.order({ type: 'move', id: h, append: true, points: [[0, 150]] })
+      s.w.f.shape[i] = U.shapeIndex('square')
+      if (sheltering) s.w.f.autoFrom[i] = U.shapeIndex('line') + 1
+      const z = s.z(h)
+      s.advance(10)
+      expect(s.z(h)).toBe(z)
+      expect(s.orders(h)).toBe(sheltering ? 2 : 0) // without: each move dropped in turn
+    }
   })
 })
 
@@ -131,6 +139,15 @@ describe('shock', () => {
 })
 
 describe('fire', () => {
+  it('a shape with no fire (the column of route) does not fire at all: no volley, not one with no hits', () => {
+    const s = sim()
+    const h = s.spawn(0, 0, 0, 'march', FULL.infantry, 0)
+    s.spawn(0, 40, Math.PI, 'line', FULL.infantry, 1)
+    s.advance(60)
+    const i = s.slot(h)
+    const CS = s.w.cr.maxC
+    expect([...s.w.f.volleyTick.slice(i * CS, i * CS + CS)].every(v => v === 0)).toBe(true)
+  })
   it("multiplies a line's musketry: at a quarter it kills far fewer", () => {
     const lost = (rs: Ruleset) => {
       const s = sim(rs)

@@ -151,7 +151,8 @@ outside contagion's reach and its breaks spread over 35–135 s instead of one t
   of its bar).
 
 **The shape's fire.** A volley's expected hits are multiplied by the firing shape's `traits.fire`, its share of
-musketry beyond what its geometry masks (1 on every shape until the formations' values, `docs/proposals/formations.md`).
+musketry beyond what its geometry masks (`docs/systems/formations.md`: the attack column's head 1.25, the column of
+route 0, which does not fire at all).
 
 **Exposure** (U1, `docs/proposals/sectors-model.md` § 5). A volley's expected hits, and canister's
 (`docs/systems/artillery.md`), are multiplied by the target's exposure to the firing company: its shape's hits taken

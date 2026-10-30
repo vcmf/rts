@@ -337,13 +337,14 @@ export function aimAt(w: World, G: FireGeo, k: number, j: number, R: Reach): num
   return -1
 }
 
-// a battalion may fire: of a type that fires, halted (no order at its head but a dress), not changing shape, in
-// the fight and not in melee, at will
+// a battalion may fire: of a type that fires, in a shape that fires (not the column of route), halted (no order at
+// its head but a dress), not changing shape, in the fight and not in melee, at will
 export function mayFire(w: World, i: number): boolean {
   const f = w.f
   const n = f.ordHead[i]
   return (
     typeOf(w, i).def.fires &&
+    fireOf(w, i) > 0 &&
     f.fireMode[i] === FIRE_AT_WILL &&
     !outOfFight(f.mstate[i]) &&
     !f.foe[i] &&

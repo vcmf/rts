@@ -166,11 +166,13 @@ function playerOrdered(w: World, i: number): void {
 }
 
 // the shape formation i will stand in when an order given now is reached: the one it is changing into or stands in,
-// and when the order is appended, the last shape its queued orders form. The player's move into a shape that cannot
-// move is refused (a scenario's plan's is kept, and held until the formation forms another shape: formation.ts)
-function shapeWhenReached(w: World, i: number, append: boolean): number {
+// and when the order is appended, the last shape its queued orders form. A move into a shape that cannot move is
+// refused, but a scenario's plan's to a battalion sheltering in its square against cavalry (autoFrom) is read by the
+// shape it will form back into, and kept for then (formation.ts); the player's order would stand the square down
+function shapeWhenReached(w: World, i: number, append: boolean, player: boolean): number {
   const f = w.f
   let s = f.trans[i] ? f.tShape[i] : f.shape[i]
+  if (!player && f.autoFrom[i]) s = f.autoFrom[i] - 1
   if (append) for (let n = f.ordHead[i]; n >= 0; n = w.ord.next[n]) if (w.ord.type[n] === O_FORM) s = w.ord.shape[n]
   return s
 }
@@ -241,7 +243,7 @@ function apply(w: World, c: Command, player = true): string {
   switch (c.type) {
     case 'move': {
       for (const [x, z] of c.points) if (!inside(w, x, z)) return 'waypoint outside the map'
-      if (player && !movesOf(w, i, shapeWhenReached(w, i, c.append))) return 'cannot move in this shape'
+      if (!movesOf(w, i, shapeWhenReached(w, i, c.append, player))) return 'cannot move in this shape'
       return giveOrders(
         w,
         i,
@@ -271,7 +273,7 @@ function apply(w: World, c: Command, player = true): string {
     }
     case 'wheel':
       if (c.angle === 0 || Math.abs(c.angle) > 2 * PI) return 'no such wheel'
-      if (player && !movesOf(w, i, shapeWhenReached(w, i, false))) return 'cannot move in this shape'
+      if (!movesOf(w, i, shapeWhenReached(w, i, false, player))) return 'cannot move in this shape'
       return giveOrders(
         w,
         i,
@@ -286,7 +288,7 @@ function apply(w: World, c: Command, player = true): string {
       return giveOrders(w, i, [O_FACE], false, () => {}, player)
     case 'retire': // the Retire drill (formation.ts)
       if (c.metres <= 0 || c.metres > 1000) return 'no such retreat'
-      if (player && !movesOf(w, i, shapeWhenReached(w, i, false))) return 'cannot move in this shape'
+      if (!movesOf(w, i, shapeWhenReached(w, i, false, player))) return 'cannot move in this shape'
       return giveOrders(w, i, RETIRE, false, (n, k) => fillRetire(w, n, k, c.metres), player)
     case 'halt':
       clearOrders(w, i)

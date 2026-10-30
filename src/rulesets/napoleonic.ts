@@ -463,7 +463,8 @@ export const napoleonic: Ruleset = {
     hold: 3,
     threat: { front: 34, flank: 71, rear: 86 }, // points
     impact: { kill: 0.06, shock: { front: 57, flank: 100, rear: 114 } },
-    // under the guard: 0.6 × level 2's 100, by the shape that takes it worst (shock 1.25, its flank's × 1.25)
+    // under the guard: 0.6 × level 2's 100, by the shape that takes it worst: the British thin line to come (step C3,
+    // docs/plans/active/formations.md: shock 1.25, its flank's × 1.25), so it passes when it ships (the owner)
     second: { flank: 38, rear: 48 },
     rate: 0.01,
     cohesion: 0.5,
