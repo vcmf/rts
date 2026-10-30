@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-26
+last_reviewed: 2026-10-30
 code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/houses.ts, src/render/lit/overlays.ts, maps/cell.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, test/render-lit-houses.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts, src/map/write.ts, tools/map-save.ts, src/app/map/edit.ts, src/app/map/editor.ts, src/app/map/draw.ts, test/map-draw.test.ts, src/app/map/fields.ts, src/app/map/form.ts, src/app/map/pin.ts, test/map-fields.test.ts, test/map-pin.test.ts, src/app/map/scan.ts, src/app/map/scan-gl.ts, src/app/map/trace.ts, test/map-scan.test.ts, tools/geo.ts, tools/scan-wms.ts, tools/streams.ts, test/map-streams.test.ts, tools/water.ts, test/map-water.test.ts, maps/austerlitz-water.json, tools/ways.ts, test/map-ways.test.ts, maps/austerlitz-ways.json, tools/works.ts, test/map-works.test.ts, maps/austerlitz-works.json, tools/villages.ts, test/map-villages.test.ts, maps/austerlitz-villages.json, tools/ground.ts, test/map-ground.test.ts, maps/austerlitz-ground.json, test/map-ring-row.test.ts, tools/labels.ts, test/map-labels.test.ts, maps/austerlitz-labels.json, test/map-write.test.ts, test/map-edit.test.ts, test/map-save.test.ts, test/map-editor.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0078-editor-writes-the-intent-file-in-place, 0079-ids-are-named-when-made, 0069-scans-placed-in-their-relief-frame, 0070-a-field-as-a-scale-model, 0073-modern-works-mended-from-their-surroundings, 0077-a-pond-levels-at-its-lower-bank]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker, 0065-map-ink-as-distance-fields-houses-as-boxes, 0078-editor-writes-the-intent-file-in-place, 0079-ids-are-named-when-made, 0069-scans-placed-in-their-relief-frame, 0070-a-field-as-a-scale-model, 0073-modern-works-mended-from-their-surroundings, 0077-a-pond-levels-at-its-lower-bank, 0090-the-staff-map-lit-as-a-model]
 ---
 
 # The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a–c, M7a–c)
@@ -229,10 +229,14 @@ maps/kinds.json ──► checkCatalogue ─┐
 - **The page** (`app/map.html`, `src/app/map/`):
   - a worker compiles, draws the flat draft and bakes the lit view's textures; the page draws the map in the **lit
     view** (`src/render/lit/`, decision 0064, M6a): one flat plane in Babylon, seen 20° off straight down (decision
-    0055, `?tilt=`), its shader ported from the prototype's lit and shaded paths: the paper and its worn border, the
-    woods darkening it, the shaded relief (slope light, cast shadow and exposure baked on the 2 m nodes, the light one
-    of the grid's 8 directions, north-west for now), the water as a wash sunk below its banks, contours every 5 m and
-    25 m from the node heights (a float texture read by `texelFetch`), the yards (a village's, a farm's), the ink, the
+    0055, `?tilt=`), its shader ported from the prototype's lit and shaded paths, lit since G2 as a model (decision
+    0090): a cold white paper and its worn border (no woods drawn for now: the owner), the light baked in the worker on
+    every second node (`bakeLight`: the sun's soft shadow toward a disc 2.5° across, the sky each node sees in eight
+    directions), the 3D world's sun (north-west, about 27° high), the slope's light per pixel from the node heights
+    raised three times for the light only (`RELIEF.z`), a quarter of the light the sky's, divided by flat ground's;
+    `?sun=`, `?az=`, `?soft=`, `?z=`, `?sky=`, `?lamp=`, `?floor=` to tune; the water stepped from a pale to a deep
+    blue by its depth, sunk below its banks, contours (grey, the index lines orange) every 5 m and 25 m from the node
+    heights (a float texture read by `texelFetch`), the yards (a village's, a farm's), the ink, the
     paper's grain; the ink (decision 0065, M6b): the water, the woods and the barriers from their cells (what the sim
     reads), every cell reading as its own kind at its centre and every edge within half a cell of the cells' sides
     (`cellField`: smoothed for the water and the woods, square for the barriers, saddle corners joined); the ways'
@@ -459,8 +463,9 @@ a whole-extent piece and its shift, an area piece's inside, blend and outside; (
 slopes the file's; the same bytes twice; the validator's and the file checks' refusals (a scale model past its file, a
 scale below 1); the test map's real heights and its sim compile.
 
-`test/render-lit-bake.test.ts` (M6a): the relief bake on flat ground, the cast shadow away from the light for each of
-its 8 directions, the exposure of a block's top and foot, no seam at the grid's edge; the cells' mask with its yards;
+`test/render-lit-bake.test.ts` (M6a, G2): the light on flat ground (in the sun, open to the sky), a block's shadow
+away from the sun at every azimuth, its length from the sun's height, its edge softer with a larger disc, a pit's
+floor seeing less sky than its rim, every second node the same light, the default sun the 3D world's; the cells' mask with its yards;
 (M6b) a way's field, its square ends and its cells' gate, the widths `waysOf` takes from `lineReach`, the contract
 (every cell's kind at its centre on stair-steps, saddles, one-cell lines and diagonals), a cell field's 0 on the
 cells' sides, a smoothed diagonal without stairs, narrow streams and clearings kept, diagonal cells joined, a wood's
