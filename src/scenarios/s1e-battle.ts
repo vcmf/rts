@@ -19,13 +19,15 @@ interface Row {
   z: number
   a: number
   part: 'first' | 'second' | 'regiment' | 'battery'
-  quality?: number
+  level?: number
 }
 // side 1's battalions are rows of their own type, which carries the x they fight at
 interface Battalion extends Row {
   part: 'first' | 'second'
   fight: number
 }
+// both batteries level 3: gunners were an elite arm (at level 2 your battery, charged, routs or not on a few men)
+const GUNNERS = 3
 const inf = (shape: string, x: number, z: number, a: number, part: 'first' | 'second'): Row => ({
   unit: 'infantry',
   shape,
@@ -49,13 +51,14 @@ const SOUTH: Row[] = [
   // line, which no piece's fire crosses (on the outer flank, facing ahead, no enemy ever came into its arc). U1: 50 m
   // behind the line, not 50 m ahead of it; from there its fire takes the enemy's line in the flank, which since
   // sectors (decision 0086) drains it and broke it by 13 minutes on every seed, the battle yours with no orders
-  { unit: 'battery', shape: 'unlimbered', men: 96, x: 180, z: -330, a: -0.44, part: 'battery' },
+  { unit: 'battery', shape: 'unlimbered', men: 96, x: 180, z: -330, a: -0.44, part: 'battery', level: GUNNERS },
 ]
 // side 1's (S1e-3), veteran infantry: four battalions up, so its line overlaps yours at both ends, and two in
 // column behind; its regiment on its eastern flank, facing your battery and your regiment; its battery on its
 // ridge west of its first line, turned 25° inwards, so that it fires past its own line while that comes down (once
 // the line has closed, it masks the battery's fire at your western battalions)
-const VETERAN = 0.85 // the ruleset's quality is 0.75
+// veterans (docs/proposals/morale-bar-model.md § 8): a bar of 120, faster reload, better aim, tougher
+const VETERAN = 3
 const vet = (shape: string, x: number, z: number, part: 'first' | 'second', fight: number): Battalion => ({
   unit: 'infantry',
   shape,
@@ -65,7 +68,7 @@ const vet = (shape: string, x: number, z: number, part: 'first' | 'second', figh
   a: PI,
   part,
   fight,
-  quality: VETERAN,
+  level: VETERAN,
 })
 // first in NORTH, so their unit numbers count from S1
 const BATTALIONS: Battalion[] = [
@@ -79,7 +82,7 @@ const BATTALIONS: Battalion[] = [
 const NORTH: Row[] = [
   ...BATTALIONS,
   { unit: 'cavalry', shape: 'line', men: 256, x: 260, z: 320, a: PI, part: 'regiment' },
-  { unit: 'battery', shape: 'unlimbered', men: 96, x: -330, z: 280, a: PI - 0.44, part: 'battery' },
+  { unit: 'battery', shape: 'unlimbered', men: 96, x: -330, z: 280, a: PI - 0.44, part: 'battery', level: GUNNERS },
 ]
 const units = <R extends Row>(rows: R[], first: number, part: Row['part']) =>
   rows.map((r, k) => ({ ...r, id: first + k })).filter(r => r.part === part)
@@ -101,7 +104,7 @@ const YOUR_BATTERY = units(SOUTH, 0, 'battery')[0].id
 // melee at the first, the move waits for the melee's end, and a melee that ends in a pursuit or a recoil clears it
 // (melee.ts). Riding back already, the same move again changes nothing (no orders: the same battle on eight seeds).
 // A stopgap: a melee after the last still leaves it forward; the fix belongs in the sim (#179)
-const T = { dress: 200, close: 500, charge: 300, back: 630, wave: 900 } // seconds
+const T = { dress: 200, close: 640, charge: 300, back: 630, wave: 900 } // seconds
 const march = (at: number, unit: number, points: [number, number][]): PlanStep => ({
   at,
   unit,
@@ -130,8 +133,8 @@ export const s1eBattle: Scenario = {
       [0, SOUTH],
       [1, NORTH],
     ] as const) {
-      for (const { unit, shape, men, x, z, a, quality } of rows) {
-        issue(w, { type: 'debug-spawn', side, unit, shape, men, x, z, heading: a, fire: 'at will', quality })
+      for (const { unit, shape, men, x, z, a, level } of rows) {
+        issue(w, { type: 'debug-spawn', side, unit, shape, men, x, z, heading: a, fire: 'at will', level })
       }
     }
   },

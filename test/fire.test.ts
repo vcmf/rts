@@ -104,10 +104,10 @@ class W {
   }
 }
 // two lines facing each other `d` apart on the strip
-function pair(d: number, opts: ConstructorParameters<typeof W>[0] = {}, qb?: number): [W, number, number] {
+function pair(d: number, opts: ConstructorParameters<typeof W>[0] = {}): [W, number, number] {
   const s = new W(opts)
   const a = s.spawn(0, FIGHT_X - d / 2, Z, E)
-  const b = s.spawn(1, FIGHT_X + d / 2, Z, -E, qb === undefined ? {} : { quality: qb })
+  const b = s.spawn(1, FIGHT_X + d / 2, Z, -E)
   return [s, a, b]
 }
 const pairB = (s: W): number => makeHandle(KIND_FORMATION, 1, s.w.f.gen[1])
@@ -193,7 +193,7 @@ describe('who may fire at whom', () => {
 describe('Face about', () => {
   it("carries each company's fire state with its men (reload, last volley, target)", () => {
     // A's companies have fired, reloads differ
-    const [s, a] = pair(100, {}, undefined)
+    const [s, a] = pair(100, {})
     s.do({ type: 'fire', id: pairB(s), mode: 'hold' })
     s.run(40)
     const i = s.i(a)
@@ -262,7 +262,7 @@ describe('a target partly hidden', () => {
       }),
     })
     const a2 = w2.spawn(0, FIGHT_X - 50, Z, E, { fire: 'hold' })
-    const b2 = w2.spawn(1, FIGHT_X + 50, Z, -E, { quality: 1, fire: 'hold' })
+    const b2 = w2.spawn(1, FIGHT_X + 50, Z, -E, { bar: 171, fire: 'hold' })
     const C = w2.w.cr.maxC
     // B's southern company
     const south = [0, 1, 2, 3].reduce((m, c) => (companyZ(w2, b2, c) < companyZ(w2, b2, m) ? c : m), 0)
@@ -287,32 +287,31 @@ describe('a target partly hidden', () => {
 
 describe('morale', () => {
   longIt('no hits, no break: at p = 0 two lines at 50 m, one of them just above the rout, stand for 20 minutes', () => {
-    const [s, a, b] = pair(
-      50,
-      {
-        rs: fireRs({
-          pRange: [
-            [0, 0],
-            [250, 0],
-          ],
-        }),
-      },
-      0.42,
-    )
-    // 0.42: wavering by quality
+    const [s, a, b] = pair(50, {
+      rs: fireRs({
+        pRange: [
+          [0, 0],
+          [250, 0],
+        ],
+      }),
+    })
+    // B's bar a point above the rout: wavering, and it recovers once calm (no man lost)
+    s.do({ type: 'debug-morale', id: b, bar: 1 })
+    expect(s.state(b)).toBe(MS_WAVERING)
     s.run(1200)
-    expect([s.state(a), s.state(b), s.men(a), s.men(b)]).toEqual([MS_STEADY, MS_WAVERING, 100, 100])
+    expect([s.state(a), s.state(b), s.men(a), s.men(b)]).toEqual([MS_STEADY, MS_STEADY, 100, 100])
   })
-  longIt('the states follow the morale with hysteresis (steady → shaken → wavering → shaken → steady)', () => {
+  it('the states follow the bar with hysteresis (steady → shaken → wavering → shaken → steady)', () => {
     const s = new W()
     const h = s.spawn(0, FIGHT_X, Z, E)
     const seen: number[] = []
-    const settle = (q: number) => {
-      s.do({ type: 'debug-morale', id: h, quality: q })
-      s.run(120)
+    // shares of the bar (enter shaken below 0.6, back at 0.7; wavering below 0.3, back at 0.45); a tick each, before
+    // it recovers
+    const settle = (share: number) => {
+      s.do({ type: 'debug-morale', id: h, bar: share * 100 })
       seen.push(s.state(h))
     }
-    for (const q of [0.62, 0.58, 0.62, 0.52, 0.48, 0.52, 0.56, 0.64, 0.66]) settle(q)
+    for (const q of [0.63, 0.51, 0.63, 0.34, 0.23, 0.34, 0.46, 0.69, 0.74]) settle(q)
     expect(seen).toEqual([
       MS_STEADY,
       MS_SHAKEN,
@@ -330,7 +329,7 @@ describe('morale', () => {
     const h = s.spawn(0, FIGHT_X, Z + 40, 0)
     s.spawn(1, FIGHT_X, Z + 120, Math.PI)
     s.do({ type: 'side', side: 0, x: 0, z: -1 })
-    s.do({ type: 'debug-morale', id: h, quality: 0.2 })
+    s.do({ type: 'debug-morale', id: h, bar: -100 })
     s.run(30)
     expect(s.state(h)).toBe(MS_ROUTING)
     const t0 = s.w.meta[M_TICK]
@@ -353,8 +352,8 @@ describe('morale', () => {
       if (STATUS[s.w.f.status[s.i(h)]] !== 'cannot face about: impassable ground') continue
       found = true
       s.do({ type: 'side', side: 0, x: 1, z: 1 })
-      s.do({ type: 'debug-morale', id: h, quality: 0.1 })
-      for (let n = 0; n < 1200 && s.state(h) !== MS_ROUTING; n++) s.tick() // morale relaxes to the rout (about 15 s)
+      s.do({ type: 'debug-morale', id: h, bar: -100 })
+      for (let n = 0; n < 1200 && s.state(h) !== MS_ROUTING; n++) s.tick()
       s.run(2) // the Face about is tried and fails
       expect(s.state(h)).toBe(MS_ROUTING)
       expect(STATUS[s.w.f.status[s.i(h)]]).toBe('cannot face about: impassable ground')
@@ -369,7 +368,8 @@ describe('morale', () => {
     const s = new W()
     const h = s.spawn(1, 40, -100, -E)
     s.do({ type: 'side', side: 1, x: 1, z: 0 })
-    s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+    s.spawn(0, -150, -100, E, { fire: 'hold' }) // an enemy within 250 m, due west: it never rallies at the bank
+    s.do({ type: 'debug-morale', id: h, bar: -100 })
     let halt: [number, number] | null = null
     for (let n = 0; n < 20 * 240; n++) {
       s.tick()
@@ -394,7 +394,7 @@ describe('morale', () => {
     s.w.claims = true
     const h = s.spawn(1, 40, -100, -E)
     s.do({ type: 'side', side: 1, x: 1, z: 0 })
-    s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+    s.do({ type: 'debug-morale', id: h, bar: -100 })
     s.run(240)
     expect(s.w.f.runs[s.i(h)]).toBeLessThanOrEqual(5)
   })
@@ -402,7 +402,7 @@ describe('morale', () => {
     const s = new W()
     const h = s.spawn(0, -100, -65, E)
     s.do({ type: 'side', side: 0, x: -1, z: 0 })
-    s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+    s.do({ type: 'debug-morale', id: h, bar: -100 })
     for (let n = 0; n < 20 * 120 && s.w.f.routPhase[s.i(h)] !== RP_FLED; n++) s.tick()
     expect(s.w.f.routPhase[s.i(h)]).toBe(RP_FLED)
     const at = [s.w.f.x[s.i(h)], s.w.f.z[s.i(h)]]
@@ -416,7 +416,7 @@ describe('morale', () => {
     // facing east at x = −20 (z = −65 is open); no `side` command: its run is straight back, west
     const s = new W()
     const h = s.spawn(0, -20, -65, E)
-    s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+    s.do({ type: 'debug-morale', id: h, bar: -100 })
     let broke = Infinity
     let maxX = -Infinity
     for (let n = 0; n < 20 * 400; n++) {
@@ -435,7 +435,8 @@ describe('morale', () => {
     // must still point east, away from the front it broke on
     const s = new W()
     const h = s.spawn(1, 40, -100, -E)
-    s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+    s.spawn(0, -150, -100, E, { fire: 'hold' }) // an enemy within 250 m, due west: it never rallies at the bank
+    s.do({ type: 'debug-morale', id: h, bar: -100 })
     const dirs: number[] = []
     let runs = 0
     for (let n = 0; n < 20 * 300; n++) {
@@ -464,8 +465,7 @@ describe('morale', () => {
     s.run(4)
     expect(Math.cos(s.w.f.heading[s.i(h)] - -E)).toBeGreaterThan(0.99)
     // breaks now, mid-Retire
-    s.w.f.quality[s.i(h)] = 0.1
-    s.w.f.morale[s.i(h)] = 0.1
+    s.w.f.bar[s.i(h)] = -100
     s.tick()
     expect(s.state(h)).toBe(MS_ROUTING)
     expect(s.w.f.routX[s.i(h)]).toBeLessThan(-0.99) // away from the enemy (west)
@@ -473,10 +473,12 @@ describe('morale', () => {
     s.run(60)
     expect(s.w.f.x[s.i(h)]).toBeLessThan(x0 - 20)
   })
-  it("a spawn with a negative quality is refused (only the −1 marker means the ruleset's)", () => {
+  it("a spawn at no level, or with a negative bar, is refused (only 0 means the ruleset's or its level's)", () => {
     const s = new W()
-    s.do({ type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, shape: 'line', men: 10, quality: -0.2 })
-    expect(s.dropped.at(-1)?.reason).toBe('no such quality')
+    s.do({ type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, shape: 'line', men: 10, level: 7 })
+    expect(s.dropped.at(-1)?.reason).toBe('no such level')
+    s.do({ type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, shape: 'line', men: 10, bar: -5 })
+    expect(s.dropped.at(-1)?.reason).toBe('no such bar')
   })
   it('a full order pool delays a run but uses up no direction of the fan', () => {
     const s = new W()
@@ -492,8 +494,7 @@ describe('morale', () => {
       appendOrder(s.w, s.i(filler), k)
     }
     // the router breaks on the next tick, with the pool full
-    s.w.f.quality[s.i(h)] = 0.1
-    s.w.f.morale[s.i(h)] = 0.1
+    s.w.f.bar[s.i(h)] = -100
     s.tick()
     expect(s.state(h)).toBe(MS_ROUTING)
     s.run(10)
@@ -521,7 +522,7 @@ describe('exposure (sectors-model § 5)', () => {
   const TZ = Z + 160 // room behind the target as well as ahead
   const at = (where: 'front' | 'flank' | 'rear', d: number, hold = false) => {
     const s = new W()
-    const b = s.spawn(1, FIGHT_X, TZ, 0, { quality: 1, fire: 'hold' })
+    const b = s.spawn(1, FIGHT_X, TZ, 0, { bar: 171, fire: 'hold' })
     blockGeometry(s.w)
     const end = s.w.scratch.faces!.R[2 * s.i(b)]
     const [x, z, hd] =

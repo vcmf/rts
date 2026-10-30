@@ -36,7 +36,7 @@ describe('the battle report', () => {
     expect(m).toBeGreaterThan(0)
     expect(lines.slice(m + 1, m + 17).every(l => / men at \(-?\d+, -?\d+\)$/.test(l))).toBe(true) // the 16 formations
     // the end table (side 1's battery has hit it)
-    expect(lines).toContain('  side 0 #0 infantry: column, steady, 375 of 400 men')
+    expect(lines).toContain('  side 0 #0 infantry: column, steady, 377 of 400 men')
   })
   it('refuses a session that does not reproduce', () => {
     const bad: Session = {
@@ -91,7 +91,7 @@ describe('the battle report', () => {
     advanceTick(w)
     const runner = formationHandle(w, 1)
     const r = reporter(w)
-    w.f.morale[1] = 0.3 // breaks at the next tick
+    w.f.bar[1] = -100 // breaks at the next tick
     r.tick(advanceTick(w))
     issue(w, { type: 'debug-kill', id: runner, men: 51 })
     issue(w, { type: 'debug-kill', id: formationHandle(w, 2), men: 100 })

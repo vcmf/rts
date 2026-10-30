@@ -17,6 +17,7 @@ import {
   formationHandle,
   STATUS,
   menOf,
+  effectiveBar,
   M_TICK,
   DT,
   TICK_HZ,
@@ -604,8 +605,14 @@ async function main(): Promise<void> {
             : w.f.blownUntil[i] > w.meta[M_TICK]
               ? ' · blown'
               : ''
+        // the level and its progress: points toward the next (none past level 6), and whether it went up this battle
+        const L = w.cr.rs.levels
+        const lv = w.f.level[i]
+        const pts = Math.floor(w.f.pts[i])
+        const next = lv < L.length ? ` · ${pts} of ${L[lv].points} points` : ` · ${pts} points`
+        const up = w.f.up[i] ? ' (up this battle)' : ''
         lines.push(
-          `   ${MORALE_STATES[w.f.mstate[i]]} · morale ${w.f.morale[i].toFixed(2)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`,
+          `   ${MORALE_STATES[w.f.mstate[i]]} · level ${lv} ${L[lv - 1].name}${up}${next} · bar ${effectiveBar(w, i, w.f.flanks[i]).toFixed(0)} of ${w.f.barMax[i].toFixed(0)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`,
         )
       }
     }

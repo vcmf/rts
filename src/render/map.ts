@@ -17,6 +17,7 @@ import {
   placeWorld,
   SHOT_RAY,
   SHOT_CONE,
+  moraleShare,
 } from '../sim/index.ts'
 import type { Scene } from './scene.ts'
 import type { SoldierLayer, Unit } from './soldiers.ts'
@@ -514,7 +515,7 @@ export class StaffMap {
       g.fillStyle = 'rgba(243,239,230,.85)'
       g.fillRect(bx - bw / 2 - 1, by - 3, bw + 2, 5)
       g.fillStyle = mc
-      g.fillRect(bx - bw / 2, by - 2, bw * Math.max(0, Math.min(1, f.morale[u.i])), 3)
+      g.fillRect(bx - bw / 2, by - 2, bw * Math.max(0, Math.min(1, moraleShare(w, u.i))), 3)
       if (st !== MS_STEADY) {
         g.font = '9px ui-monospace, monospace'
         g.textAlign = 'center'

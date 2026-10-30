@@ -1,5 +1,6 @@
-// The rest of the morale machine (docs/plans/active/s1c2-morale-machine.md): rally, shattered, contagion,
-// flank support, the wavering fall-back. The cases are scripted: morale and states are set between ticks, on
+// The rest of the morale machine (docs/plans/active/s1c2-morale-machine.md; the bar, docs/proposals/
+// morale-bar-model.md): rally, shattered, contagion, flank support, the back exposed. The cases are scripted: bars
+// and states are set between ticks, on
 // levelled ground, in the open band west of the stream (x ≈ −60, z −105..30) or at the map's west edge.
 import { describe, it, expect } from 'vitest'
 import { data, cr, shipped, Sim, openBattlefield, OPEN_DATA } from './fx.ts'
@@ -31,6 +32,7 @@ import {
   record,
   play,
   outOfFight,
+  effectiveBar,
   mayFire,
   formationSlot,
   MORALE_STATES,
@@ -87,28 +89,26 @@ class W {
   state(h: number): number {
     return this.w.f.mstate[this.i(h)]
   }
-  // sets the morale (and the state it would have, coming down) before the next tick
+  // sets the bar to a share of its maximum (and the state it would have, coming down) before the next tick
   set(
     h: number,
-    morale: number,
-    state = morale < M.wavering[0] ? MS_WAVERING : morale < M.shaken[0] ? MS_SHAKEN : MS_STEADY,
+    share: number,
+    state = share < M.wavering[0] ? MS_WAVERING : share < M.shaken[0] ? MS_SHAKEN : MS_STEADY,
   ): void {
     const i = this.i(h)
-    this.w.f.morale[i] = morale
+    this.w.f.bar[i] = share * this.w.f.barMax[i]
     this.w.f.mstate[i] = state
   }
   // breaks it at the next tick
   breakNow(h: number): void {
-    this.w.f.morale[this.i(h)] = 0.3
+    this.w.f.bar[this.i(h)] = -100
     this.tick()
   }
-  // the morale target it relaxes toward, read off one tick from a morale equal to its quality
-  target(h: number): number {
-    const i = this.i(h)
-    const q = this.w.f.quality[i]
-    this.w.f.morale[i] = q
+  // whether it routs on the next tick with its bar at `bar` points (support decides it near 0)
+  routsAt(h: number, bar: number): boolean {
+    this.w.f.bar[this.i(h)] = bar
     this.tick()
-    return q + (this.w.f.morale[i] - q) / cr.relax
+    return outOfFight(this.state(h))
   }
   reasons(): string[] {
     return this.dropped.map(d => d.reason)
@@ -143,8 +143,8 @@ describe('rally', () => {
     })
     expect(rallied).toBeGreaterThan(0)
     expect(seen.every(st => st === MS_ROUTING)).toBe(true) // never while running
-    expect(s.w.f.quality[i]).toBeCloseTo(M.quality - M.rally.cost, 9)
-    expect(s.w.f.baseMen[i]).toBe(menOf(s.w, i)) // the losses before the rout are written off
+    expect(s.w.f.barMax[i]).toBeCloseTo(100 * (1 - M.rally.cut), 9) // brittle: its maximum cut
+    expect(s.w.f.cost[i]).toBe(0) // what the losses before the rout cost is written off
     expect(s.w.f.startMen[i]).toBe(100) // its strength still counts from the spawn
     expect(outOfFight(s.state(h))).toBe(false)
     expect(s.w.f.routs[i]).toBe(1)
@@ -165,7 +165,7 @@ describe('rally', () => {
     expect(s.reasons()).toEqual([])
     const states: number[] = []
     s.run(60, () => states.push(s.state(h)))
-    expect(states.some(outOfFight)).toBe(false) // without the write-off its target (0.65 − 0.31) is below the rout
+    expect(states.some(outOfFight)).toBe(false)
   })
   it('no rally while an enemy in the fight is within 250 m, or while it keeps losing men', () => {
     const [near, a] = routed(40) // the edge is about 220 m from an enemy at x = 40
@@ -195,14 +195,13 @@ describe('rally', () => {
     expect(s.w.f.x[s.i(h)]).toBe(-100)
     void held
   })
-  it('a battalion whose quality, less the cost, would be below wavering does not rally', () => {
-    const s = new W()
-    SIDES_SET(s)
-    const h = s.spawn(0, -60, -35, { quality: 0.55 })
-    s.spawn(1, 170, -35)
-    s.breakNow(h)
-    s.run(240)
-    expect(s.state(h)).toBe(MS_ROUTING)
+  it('P-37: a rally refills rally.share of its cut maximum; after rally.time it is shaken, never wavering', () => {
+    const [s, h] = routed(170)
+    const i = s.i(h)
+    while (s.state(h) !== MS_RALLYING) s.tick()
+    expect(s.w.f.bar[i]).toBeCloseTo(M.rally.share * s.w.f.barMax[i], 9)
+    while (s.state(h) === MS_RALLYING) s.tick()
+    expect(s.state(h)).toBe(MS_SHAKEN)
   })
 })
 
@@ -252,30 +251,24 @@ describe('contagion', () => {
   it('a break shocks the neighbours by shock × (1 − d/R) in the next tick, not the same one', () => {
     const [s, [a, b, c]] = three()
     s.run(5)
-    const before = [a, c].map(h => s.w.f.morale[s.i(h)])
+    const before = [a, c].map(h => s.w.f.bar[s.i(h)])
     s.breakNow(b) // tick T: b breaks
-    const atT = [a, c].map(h => s.w.f.morale[s.i(h)])
+    const atT = [a, c].map(h => s.w.f.bar[s.i(h)])
     for (let k = 0; k < 2; k++) expect(atT[k]).toBeGreaterThanOrEqual(before[k] - 1e-3) // no shock yet
     s.tick() // T + 1: the shock, across the front (the back radius, 100 m), at about 40 m
     const j = s.i(b)
     for (const [k, h] of [a, c].entries()) {
-      // the distance after this tick's movement (b's Face about moves its anchor); b, routing, no longer
-      // supports it, but the other outer line does: 80 m off, square to its flank
+      // the distance after this tick's movement (b's Face about moves its anchor); the bar is full, so nothing
+      // recovers: the shock alone
       const i = s.i(h)
       const d = Math.hypot(s.w.f.x[j] - s.w.f.x[i], s.w.f.z[j] - s.w.f.z[i])
-      const m0 = atT[k]
-      const target = s.w.f.quality[i] + M.support.bonus
-      expect(s.w.f.morale[i]).toBeCloseTo(
-        m0 + (target - m0) * cr.relax - M.contagion.shock * (1 - d / M.contagion.back),
-        9,
-      )
+      expect(s.w.f.bar[i]).toBeCloseTo(atT[k] - M.contagion.shock * (1 - d / M.contagion.back), 9)
     }
   })
-  it('a wavering neighbour breaks with it; a steady one at default quality does not', () => {
+  it('a wavering neighbour breaks with it; a steady one does not', () => {
     const [s, [a, b, c]] = three()
-    // wavering, and staying there
-    s.w.f.quality[s.i(a)] = 0.45
-    s.set(a, 0.45)
+    // wavering, its bar below the shock
+    s.set(a, 0.14)
     s.breakNow(b)
     s.tick()
     expect(s.state(a)).toBe(MS_ROUTING)
@@ -291,15 +284,15 @@ describe('contagion', () => {
       const b = s.spawn(0, -20 + dx, -35)
       s.run(2)
       s.breakNow(b)
-      const m = s.w.f.morale[s.i(a)]
+      const m = s.w.f.bar[s.i(a)]
       s.tick()
       const d = Math.abs(s.w.f.x[s.i(b)] - s.w.f.x[s.i(a)])
-      return [m + (s.w.f.quality[s.i(a)] - m) * cr.relax - s.w.f.morale[s.i(a)], d]
+      return [m - s.w.f.bar[s.i(a)], d]
     }
     const [ahead, d] = shockAt(150)
     const [behind] = shockAt(-150)
     expect(ahead).toBeCloseTo(M.contagion.shock * (1 - d / M.contagion.front), 9)
-    expect(ahead).toBeGreaterThan(0.03)
+    expect(ahead).toBeGreaterThan(9)
     expect(behind).toBeCloseTo(0, 9)
   })
   it('a chain of breaks travels one link per tick, and visiting order does not change it', () => {
@@ -308,10 +301,7 @@ describe('contagion', () => {
       SIDES_SET(s)
       s.w.scratch.reverse = rev
       const hs = [-115, -75, -35, 5, 45].map(z => s.spawn(0, -100, z))
-      for (const h of hs) {
-        s.w.f.quality[s.i(h)] = 0.45
-        s.set(h, 0.45)
-      }
+      for (const h of hs) s.set(h, 0.14)
       s.breakNow(hs[0])
       s.run(2)
       return { ticks: hs.map(h => s.w.f.brokeTick[s.i(h)] - s.w.f.brokeTick[s.i(hs[0])]), hash: hex(hashWorld(s.w)) }
@@ -324,67 +314,57 @@ describe('contagion', () => {
 })
 
 describe('flank support', () => {
-  it('a line between two friends has a target 2 × bonus higher than one alone, and holds where the lone line breaks', () => {
-    const alone = new W()
-    const a = alone.spawn(0, -60, -35)
-    alone.run(1)
-    const flanked = new W()
-    const [, b] = [-75, -35, 5].map(z => flanked.spawn(0, -60, z))
-    flanked.run(1)
-    expect(flanked.target(b) - alone.target(a)).toBeCloseTo(2 * M.support.bonus, 9)
-    for (const [s, h] of [
-      [alone, a],
-      [flanked, b],
+  // P-34: each secured flank adds support.bonus to the effective bar, so the bar it routs at moves down by it
+  const lone = () => {
+    const s = new W()
+    return [s, s.spawn(0, -60, -35)] as const
+  }
+  const between = () => {
+    const s = new W()
+    return [s, [-75, -35, 5].map(z => s.spawn(0, -60, z))[1]] as const
+  }
+  it('P-34: a line between two friends routs 2 × bonus lower than one alone', () => {
+    const B = 2 * M.support.bonus
+    for (const [make, at] of [
+      [lone, 0],
+      [between, -B],
     ] as const) {
-      s.do({ type: 'debug-kill', id: h, men: 30 })
+      const [s1, h1] = make()
+      expect(s1.routsAt(h1, at + 0.5)).toBe(false)
+      const [s2, h2] = make()
+      expect(s2.routsAt(h2, at - 0.5)).toBe(true)
     }
-    let aloneBroke = false
-    let flankedBroke = false
-    alone.run(240, () => {
-      aloneBroke ||= outOfFight(alone.state(a))
-    })
-    flanked.run(240, () => {
-      flankedBroke ||= outOfFight(flanked.state(b))
-    })
-    expect(aloneBroke).toBe(true) // target 0.75 − 0.375 (no enemy: it rallies after)
-    expect(flankedBroke).toBe(false) // target 0.75 − 0.375 + 0.08
   })
-  it('a friend ahead or behind gives none, nor does a routing friend', () => {
-    const lone = new W()
-    const h0 = lone.spawn(0, -60, -35)
-    lone.run(1)
-    const base = lone.target(h0)
+  it('P-34: a friend ahead or behind gives none, nor does a routing friend', () => {
     for (const dx of [40, -40]) {
       const s = new W()
       const h = s.spawn(0, -60, -35)
       s.spawn(0, -60 + dx, -35)
-      s.run(1)
-      expect(s.target(h)).toBeCloseTo(base, 9)
+      expect(s.routsAt(h, -0.5)).toBe(true)
     }
     const s = new W()
     const h = s.spawn(0, -60, -35)
     const f = s.spawn(0, -60, 5)
-    s.run(1)
-    expect(s.target(h) - base).toBeCloseTo(M.support.bonus, 9)
+    expect(s.routsAt(h, 0.5 - M.support.bonus)).toBe(false)
     // routing, standing where it is
     const j = s.i(f)
     s.w.f.mstate[j] = MS_ROUTING
     s.w.f.routPhase[j] = RP_FLED
-    expect(s.target(h)).toBeCloseTo(base, 9)
+    expect(s.routsAt(h, -0.5)).toBe(true)
   })
 })
 
 describe('a wavering battalion keeps fighting (decision 0087)', () => {
   it('P-24: with no orders, losing men to an enemy in front of it, it stands and fires; it never Retires by itself', () => {
-    // side 1 at x = −10 facing west, an enemy firing at it 100 m west; spawned at the default quality, its quality
-    // then lowered, so its morale falls into wavering (the old fall-back's case)
+    // side 1 at x = −10 facing west, an enemy firing at it 100 m west; its bar set into wavering (the old fall-back's
+    // case)
     const s = new W()
     SIDES_SET(s)
     s.spawn(0, -110, -35, { fire: 'at will' })
     const h = s.spawn(1, -10, -35, { fire: 'at will' })
     const i = s.i(h)
     const men = menOf(s.w, i)
-    s.w.f.quality[i] = 0.45
+    s.set(h, 0.29)
     let wavering = -1
     let moved = false
     s.run(120, () => {
@@ -418,38 +398,39 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
     const s = field()
     const j = place(s)
     s.tick()
-    return s.w.scratch.drain![j]
+    return s.w.f.drain[j]
   }
   // a line at the origin facing north (+z), side 0
   const line = (s: Sim, extra: Partial<Command> = {}) => put(s, 0, 0, 0, 0, extra)
   const cav = { unit: 'cavalry', men: 256 } as Partial<Command>
   const guns = (shape: string) => ({ unit: 'battery', men: 96, shape }) as Partial<Command>
 
-  it('P-22: a steady line with an enemy on its flank settles at 0.65, still steady; one behind it, 0.55: shaken', () => {
+  it('P-22: a steady line with an enemy on its flank stands at 71 points, still steady; one behind it, 43: shaken', () => {
     const settle = (x: number, z: number, heading: number) => {
       const s = field()
       const j = line(s)
       put(s, 1, x, z, heading)
       s.advance(120)
-      return [s.w.f.morale[j], MORALE_STATES[s.w.f.mstate[j]]]
+      return [effectiveBar(s.w, j, 0), MORALE_STATES[s.w.f.mstate[j]]]
     }
-    const q = napoleonic.morale.quality
     const [mf, sf] = settle(150, 0, -PI / 2)
-    expect(mf).toBeCloseTo(q - D.flank, 3)
+    expect(mf).toBeCloseTo(100 - D.flank, 9)
     expect(sf).toBe('steady')
     const [mr, sr] = settle(0, -120, 0)
-    expect(mr).toBeCloseTo(q - D.rear, 3)
+    expect(mr).toBeCloseTo(100 - D.rear, 9)
     expect(sr).toBe('shaken')
   })
-  it('P-22: the drain lowers a target at most to wavering, never below, and leaves one already under it', () => {
-    const W0 = napoleonic.morale.wavering[0]
-    for (const q of [0.52, 0.45]) {
+  it('P-35: the drain lowers the effective bar at most to wavering, never below, and leaves one already under it', () => {
+    const W0 = napoleonic.morale.wavering[0] * 100
+    for (const b of [34, 14]) {
       const s = field()
-      const j = line(s, { quality: q })
+      const j = line(s)
       put(s, 1, 0, -120, 0)
-      s.advance(120)
-      expect(s.w.scratch.drain![j]).toBe(D.rear)
-      expect(s.w.f.morale[j]).toBeCloseTo(Math.min(q, Math.max(W0, q - D.rear)), 3)
+      s.w.f.bar[j] = b
+      s.advance(1)
+      expect(s.w.f.drain[j]).toBe(D.rear)
+      const now = s.w.f.bar[j] // a second's recovery on
+      expect(effectiveBar(s.w, j, 0)).toBeCloseTo(Math.min(now, Math.max(W0, now - D.rear)), 9)
       expect(outOfFight(s.w.f.mstate[j])).toBe(false)
     }
   })
@@ -515,7 +496,7 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
       spawn({ side: 0, x: 25, z: -165, heading: 0 })
       spawn({ side: 1, x: -125, z: -165, heading: Math.PI / 2 })
       advanceTick(w)
-      return w.scratch.drain![j]
+      return w.f.drain[j]
     }
     expect(at(data)).toBe(0)
     expect(at(levelled(data))).toBeGreaterThan(0)
@@ -538,7 +519,7 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
       }
     }
     expect(screenShare(s.w, G, near[1], near[2], 0)).toBeCloseTo(1 / 3, 9)
-    expect(s.w.scratch.drain![j]).toBe(D.flank)
+    expect(s.w.f.drain[j]).toBe(D.flank)
   })
   it('P-26: a limbered battery is no threat, an unlimbered one is; cavalry within 200 m is, blown, beyond 200 m, in march column or screened it is not', () => {
     const flank = (extra: Partial<Command>, x = 150, then: (s: Sim, e: number) => void = () => {}) =>
@@ -575,7 +556,7 @@ describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
       s.cmd({ type: 'form', id: makeHandle(KIND_FORMATION, g, s.w.f.gen[g]), shape: 'unlimbered' } as Command)
       s.advance(90)
       const f = s.w.f
-      return JSON.stringify([f.x, f.z, f.heading, f.men, f.morale, f.mstate, f.shape, f.trans].map(a => [...a]))
+      return JSON.stringify([f.x, f.z, f.heading, f.men, f.bar, f.mstate, f.shape, f.trans].map(a => [...a]))
     }
     expect(go(true)).toBe(go(false))
   })
@@ -604,8 +585,7 @@ describe('determinism', () => {
     }
     s.breakNow(r1)
     until(() => s.state(r1) === MS_RALLYING)
-    s.w.f.quality[s.i(wv)] = 0.45
-    s.set(wv, 0.49)
+    s.set(wv, 0.25)
     s.breakNow(r2)
     s.tick()
     expect([s.state(r1), s.state(r2), s.state(wv)]).toEqual([MS_RALLYING, MS_ROUTING, MS_WAVERING])

@@ -52,6 +52,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 - [`proposals/unit-model.md`](proposals/unit-model.md): the unit model: categories, shapes and faces, sectors, engagement, experience levels, fire, the assault, guns taken, collision, pathfinding, counters and bonuses; phases U1–U9. *(draft)*
 - [`proposals/collision-and-orders.md`](proposals/collision-and-orders.md): formed and loose bodies, the clamp on bins with half gaps, a melee that holds until one side breaks, the visual bench, the orders' queue and what suspends or clears it; phases C0–C4. *(draft)*
 - [`proposals/sectors-model.md`](proposals/sectors-model.md): the math and code structure of U1's sectors: the face, the weight of a point and of a threat, what reads them, who can hurt a battalion; each rule a definition, its properties and their tests. *(draft)*
+- [`proposals/morale-bar-model.md`](proposals/morale-bar-model.md): the math and code structure of U2: the morale bar in points, what empties and fills it, the states, the rally, experience points and the level up, each level's effects; each rule a definition, its properties and their tests. *(draft)*
 - [`proposals/unit-scenarios.md`](proposals/unit-scenarios.md): the situations the unit model must get right, each with its expected outcome and what the sim does today. *(draft)*
 - [`proposals/map-engine.md`](proposals/map-engine.md): the map engine: a closed JSON language (one feature shape, dotted kinds from a catalogue of presets, five layers), its generator, compilers in Node and the browser, square grids, the draft and rendered views, Track M's phases. *(draft)*
 - [`proposals/ai.md`](proposals/ai.md): the enemy AI: layers, influence maps, utility scores, lookahead with the sim, honest difficulty; built after pathfinding. *(draft)*
@@ -69,6 +70,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/ci-faster-tests.md`](plans/active/ci-faster-tests.md) (CI's tests and coverage in three shards each, the bench split in five files),
   [`plans/active/c1-claims.md`](plans/active/c1-claims.md) (C1: a prototype of the claim grid, experimental; its weak points and their order),
   [`plans/active/u1-sectors.md`](plans/active/u1-sectors.md) (U1: sectors, exposure by shape, the back exposed, the second enemy in melee),
+  [`plans/active/u2-morale-bar.md`](plans/active/u2-morale-bar.md) (U2: the morale bar, levels and experience),
   [`plans/active/paper-layers.md`](plans/active/paper-layers.md) (paper layers: the relief as stacked lit sheets in the staff map prototype),
   [`plans/active/brigades-proto.md`](plans/active/brigades-proto.md) (brigades of two battalions in the staff map prototype),
   [`plans/active/water-paper.md`](plans/active/water-paper.md) (water as a paper wash, sunk below the land, in the staff map prototype),

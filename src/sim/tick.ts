@@ -17,6 +17,7 @@ import { fnv1a } from './hash.ts'
 import { buildClaims, claimFormation, claimOrder } from './claims.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep, threatPass } from './morale.ts'
+import { experienceStep } from './experience.ts'
 import { meleeStep, standingStep } from './melee.ts'
 import { artilleryStep } from './artillery.ts'
 import { planStep, endStep, checkPlan } from './plan.ts'
@@ -132,6 +133,8 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
       const i = rev ? MAX_FORMATIONS - 1 - k : k
       if (w.f.alive[i]) moraleStep(w, i, lost[i])
     }
+    // experience (docs/proposals/morale-bar-model.md § 7): the seconds under fire, the enemies broken, the level ups
+    experienceStep(w)
   })
   // 13: the end (S1e-2); smoke: S2
   step('13 the end', () => {

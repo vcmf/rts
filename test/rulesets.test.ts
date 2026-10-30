@@ -133,7 +133,7 @@ describe('compileRuleset refuses', () => {
     ],
     [
       "a friend's break strong enough to rout a steady battalion on its own",
-      { ...N, morale: { ...N.morale, contagion: { ...N.morale.contagion, shock: 0.25 } } },
+      { ...N, morale: { ...N.morale, contagion: { ...N.morale.contagion, shock: 61 } } },
       /contagion.shock over 0.6/,
     ],
     [

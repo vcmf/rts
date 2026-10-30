@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-28
+last_reviewed: 2026-10-29
 code: [src/sim/melee.ts, src/sim/formation.ts, src/sim/claims.ts, src/sim/commands.ts, src/sim/morale.ts, src/sim/sectors.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-charge.ts, tools/calibrate-charge.ts, test/charge.test.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0080-melee-holds-cornered-routers-cut-down, 0086-the-back-exposed]
 ---
@@ -88,7 +88,8 @@ strikes the corner of a line takes part of each. A target changing shape has no 
 front.
 
 **The test** (step 10, when the gap first falls to `charge.test`, 60 m, once per charge):
-- **The target's test:** a morale shock of `threat[side] × (1 − braced) × (0.5 + u)`, `u` a keyed draw. A
+- **The target's test:** a morale shock of `threat[side] × (1 − braced) × (0.5 + u)` points (34, 71 and 86), `u`
+  a keyed draw. A
   wavering line breaks here, before the horses reach it.
 - **The charger's test:** against a braced target it turns away with chance `refuse × braced`, halved when the
   target is wavering or worse.
@@ -96,18 +97,19 @@ front.
 **The impact** (when the gap falls to `melee.contact`, 2 m):
 - **The breach:** a braced target that is wavering or worse is broken into with chance `breach`, and counts as
   unbraced.
-- **Losses:** the target loses `impact.kill × momentum × (the charger's men in contact) × (1 − braced)`.
+- **Losses:** the target loses `impact.kill × momentum × (the charger's men in contact) × (1 − braced)`, after its
+  toughness (`impact.kill` 0.06: since U2 the men lost land on the bar at once, with the shock).
   A target that is itself charging inflicts the same on the charger by its own momentum; a standing one
   inflicts nothing.
-- **Shock:** the target loses `impact.shock[side] × momentum × (1 − braced)` of its morale.
+- **Shock:** the target loses `impact.shock[side] × momentum × (1 − braced)` points of its bar (57, 100 and 114).
 - **A second enemy** (E-16, decision 0080): a target already in melee with another when the step began loses
-  besides flank × `second.flank` + rear × `second.rear` (0.15 and 0.2) of its morale, the weights of the side
+  besides flank × `second.flank` + rear × `second.rear` (43 and 57 points) of its bar, the weights of the side
   struck, × (1 − braced) as the impact's shock, once per impact; a charge from its front adds nothing.
 - **Then:** the charger recoils with chance `braced`, else both are in melee (`foe`). A target struck while
   not in melee takes on its lowest-slot attacker, and any charge of its own ends; its other orders are kept for
   after the melee (in melee it stands).
 
-**The recoil:** the charger rides `charge.recoil` metres straight away from the target, with a Face about first
+**The recoil:** the target is credited a charge turned away (`points.repulse`, `src/sim/experience.ts`). The charger rides `charge.recoil` metres straight away from the target, with a Face about first
 when the way is behind it, and is blown for `charge.rest`.
 
 **Melee** (each tick, each formation in melee): it strikes its foe, and every enemy whose foe it is, with the
@@ -116,12 +118,13 @@ men of its companies within `contact + hold` of each.
   their men.
 - **Strength:** `strength[kind] × (1 − cohesion × disorder) × the fire's morale-state factor`. Changing
   shape counts as full disorder.
-- **No fire:** neither side fires (`mayFire`), and a wavering battalion does not fall back.
+- **No fire:** neither side fires (`mayFire`); a wavering battalion keeps fighting (decision 0087).
 - **It ends when:**
   - either side is out of the fight, or gone;
   - they are out of contact;
   - for a charging type, its foe has formed its refuge and holds it (steady or shaken): the charger recoils.
-- **The winner:** a charging type pursues a broken foe at the gallop for `charge.pursue` seconds, costing it
+- **The winner:** a charging type pursues a broken foe at the gallop for `charge.pursue` seconds × its level's
+  `pursue`, costing it
   melee losses it does not return, and is then blown. A target that breaks before contact is pursued the same
   way. Infantry holds where it stands.
 
@@ -134,14 +137,14 @@ that reaches a router, running, held or with no way left, and not in melee with 
 does (`cutDown`); the reach is longer by the router's margin (`reachOf`).
 
 **Shocks** (`shockIn`): the test's and the impact's shocks are owed to the target and taken by its morale step
-with contagion, after relaxing (`morale.ts`).
+with contagion, from its bar (`morale.ts`, `docs/proposals/morale-bar-model.md`).
 
 **The square against cavalry** (step 4, `standingStep`), for each battalion whose type names a refuge
 (`UnitType.refuge`), in the fight and not in melee:
 - **A threat:** an enemy in the fight of a type that charges, within `refuge.alert` (200 m, centre to centre),
   either charging it or anything but riding away faster than `refuge.closing`. A regiment at the halt can
   charge in seconds.
-- **Forming:** after `refuge.react` seconds of unbroken threat, with the threat present, a battalion not in its
+- **Forming:** after `refuge.react` seconds × its level's `react` of unbroken threat, with the threat present, a battalion not in its
   refuge and not changing into it starts the change itself (not an order). The shape it came from is kept
   (`autoFrom`). A change that cannot be made there (a wood, the water) is tried again every 5 s; nothing is
   queued.

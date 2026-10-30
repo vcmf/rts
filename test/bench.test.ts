@@ -100,7 +100,8 @@ describe('with claims: a melee holds', () => {
     it(`${id}: nobody gives ground; the raw regiment stands where the melee found it until it ends`, () => {
       const a = id === 'x15-melee-holds-claims' ? open() : untilRout(id, [...watch])
       expect(a.melee).toBeGreaterThan(0)
-      expect(a.rout).toBeGreaterThan(a.melee)
+      // a melee: the raw one breaks after it began, or the two part with neither broken (X-19 since the bar)
+      if (a.rout >= 0) expect(a.rout).toBeGreaterThan(a.melee)
       watch.forEach((_, k) => a.at[k].forEach((v, d) => expect(v).toBeCloseTo(a.z[k][d], 6)))
     })
   }
