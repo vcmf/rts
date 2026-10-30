@@ -33,7 +33,7 @@ export const TILT = 20 // degrees off straight down (decision 0055)
 // (0 by default: the readability bound, #141, is checked when the armies are on the map)
 const KEY = [1.3, 0.98, 0.66]
 const SKY = [0.82, 0.88, 1.08]
-const SKY_K = 0.62
+const SKY_K = 0.25
 const LAMP = 0.55
 // the paper by season, a cold white (Track K's), a touch cooler in winter: summer, early autumn, late autumn, winter
 const PAPER = ['#eceef1', '#eceef1', '#ebecee', '#eef0f3']

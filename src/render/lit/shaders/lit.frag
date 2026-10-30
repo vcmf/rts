@@ -110,21 +110,23 @@ void main() {
 
   /* the light, falling on the print: the warm sun on the slope (per pixel, from the node heights raised uZ times, as
      the bake's), in its baked soft shadow, a little stronger on the sun's side of the map (a lamp beside the table);
-     the cool sky in its baked share, less on a steep face; the water lies flat. Flat open ground in the sun comes out
-     at about the paper's own tone */
+     the cool sky in its baked share, less on a steep face; the water lies flat, and so does the ground past the map's
+     edge (its heights there are the edge's, held). Divided by what flat open ground gets, so that comes out in the
+     paper's own tone: the faces toward the sun warmer, the shade cooler */
   {
     vec2 e = vec2(uCell, 0.0);
     float gx = (heightAt(vW.xz + e.xy) - heightAt(vW.xz - e.xy)) / (2.0 * uCell) * uZ;
     float gz = (heightAt(vW.xz + e.yx) - heightAt(vW.xz - e.yx)) / (2.0 * uCell) * uZ;
-    vec3 n = normalize(mix(vec3(-gx, 1.0, -gz), vec3(0.0, 1.0, 0.0), waterA));
+    vec3 n = normalize(mix(vec3(-gx, 1.0, -gz), vec3(0.0, 1.0, 0.0), max(waterA, 1.0 - inside)));
     vec2 ln = (vW.xz - uX0Z0) / (uCell * uLightStep);   /* light node i at the centre of texel i */
-    vec2 B = texture2D(uLight, (ln + 0.5) / uLightNodes).rg;
+    vec2 B = mix(vec2(1.0), texture2D(uLight, (ln + 0.5) / uLightNodes).rg, inside);
     float key = max(0.0, dot(n, uSun)) / uSun.y;
     float sky = B.g * (0.55 + 0.45 * n.y);
     vec2 toSun = normalize(uSun.xz + vec2(1e-6, 0.0));
     float side = clamp(dot((vW.xz - uX0Z0) / uSize * 2.0 - 1.0, toSun) * 0.5, -0.5, 0.5);
     vec3 keyC = uKey * mix(vec3(1.0), vec3(1.06, 0.96, 0.84), side * 2.0 * uLamp);
     vec3 light = keyC * key * B.r * (1.0 + uLamp * side) * (1.0 - uSkyK) + uSkyC * sky * uSkyK;
+    light /= uKey * (1.0 - uSkyK) + uSkyC * uSkyK;
     vec3 lit = mapC * max(light, vec3(uFloor));
     /* a soft shoulder: the brightest faces glow toward white instead of clipping */
     mapC = min(lit / (1.0 + 0.18 * max(lit - 1.0, 0.0)), vec3(1.0));
