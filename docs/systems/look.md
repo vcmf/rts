@@ -81,11 +81,13 @@ and on.
 The look compiler (M4, `docs/plans/active/look-austerlitz-a1.md`; decision 0057: the map language is the one
 description of the ground) draws a window of a map file on the look page: a square the size of the demo world (the
 800 m tile, the 2600 m far ring, ±235 m of play, `SPEC` unchanged) round a named centre (`src/look/world/windows.ts`;
-Kobelnitz on Austerlitz, (−450, 350); the Pratzen, (700, 250)). `tools/build-look-data.ts` compiles the map with the map engine
+Kobelnitz on Austerlitz, (−226, 176); the Pratzen, (350, 126), on the 3 km map since G1). `tools/build-look-data.ts` compiles the map with the map engine
 (`layersOf`, `maps/engine.ts`) and `src/look/world/from-map.ts` reads the window's layers into today's inputs:
 
 - the heights from the layers' nodes (bilinear, `heightOf`), taken down by the window's lowest node so it meets 0;
-  the window's far ring must lie inside the map;
+  the window's tile must lie inside the map; its far ring may pass the map's edge: there the edge's heights are
+  held (`heightOf` clamps) and the cover is the default meadow, with no ways, water or trees, a stopgap until G3 draws
+  paper there (G1, `docs/plans/active/g1-austerlitz-3km.md`);
 - the cover at 1 m cells (`MAP_COVER_CELL`, half the demo's 2 m), its ground, vegetation and built areas rasterised
   from the map's own shapes by apply's rules (`fineAreas`: the painting order, a ground area clearing the vegetation
   under it, an area's `clear` keep-offs, the lines' reach), not read off the layers' 2 m cells (the water and a
@@ -112,7 +114,7 @@ Kobelnitz on Austerlitz, (−450, 350); the Pratzen, (700, 250)). `tools/build-l
   as placed on purpose (`onFields`: one beside a field stays drawn), the far ring's are far trees (none in the apron
   band).
 
-**The relief's painted tone** (`?relief=0|1|2`, `src/look/relief.ts`): a map's long, gentle slopes (Austerlitz at 2×)
+**The relief's painted tone** (`?relief=0|1|2`, `src/look/relief.ts`): a map's long, gentle slopes (Austerlitz at 4×)
 take the sun too evenly to read as hills, so the macro colour's bakes multiply in a soft hillshade (the heights over
 the far ring at 4 m, smoothed, their slopes as if four times steeper, lit from the sun) and a crest-and-valley tone
 (the ground against its mean over about 60 m: crests lighter, valleys darker and a little cooler), baked once with

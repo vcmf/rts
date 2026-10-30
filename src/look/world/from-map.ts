@@ -96,14 +96,19 @@ export function windowHeights(
 const minOf = (a: Float32Array): number => a.reduce((v, x) => Math.min(v, x), Infinity)
 const maxOf = (a: Float32Array): number => a.reduce((v, x) => Math.max(v, x), -Infinity)
 
-/** Throws unless the window's far ring (side `far` m) lies inside the layers: a collar past the map's edge waits. */
-export function checkWindowInside(L: Layers, win: LookWindow, far: number): void {
-  const h = far / 2
+/**
+ * Throws unless the window's tile (side `tile` m) lies inside the layers. Its far ring may run past the map's edge
+ * (docs/plans/active/g1-austerlitz-3km.md): there the edge's heights are held (`heightOf` clamps) and the cover is the
+ * default (meadow: `groundClass` of no cell), with no ways, water or trees (`cellAt` is −1 off the layers). A stopgap:
+ * G3 draws paper past the map's edge (docs/plans/active/track-g.md).
+ */
+export function checkWindowInside(L: Layers, win: LookWindow, tile: number): void {
+  const h = tile / 2
   const x1 = L.x0 + L.nx * L.cell
   const z1 = L.z0 + L.nz * L.cell
   if (win.x - h < L.x0 || win.x + h > x1 || win.z - h < L.z0 || win.z + h > z1) {
     throw new Error(
-      `window ${win.name}: its far ring (${far} m about ${win.x}, ${win.z}) leaves the map (${L.x0}..${x1}, ${L.z0}..${z1})`,
+      `window ${win.name}: its tile (${tile} m about ${win.x}, ${win.z}) leaves the map (${L.x0}..${x1}, ${L.z0}..${z1})`,
     )
   }
   if (win.x % 2 || win.z % 2) throw new Error(`window ${win.name}: its centre must lie on even metres`)

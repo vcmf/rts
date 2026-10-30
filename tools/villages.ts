@@ -23,7 +23,8 @@ import { scanFitOf } from './water.ts'
 export interface VillageInputs {
   piece: string
   scan: string
-  villages: { id: string; note: string; from: Pt; to: Pt; houses: number; way?: string; church?: Pt }[]
+  // skip: why the survey's village is not written (kept in the inputs, the source's record)
+  villages: { id: string; note: string; from: Pt; to: Pt; houses: number; way?: string; church?: Pt; skip?: string }[]
 }
 
 // a parish church of the region: nave and chancel, about 24 × 11 m (buildings keep their real size on a scale model,
@@ -31,6 +32,14 @@ export interface VillageInputs {
 const CHURCH: Pt = [24, 11]
 // its long side this far from the street's edge at least (the houses' setback and a churchyard's path)
 const CHURCH_OFF = 6
+// the share of the survey's houses a village must place: a scale model shortens its street while its houses keep their
+// real size (decision 0070), so it places those that fit, and the expansion says why when most of them do not
+export const MIN_SHARE = 0.5
+
+/** The fewest houses a village of the survey's `houses` must place: MIN_SHARE of them, at least one if it asks any. */
+export function minHouses(houses: number): number {
+  return Math.min(houses, Math.max(1, Math.ceil(houses * MIN_SHARE)))
+}
 
 /** The way nearest both of two points (the least sum of their distances), and each point's distance along it. */
 export function nearestWay(ways: { id: string; line: Pt[] }[], a: Pt, b: Pt): { id: string; from: number; to: number } {
@@ -160,6 +169,10 @@ function main(): void {
     features.push(f)
   }
   for (const v of ins.villages) {
+    if (v.skip) {
+      report.push(`${v.id}: skipped (${v.skip})`)
+      continue
+    }
     const [a, b] = [toPoint(v.from), toPoint(v.to)]
     const pool = v.way ? ways.filter(w => w.id === v.way) : ways
     if (!pool.length) throw new Error(`${v.id}: no way ${v.way}`)
@@ -175,8 +188,8 @@ function main(): void {
       source: ins.scan,
       along: { id: near.id, from, to },
       houses: v.houses,
-      // every house the survey shows, or the expansion says why not
-      gen: { 'street-village': { min: v.houses } },
+      // the survey's houses asked, at least MIN_SHARE of them placed, or the expansion says why not
+      gen: { 'street-village': { min: minHouses(v.houses) } },
       note: `${v.note}${NOTE}`,
     })
     let church = ''
@@ -203,7 +216,9 @@ function main(): void {
       obstacles.push({ f: placed, attrs: {} })
       church = ', its church'
     }
-    report.push(`${v.id}: ${v.houses} houses along ${near.id} from ${from.toFixed(0)} to ${to.toFixed(0)} m${church}`)
+    report.push(
+      `${v.id}: ${v.houses} houses asked (${minHouses(v.houses)} at least) along ${near.id} from ${from.toFixed(0)} to ${to.toFixed(0)} m${church}`,
+    )
   }
   const others = map.features.filter(f => !mine(f))
   for (const f of features) {

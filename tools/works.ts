@@ -16,6 +16,11 @@ import { gridOf, simplify, type Grid } from './streams.ts'
 import { evenKept, snapToInk, traceWay } from './ways.ts'
 import { mapPieces } from './water.ts'
 
+// a mend line's shortest piece inside the map, and its simplification's tolerance, in m of field (40 and 2 m: the
+// 20 m and 1 m of map the 2× Austerlitz had)
+const MIN_PIECE = 40
+const TOLERANCE = 2
+
 /** The tool's inputs for one map (a committed file beside it). */
 export interface WorkInputs {
   piece: string
@@ -143,9 +148,16 @@ function main(): void {
       pts,
       pts.map(() => false),
     )
-    // cut at the map's edge (the grid reaches 100 m past it; no piece under 20 m)
-    const pieces = mapPieces(untangle(simplify(evenKept(t, 6).map(toPoint), 1)), { x: 0, z: 0, k: 1 }, half, 20)
-    if (!pieces.length) throw new Error(`${w.id}: no piece of 20 m or more inside the map`)
+    // cut at the map's edge (the grid reaches 100 m past it; no piece under MIN_PIECE m of field), simplified within
+    // TOLERANCE m of field: both in the field's metres, so a scale model keeps the same works (G1)
+    const minPiece = MIN_PIECE / place.k
+    const pieces = mapPieces(
+      untangle(simplify(evenKept(t, 6).map(toPoint), TOLERANCE / place.k)),
+      { x: 0, z: 0, k: 1 },
+      half,
+      minPiece,
+    )
+    if (!pieces.length) throw new Error(`${w.id}: no piece of ${minPiece} m or more inside the map`)
     pieces.forEach((line, k) => {
       const id = k ? `${w.id}${k + 1}` : w.id
       if (made.has(id)) throw new Error(`${id}: the tool makes two features with this id`)

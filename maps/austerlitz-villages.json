@@ -5,7 +5,7 @@
   "villages": [
     {"id": "pratze", "note": "the village of Pratze (Prace), on the plateau's western slope", "from": [2350, 1840], "to": [2385, 1955], "houses": 14, "church": [2378, 1925]},
     {"id": "kobelnitz", "note": "the village of Kobelnitz (Kobylnice), by its pond on the Goldbach", "from": [1735, 1986], "to": [1782, 1928], "houses": 10, "way": "kobelnitz-street", "church": [1760, 1917]},
-    {"id": "kobelnitz-south", "note": "the south end of Kobelnitz, down the Goldbach road", "from": [1712, 2015], "to": [1680, 2050], "houses": 6, "way": "goldbach-road"},
+    {"id": "kobelnitz-south", "note": "the south end of Kobelnitz, down the Goldbach road", "from": [1712, 2015], "to": [1680, 2050], "houses": 6, "way": "goldbach-road", "skip": "at 4x (G1) its stretch is about 25 m and its ground meets Kobelnitz's own"},
     {"id": "telnitz", "note": "the village of Telnitz (Telnice), on the Goldbach", "from": [1670, 2972], "to": [1606, 3083], "houses": 14, "way": "telnitz-street", "church": [1676, 2948]},
     {"id": "aujezd", "note": "the village of Aujezd (Újezd u Brna), on the Littawa", "from": [2200, 2888], "to": [2176, 2738], "houses": 14, "way": "aujezd-street", "church": [2165, 2812]},
     {"id": "hostieradek", "note": "the hamlet of Klein Hostieradek (Hostěrádky)", "from": [2455, 2410], "to": [2535, 2475], "houses": 8, "way": "hostieradek-road"},

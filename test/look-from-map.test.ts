@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url'
 import type { Catalogue, MapFile } from '../src/map/schema.ts'
 import { validate } from '../src/map/validate.ts'
 import { expand } from '../src/map/expand.ts'
-import { apply } from '../src/map/apply.ts'
+import { apply, heightOf } from '../src/map/apply.ts'
 import { segD } from '../src/look/world/geom.ts'
 import { D as SPEC_D, ROAD_SLOTS } from '../src/look/spec.ts'
 
@@ -132,11 +132,24 @@ describe('the window heights', () => {
     expect(far.n).toBe(D.spec.farSub + 1)
   })
 
-  it('refuses a window whose far ring leaves the map, or whose centre is off even metres', () => {
+  it('refuses a window whose tile leaves the map (its far ring may: paper), or whose centre is off even metres', () => {
     const L = layers()
     expect(() => checkWindowInside(L, WIN, 100)).not.toThrow()
     expect(() => checkWindowInside(L, WIN, 140)).toThrow(/leaves the map/)
     expect(() => checkWindowInside(L, { ...WIN, x: 1 }, 100)).toThrow(/even metres/)
+  })
+
+  it("past the map's edge (G1: a far ring may leave it): no cells, the edge's heights held, the default cover, no trees", () => {
+    const L = layers()
+    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) L.height[j * (N + 1) + i] = i * 0.5
+    const east = L.x0 + N * L.cell
+    expect(cellAt(L, east + 50, 0)).toBe(-1)
+    expect(heightOf(L, east + 300, 0)).toBe(heightOf(L, east, 0))
+    expect(groundClass(L, -1, east + 50, 0).cls).toBe(COVER.meadow)
+    // a far ring twice the layers' size: every tree still on the layers
+    const trees = mapTrees(L, fineAreas(L, FEATURES, WIN, 240, 1), WIN)
+    expect(trees.length).toBeGreaterThan(0)
+    for (const t of trees) expect(Math.max(Math.abs(t.x), Math.abs(t.z))).toBeLessThanOrEqual(N)
   })
 })
 

@@ -8,6 +8,10 @@ last_reviewed: 2026-10-29
 Stage A1 of the Austerlitz look plan (PR #255, "Stage A": `docs/plans/active/one-map-austerlitz.md` step 5, the look
 compiler M4). The owner's decision of 2026-10-29: Kobelnitz first, then Sokolnitz; the Pratzen after A1b.
 
+> **Since G1 (2026-10-30, `docs/plans/active/g1-austerlitz-3km.md`):** Austerlitz is a 3 km map at 4× (decision 0089),
+> so the window centres below are halved (Kobelnitz (−226, 176), the Pratzen (350, 126), `src/look/world/windows.ts`),
+> their contents and relief differ from the figures here, and a far ring may pass the map's edge.
+
 ## Scope
 
 - **In:** the look compiler for a named window of a map file; the look page's `?map=<map>&window=<name>`; the land

@@ -1,7 +1,9 @@
 // The named windows of the maps the look page draws (docs/plans/active/look-austerlitz-a1.md): a square of a map the
-// size of the look world (SPEC: the tile, the far ring, the play area), its centre in the map's metres. The look
-// world's origin is the window's centre, with the map's axes. The compiler (tools/build-look-data.ts --window) writes
-// each into data/<map>-<window>.lookdata; the page loads one by ?map=<map>&window=<name>.
+// size of the look world (SPEC: the tile, the far ring, the play area), its centre in the map's metres. Austerlitz's
+// are at 4× since G1 (decision 0089, accepted on #234): their far rings pass the 3 km map's edge, where the ground
+// is the default cover (meadow) on the edge's heights held, a stopgap until G3's paper. The look world's origin is
+// the window's centre, with the map's axes. The compiler (tools/build-look-data.ts --window) writes each into
+// data/<map>-<window>.lookdata; the page loads one by ?map=<map>&window=<name>.
 
 export interface LookWindow {
   map: string // the map's name: its file is maps/<map>.map.json
@@ -12,9 +14,9 @@ export interface LookWindow {
 
 export const WINDOWS: readonly LookWindow[] = [
   // Kobelnitz, its pond and the Goldbach, the pheasantry's orchard south-west (the owner's first, 2026-10-29)
-  { map: 'austerlitz', name: 'kobelnitz', x: -450, z: 350 },
-  // the Pratzen plateau's western slope and top, 36.6 m of relief in play (A1b: the camera's focus on the ground)
-  { map: 'austerlitz', name: 'pratzen', x: 700, z: 250 },
+  { map: 'austerlitz', name: 'kobelnitz', x: -226, z: 176 },
+  // the Pratzen plateau's western slope and top, its relief in play (A1b: the camera's focus on the ground)
+  { map: 'austerlitz', name: 'pratzen', x: 350, z: 126 },
 ]
 
 /** The look data file of a window, from the repo's root. */
