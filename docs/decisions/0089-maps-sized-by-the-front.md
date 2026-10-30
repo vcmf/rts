@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-30
 ---
 
@@ -35,8 +35,7 @@ at least 2 km**, so there is room to approach, to turn a flank and to hold a res
   kilometres, designed for play, soldiers, ranges and sight at real size, a game speed faster than real time.
 - **Austerlitz** is a 3 km map: the same 12 km of field as a **4× model** (decision 0070 allows 1 to 4), heights scaled
   with it. This amends 0070's 2×. Its whole battle, about 6,300 figures, is the typical match's size.
-- Settled when the owner has compared Austerlitz at 3 km with the 6 km map in side-by-side screenshots; until then the
-  6 km map stays as it is.
+- The owner chose 3 km for Austerlitz on 2026-10-30, from the armies' front, over keeping 6 km.
 
 ## Consequences
 
