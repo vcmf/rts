@@ -14,18 +14,7 @@ export type Track = Waypoint[]
 
 /** The position on a track at time t. */
 export function positionAt(track: Track, t: number): { x: number; z: number } {
-  const first = track[0]
-  if (t <= first.t) return { x: first.x, z: first.z }
-  for (let k = 1; k < track.length; k++) {
-    const b = track[k]
-    if (t <= b.t) {
-      const a = track[k - 1]
-      const u = (t - a.t) / (b.t - a.t)
-      return { x: a.x + (b.x - a.x) * u, z: a.z + (b.z - a.z) * u }
-    }
-  }
-  const last = track[track.length - 1]
-  return { x: last.x, z: last.z }
+  return positionsAt(track, [t])[0]
 }
 
 /**

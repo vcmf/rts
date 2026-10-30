@@ -62,11 +62,12 @@ after); the map's code (K2a–K2d).
 
 ## Results
 
-- `src/campaign/`: rules, march, track, contact (`firstContact`, `firstExit`, `battleFor`), courier (`ride`, `help`,
-  `inHelpRadius`), roads (`fastestRoute`, `routePoints`, `roadLength`), timeline; the Napoleonic values in
-  `src/rulesets/napoleonic-campaign.ts`. 18 tests in `test/campaign-rules.test.ts`, among them the proposal's own: a
-  call 25 km away heard after 125 minutes, the help's head 560 minutes after the call (9 h 20), with 85 % of its
-  strength; two corps closing at 6 km/h meet at minute 285; a courier caught where it enters a zone, at 8.5 km.
+- `src/campaign/`: rules, march, track, contact (`firstContact`, `zoneFor`, `battleFor`), courier (`ride`, `help`,
+  `inHelpRadius`), answers (`answers`), roads (`network`, `fastestRoute`, `routePoints`, `roadLength`), timeline;
+  the Napoleonic values in `src/rulesets/napoleonic-campaign.ts`. 25 tests in `test/campaign-rules.test.ts`, among
+  them the proposal's own: a call 25 km away heard after 125 minutes, the help's head 560 minutes after the call
+  (9 h 20), with 25/35 of the day's 15 % left behind; two corps closing at 6 km/h meet at minute 285; a courier
+  caught where it enters a zone, at 8.5 km; a chain of calls among eight corps that ends.
 - The exact rules on `src/campaign/` by lint, one helper for it and the map engine (`exactArea` in
   `eslint.config.js`), tested in `test/lint.test.ts`.
 
@@ -89,3 +90,20 @@ after); the map's code (K2a–K2d).
   along a track in one sweep; no argument spread on long routes; stragglers in proportion to the forced march made;
   the doc's case for exact contact corrected (a tick finds contact late, and misses a courier's short crossing);
   road kinds named as K3–K4's.
+- **Round 3**: two correctness findings on the same rule again: "closing" decided on a knife-edge (a road 0.02° toward
+  the enemy caught at once, the perpendicular delivered), and a pair exactly on the radius at a corner lost to
+  rounding at some angles (the doc claimed otherwise). Three rounds, so **stop and redesign** (`AGENTS.md`): the
+  rule, not its geometry, was wrong.
+
+### The redesign (the owner, 2026-10-30)
+
+- **The enemies a courier's corps is fighting never catch it**: they are held by the battle, and a call always gets
+  out of the battle it is sent from; every other enemy catches it where it comes within its zone (`ride(…, engaged)`,
+  plain `firstContact`; `firstClosing` and its knife-edge are gone).
+- **A corps answers at most one call a day**; one marching to help that meets another enemy fights there and may
+  call in turn, but only free corps answer (`answers.ts`). Every answer commits a corps, so a chain of calls ends
+  (the owner's worry: "u call an ally for help, he goes and got into a fight with another enemy, will this ally call
+  for help as well?").
+- With: each battle's zone at most half its map's side (`zoneFor`); the doc honest on a pair exactly on the radius
+  (deterministic, no tolerance); the search stopping at an earlier catch; town indices checked; one interpolation.
+- The review rounds count again from 1.

@@ -22,7 +22,7 @@ the day's loop (orders, standing orders, the turn) comes later in the track. The
 | Size | full speed up to 6 units, 3 % slower a unit more, 20 % at most |
 | Column | 2 km of road a unit |
 | Courier | 12 km/h; a corps gets under way in an hour |
-| Contact, battle zone, help | 1.5 km, 2.5 km (a radius: inside a 6 km battle map), 25 km by road |
+| Contact, battle zone, help | 1.5 km, 2.5 km (a radius, at most half the battle map's side), 25 km by road |
 
 ## The models
 
@@ -31,14 +31,13 @@ the day's loop (orders, standing orders, the turn) comes later in the track. The
 - **Tracks** (`track.ts`): a moving corps or courier as timed waypoints, linear between them, still before the first
   and after the last; `walk` makes one from a route and a speed.
 - **Contact** (`contact.ts`): `firstContact` gives the earliest moment two tracks come within a radius, exactly:
-  between breakpoints the separation moves in a straight line, so contact is the first root of a quadratic (its
-  roots clamped to the interval: a pair on the radius at a corner is not lost to rounding). `firstClosing` gives the
-  earliest moment one is inside the radius and closing on the other. `battleFor` joins a contact to the nearest
-  battle whose zone holds it, or starts one.
-- **Couriers** (`courier.ts`): `ride` takes the courier along its route and loses it to the first enemy whose
-  zone it is inside and closing on (`firstClosing`, by time, then index), where that happens: a call leaves its
-  battle uncaught if it rides away from the enemy there, not if its road leads toward it; a route of one town
-  delivers at once. `help` gives the head's and tail's arrival of the corps that heard the call, at a forced march,
+  between breakpoints the separation moves in a straight line, so contact is the first root of a quadratic (a pair
+  exactly on the radius counts as the arithmetic rounds: the same on every machine). `zoneFor` gives a battle's zone
+  (the ruleset's radius, at most half its map's side); `battleFor` joins a contact to the nearest battle whose zone
+  holds it, or starts one.
+- **Couriers** (`courier.ts`): `ride` takes the courier along its route and loses it to the first enemy (by time,
+  then index) within whose zone it comes, where it does; the enemies its corps is fighting (`engaged`) never catch
+  it; a route of one town delivers at once. `help` gives the head's and tail's arrival of the corps that heard the call, at a forced march,
   and the share of its strength with it (stragglers in proportion to the day's forced march it made);
   `inHelpRadius` whether an ally is in reach.
 - **Roads** (`roads.ts`): the graph of towns and roads, made into a `network` (a copy, searched as it was built: a
@@ -47,6 +46,9 @@ the day's loop (orders, standing orders, the turn) comes later in the track. The
   direction travelled.
 - **Timeline** (`timeline.ts`): the day's events, played in the order of their time, then id; an event may queue
   later ones.
+- **Answers** (`answers.ts`): whether an ally answers a call: not fighting, not already committed to a battle (a
+  corps answers at most one call a day), in the help radius by road, and allowed by its standing orders (always,
+  within a distance, never). Every answer commits a corps, so a chain of calls in a day ends.
 
 ## Determinism
 

@@ -2,7 +2,8 @@
 // march speeds and columns, the exact moment of contact, the courier caught on its road, the help that arrives
 // about 9 hours after a morning call, the fastest road, and the timeline's order.
 import { describe, it, expect } from 'vitest'
-import { battleFor, firstClosing, firstContact } from '../src/campaign/contact.ts'
+import { answers, type Ally } from '../src/campaign/answers.ts'
+import { battleFor, firstContact, zoneFor } from '../src/campaign/contact.ts'
 import { help, inHelpRadius, ride } from '../src/campaign/courier.ts'
 import { arrival, columnLength, dayMarch, marchSpeed } from '../src/campaign/march.ts'
 import { fastestRoute, network, roadLength, routePoints, type RoadGraph } from '../src/campaign/roads.ts'
@@ -76,36 +77,32 @@ describe('contact', () => {
     expect(firstContact(courier, standing(0, 0), 1500, 10, 100)).toBe(10)
   })
 
-  it('tells closing from parting inside a zone', () => {
-    const away = walk(along(0, -25000), 0, 200)
-    const toward = walk(along(0, 25000), 0, 200)
-    // the enemy 1 km east: riding west it parts from it, riding east it closes on it at once
-    expect(firstClosing(away, standing(1000, 0), 1500, 0, 125)).toBeNull()
-    expect(firstClosing(toward, standing(1000, 0), 1500, 0, 125)).toBe(0)
-  })
-
-  it('fits a battle zone in the largest battle map (6 km a side)', () => {
-    expect(rules.battleZoneM).toBeLessThanOrEqual(3000)
+  it('fits a battle’s zone inside its map', () => {
+    // the ruleset's 2.5 km on a 6 km map; half the side on a smaller one
+    expect(zoneFor(rules, 6000)).toBe(2500)
+    expect(zoneFor(rules, 2000)).toBe(1000)
   })
 
   it('joins the nearest battle when zones overlap', () => {
     const battles = [
-      { x: 0, z: 0 },
-      { x: 4000, z: 0 },
+      { x: 0, z: 0, zoneM: 2500 },
+      { x: 4000, z: 0, zoneM: 2500 },
     ]
-    expect(battleFor(battles, 2300, 0, rules.battleZoneM)).toBe(1)
-    expect(battleFor(battles, 2000, 0, rules.battleZoneM)).toBe(0)
+    expect(battleFor(battles, 2300, 0)).toBe(1)
+    expect(battleFor(battles, 2000, 0)).toBe(0)
   })
 
   it('joins a battle within its zone, starts one beyond', () => {
     const battles = [
-      { x: 0, z: 0 },
-      { x: 20000, z: 0 },
+      { x: 0, z: 0, zoneM: zoneFor(rules, 6000) },
+      { x: 20000, z: 0, zoneM: zoneFor(rules, 2000) },
     ]
     // a contact 2 km from the main fight, within its zone (2.5 km): part of it
-    expect(battleFor(battles, 2000, 0, rules.battleZoneM)).toBe(0)
+    expect(battleFor(battles, 2000, 0)).toBe(0)
+    // 2 km from the small battle, whose zone is 1 km: a battle of its own
+    expect(battleFor(battles, 22000, 0)).toBe(-1)
     // Wavre, 15 km away: a battle of its own
-    expect(battleFor(battles, 0, 15000, rules.battleZoneM)).toBe(-1)
+    expect(battleFor(battles, 0, 15000)).toBe(-1)
   })
 })
 
@@ -138,29 +135,23 @@ describe('couriers and help', () => {
     expect(r.x).toBeCloseTo(8500, 6)
   })
 
-  it('rides out of the battle it is sent from: the enemy there does not catch it as it leaves', () => {
-    // the engaged corps at 0, the enemy it fights 1 km east; the call goes 25 km west
-    const r = ride(rules, along(0, -25000), 0, [standing(1000, 0)])
-    expect(r).toEqual({ delivered: true, atMin: 125 })
+  it('gets out of the battle it is sent from: the enemy its corps fights never catches it', () => {
+    // the engaged corps at 0, the enemy it fights 1 km east (enemy 0, engaged); the call goes either way
+    expect(ride(rules, along(0, -25000), 0, [standing(1000, 0)], [0])).toEqual({ delivered: true, atMin: 125 })
+    expect(ride(rules, along(0, 25000), 0, [standing(1000, 0)], [0])).toEqual({ delivered: true, atMin: 125 })
   })
 
-  it('is caught at once if its road leads through the enemy its corps fights', () => {
-    const r = ride(rules, along(0, 25000), 0, [standing(1000, 0)])
-    expect(r).toEqual({ delivered: false, atMin: 0, by: 0, x: 0, z: 0 })
-  })
-
-  it('is caught by the enemy it rode away from if its road comes back into that enemy’s zone', () => {
-    // west 5 km, then back east past the enemy at 1 km: out at 2.5 km from it (minute 7.5 on), back in at 2.5 km
-    const route = [
-      { x: 0, z: 0 },
-      { x: -5000, z: 0 },
-      { x: 25000, z: 0 },
-    ]
-    const r = ride(rules, route, 0, [standing(1000, 0)])
+  it('is caught by another enemy whose zone it rides into, the engaged one at its side', () => {
+    const r = ride(rules, along(0, 25000), 0, [standing(1000, 0), standing(10000, 0)], [0])
     expect(r.delivered).toBe(false)
     if (r.delivered) return
-    // back in at x = -500 on the way east: 5 km west plus 4.5 km back, at 200 m a minute
-    expect(r.atMin).toBeCloseTo(47.5, 6)
+    expect(r.by).toBe(1)
+    expect(r.atMin).toBeCloseTo(42.5, 9)
+  })
+
+  it('is caught at once by an enemy not engaged with its corps if it starts in its zone', () => {
+    const r = ride(rules, along(0, -25000), 0, [standing(1000, 0)])
+    expect(r).toEqual({ delivered: false, atMin: 0, by: 0, x: 0, z: 0 })
   })
 
   it('is caught by a moving enemy where their tracks meet', () => {
@@ -179,6 +170,43 @@ describe('couriers and help', () => {
     const courier = positionAt(walk(along(0, 25000), 0, 200), r.atMin)
     const them = positionAt(enemy, r.atMin)
     expect(Math.hypot(courier.x - them.x, courier.z - them.z)).toBeCloseTo(rules.contactRadiusM, 6)
+  })
+})
+
+describe('who answers a call', () => {
+  const free: Ally = { engaged: false, committed: false, onCall: { kind: 'always' } }
+
+  it('answers if free, in reach and allowed by its standing orders', () => {
+    expect(answers(rules, free, 20000)).toBe(true)
+    expect(answers(rules, free, 30000)).toBe(false)
+    expect(answers(rules, { ...free, engaged: true }, 5000)).toBe(false)
+    expect(answers(rules, { ...free, committed: true }, 5000)).toBe(false)
+    expect(answers(rules, { ...free, onCall: { kind: 'never' } }, 5000)).toBe(false)
+    expect(answers(rules, { ...free, onCall: { kind: 'near', nearM: 10000 } }, 12000)).toBe(false)
+    expect(answers(rules, { ...free, onCall: { kind: 'near', nearM: 10000 } }, 8000)).toBe(true)
+  })
+
+  it('ends a chain of calls in a day, however unlucky every helper is', () => {
+    // the worst case: every corps within reach of every other, and each helper meets a new enemy on its way, fights
+    // and calls for help in turn; every answer commits a corps, so the calls run out
+    const n = 8
+    const allies: Ally[] = Array.from({ length: n }, () => ({ ...free }))
+    const day = new Timeline<{ caller: number }>()
+    allies[0].engaged = true
+    day.push({ t: 0, id: 0, data: { caller: 0 } })
+    let battles = 1
+    let nextId = 1
+    day.play(1440, (call, tl) => {
+      for (let k = 0; k < n; k++) {
+        if (k === call.data.caller || !answers(rules, allies[k], 20000)) continue
+        allies[k].committed = true
+        // on its way it meets another enemy: a new battle, and a new call
+        battles++
+        tl.push({ t: call.t + 60, id: nextId++, data: { caller: k } })
+      }
+    })
+    expect(day.size).toBe(0)
+    expect(battles).toBeLessThanOrEqual(n)
   })
 })
 
@@ -263,6 +291,11 @@ describe('the roads', () => {
 
   it('finds no route to a town no road reaches', () => {
     expect(fastestRoute(network({ towns: 2, roads: [] }), 0, 1)).toBeNull()
+  })
+
+  it('refuses a road to a town that does not exist, and a route from one', () => {
+    expect(() => network({ towns: 2, roads: [{ a: 0, b: 5, points: [] }] })).toThrow(RangeError)
+    expect(() => fastestRoute(net, 9, 0)).toThrow(RangeError)
   })
 
   it('does not see later changes to the graph it was built from', () => {

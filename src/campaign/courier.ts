@@ -1,8 +1,8 @@
 // Calling for help (docs/proposals/campaign.md, Calling for help): a courier rides the fastest road to an ally; if
-// its road crosses an enemy's contact zone it is caught there and its message lost (and read by the enemy). Help
-// that is called arrives when the courier has ridden, the corps has got under way and has marched, its tail a
-// column's length after its head.
-import { firstClosing } from './contact.ts'
+// it comes within the contact zone of an enemy other than those its corps is fighting, it is caught there and its
+// message lost (and read by the enemy). Help that is called arrives when the courier has ridden, the corps has got
+// under way and has marched, its tail a column's length after its head.
+import { firstContact } from './contact.ts'
 import { arrival, dayMarch } from './march.ts'
 import type { CampaignRules } from './rules.ts'
 import { positionAt, walk, type Track } from './track.ts'
@@ -13,16 +13,17 @@ export type Ride =
 
 /**
  * A courier leaving at `startMin` along its route (points in metres, the fastest road), with the enemies' tracks
- * over the day: caught by the first enemy (by time, then by index) whose contact radius it enters, else delivered
- * at the route's end. Caught means inside the zone and closing on the enemy (contact.ts, firstClosing): a call for
- * help leaves from the battle, inside the zone of the enemy its corps fights, and gets away if it rides away from
- * it, not if its road leads through it. A route of one point (the ally in the same town) is delivered at once.
+ * over the day: caught by the first enemy (by time, then by index) within whose contact radius it comes, else
+ * delivered at the route's end. The enemies listed in `engaged` (those the sender's corps is fighting) never catch
+ * it: they are held by their battle, and a call for help always gets out of the battle it is sent from. A route of
+ * one point (the ally in the same town) is delivered at once.
  */
 export function ride(
   rules: CampaignRules,
   route: { x: number; z: number }[],
   startMin: number,
   enemies: Track[],
+  engaged: readonly number[] = [],
 ): Ride {
   if (route.length < 2) return { delivered: true, atMin: startMin }
   const speed = (rules.courierKmPerHour * 1000) / 60
@@ -31,7 +32,9 @@ export function ride(
   let caughtAt = Infinity
   let by = -1
   for (let k = 0; k < enemies.length; k++) {
-    const t = firstClosing(courier, enemies[k], rules.contactRadiusM, startMin, end)
+    if (engaged.includes(k)) continue
+    // only a catch earlier than the one known can win: the search stops there
+    const t = firstContact(courier, enemies[k], rules.contactRadiusM, startMin, Math.min(end, caughtAt))
     if (t !== null && t < caughtAt) {
       caughtAt = t
       by = k

@@ -124,7 +124,7 @@ Every side gives its orders: a road route, a march mode and standing orders for 
 played from dawn to dusk as a **timeline of events**, handled one by one in time order:
 - **contact**: two enemy corps come within the contact radius, and a battle starts;
 - **a courier arrives**: an ally receives a call for help and acts on its standing orders;
-- **a courier is caught**: it enters an enemy's zone, and its message is lost;
+- **a courier is caught**: it comes within the zone of an enemy its corps is not fighting, and its message is lost;
 - **an arrival**: a corps reaches a battle.
 
 Events at the same moment are ordered by a fixed key (time, then the id), so a turn plays the same on every
@@ -151,15 +151,21 @@ meet far from it pin each other and neither helps (Wavre, 15 km away, held Grouc
 
 1. An engaged corps sends a courier to each ally within the **help radius** by road (a parameter, about
    25 km).
-2. The courier takes the **fastest route**. It is a fast moving point on the timeline: if it enters an enemy
-   corps' contact zone on its way, it is **caught**. It does not look for another road.
+2. The courier takes the **fastest route**. It is a fast moving point on the timeline: if it comes within the
+   contact zone of an enemy corps on its way, it is **caught**, except by the enemies its own corps is fighting:
+   they are held by the battle, and a call always gets out of the battle it is sent from (the owner, 2026-10-30).
+   It does not look for another road.
 3. A caught message is **read by the enemy**: who called for help, and how hard pressed they are.
-4. An engaged ally cannot come. A free one acts on its standing orders (below).
+4. An engaged ally cannot come, nor one already marching to a battle: **a corps answers at most one call a
+   day**. A free one acts on its standing orders (below).
 5. **Arrival = courier time + getting under way + forced march.** As starting values: a courier at about
    12 km/h, about 1 hour to get under way, a forced march at about 4 km/h. An ally 25 km away hears after about
    2 hours, and its head arrives about 9 hours after the battle began: the afternoon of a battle begun in the
    morning, as at Waterloo and Marengo. The rest of the corps follows by its column's length.
-6. **A rescuer can be stopped**: if its road crosses an enemy's zone, it fights there instead.
+6. **A rescuer can be stopped**: if its road crosses an enemy's zone, it fights there instead (Grouchy at Wavre),
+   and may call for help in turn; only free corps can answer it. Every answer and every battle takes a corps out of
+   the free ones, so **a chain of calls ends within the day**: with N corps, at most N answers; calls and marches due
+   after dusk wait for the next turn.
 7. A free corps in reach of two battles goes to the one whose courier reaches it first, unless its standing
    orders name one.
 
@@ -201,7 +207,8 @@ has to write the same contract.
 
 ### Simplifications
 
-- A courier never takes another road, and a courier in an enemy zone is always caught.
+- A courier never takes another road, and a courier in the zone of an enemy its corps is not fighting is always
+  caught.
 - Standing orders are a short fixed list, not a script.
 - Food is one number per corps.
 - Fatigue is one number per corps (or per battalion, § Open questions).
@@ -218,7 +225,7 @@ has to write the same contract.
 | Courier | about 12 km/h |
 | Getting under way | about 1 hour |
 | Stragglers of a forced march | 10–20 % of each battalion, back in 1–2 days |
-| Battle zone | 2.5 km from the battle's centre, inside its map (at most 6 km a side) |
+| Battle zone | 2.5 km from the battle's centre, never more than half its map's side (maps of 2–6 km) |
 
 ## The models in code
 
@@ -231,18 +238,21 @@ The numbers and rules above are code in `src/campaign/` (exact maths, as the sim
 | March speed by mode and size, the column's length, head and tail arrivals | `src/campaign/march.ts` |
 | Moving corps and couriers as tracks (timed waypoints, linear between) | `src/campaign/track.ts` |
 | Contact: the first moment two tracks come within the contact radius, exactly; a contact joins the battle whose zone it lies in, else starts one | `src/campaign/contact.ts` |
-| A courier caught where its road enters an enemy's zone; the help it brings | `src/campaign/courier.ts` |
+| A courier caught where it comes within the zone of an enemy its corps is not fighting; the help it brings | `src/campaign/courier.ts` |
 | The road network (a road's length its line's) and the fastest route, the same on every machine | `src/campaign/roads.ts` |
 | The day as a timeline, ordered by time, then id | `src/campaign/timeline.ts` |
+| Who answers a call: free, not committed, in reach, allowed by its standing orders | `src/campaign/answers.ts` |
 
 Contact is exact rather than tested at ticks: a 10-minute tick finds two corps closing at 6 km/h up to 10 minutes
 and a kilometre late, and a courier riding at 12 km/h through the edge of a zone (2 km of it inside) not at all.
-Between two waypoints both move in straight lines, so the moment of contact is the first root of a quadratic. A
-courier is caught when it is inside an enemy's zone and closing on that enemy: one sent from a battle rides out of
-the zone of the enemy its corps fights, unless its road leads toward that enemy.
+Between two waypoints both move in straight lines, so the moment of contact is the first root of a quadratic. The
+enemies a courier's corps is fighting never catch it (§ Calling for help, 2): a plain rule, after three attempts at
+a geometric one (caught on any contact, then exempt until it left the zone, then caught while closing) each failed
+review on a case (every call caught at its first minute; a courier riding through the enemy; a road 0.02° off
+deciding the outcome).
 
-The battle zone is a radius that fits in the battle map (2.5 km: decision 0061's largest map is 6 km a side). Every
-road is taken at one speed for now: road kinds come with the theatre's data and the march (K3, K4).
+Each battle's zone is the ruleset's radius, at most half its map's side (`zoneFor`), so the zone lies in its map.
+Every road is taken at one speed for now: road kinds come with the theatre's data and the march (K3, K4).
 
 ## Alternatives considered
 

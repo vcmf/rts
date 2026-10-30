@@ -49,6 +49,10 @@ export interface Network {
 
 /** A network from a road graph. */
 export function network(graph: RoadGraph): Network {
+  graph.roads.forEach((r, k) => {
+    const ok = (t: number) => Number.isInteger(t) && t >= 0 && t < graph.towns
+    if (!ok(r.a) || !ok(r.b)) throw new RangeError(`road ${k}: towns ${r.a}–${r.b} not in 0..${graph.towns - 1}`)
+  })
   const roads = graph.roads.map(r => ({ a: r.a, b: r.b, points: r.points.map(p => ({ x: p.x, z: p.z })) }))
   const touching: number[][] = Array.from({ length: graph.towns }, () => [])
   roads.forEach((r, k) => {
@@ -66,6 +70,9 @@ export function network(graph: RoadGraph): Network {
  */
 export function fastestRoute(net: Network, from: number, to: number): Route | null {
   const { touching, lengths } = net
+  for (const t of [from, to]) {
+    if (!Number.isInteger(t) || t < 0 || t >= net.towns) throw new RangeError(`fastestRoute: no town ${t}`)
+  }
   const dist = new Float64Array(net.towns).fill(Infinity)
   const viaRoad = new Int32Array(net.towns).fill(-1)
   const done = new Uint8Array(net.towns)
@@ -99,6 +106,7 @@ export function fastestRoute(net: Network, from: number, to: number): Route | nu
   }
   return { towns: towns.reverse(), roads: roads.reverse(), lengthM: dist[to] }
 }
+
 /** A route's line, from its first town to its last, each road's points in the direction travelled. */
 export function routePoints(net: Network, route: Route): { x: number; z: number }[] {
   const out: { x: number; z: number }[] = []

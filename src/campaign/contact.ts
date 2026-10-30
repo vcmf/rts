@@ -1,7 +1,8 @@
 // When two moving things meet (docs/proposals/campaign.md, Contact and battle): the first moment two tracks come
 // within a radius, found exactly rather than at a tick (a 10-minute tick finds two corps closing at 6 km/h up to
-// 10 minutes and a kilometre late); the first moment a courier is inside an enemy's zone and closing on it, where it
-// is caught; and which battle a contact joins.
+// 10 minutes and a kilometre late), so corps meet and couriers are caught where they do; and which battle a contact
+// joins.
+import type { CampaignRules } from './rules.ts'
 import { positionsAt, type Track } from './track.ts'
 
 /** Every time either track turns (its waypoints' times) inside [t0, t1], with t0 and t1, in order. */
@@ -16,8 +17,7 @@ function breakpoints(a: Track, b: Track, t0: number, t1: number): number[] {
 /**
  * The separation of b from a over one interval between breakpoints, where both move in straight lines: d(s) =
  * d0 + v·s for s in [0, span], s from the interval's start. Within the radius r where |d(s)|² ≤ r², which is
- * qa·s² + 2·half·s + c ≤ 0 (qa = |v|², half = d0·v, c = |d0|² − r²): between the roots s1 ≤ s2. The separation
- * shrinks while d·v < 0, that is before the vertex s* = −half / qa.
+ * qa·s² + 2·half·s + c ≤ 0 (qa = |v|², half = d0·v, c = |d0|² − r²): between the roots s1 ≤ s2.
  */
 interface Interval {
   ts: number
@@ -64,8 +64,8 @@ function roots(iv: Interval): [number, number] | null {
 
 /**
  * The earliest time in [t0, t1] at which tracks a and b are within `radius` metres, or null if they never are:
- * per interval, the first s in [0, span] between the roots (clamped to the interval, so a pair just on the radius
- * at a breakpoint is not lost to rounding).
+ * per interval, the first s in [0, span] between the roots. A pair exactly on the radius counts as within it or not
+ * as the arithmetic rounds: the same on every machine (decision 0006), and no tolerance is added for it.
  */
 export function firstContact(a: Track, b: Track, radius: number, t0: number, t1: number): number | null {
   for (const iv of intervals(a, b, radius, t0, t1)) {
@@ -77,43 +77,34 @@ export function firstContact(a: Track, b: Track, radius: number, t0: number, t1:
   return null
 }
 
-/**
- * The earliest time in [t0, t1] at which b is within `radius` of a and closing on it, or null: how a courier (a) is
- * caught by an enemy (b). One that enters the zone is closing as it enters; one that starts inside it (the battle it
- * is sent from) is caught at once if it rides toward the enemy, and not while it rides away: per interval, the s in
- * [0, span] between the roots and before the vertex, where the separation shrinks.
- */
-export function firstClosing(a: Track, b: Track, radius: number, t0: number, t1: number): number | null {
-  for (const iv of intervals(a, b, radius, t0, t1)) {
-    if (iv.qa === 0) continue
-    const r = roots(iv)
-    if (r === null) continue
-    const from = Math.max(0, r[0])
-    const vertex = -iv.half / iv.qa
-    if (from < Math.min(iv.span, vertex)) return iv.ts + from
-  }
-  return null
-}
-
-/** A battle being fought, as far as the contact rule reads it: where it is. */
+/** A battle being fought, as far as the contact rule reads it: where it is, and its zone's radius (zoneFor). */
 export interface BattleSite {
   x: number
   z: number
+  zoneM: number
 }
 
 /**
- * The battle a contact at (x, z) joins: the nearest whose centre lies within `zoneM` (the lowest index on a tie), or
+ * A battle's zone, a radius in metres: the ruleset's, but never more than half its map's side, so the zone lies
+ * inside the map that is fought on (decision 0061: maps of 2 to 6 km a side).
+ */
+export function zoneFor(rules: CampaignRules, mapSideM: number): number {
+  return Math.min(rules.battleZoneM, mapSideM / 2)
+}
+
+/**
+ * The battle a contact at (x, z) joins: of those whose zone holds it, the nearest (the lowest index on a tie), or
  * -1 when it lies in none and starts a battle of its own (Plancenoit was part of Waterloo; Wavre, 15 km away, was
  * not).
  */
-export function battleFor(battles: BattleSite[], x: number, z: number, zoneM: number): number {
+export function battleFor(battles: BattleSite[], x: number, z: number): number {
   let best = -1
-  let bestD2 = zoneM * zoneM
+  let bestD2 = Infinity
   for (let k = 0; k < battles.length; k++) {
     const dx = battles[k].x - x
     const dz = battles[k].z - z
     const d2 = dx * dx + dz * dz
-    if (d2 < bestD2 || (d2 === bestD2 && best < 0)) {
+    if (d2 <= battles[k].zoneM * battles[k].zoneM && d2 < bestD2) {
       best = k
       bestD2 = d2
     }
