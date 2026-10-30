@@ -561,11 +561,8 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
             n = nearLine(f.line, x, z, w2 + edge)
             w = editWeight(n.d, w2, edge)
           } else {
-            // an area's membrane meets the ground just past its edge by itself: it takes the whole reach at full
-            // weight, so none of the work's own ground (a pit's stepped sides past its outline) is mixed back in
-            // (decision 0091)
             const e = field!.edge(x, z)
-            w = e >= -edge ? 1 : 0
+            w = e >= 0 ? 1 : edge > 0 ? smooth(1 + e / edge) : 0
           }
           if (w <= 0) return
           ks.push(k)
@@ -1161,9 +1158,9 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
  * Settles `target` (the heights wanted at the nodes `ks`, a first guess) into a membrane over those nodes: each the
  * mean of its neighbours (four, fewer at the grid's edge), a neighbour outside `ks` that no mend reaches read from
  * `H` and held (the ground round the mend), one another mend reaches left out (never read: decision 0073's
- * independence). Successive over-relaxation with the factor optimal for the nodes' extent, until no node moves a tenth
- * of a millimetre (at most MEMBRANE_SWEEPS times the extent in sweeps; optimal SOR converges in a few times the
- * extent). Writes `target` in place.
+ * independence). Successive over-relaxation until no node moves ten micrometres in a sweep; throws if that takes over
+ * MEMBRANE_SWEEPS times the nodes' extent in sweeps (a silent unsettled fill would leave the walls it is there to
+ * remove). Writes `target` in place.
  */
 function membrane(
   ks: readonly number[],
@@ -1174,35 +1171,44 @@ function membrane(
   reached: Uint8Array,
 ): void {
   const W = nx + 1
-  const at = new Map<number, number>()
-  ks.forEach((k, q) => at.set(k, q))
+  // the nodes' box, and each box node's index in ks (−1: not the mend's)
+  let [i0, i1, j0, j1] = [Infinity, -Infinity, Infinity, -Infinity]
+  for (const k of ks) {
+    const i = k % W
+    const j = (k - i) / W
+    i0 = Math.min(i0, i)
+    i1 = Math.max(i1, i)
+    j0 = Math.min(j0, j)
+    j1 = Math.max(j1, j)
+  }
+  const bw = i1 - i0 + 1
+  const index = new Int32Array(bw * (j1 - j0 + 1)).fill(-1)
+  ks.forEach((k, q) => {
+    const i = k % W
+    index[((k - i) / W - j0) * bw + i - i0] = q
+  })
   // each node's neighbours: inside the mend (its index, ≥ 0) or held (−1 − the node, its height read from H)
   const nb = new Int32Array(ks.length * 4)
   const cnt = new Uint8Array(ks.length)
-  let [i0, i1, j0, j1] = [Infinity, -Infinity, Infinity, -Infinity]
   ks.forEach((k, q) => {
     const i = k % W
     const j = (k - i) / W
-    ;[i0, i1, j0, j1] = [Math.min(i0, i), Math.max(i1, i), Math.min(j0, j), Math.max(j1, j)]
     let n = 0
-    for (const [di, dj] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ]) {
-      const [a, b] = [i + di, j + dj]
+    for (let e = 0; e < 4; e++) {
+      const a = i + DI[e]
+      const b = j + DJ[e]
       if (a < 0 || a > nx || b < 0 || b > nz) continue
-      const k2 = b * W + a
-      const q2 = at.get(k2)
-      if (q2 !== undefined) nb[q * 4 + n++] = q2
-      else if (!reached[k2]) nb[q * 4 + n++] = -1 - k2
+      const inBox = a >= i0 && a <= i1 && b >= j0 && b <= j1
+      const q2 = inBox ? index[(b - j0) * bw + a - i0] : -1
+      if (q2 >= 0) nb[q * 4 + n++] = q2
+      else if (!reached[b * W + a]) nb[q * 4 + n++] = -1 - (b * W + a)
     }
     cnt[q] = n
   })
+  // the factor optimal for a square of this extent held all round, 2 / (1 + sin(π / extent)), with π / extent for the
+  // sine (exact across engines); a work held on part of its rim (the rest another mend's or past the map's edge)
+  // converges more slowly, hence the cap's margin. The factor sets only the speed, not the result
   const extent = Math.max(i1 - i0, j1 - j0) + 2
-  // the optimal factor, 2 / (1 + sin(π / extent)), with π / extent for the sine (exact across engines; the factor sets
-  // only the speed, not the result)
   const omega = 2 / (1 + Math.PI / extent)
   for (let sweep = 0; sweep < MEMBRANE_SWEEPS * extent; sweep++) {
     let moved = 0
@@ -1217,10 +1223,15 @@ function membrane(
       target[q] += d
       if (Math.abs(d) > moved) moved = Math.abs(d)
     }
-    if (moved < 1e-4) return
+    // ten micrometres a sweep: the error left is that over (1 − the convergence rate), 30 to 130 times it at
+    // Austerlitz's works, a millimetre or so
+    if (moved < 1e-5) return
   }
+  throw new Error(`a mend's membrane did not settle in ${MEMBRANE_SWEEPS * extent} sweeps (decision 0091)`)
 }
-const MEMBRANE_SWEEPS = 20
+const MEMBRANE_SWEEPS = 60
+const DI = [1, -1, 0, 0]
+const DJ = [0, 0, 1, -1]
 
 // the ground at a point, bilinear between the layers' nodes, clamped to the grid (of `h`: the layers' heights unless
 // given another array on the same nodes)

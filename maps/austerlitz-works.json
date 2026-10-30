@@ -13,7 +13,7 @@
   "areas": [
     {"id": "basin-slapanice", "edge": 15, "note": "the walled basin north-east of Šlapanice", "area": [[[-250, 1330], [-100, 1330], [-100, 1145], [-250, 1145]]]},
     {"id": "tanks-slatina", "edge": 5, "note": "the tank farm's bunds south of Slatina", "area": [[[-1220, 830], [-1130, 830], [-1130, 745], [-1220, 745]]]},
-    {"id": "pit-ujezd", "edge": 5, "note": "the rectangular pit west of Újezd and the stepped ground beside it", "area": [[[-225, -240], [155, -240], [155, -320], [-225, -320]]]},
+    {"id": "pit-ujezd", "edge": 15, "note": "the rectangular pit west of Újezd and the stepped ground beside it", "area": [[[-225, -240], [155, -240], [155, -320], [-225, -320]]]},
     {"id": "d1-loop", "edge": 10, "note": "the D1 interchange's loop", "circle": [[-1040, 1080], 30]}
   ]
 }

@@ -31,8 +31,8 @@ ground round it by up to 3 m (the ground curves there), and the blend over its 5
 - The pit's rim (x = −35 m): the ground 12.6, 12.4, 12.3 m across it, where it was 12.6, then 15.0 (a 2.4 m wall).
 - Austerlitz compiles in about 2.1 s in Node either way (three runs each, the dev Mac).
 - On G2's light (`scratch/g2/pit-*.png` in its worktree): the walls gone; blended into the ground over its `edge` the
-  membrane still left a ghost of the rectangle (the pit's stepped sides mixed back in), so an area's mend now takes
-  its whole reach at full weight. What remains: a faint flat patch over the west half, where the ground falls over a
+  membrane still left a ghost of the rectangle (the pit's stepped sides mixed back in); its `edge` is now 15 m
+  (`maps/austerlitz-works.json`), past those sides. What remains: a faint flat patch over the west half, where the ground falls over a
   rounded shoulder to the Goldbach, and a soft line along the north edge (a membrane's slope at its rim; a biharmonic
   fill is the next step if the owner still sees it).
 
@@ -46,3 +46,11 @@ mostly off the map or reached keeps its mean; the inverse-distance first fill dr
 comments, the system doc and the decision say so. Tests: the rim's range on all four sides; an embankment mended
 through a pit's ring stays mended (0.56 m off with round 1's code, under 0.3 m now). Kept: a mend with no free ground
 round it is left as it is (0073's rule; nothing to hold it to).
+
+Round 2 (`/code-review high`, severe: the full weight over an area's reach pasted a fallback mean with no blend, a
+cliff, and dropped the blend where an area meets another mend). The full weight undone, the blend over `edge` as 0073
+has it; the pit's ghost removed by its wider `edge` instead (the reviewer's alternative). The membrane: a stop at ten
+micrometres a sweep (the error left a millimetre or so), the cap 60 times the extent, and the compile failing rather
+than keep an unsettled fill; no allocation per node; the docs and the PR's text brought in line. A test of the
+fallback's blend was tried and dropped: on every slope tried it passed with round 2's code too, so it guarded nothing;
+the fallback is 0073's own path again, which the off-map test covers.

@@ -17,14 +17,14 @@ for a modern earthwork (2026-10-30).
 
 We will fill an area's or a circle's mend with a **membrane**: Laplace's equation over the mend's nodes, held to the
 ground round them that no mend reaches; a neighbour another mend reaches is left out, never read, so the mends stay
-independent of each other (0073). It is settled by successive over-relaxation (the factor optimal for its extent, until
-no node moves a tenth of a millimetre), started from the plane through that ground (`membrane`, `src/map/apply.ts`).
+independent of each other (0073). It is settled by successive over-relaxation from the plane through that ground,
+until no node moves ten micrometres in a sweep (a millimetre or so of error), and the compile fails rather than keep an
+unsettled fill (`membrane`, `src/map/apply.ts`).
 A rim mostly off the map or reached by other mends (under a quarter of it free) keeps its mean, as 0073 has it: held
 to a short arc, a membrane would spread that arc's bumps over the whole work. The
-membrane takes the area's whole reach (its outline and `edge` past it) at full weight, not blended into the ground
-over `edge`: it meets the ground just past that by itself, and a blend mixed the work's own ground back in (the pit's
-stepped sides past its outline drew a ghost of the rectangle). The rest of 0073 stands: lines are mended and blended
-as before, every mend reads the relief before any mend.
+rest of 0073 stands: the blend into the ground over `edge`, lines mended as before, every mend reading the relief
+before any mend. A work whose own ground reaches past its outline (the Újezd pit's stepped sides) takes an `edge`
+wide enough to cover it (15 m there): a narrow blend mixes that ground back in, a ghost of the work's outline.
 
 ## Consequences
 
