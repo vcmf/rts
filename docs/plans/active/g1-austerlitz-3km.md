@@ -57,6 +57,11 @@ Out: the staff map's light (G2); the whole map in 3D (G3).
 - **The look windows:** Kobelnitz at (−226, 176), the Pratzen at (350, 126); both far rings pass the map's edge
   (`checkWindowInside` now asks only for the tile). The demo's look data unchanged.
 - Screenshots: `scratch/g1/` (before at 6 km, after at 3 km).
+- **The Újezd pit** (G1b, after the merge): at 4× the pit, a modern work, showed as walls in the lit view, its 5 m
+  blend too narrow for the plane fitted under it (decision 0073) on the curving slope. Its `edge` is 40 m now (a data
+  change only): the pit is gone, a faint trace left at its north-west corner. A new fill for area mends (a membrane,
+  #279) was tried and dropped after three review rounds: too much machinery for one pit. Widening the outline instead
+  made the plane misfit more. A plane under a large work on curving ground is #281.
 
 ## Open questions
 
