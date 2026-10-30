@@ -1,0 +1,14 @@
+Reference images for the campaign map's look (docs/proposals/campaign-map.md), collected from the internet by the
+owner, 2026-10-29. Third-party prints: for reference only, never shipped or traced. The images stay out of git
+(.gitignore); ask the owner for them.
+
+- 1174d04449735f4acbda751948896add.jpg: Crater Lake, Oregon, a USGS map of 1911 rendered as lit relief, a low light,
+  red roads, names letter-spaced across the park, the plate's edge and shadow on a table.
+- 3093e28b406a1fa77f0a98423903fe64.jpg: Italy in white relief, close and blurred, the coast as a fine line, towns as
+  dots: a continent's relief at strong exaggeration.
+- 73474c4acbacbd4c58cef4191f4f07ae.jpg: Valdez, Alaska, a USGS map lit in warm orange from a very low light, long
+  cast shadows across the valleys.
+- 82889a9ac4b3576bf2b3f09acdb7fe6b.jpg: a grey contour study: stacked contour sheets, raised, under a soft light.
+- a29696bf2f8cff06de26a8bfed6d39f8.jpg: Crater Lake again, paler, the lake flat and sunk, a serif title below.
+- c19e7c0e9e8338aac2a2d47bc1f4ce69.jpg: San Francisco Bay, a USGS map of about 1915 lit warm, ochre slopes, the
+  street grid and roads as ink, water flat and pale.
