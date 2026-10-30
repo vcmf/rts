@@ -4,14 +4,15 @@
 // copies of itself; only one reduced level is read, tile by tile, by range requests (the header first), and cached
 // under scratch/worldcover/: about 5 MB a file at about 70 m a pixel, where the full file is about 100 MB.
 // Its tree-cover class (10) is sampled onto a grid in the theatre's projection as a coverage, 0 to 255.
-// smoothCover: the cover is smoothed before it is printed (the large forests stay, the farm copses fade) by three box
-// means of WOOD_BOX_M either side, in metres, so the theatre (250 m) and the tiles (100 m) smooth alike; both record
-// it, and the page checks they agree.
+// forestField: one field for the whole frame, made once: the cover at 100 m, smoothed before it is printed (the large
+// forests stay, the farm copses fade) by three box means of WOOD_BOX_M either side, cached under scratch/worldcover/.
+// The tiles (100 m) use it as is, the theatre (250 m) resamples it (resampleField): one source, so the two layers
+// agree where the tiles fade in.
 import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { boxMean } from './campaign-bake.ts'
-import type { projection } from './campaign-theatre-lib.ts'
+import type { Frame, projection } from './campaign-theatre-lib.ts'
 
 const BASE = 'https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map'
 const CACHE = 'scratch/worldcover'
@@ -22,6 +23,11 @@ const TREES = 10
 // the level read: the one closest to (and not coarser than) this many pixels across a 3° file
 const LEVEL_PX = 4500
 export const WOOD_BOX_M = 500
+// the forest field's cell, in metres: the tiles' (tools/campaign-tiles.ts)
+export const FIELD_CELL = 100
+// downloads: files read side by side, and each file's tiles
+const FILES_AT_ONCE = 2
+const TILES_AT_ONCE = 8
 export const WORLDCOVER_CREDIT =
   'Forests: © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA ' +
   'WorldCover consortium, CC BY 4.0.'
@@ -33,14 +39,16 @@ export interface CogLevel {
   width: number
   height: number
   tile: number
+  tileLength: number
   offsets: number[]
   counts: number[]
   compression: number
 }
 
 /**
- * The levels of a little-endian tiled GeoTIFF (full size first), from its first bytes: each level's size, tile size,
- * compression and tile tables (TileOffsets 324, TileByteCounts 325). Throws when a table lies past the bytes given.
+ * The levels of a little-endian tiled GeoTIFF (full size first), from its first bytes: each level's size, tile width
+ * and length, compression and tile tables (TileOffsets 324, TileByteCounts 325). Throws when a table lies past the
+ * bytes given.
  */
 export function parseCog(head: Buffer): CogLevel[] {
   if (head.toString('latin1', 0, 2) !== 'II' || head.readUInt16LE(2) !== 42) throw new Error('not a little-endian TIFF')
@@ -92,6 +100,7 @@ export function parseCog(head: Buffer): CogLevel[] {
       width: need(256)[0],
       height: need(257)[0],
       tile: need(322)[0],
+      tileLength: need(323)[0],
       offsets: need(324),
       counts: need(325),
       compression: need(259)[0],
@@ -101,14 +110,19 @@ export function parseCog(head: Buffer): CogLevel[] {
   return levels
 }
 
+/** An answer a retry cannot change (the server ignored the range, or refused it): not tried again. */
+class Refused extends Error {}
+
 /** A fetch, as range() uses it (a test passes its own). */
 export type Fetch = (url: string, init: { headers: Record<string, string> }) => Promise<Response>
 
 /**
  * A byte range of a file, from the cache or fetched and cached: only a partial answer (206) of exactly the length
  * asked (or the rest of a shorter file, as its Content-Range says) is kept: a server that ignored the range would
- * answer the whole file, a cut answer would poison the cache. A cached range of another length is fetched again; a
- * failed fetch is tried three times. Null when the file does not exist (404: open sea has none).
+ * answer the whole file, a cut answer would poison the cache. A cached range of another length is fetched again. A
+ * failure that may pass (the network, a server error, a cut answer) is tried three times, `waitMs` and then twice
+ * that apart; an answer a retry cannot change (a whole file, another client error) throws at once. Null when the
+ * file does not exist (404: open sea has none).
  */
 export async function range(
   url: string,
@@ -116,6 +130,7 @@ export async function range(
   start: number,
   length: number,
   get: Fetch = fetch,
+  waitMs = 500,
 ): Promise<Buffer | null> {
   if (fs.existsSync(file)) {
     const kept = fs.readFileSync(file)
@@ -125,7 +140,11 @@ export async function range(
     try {
       const res = await get(url, { headers: { Range: `bytes=${start}-${start + length - 1}` } })
       if (res.status === 404) return null
-      if (res.status !== 206) throw new Error(`${url}: HTTP ${res.status}, not a partial answer to a range`)
+      if (res.status !== 206) {
+        const message = `${url}: HTTP ${res.status}, not a partial answer to a range`
+        // a server error or a throttle may pass; anything else answers the same again
+        throw res.status >= 500 || res.status === 429 ? new Error(message) : new Refused(message)
+      }
       const bytes = Buffer.from(await res.arrayBuffer())
       // the file's whole size, from "bytes a-b/total": a range past its end answers only what is there
       const total = Number((res.headers.get('content-range') ?? '').split('/')[1])
@@ -136,7 +155,8 @@ export async function range(
       if (expected < length) fs.writeFileSync(file + '.short', '')
       return bytes
     } catch (e) {
-      if (attempt >= 3) throw e
+      if (e instanceof Refused || attempt >= 3) throw e
+      await new Promise(resolve => setTimeout(resolve, waitMs * 2 ** (attempt - 1)))
     }
   }
 }
@@ -156,8 +176,8 @@ async function pool<T>(jobs: (() => Promise<T>)[], n: number): Promise<T[]> {
 }
 
 /**
- * The cover smoothed for printing: three box means of WOOD_BOX_M either side, in metres. The grid's cell must divide
- * it, so grids of different cells smooth alike.
+ * The cover smoothed for printing: three box means of WOOD_BOX_M either side, in metres (a forest smaller than about
+ * the box fades, a large one keeps its core). The grid's cell must divide WOOD_BOX_M.
  */
 export function smoothCover(cover: Uint8Array, nx: number, nz: number, cell: number): Uint8Array {
   const r = WOOD_BOX_M / cell
@@ -198,7 +218,7 @@ export function pixelOf(lat0: number, lon0: number, size: number, lat: number, l
 }
 
 /**
- * Reads one file's reduced level: the header, then its tiles, fetched side by side and inflated (an empty tile is
+ * Reads one file's reduced level: the header, then its tiles, TILES_AT_ONCE at a time, inflated (an empty tile is
  * no data: left 0). Null when there is no such file (open sea).
  */
 async function readSheet(lat0: number, lon0: number): Promise<Sheet | null> {
@@ -208,6 +228,9 @@ async function readSheet(lat0: number, lon0: number): Promise<Sheet | null> {
   if (!head) return null
   const level = chooseLevel(parseCog(head), LEVEL_PX)
   if (level.compression !== 8) throw new Error(`${name}: compression ${level.compression}, not Deflate`)
+  // a 3° file is square, and so are its tiles: pixelOf and the tile copy below count on both
+  if (level.height !== level.width) throw new Error(`${name}: a level of ${level.width} × ${level.height} pixels`)
+  if (level.tileLength !== level.tile) throw new Error(`${name}: tiles of ${level.tile} × ${level.tileLength}`)
   const across = Math.ceil(level.width / level.tile)
   const classes = new Uint8Array(level.width * level.height)
   const tiles = await pool(
@@ -217,7 +240,7 @@ async function readSheet(lat0: number, lon0: number): Promise<Sheet | null> {
           ? range(url, path.join(CACHE, name, `${level.width}-${t}.bin`), offset, level.counts[t])
           : Promise.resolve(null),
     ),
-    8,
+    TILES_AT_ONCE,
   )
   for (let t = 0; t < tiles.length; t++) {
     const raw = tiles[t]
@@ -238,7 +261,7 @@ async function readSheet(lat0: number, lon0: number): Promise<Sheet | null> {
  * The tree cover on a grid of nx × nz nodes `step` metres apart from (x0, z0) in the theatre's projection, the south
  * row first: for each node, the share of `per` × `per` samples spread over its cell that fall on trees, 0 to 255.
  */
-export async function forestCover(
+async function forestCover(
   proj: Projection,
   x0: number,
   z0: number,
@@ -247,7 +270,6 @@ export async function forestCover(
   nz: number,
   per = 3,
 ): Promise<Uint8Array> {
-  const sheets = new Map<string, Sheet>()
   // the 3° files the grid touches: every one between the lowest and highest latitude and longitude of its edges
   // (sampled densely: the projection curves them), not only those under its corners
   let latLo = Infinity
@@ -272,32 +294,27 @@ export async function forestCover(
       lonHi = Math.max(lonHi, lon)
     }
   }
-  const need: string[] = []
-  for (let lat = Math.floor(latLo / 3) * 3; lat <= latHi; lat += 3) {
-    for (let lon = Math.floor(lonLo / 3) * 3; lon <= lonHi; lon += 3) need.push(`${lat},${lon}`)
-  }
-  const read: (Sheet | null)[] = []
-  for (const key of need) {
-    const [lat0, lon0] = key.split(',').map(Number)
-    read.push(await readSheet(lat0, lon0))
-  }
-  need.forEach((key, k) => {
-    const sheet = read[k]
-    if (sheet) sheets.set(key, sheet)
-  })
-  console.log(`forests: ${sheets.size} WorldCover files`)
-  // the sheets by their 3° cell, indexed numerically (a string key a sample cost minutes over 160 million samples)
+  // the sheets by their 3° cell, rows of latitude: indexed numerically (a string key a sample cost minutes over 160
+  // million samples)
   const lat3 = Math.floor(latLo / 3)
   const lon3 = Math.floor(lonLo / 3)
+  const rows = Math.floor(latHi / 3) - lat3 + 1
   const cols = Math.floor(lonHi / 3) - lon3 + 1
-  const grid: (Sheet | undefined)[] = []
-  for (const [key, sheet] of sheets) {
-    const [la, lo] = key.split(',').map(Number)
-    grid[(la / 3 - lat3) * cols + (lo / 3 - lon3)] = sheet
-  }
+  const grid = await pool(
+    Array.from(
+      { length: rows * cols },
+      (_, k) => () => readSheet((lat3 + Math.floor(k / cols)) * 3, (lon3 + (k % cols)) * 3),
+    ),
+    FILES_AT_ONCE,
+  )
+  console.log(`forests: ${grid.filter(Boolean).length} WorldCover files`)
   const out = new Uint8Array(nx * nz)
   const sample = (lat: number, lon: number) => {
-    const sheet = grid[(Math.floor(lat / 3) - lat3) * cols + (Math.floor(lon / 3) - lon3)]
+    const row = Math.floor(lat / 3) - lat3
+    const col = Math.floor(lon / 3) - lon3
+    // a sample past the files read (it cannot be, but a wrong index would read another file's pixel): no trees
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return 0
+    const sheet = grid[row * cols + col]
     if (!sheet) return 0
     return sheet.classes[pixelOf(sheet.lat0, sheet.lon0, sheet.size, lat, lon)] === TREES ? 1 : 0
   }
@@ -313,6 +330,59 @@ export async function forestCover(
         }
       }
       out[j * nx + i] = Math.round((trees / (per * per)) * 255)
+    }
+  }
+  return out
+}
+
+/** The forest field: the smoothed cover, 0–255, on a grid of nx × nz nodes `cell` metres apart, the south row first. */
+export interface ForestField {
+  cell: number
+  nx: number
+  nz: number
+  cover: Uint8Array
+}
+
+/**
+ * The forest field of a frame centred on (lat0, lon0), from edge to edge: the cover at FIELD_CELL (2 × 2 samples a
+ * node), smoothed (smoothCover). Made once and cached, its parameters in the file's name; the theatre makes it first,
+ * the tiles then read it.
+ */
+export async function forestField(frame: Frame, proj: Projection): Promise<ForestField> {
+  const nx = Math.round((2 * frame.halfX) / FIELD_CELL) + 1
+  const nz = Math.round((2 * frame.halfZ) / FIELD_CELL) + 1
+  const key = [frame.lat0, frame.lon0, frame.halfX, frame.halfZ, FIELD_CELL, WOOD_BOX_M, LEVEL_PX].join('_')
+  const file = path.join(CACHE, `field-${key}.bin`)
+  if (fs.existsSync(file)) {
+    const kept = fs.readFileSync(file)
+    if (kept.length === nx * nz) return { cell: FIELD_CELL, nx, nz, cover: new Uint8Array(kept) }
+  }
+  const cover = await forestCover(proj, -frame.halfX, -frame.halfZ, FIELD_CELL, nx, nz, 2)
+  const field: ForestField = { cell: FIELD_CELL, nx, nz, cover: smoothCover(cover, nx, nz, FIELD_CELL) }
+  fs.mkdirSync(CACHE, { recursive: true })
+  fs.writeFileSync(file, field.cover)
+  return field
+}
+
+/**
+ * The field on another grid over the same frame (nx × nz nodes `cell` metres apart from the same south-west corner):
+ * bilinear between the field's nodes, held at its edge. Where a node falls on one of the field's, it is that node's
+ * value, so the two layers agree.
+ */
+export function resampleField(field: ForestField, cell: number, nx: number, nz: number): Uint8Array {
+  const out = new Uint8Array(nx * nz)
+  const at = (i: number, j: number) => field.cover[Math.min(field.nz - 1, j) * field.nx + Math.min(field.nx - 1, i)]
+  for (let j = 0; j < nz; j++) {
+    const fz = (j * cell) / field.cell
+    const j0 = Math.floor(fz)
+    const v = fz - j0
+    for (let i = 0; i < nx; i++) {
+      const fx = (i * cell) / field.cell
+      const i0 = Math.floor(fx)
+      const u = fx - i0
+      const south = at(i0, j0) * (1 - u) + at(i0 + 1, j0) * u
+      const north = at(i0, j0 + 1) * (1 - u) + at(i0 + 1, j0 + 1) * u
+      out[j * nx + i] = Math.round(south * (1 - v) + north * v)
     }
   }
   return out

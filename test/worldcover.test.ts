@@ -4,7 +4,17 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { chooseLevel, fileName, parseCog, pixelOf, range, type CogLevel, type Fetch } from '../tools/worldcover.ts'
+import {
+  chooseLevel,
+  fileName,
+  parseCog,
+  pixelOf,
+  range,
+  resampleField,
+  smoothCover,
+  type CogLevel,
+  type Fetch,
+} from '../tools/worldcover.ts'
 
 /** A little-endian TIFF of the given levels, each a directory with its size, tile size and tile tables. */
 function tiff(levels: { size: number; tile: number; offsets: number[]; counts: number[] }[]): Buffer {
@@ -62,11 +72,12 @@ describe('the WorldCover reader', () => {
         width: 2048,
         height: 2048,
         tile: 1024,
+        tileLength: 1024,
         offsets: [100, 200, 300, 400],
         counts: [10, 20, 30, 40],
         compression: 8,
       },
-      { width: 1024, height: 1024, tile: 1024, offsets: [500], counts: [50], compression: 8 },
+      { width: 1024, height: 1024, tile: 1024, tileLength: 1024, offsets: [500], counts: [50], compression: 8 },
     ])
   })
 
@@ -106,6 +117,7 @@ describe('the WorldCover reader', () => {
       width,
       height: width,
       tile: 1024,
+      tileLength: 1024,
       offsets: [],
       counts: [],
       compression: 8,
@@ -127,10 +139,11 @@ describe('the WorldCover reader', () => {
 
 describe('the WorldCover ranges', () => {
   /** A fetch that answers with this status, these bytes and this Content-Range, and counts its calls. */
-  const answer = (status: number, bytes: number, contentRange?: string) => {
+  const answer = (status: number, bytes: number, contentRange?: string, failFirst = 0) => {
     const calls = { n: 0 }
     const get: Fetch = async () => {
       calls.n++
+      if (calls.n <= failFirst) return new Response(null, { status: 503 })
       const headers = contentRange ? { 'content-range': contentRange } : undefined
       return new Response(status === 404 ? null : new Uint8Array(bytes), { status, headers })
     }
@@ -149,14 +162,29 @@ describe('the WorldCover ranges', () => {
   it('refuses a whole file answered to a range, and caches nothing', async () => {
     const file = scratch()
     const { get } = answer(200, 5000)
-    await expect(range('u', file, 0, 100, get)).rejects.toThrow(/not a partial answer/)
+    await expect(range('u', file, 0, 100, get, 0)).rejects.toThrow(/not a partial answer/)
     expect(fs.existsSync(file)).toBe(false)
+  })
+
+  it('does not ask again for a whole file: a retry would answer the same', async () => {
+    const { get, calls } = answer(200, 5000)
+    await expect(range('u', scratch(), 0, 100, get, 0)).rejects.toThrow(/HTTP 200/)
+    expect(calls.n).toBe(1)
+  })
+
+  it('asks again after a server error, and gives up after three tries', async () => {
+    const recovers = answer(206, 100, 'bytes 0-99/5000', 2)
+    expect((await range('u', scratch(), 0, 100, recovers.get, 0))!.length).toBe(100)
+    expect(recovers.calls.n).toBe(3)
+    const fails = answer(206, 100, 'bytes 0-99/5000', 3)
+    await expect(range('u', scratch(), 0, 100, fails.get, 0)).rejects.toThrow(/HTTP 503/)
+    expect(fails.calls.n).toBe(3)
   })
 
   it('refuses a cut answer, and caches nothing', async () => {
     const file = scratch()
     const { get } = answer(206, 60, 'bytes 0-99/5000')
-    await expect(range('u', file, 0, 100, get)).rejects.toThrow(/60 bytes for a range of 100/)
+    await expect(range('u', file, 0, 100, get, 0)).rejects.toThrow(/60 bytes for a range of 100/)
     expect(fs.existsSync(file)).toBe(false)
   })
 
@@ -176,5 +204,57 @@ describe('the WorldCover ranges', () => {
   it('answers no file for a 404 (open sea)', async () => {
     const { get } = answer(404, 0)
     expect(await range('u', scratch(), 0, 100, get)).toBeNull()
+  })
+})
+
+describe('the forest field', () => {
+  /** A grid of `n` × `n` nodes, 255 inside the square [a, b) of nodes, 0 elsewhere. */
+  const square = (n: number, a: number, b: number) =>
+    Uint8Array.from({ length: n * n }, (_, k) => {
+      const i = k % n
+      const j = Math.floor(k / n)
+      return i >= a && i < b && j >= a && j < b ? 255 : 0
+    })
+  const cell = 100
+
+  it('keeps an even cover even', () => {
+    const smooth = smoothCover(new Uint8Array(40 * 40).fill(153), 40, 40, cell)
+    expect(smooth.every(v => v === 153)).toBe(true)
+  })
+
+  it('fades a copse under the print threshold and keeps the core of a large forest whole', () => {
+    const n = 80
+    // a copse of 300 m, a forest of 4 km
+    const copse = smoothCover(square(n, 39, 42), n, n, cell)
+    const forest = smoothCover(square(n, 20, 60), n, n, cell)
+    expect(Math.max(...copse)).toBeLessThan(0.6 * 255)
+    expect(forest[40 * n + 40]).toBe(255)
+  })
+
+  it('refuses a cell that does not divide the box', () => {
+    expect(() => smoothCover(new Uint8Array(4), 2, 2, 300)).toThrow(/does not divide/)
+  })
+
+  it('resamples to the theatre at 250 m: the same value where its nodes meet those of the field, bilinear in between', () => {
+    const n = 51
+    const field = { cell, nx: n, nz: n, cover: smoothCover(square(n, 10, 40), n, n, cell) }
+    // 250 m nodes over the same 5 km: every second one falls on a field node (500 m)
+    const m = 21
+    const out = resampleField(field, 250, m, m)
+    for (let j = 0; j < m; j += 2) {
+      for (let i = 0; i < m; i += 2) expect(out[j * m + i]).toBe(field.cover[j * 2.5 * n + i * 2.5])
+    }
+    // node (1, 2) at x = 250 m, between field nodes 2 and 3
+    const between = out[2 * m + 1]
+    const a = field.cover[5 * n + 2]
+    const b = field.cover[5 * n + 3]
+    expect(between).toBe(Math.round((a + b) / 2))
+  })
+
+  it('holds the edge of the field past it', () => {
+    const field = { cell, nx: 2, nz: 2, cover: Uint8Array.from([10, 20, 30, 40]) }
+    // x = 150 m is halfway from node 1 to the held edge: the edge value
+    expect([...resampleField(field, 150, 2, 2)]).toEqual([10, 20, 30, 40])
+    expect([...resampleField(field, 50, 2, 2)]).toEqual([10, 15, 20, 25])
   })
 })

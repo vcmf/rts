@@ -31,7 +31,7 @@ import {
   type Pt,
 } from './campaign-theatre-lib.ts'
 import { cached, sampleGrid } from './terrarium.ts'
-import { forestCover, smoothCover, WOOD_BOX_M, WORLDCOVER_CREDIT } from './worldcover.ts'
+import { forestField, resampleField, WOOD_BOX_M, WORLDCOVER_CREDIT } from './worldcover.ts'
 
 const DATA_FILE = 'prototypes/campaign-1805.data.js'
 const TILE_ZOOM = 9
@@ -189,15 +189,9 @@ async function main() {
     nx: heights.nx,
     nz: heights.nz,
     h: Buffer.from(heights.h.buffer).toString('base64'),
-    // the tree cover a node, 0–255, the south row first, smoothed for printing (tools/worldcover.ts, smoothCover)
-    forest: Buffer.from(
-      smoothCover(
-        await forestCover(proj, -frame.halfX, -frame.halfZ, cell, heights.nx, heights.nz),
-        heights.nx,
-        heights.nz,
-        cell,
-      ),
-    ).toString('base64'),
+    // the tree cover a node, 0–255, the south row first: the frame's one forest field (made here, cached, read again
+    // by the tiles), resampled to this grid (tools/worldcover.ts)
+    forest: Buffer.from(resampleField(await forestField(frame, proj), cell, heights.nx, heights.nz)).toString('base64'),
     forestBoxM: WOOD_BOX_M,
     towns: Object.fromEntries([...towns].map(([id, p]) => [id, p.map(Math.round)])),
     regions: data.regions.map(r => proj.forward(r.lat, r.lon).map(Math.round)),

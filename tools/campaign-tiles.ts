@@ -4,8 +4,9 @@
 // cut into tiles of 256 × 256 nodes under scratch/campaign-tiles/ (git-ignored, never committed):
 //   meta.js: window.CAMPAIGN_TILES = { cell, nx, nz, size, tilesX, tilesZ, scale, params }
 //   t-<i>-<j>.js: window.__campaignTile(i, j, shape, light): the shape in metres / scale as base64 of little-endian
-//     Uint16, the light as base64 of three bytes a node (the sun, the sky, the tree cover: tools/worldcover.ts), each
-//     the south row first; nodes past the grid repeat its edge.
+//     Uint16, the light as base64 of three bytes a node (the sun, the sky, the tree cover: the frame's forest field,
+//     tools/worldcover.ts, the one the theatre resampled), each the south row first; nodes past the grid repeat its
+//     edge.
 // The page (prototypes/campaign-map.html) loads the tiles around the camera when it closes in, and blends them over
 // its own 250 m bake; it uses them only if their params match its own.
 // Reads the theatre (tools/campaign-theatre.ts's output) for the frame, the lowest ground and the lakes; the heights
@@ -29,10 +30,10 @@ import {
 } from './campaign-bake.ts'
 import { projection, type Pt } from './campaign-theatre-lib.ts'
 import { sampleGrid } from './terrarium.ts'
-import { forestCover, smoothCover, WOOD_BOX_M } from './worldcover.ts'
+import { FIELD_CELL, forestField, WOOD_BOX_M } from './worldcover.ts'
 
-// the grid, the tiles' zoom, the tile size in nodes, the shape's storage step in metres
-const CELL = 100
+// the grid (the forest field's), the tiles' zoom, the tile size in nodes, the shape's storage step in metres
+const CELL = FIELD_CELL
 const ZOOM = 10
 const SIZE = 256
 const SCALE = 0.5
@@ -93,18 +94,26 @@ async function bakeLight(shape: Float32Array, grid: Grid): Promise<Uint8Array> {
   const shared = new SharedArrayBuffer(shape.byteLength)
   new Float32Array(shared).set(shape)
   const light = new SharedArrayBuffer(grid.nx * grid.nz * 2)
-  const workers = Math.max(1, os.cpus().length)
-  const band = Math.ceil(grid.nz / workers)
-  await Promise.all(
-    Array.from({ length: workers }, (_, w) => {
-      const job: Job = { shape: shared, light, grid, sun: SUN, j0: w * band, j1: Math.min(grid.nz, (w + 1) * band) }
-      return new Promise<void>((resolve, reject) => {
-        const worker = new Worker(new URL(import.meta.url), { workerData: job })
-        worker.on('message', () => resolve())
-        worker.on('error', reject)
-      })
-    }),
-  )
+  const count = Math.max(1, os.cpus().length)
+  const band = Math.ceil(grid.nz / count)
+  const workers = Array.from({ length: count }, (_, w) => {
+    const job: Job = { shape: shared, light, grid, sun: SUN, j0: w * band, j1: Math.min(grid.nz, (w + 1) * band) }
+    return new Worker(new URL(import.meta.url), { workerData: job })
+  })
+  try {
+    await Promise.all(
+      workers.map(
+        worker =>
+          new Promise<void>((resolve, reject) => {
+            worker.on('message', () => resolve())
+            worker.on('error', reject)
+          }),
+      ),
+    )
+  } finally {
+    // a failed band stops the others: none is left baking
+    await Promise.all(workers.map(worker => worker.terminate()))
+  }
   return new Uint8Array(light)
 }
 
@@ -176,15 +185,13 @@ async function main() {
   })
   sinkLakes(shape, lakeDistance(rings, grid, LAKE_BLUR_M), CELL, SINK)
   console.log(`shape and lakes: ${Math.round(performance.now() - t0)} ms`)
-  // the light on the workers and the tree cover on this thread, side by side (they do not depend on each other); the
-  // cover smoothed as the theatre's is (smoothCover): farm copses fade, the large forests stay
-  const [light, cover] = await Promise.all([
-    bakeLight(shape, grid),
-    forestCover(proj, grid.x0, grid.z0, CELL, grid.nx, grid.nz, 2),
-  ])
-  const forest = smoothCover(cover, grid.nx, grid.nz, CELL)
-  console.log(`light on ${os.cpus().length} cores and forests: ${Math.round(performance.now() - t0)} ms`)
-  const n = writeTiles(dir, grid, shape, light, forest)
+  // the frame's forest field, the theatre's own (cached by tools/campaign-theatre.ts; made here if it is not)
+  const forest = await forestField(frame, proj)
+  if (forest.nx !== grid.nx || forest.nz !== grid.nz) throw new Error("the forest field does not span the tiles' grid")
+  console.log(`forests: ${Math.round(performance.now() - t0)} ms`)
+  const light = await bakeLight(shape, grid)
+  console.log(`light on ${os.cpus().length} cores: ${Math.round(performance.now() - t0)} ms`)
+  const n = writeTiles(dir, grid, shape, light, forest.cover)
   console.log(`${dir}: ${n} tiles of ${SIZE} × ${SIZE} nodes; built in ${Math.round(performance.now() - t0)} ms`)
 }
 
