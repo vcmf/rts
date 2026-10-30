@@ -77,6 +77,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/track-g.md`](plans/active/track-g.md) (Track G: the gameplay map, the lit map far out and the 3D world near on one camera, performance, fog of war; the `epic/gameplay-map` branch),
   [`plans/active/g1-austerlitz-3km.md`](plans/active/g1-austerlitz-3km.md) (Track G G1: Austerlitz at 3 km, a 4× model, its tools run again, the look windows' far rings past the edge as paper),
   [`plans/active/g3-austerlitz-in-3d.md`](plans/active/g3-austerlitz-in-3d.md) (Track G G3: the whole of Austerlitz in 3D: the far ring the whole map, 400 m tiles in detail around the camera, bakes per tile),
+  [`plans/active/g3a-the-whole-map-far.md`](plans/active/g3a-the-whole-map-far.md) (Track G G3a: the far ring the whole map, its coarse light baked offline, paper past the edge, the camera free over it),
   [`plans/active/g2b-buildings-in-the-light.md`](plans/active/g2b-buildings-in-the-light.md) (Track G G2b: the buildings part of the landscape, in its tone and light, their shadows the ground's),
   [`plans/active/g2-staff-light.md`](plans/active/g2-staff-light.md) (Track G G2: the staff map lit as a model under the 3D world's sun and the sky, in the campaign map's palette),
   [`plans/active/look-austerlitz.md`](plans/active/look-austerlitz.md) (Austerlitz on the look page: the look compiler M4 for a window, then the 3D world in tiles, then the zoom handover; a plan),
