@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Feature, Pt } from '../src/map/schema.ts'
 import type { Resolved } from '../src/map/resolve.ts'
-import { bridged, ccw, standing, triangulate } from '../src/render/lit/houses.ts'
+import { bridged, ccw, shadowQuads, standing, triangulate, type Standing } from '../src/render/lit/houses.ts'
 
 const grid = { x0: -20, z0: -20, cell: 2, nx: 20, nz: 20 }
 const rect = (x0: number, z0: number, x1: number, z1: number): Pt[] => [
@@ -118,5 +118,60 @@ describe('M6b: footprints into triangles', () => {
   it('a courtyard bridged into the outline leaves its area uncovered', () => {
     const outline = bridged([rect(-10, -10, 10, 10), rect(-4, -4, 4, 4)])
     expect(area2(outline, triangulate(outline))).toBeCloseTo(400 - 64, 6)
+  })
+})
+
+describe("G2b: the buildings' shadows on the ground", () => {
+  // a sun in the east 30° high
+  const east = { el: 30, az: 90, size: 2.5 }
+  const house = (rings: Pt[][], height: number, roof = true): Standing => ({
+    rings: rings.map(ccw),
+    height,
+    church: false,
+    roof,
+  })
+  // whether a point lies in the shadow's triangles
+  const shaded = (s: { xz: number[]; tris: number[] }, [x, z]: Pt) => {
+    const P = (k: number): Pt => [s.xz[2 * k], s.xz[2 * k + 1]]
+    for (let t = 0; t < s.tris.length; t += 3) {
+      const [a, b, c] = [P(s.tris[t]), P(s.tris[t + 1]), P(s.tris[t + 2])]
+      const d = (p: Pt, q: Pt, r: Pt) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+      const [d1, d2, d3] = [d(a, b, [x, z]), d(b, c, [x, z]), d(c, a, [x, z])]
+      if (!((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0))) return true
+    }
+    return false
+  }
+  it("falls away from the sun, as long as the wall over the tangent of the sun's height", () => {
+    // a 10 m house 6 m high, from x 30 to 40: its shadow runs 10.4 m west of its west wall, to x 19.6
+    const s = shadowQuads([house([rect(30, 25, 40, 35)], 6)], east)
+    expect(shaded(s, [25, 30])).toBe(true)
+    expect(shaded(s, [19.8, 30])).toBe(true)
+    expect(shaded(s, [19.4, 30])).toBe(false)
+    expect(shaded(s, [41, 30])).toBe(false) // none toward the sun
+    expect(shaded(s, [25, 36])).toBe(false) // none beside it
+  })
+  it('from a height raised bz times, at most SHADOW_REACH, and none from a negative bz', () => {
+    const h = [house([rect(30, 25, 40, 35)], 6)]
+    // ×3: 31.2 m west of the wall, to x -1.2
+    expect(shaded(shadowQuads(h, east, 3), [0, 30])).toBe(true)
+    expect(shaded(shadowQuads(h, east, 3), [-2, 30])).toBe(false)
+    // a 1° sun would cast it 344 m: 100 at most
+    expect(shaded(shadowQuads(h, { ...east, el: 1 }, 1), [30 - 99, 30])).toBe(true)
+    expect(shaded(shadowQuads(h, { ...east, el: 1 }, 1), [30 - 101, 30])).toBe(false)
+    expect(shaded(shadowQuads(h, east, -1), [29, 30])).toBe(false)
+    expect(shaded(shadowQuads(h, east), [29, 30])).toBe(true)
+  })
+  it('terraced houses on one wall cast one shadow, with no stripe along their party wall', () => {
+    const s = shadowQuads([house([rect(30, 20, 40, 31)], 6), house([rect(30, 31, 40, 40)], 6)], east)
+    for (const z of [30.9, 31, 31.1]) expect(shaded(s, [25, z])).toBe(true)
+  })
+  it("a courtyard's walls shade it in part; a roofless ruin's floor by its walls", () => {
+    // a 20 m square with an 8 m courtyard (x 36 to 44), 3 m high: the east wing's inner face shades 5.2 m of it
+    const yard = shadowQuads([house([rect(30, 20, 50, 40), rect(36, 26, 44, 34)], 3)], east)
+    expect(shaded(yard, [42, 30])).toBe(true)
+    expect(shaded(yard, [37, 30])).toBe(false)
+    const ruin = shadowQuads([house([rect(30, 25, 40, 35)], 3, false)], east)
+    expect(shaded(ruin, [37, 30])).toBe(true)
+    expect(shaded(ruin, [31, 30])).toBe(false)
   })
 })

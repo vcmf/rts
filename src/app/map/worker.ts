@@ -21,6 +21,7 @@ import { groundOf, overlay, unitKinds, type Ground } from '../../render/lit/over
 import { napoleonic } from '../../rulesets/napoleonic.ts'
 import { classifyNapoleonic } from '../../rulesets/napoleonic-ground.ts'
 import type { CompileReply, CompileRequest, LayerName, OverlayReply, OverlayRequest } from './protocol.ts'
+import { standing } from '../../render/lit/houses.ts'
 
 // the ruleset the overlays read the ground with (the page's one era for now)
 const RULESET = napoleonic
@@ -125,6 +126,7 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles, sun
   const img = draft(L)
   const t3 = performance.now()
   const light = bakeLightCached(L.height, L.nx + 1, L.nz + 1, L.cell, sun, LIGHT_STEP, z)
+  const houses = standing(ex.map.features, L.table, L.built, { x0: L.x0, z0: L.z0, cell: L.cell, nx: L.nx, nz: L.nz })
   const masks = bakeMasks(L)
   const ink = bakeInk(L, waysOf(ex.map.features, L.table))
   const t4 = performance.now()
@@ -161,6 +163,7 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles, sun
     z,
     masks: masks.buffer as ArrayBuffer,
     ink: ink.buffer as ArrayBuffer,
+    houses,
     ms: { validate: t1 - t0, apply: t2 - t1, draw: t3 - t2, bake: t4 - t3, ground: tg },
   }
   ;(self as unknown as Worker).postMessage(reply, [

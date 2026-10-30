@@ -5,6 +5,7 @@ import type { Resolved } from '../../map/resolve.ts'
 import type { LAYER_NAMES } from '../../map/apply.ts'
 import type { Sun } from '../../render/lit/bake.ts'
 import type { OverlaySpec } from '../../render/lit/overlays.ts'
+import type { Standing } from '../../render/lit/houses.ts'
 
 export interface CompileRequest {
   type?: 'compile'
@@ -45,6 +46,7 @@ export interface Compiled {
   lightStep: number
   masks: ArrayBuffer
   ink: ArrayBuffer // the ink's distance field on the cells (bakeInk), RGBA
+  houses: Standing[] // the buildings that stand (standing): the view raises them and casts their shadows
   sun: Sun // the sun the light was baked for: the shader's slope light and the houses take the same
   z: number // the heights' exaggeration it was baked with: the shader's slope light takes the same
   ms: { validate: number; apply: number; draw: number; bake: number; ground: number }

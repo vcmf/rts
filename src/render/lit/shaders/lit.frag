@@ -19,21 +19,12 @@ uniform float uCell, uDatum, uFlat, uInkRange, uLightStep, uZ, uSkyK, uLamp, uFl
 uniform vec3 uSun;           // toward the sun (x east, y up, z north), a unit vector
 uniform vec3 uPaper, uKey, uSkyC, uShallow, uDeep, uContourMinor, uContourIndex, uLine, uBarrier;
 
+#include <light>
+
 // a hairline where a distance field crosses 0: about a pixel wide at any zoom
 float hair(float sd) {
   float px = sd / max(fwidth(sd), 1e-5);
   return 1.0 - smoothstep(0.5, 1.3, abs(px));
-}
-
-// the height at a point, bilinear between the four nodes round it (m above sea level)
-float heightAt(vec2 xz) {
-  vec2 u = (xz - uX0Z0) / uCell;
-  vec2 i = clamp(floor(u), vec2(0.0), uNodes - 2.0);
-  vec2 f = clamp(u - i, 0.0, 1.0);
-  ivec2 a = ivec2(i);
-  float h00 = texelFetch(uHeight, a, 0).r, h10 = texelFetch(uHeight, a + ivec2(1, 0), 0).r;
-  float h01 = texelFetch(uHeight, a + ivec2(0, 1), 0).r, h11 = texelFetch(uHeight, a + ivec2(1, 1), 0).r;
-  return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y) + uDatum;
 }
 
 void main() {
@@ -113,28 +104,9 @@ void main() {
      sky from its bed, a basin sunk into the model as K1's; the ground past the map's edge lies flat. Divided by what flat open ground gets, so that comes out in the
      paper's own tone: the faces toward the sun warmer, the shade cooler */
   {
-    /* the differences one-sided within a cell of the map's edge (the heights past it are held, which would halve
-       the slope there) */
-    float gx = 0.0, gz = 0.0;
-    if (inside > 0.0) {   /* past the map's edge the ground is flat: no height to read */
-      vec2 lo = uX0Z0, hi = uX0Z0 + (uNodes - 1.0) * uCell;
-      vec2 p0 = clamp(vW.xz - uCell, lo, hi), p1 = clamp(vW.xz + uCell, lo, hi);
-      gx = (heightAt(vec2(p1.x, vW.z)) - heightAt(vec2(p0.x, vW.z))) / max(p1.x - p0.x, 1e-3) * uZ;
-      gz = (heightAt(vec2(vW.x, p1.y)) - heightAt(vec2(vW.x, p0.y))) / max(p1.y - p0.y, 1e-3) * uZ;
-    }
-    vec3 n = normalize(mix(vec3(-gx, 1.0, -gz), vec3(0.0, 1.0, 0.0), max(waterA, 1.0 - inside)));
-    vec2 ln = (vW.xz - uX0Z0) / (uCell * uLightStep);   /* light node i at the centre of texel i */
-    vec2 B = mix(vec2(1.0), texture2D(uLight, (ln + 0.5) / uLightNodes).rg, inside);
-    float key = min(max(0.0, dot(n, uSun)) / uSun.y, 3.0);   /* a face lit three times flat ground at most: a low ?sun= */
-    float sky = B.g * (0.55 + 0.45 * n.y);
-    vec2 toSun = normalize(uSun.xz + vec2(1e-6, 0.0));
-    float side = clamp(dot((vW.xz - uX0Z0) / uSize * 2.0 - 1.0, toSun) * 0.5, -0.5, 0.5);
-    vec3 keyC = uKey * mix(vec3(1.0), vec3(1.06, 0.96, 0.84), side * 2.0 * uLamp);
-    vec3 light = keyC * key * B.r * (1.0 + uLamp * side) * (1.0 - uSkyK) + uSkyC * sky * uSkyK;
-    light /= uKey * (1.0 - uSkyK) + uSkyC * uSkyK;
-    vec3 lit = mapC * max(light, vec3(uFloor));
-    /* a soft shoulder: the brightest faces glow toward white instead of clipping */
-    mapC = min(lit / (1.0 + 0.18 * max(lit - 1.0, 0.0)), vec3(1.0));
+    vec3 n = normalize(mix(groundNormal(vW.xz, inside), vec3(0.0, 1.0, 0.0), waterA));
+    vec2 B = bakedAt(vW.xz, inside);
+    mapC = litBy(mapC, lightOf(n, vW.xz, B.r, B.g));
   }
 
   vec3 col = mapC * (0.93 + (g1 - 0.5) * 0.16 + (fine - 0.5) * 0.12);   /* the paper's grain */

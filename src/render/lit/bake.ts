@@ -191,8 +191,7 @@ export function lightCache(
 
 /**
  * The cells' mask, as RGBA bytes, the south row first: R the water's depth (0..1 over 0..WATER_FULL m), G unused, B
- * the water, A the yards (a
- * village's, a farm's, ground.yard).
+ * the water, A the yards (a village's, a farm's, ground.yard).
  */
 export function bakeMasks(L: Pick<Layers, 'nx' | 'nz' | 'water' | 'depth' | 'table' | 'built' | 'ground'>): Uint8Array {
   const n = L.nx * L.nz

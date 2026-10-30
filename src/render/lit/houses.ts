@@ -5,6 +5,13 @@ import type { Feature, Pt } from '../../map/schema.ts'
 import type { Resolved } from '../../map/resolve.ts'
 import { inRing, ringArea2 } from '../../map/geometry.ts'
 import { ringsOf } from '../../map/reach.ts'
+import { clampSun, sunXZ, type Sun } from './bake.ts'
+
+// m: the longest shadow a building casts (a low ?sun= or a large ?bz= would cast it across the map)
+export const SHADOW_REACH = 100
+// the buildings' shadows cast from their wall heights raised this many times: their true heights (the owner, G2b:
+// 1 first; ?bz= to try others)
+export const BUILDING_BZ = 1
 
 /** A building as the view stands it: its outer ring and its courtyards (counter-clockwise), wall height, kind. */
 export interface Standing {
@@ -133,4 +140,33 @@ export function triangulate(ring: Pt[]): [number, number, number][] {
   }
   for (let k = 1; k + 1 < left.length; k++) out.push([left[0], left[k], left[k + 1]])
   return out
+}
+
+/**
+ * The buildings' shadows on the ground (G2b, decision 0090): along every wall of each building (a courtyard's too), a
+ * quad from its foot to where the sun casts its top, `bz` times its height (BUILDING_BZ by default) at the sun's
+ * height, at most SHADOW_REACH. Their union is the shadow, the footprint's own swept copy within it; the view draws it
+ * over the plane in the ground's light, darkening each pixel once (shaders/shadows.frag). As x, z pairs and triangles.
+ */
+export function shadowQuads(houses: Standing[], sun: Sun, bz = BUILDING_BZ): { xz: number[]; tris: number[] } {
+  const lit = clampSun(sun)
+  const [lx, lz] = sunXZ(lit)
+  const cast = 1 / Math.tan((lit.el * Math.PI) / 180)
+  const xz: number[] = []
+  const tris: number[] = []
+  for (const h of houses) {
+    const reach = Math.min(SHADOW_REACH, h.height * Math.max(0, bz) * cast)
+    const dx = -lx * reach
+    const dz = -lz * reach
+    for (const ring of h.rings) {
+      for (let k = 0; k < ring.length; k++) {
+        const [ax, az] = ring[k]
+        const [bx, bz2] = ring[(k + 1) % ring.length]
+        const v = xz.length / 2
+        xz.push(ax, az, bx, bz2, bx + dx, bz2 + dz, ax + dx, az + dz)
+        tris.push(v, v + 1, v + 2, v, v + 2, v + 3)
+      }
+    }
+  }
+  return { xz, tris }
 }
