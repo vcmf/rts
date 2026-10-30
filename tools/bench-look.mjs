@@ -113,4 +113,21 @@ if (res.traceSummary) {
     )
   }
 }
+// each run's main-thread work outside rendering (?benchtrace=1: the page's sim tick, the placing, the uploads: battle
+// threads PR 6's measure), a frame's mean and p95, and its long tasks (version 9; null: the browser reports none)
+const traced = res.runs.filter(r => r.trace?.fields?.simMs)
+if (traced.length || res.runs.some(r => r.longTasks !== undefined)) {
+  console.log('camera            arm      off-render mean   p95 | long tasks (ms)')
+  for (const r of res.runs) {
+    const F = r.trace?.fields
+    let off = ''
+    if (F?.simMs) {
+      const a = F.simMs.map((v, i) => v + F.placeMs[i] + F.tiMs[i]).sort((x, y) => x - y)
+      const mean = a.reduce((x, y) => x + y, 0) / a.length
+      off = `${f(mean)} ${f(a[Math.min(a.length - 1, Math.floor(0.95 * a.length))])}`
+    } else off = '     –      –'
+    const lt = r.longTasks == null ? '–' : `${r.longTasks.n} (${r.longTasks.ms.toFixed(0)})`
+    console.log(`${r.cam.padEnd(18)}${r.arm.padEnd(9)}     ${off} | ${lt}`)
+  }
+}
 if (!saved) console.log(`wrote ${path.relative(ROOT, out)}`)

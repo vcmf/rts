@@ -119,6 +119,10 @@ export interface Formations {
   bar: Float64Array
   barMax: Float64Array
   cost: Float64Array
+  // what the effective bar reads besides the bar, at the last morale step (morale.ts): the back exposed's drain
+  // (threatPass) and the secured flanks; state, so a published frame's world reads the bar the sim does
+  drain: Float64Array
+  flanks: Uint8Array
   mstate: Uint8Array
   startMen: Int32Array
   // the rout (morale.ts): its direction, fixed at the break; its phase (RP_*); the runs made so far
@@ -250,8 +254,6 @@ export interface World {
     menNow?: Int32Array
     melee?: Melee
     fireGeoTick?: number
-    drain?: Float64Array // each battalion's drain this tick, the back exposed (morale.ts, threatPass)
-    flanks?: Uint8Array // each battalion's secured flanks at its last morale step (morale.ts), for the page
   }
 }
 
@@ -322,6 +324,8 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     bar: f64(N),
     barMax: f64(N),
     cost: f64(N),
+    drain: f64(N),
+    flanks: u8(N),
     mstate: u8(N),
     startMen: i32(N),
     routX: f64(N),

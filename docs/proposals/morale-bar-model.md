@@ -66,7 +66,7 @@ The bar `B` is a stock: losses and shocks take points from it, recovery and leve
 Two things act on the states without being part of the stock, each while its cause stands, as today:
 
 - **support** `S = support.bonus × (secured flanks)`, points (today's bonus on the target × k);
-- **the back exposed** (decision 0081): the drain `D` (`threatPass`, U1, in points), down to the wavering threshold at
+- **the back exposed** (decision 0086): the drain `D` (`threatPass`, U1, in points), down to the wavering threshold at
   most.
 
 ```
@@ -79,7 +79,7 @@ E  = E0 − min(D, max(0, E0 − wavering.enter × Bmax))
   - **P-34:** each secured flank adds exactly `support.bonus` to `E` (G-03: a supported line routs later, by
     `support.bonus / loss` of its men per flank).
   - **P-35:** the drain never takes `E` below `wavering.enter × Bmax`; on a formation already below it, it does nothing;
-    the drain alone never routs (decision 0081).
+    the drain alone never routs (decision 0086).
 
 ## 5. The states
 
@@ -88,7 +88,7 @@ The share `s = E / Bmax`. With hysteresis, as today:
 - **up:** one step at a time: wavering to shaken at `wavering.back` or more, shaken to steady at `shaken.back` or more;
 - **the rout:** at `E ≤ 0` it routs, as today at the rout threshold. `B` is not clamped at 0, so support decides
   the tick of the rout as it decides it today.
-- A wavering formation keeps fighting (decision 0082); what else wavering changes is U3's.
+- A wavering formation keeps fighting (decision 0087); what else wavering changes is U3's.
 
 - **Properties.**
   - **P-36:** the states are a function of `s` and the state before, with the hysteresis above; a formation never goes
@@ -189,7 +189,7 @@ and its men lost at once, and a smaller bar breaks on contact, with no melee to 
 ## 10. Where this departs from the unit model (for the owner)
 
 1. **The drains stay a pressure, not a per-second emptying.** The unit model's § Morale lists drains among what empties
-   the bar "per second while their cause stands"; decision 0081 made the back exposed a pressure while it lasts, down
+   the bar "per second while their cause stands"; decision 0086 made the back exposed a pressure while it lasts, down
    to wavering at most, and U1 built it so. It stays that, in points (§ 4). G-09's fire without reply and D-04's guns
    (U4) can be drains of the same kind.
 2. **Support adds to the effective bar, as today,** not to the recovery rate. A faster recovery would not hold a line
@@ -204,7 +204,7 @@ and its men lost at once, and a smaller bar breaks on contact, with no melee to 
    against level 1's bar": the drains cannot empty a bar (point 1), and 43 + 57 points would refuse today's numbers
    against a recruit's 70.
 5. **The rally** cuts the maximum by a share and refills half of it (G-08), in place of today's quality cost.
-6. **A wavering formation does not fall back** (decision 0082); the unit model's § Morale still says it does, and is
+6. **A wavering formation does not fall back** (decision 0087); the unit model's § Morale still says it does, and is
    corrected with U2.
 
 ## 11. Risks

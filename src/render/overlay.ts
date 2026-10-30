@@ -2,7 +2,9 @@
 // formations meet. Each company's block and each bin as the hull of its places (the places the footprint gate tests,
 // from src/sim/geometry.ts), bins shaded by their lag, the pairs of companies that touch, each formation's status and
 // its queue of orders, and each formation's sectors (front, flank, rear; docs/proposals/sectors-model.md). It reads the
-// world at its tick, never writes to it, and is drawn only while it is on.
+// world at its tick, never writes to it, and is drawn only while it is on. On a published frame's world (the battle in
+// its workers: decision 0081) the claim grid, scratch no frame carries, is built again here from the formations as
+// they stand.
 import {
   type World,
   type Placed,
@@ -33,6 +35,7 @@ import {
   FACE_TRAIL,
   type Faces,
   type FireGeo,
+  buildClaims,
 } from '../sim/index.ts'
 import { toS, type View } from './map.ts'
 
@@ -85,8 +88,15 @@ export class Overlay {
   private shadow: World['scratch'] = {}
   private geo: { G: FireGeo; F: Faces } | null = null
   private wt = new Float64Array(3)
-  constructor(w: World) {
+  // the worlds drawn are copies (published frames), whose claim grid is built here; else the sim's own is read. The
+  // tick each copy's grid was built at by this overlay (the page makes a new one after going to a time: a copy's grid
+  // from before it may be another branch's at the same tick)
+  private readonly copies: boolean
+  private readonly built = new WeakMap<World, number>()
+  /** `copies`: the worlds drawn are published frames' (their scratch the page's own), not the battle's. */
+  constructor(w: World, copies = false) {
     this.P = mkPlaced(w)
+    this.copies = copies
   }
 
   /** Draws the layers in `on` for the world as it stands at its tick. */
@@ -96,6 +106,14 @@ export class Overlay {
       this.near = null
       this.geo = null
       this.at = w.meta[M_TICK]
+    }
+    // a frame's world (each slot its own scratch) builds its grid once a tick: every formation claimed afresh where
+    // it stands, not the last build's cells stamped again (claims.ts buildClaims)
+    const C = w.scratch.claims
+    if (this.copies && w.claims && on.has('cells') && this.built.get(w) !== w.meta[M_TICK]) {
+      if (C) C.built = -1
+      buildClaims(w)
+      this.built.set(w, w.meta[M_TICK])
     }
     const P = this.P
     const near = (this.near ??= on.has('contacts') ? contacts(w, P, NEAR) : null) ?? []

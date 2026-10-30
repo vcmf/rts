@@ -15,7 +15,7 @@ const SAVE_MAGIC = 0x57535452 // 'RTSW'
 // morale machine (S1c-2); 7: unit types (S1d-1); 8: charges, melee and the square (S1d-2); 9: the battery's shots
 // (S1d-3); 10: the men who left the field, per side (S1e-1); 11: the end and the men spawned per side (S1e-2);
 // 12: a pending command may be `refused` (#155), which an older sim would not read; 13: the wavering fall-back's
-// falling and fellBack removed (U1, decision 0082); 14: the morale bar and levels in place of quality, morale and
+// falling and fellBack removed (U1, decision 0087); 14: the morale bar and levels in place of quality, morale and
 // baseMen (U2)
 const SAVE_FORMAT = 14
 

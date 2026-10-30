@@ -160,6 +160,33 @@ describe('where shadows overlap (the decal at a fragment, decalFragment)', () =>
     const z = decalFragment(1, 0.5, 0, 0)
     expect(Number.isFinite(z.cover) && z.cover === 0).toBe(true)
   })
+  it("an arm's darken (SH_DARKEN, 1.18 the guns') raises the share alone: cover at most 1, the darkest capped", () => {
+    for (const darken of [1.18, 1.5]) {
+      for (const s of [0, 0.3, 0.7, 1]) {
+        for (const g of [0, 0.25, 0.5, 1]) {
+          const plain = decalFragment(s, g, c.foot, c.dark)
+          const d = decalFragment(s, g, c.foot, c.dark, darken)
+          expect(d.cover).toBeLessThanOrEqual(1)
+          expect(d.cover).toBeGreaterThanOrEqual(plain.cover)
+          expect(d.cover).toBeCloseTo(Math.min(1, plain.cover * darken), 12)
+          expect(d.dark).toBe(plain.dark)
+          // the pixel never past the ground's shade at the look's darkest (decision 0071)
+          const k = [0.5, 0.55, 0.7]
+          const full = decalPixel(k, d.dark, 1, 1, false)
+          decalPixel(k, d.dark, 1, d.cover, false).forEach((v, i) => expect(v).toBeGreaterThanOrEqual(full[i] - 1e-12))
+        }
+      }
+    }
+    expect(decalFragment(0.6, 0.3, c.foot, c.dark, 1)).toEqual(decalFragment(0.6, 0.3, c.foot, c.dark))
+    // the mirror's order: the darken after the feet's boost, before the cover is taken (unitdecal.frag)
+    const frag = readFileSync(new URL('../src/look/shaders/unitdecal.frag', import.meta.url), 'utf8').replace(
+      /\s+/g,
+      '',
+    )
+    const at = (t: string) => frag.indexOf(t)
+    expect(at('v*=SH_DARKEN;')).toBeGreaterThan(at('v*=mix(uShFootK.x'))
+    expect(at('floata=min(1.0,v/dm);')).toBeGreaterThan(at('v*=SH_DARKEN;'))
+  })
 })
 
 describe("the darkening's gain (shadowShade)", () => {
@@ -696,6 +723,10 @@ describe('the contact shaders match their mirrors (the source)', () => {
       'vCt=(vec2(dot(P,normalize(finalWorld[0].xz)),dot(P,normalize(finalWorld[2].xz)))-ov.xy)/max(ov.zw+uShContact.x,1.0e-3);',
     )
     once(v, 'vCell=c/uShapeCell.xy;')
-    once(v, 'floatlift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);#ifdefSH_CONTACTlift=max(lift,CONTACT_FLOOR);#endif')
+    // (the soldier's ramp from his soles; a spread figure's floored, SH_SPREAD: test/arms.test.ts)
+    once(
+      v,
+      'floatlift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);#endif#ifdefSH_CONTACTlift=max(lift,CONTACT_FLOOR);#endif',
+    )
   })
 })

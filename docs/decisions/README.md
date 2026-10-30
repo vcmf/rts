@@ -47,7 +47,7 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0019](0019-shading-data-from-authored-surface.md) | Shading data finer than the heightfield comes from the authored surface | proposed |
 | [0020](0020-track-m-on-an-epic-branch.md) | The map engine is Track M, built on an epic branch | accepted |
 | [0021](0021-two-metre-map-cell.md) | Every map grid is built on one 2 m cell | accepted |
-| [0022](0022-soft-ramp-for-foliage.md) | Foliage crowns are painted with a soft ramp | accepted |
+| [0022](0022-soft-ramp-for-foliage.md) | Foliage crowns are painted with a soft ramp (amended by 0084) | accepted |
 | [0024](0024-blur-as-player-option.md) | Depth of field in gameplay is a player option, on by default | accepted |
 | [0025](0025-review-by-kind-of-pr.md) | Review rounds by kind of PR: code as before, docs one round at most, research none | accepted |
 | [0026](0026-crops-under-a-soldiers-chest.md) | Standing crops are drawn under a soldier's chest | accepted |
@@ -72,7 +72,7 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0045](0045-render-scale-easu.md) | The render scale 0.9 from the closest zoom, upscaled by EASU | accepted |
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
 | [0047](0047-figures-cast-runtime-shadows.md) | The figures cast runtime shadows from a map of their own | proposed |
-| [0048](0048-battle-in-a-worker.md) | The battle runs in a worker, its soldiers stepped at 12 fps | proposed |
+| [0048](0048-battle-in-a-worker.md) | The battle runs in a worker, its soldiers stepped at 12 fps | accepted |
 | [0049](0049-simple-shadows-beyond-close-zoom.md) | The figures' shadow map only up close; one simple shadow a soldier beyond | proposed |
 | [0050](0050-armies-32k-at-120fps.md) | 32,000 soldiers at 120 fps: four steps, each kept only if measured (experimental) | proposed |
 | [0051](0051-closer-zoom-nearest-lod.md) | The closest zoom at 15 m, held over high ground, with the full figure for the men nearest | proposed |
@@ -96,11 +96,17 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0069](0069-scans-placed-in-their-relief-frame.md) | A scan to trace from is a source placed in its relief file's frame, bent through control points, kept out of git | accepted |
 | [0070](0070-a-field-as-a-scale-model.md) | A real field may be fitted to a map as a scale model: distances and heights scaled by one factor (amends 0061 and 0063) | accepted |
 | [0071](0071-soldier-contact-shadow.md) | A contact shadow under the soldiers' feet; their shadows no darker than the ground's painted shadow (amends 0062, supersedes 0067's values; its oval superseded by 0074) | accepted |
+| [0072](0072-battle-threads-pr6-not-needed.md) | Battle threads: no PR 6; the look page's placing goes to the men worker instead | accepted |
 | [0073](0073-modern-works-mended-from-their-surroundings.md) | Modern works are mended out of real relief by rebuilding the ground from what lies around them | accepted |
 | [0074](0074-soldier-shadow-per-step.md) | The soldiers' shadow from their pose up close, baked per animation step; no contact oval (amends 0062, supersedes 0071's oval) | accepted |
+| [0075](0075-arms-share-the-units-pipeline.md) | The cavalry and the artillery share the units pipeline; a figure on more than its root measures its shadow from its contacts (amends 0062, 0074) | proposed |
 | [0077](0077-a-pond-levels-at-its-lower-bank.md) | A pond with no level of its own levels at its lower bank; a dam is drawn, never implied | accepted |
 | [0078](0078-editor-writes-the-intent-file-in-place.md) | The editor edits the intent file in the page and saves only what changed, through the dev server | accepted |
 | [0079](0079-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |
-| [0080](0080-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | superseded in part by 0081 |
-| [0081](0081-the-back-exposed.md) | The back exposed: a pressure while it lasts, not a retreat detected (supersedes 0080's retreat shock) | accepted |
-| [0082](0082-wavering-keeps-fighting.md) | A wavering battalion keeps fighting: no automatic fall-back | accepted |
+| [0080](0080-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | superseded in part by 0086 |
+| [0081](0081-the-bench-timeline-in-the-battle.md) | The bench's timeline lives in the battle, wherever it runs; its overlay is a view on the page | accepted |
+| [0082](0082-light-map-at-half-a-metre.md) | The baked light map at about half a metre a texel (1536² over the 800 m tile, the target 0.53 m) | accepted |
+| [0084](0084-a-soft-mid-tone-on-figures-and-buildings.md) | A soft mid tone on the figures, the buildings and the nature meshes (amends 0022) | accepted |
+| [0085](0085-upright-meadow-and-wheat-fill.md) | The meadow's grass upright and shorter, the wheat filled (`?grassup`, `?wheatfill`; amends 0041's clumps) | accepted |
+| [0086](0086-the-back-exposed.md) | The back exposed: a pressure while it lasts, not a retreat detected (supersedes 0080's retreat shock) | accepted |
+| [0087](0087-wavering-keeps-fighting.md) | A wavering battalion keeps fighting: no automatic fall-back | accepted |

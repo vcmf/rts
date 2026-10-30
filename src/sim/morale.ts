@@ -12,7 +12,7 @@
 // fan about the stored one. Enemies that reach a router cut it down (the melee step). A router
 // whose run has ended, safe and calm, rallies: its losses so far are written off and its maximum is cut. A
 // battalion that breaks too often, or routs below half strength, shatters and runs for good. A wavering
-// battalion keeps fighting until it recovers or routs (decision 0082): nothing moves it back by itself.
+// battalion keeps fighting until it recovers or routs (decision 0087): nothing moves it back by itself.
 //
 // Everything one battalion reads of another (its state, whether it broke, its men) was fixed before this
 // step began, so no outcome depends on the order battalions are visited in. One thing does: routs take orders
@@ -92,14 +92,14 @@ export function effectiveBar(w: World, i: number, flanks: number): number {
   const f = w.f
   const M = w.cr.rs.morale
   const e0 = f.bar[i] + M.support.bonus * flanks
-  return e0 - Math.min(w.scratch.drain?.[i] ?? 0, Math.max(0, e0 - M.wavering[0] * f.barMax[i]))
+  return e0 - Math.min(f.drain[i], Math.max(0, e0 - M.wavering[0] * f.barMax[i]))
 }
 /**
  * Formation i's effective bar as a share of its maximum, for the page: 0 at the rout, 1 full; with the flanks its
  * last morale step secured.
  */
 export function moraleShare(w: World, i: number): number {
-  return effectiveBar(w, i, w.scratch.flanks?.[i] ?? 0) / w.f.barMax[i]
+  return effectiveBar(w, i, w.f.flanks[i]) / w.f.barMax[i]
 }
 
 // step 12 for battalion i, after its casualties (`lost`, step 11)
@@ -130,9 +130,8 @@ export function moraleStep(w: World, i: number, lost: number): void {
     if (f.bar[i] < ceiling) f.bar[i] = Math.min(ceiling, f.bar[i] + M.regen * DT)
   }
   if (s !== MS_ROUTING) f.bar[i] -= near.shock + owedShock // routing and shattered (returned above) are not shocked
-  const flanks = w.scratch.flanks ?? (w.scratch.flanks = new Uint8Array(MAX_FORMATIONS))
-  flanks[i] = near.left + near.right
-  const e = effectiveBar(w, i, flanks[i])
+  f.flanks[i] = near.left + near.right
+  const e = effectiveBar(w, i, f.flanks[i])
   const m = e / f.barMax[i]
   if (s === MS_ROUTING) {
     if (men < M.shatter * f.startMen[i]) f.mstate[i] = MS_SHATTERED
@@ -269,7 +268,7 @@ export function drainBy(w: World, G: FireGeo, e: number, j: number): number {
 export function threatPass(w: World): void {
   const f = w.f
   const N = MAX_FORMATIONS
-  const D = w.scratch.drain ?? (w.scratch.drain = new Float64Array(N))
+  const D = f.drain
   D.fill(0)
   let any = false
   for (let j = 0; j < N && !any; j++) if (f.alive[j] && !outOfFight(f.mstate[j]) && enemyNear(w, j)) any = true
@@ -450,6 +449,8 @@ export function spawnMorale(w: World, i: number, level: number, bar?: number): v
   f.barMax[i] = bar ?? L.bar
   f.bar[i] = f.barMax[i]
   f.cost[i] = 0
+  f.drain[i] = 0
+  f.flanks[i] = 0
   f.mstate[i] = MS_STEADY
   f.startMen[i] = menOf(w, i)
   f.brokeTick[i] = -1

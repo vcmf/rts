@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-29
 code: [src/sim/melee.ts, src/sim/formation.ts, src/sim/claims.ts, src/sim/commands.ts, src/sim/morale.ts, src/sim/sectors.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-charge.ts, tools/calibrate-charge.ts, test/charge.test.ts]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0080-melee-holds-cornered-routers-cut-down, 0081-the-back-exposed]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0080-melee-holds-cornered-routers-cut-down, 0086-the-back-exposed]
 ---
 
 # Charges, melee and the square (S1d-2)
@@ -118,7 +118,7 @@ men of its companies within `contact + hold` of each.
   their men.
 - **Strength:** `strength[kind] × (1 − cohesion × disorder) × the fire's morale-state factor`. Changing
   shape counts as full disorder.
-- **No fire:** neither side fires (`mayFire`); a wavering battalion keeps fighting (decision 0082).
+- **No fire:** neither side fires (`mayFire`); a wavering battalion keeps fighting (decision 0087).
 - **It ends when:**
   - either side is out of the fight, or gone;
   - they are out of contact;

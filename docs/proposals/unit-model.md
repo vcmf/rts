@@ -244,7 +244,7 @@ against cavalry under fire is the period's central dilemma (L-01).
 - turning costs time (Face about 3 s; a change front tens of seconds).
 
 A battalion that marches across an enemy's front, or turns its back to retire under fire, pays all four (A-10,
-F-06). **The back exposed** (decision 0081): a battalion whose flank or back is turned to an enemy that can hurt it
+F-06). **The back exposed** (decision 0086): a battalion whose flank or back is turned to an enemy that can hurt it
 (that could fire on it, in range with a clear line, or charge it) is drained for as long as it stays so, whatever
 orders turned it. A redeployment in the open within the enemy's reach costs nerve; behind a screen of friends, or beyond
 range, nothing. From a melee there is no retiring at all (§ Collision).
@@ -387,7 +387,7 @@ with the status "wavering: will not advance":
 - **toward an enemy:** the step's direction is within 60° of the direction to an enemy in the fight within fire
   range (`fire.maxRange`), so at least half the step closes on it. A march across an enemy's front is not dropped,
   and is punished by the sectors instead (A-10);
-- **then:** it fires if it may, and stays where it is: there is no fall-back (decision 0082);
+- **then:** it fires if it may, and stays where it is: there is no fall-back (decision 0087);
 - **dropped, not held:** nothing resumes on its own; the player orders it forward again once it has recovered;
 - **charges and assaults:** a wavering formation cannot be ordered to charge (refused: "wavering"), and a charge it
   is making is dropped by this rule until it reaches its test distance. From the test on, the test decides
@@ -473,7 +473,7 @@ section (its § 10, the owner's choices), the notes below say so.
   and only shocks wear off. Supports (secured flanks; a commander near, S2) add to the effective bar (U2), not to the
   rate.
 - **The states** come from the share of the bar left, with a little hysteresis: steady above 60%, shaken above
-  30%, wavering below it (fires worse, will not advance; it does not fall back, decision 0082). **At 0 it flees:**
+  30%, wavering below it (fires worse, will not advance; it does not fall back, decision 0087). **At 0 it flees:**
   it routs.
 - **Rally:** a router out of danger rallies as today (no enemy within `rally.safe`, no loss for `rally.calm`).
   - Like today's rally (which counts losses from its men now, `baseMen`), it writes off what its losses so far have

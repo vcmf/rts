@@ -201,9 +201,8 @@ function curvy(p: readonly Pt[], amp: number, k: number): Pt[] {
     return [pt[0] - (dz / l) * m, pt[1] + (dx / l) * m] as Pt
   })
 }
-// a line resampled every `step` m along it (its ends kept): the roads' segments, few enough a cell
-// (src/look/world/data.ts)
-function resample(p: readonly Pt[], step: number): Pt[] {
+/** A line resampled every `step` m along it (its ends kept): the roads' segments, few enough a cell (data.ts). */
+export function resample(p: readonly Pt[], step: number): Pt[] {
   const out: Pt[] = [p[0]]
   let carry = 0
   for (let i = 0; i < p.length - 1; i++) {
@@ -484,6 +483,33 @@ export function fieldAt(g: CoverGrid, x: number, z: number): number {
   const i = Math.floor((x - g.x0) / g.cell)
   const j = Math.floor((z - g.z0) / g.cell)
   return i < 0 || j < 0 || i >= g.n || j >= g.n ? 0 : g.tex[(j * g.n + i) * 4 + 1]
+}
+
+/**
+ * A finer cover (a map world's, src/look/world/from-map.ts) on coarser cells of `cell` m, for the page's per-frame
+ * shaders (the same size as the demo's; the macro colour's bakes read the fine one: src/look/macro.ts). Each coarse
+ * texel takes its class, field and furrow from the fine cell just past its centre (so a road's class spreads no wider
+ * than its cells), and the least wear of its k × k fine cells, so its wear is never more than the ground's own distance
+ * to a line plus a fine cell's half diagonal (the roads' gate, SPEC.road.near, allows a coarse cell's; tested in
+ * `test/look-from-map.test.ts`). A cover already that coarse comes back as it is.
+ */
+export function coarsenCover(g: CoverGrid, cell: number): CoverGrid {
+  const k = Math.round(cell / g.cell)
+  if (k <= 1) return g
+  const n = Math.round(g.n / k)
+  const tex = new Uint8Array(n * n * 4)
+  const h = k >> 1
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const at = ((j * k + h) * g.n + i * k + h) * 4
+      const o = (j * n + i) * 4
+      tex.set(g.tex.subarray(at, at + 4), o)
+      for (let q = 0; q < k; q++) {
+        for (let p = 0; p < k; p++) tex[o + 3] = Math.min(tex[o + 3], g.tex[((j * k + q) * g.n + i * k + p) * 4 + 3])
+      }
+    }
+  }
+  return { n, cell: g.cell * k, x0: g.x0, z0: g.z0, tex }
 }
 
 // Run-length coding by rows (classes lie in long runs): per run, the length (u16, little-endian) and the 4 bytes

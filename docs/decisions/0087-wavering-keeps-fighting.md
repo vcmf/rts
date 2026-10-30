@@ -3,13 +3,13 @@ status: accepted
 date: 2026-10-27
 ---
 
-# 0082 A wavering battalion keeps fighting: no automatic fall-back
+# 0087 A wavering battalion keeps fighting: no automatic fall-back
 
 ## Context
 
 Since S1c-2 a wavering battalion with no orders, its morale still falling and an enemy in front within range, Retired
 15 m once by itself (`docs/systems/fire-morale.md`, the wavering fall-back). U1's drain of a back exposed to the enemy
-(decision 0081) lowers the morale's target, and a drain looks to that rule like a fall: a wavering battalion would
+(decision 0086) lowers the morale's target, and a drain looks to that rule like a fall: a wavering battalion would
 retire because an enemy stood on its flank, with no shot fired. Mending the trigger (a share of recent losses) failed
 review on how companies actually fire. In Total War a wavering unit keeps fighting until it recovers or routs.
 
@@ -23,7 +23,7 @@ review on how companies actually fire. In Total War a wavering unit keeps fighti
 ## Consequences
 
 Good: one rule fewer; nothing reads the morale's fall, so the drain needs no exception; the player decides when to
-pull a shaken line back (and pays for it, decision 0081). Bad: a battered line no longer gives a few metres on its own
+pull a shaken line back (and pays for it, decision 0086). Bad: a battered line no longer gives a few metres on its own
 before it breaks; the fire calibration (`tools/calibrate-fire.ts`) and the goldens move.
 
 ## Alternatives considered

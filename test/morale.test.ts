@@ -354,7 +354,7 @@ describe('flank support', () => {
   })
 })
 
-describe('a wavering battalion keeps fighting (decision 0082)', () => {
+describe('a wavering battalion keeps fighting (decision 0087)', () => {
   it('P-24: with no orders, losing men to an enemy in front of it, it stands and fires; it never Retires by itself', () => {
     // side 1 at x = −10 facing west, an enemy firing at it 100 m west; its bar set into wavering (the old fall-back's
     // case)
@@ -381,7 +381,7 @@ describe('a wavering battalion keeps fighting (decision 0082)', () => {
   })
 })
 
-describe('the back exposed (decision 0081, sectors-model §§ 5–6)', () => {
+describe('the back exposed (decision 0086, sectors-model §§ 5–6)', () => {
   const PI = Math.PI
   const D = napoleonic.morale.drain
   // a battalion spawned on the open field with the shipped ruleset (a line of 400 holding its fire unless told)
@@ -398,7 +398,7 @@ describe('the back exposed (decision 0081, sectors-model §§ 5–6)', () => {
     const s = field()
     const j = place(s)
     s.tick()
-    return s.w.scratch.drain![j]
+    return s.w.f.drain[j]
   }
   // a line at the origin facing north (+z), side 0
   const line = (s: Sim, extra: Partial<Command> = {}) => put(s, 0, 0, 0, 0, extra)
@@ -428,7 +428,7 @@ describe('the back exposed (decision 0081, sectors-model §§ 5–6)', () => {
       put(s, 1, 0, -120, 0)
       s.w.f.bar[j] = b
       s.advance(1)
-      expect(s.w.scratch.drain![j]).toBe(D.rear)
+      expect(s.w.f.drain[j]).toBe(D.rear)
       const now = s.w.f.bar[j] // a second's recovery on
       expect(effectiveBar(s.w, j, 0)).toBeCloseTo(Math.min(now, Math.max(W0, now - D.rear)), 9)
       expect(outOfFight(s.w.f.mstate[j])).toBe(false)
@@ -496,7 +496,7 @@ describe('the back exposed (decision 0081, sectors-model §§ 5–6)', () => {
       spawn({ side: 0, x: 25, z: -165, heading: 0 })
       spawn({ side: 1, x: -125, z: -165, heading: Math.PI / 2 })
       advanceTick(w)
-      return w.scratch.drain![j]
+      return w.f.drain[j]
     }
     expect(at(data)).toBe(0)
     expect(at(levelled(data))).toBeGreaterThan(0)
@@ -519,7 +519,7 @@ describe('the back exposed (decision 0081, sectors-model §§ 5–6)', () => {
       }
     }
     expect(screenShare(s.w, G, near[1], near[2], 0)).toBeCloseTo(1 / 3, 9)
-    expect(s.w.scratch.drain![j]).toBe(D.flank)
+    expect(s.w.f.drain[j]).toBe(D.flank)
   })
   it('P-26: a limbered battery is no threat, an unlimbered one is; cavalry within 200 m is, blown, beyond 200 m, in march column or screened it is not', () => {
     const flank = (extra: Partial<Command>, x = 150, then: (s: Sim, e: number) => void = () => {}) =>
