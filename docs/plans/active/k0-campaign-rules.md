@@ -64,7 +64,7 @@ after); the map's code (K2a–K2d).
 
 - `src/campaign/`: rules, march, track, contact (`firstContact`, `zoneFor`, `battleFor`), courier (`ride`, `help`,
   `inHelpRadius`), answers (`answers`), roads (`network`, `fastestRoute`, `routePoints`, `roadLength`), timeline;
-  the Napoleonic values in `src/rulesets/napoleonic-campaign.ts`. 25 tests in `test/campaign-rules.test.ts`, among
+  the Napoleonic values in `src/rulesets/napoleonic-campaign.ts`. 31 tests in `test/campaign-rules.test.ts`, among
   them the proposal's own: a call 25 km away heard after 125 minutes, the help's head 560 minutes after the call
   (9 h 20), with 25/35 of the day's 15 % left behind; two corps closing at 6 km/h meet at minute 285; a courier
   caught where it enters a zone, at 8.5 km; a chain of calls among eight corps that ends.
@@ -107,3 +107,18 @@ after); the map's code (K2a–K2d).
 - With: each battle's zone at most half its map's side (`zoneFor`); the doc honest on a pair exactly on the radius
   (deterministic, no tolerance); the search stopping at an earlier catch; town indices checked; one interpolation.
 - The review rounds count again from 1.
+
+After the redesign:
+
+- **Round 1**: severe: decision numbers taken on main (0084, 0085) and later on other branches; a battle's zone
+  smaller than the contact radius on a small map; a road with no line a free leap. Fixed: K0 no longer copies
+  #234's proposal and decisions (the map editor track's session works on them: decisions 0088, 0076, 0089) and points
+  to them; its own look decision is 0093; roads need a line; contact already made at a start found exactly
+  (`c ≤ 0`); rulesets take only types from `src/campaign/` (lint, with a test).
+- **Round 2**: severe: a route's line bridged a gap between roads that did not meet at their town; "no corps in two
+  battles" held only for a corps at a battle's centre (the zone was inflated to the contact radius for it). Fixed:
+  the road graph's towns have positions and each road must run from its town to its town (`network`); a one-town
+  route is that town's point, so a courier there is caught by an enemy holding the town like any other; a contact
+  with a corps already fighting joins that corps' battle (`battleFor(…, engagedIn)`), and the zone is back to at
+  most half the map's side. With: a ruleset's `./` imports may not climb out (tested); intervals made lazily, the
+  zero-length window plain; the courier and help test split, one behaviour each.

@@ -87,7 +87,14 @@ describe('contact', () => {
     // the ruleset's 2.5 km on a 6 km map; half the side on a smaller one, never under the contact radius
     expect(zoneFor(rules, 6000)).toBe(2500)
     expect(zoneFor(rules, 4000)).toBe(2000)
-    expect(zoneFor(rules, 2000)).toBe(rules.contactRadiusM)
+    expect(zoneFor(rules, 2000)).toBe(1000)
+  })
+
+  it('joins the battle of a corps already fighting, wherever in the zone it stands', () => {
+    // a corps fights at the edge of a 2.5 km zone; a fresh enemy comes within 1.5 km of it, outside the zone
+    const battles = [{ x: 0, z: 0, zoneM: 2500 }]
+    expect(battleFor(battles, 3900, 0)).toBe(-1)
+    expect(battleFor(battles, 3900, 0, [0, -1])).toBe(0)
   })
 
   it('joins the nearest battle when zones overlap', () => {
@@ -106,7 +113,7 @@ describe('contact', () => {
     ]
     // a contact 2 km from the main fight, within its zone (2.5 km): part of it
     expect(battleFor(battles, 2000, 0)).toBe(0)
-    // 2 km from the small battle, whose zone is 1.5 km: a battle of its own
+    // 2 km from the small battle, whose zone is 1.5 km (a 3 km map): a battle of its own
     expect(battleFor(battles, 22000, 0)).toBe(-1)
     // Wavre, 15 km away: a battle of its own
     expect(battleFor(battles, 0, 15000)).toBe(-1)
@@ -114,22 +121,26 @@ describe('contact', () => {
 })
 
 describe('couriers and help', () => {
-  it('delivers a call 25 km away in about two hours; the help arrives about 9 hours after the call', () => {
-    const r = ride(rules, along(0, 25000), 0, [])
-    expect(r.delivered).toBe(true)
+  it('delivers a call 25 km away in about two hours', () => {
     // 25 km at 12 km/h: 125 minutes
-    expect(r.atMin).toBeCloseTo(125, 9)
-    // under way in an hour, then 25 km at a forced 4 km/h: 6 h 15; the head at 9 h 20 after the call
-    const { headMin, strength } = help(rules, 6, r.atMin, 25000)
+    expect(ride(rules, along(0, 25000), 0, [])).toEqual({ delivered: true, atMin: 125 })
+  })
+
+  it('brings the help about 9 hours after the call', () => {
+    // heard at 125 minutes, under way in an hour, then 25 km at a forced 4 km/h: 6 h 15; the head at 9 h 20
+    const { headMin } = help(rules, 6, 125, 25000)
     expect(headMin).toBeCloseTo(560, 9)
+  })
+
+  it('leaves stragglers in proportion to the forced march made, a full day’s at most', () => {
     // 25 km of the forced march's 35 a day: 25/35 of its 15 % left behind
-    expect(strength).toBeCloseTo(1 - 0.15 * (25 / 35), 9)
-    // a full day's forced march or more: the whole 15 %
+    expect(help(rules, 6, 0, 25000).strength).toBeCloseTo(1 - 0.15 * (25 / 35), 9)
     expect(help(rules, 6, 0, 40000).strength).toBeCloseTo(0.85, 9)
+  })
+
+  it('reaches allies within the help radius by road', () => {
     expect(inHelpRadius(rules, 25000)).toBe(true)
     expect(inHelpRadius(rules, 25001)).toBe(false)
-    expect(headMin / 60).toBeGreaterThan(9)
-    expect(headMin / 60).toBeLessThan(10)
   })
 
   it('loses a courier whose road crosses an enemy’s zone, where it enters it', () => {
@@ -220,7 +231,12 @@ describe('who answers a call', () => {
 describe('the roads', () => {
   // four towns in a square, the two ways round of 20 km each, and a long detour 0–2
   const graph: RoadGraph = {
-    towns: 4,
+    towns: [
+      { x: 0, z: 0 },
+      { x: 10000, z: 0 },
+      { x: 10000, z: 10000 },
+      { x: 0, z: 10000 },
+    ],
     roads: [
       {
         a: 0,
@@ -290,23 +306,42 @@ describe('the roads', () => {
     expect(routePoints(net, route)[0]).toEqual({ x: 10000, z: 10000 })
   })
 
-  it('routes a town to itself with no road, and a courier there arrives at once', () => {
+  it('routes a town to itself as its point; a courier there arrives at once, unless an enemy holds the town', () => {
     const route = fastestRoute(net, 1, 1)!
     expect(route).toEqual({ towns: [1], roads: [], lengthM: 0 })
-    expect(ride(rules, routePoints(net, route), 30, [standing(500, 0)])).toEqual({ delivered: true, atMin: 30 })
+    const here = routePoints(net, route)
+    expect(here).toEqual([{ x: 10000, z: 0 }])
+    expect(ride(rules, here, 30, [])).toEqual({ delivered: true, atMin: 30 })
+    // an enemy 500 m off: caught there, unless it is the one the sender's corps is fighting
+    expect(ride(rules, here, 30, [standing(10500, 0)]).delivered).toBe(false)
+    expect(ride(rules, here, 30, [standing(10500, 0)], [0])).toEqual({ delivered: true, atMin: 30 })
+  })
+
+  it('refuses roads that do not meet at their towns', () => {
+    const towns = [
+      { x: 0, z: 0 },
+      { x: 10000, z: 0 },
+      { x: 20000, z: 3000 },
+    ]
+    const gap = {
+      towns,
+      roads: [
+        { a: 0, b: 1, points: [towns[0], towns[1]] },
+        // 3 km off town 1 at its start: a gap a route would bridge across country
+        { a: 1, b: 2, points: [{ x: 10000, z: 3000 }, towns[2]] },
+      ],
+    }
+    expect(() => network(gap)).toThrow(/does not run from town 1/)
   })
 
   it('finds no route to a town no road reaches', () => {
-    expect(fastestRoute(network({ towns: 2, roads: [] }), 0, 1)).toBeNull()
+    expect(fastestRoute(network({ towns: [graph.towns[0], graph.towns[1]], roads: [] }), 0, 1)).toBeNull()
   })
 
   it('refuses a road to a town that does not exist, a road with no line, and a route from no town', () => {
-    const line = [
-      { x: 0, z: 0 },
-      { x: 1, z: 0 },
-    ]
-    expect(() => network({ towns: 2, roads: [{ a: 0, b: 5, points: line }] })).toThrow(RangeError)
-    expect(() => network({ towns: 2, roads: [{ a: 0, b: 1, points: [] }] })).toThrow(RangeError)
+    const towns = [graph.towns[0], graph.towns[1]]
+    expect(() => network({ towns, roads: [{ a: 0, b: 5, points: [towns[0], towns[1]] }] })).toThrow(RangeError)
+    expect(() => network({ towns, roads: [{ a: 0, b: 1, points: [] }] })).toThrow(RangeError)
     expect(() => fastestRoute(net, 9, 0)).toThrow(RangeError)
   })
 

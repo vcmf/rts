@@ -11,11 +11,14 @@ export interface Road {
   points: { x: number; z: number }[]
 }
 
-/** The road network: `towns` nodes, the roads between them. */
+/** The road network: its towns (where they are, in metres) and the roads between them. */
 export interface RoadGraph {
-  towns: number
+  towns: { x: number; z: number }[]
   roads: Road[]
 }
+
+// how far a road's end may lie from its town, in metres (traced data rounds to the metre)
+const JOIN_M = 1
 
 /** A route: the towns it passes, in order, the roads it takes and its length. */
 export interface Route {
@@ -42,6 +45,7 @@ export function roadLength(road: Road): number {
  */
 export interface Network {
   towns: number
+  places: { x: number; z: number }[]
   roads: Road[]
   touching: number[][]
   lengths: Float64Array
@@ -49,19 +53,28 @@ export interface Network {
 
 /** A network from a road graph. */
 export function network(graph: RoadGraph): Network {
+  const n = graph.towns.length
+  const near = (p: { x: number; z: number }, t: number) =>
+    (p.x - graph.towns[t].x) * (p.x - graph.towns[t].x) + (p.z - graph.towns[t].z) * (p.z - graph.towns[t].z) <=
+    JOIN_M * JOIN_M
   graph.roads.forEach((r, k) => {
-    const ok = (t: number) => Number.isInteger(t) && t >= 0 && t < graph.towns
-    if (!ok(r.a) || !ok(r.b)) throw new RangeError(`road ${k}: towns ${r.a}–${r.b} not in 0..${graph.towns - 1}`)
+    const ok = (t: number) => Number.isInteger(t) && t >= 0 && t < n
+    if (!ok(r.a) || !ok(r.b)) throw new RangeError(`road ${k}: towns ${r.a}–${r.b} not in 0..${n - 1}`)
     // a road with no line would be a free leap between its towns
     if (r.points.length < 2) throw new RangeError(`road ${k}: a line of ${r.points.length} point(s)`)
+    // roads meet at towns: a route's line runs from one road into the next with no gap to bridge
+    if (!near(r.points[0], r.a) || !near(r.points[r.points.length - 1], r.b)) {
+      throw new RangeError(`road ${k}: its line does not run from town ${r.a} to town ${r.b}`)
+    }
   })
   const roads = graph.roads.map(r => ({ a: r.a, b: r.b, points: r.points.map(p => ({ x: p.x, z: p.z })) }))
-  const touching: number[][] = Array.from({ length: graph.towns }, () => [])
+  const touching: number[][] = Array.from({ length: n }, () => [])
   roads.forEach((r, k) => {
     touching[r.a].push(k)
     touching[r.b].push(k)
   })
-  return { towns: graph.towns, roads, touching, lengths: Float64Array.from(roads, roadLength) }
+  const places = graph.towns.map(t => ({ x: t.x, z: t.z }))
+  return { towns: n, places, roads, touching, lengths: Float64Array.from(roads, roadLength) }
 }
 
 /**
@@ -110,11 +123,11 @@ export function fastestRoute(net: Network, from: number, to: number): Route | nu
 }
 
 /**
- * A route's line, from its first town to its last, each road's points in the direction travelled (a road's first
- * point is where the previous one ended: towns join them). A route of one town and no road has no line: an empty
- * array (a courier there is delivered at once, a corps there is already there).
+ * A route's line, from its first town to its last, each road's points in the direction travelled (each road starts
+ * at the town the previous one ended at: network checks it). A route of one town is that town's point.
  */
 export function routePoints(net: Network, route: Route): { x: number; z: number }[] {
+  if (!route.roads.length) return [{ ...net.places[route.towns[0]] }]
   const out: { x: number; z: number }[] = []
   route.roads.forEach((k, step) => {
     const r = net.roads[k]

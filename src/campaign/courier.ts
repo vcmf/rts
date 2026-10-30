@@ -16,7 +16,7 @@ export type Ride =
  * over the day: caught by the first enemy (by time, then by index) within whose contact radius it comes, else
  * delivered at the route's end. The enemies listed in `engaged` (those the sender's corps is fighting) never catch
  * it: they are held by their battle, and a call for help always gets out of the battle it is sent from. A route of
- * no road (routePoints gives none for the ally in the same town) is delivered at once.
+ * one point (the ally in the same town) arrives at once, unless an enemy not engaged with its corps is there.
  */
 export function ride(
   rules: CampaignRules,
@@ -25,7 +25,6 @@ export function ride(
   enemies: Track[],
   engaged: readonly number[] = [],
 ): Ride {
-  if (route.length < 2) return { delivered: true, atMin: startMin }
   const speed = (rules.courierKmPerHour * 1000) / 60
   const courier = walk(route, startMin, speed)
   const end = courier[courier.length - 1].t

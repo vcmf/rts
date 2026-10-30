@@ -208,7 +208,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              regex: '^(?!\\.\\./(sim|campaign)/[\\w-]+\\.ts$|\\./)',
+              regex: '^(?!\\.\\./(sim|campaign)/[\\w-]+\\.ts$|\\./(?!.*\\.\\.))',
               message: 'A ruleset imports only from src/sim/, src/campaign/ (types) and src/rulesets/.',
             },
             {

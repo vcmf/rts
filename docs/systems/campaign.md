@@ -33,17 +33,20 @@ the day's loop (orders, standing orders, the turn) comes later in the track. The
 - **Contact** (`contact.ts`): `firstContact` gives the earliest moment two tracks come within a radius, exactly:
   between breakpoints the separation moves in a straight line, so contact is the first root of a quadratic (a pair
   exactly on the radius counts as the arithmetic rounds: the same on every machine). `zoneFor` gives a battle's zone
-  (the ruleset's radius, at most half its map's side); `battleFor` joins a contact to the nearest battle whose zone
-  holds it, or starts one.
+  (the ruleset's radius, at most half its map's side, so it lies in its map); `battleFor` joins a contact with a corps
+  already fighting to that corps' battle (no corps is in two battles), else to the nearest battle whose zone holds
+  it, or starts one.
 - **Couriers** (`courier.ts`): `ride` takes the courier along its route and loses it to the first enemy (by time,
   then index) within whose zone it comes, where it does; the enemies its corps is fighting (`engaged`) never catch
-  it; a route of one town delivers at once. `help` gives the head's and tail's arrival of the corps that heard the call, at a forced march,
+  it; a route of one town (the ally in the same town) arrives at once unless an enemy not engaged with the sender
+  holds the town. `help` gives the head's and tail's arrival of the corps that heard the call, at a forced march,
   and the share of its strength with it (stragglers in proportion to the day's forced march it made);
   `inHelpRadius` whether an ally is in reach.
-- **Roads** (`roads.ts`): the graph of towns and roads, made into a `network` (a copy, searched as it was built: a
-  changed graph makes a new network); `fastestRoute` (Dijkstra, the heap ordered by distance, then town; a road's
+- **Roads** (`roads.ts`): the graph of towns (where they are) and roads, made into a `network`: a copy, searched as
+  it was built (a changed graph makes a new network), each road checked to have a line that runs from its town to
+  its town, so a route's line has no gap; `fastestRoute` (Dijkstra, the heap ordered by distance, then town; a road's
   length is its line's; every road at one speed until road kinds come, K3–K4), `routePoints` its line in the
-  direction travelled.
+  direction travelled (a route of one town: that town's point).
 - **Timeline** (`timeline.ts`): the day's events, played in the order of their time, then id; an event may queue
   later ones.
 - **Answers** (`answers.ts`): whether an ally answers a call: not fighting, not already committed to a battle (a
