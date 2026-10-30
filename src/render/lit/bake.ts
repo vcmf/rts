@@ -1,129 +1,192 @@
-// The lit map view's bakes (docs/plans/active/m6-lit-view.md, M6a), from a compiled map's layers: the shaded relief on
-// the height nodes and a mask per cell. Pure functions with no DOM, run in the map page's compile worker. Ported from
-// the prototype's relief bake (prototypes/staff-map.html bakeRelief, docs/plans/active/relief-shading.md), with the
-// light's direction a parameter instead of the north-west diagonal.
+// The lit map view's bakes (docs/plans/active/m6-lit-view.md, M6a), from a compiled map's layers: the light that does
+// not change on the height nodes (M10, decision 0090: a sun's soft shadow and the sky's occlusion, after Track K's
+// campaign map), a mask per cell and the ink's distance fields. Pure functions with no DOM, run in the map page's
+// compile worker.
 import type { Layers } from '../../map/apply.ts'
 import type { Feature, Pt } from '../../map/schema.ts'
 import type { Resolved } from '../../map/resolve.ts'
 import { lineReach } from '../../map/apply.ts'
 import { categoryOf } from '../../map/catalogue.ts'
 import { sstep } from '../../look/noise.ts'
+import { SUN_TOWARD } from '../../look/sun.ts'
 
-// the light: toward it, one of the grid's eight directions (x east, z north), and its height
-export const LIGHTS = {
-  n: [0, 1],
-  ne: [1, 1],
-  e: [1, 0],
-  se: [1, -1],
-  s: [0, -1],
-  sw: [-1, -1],
-  w: [-1, 0],
-  nw: [-1, 1],
-} as const
-export type LightDir = keyof typeof LIGHTS
-export const RELIEF = {
-  sun: 30, // degrees above the horizon
-  z: 2, // the heights' exaggeration, for the light only (as shaded-relief prints do)
-  soft: 4, // m: a cast shadow's soft edge
-  near: 24, // m: the exposure's near box (its half-width)
-  wide: 80, // m: and its wide one
-  lambert: [0.6, 1.4] as const, // the slope light's stored range (1 on flat ground in its middle)
+/** The sun: its height above the horizon, where it stands (clockwise from north) and its disc's size, in degrees. */
+export interface Sun {
+  el: number
+  az: number
+  size: number
 }
+/** The sun toward a direction (x east, y up, z north; any length), its disc `size` degrees across. */
+export function sunFrom(x: number, y: number, z: number, size: number): Sun {
+  const deg = 180 / Math.PI
+  return { el: Math.atan2(y, Math.hypot(x, z)) * deg, az: (((Math.atan2(x, z) * deg) % 360) + 360) % 360, size }
+}
+// the 3D world's sun (src/look/sun.ts: north-west, about 27° high), so the light does not turn at the zoom's handover
+// (the owner, 2026-10-30: docs/plans/active/track-g.md); its disc 2.5° across, as Track K's
+export const SUN: Sun = sunFrom(...SUN_TOWARD, 2.5)
+// the light's bake on every LIGHT_STEP-th node: 8 m, so a save redraws within the editor's second (the page's bake,
+// light, masks and ink, 0.41 s for a 3 km map: the G2 plan's Results); the slope's light is the shader's, per pixel,
+// from the 2 m heights
+export const LIGHT_STEP = 4
+export const RELIEF = {
+  z: 3, // the heights' exaggeration, for the light only (as shaded-relief prints do)
+}
+// the sky's horizon is read this far from a node in each of eight directions, m: the hollows, sunken roads and stream
+// valleys of a battlefield, not a mountain range's
+const SKY_STEPS = [4, 8, 16, 32, 64, 128, 256]
+const SUN_REACH = 5000 // m: the farthest a ray toward the sun looks for what shades a node
 export const WATER_FULL = 1.5 // m: the depth the mask stores as 1
 
-/** The light's horizontal direction, a unit vector (x, z) toward it. */
-export function lightXZ(dir: LightDir): [number, number] {
-  const [x, z] = LIGHTS[dir]
-  const l = Math.sqrt(x * x + z * z)
-  return [x / l, z / l]
+/**
+ * A sun the bake and the shader can light by (the page's ?sun= and ?soft= take any number): its disc 1° to 20°
+ * across (a smaller one would step the bake's rays a cell at a time out to a kilometre), its lower rim at least half
+ * a degree above the horizon, its middle at most 89.5° high.
+ */
+export function clampSun(sun: Sun): Sun {
+  const size = Math.min(20, Math.max(1, sun.size))
+  return { el: Math.min(89.5, Math.max(size / 2 + 0.5, sun.el)), az: sun.az, size }
 }
 
-/** Box mean of a grid over a square of half-width r nodes, edges clamped, by a summed-area table. */
-function boxMean(h: Float32Array, nx: number, nz: number, r: number): Float32Array {
-  const W = nx + 1
-  const S = new Float64Array(W * (nz + 1))
-  for (let j = 0; j < nz; j++) {
-    let row = 0
-    for (let i = 0; i < nx; i++) {
-      row += h[j * nx + i]
-      S[(j + 1) * W + i + 1] = S[j * W + i + 1] + row
-    }
-  }
-  const out = new Float32Array(nx * nz)
-  for (let j = 0; j < nz; j++) {
-    const j0 = Math.max(0, j - r)
-    const j1 = Math.min(nz, j + r + 1)
-    for (let i = 0; i < nx; i++) {
-      const i0 = Math.max(0, i - r)
-      const i1 = Math.min(nx, i + r + 1)
-      const sum = S[j1 * W + i1] - S[j0 * W + i1] - S[j1 * W + i0] + S[j0 * W + i0]
-      out[j * nx + i] = sum / ((i1 - i0) * (j1 - j0))
-    }
-  }
-  return out
+/** The sun's horizontal direction, a unit vector (x east, z north) toward it. */
+export function sunXZ(sun: Sun): [number, number] {
+  const az = (sun.az * Math.PI) / 180
+  return [Math.sin(az), Math.cos(az)]
+}
+
+/** The light that does not change, on every `step`-th node of the heights (bakeLight). */
+export interface LightBake {
+  data: Uint8Array // RGBA bytes, the south row first: R the sun's soft shadow (255 lit), G the open sky (255 all of it)
+  nx: number // nodes
+  nz: number
+  step: number // in the heights' nodes
 }
 
 /**
- * The shaded relief on the height nodes, as RGBA bytes, the south row first: R the slope's light (Lambert over
- * RELIEF.lambert, its middle on flat ground), G the cast shadow (255 lit), B the exposure (128 even, lower in hollows,
- * higher on crests). `heights`: (nx) × (nz) nodes `cell` m apart, m.
- *
- * Cast shadow in one pass: walking from the light's side, each node carries the highest shadow line reaching it (its
- * neighbour's toward the light, dropped by the sun's slope over one step, or its own height); a node under that line
- * is in shadow, softly over the first RELIEF.soft metres.
+ * The light that does not change (decision 0090, after Track K's `bakeLightRows`, PR #262), from the
+ * heights raised `z` times (RELIEF.z by default), on every `step`-th node: `heights` (nx) × (nz) nodes `cell` m apart.
+ * - The sun's shadow: from each node a ray walks toward the sun in growing steps, as far as any ground of the map
+ *   could shade it; the sun is a disc `size` degrees across, so a crest just grazing the ray dims it in part, and the
+ *   penumbra widens with the distance to what casts it.
+ * - The open sky: in eight directions, the highest horizon within SKY_STEPS; the sky a node sees is the mean of one
+ *   minus the sine of those horizon angles (ambient occlusion).
+ * Heights past the grid's edges repeat its edge nodes.
  */
-export function bakeRelief(heights: Float64Array, nx: number, nz: number, cell: number, dir: LightDir): Uint8Array {
-  const [di, dj] = LIGHTS[dir]
-  const h0 = Float32Array.from(heights)
-  const h = new Float32Array(h0.length)
-  for (let k = 0; k < h.length; k++) h[k] = h0[k] * RELIEF.z
-  const el = (RELIEF.sun * Math.PI) / 180
-  const drop = cell * Math.sqrt(di * di + dj * dj) * Math.tan(el)
-  const [lx, lz] = lightXZ(dir)
-  const L = [lx * Math.cos(el), Math.sin(el), lz * Math.cos(el)]
-
-  // the walk: the neighbour toward the light first
-  const line = new Float32Array(nx * nz)
-  const lit = new Float32Array(nx * nz)
-  const js = dj > 0 ? { from: nz - 1, to: -1, by: -1 } : { from: 0, to: nz, by: 1 }
-  const is = di > 0 ? { from: nx - 1, to: -1, by: -1 } : { from: 0, to: nx, by: 1 }
-  for (let j = js.from; j !== js.to; j += js.by) {
-    for (let i = is.from; i !== is.to; i += is.by) {
-      const k = j * nx + i
-      const ti = i + di
-      const tj = j + dj
-      const from = ti >= 0 && ti < nx && tj >= 0 && tj < nz ? line[tj * nx + ti] - drop : -Infinity
-      line[k] = Math.max(h[k], from)
-      lit[k] = 1 - sstep(0, 1, (from - h[k]) / (RELIEF.soft * RELIEF.z))
+export function bakeLight(
+  heights: ArrayLike<number>,
+  nx: number,
+  nz: number,
+  cell: number,
+  sun: Sun,
+  step = 1,
+  z = RELIEF.z,
+): LightBake {
+  sun = clampSun(sun)
+  // plain loops: a mapped Float32Array.from and a destructuring min-max cost seconds over millions of nodes
+  const h = new Float32Array(nx * nz)
+  let lo = Infinity
+  let hi = -Infinity
+  for (let k = 0; k < h.length; k++) {
+    const v = heights[k] * z
+    h[k] = v
+    if (v < lo) lo = v
+    if (v > hi) hi = v
+  }
+  const rad = Math.PI / 180
+  const tanEl = Math.tan(sun.el * rad)
+  const tanR = Math.tan((sun.size / 2) * rad)
+  // the disc's lower rim: the last ray anything can shade (clampSun keeps it above the horizon)
+  const tanLo = Math.tan((sun.el - sun.size / 2) * rad)
+  const [sx, sz] = sunXZ(sun)
+  const reach = Math.min(SUN_REACH, (hi - lo) / tanLo)
+  // steps no longer than the penumbra's width there (nor shorter than a cell), so a bank's soft edge is sampled
+  // across, not jumped
+  const sunSteps: number[] = []
+  for (let d = cell; d <= reach + cell; d += Math.max(cell, 2 * tanR * d)) sunSteps.push(d)
+  // the sky's eight directions run along the grid's axes and diagonals, so its horizon is read on whole nodes (no
+  // bilinear read: the bake's other half of its time): for each direction and step, the nodes it moves and the metres
+  // that is
+  const DI = [1, 1, 0, -1, -1, -1, 0, 1]
+  const DJ = [0, 1, 1, 1, 0, -1, -1, -1]
+  const skyN: number[] = []
+  const skyD: number[] = []
+  for (let a = 0; a < 8; a++) {
+    const len = a % 2 ? cell * Math.SQRT2 : cell
+    for (const d of SKY_STEPS) {
+      const n = Math.max(1, Math.round(d / len))
+      skyN.push(n)
+      skyD.push(n * len)
     }
   }
-
-  // exposure: how far a node stands above or below its surroundings, from the true heights
-  const near = boxMean(h0, nx, nz, Math.round(RELIEF.near / cell))
-  const wide = boxMean(h0, nx, nz, Math.round(RELIEF.wide / cell))
-
-  const out = new Uint8Array(nx * nz * 4)
-  const [lo, hi] = RELIEF.lambert
-  for (let j = 0; j < nz; j++) {
-    for (let i = 0; i < nx; i++) {
-      const k = j * nx + i
-      // central differences, one-sided at the grid's edges (over their true span)
-      const i0 = Math.max(0, i - 1)
-      const i1 = Math.min(nx - 1, i + 1)
-      const j0 = Math.max(0, j - 1)
-      const j1 = Math.min(nz - 1, j + 1)
-      const gx = (h[j * nx + i1] - h[j * nx + i0]) / ((i1 - i0) * cell)
-      const gz = (h[j1 * nx + i] - h[j0 * nx + i]) / ((j1 - j0) * cell)
-      const nl = Math.sqrt(gx * gx + 1 + gz * gz)
-      const lambert = Math.max(0, (-gx * L[0] + L[1] - gz * L[2]) / nl) / L[1] // 1 on flat ground
-      const exposed = 0.5 - ((near[k] - h0[k]) * 0.1 + (wide[k] - h0[k]) * 0.03)
-      out[k * 4] = Math.round(Math.min(1, Math.max(0, (lambert - lo) / (hi - lo))) * 255)
-      out[k * 4 + 1] = Math.round(lit[k] * 255)
-      out[k * 4 + 2] = Math.round(Math.min(1, Math.max(0, exposed)) * 255)
-      out[k * 4 + 3] = 255
+  // the heights at a point (m from the grid's first node), bilinear, the edges repeated
+  const at = (x: number, z: number) => {
+    const fx = Math.min(nx - 1.001, Math.max(0, x / cell))
+    const fz = Math.min(nz - 1.001, Math.max(0, z / cell))
+    const i = Math.floor(fx)
+    const j = Math.floor(fz)
+    const u = fx - i
+    const v = fz - j
+    const k = j * nx + i
+    return (h[k] * (1 - u) + h[k + 1] * u) * (1 - v) + (h[k + nx] * (1 - u) + h[k + nx + 1] * u) * v
+  }
+  const bnx = Math.floor((nx - 1) / step) + 1
+  const bnz = Math.floor((nz - 1) / step) + 1
+  const out = new Uint8Array(bnx * bnz * 4)
+  for (let bj = 0; bj < bnz; bj++) {
+    for (let bi = 0; bi < bnx; bi++) {
+      const i = bi * step
+      const j = bj * step
+      const x = i * cell
+      const z = j * cell
+      const h0 = h[j * nx + i]
+      let lit = 1
+      for (const d of sunSteps) {
+        if (h0 + d * tanLo >= hi) break // the whole disc above the highest ground: nothing further shades it
+        const clear = (h0 + d * tanEl - at(x + sx * d, z + sz * d)) / d
+        lit = Math.min(lit, Math.min(1, Math.max(0, 0.5 + (0.5 * clear) / tanR)))
+        if (lit <= 0) break
+      }
+      let sky = 0
+      for (let a = 0, q = 0; a < 8; a++) {
+        let horizon = 0
+        for (let s = 0; s < SKY_STEPS.length; s++, q++) {
+          const si = Math.min(nx - 1, Math.max(0, i + DI[a] * skyN[q]))
+          const sj = Math.min(nz - 1, Math.max(0, j + DJ[a] * skyN[q]))
+          horizon = Math.max(horizon, (h[sj * nx + si] - h0) / skyD[q])
+        }
+        sky += 1 - horizon / Math.hypot(1, horizon)
+      }
+      const o = (bj * bnx + bi) * 4
+      out[o] = Math.round(sstep(0, 1, lit) * 255)
+      out[o + 1] = Math.round((sky / 8) * 255)
+      out[o + 3] = 255
     }
   }
-  return out
+  return { data: out, nx: bnx, nz: bnz, step }
+}
+
+/**
+ * bakeLight, remembering its last bake: a compile that leaves the heights, the sun, `z` and `step` as they were (an
+ * edit of a hedge, a name, a save) bakes nothing. Each call returns its own copy of the bytes, so the caller can
+ * transfer them. `bake` is bakeLight but for the tests.
+ */
+export function lightCache(
+  bake = bakeLight,
+): (heights: Float64Array, nx: number, nz: number, cell: number, sun: Sun, step: number, z: number) => LightBake {
+  let key = ''
+  let kept = new Float64Array(0)
+  let last: LightBake | null = null
+  return (heights, nx, nz, cell, sun, step, z) => {
+    // the heights compared with a kept copy, exactly (a hash missed edits that only flip signs)
+    const k = [nx, nz, cell, sun.el, sun.az, sun.size, step, z].join(',')
+    let same = !!last && k === key && kept.length === heights.length
+    for (let i = 0; same && i < heights.length; i++) same = kept[i] === heights[i]
+    if (!same) {
+      last = bake(heights, nx, nz, cell, sun, step, z)
+      key = k
+      kept = Float64Array.from(heights)
+    }
+    return { ...last!, data: last!.data.slice() }
+  }
 }
 
 /**

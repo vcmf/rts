@@ -12,6 +12,7 @@ import type { Compiled, CompileReply, CompileRequest, LayerName, OverlayReply, O
 import type { OverlaySpec } from '../../render/lit/overlays.ts'
 import { demFileNames } from '../../map/dem.ts'
 import { LitView, TILT } from '../../render/lit/view.ts'
+import { RELIEF, SUN, type Sun } from '../../render/lit/bake.ts'
 import { standing } from '../../render/lit/houses.ts'
 import { lineLength, pointAt } from '../../map/geometry.ts'
 import { Editor } from './editor.ts'
@@ -110,8 +111,23 @@ try {
 } catch (e) {
   litError = (e as Error).message
 }
-const tiltParam = Number(new URLSearchParams(location.search).get('tilt'))
-const tilt = Number.isFinite(tiltParam) && new URLSearchParams(location.search).has('tilt') ? tiltParam : TILT
+// the light's settings, to tune by eye (G2, docs/plans/active/g2-staff-light.md), as Track K's page: the sun's height,
+// where it stands (clockwise from north) and its disc, in degrees (?sun=, ?az=, ?soft=), and the heights' exaggeration
+// for the light (?z=), all baked in the worker; the sky's share of the light, the lamp's fall-off across the map and
+// the darkest tone (?sky=, ?lamp=, ?floor=), the shader's
+const litParam = (k: string): number | undefined => {
+  const q = new URLSearchParams(location.search)
+  const v = Number(q.get(k))
+  return q.has(k) && Number.isFinite(v) ? v : undefined
+}
+const tilt = litParam('tilt') ?? TILT
+const sunAsked: Sun = {
+  el: litParam('sun') ?? SUN.el,
+  az: litParam('az') ?? SUN.az,
+  size: litParam('soft') ?? SUN.size,
+}
+const zAsked = litParam('z') ?? RELIEF.z
+lit?.setTuning({ sky: litParam('sky'), lamp: litParam('lamp'), floor: litParam('floor') })
 
 const names = Object.keys(MAPS).sort()
 /** The picker's entry for a map file, named by its id. */
@@ -203,9 +219,10 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
       nz: r.nz,
       datum: r.map.datum ?? 0,
       season: r.map.season,
-      light: r.light,
+      sun: r.sun,
+      z: r.z,
       height,
-      relief: new Uint8Array(r.relief),
+      light: { data: new Uint8Array(r.light), nx: r.lightNx, nz: r.lightNz, step: r.lightStep },
       masks: new Uint8Array(r.masks),
       ink: new Uint8Array(r.ink),
       flat: { w: r.w, h: r.h, rgba: new Uint8Array(r.rgba) },
@@ -217,7 +234,7 @@ function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
     // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
     current = {
       ...r,
-      relief: new ArrayBuffer(0),
+      light: new ArrayBuffer(0),
       masks: new ArrayBuffer(0),
       ink: new ArrayBuffer(0),
       rgba: new ArrayBuffer(0),
@@ -281,7 +298,7 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
   if (mine !== seq) return
   for (const [name, f] of Object.entries(files)) if (f.bytes) sentVersion.set(name, f.version)
   worker.postMessage(
-    { seq: mine, mapText, kindsText, files } satisfies CompileRequest,
+    { seq: mine, mapText, kindsText, files, sun: sunAsked, z: zAsked } satisfies CompileRequest,
     Object.values(files).flatMap(f => (f.bytes ? [f.bytes] : [])),
   )
 }

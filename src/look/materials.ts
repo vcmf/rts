@@ -11,6 +11,7 @@ import SHORE from './shaders/shore.glsl?raw'
 import MACRO from './shaders/macro.glsl?raw'
 import MEADOW from './shaders/meadow.glsl?raw'
 import type { Color3 } from '@babylonjs/core/Maths/math.color.js'
+import { SUN_TOWARD } from './sun.ts'
 import { lockMood, MOOD, SEASON, type Mood, type SeasonLight } from './mood.ts'
 import { D } from './spec.ts'
 import type { Effect } from '@babylonjs/core/Materials/effect.js'
@@ -36,7 +37,7 @@ export const S = {
 }
 export type LookState = typeof S
 
-export const SUN = new Vector3(-0.7, 0.45, 0.55).normalize() // low side-back light, ~27° elevation
+export const SUN = new Vector3(...SUN_TOWARD).normalize() // low side-back light, ~27° elevation (src/look/sun.ts)
 
 const MARK = '#include<painter>'
 // every painted fragment shader includes the painter, and may include the water data's reads (#include<waterdata>)

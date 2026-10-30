@@ -88,7 +88,7 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0061](0061-square-designed-maps-2-to-6-km.md) | Square maps of 2 to 6 km a side, designed for play, at true local scale (amended by 0070) | accepted |
 | [0062](0062-simple-shadows-at-every-zoom.md) | The simple shadow at every zoom, softer, lighter and shorter up close | accepted |
 | [0063](0063-real-relief-as-placed-pieces.md) | Real relief is placed pieces of a pinned heightfield, read by bicubic (amended by 0070) | accepted |
-| [0064](0064-lit-view-flat-plane-baked-in-the-worker.md) | The lit map view is one flat plane in Babylon, its bakes made in the compile worker | accepted |
+| [0064](0064-lit-view-flat-plane-baked-in-the-worker.md) | The lit map view is one flat plane in Babylon, its bakes made in the compile worker (amended by 0090, proposed) | accepted |
 | [0065](0065-map-ink-as-distance-fields-houses-as-boxes.md) | The lit map draws from the cells, its edges smoothed by distance fields; its houses are lit boxes | accepted |
 | [0066](0066-figures-lod-cross-fade.md) | The figures' LODs cross-faded per man by a screen-door dither | proposed |
 | [0067](0067-simple-shadows-darker.md) | The soldiers' simple shadows darker: a gain on their darkening (amends 0062; its values superseded by 0071) | accepted |
@@ -108,3 +108,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0082](0082-light-map-at-half-a-metre.md) | The baked light map at about half a metre a texel (1536² over the 800 m tile, the target 0.53 m) | accepted |
 | [0084](0084-a-soft-mid-tone-on-figures-and-buildings.md) | A soft mid tone on the figures, the buildings and the nature meshes (amends 0022) | accepted |
 | [0085](0085-upright-meadow-and-wheat-fill.md) | The meadow's grass upright and shorter, the wheat filled (`?grassup`, `?wheatfill`; amends 0041's clumps) | accepted |
+| [0090](0090-the-staff-map-lit-as-a-model.md) | The staff map lit as a model under the 3D world's sun and the sky, in the campaign map's palette (amends 0064) | proposed |
