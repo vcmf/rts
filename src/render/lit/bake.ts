@@ -24,10 +24,10 @@ export function sunFrom(x: number, y: number, z: number, size: number): Sun {
 // the 3D world's sun (src/look/sun.ts: north-west, about 27° high), so the light does not turn at the zoom's handover
 // (the owner, 2026-10-30: docs/plans/active/track-g.md); its disc 2.5° across, as Track K's
 export const SUN: Sun = sunFrom(...SUN_TOWARD, 2.5)
-// the light's bake on every LIGHT_STEP-th node: 4 m, 0.8 s for a 3 km map in the page's worker (G2, measured, the
-// G2 plan's Results); the slope's light
-// is the shader's, per pixel, from the 2 m heights
-export const LIGHT_STEP = 2
+// the light's bake on every LIGHT_STEP-th node: 8 m, so a save redraws within the editor's second (the page's bake,
+// light, masks and ink, 0.41 s for a 3 km map: the G2 plan's Results); the slope's light is the shader's, per pixel,
+// from the 2 m heights
+export const LIGHT_STEP = 4
 export const RELIEF = {
   z: 3, // the heights' exaggeration, for the light only (as shaded-relief prints do)
 }
@@ -102,9 +102,21 @@ export function bakeLight(
   // across, not jumped
   const sunSteps: number[] = []
   for (let d = cell; d <= reach + cell; d += Math.max(cell, 2 * tanR * d)) sunSteps.push(d)
-  const dirX = new Float64Array(8)
-  const dirZ = new Float64Array(8)
-  for (let a = 0; a < 8; a++) [dirX[a], dirZ[a]] = [Math.cos((a * Math.PI) / 4), Math.sin((a * Math.PI) / 4)]
+  // the sky's eight directions run along the grid's axes and diagonals, so its horizon is read on whole nodes (no
+  // bilinear read: the bake's other half of its time): for each direction and step, the nodes it moves and the metres
+  // that is
+  const DI = [1, 1, 0, -1, -1, -1, 0, 1]
+  const DJ = [0, 1, 1, 1, 0, -1, -1, -1]
+  const skyN: number[] = []
+  const skyD: number[] = []
+  for (let a = 0; a < 8; a++) {
+    const len = a % 2 ? cell * Math.SQRT2 : cell
+    for (const d of SKY_STEPS) {
+      const n = Math.max(1, Math.round(d / len))
+      skyN.push(n)
+      skyD.push(n * len)
+    }
+  }
   // the heights at a point (m from the grid's first node), bilinear, the edges repeated
   const at = (x: number, z: number) => {
     const fx = Math.min(nx - 1.001, Math.max(0, x / cell))
@@ -134,11 +146,13 @@ export function bakeLight(
         if (lit <= 0) break
       }
       let sky = 0
-      for (let a = 0; a < 8; a++) {
-        const dx = dirX[a]
-        const dz = dirZ[a]
+      for (let a = 0, q = 0; a < 8; a++) {
         let horizon = 0
-        for (const d of SKY_STEPS) horizon = Math.max(horizon, (at(x + dx * d, z + dz * d) - h0) / d)
+        for (let s = 0; s < SKY_STEPS.length; s++, q++) {
+          const si = Math.min(nx - 1, Math.max(0, i + DI[a] * skyN[q]))
+          const sj = Math.min(nz - 1, Math.max(0, j + DJ[a] * skyN[q]))
+          horizon = Math.max(horizon, (h[sj * nx + si] - h0) / skyD[q])
+        }
         sky += 1 - horizon / Math.hypot(1, horizon)
       }
       const o = (bj * bnx + bi) * 4

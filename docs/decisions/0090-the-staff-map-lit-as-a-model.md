@@ -17,7 +17,7 @@ the two views must share a light: the owner chose one sun, the 3D world's (`docs
 ## Decision
 
 We will light the staff map as a model:
-- **The bake** in the compile worker gives, on every second node: the sun's soft shadow (a ray toward a sun disc
+- **The bake** in the compile worker gives, on every fourth node (8 m, read through a bilinear filter): the sun's soft shadow (a ray toward a sun disc
   2.5° across, so the penumbra widens with the distance to what casts it) and the share of the sky each node sees (the
   horizon in eight directions, up to 256 m away). It replaces the slope light, the cast shadow and the exposure.
 - **The sun is the 3D world's** (`src/look/sun.ts`: north-west, about 27° high), at any azimuth and elevation,
@@ -39,8 +39,9 @@ its worker bakes and its float heights stand.
   (G4) changes no light, and the campaign's zoom into a battle can stay in one look.
 - Good: a soft shadow and the sky's occlusion read the hollows, sunken roads and stream valleys that the hard shadow
   cut as black shapes.
-- Good: the bake on every second node of a 3 km map takes 0.8 s in the page's worker, against M6a's 0.4 s, and an
-  edit that leaves the heights as they were bakes nothing; the frame is unchanged within the measurement's noise
+- Good: the page's bakes on a 3 km map take 0.41 s in its worker, against M6a's 0.40 s (the light on every fourth
+  node; on every second one they took 0.78 s, and a save no longer redrew within the editor's second), and an edit
+  that leaves the heights as they were bakes nothing; the frame is unchanged within the measurement's noise
   (about 4 ms at 1080p; the dev Mac, the G2 plan's Results).
 - Bad: the light is baked for one sun; a sun that moves with the day (the campaign map's open question) needs a rebake
   or several bakes blended.

@@ -28,7 +28,8 @@ by eye between ×2 and ×3, 2026-10-30), tunable with `?z=`.
   `bakeLightRows` (in K1's bake tool, PR #262): R the sun's soft shadow (a ray from each node toward a sun disc 2.5°
   across, so the penumbra widens with the distance to what casts it), G the sky each node sees (the horizon in eight
   directions, from 4 m to 256 m away). The sun at any azimuth and elevation, not one of eight directions. Baked on
-  every second node (`LIGHT_STEP`), read through a bilinear filter.
+  every fourth node (`LIGHT_STEP`, 8 m), read through a bilinear filter: on every second one a save took 1.4 s to
+  redraw on the page check's map (`tools/map-page-check.mjs`, its limit 1 s); the sky's horizon read on whole nodes.
 - **One sun** (the owner, track-g.md): the 3D world's, from the north-west about 27° high (`SUN`), so the light does
   not change at the handover (G4).
 - **The shader** (`lit.frag`): the print (paper, water, yards, contours, ink) multiplied by the light: the sun's colour
@@ -66,15 +67,18 @@ handover (G4).
 ## Results
 
 - The look: the owner's eye on the shots in `scratch/g2/` (2026-10-30): ×3 chosen over ×2; the woods taken out.
-- The light's bake on Austerlitz (1501 × 1501 nodes, every second one baked) in the page's worker, on the preview
-  build: 0.77 to 0.78 s, against M6a's relief bake 0.39 to 0.40 s (two rounds each, the dev Mac, Chrome on Metal, a load
-  of 4.4 from other sessions: the owner allowed up to 5). On the dev server under a load of 15 to 40: 0.85 to 0.97 s;
+- The page's bakes (the light, the masks, the ink) on Austerlitz (1501 × 1501 nodes) in its worker, on the preview
+  build: 0.41 to 0.43 s with the light on every fourth node (three loads, a load of 4 to 5), against M6a's 0.39 to
+  0.40 s; with the light on every second node 0.77 to 0.78 s (two rounds, a load of 4.4 from other sessions: the owner
+  allowed up to 5). Close up (3 px a metre, `scratch/g2/step2-*` and `step4-*`) the two read alike; the ponds' banks
+  are smoother on 8 m. On the dev server under a load of 15 to 40: 0.85 to 0.97 s;
   in Node 1.8 to 2.8 s. An edit that leaves the heights, the sun and z as they were bakes nothing (the cache compares a
   kept copy of the heights).
 - The frame, on the same preview builds in a 1920 × 1080 window: 60 frames at each of three views (the whole map, the Pratzen,
   Satschan), each forced to finish by a one-pixel read; the median 3.1 to 5.0 ms for G2 against 3.3 to 4.2 ms for the
   epic (90th percentile 3.7 to 5.9 against 4.3 to 5.9). The two rounds disagree by more than the two builds do: no
-  difference measurable at this load, both far under the 6.7 ms of 150 fps.
+  difference measurable at this load, both far under the 6.7 ms of 150 fps (measured with the light on every second
+  node; on every fourth its texture is a quarter the size and the shader the same).
 
 ## Open questions
 
@@ -121,3 +125,7 @@ Round 3 (9 findings, none severe; fixed or answered, then stopped, the third rou
   (the worker's, not Node's); the view's header;
 - answered: the water shaded from its bed (K1's basins; open question 4); the frame (Results, measured once the code
   is final).
+
+After round 3, the final checks: the page check (`tools/map-page-check.mjs`) failed its one-second redraw after a save
+(1.43 s, the epic 0.64 s). The light moved to every fourth node and the sky's horizon to whole-node reads (the same
+directions and steps, no bilinear read); the bake tests pass unchanged.

@@ -231,7 +231,7 @@ maps/kinds.json ──► checkCatalogue ─┐
     view** (`src/render/lit/`, decision 0064, M6a): one flat plane in Babylon, seen 20° off straight down (decision
     0055, `?tilt=`), its shader ported from the prototype's lit and shaded paths, lit since G2 as a model (decision
     0090): a cold white paper and its worn border (no woods drawn for now: the owner), the light baked in the worker on
-    every second node (`bakeLight`: the sun's soft shadow toward a disc 2.5° across, the sky each node sees in eight
+    every fourth node (8 m; `bakeLight`: the sun's soft shadow toward a disc 2.5° across, the sky each node sees in eight
     directions; the last bake kept while the heights, the sun and the exaggeration stay as they were), the 3D world's
     sun (`src/look/sun.ts`: north-west, about 27° high), the slope's light per pixel from the node heights
     raised three times for the light only (`RELIEF.z`), a quarter of the light the sky's, divided by flat ground's;
@@ -468,7 +468,7 @@ scale below 1); the test map's real heights and its sim compile.
 `test/render-lit-bake.test.ts` (M6a, G2): the light on flat ground (in the sun, open to the sky), a block's shadow
 away from the sun at every azimuth, its length from the sun's height, its edge softer with a larger disc, a pit's
 floor seeing less sky than its rim, the highest ground's soft edge kept, a narrow bank's whole shadow, a sun on the
-horizon or with no disc clamped, the cache baking again only on a change, every second node the same light, the
+horizon or with no disc clamped, the cache baking again only on a change, every second node the same light as every node there, the
 default sun the 3D world's; the cells' mask with its yards;
 (M6b) a way's field, its square ends and its cells' gate, the widths `waysOf` takes from `lineReach`, the contract
 (every cell's kind at its centre on stair-steps, saddles, one-cell lines and diagonals), a cell field's 0 on the
