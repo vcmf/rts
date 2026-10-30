@@ -541,8 +541,8 @@ describe('exposure (sectors-model § 5)', () => {
     const CS = s.w.cr.maxC
     return [0, 1, 2, 3].map(c => exposure(s.w, G, s.i(a) * CS + c, s.i(b)))
   }
-  it('P-18: fire from the front is the depth factor alone; from a flank or the rear never less', () => {
-    const base = cr.depthByKind[cr.kinds.indexOf('line')]
+  it("P-18: fire from the front is the shape's hits from the front alone; from a flank or the rear never less", () => {
+    const base = napoleonic.types.infantry.formations.line.traits!.hits!.front!
     for (const d of [20, 80, 150]) {
       const front = at('front', d, true)
       for (const e of exposures(front.s, front.a, front.b)) expect(e).toBe(base)

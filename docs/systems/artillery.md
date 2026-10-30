@@ -68,7 +68,7 @@ step 11 casualties   the owed men fall
 
 **The cone:**
 - **Men struck:** `hits(range)` (the table, linear between points) × the aimed target's exposure to the firing
-  piece (U1, `docs/systems/fire-morale.md`): its kind's depth factor (`fire.depth`), more from its flank or rear.
+  piece (U1, `docs/systems/fire-morale.md`): its shape's hits taken (`traits.hits`), more from its flank or rear.
 - **Who:** spread over the enemy companies whose centres lie inside the cone (`cone.half`) and its range, that
   the piece sees. Each man goes first to a formation weighted by its men there, then to a company of it
   (`oweByMen`).

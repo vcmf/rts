@@ -19,7 +19,7 @@ import {
   hashWorld,
   hex,
   issue,
-  bracedOf,
+  braceOf,
   gapBetween,
   sideStruck,
   CH_CLOSING,
@@ -180,16 +180,16 @@ describe('the charge', () => {
     const s = new S()
     const sq = s.inf(-80, 0, 0, 1, 'square')
     const ln = s.inf(80, 0, 0, 1)
-    expect(bracedOf(s.w, s.slot(sq))).toBe(1)
-    expect(bracedOf(s.w, s.slot(ln))).toBe(0)
+    expect(braceOf(s.w, s.slot(sq))).toBe(1)
+    expect(braceOf(s.w, s.slot(ln))).toBe(0)
     s.order({ type: 'form', id: ln, shape: 'square' })
     s.order({ type: 'form', id: sq, shape: 'line' })
     const into: number[] = []
     const out: number[] = []
     for (let k = 0; k < 6; k++) {
       s.advance(5)
-      into.push(bracedOf(s.w, s.slot(ln)))
-      out.push(bracedOf(s.w, s.slot(sq)))
+      into.push(braceOf(s.w, s.slot(ln)))
+      out.push(braceOf(s.w, s.slot(sq)))
     }
     for (let k = 1; k < 6; k++) {
       expect(into[k]).toBeGreaterThan(into[k - 1])
@@ -198,8 +198,8 @@ describe('the charge', () => {
     expect(into[5]).toBeLessThan(1)
     expect(out[5]).toBeGreaterThan(0)
     s.advance(120)
-    expect(bracedOf(s.w, s.slot(ln))).toBe(1)
-    expect(bracedOf(s.w, s.slot(sq))).toBe(0)
+    expect(braceOf(s.w, s.slot(ln))).toBe(1)
+    expect(braceOf(s.w, s.slot(sq))).toBe(0)
   })
 })
 
@@ -501,7 +501,7 @@ describe('a second enemy (decision 0080, E-16)', () => {
     let braced = 0
     s.until(() => {
       if (s.f(b, 'foe')) return false
-      braced = bracedOf(s.w, s.slot(t))
+      braced = braceOf(s.w, s.slot(t))
       return s.f(b, 'chPhase') !== 0
     }, 60)
     if (!alone) expect(s.f(t, 'foe')).toBe(a)

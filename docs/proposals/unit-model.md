@@ -179,7 +179,7 @@ with no flank value (the square, skirmish order) uses its front.
 
 A shape's exposure is how many hits a given amount of fire does to it: the shape's base, times its sector's factor.
 It replaces today's depth factor by kind (`fire.depth`): each shape's base is its kind's value there, so the front is
-today's. First guesses for the sector factors:
+today's. (Done: each shape's `traits.hits`, `docs/proposals/formations.md` § 5a.) First guesses for the sector factors:
 
 | Shape | Base | Front | Flank | Rear | Why |
 |---|---|---|---|---|---|

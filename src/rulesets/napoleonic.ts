@@ -55,17 +55,23 @@ const infantry: UnitType = {
       kind: 'line',
       pace: 'ordinary',
       closeAcross: true,
-      exposure: { flank: 1.8, rear: 1.2 }, // enfiladed, the ball runs down the files
+      traits: { hits: { front: 1.0, flank: 1.8, rear: 1.2 } }, // enfiladed, the ball runs down the files
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * (BW(g) + g.fileSpacing), z: 0, rot: 0, face: 0 })),
     },
     // the companies over four faces, facing out (square, above)
-    square: { kind: 'column', pace: 'ordinary', braced: true, place: square },
+    square: {
+      kind: 'column',
+      pace: 'ordinary',
+      allRound: true,
+      traits: { hits: { front: 1.6 }, brace: 1 },
+      place: square,
+    },
     // column of divisions: two companies wide, one division behind another (an odd last company centred;
     // 0 − keeps the first division at +0)
     column: {
       kind: 'column',
       pace: 'ordinary',
-      exposure: { flank: 1.2, rear: 1.1 },
+      traits: { hits: { front: 1.6, flank: 1.2, rear: 1.1 } },
       place: g =>
         each(g, c => ({
           x: c === g.companies - 1 && g.companies % 2 ? 0 : ((c % 2) - 0.5) * (BW(g) + g.fileSpacing),
@@ -80,7 +86,7 @@ const infantry: UnitType = {
       pace: 'ordinary',
       roadPace: 'routeStep',
       trail: true,
-      exposure: { flank: 1.5, rear: 1.0 },
+      traits: { hits: { front: 1.6, flank: 1.5, rear: 1.0 } },
       place: g =>
         each(g, c => ({ x: ((g.ranks - 1) * g.rankSpacing) / 2, z: -c * (BW(g) + 1.0), rot: -PI / 2, face: 0 })),
     },
@@ -127,14 +133,14 @@ const cavalry: UnitType = {
     line: {
       kind: 'horse',
       pace: 'walk',
-      exposure: { flank: 1.2, rear: 1.1 },
+      traits: { hits: { flank: 1.2, rear: 1.1 } },
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * (BW(g) + SQ_GAP), z: 0, rot: 0, face: 0 })),
     },
     // column of squadrons at half distance: each squadron half its frontage behind the one ahead
     column: {
       kind: 'horse',
       pace: 'walk',
-      exposure: { flank: 1.2, rear: 1.1 },
+      traits: { hits: { flank: 1.2, rear: 1.1 } },
       place: g => each(g, c => ({ x: 0, z: -c * ((g.ranks - 1) * g.rankSpacing + BW(g) / 2), rot: 0, face: 0 })),
     },
     // column of route by fours at the trot: each squadron's block turned along the road as a column of twos,
@@ -144,7 +150,7 @@ const cavalry: UnitType = {
       kind: 'horse',
       pace: 'trot',
       trail: true,
-      exposure: { flank: 1.5, rear: 1.0 },
+      traits: { hits: { flank: 1.5, rear: 1.0 } },
       step: { file: 3.0, rank: 1.0 },
       place: g =>
         each(g, c => ({
@@ -169,6 +175,7 @@ const cavalry: UnitType = {
   start: 'line',
   fires: false,
   figure: 'mounted',
+  traits: { hits: { front: 1.3 }, melee: 1.6 }, // every shape: a horseman is a large target, and strong in melee
   // the charge (docs/systems/melee.md): at the trot, the gallop over the last 150 m (the research: 50–200
   // paces), full weight after 50 m of it; blown for two minutes after, recoiling 80 m from a square
   charge: {
@@ -203,7 +210,7 @@ const battery: UnitType = {
     unlimbered: {
       kind: 'guns',
       pace: 'manhandle',
-      exposure: { flank: 1.5, rear: 1.0 },
+      traits: { hits: { flank: 1.5, rear: 1.0 } },
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * 16, z: 0, rot: 0, face: 0 })),
     },
     // on the move: piece, limber and team one behind the other on the trail, 18 m apart, at the walk
@@ -211,7 +218,7 @@ const battery: UnitType = {
       kind: 'guns',
       pace: 'gunWalk',
       trail: true,
-      exposure: { flank: 1.5, rear: 1.0 },
+      traits: { hits: { flank: 1.5, rear: 1.0 } },
       place: g => each(g, c => ({ x: 0, z: -c * 18, rot: 0, face: 0 })),
     },
   },
@@ -223,6 +230,7 @@ const battery: UnitType = {
   start: 'limbered',
   fires: false, // no musketry: its pieces fire shot
   figure: 'crewed',
+  traits: { hits: { front: 0.4 }, melee: 0.3 }, // every shape: the detachment spread round its piece; weak in melee
   // roundshot and canister (docs/systems/artillery.md): a 6-pounder's ball at about 430 m/s, effective to about
   // 800 m with its grazes; canister inside 300 m (the research: 200–350 m). First guesses, tuned by
   // tools/calibrate-artillery.ts
@@ -343,8 +351,6 @@ export const napoleonic: Ruleset = {
     reloadJitter: 0.2,
     firingRanks: 2,
     misfire: 0.15,
-    // a horseman is a large target; a detachment stands spread round its piece
-    depth: { line: 1.0, column: 1.6, skirmish: 0.5, horse: 1.3, guns: 0.4 },
     state: { steady: 1.0, shaken: 0.85, wavering: 0.6 },
     cohesion: 0.5,
     eye: 1.6,
@@ -444,7 +450,6 @@ export const napoleonic: Ruleset = {
     impact: { kill: 0.06, shock: { front: 57, flank: 100, rear: 114 } },
     second: { flank: 43, rear: 57 }, // under the guard: 0.6 × level 2's 100
     rate: 0.01,
-    strength: { line: 1.0, column: 1.0, skirmish: 0.5, horse: 1.6, guns: 0.3 },
     cohesion: 0.5,
     refuse: 0.9,
     breach: 0.3,

@@ -9,6 +9,7 @@ import type { FireGeo } from './fire.ts'
 import type { SectorsDef } from './ruleset.ts'
 import { layoutOf } from './formation.ts'
 import { sin, cos } from './num.ts'
+import { allRoundOf } from './traits.ts'
 
 /** The face's kinds (§ 2): none (changing shape), one (a formed shape's front), all (braced), trail (head and tail). */
 export const FACE_NONE = 0
@@ -107,7 +108,7 @@ export function buildFaces(w: World, G: FireGeo): Faces {
   for (let j = 0; j < MAX_FORMATIONS; j++) {
     if (!f.alive[j]) continue
     const def = layoutOf(w, j).def
-    const kind = f.trans[j] ? FACE_NONE : def.braced ? FACE_ALL : def.trail ? FACE_TRAIL : FACE_ONE
+    const kind = f.trans[j] ? FACE_NONE : allRoundOf(w, j) ? FACE_ALL : def.trail ? FACE_TRAIL : FACE_ONE
     F.kind[j] = kind
     if (kind === FACE_ALL) continue
     const C = typeOf(w, j).C
