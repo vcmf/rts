@@ -111,8 +111,6 @@ try {
 } catch (e) {
   litError = (e as Error).message
 }
-const tiltParam = Number(new URLSearchParams(location.search).get('tilt'))
-const tilt = Number.isFinite(tiltParam) && new URLSearchParams(location.search).has('tilt') ? tiltParam : TILT
 // the light's settings, to tune by eye (G2, docs/plans/active/g2-staff-light.md), as Track K's page: the sun's height,
 // where it stands (clockwise from north) and its disc, in degrees (?sun=, ?az=, ?soft=), and the heights' exaggeration
 // for the light (?z=), all baked in the worker; the sky's share of the light, the lamp's fall-off across the map and
@@ -122,6 +120,7 @@ const litParam = (k: string): number | undefined => {
   const v = Number(q.get(k))
   return q.has(k) && Number.isFinite(v) ? v : undefined
 }
+const tilt = litParam('tilt') ?? TILT
 const sunAsked: Sun = {
   el: litParam('sun') ?? SUN.el,
   az: litParam('az') ?? SUN.az,

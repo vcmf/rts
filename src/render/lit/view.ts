@@ -146,7 +146,6 @@ export class LitView {
           'uX0Z0',
           'uSize',
           'uNodes',
-          'uCells',
           'uSun',
           'uKey',
           'uSkyC',
@@ -279,7 +278,6 @@ export class LitView {
     this.material.setVector2('uX0Z0', new Vector2(m.x0, m.z0))
     this.material.setVector2('uSize', new Vector2(W, H))
     this.material.setVector2('uNodes', new Vector2(m.nx + 1, m.nz + 1))
-    this.material.setVector2('uCells', new Vector2(m.nx, m.nz))
     this.grid = { nx: m.nx, nz: m.nz }
     this.setOverlay(null) // the last map's overlay is not this one's
     this.material.setFloat('uCell', m.cell)

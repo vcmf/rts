@@ -6,8 +6,8 @@ last_reviewed: 2026-10-30
 # Plan: G2, the staff map lit as a model, after the campaign map
 
 Track G (`docs/plans/active/track-g.md`), on `epic/gameplay-map`. The map page's lit view (`src/render/lit/`, M6,
-decision 0064), lit the way Track K's campaign map is (`docs/plans/active/k1-theatre-look.md` on
-`proto/k1-theatre-look`, PR #262, § The rebuild). Started as "M10a" on Track M; Track G took it over.
+decision 0064), lit the way Track K's campaign map is (K1's plan, § The rebuild, on `proto/k1-theatre-look`,
+PR #262). Started as "M10a" on Track M; Track G took it over.
 
 ## Problem
 
@@ -25,7 +25,7 @@ model: the light alone reads the heights raised `RELIEF.z` times, as shaded-reli
 by eye between ×2 and ×3, 2026-10-30), tunable with `?z=`.
 
 - **The bake** (`src/render/lit/bake.ts`, in the worker): `bakeRelief` replaced by `bakeLight`, after K1's
-  `bakeLightRows` (`tools/campaign-bake.ts`): R the sun's soft shadow (a ray from each node toward a sun disc 2.5°
+  `bakeLightRows` (in K1's bake tool, PR #262): R the sun's soft shadow (a ray from each node toward a sun disc 2.5°
   across, so the penumbra widens with the distance to what casts it), G the sky each node sees (the horizon in eight
   directions, from 4 m to 256 m away). The sun at any azimuth and elevation, not one of eight directions. Baked on
   every second node (`LIGHT_STEP`), read through a bilinear filter.
@@ -65,12 +65,42 @@ handover (G4).
 
 ## Results
 
-To be filled with the PR's measurements.
+- The look: the owner's eye on the shots in `scratch/g2/` (2026-10-30): ×3 chosen over ×2; the woods taken out.
+- The light's bake on Austerlitz (1501 × 1501 nodes, every second one baked) in the page's worker: 0.85 to 0.97 s
+  (the dev Mac, Chrome, the dev server, a load of 15 to 40 from other sessions); in Node 1.8 to 2.8 s under the same
+  load. The cache's hash of the heights: 10 ms. An edit that leaves the heights as they were bakes nothing.
+- The frame: FRAME.
 
 ## Open questions
 
 1. The readability bound (#141: the darkest about 0.6 of the paper): K1's shade is darker. `?floor=` sets it; checked
    when armies are on the map (G4).
 2. The woods' tone on the cold paper, after the campaign map's (the owner).
-3. The water is K1's blue in every season: M6a's pale winter wash is gone, and on a winter map (Austerlitz) the deep
+3. The houses: their shadows come from their true wall heights while the ground's light reads its heights ×3, and a
+   house in a hill's baked shadow is drawn in full light (its boxes do not read the light texture). To settle with the
+   3D world's houses (G4).
+4. The water is K1's blue in every season: M6a's pale winter wash is gone, and on a winter map (Austerlitz) the deep
    blue is near the armies' saturation. The owner has seen it in the G2 shots and asked no change; checked with the armies (G4).
+
+## Review
+
+Round 1 (`/code-review high`, 10 findings, 2 severe):
+- fixed, severe: the ray toward the sun ended once the disc's middle cleared the highest ground, cutting the soft
+  edge of that ground's shadow to a hard line (now its lower rim; tested); the ray's steps (×1.15) jumped narrow banks,
+  leaving nodes lit in their shadow (now no longer than the penumbra's width; tested on an 8 m bank);
+- fixed: a sun on the horizon or with no disc (`?sun=0`, `?soft=0`) turned the map black or NaN (`clampSun`; tested);
+  the light baked again on every edit (`lightCache`; tested); the sun's vector copied from the 3D world's materials
+  (one module, `src/look/sun.ts`); the houses' fallback sun; the slope halved within a cell of the map's edge
+  (one-sided differences in the shader, checked by eye: no test harness runs the shader); the system doc's water and
+  woods;
+- kept: the water's winter wash gone (open question 4); the measurements (Results).
+
+Round 2 (10 findings, 1 severe):
+- fixed, severe: the docs check failed (paths only on K1's branch, the plan not in the index);
+- fixed: the slope's four height reads skipped past the map's edge; the sun's term capped at three times flat
+  ground's (a low `?sun=` saturated every face); `uCells` unused; the cache's test now counts the bakes (it passed a
+  cache that baked every time); the hash's time measured; the tilt read through the same helper as the light's
+  settings; decision 0090's sun module;
+- kept: the light over the ink at a floor of 0 (the owner's look, K1's; open question 1, checked with the armies); the
+  houses (open question 3); the ray's steps far out (a work shades a node d metres away only if its height ×3 rises
+  d × tan(26°) above it: at 200 m about 30 m, which no work on a battlefield is).

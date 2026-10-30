@@ -20,7 +20,7 @@ We will light the staff map as a model:
 - **The bake** in the compile worker gives, on every second node: the sun's soft shadow (a ray toward a sun disc
   2.5° across, so the penumbra widens with the distance to what casts it) and the share of the sky each node sees (the
   horizon in eight directions, up to 256 m away). It replaces the slope light, the cast shadow and the exposure.
-- **The sun is the 3D world's** (`src/look/materials.ts`: north-west, about 27° high), at any azimuth and elevation,
+- **The sun is the 3D world's** (`src/look/sun.ts`: north-west, about 27° high), at any azimuth and elevation,
   not one of the grid's directions.
 - **The shader** lights the print per pixel: the sun's colour on the slope from the node heights, in its shadow; the
   sky's colour in its share (a quarter of the light); the whole divided by flat ground's light, so flat paper keeps its

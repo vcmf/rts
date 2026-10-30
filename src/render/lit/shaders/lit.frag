@@ -14,7 +14,7 @@ uniform sampler2D uInk;      // the ink's distance fields on the cells: R ways (
 uniform sampler2D uPaperT, uFlatT;
 uniform sampler2D uOverlay;  // a debug overlay (src/render/lit/overlays.ts): RGBA a cell, alpha where it shows
 uniform float uOverlayOn;
-uniform vec2 uX0Z0, uSize, uNodes, uCells, uLightNodes;
+uniform vec2 uX0Z0, uSize, uNodes, uLightNodes;
 uniform float uCell, uDatum, uFlat, uInkRange, uLightStep, uZ, uSkyK, uLamp, uFloor;
 uniform vec3 uSun;           // toward the sun (x east, y up, z north), a unit vector
 uniform vec3 uPaper, uKey, uSkyC, uShallow, uDeep, uContourMinor, uContourIndex, uLine, uBarrier;
@@ -115,14 +115,17 @@ void main() {
   {
     /* the differences one-sided within a cell of the map's edge (the heights past it are held, which would halve
        the slope there) */
-    vec2 lo = uX0Z0, hi = uX0Z0 + (uNodes - 1.0) * uCell;
-    vec2 p0 = clamp(vW.xz - uCell, lo, hi), p1 = clamp(vW.xz + uCell, lo, hi);
-    float gx = (heightAt(vec2(p1.x, vW.z)) - heightAt(vec2(p0.x, vW.z))) / max(p1.x - p0.x, 1e-3) * uZ;
-    float gz = (heightAt(vec2(vW.x, p1.y)) - heightAt(vec2(vW.x, p0.y))) / max(p1.y - p0.y, 1e-3) * uZ;
+    float gx = 0.0, gz = 0.0;
+    if (inside > 0.0) {   /* past the map's edge the ground is flat: no height to read */
+      vec2 lo = uX0Z0, hi = uX0Z0 + (uNodes - 1.0) * uCell;
+      vec2 p0 = clamp(vW.xz - uCell, lo, hi), p1 = clamp(vW.xz + uCell, lo, hi);
+      gx = (heightAt(vec2(p1.x, vW.z)) - heightAt(vec2(p0.x, vW.z))) / max(p1.x - p0.x, 1e-3) * uZ;
+      gz = (heightAt(vec2(vW.x, p1.y)) - heightAt(vec2(vW.x, p0.y))) / max(p1.y - p0.y, 1e-3) * uZ;
+    }
     vec3 n = normalize(mix(vec3(-gx, 1.0, -gz), vec3(0.0, 1.0, 0.0), max(waterA, 1.0 - inside)));
     vec2 ln = (vW.xz - uX0Z0) / (uCell * uLightStep);   /* light node i at the centre of texel i */
     vec2 B = mix(vec2(1.0), texture2D(uLight, (ln + 0.5) / uLightNodes).rg, inside);
-    float key = max(0.0, dot(n, uSun)) / uSun.y;
+    float key = min(max(0.0, dot(n, uSun)) / uSun.y, 3.0);   /* a face lit three times flat ground at most: a low ?sun= */
     float sky = B.g * (0.55 + 0.45 * n.y);
     vec2 toSun = normalize(uSun.xz + vec2(1e-6, 0.0));
     float side = clamp(dot((vW.xz - uX0Z0) / uSize * 2.0 - 1.0, toSun) * 0.5, -0.5, 0.5);

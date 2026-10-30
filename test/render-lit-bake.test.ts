@@ -93,16 +93,19 @@ describe('G2: the light bake', () => {
     }
   })
   it('the light cache bakes again only when the heights, the sun or z change, and copies its bytes', () => {
-    const bake = lightCache()
+    let baked = 0
+    const bake = lightCache((...a) => (baked++, bakeLight(...a)))
     const h = Float64Array.from(block)
     const a = bake(h, N, N, 2, SUN, 1, 1)
     const b = bake(h, N, N, 2, SUN, 1, 1)
+    expect(baked).toBe(1)
     expect(b.data).not.toBe(a.data)
     expect(b.data).toEqual(a.data)
     h[20 * N + 20] = 30 // a tower west of the block
     expect(bake(h, N, N, 2, SUN, 1, 1).data).toEqual(bakeLight(h, N, N, 2, SUN, 1, 1).data)
     expect(bake(h, N, N, 2, sunAt(90), 1, 1).data).toEqual(bakeLight(h, N, N, 2, sunAt(90), 1, 1).data)
     expect(bake(h, N, N, 2, sunAt(90), 1, 3).data).toEqual(bakeLight(h, N, N, 2, sunAt(90), 1, 3).data)
+    expect(baked).toBe(4)
   })
   it("a pit's floor sees less of the sky than the ground round it", () => {
     const pit = Float64Array.from(block, v => -v)

@@ -60,7 +60,7 @@ export interface LightBake {
 }
 
 /**
- * The light that does not change (decision 0090, after Track K's `bakeLightRows` in tools/campaign-bake.ts), from the
+ * The light that does not change (decision 0090, after Track K's `bakeLightRows`, PR #262), from the
  * heights raised `z` times (RELIEF.z by default), on every `step`-th node: `heights` (nx) × (nz) nodes `cell` m apart.
  * - The sun's shadow: from each node a ray walks toward the sun in growing steps, as far as any ground of the map
  *   could shade it; the sun is a disc `size` degrees across, so a crest just grazing the ray dims it in part, and the
@@ -146,9 +146,9 @@ export function bakeLight(
 /**
  * bakeLight, remembering its last bake: a compile that leaves the heights, the sun, `z` and `step` as they were (an
  * edit of a hedge, a name, a save) bakes nothing. Each call returns its own copy of the bytes, so the caller can
- * transfer them.
+ * transfer them. `bake` is bakeLight but for the tests.
  */
-export function lightCache(): (
+export function lightCache(bake = bakeLight): (
   heights: Float64Array,
   nx: number,
   nz: number,
@@ -160,13 +160,13 @@ export function lightCache(): (
   let key = ''
   let last: LightBake | null = null
   return (heights, nx, nz, cell, sun, step, z) => {
-    // FNV-1a over the heights' bits: about 10 ms for a 3 km map, against about a second for the bake
+    // FNV-1a over the heights' bits: 10 ms for a 3 km map (measured, Node, the dev Mac), against a second for the bake
     const w = new Uint32Array(heights.buffer, heights.byteOffset, heights.length * 2)
     let f = 0x811c9dc5
     for (let k = 0; k < w.length; k++) f = Math.imul(f ^ w[k], 0x01000193)
     const k = [nx, nz, cell, sun.el, sun.az, sun.size, step, z, f >>> 0].join(',')
     if (!last || k !== key) {
-      last = bakeLight(heights, nx, nz, cell, sun, step, z)
+      last = bake(heights, nx, nz, cell, sun, step, z)
       key = k
     }
     return { ...last, data: last.data.slice() }
