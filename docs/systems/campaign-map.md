@@ -46,13 +46,14 @@ level's bake, `levelLayout` says how a level is cut. Tested in `test/campaign-ti
 | `l1` | 100 m | 8001 × 5001 | 640 | 91 MB |
 
 with `manifest.json`: its own format's version, the frame, every parameter the bake depends on (the shape's, the
-theatre's lowest ground, the sun's, the lakes', the forests'), the levels (cell, nodes, tiles, the shape's step and
-base, the heights' zoom, the tiles' path) and the credit. Each level's grid must span the frame exactly (its cell
-divides it, or the tool stops). The far level's heights are the theatre's own. Every output is built beside the last
-one and swapped in whole when the run succeeds: a failed run leaves the last build as it was. The build takes 63 s on
-8 cores (the i7-9700K of the owner's WSL machine): 6 s for `l0`, 55 s for `l1`, most of it the light; the tiles are
-deflated on the thread pool. It also writes the 100 m level as the prototype's base64 tiles (280 MB) under
-`scratch/campaign-tiles/`, from the same bake, their shape held at zero as the prototype expects.
+theatre's lowest ground, the sun's, the lakes', the forests' and their field's), the levels (cell, nodes, tiles, the
+shape's step and base, the heights' zoom, the tiles' path) and the credit. Each level's grid must span the frame
+exactly (its cell divides it, or the tool stops). Both outputs are built beside the last ones and swapped in at the
+end (the old renamed aside, the new renamed in, the old removed; a failed rename puts them back): a failed run leaves
+the last builds as they were. The build takes 69 s on 8 cores (the i7-9700K of the owner's WSL machine): 10 s for
+`l0`, 58 s for `l1`, most of it the light; the tiles are deflated on libuv's thread pool. It also writes the 100 m
+level as the prototype's base64 tiles (280 MB) under `scratch/campaign-tiles/`, from the same cut, their shape held
+at zero as the prototype expects.
 
 The tools around it: `tools/campaign-theatre.ts` (the theatre's data, its 250 m heights, the forest field),
 `tools/worldcover.ts` (the forests' source), `tools/terrarium.ts` (the heights' source).

@@ -40,22 +40,24 @@ compressed tile levels with a manifest. The page that draws them is K2b.
 - Vitest (`test/campaign-bake.test.ts`, moved and extended; `test/campaign-tiles.test.ts`): a tile packs and unpacks
   to the same values, its edge tiles padded with the grid's edge; the shape's row differences round-trip at the
   Uint16 limits; a tile deflated by Node's zlib inflates in `DecompressionStream`; a wrong magic, version or length
-  refused; the bake gives the same bytes twice.
+  refused; the light baked by bands (as the workers do) gives the bytes of one pass.
 - The prototype's image: the prototype's tiles written by the new tool equal, byte for byte, those written before
-  K2a (so the page draws the same image), and the 100 m level unpacked equals what they carry (one bake, two
-  packings).
+  K2a (so the page draws the same image), and the 100 m level unpacked carries the same shape and light (one bake,
+  two packings: the binary shape above its base, the prototype's from zero).
 - Measured: each level's size on disk (against the prototype's base64 tiles), and the bake's time on this machine.
 
 ## Results
 
 - The bake moved whole: the prototype's 640 tiles and meta file written by the rewritten tool are byte for byte
   those of K1b's tool (the page unchanged, so its image is the same); every tile of the binary 100 m level, inflated
-  by `DecompressionStream` and unpacked, equals the prototype tile of the same place (a check script, 3 s for the
-  640 tiles in one Node thread).
+  by `DecompressionStream` and unpacked, carries the light of the prototype tile of the same place byte for byte,
+  and its shape less the base (140 steps) held at zero is the prototype's; the binary level keeps 18,413 lake-bed
+  nodes below the lowest ground that the prototype holds at zero (a check script, 3 s for the 640 tiles in one Node
+  thread; rerun after each round).
 - Sizes, the 1805 theatre: the 100 m level 91 MB (the prototype's base64: 280 MB; raw: 210 MB), the 250 m level
   18 MB.
-- The build: 63 s on 8 cores (the owner's WSL machine, an i7-9700K): 6 s for the 250 m level (the theatre's own
-  heights), 55 s for the 100 m one, most of it the light.
+- The build: 69 s on 8 cores (the owner's WSL machine, an i7-9700K): 10 s for the 250 m level, 58 s for the 100 m
+  one, most of it the light.
 - Tests: `test/campaign-tiles.test.ts` (13), `test/campaign-bake.test.ts` (one more: the bands give the bytes of one
   pass), `test/worldcover.test.ts` (unchanged, its smoothing and resampling now from the bake module).
 
@@ -70,6 +72,15 @@ compressed tile levels with a manifest. The page that draws them is K2b.
   `unpackTile` refuses a tile of another place than the one asked for; the forest field loaded once and the far
   level's heights the theatre's own; one `levelLayout`; the tiles deflated on the thread pool; the manifest's format
   apart from the tiles'. The prototype's tiles unchanged, byte for byte.
+- **Round 2**: severe: an output given with a trailing slash put the build inside it, and the swap then removed both
+  (no tiles left): the paths resolved first; the swap not all at once (the old removed before the new was in, the
+  two outputs one after the other): the old ones renamed aside, the new ones renamed in, the old ones removed last,
+  a failed rename put back, a crashed run's leftovers cleared. With: the manifest's parameters with the forest
+  field's cell and WorldCover's level; every level's heights sampled at its recorded zoom (the far level had taken
+  the theatre's, under a zoom it did not come from); each tile cut once for both outputs; as many deflates at once as
+  libuv's pool has threads, written without blocking; the acceptance's claim of the same bytes twice replaced by what
+  the test checks (bands against one pass); a stray doc comment. Left: the prototype still holds its lake beds at
+  zero, as before K2a (its shader reads its shape from zero; the page that replaces it, K2b, reads the base).
 
 ## Open questions
 

@@ -11,8 +11,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { FIELD_CELL, smoothCover, WOOD_BOX_M, type ForestField } from '../src/render/campaign/bake.ts'
-
-export type { ForestField }
 import { frameGrid, type Frame, type projection } from './campaign-theatre-lib.ts'
 
 const BASE = 'https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map'
@@ -22,7 +20,7 @@ const HEADER_BYTES = 65536
 // the class of tree cover
 const TREES = 10
 // the level read: the one closest to (and not coarser than) this many pixels across a 3° file
-const LEVEL_PX = 4500
+export const WORLDCOVER_LEVEL_PX = 4500
 // downloads: files read side by side, and each file's tiles
 const FILES_AT_ONCE = 2
 const TILES_AT_ONCE = 8
@@ -213,7 +211,7 @@ async function readSheet(lat0: number, lon0: number): Promise<Sheet | null> {
   const url = `${BASE}/${name}`
   const head = await range(url, path.join(CACHE, name, 'head.bin'), 0, HEADER_BYTES)
   if (!head) return null
-  const level = chooseLevel(parseCog(head), LEVEL_PX)
+  const level = chooseLevel(parseCog(head), WORLDCOVER_LEVEL_PX)
   if (level.compression !== 8) throw new Error(`${name}: compression ${level.compression}, not Deflate`)
   // a 3° file is square, and so are its tiles: pixelOf and the tile copy below count on both
   if (level.height !== level.width) throw new Error(`${name}: a level of ${level.width} × ${level.height} pixels`)
@@ -329,7 +327,7 @@ async function forestCover(
  */
 export async function forestField(frame: Frame, proj: Projection): Promise<ForestField> {
   const { nx, nz } = frameGrid(frame, FIELD_CELL)
-  const key = [frame.lat0, frame.lon0, frame.halfX, frame.halfZ, FIELD_CELL, WOOD_BOX_M, LEVEL_PX].join('_')
+  const key = [frame.lat0, frame.lon0, frame.halfX, frame.halfZ, FIELD_CELL, WOOD_BOX_M, WORLDCOVER_LEVEL_PX].join('_')
   const file = path.join(CACHE, `field-${key}.bin`)
   if (fs.existsSync(file)) {
     const kept = fs.readFileSync(file)
