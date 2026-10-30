@@ -151,7 +151,7 @@ void main(){
   #else
   vec3 fl=flowTex(root);
   #endif
-  // upright (?grassup, docs/plans/active/grass-upright.md): the clump's own fan partly undone, as a crop's is
+  // upright (?grassup, docs/plans/done/grass-upright.md): the clump's own fan partly undone, as a crop's is
   if(!crop)p.xz/=1.0+GRASS_FAN_UNDO*big*CROP_FAN*aV;
   if(!crop)p.xz+=mix((vec2(h5,h6)-0.5)*0.25,fl.xy*mix(LEAN_MIN,LEAN_MAX,fl.z)*p.y/max(hgt,0.05)+(vec2(h5,h6)-0.5)*LEAN_JITTER,big)*p.y;   // (as the default under the snow)
   else p.xz+=(vec2(h5,h6)-0.5)*0.06*p.y;

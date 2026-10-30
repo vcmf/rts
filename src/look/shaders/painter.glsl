@@ -95,7 +95,7 @@ float shadowAtRaw(vec3 wp,vec3 n){
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,uSMFade.x,e.x)*smoothstep(0.0,uSMFade.y,e.y);   // soft edge: far foliage past the box fades to lit
   return s/4.0*fade;}
 float shadowAt(vec3 wp,vec3 n){return shadowAtRaw(wp,n)*uShadowsOn;}
-// a wide, clean penumbra (the layered crowns, docs/plans/active/crown-leaves.md): eight reads on two rings, r and r/2
+// a wide, clean penumbra (the layered crowns, docs/plans/done/crown-leaves.md): eight reads on two rings, r and r/2
 // texels round the point, no grain jitter. Read where a sun ray leaves a crown, the point slides along the light at a
 // grazing angle, and the map's leaf-cut holes (the cards cast through the atlas) came out as streaks along it; the
 // rings average the holes away and widen the edge
@@ -217,7 +217,7 @@ vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
 #if defined(DETAIL)&&!defined(DETAIL_L0)
 #define DETAIL_ON
 #endif
-// THE MID TONE (docs/plans/active/soft-midtone.md, decision 0084): how wide the ramp turns from light to
+// THE MID TONE (docs/plans/done/soft-midtone.md, decision 0084): how wide the ramp turns from light to
 // shade, by the material's class, set by the page (?midtone, src/look/midtone.ts: MIDn_U units, _B buildings,
 // _N the nature meshes, _G the ground). MID1: soft band edges, the mid a little lighter. MID2: a wide mid tone, the
 // light wrapped round the form. MID3 (units only): the figure's turn, the mid spread over most of the side turned from

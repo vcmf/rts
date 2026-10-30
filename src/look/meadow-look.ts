@@ -1,4 +1,4 @@
-// The meadow's looks (decision 0085, docs/plans/active/grass-upright.md): the combed clumps' (?grassup, GRASS_UP in
+// The meadow's looks (decision 0085, docs/plans/done/grass-upright.md): the combed clumps' (?grassup, GRASS_UP in
 // src/look/meadow-spec.ts) and the wheat's fill (?wheatfill), read from the page's query and turned into the defines
 // the shaders take. Pure: no Babylon, so the tests read it.
 import {

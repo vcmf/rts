@@ -1,7 +1,7 @@
 // The unit data files (data/figures/<figure>.unitdata, written by tools/bake-figure.py;
 // docs/plans/active/armies-demo.md): their decoder and their checks. No Babylon: the tests read it in Node. A figure's
 // clips are named by ROLE (decision 0015, the page never names a clip: the infantryman's halt, march, run, fire; a
-// figure names its own, docs/plans/active/cavalry-artillery-demo.md), each a range of the baked animation's 12 fps
+// figure names its own, docs/plans/done/cavalry-artillery-demo.md), each a range of the baked animation's 12 fps
 // steps
 export interface UnitRange {
   start: number
@@ -758,7 +758,7 @@ export function stepAtlasLayout(
  *  already made. steps (0: the average above): the shape per animation step instead (?ushstep,
  *  docs/plans/done/step-shadows.md): a role's clip in min(n, steps) bins (stepBin), each the average of up to
  *  binSamples of its own steps, a row of facings a bin, the rows in blocks within maxSize texels a side
- *  (stepAtlasLayout). heights (docs/plans/active/cavalry-artillery-demo.md): a third channel, at each texel the height
+ *  (stepAtlasLayout). heights (docs/plans/done/cavalry-artillery-demo.md): a third channel, at each texel the height
  *  over the ground of the lowest part casting it (averaged over the steps where covered, blurred with the shape's own
  *  blur, its share of the figure's posed top: heightTop), so the decal measures its look from each contact (a horse's
  *  hooves, a gun's wheels), not from the root. maxCell: a cell's texels a side at most; a bigger figure's texel grows

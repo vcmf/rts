@@ -18,7 +18,7 @@ precision highp float;attribute vec3 position;
 // the look's far share; past the soles it is drawn uShLen as long (the zoom's look, decision 0062: the shape's own texels stretched or shortened, his feet where they were).
 // vAlong: m along it from his soles at the shape's own size times uShLen (the far figures' growth leaves the
 // fragment's gradient where it lies on the shape). SH_SPREAD (a figure on more than its root: a horse's hooves, a gun's
-// wheels; docs/plans/active/cavalry-artillery-demo.md): its shape drawn at its own length (a shortening about the root
+// wheels; docs/plans/done/cavalry-artillery-demo.md): its shape drawn at its own length (a shortening about the root
 // would move the far hooves' shadow off them; the fragment's look runs from each contact instead), grown by the far
 // growth across alone, its lift at least SPREAD_FLOOR m
 uniform mat4 viewProjection;uniform vec3 uCamPos;

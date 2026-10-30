@@ -111,7 +111,7 @@ export const UNIFORMS: Readonly<Record<string, Dress>> = {
     },
     flag: ['flag-green', 'flag-black', 'flag-green'],
   },
-  // the cavalry and the artillery (docs/plans/active/cavalry-artillery-demo.md; first picks, the owner's to change):
+  // the cavalry and the artillery (docs/plans/done/cavalry-artillery-demo.md; first picks, the owner's to change):
   // the French cuirassiers: blue coat, red facings, white breeches, black boots (the figure's shabraque wears the
   // coat, its lace the breeches' white)
   'fr-cuirassier': {

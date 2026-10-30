@@ -1,6 +1,6 @@
 ---
-status: active
-last_reviewed: 2026-10-29
+status: done
+last_reviewed: 2026-10-30
 ---
 
 # Plan: A1b, the camera's focus on the ground, and the ground range per world

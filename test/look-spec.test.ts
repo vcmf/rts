@@ -760,7 +760,7 @@ describe("each world's data against the camera (checkView, nearFrameOf)", () => 
       const [lo, hi] = g.focus
       const focusY = (x: number, z: number, r: number) =>
         lo === hi ? lo : Math.max(lo, Math.min(hi, groundUnder(groundAt, x, z, spreadOf(r))))
-      // (1 m of headroom: the Pratzen's is 1.6 m, docs/plans/active/look-austerlitz-a1b.md, open questions)
+      // (1 m of headroom: the Pratzen's is 1.6 m, docs/plans/done/look-austerlitz-a1b.md, open questions)
       expect(nearFrameOf(SPEC, groundAt, focusY)).toBeLessThanOrEqual(SPEC.tile / 2 - 1)
     })
   }

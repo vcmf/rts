@@ -31,7 +31,7 @@ const LOSS_DEFINES = `#define LOSS_FROM ${LEAF_LOSS.from.toFixed(3)}\n#define LO
 export const withCards = (src: string): string => src.replace('#include<cards>', () => LOSS_DEFINES + CARDS)
 
 /**
- * The painter's layers' tones (docs/plans/active/crown-leaves.md; LEAF_PAINT in canopy.frag): each a gain on the
+ * The painter's layers' tones (docs/plans/done/crown-leaves.md; LEAF_PAINT in canopy.frag): each a gain on the
  * crown's foliage colour, the dark base cool, the mid as it is, the light warmer, the highlights pale and warm
  */
 export const LEAF_LAYERS: [number, number, number][] = [
@@ -208,7 +208,7 @@ export function cardMesh(
 
 // the card material: the default crowns' palette, rim and backlight, the leaf atlas's value and coverage
 // look.volume: the crown lit as a volume (L7b: a normal per pixel from its ellipsoid, the light through it, the soft
-// ramp); look.paint: the painter's layers up close (docs/plans/active/crown-leaves.md)
+// ramp); look.paint: the painter's layers up close (docs/plans/done/crown-leaves.md)
 // thins: the crown thins with the season, card by card (src/look/shaders/cards.glsl; generated deciduous trees)
 // fade: a far tree's cards (src/look/nature.ts, farCuller), cut by a dither as the instance's
 // aFade gives way to its crown mesh

@@ -41,7 +41,7 @@ export const GRASS_TALL = 1.15
 export const LEAN_MIN = 0.18
 export const LEAN_MAX = 0.75
 export const LEAN_JITTER = 0.12
-/** A look of the combed clumps (?grassup, docs/plans/active/grass-upright.md) */
+/** A look of the combed clumps (?grassup, docs/plans/done/grass-upright.md) */
 export interface GrassUp {
   /** up close (CLOSE_ZOOM, the inner rings): the footprint and the height times these */
   wide: number

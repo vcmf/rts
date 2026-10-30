@@ -112,7 +112,7 @@ setRiver(look.river)
 setHeightfield(look.hf, look.far, D.spec.tile / 2)
 // the world's ground range, from the heights themselves (not the header): the camera's checks take it (checkView), and
 // the focus keeps to its range (the demo's focus stays on its 8 m plane, SPEC.camera.focusY; a map world's follows its
-// ground in play: docs/plans/active/look-austerlitz-a1b.md)
+// ground in play: docs/plans/done/look-austerlitz-a1b.md)
 const worldGround = groundOf(D.spec, look.hf, look.far, onMap ? null : D.spec.camera.focusY)
 checkView(D.spec, worldGround)
 const canvas = document.getElementById('c') as HTMLCanvasElement
@@ -234,7 +234,7 @@ if (reliefK > 0) {
   tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE
   relief = { tex, k: reliefK }
 }
-// ?grassup=0|1|2, ?wheatfill=0|1: the meadow's look (docs/plans/active/grass-upright.md, decision 0085; meadowLookOf in
+// ?grassup=0|1|2, ?wheatfill=0|1: the meadow's look (docs/plans/done/grass-upright.md, decision 0085; meadowLookOf in
 // src/look/meadow-look.ts)
 const meadowLook = meadowLookOf(params, grassMode)
 const grain0 = makeGrainCanvas(null)
@@ -373,7 +373,7 @@ if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has(
 // the generator (a plain script that sets window.TREEGEN), loaded only for the arm that draws its trees
 if (treeSet.has('gen')) await import('../../prototypes/tree-core.js')
 const cardsOn = treeSet.has('cards')
-// ?leaves: the leaf atlas (docs/plans/active/crown-leaves.md): layered (the default), the owner's sheet of simple
+// ?leaves: the leaf atlas (docs/plans/done/crown-leaves.md): layered (the default), the owner's sheet of simple
 // leaves read as the painter's layers; oak, the oak picture the crowns had before; procedural, L7a's drawn oak clumps
 const LEAVES = ['layered', 'oak', 'procedural'] as const
 const leavesParam = params.get('leaves') ?? 'layered'
@@ -395,7 +395,7 @@ const cardOpt = (k: string, d: number) => {
   if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`)
   return v
 }
-// ?leafscale=<x>: the layered leaves' size, 1 the sheet's clumps at 0.8 a cell (docs/plans/active/crown-leaves.md)
+// ?leafscale=<x>: the layered leaves' size, 1 the sheet's clumps at 0.8 a cell (docs/plans/done/crown-leaves.md)
 if (params.has('leafscale') && !paintedLeaves) {
   throw new Error('?leafscale needs the layered leaves (not oak or procedural)')
 }
@@ -627,7 +627,7 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dar
 // switches (with ?armies): ?uniforms=all, each side's battalions wearing the scenario's reviewSides in turn;
 // ?uniforms=all-greatcoats, the same with every man in his greatcoat; ?dye=<dye>:<rrggbb>[;…] (bare, or '#' as
 // %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride). The other arms
-// (docs/plans/active/cavalry-artillery-demo.md, the scenario's ARMS_DEMO): ?cavalry=0, ?artillery=0 leave them out
+// (docs/plans/done/cavalry-artillery-demo.md, the scenario's ARMS_DEMO): ?cavalry=0, ?artillery=0 leave them out
 // (with both, main's page before them)
 const armiesParam = params.get('armies')
 // (under ?sim the other arms are left out: their scripts are stand-ins the sim does not drive, nor place against its
