@@ -249,11 +249,49 @@ Built as the approach says, with what the stills taught:
   on the second (facing the camera), on and off (a compare page: space flips), a battery's volley over a minute
   (`volley-life.gif`, `seq-sheet.png`), and the tuning rounds (`it2` to `it6`).
 
+## Round 2: the clouds' body (2026-10-30)
+
+The owner, on the merged guns' smoke (#266): its motion and look approved, but "still a bit flat: it must be denser,
+less transparent, and more 3D". Refs: `output/smoke-refs/owner-2026-10-28/` (the Patriot's volley bank, Cossacks 2's
+volley, the musket plume) and `docs/research/smoke.md`; this plan's open question 1 (a thicker bank).
+
+**Scope**: the arms' big cards only (the muskets' smoke as approved: `uBody` 0 on its material); painted, no
+volumetrics or ray marching; the formations' cap kept over every card; the far-zoom fix (`vFar`) kept. Variants behind
+`?smokebody=0|1|2` (0, today's, the default until the owner picks; `BODY_LOOKS`, `src/look/world/smoke.ts`).
+
+**Approach** (`src/look/shaders/smoke.frag`, `smoke.vert`, `src/look/smoke.ts`; `docs/systems/look.md`, the body):
+
+- **Denser**: a core from the card's large shape alone (the falloff and the large billows; the smaller billows and
+  the grain left to the rim, which stays torn and soft), near-opaque through and its opacity holding to half its life
+  (`vOpC`), then fading with the erosion; the rim thinning as before. A thin puff (one in seven, the gaps between
+  clouds; a far strung puff's lower density) gets no core: a faint core read as a grey film (seen in the first stills).
+- **3D**: a dome over the card's shape (its normal from the card's coordinates), its lobes the large billows embossed
+  a step toward the sun; lit by the sun through a soft mid tone (decision 0084) from a warm white to a pale cool shade,
+  the underside cooler and deeper, the core deeper in the shade than the rim, a faint warm rim on the sun's side. The
+  thin veils lit as before (the body's light weighted by the core's shape). First built with the billows' slope from
+  the screen's derivatives (and then a strong emboss): the 8-bit grain's large blotches step, and the light came out in
+  terraces, a blocky camouflage; the gentle emboss of values does not.
+- **Front and back**: the cards drawn back to front (`depthOrder`: the ring's live puffs' middles at the shader's clock,
+  an insertion sort each frame into a second buffer, only the live ones drawn); with dense cores an unsorted blend put a
+  back card's lit top over a front card. **2** adds one lobe a strung puff (`BODY_LAYERS`: a lit top up and to one
+  side, a shaded underbelly low on the other, in turn; set off by shares of the puff's radius, so they grow apart with
+  it): 8 cards a shot for 4. Fewer, bigger, denser cards over many translucent ones (the fill is the cost).
+
+**Stills** (`output/armies-review/29-gun-smoke-volume/`, not in git: its compare page, side by side or space to cycle
+0 → 1 → 2; 25, 40, 90, 150 m at 66 s and 40 m at 64 s; one volley's life every 2 s, `seq-sheet.png` and a gif a
+variant; the refs). Read: 1 and 2 turn the flat white patches into rounded, lit clouds with a cool shaded side and
+underside; 2 is fuller and rounder, its far puffs more of a cloud; the crews and the cavalry riding through still read
+(the cap); at 90 and 150 m soft shaded masses, no camouflage pattern.
+
+**Cost**: COST_PLACEHOLDER
+
 ## Open questions for the owner
 
 1. **How long should a gun's cloud stay, and how thick the bank?** 14 to 22 s as built (cut from 20 to 30 s for the
    cost): a battery in action keeps a ragged row of clouds before its guns, not a continuous bank. A thicker,
    longer bank is truer to Mercer and costs about 0.3 ms more at the worst views (measured with the first def).
+   Round 2 (`?smokebody`) makes each cloud denser and rounder at the same life; which body (0, 1, 2) is the owner's
+   pick.
 2. **Dust**: a low, warm brown puff at the ground under the muzzle as the blast kicks it up (Leonardo's smoke and
    dust), or white smoke only?
 3. **The flash**: a short spark only (as the muskets'), or a warm glow lighting the young cloud for a tenth of a second?

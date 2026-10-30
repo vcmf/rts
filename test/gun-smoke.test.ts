@@ -8,8 +8,13 @@ import { scriptClock, type Battalion } from '../src/look/world/armies.ts'
 import { serveScript } from '../src/look/world/arms.ts'
 import { decodeUnits } from '../src/look/units-data.ts'
 import {
+  BODY_LAYERS,
+  BODY_LOOKS,
   PUFF_FLOATS,
+  bodyLayer,
   cardLift,
+  depthOrder,
+  smokeBody,
   pathGround,
   pieceStarts,
   pieceRingSize,
@@ -231,5 +236,125 @@ describe("the era's gun smoke checked", () => {
     expect(() => validateSmoke({ ...GUN, strung: [2.5, 1] }, timing(false))).toThrow(/strung\[0\]/)
     expect(() => validateSmoke({ ...GUN, strung: [3, 0] }, timing(false))).toThrow(/strung\[1\]/)
     expect(() => validateSmoke(GUN, { ...timing(false), hold: 110 })).toThrow(/hold/)
+  })
+})
+
+describe("a big cloud's body (?smokebody)", () => {
+  const shot: PieceShot = { t: 30, piece: 2, cycle: 0, n: 1 }
+  it('adds a lobe to each of the first strung puffs, its puff unchanged, born and carried with it', () => {
+    const plain: number[] = []
+    const lobed: number[] = []
+    piecePuffs(battery, 0, shot, places[2], GUN, () => 0, plain)
+    piecePuffs(battery, 0, shot, places[2], GUN, () => 0, lobed, [1, 4])
+    const n = GUN.strung[0]
+    expect(lobed.length).toBe(2 * n * PUFF_FLOATS)
+    for (let k = 0; k < n; k++) {
+      const puff = lobed.slice(2 * k * PUFF_FLOATS, (2 * k + 1) * PUFF_FLOATS)
+      const lobe = lobed.slice((2 * k + 1) * PUFF_FLOATS, (2 * k + 2) * PUFF_FLOATS)
+      // (the puff as without the body; a plain puff in no place of a cloud)
+      expect(puff).toEqual(plain.slice(k * PUFF_FLOATS, (k + 1) * PUFF_FLOATS))
+      expect(puff.slice(14)).toEqual([0, 0])
+      // (the lobe: the puff's birth, clock, way, life and reach; its own seed and place)
+      for (const i of [0, 1, 2, 3, 4, 5, 7, 9, 12, 13]) expect(lobe[i]).toBe(puff[i])
+      expect(lobe[6]).not.toBe(puff[6])
+      const L = BODY_LAYERS[k % BODY_LAYERS.length]
+      expect(Math.abs(lobe[14])).toBeCloseTo(Math.abs(L.across), 9)
+      expect(lobe[15]).toBeCloseTo(L.up, 9)
+      expect(lobe[8]).toBeCloseTo(puff[8] * L.size, 9)
+      expect(lobe[11]).toBeLessThanOrEqual(1)
+    }
+    // (only the first `layers[1]` puffs get lobes)
+    const two: number[] = []
+    piecePuffs(battery, 0, shot, places[2], GUN, () => 0, two, [1, 2])
+    expect(two.length).toBe((n + 2) * PUFF_FLOATS)
+  })
+  it("a lobe's side flipped by its hash, its seed in [0, 1)", () => {
+    expect(bodyLayer(0, 0.2).across).toBe(BODY_LAYERS[0].across)
+    expect(bodyLayer(0, 0.7).across).toBe(-BODY_LAYERS[0].across)
+    expect(bodyLayer(1, 0.2)).toMatchObject({ up: BODY_LAYERS[1].up, size: BODY_LAYERS[1].size })
+    for (const h of [0, 0.31, 0.5, 0.999]) {
+      const s = bodyLayer(3, h).seed
+      expect(s).toBeGreaterThanOrEqual(0)
+      expect(s).toBeLessThan(1)
+    }
+  })
+  it('the ring holds the lobes too', () => {
+    const f = timing(true)
+    const spans: [number, number][] = []
+    for (const s of pieceShotsBetween(-times.cycle, 3 * times.cycle, 0, f, [])) {
+      const out: number[] = []
+      piecePuffs(battery, 0, s, places[s.piece], GUN, () => 0, out, BODY_LOOKS[2].layers)
+      for (let k = 0; k < out.length; k += PUFF_FLOATS) spans.push([out[k + 3], out[k + 3] + out[k + 7]])
+    }
+    let most = 0
+    for (let t = 0; t < 3 * times.cycle; t += 0.25) {
+      most = Math.max(most, spans.filter(([a, e]) => a <= t && t < e).length)
+    }
+    expect(most).toBeGreaterThan(0)
+    expect(most).toBeLessThanOrEqual(pieceRingSize(8, f, GUN, 8192, 4))
+  })
+  it('?smokebody: 0 without it, each variant by number, a bad value throws', () => {
+    expect(smokeBody(new URLSearchParams(''))).toBe(0)
+    for (let b = 0; b < BODY_LOOKS.length; b++) expect(smokeBody(new URLSearchParams(`smokebody=${b}`))).toBe(b)
+    for (const v of ['3', 'x', '', '-1', '1.5']) {
+      expect(() => smokeBody(new URLSearchParams(`smokebody=${v}`))).toThrow()
+    }
+    expect(BODY_LOOKS[0]).toEqual({ light: 0, layers: [0, 0] })
+  })
+})
+
+describe("the big cards' order (depthOrder)", () => {
+  /** a ring of puffs from one shot of each piece (lobes and all), its slots 16 floats */
+  function ring(T: number): { buf: Float32Array; n: number } {
+    const out: number[] = []
+    for (let i = 0; i < 8; i++) {
+      piecePuffs(battery, 0, { t: T - 1 - i * 0.5, piece: i, cycle: 0, n: 0 }, places[i], GUN, () => 0, out, [1, 4])
+    }
+    // (one not yet born, one dead, one of no density)
+    out.push(...out.slice(0, PUFF_FLOATS))
+    out[out.length - PUFF_FLOATS + 3] = T + 5
+    out.push(...out.slice(0, PUFF_FLOATS))
+    out[out.length - PUFF_FLOATS + 3] = T - 100
+    out.push(...out.slice(0, PUFF_FLOATS))
+    out[out.length - PUFF_FLOATS + 11] = 0
+    const n = out.length / PUFF_FLOATS
+    const buf = new Float32Array(n * 16)
+    for (let i = 0; i < n; i++) buf.set(out.slice(i * PUFF_FLOATS, (i + 1) * PUFF_FLOATS), i * 16)
+    return { buf, n }
+  }
+  it('the live puffs, farthest from the eye first, by their middles as the vertex shader moves them', () => {
+    const T = 40
+    const { buf, n } = ring(T)
+    const order = new Uint32Array(n)
+    const keys = new Float32Array(n)
+    const eye: [number, number, number] = [60, 60, -120]
+    const wind: [number, number, number] = [0.1, 0, 0.15]
+    const m = depthOrder(buf, n, 16, T, GUN, wind, eye, order, keys)
+    expect(m).toBe(n - 3)
+    const seen = new Set(order.slice(0, m))
+    expect(seen.size).toBe(m)
+    for (const dead of [n - 3, n - 2, n - 1]) expect(seen.has(dead)).toBe(false)
+    for (let i = 1; i < m; i++) expect(keys[order[i - 1]]).toBeGreaterThanOrEqual(keys[order[i]])
+    // (a middle as smoke.vert's: the birth, the blast and roll along the way, the rise, the wind, the lobe's offset)
+    const i = order[0]
+    const o = i * 16
+    const p = puffAt(GUN, T - buf[o + 3], buf[o + 7])
+    const w = (T - buf[o + 3]) * (0.7 + 0.6 * ((buf[o + 6] * 2.93) % 1))
+    const r = p.radius * buf[o + 8]
+    const x = buf[o] + buf[o + 4] * p.ahead * buf[o + 9] + wind[0] * w - buf[o + 5] * buf[o + 14] * r
+    const y = buf[o + 1] + p.up * buf[o + 10] + buf[o + 15] * r
+    const z = buf[o + 2] + buf[o + 5] * p.ahead * buf[o + 9] + wind[2] * w + buf[o + 4] * buf[o + 14] * r
+    expect(keys[i]).toBeCloseTo((x - eye[0]) ** 2 + (y - eye[1]) ** 2 + (z - eye[2]) ** 2, 1)
+  })
+  it('the order turns over when the eye goes round to the other side', () => {
+    const T = 40
+    const { buf, n } = ring(T)
+    const a = new Uint32Array(n)
+    const b = new Uint32Array(n)
+    const keys = new Float32Array(n)
+    const m = depthOrder(buf, n, 16, T, GUN, [0, 0, 0], [60, 40, -200], a, keys)
+    depthOrder(buf, n, 16, T, GUN, [0, 0, 0], [60, 40, 200], b, keys)
+    expect(a[0]).not.toBe(b[0])
+    expect(a[m - 1]).not.toBe(b[m - 1])
   })
 })

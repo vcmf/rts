@@ -9,16 +9,19 @@ precision highp float;attribute vec3 position;
 // puff's a little its own), growth from uGrow.x to uGrow.y over uGrow.z. Young, the card is long along the shot
 // (uPlume: its stretch at birth, its relaxing time), narrow at the muzzle (smoke.frag); grown, wider along the front
 // than tall (uPlume.z, more with age), into its neighbours. A puff not born or past its life, of no density, or
-// thinned out by the zoom (keepScale: uKeep, its share kept and the shrink's band), is put outside the view
+// thinned out by the zoom (keepScale: uKeep, its share kept and the shrink's band), is put outside the view. A big
+// cloud's lobe (world3.zw: its place in its cloud, shares of its radius across its way and up; 0 for every other puff)
+// is set off from its puff's middle by them, and shaded by how far below it lies (vShade). With a body's light (uBody
+// 1, the big cards': smoke.frag) the core's opacity (vOpC) holds through most of the life, the rim's (vOp) thins
 uniform mat4 viewProjection;uniform vec3 uCamPos,uWind;uniform vec4 uJet,uGrow;uniform vec2 uKeep;uniform vec3 uPlume;
-uniform float uSmokeT,uHeight,uRoll,uThin,uBig;
-varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl,vFar;
+uniform float uSmokeT,uHeight,uRoll,uThin,uBig,uBody;
+varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl,vFar,vOpC,vShade;
 void main(){
   float birth=world0.w,life=world1.w,seed=world1.z,age=uSmokeT-birth;
   float keep=uKeep.x,sc=clamp((keep*(1.0+uKeep.y)-fract(seed*13.73))/(uKeep.y*keep),0.0,1.0)/sqrt(keep);
   if(age<0.0||age>=life||sc<=0.0||world2.w<=0.0){
     gl_Position=vec4(2.0,2.0,2.0,1.0);vW=vU=vV=vC=vec3(0.0);vQ=vM=vec2(0.0);
-    vAge=vErode=vSeed=vGround=vOp=vR=vPl=vFar=0.0;return;}
+    vAge=vErode=vSeed=vGround=vOp=vR=vPl=vFar=vOpC=vShade=0.0;return;}
   float r=(uGrow.x+(uGrow.y-uGrow.x)*(1.0-exp(-age/uGrow.z)))*world2.x*sc;
   vec3 fwd=vec3(world1.x,0.0,world1.y),side=vec3(-fwd.z,0.0,fwd.x);
   float reach=(uJet.x*uJet.y*(1.0-exp(-age/uJet.y))+uRoll*age)*world2.y;
@@ -39,7 +42,7 @@ void main(){
   float fl=mix(0.85,0.6,1.0-exp(-age/4.0));
   float rx=r*mix(1.0+st,fl,g),ry=r*mix(1.0,uPlume.z*(1.0+0.3*(1.0-exp(-age/5.0))),g);
   // (the jet's back at the muzzle; the streak at the muskets and a little above, as it rises)
-  vec3 c=m+Uj*(r*(1.0+st)*0.55*pl)+vec3(0.0,0.2*g,0.0);
+  vec3 c=m+Uj*(r*(1.0+st)*0.55*pl)+vec3(0.0,0.2*g,0.0)+side*(world3.z*r)+vec3(0.0,world3.w*r,0.0);
   vGround=world0.y-uHeight+gl;
   // (uBig 1: a card whose lower edge would pass under its ground, cut there hard by the depth test, is lifted until
   // it clears it, its soft fade at its ground kept: cardLift, src/look/world/smoke.ts)
@@ -51,4 +54,8 @@ void main(){
   vFar=uBig*smoothstep(50.0,85.0,length(uCamPos-c));
   vErode=clamp((age/life-uGrow.w)/(1.0-uGrow.w),0.0,1.0);
   vOp=(1.0-uThin*min(1.0,age/life))*world2.w;
+  // (the core: whole until half its life, a dense puff's; a thin one, a gap between clouds, has none: a faint core
+  // reads as a grey film, not smoke)
+  vOpC=(1.0-uThin*smoothstep(0.5,1.0,age/life))*smoothstep(0.3,0.6,world2.w);
+  vShade=smoothstep(0.0,0.25,-world3.w)*uBody;
   vW=p;gl_Position=viewProjection*vec4(p,1.0);}

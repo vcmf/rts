@@ -434,7 +434,9 @@ describe('the switches', () => {
     expect(look('smoke=step')).toEqual(SMOKE_LOOKS.step)
   })
   it('the knobs over the variant', () => {
-    expect(look('smoke=soft&smokestep=12&smokecap=0.6')).toEqual({ step: 12, cap: 0.6 })
+    expect(look('smoke=soft&smokestep=12&smokecap=0.6')).toEqual({ step: 12, cap: 0.6, body: 0 })
+    expect(look('smokebody=2')?.body).toBe(2)
+    expect(look('smokebody=0')?.body).toBe(0)
     expect(look('smokecap=1')?.cap).toBe(1)
     expect(look('smokecap=0')?.cap).toBe(0)
     expect(look('smokecap=1.0')?.cap).toBe(1)
@@ -452,6 +454,10 @@ describe('the switches', () => {
       'smokecap=x',
       'smokecap=',
       'smokecap=1.01',
+      'smokebody=3',
+      'smokebody=x',
+      'smokebody=',
+      'smokebody=-1',
     ]) {
       expect(() => look(q)).toThrow()
     }

@@ -1164,9 +1164,11 @@ and `?lookat` without `?armies` throw, naming it.
   cards over each other share no holes; the billows and the torn rim gentler, and the thinning with age a fade more
   than holes. (The owner, 2026-10-29: the battery's merged clouds from far read as a camouflage pattern.)
 - **The draw order**: the muskets' smoke first, then each arm's (one draw each, in that order; unsorted within, as
-  the muskets': one colour family).
-- **Memory**: the rings, 64 B a puff (the muskets' 1,512 puffs at 20 a side: 97 KB; the guns' 192: 12 KB; on the GPU
-  and the CPU; 14 of its 16 floats used), and the mask, 256 KB, one for all.
+  the muskets': one colour family), except an arm's cards with a body's light (`?smokebody=1|2`, below): those
+  back to front.
+- **Memory**: the rings, 64 B a puff (the muskets' 1,512 puffs at 20 a side: 97 KB; the guns' 384 with room for the
+  lobes: 25 KB, and as much again for their sorted copy; on the GPU and the CPU; all 16 floats used: the last two a
+  lobe's place in its cloud), and the mask, 256 KB, one for all.
 
 ### The guns' smoke (with `?armies`; decision 0083, proposed)
 
@@ -1195,6 +1197,22 @@ shared (`SmokeMask`, drawn once a frame before the smokes).
   (`?armsmoke` with `?smoke=0`, `?sim` or no smoking arm on the page throws).
 - **Cost** (the plan's Results): about +0.2 to 0.4 ms GPU at 25, 40 and 90 m on the battery, both batteries firing
   without pause (`?firehold=1`); its fill is cut by leaving a card's corners before any texture is read.
+- **The body** (`?smokebody=0|1|2`, `BODY_LOOKS`, `smokeBody`; the arms' big cards only, the muskets' as approved; 0,
+  the default until the owner picks, the cards as approved 2026-10-29). The owner (2026-10-30): the guns' smoke "a
+  bit flat: denser, less transparent, more 3D". **1**, each card painted as a volume (`smoke.frag`, `uBody`): its core
+  from the card's large shape alone (the smaller billows and the grain left to the rim), dense through and its
+  opacity holding to half its life (`vOpC`; a thin puff, a gap between clouds, has none: a faint core reads as a grey
+  film), fading with the erosion; its light from a dome over the card's shape, its lobes the large billows embossed
+  a step toward the sun (their values, not their texels' derivatives, which the 8-bit grain steps into terraces), lit
+  through a soft mid tone (decision 0084) from a warm white to a pale cool shade, the underside cooler and deeper,
+  the core deeper in the shade than the rim, a faint warm rim on the sun's side; the thin veils lit as before. Drawn
+  back to front (`depthOrder`, pure, tested: the live puffs' middles as the vertex shader moves them, an insertion
+  sort, only they drawn: `thinInstanceCount`), the dense cores needing it. **2**, that and a lobe round each strung
+  puff (`BODY_LAYERS`, `bodyLayer`: a lit top up and to one side, a shaded underbelly low on the other, in turn; set
+  off by shares of the puff's radius as it grows, born and carried with it, the vertex shader shading a lobe by how
+  far below its puff it lies): eight cards a shot for four, front and back. The formations' cap stays over each card.
+  `?bench=smokebody` measures `body0`, `body1`, `body2` and `noarmsmoke` in one page (`Smoke.setBody`: the ring
+  rebuilt with the body's lobes).
 
 ### The readability guard (L2a)
 

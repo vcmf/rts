@@ -25,8 +25,10 @@ import SMOKE_FS from './shaders/smoke.frag?raw'
 import { FLAG_WIND } from './units.ts'
 import type { Battalion, Drill } from './world/armies.ts'
 import {
+  BODY_LOOKS,
   FOOT_FLOATS,
   PUFF_FLOATS,
+  depthOrder,
   PUFF_THIN,
   drawClearance,
   validateSmoke,
@@ -42,6 +44,7 @@ import {
   type PieceShot,
   type ServeTiming,
   type Shot,
+  type BodyLook,
   type SmokeLook,
 } from './world/smoke.ts'
 
@@ -94,6 +97,9 @@ export interface PuffSource {
    *  the muskets' small cards as approved, neither */
   readonly big: boolean
   spawn(t0: number, t1: number, out: number[]): void
+  /** a big cloud's lobes from now on ([lobes a strung puff, the strung puffs that get them]: BodyLook.layers); the
+   *  muskets' have none */
+  setLayers?(layers: readonly [number, number]): void
 }
 
 /** the musket smoke's source: the line battalions' volleys (shotsBetween, volleyPuffs) */
@@ -121,16 +127,28 @@ export function pieceSource(p: SmokePieces, def: PuffDef): PuffSource {
   validateSmoke(def, p.fire)
   const shots: PieceShot[] = []
   const timings = p.units.map((_, u) => ({ ...p.fire, starts: p.starts[u] }))
+  // (the ring holds the most lobes any body adds: the bench switches them in one page)
+  const lobes = Math.max(...BODY_LOOKS.map(b => b.layers[0] * Math.min(b.layers[1], def.strung[0])))
+  let layers: readonly [number, number] = [0, 0]
   return {
-    capacity: pieceRingSize(p.units.length * p.places.length, timings[0] ?? { ...p.fire, starts: [] }, def),
+    capacity: pieceRingSize(
+      p.units.length * p.places.length,
+      timings[0] ?? { ...p.fire, starts: [] },
+      def,
+      8192,
+      lobes,
+    ),
     slack: def.jitter,
     big: true,
     spawn(t0, t1, out) {
       p.units.forEach((b, u) => {
         for (const s of pieceShotsBetween(t0, t1, b.offset, timings[u], shots)) {
-          piecePuffs(b, u, s, p.places[s.piece], def, groundAt, out)
+          piecePuffs(b, u, s, p.places[s.piece], def, groundAt, out, layers)
         }
       })
+    },
+    setLayers(l) {
+      layers = l
     },
   }
 }
@@ -202,7 +220,16 @@ export class Smoke {
   private readonly clock: () => number
   private readonly mask: SmokeMask
   private readonly cap: number
-  private readonly buf: Float32Array // the ring: 16 floats an instance (the 'matrix' buffer's first three columns used)
+  private readonly ring: Float32Array // the ring: 16 floats an instance (the 'matrix' buffer's four columns)
+  // the instances drawn: the ring itself, or with a body's light (big cards) its live puffs back to front (depthOrder)
+  private readonly buf: Float32Array
+  private readonly order: Uint32Array
+  private readonly keys: Float32Array
+  private readonly drawn: Uint32Array // the order last uploaded, and how many
+  private drawnN = -1
+  private readonly eye: [number, number, number] = [0, 0, 0]
+  private readonly wind: [number, number, number]
+  private body: BodyLook = BODY_LOOKS[0]
   private next = 0 // the ring's next slot
   private dirtyLo = Infinity // the ring's slots written since the last upload
   private dirtyHi = -1
@@ -235,11 +262,31 @@ export class Smoke {
     this.clock = clock
     this.mask = mask
     this.cap = source.capacity
-    this.buf = new Float32Array(this.cap * 16)
+    this.ring = new Float32Array(this.cap * 16)
+    // (a source of small cards draws its ring as it is; a big one may sort it: its own buffer)
+    this.buf = source.big ? new Float32Array(this.cap * 16) : this.ring
+    this.order = new Uint32Array(source.big ? this.cap : 0)
+    this.keys = new Float32Array(source.big ? this.cap : 0)
+    this.drawn = new Uint32Array(source.big ? this.cap : 0)
+    this.wind = [Math.cos(FLAG_WIND) * def.drift, 0, Math.sin(FLAG_WIND) * def.drift]
     this.mesh = this.cardMesh(name)
     this.mat = this.cardMaterial(mats)
     this.mesh.material = this.mat
+    if (source.big) this.setBody(look.body)
     scene.onBeforeRenderObservable.add(() => this.frame())
+  }
+
+  /** a big source's body (BODY_LOOKS' index: ?smokebody, the bench's arms): its cards' light and its lobes, the ring
+   *  rebuilt from the last life's shots with them; the muskets' smoke has none (throws) */
+  setBody(i: number): void {
+    const b = BODY_LOOKS[i]
+    if (!this.source.big || !this.source.setLayers || !b) throw new Error(`smoke: no body ${i} for ${this.mesh.name}`)
+    this.body = b
+    this.source.setLayers(b.layers)
+    this.mat.setFloat('uBody', b.light)
+    this.last = NaN
+    this.drawnN = -1
+    if (!b.light) this.mesh.thinInstanceCount = this.cap
   }
 
   /** the smoke drawn or not (the bench's arms): off, nothing is written or drawn */
@@ -288,6 +335,7 @@ export class Smoke {
     m.setFloat('uThin', PUFF_THIN)
     m.setFloat('uHeight', d.height)
     m.setFloat('uBig', this.source.big ? 1 : 0)
+    m.setFloat('uBody', 0)
     m.setFloat('uOpacity', d.opacity)
     m.setFloat('uCap', this.look.cap)
     m.setVector2('uKeep', this.keepV)
@@ -296,7 +344,7 @@ export class Smoke {
       m.setVector4('uClear', this.mask.uniform(d.body))
       m.setTexture('uClearTex', this.mask.tex)
     }
-    m.setVector3('uWind', new Vector3(Math.cos(FLAG_WIND) * d.drift, 0, Math.sin(FLAG_WIND) * d.drift))
+    m.setVector3('uWind', new Vector3(...this.wind))
     m.setColor3('uSmokeCol', Color3.FromHexString(d.colour))
     m.setColor3('uFlashCol', Color3.FromHexString(d.flash[0]))
     m.setFloat('uFlashT', d.flash[1])
@@ -319,7 +367,32 @@ export class Smoke {
     const st = this.look.step > 0 ? Math.floor(T * this.look.step) / this.look.step : T
     this.keepV.x = keepShare(this.camera.radius)
     this.mat.setFloat('uSmokeT', st)
-    this.upload()
+    if (this.body.light) this.sort(st)
+    else this.upload()
+  }
+
+  /** a body's cards drawn back to front: the ring's live puffs at the shader's clock ordered from the eye
+   *  (depthOrder) into the drawn buffer, only they drawn; the whole of it uploaded (a few hundred puffs, 64 B each) */
+  private sort(T: number): void {
+    const p = this.camera.position
+    this.eye[0] = p.x
+    this.eye[1] = p.y
+    this.eye[2] = p.z
+    const n = depthOrder(this.ring, this.cap, 16, T, this.def, this.wind, this.eye, this.order, this.keys)
+    // (uploaded only when the drawn list changed: a puff born or gone, two swapped, the ring rebuilt. An upload every
+    // frame cost about 3.5 ms of the GPU's frame on Metal, the buffer's update waiting on the frame before)
+    let same = n === this.drawnN && this.dirtyHi < 0
+    for (let i = 0; same && i < n; i++) same = this.order[i] === this.drawn[i]
+    if (same) return
+    this.drawn.set(this.order.subarray(0, n))
+    this.drawnN = n
+    for (let i = 0; i < n; i++) this.buf.set(this.ring.subarray(this.order[i] * 16, this.order[i] * 16 + 16), i * 16)
+    this.dirtyLo = Infinity
+    this.dirtyHi = -1
+    // (none live: one dead slot drawn, a mesh of no thin instances drawing as a plain mesh)
+    if (n === 0) this.buf.fill(0, 0, 16)
+    this.mesh.thinInstanceCount = Math.max(1, n)
+    this.mesh.thinInstancePartialBufferUpdate('matrix', Math.max(1, n), 0)
   }
 
   /** the shots since the last frame written as puffs: a clock that ran back or jumped (a load, the bench) rebuilds the
@@ -328,7 +401,7 @@ export class Smoke {
     const j = this.source.slack // (a puff's birth past its shot's clock, at most)
     let t0 = this.last + j
     if (!(T >= this.last && T - this.last <= REBUILD)) {
-      this.buf.fill(0)
+      this.ring.fill(0)
       this.next = 0
       this.dirtyLo = 0
       this.dirtyHi = this.cap
@@ -344,7 +417,7 @@ export class Smoke {
   // a puff into the ring's next slot (overwriting the oldest when full: new fire always shows)
   private write(p: number[], k: number): void {
     const o = this.next * 16
-    for (let i = 0; i < PUFF_FLOATS; i++) this.buf[o + i] = p[k + i]
+    for (let i = 0; i < PUFF_FLOATS; i++) this.ring[o + i] = p[k + i]
     this.dirtyLo = Math.min(this.dirtyLo, this.next)
     this.dirtyHi = Math.max(this.dirtyHi, this.next + 1)
     this.next = (this.next + 1) % this.cap
@@ -354,6 +427,10 @@ export class Smoke {
   private upload(): void {
     if (this.dirtyHi < 0) return
     const n = this.dirtyHi - this.dirtyLo
+    // (a big source drawn unsorted: its ring's written slots into the drawn buffer)
+    if (this.buf !== this.ring) {
+      this.buf.set(this.ring.subarray(this.dirtyLo * 16, this.dirtyHi * 16), this.dirtyLo * 16)
+    }
     this.mesh.thinInstancePartialBufferUpdate('matrix', n, this.dirtyLo)
     this.dirtyLo = Infinity
     this.dirtyHi = -1
@@ -368,6 +445,7 @@ const UNIFORMS = [
   'uThin',
   'uHeight',
   'uBig',
+  'uBody',
   'uOpacity',
   'uCap',
   'uKeep',
