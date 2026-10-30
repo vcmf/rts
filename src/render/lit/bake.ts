@@ -148,15 +148,9 @@ export function bakeLight(
  * edit of a hedge, a name, a save) bakes nothing. Each call returns its own copy of the bytes, so the caller can
  * transfer them. `bake` is bakeLight but for the tests.
  */
-export function lightCache(bake = bakeLight): (
-  heights: Float64Array,
-  nx: number,
-  nz: number,
-  cell: number,
-  sun: Sun,
-  step: number,
-  z: number,
-) => LightBake {
+export function lightCache(
+  bake = bakeLight,
+): (heights: Float64Array, nx: number, nz: number, cell: number, sun: Sun, step: number, z: number) => LightBake {
   let key = ''
   let last: LightBake | null = null
   return (heights, nx, nz, cell, sun, step, z) => {
