@@ -1,21 +1,23 @@
-// The lit map view's bakes (docs/plans/active/m6-lit-view.md, M6a): the relief's light, cast shadow and exposure for
-// every direction of the light, and the cells' mask.
+// The lit map view's bakes (docs/plans/active/m6-lit-view.md, M6a; G2): the light that does not change (the sun's soft
+// shadow and the open sky), and the cells' mask.
 import { describe, it, expect } from 'vitest'
 import {
   bakeInk,
+  bakeLight,
   bakeMasks,
-  bakeRelief,
   cellField,
   INK_RANGE,
-  LIGHTS,
+  SUN,
+  sunFrom,
+  sunXZ,
   waysOf,
-  type LightDir,
+  type Sun,
 } from '../src/render/lit/bake.ts'
+import { SUN as WORLD_SUN } from '../src/look/materials.ts'
 import type { Pt } from '../src/map/schema.ts'
 import type { Resolved } from '../src/map/resolve.ts'
 
 const N = 81 // nodes a side, 2 m apart
-const at = (out: Uint8Array, i: number, j: number) => [...out.slice((j * N + i) * 4, (j * N + i) * 4 + 3)]
 // a flat field with a block 20 m high in its middle (nodes 35..45)
 const block = (() => {
   const h = new Float64Array(N * N)
@@ -23,42 +25,71 @@ const block = (() => {
   return h
 })()
 
-describe('M6a: the relief bake', () => {
-  it('flat ground: the slope light in its middle, lit, evenly exposed', () => {
-    const out = bakeRelief(new Float64Array(N * N), N, N, 2, 'nw')
-    const [r, g, b] = at(out, 40, 40)
-    expect(r).toBe(128)
-    expect(g).toBe(255)
-    expect(b).toBe(128)
+const sunAt = (az: number, el = 30, size = 2.5): Sun => ({ el, az, size })
+// the light bake on every node, its R (the sun) and G (the sky) at node (i, j)
+const lit = (h: Float64Array, sun: Sun) => {
+  const b = bakeLight(h, N, N, 2, sun, 1, 1)
+  return (i: number, j: number) => [b.data[(j * N + i) * 4], b.data[(j * N + i) * 4 + 1]]
+}
+
+describe('G2: the light bake', () => {
+  it('flat ground: in the sun and open to the whole sky', () => {
+    expect(lit(new Float64Array(N * N), SUN)(40, 40)).toEqual([255, 255])
   })
-  for (const dir of Object.keys(LIGHTS) as LightDir[]) {
-    it(`a block casts its shadow away from a light from the ${dir}, never toward it`, () => {
-      const [di, dj] = LIGHTS[dir]
-      const out = bakeRelief(block, N, N, 2, dir)
-      // 10 nodes (20 m) beyond the block's edge, away from the light and toward it
-      const away = at(out, 40 - di * 11, 40 - dj * 11)[1]
-      const toward = at(out, 40 + di * 11, 40 + dj * 11)[1]
-      expect(away).toBeLessThan(64)
-      expect(toward).toBe(255)
+  for (const az of [0, 90, 180, 270, 308]) {
+    it(`a block casts its shadow away from a sun at ${az}°, never toward it`, () => {
+      const [sx, sz] = sunXZ(sunAt(az))
+      const L = lit(block, sunAt(az))
+      // 16 nodes from the block's middle (11 past its edge along an axis), away from the sun and toward it
+      const off = (k: number) => [40 + Math.round(sx * k), 40 + Math.round(sz * k)] as const
+      expect(L(...off(-16))[0]).toBeLessThan(64)
+      expect(L(...off(16))[0]).toBe(255)
     })
   }
-  it("a uniform slope's light is the same at the grid's edges as inside it (no seam)", () => {
-    const h = new Float64Array(N * N)
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) h[j * N + i] = i * 0.5 + j * 0.25
-    const out = bakeRelief(h, N, N, 2, 'nw')
+  it("the shadow's length comes from the sun's height", () => {
+    // a sun in the east 45° high: the block's 20 m cast 20 m (10 nodes) west of its edge (node 35)
+    const L = lit(block, sunAt(90, 45))
+    expect(L(30, 40)[0]).toBeLessThan(64)
+    expect(L(18, 40)[0]).toBe(255)
+    // lower, it reaches further
+    expect(lit(block, sunAt(90, 20))(18, 40)[0]).toBeLessThan(64)
+  })
+  it("a larger sun's disc softens the shadow's edge", () => {
+    const partial = (size: number) => {
+      const L = lit(block, sunAt(90, 30, size))
+      let n = 0
+      for (let i = 0; i < 35; i++) if (L(i, 40)[0] > 10 && L(i, 40)[0] < 245) n++
+      return n
+    }
+    expect(partial(10)).toBeGreaterThan(partial(1))
+  })
+  it("a pit's floor sees less of the sky than the ground round it", () => {
+    const pit = Float64Array.from(block, v => -v)
+    const L = lit(pit, SUN)
+    expect(L(40, 40)[1]).toBeLessThan(L(5, 40)[1] - 40)
+    expect(L(5, 5)[1]).toBe(255)
+  })
+  it('on every second node, the same light as on every node there', () => {
+    const full = bakeLight(block, N, N, 2, SUN, 1)
+    const half = bakeLight(block, N, N, 2, SUN, 2)
+    expect([half.nx, half.nz, half.step]).toEqual([41, 41, 2])
     for (const [i, j] of [
-      [0, 40],
-      [N - 1, 40],
-      [40, 0],
-      [40, N - 1],
+      [10, 20],
+      [17, 17],
+      [30, 5],
     ]) {
-      expect(at(out, i, j)[0]).toBe(at(out, 40, 40)[0])
+      const a = (j * 41 + i) * 4
+      const b = (2 * j * N + 2 * i) * 4
+      expect([half.data[a], half.data[a + 1]]).toEqual([full.data[b], full.data[b + 1]])
     }
   })
-  it("the block's top stands exposed and its foot in a hollow", () => {
-    const out = bakeRelief(block, N, N, 2, 'nw')
-    expect(at(out, 40, 40)[2]).toBeGreaterThan(160)
-    expect(at(out, 33, 40)[2]).toBeLessThan(110)
+  it("is lit by the 3D world's sun (the owner, 2026-10-30: one sun for both views)", () => {
+    const w = sunFrom(WORLD_SUN.x, WORLD_SUN.y, WORLD_SUN.z, SUN.size)
+    expect(SUN.el).toBeCloseTo(w.el, 6)
+    expect(SUN.az).toBeCloseTo(w.az, 6)
+    // north-west, about 27° high
+    expect(SUN.az).toBeGreaterThan(270)
+    expect(SUN.el).toBeGreaterThan(20)
   })
 })
 

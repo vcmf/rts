@@ -15,8 +15,17 @@ export interface Sun {
   az: number
   size: number
 }
-// a warm low sun from the north-east (decision 0090, after Track K's campaign print and the owner's Valdez reference)
-export const SUN: Sun = { el: 20, az: 55, size: 2.5 }
+/** The sun toward a direction (x east, y up, z north; any length), its disc `size` degrees across. */
+export function sunFrom(x: number, y: number, z: number, size: number): Sun {
+  const deg = 180 / Math.PI
+  return { el: Math.atan2(y, Math.hypot(x, z)) * deg, az: (((Math.atan2(x, z) * deg) % 360) + 360) % 360, size }
+}
+// the 3D world's sun (src/look/materials.ts SUN: north-west, about 27° high), so the light does not turn at the
+// zoom's handover (the owner, 2026-10-30: docs/plans/active/track-g.md); its disc 2.5° across, as Track K's
+export const SUN: Sun = sunFrom(-0.7, 0.45, 0.55, 2.5)
+// the light's bake on every LIGHT_STEP-th node: 4 m, about 1 s for a 3 km map in Node (G2, measured); the slope's light
+// is the shader's, per pixel, from the 2 m heights
+export const LIGHT_STEP = 2
 export const RELIEF = {
   z: 2, // the heights' exaggeration, for the light only (as shaded-relief prints do)
 }
@@ -42,7 +51,7 @@ export interface LightBake {
 
 /**
  * The light that does not change (decision 0090, after Track K's `bakeLightRows` in tools/campaign-bake.ts), from the
- * heights raised RELIEF.z times, on every `step`-th node: `heights` (nx) × (nz) nodes `cell` m apart.
+ * heights raised `z` times (RELIEF.z by default), on every `step`-th node: `heights` (nx) × (nz) nodes `cell` m apart.
  * - The sun's shadow: from each node a ray walks toward the sun in growing steps, as far as any ground of the map
  *   could shade it; the sun is a disc `size` degrees across, so a crest just grazing the ray dims it in part, and the
  *   penumbra widens with the distance to what casts it.
@@ -57,11 +66,18 @@ export function bakeLight(
   cell: number,
   sun: Sun,
   step = 1,
+  z = RELIEF.z,
 ): LightBake {
-  const h = Float32Array.from(heights, v => v * RELIEF.z)
+  // plain loops: a mapped Float32Array.from and a destructuring min-max cost seconds over millions of nodes
+  const h = new Float32Array(nx * nz)
   let lo = Infinity
   let hi = -Infinity
-  for (const v of h) [lo, hi] = [Math.min(lo, v), Math.max(hi, v)]
+  for (let k = 0; k < h.length; k++) {
+    const v = heights[k] * z
+    h[k] = v
+    if (v < lo) lo = v
+    if (v > hi) hi = v
+  }
   const rad = Math.PI / 180
   const tanEl = Math.tan(sun.el * rad)
   const tanR = Math.tan((sun.size / 2) * rad)

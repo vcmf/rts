@@ -6,14 +6,12 @@ import { checkFiles, validate } from '../../map/validate.ts'
 import { expand } from '../../map/expand.ts'
 import { apply, LAYER_NAMES } from '../../map/apply.ts'
 import { draft } from '../../map/draft.ts'
-import { bakeInk, bakeMasks, bakeRelief, waysOf, type LightDir } from '../../render/lit/bake.ts'
+import { bakeInk, bakeLight, bakeMasks, LIGHT_STEP, RELIEF, SUN, waysOf, type Sun } from '../../render/lit/bake.ts'
 import { groundOf, overlay, unitKinds, type Ground } from '../../render/lit/overlays.ts'
 import { napoleonic } from '../../rulesets/napoleonic.ts'
 import { classifyNapoleonic } from '../../rulesets/napoleonic-ground.ts'
 import type { CompileReply, CompileRequest, LayerName, OverlayReply, OverlayRequest } from './protocol.ts'
 
-// the map view's one light, from the north-west for now (docs/plans/active/one-map-austerlitz.md, open question 6)
-const LIGHT: LightDir = 'nw'
 // the ruleset the overlays read the ground with (the page's one era for now)
 const RULESET = napoleonic
 const CLASSIFY = classifyNapoleonic
@@ -38,7 +36,7 @@ self.onmessage = (e: MessageEvent<CompileRequest | OverlayRequest>) => {
     ;(self as unknown as Worker).postMessage(reply, rgba ? [rgba] : [])
     return
   }
-  const { seq, mapText, kindsText, files } = e.data
+  const { seq, mapText, kindsText, files, sun, z } = e.data
   const fail = (path: string, message: string) =>
     (self as unknown as Worker).postMessage({
       seq,
@@ -66,7 +64,7 @@ self.onmessage = (e: MessageEvent<CompileRequest | OverlayRequest>) => {
     return
   }
   try {
-    compile(seq, map, cat, mine)
+    compile(seq, map, cat, mine, sun ?? SUN, z ?? RELIEF.z)
   } catch (err) {
     fail('', `the compiler failed: ${(err as Error).message} (a bug, or a catalogue the validator does not check)`)
   }
@@ -92,7 +90,7 @@ function held(files: CompileRequest['files']): { files: MapFiles; missing: strin
   return { files: out, missing }
 }
 
-function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): void {
+function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles, sun: Sun, z: number): void {
   const t0 = performance.now()
   const issues = validate(map, cat)
   if (issues.length) {
@@ -114,7 +112,7 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
   const t2 = performance.now()
   const img = draft(L)
   const t3 = performance.now()
-  const relief = bakeRelief(L.height, L.nx + 1, L.nz + 1, L.cell, LIGHT)
+  const light = bakeLight(L.height, L.nx + 1, L.nz + 1, L.cell, sun, LIGHT_STEP, z)
   const masks = bakeMasks(L)
   const ink = bakeInk(L, waysOf(ex.map.features, L.table))
   const t4 = performance.now()
@@ -143,8 +141,12 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
     layers,
     table: L.table,
     units: unitKinds(RULESET),
-    relief: relief.buffer as ArrayBuffer,
-    light: LIGHT,
+    light: light.data.buffer as ArrayBuffer,
+    lightNx: light.nx,
+    lightNz: light.nz,
+    lightStep: light.step,
+    sun,
+    z,
     masks: masks.buffer as ArrayBuffer,
     ink: ink.buffer as ArrayBuffer,
     ms: { validate: t1 - t0, apply: t2 - t1, draw: t3 - t2, bake: t4 - t3, ground: tg },
@@ -153,7 +155,7 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
     reply.rgba,
     reply.height,
     reply.depth,
-    reply.relief,
+    reply.light,
     reply.masks,
     reply.ink,
     ...Object.values(layers),

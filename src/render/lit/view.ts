@@ -15,7 +15,7 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Season } from '../../map/schema.ts'
-import { INK_RANGE, lightXZ, RELIEF, type LightDir } from './bake.ts'
+import { INK_RANGE, sunXZ, type LightBake, type Sun } from './bake.ts'
 import { paperCanvas } from './paper.ts'
 import type { Pt } from '../../map/schema.ts'
 import { bridged, triangulate, type Standing } from './houses.ts'
@@ -27,20 +27,28 @@ const FOV = 0.52 // rad, vertical (the prototype's)
 // plane is not drawn (it would project to huge or mirrored coordinates)
 const NEAR_SHARE = 0.05
 export const TILT = 20 // degrees off straight down (decision 0055)
-// the relief's tone on the paper: never darker than SHADE_FLOOR (with its warm hue, 0.62 of the paper), never lighter
-// than SHADE_TOP (the prototype's)
-const SHADE_FLOOR = 0.72
-const SHADE_TOP = 1.15
-// the paper and the water's wash by season, the prototype's lit palette: summer, early autumn, late autumn, winter
-const PAPER = ['#e3d1a2', '#e1cb98', '#d9c18f', '#e4d9bf']
-const WATER = ['#9fbcc2', '#9fbcc2', '#a3b8bb', '#d3e0e8']
+// the light and the print (decision 0090, after Track K's campaign map, its prototype on #262): the print multiplied
+// by a warm sun (KEY) on the slope, in its baked shadow, and a cool sky (SKY) in its baked share, the sky SKY_K of the
+// light; the light a little stronger on the sun's side of the map (LAMP); never darker than the floor
+// (0 by default: the readability bound, #141, is checked when the armies are on the map)
+const KEY = [1.3, 0.98, 0.66]
+const SKY = [0.82, 0.88, 1.08]
+const SKY_K = 0.62
+const LAMP = 0.55
+// the paper by season, a cold white (Track K's), a touch cooler in winter: summer, early autumn, late autumn, winter
+const PAPER = ['#eceef1', '#eceef1', '#ebecee', '#eef0f3']
+// the water by its depth, a pale shallow blue to a deep blue, in steps (Track K's stepped basins, flat here)
+const SHALLOW = '#a9d0ec'
+const DEEP = '#2b67b0'
+// the contours: the minor lines a muted grey, the index lines orange (Track K's)
+const CONTOUR_MINOR = '#a9a7ae'
+const CONTOUR_INDEX = '#d08450'
 const LINE = ['#2b2824', '#2b2824', '#2b2824', '#363c45']
 const BARRIER = '#3a4528' // hedges and walls, a dark olive
-// the houses (the prototype's bakeHouses): dark warm roofs, a church darker, the faces away from the light at 0.62 of
-// the roof, the faces toward it at 0.85; a soft shadow HOUSE_SHADOW m away from the light
+// the houses (the prototype's bakeHouses): dark warm roofs, a church darker, the faces away from the sun at 0.62 of
+// the roof, the faces toward it at 0.85; a soft shadow away from the sun, as long as the sun's height casts the wall
 const HOUSE = [0.36, 0.29, 0.23]
 const CHURCH = [0.27, 0.22, 0.19]
-const HOUSE_SHADOW = 4.3 // m, for a 4 m wall (the prototype's)
 const SHADOW_ALPHA = 0.32
 const SHADOW_Y = 0.05 // m above the paper
 const SEASON_AT: Record<Season, number> = { spring: 0, summer: 0, autumn: 1.5, winter: 3 }
@@ -54,12 +62,20 @@ export interface LitMap {
   nz: number
   datum: number // m above sea level of the map's zero
   season: Season
-  light: LightDir
+  sun: Sun // the sun the light was baked for
+  z: number // the heights' exaggeration it was baked with (the slope's light takes the same)
   height: Float64Array // (nx + 1) × (nz + 1) node heights, m above the datum, the south row first
-  relief: Uint8Array // RGBA on the nodes (bakeRelief)
+  light: LightBake // RGBA on every step-th node (bakeLight)
   masks: Uint8Array // RGBA on the cells (bakeMasks)
   ink: Uint8Array // RGBA on the cells (bakeInk)
   flat: { w: number; h: number; rgba: Uint8Array } // the draft raster, the north row first
+}
+
+/** The light's settings the page may tune by eye (undefined: the view's own). */
+export interface LitTuning {
+  sky?: number // the sky's share of the light (SKY_K)
+  lamp?: number // the light's fall-off across the map from the sun's side (LAMP)
+  floor?: number // the darkest the light may make the print (0)
 }
 
 /** The camera: the world point at the screen's centre, pixels per metre there, and the tilt in degrees. */
@@ -87,7 +103,7 @@ export class LitView {
   private overlay: RawTexture | null = null
   private readonly noOverlay: RawTexture
   private grid: { nx: number; nz: number } | null = null
-  private light: [number, number] = [-Math.SQRT1_2, Math.SQRT1_2]
+  private sun: Sun | null = null
   private textures: Texture[] = []
   private viewProj = Matrix.Identity()
   private inverse = Matrix.Identity()
@@ -131,21 +147,29 @@ export class LitView {
           'uSize',
           'uNodes',
           'uCells',
-          'uLightXZ',
-          'uLambert',
+          'uSun',
+          'uKey',
+          'uSkyC',
+          'uSkyK',
+          'uLamp',
+          'uFloor',
+          'uZ',
+          'uLightNodes',
+          'uLightStep',
           'uCell',
           'uDatum',
           'uFlat',
-          'uShadeFloor',
-          'uShadeTop',
           'uPaper',
-          'uWaterW',
+          'uShallow',
+          'uDeep',
+          'uContourMinor',
+          'uContourIndex',
           'uLine',
           'uBarrier',
           'uInkRange',
           'uOverlayOn',
         ],
-        samplers: ['uHeight', 'uRelief', 'uMask', 'uInk', 'uPaperT', 'uFlatT', 'uOverlay'],
+        samplers: ['uHeight', 'uLight', 'uMask', 'uInk', 'uPaperT', 'uFlatT', 'uOverlay'],
       },
     )
     this.material.backFaceCulling = false
@@ -175,9 +199,13 @@ export class LitView {
     const t = this.rgba(paper, Texture.TRILINEAR_SAMPLINGMODE, true)
     t.wrapU = t.wrapV = Texture.WRAP_ADDRESSMODE
     this.material.setTexture('uPaperT', t)
-    this.material.setVector2('uLambert', new Vector2(RELIEF.lambert[0], RELIEF.lambert[1]))
-    this.material.setFloat('uShadeFloor', SHADE_FLOOR)
-    this.material.setFloat('uShadeTop', SHADE_TOP)
+    this.material.setColor3('uKey', Color3.FromArray(KEY))
+    this.material.setColor3('uSkyC', Color3.FromArray(SKY))
+    this.material.setColor3('uShallow', Color3.FromHexString(SHALLOW))
+    this.material.setColor3('uDeep', Color3.FromHexString(DEEP))
+    this.material.setColor3('uContourMinor', Color3.FromHexString(CONTOUR_MINOR))
+    this.material.setColor3('uContourIndex', Color3.FromHexString(CONTOUR_INDEX))
+    this.setTuning({})
     // no overlay: a texel of nothing, so the sampler is always bound to a live texture
     this.noOverlay = new RawTexture(
       new Uint8Array(4),
@@ -191,6 +219,13 @@ export class LitView {
     )
     this.material.setTexture('uOverlay', this.noOverlay)
     this.material.setFloat('uOverlayOn', 0)
+  }
+
+  /** Sets the light's settings (G2: tuned by eye from the page's URL); an absent one takes the view's own. */
+  setTuning(t: LitTuning): void {
+    this.material.setFloat('uSkyK', t.sky ?? SKY_K)
+    this.material.setFloat('uLamp', t.lamp ?? LAMP)
+    this.material.setFloat('uFloor', t.floor ?? 0)
   }
 
   // a canvas's pixels as an RGBA texture (the paper's: kept for the view's life)
@@ -231,7 +266,9 @@ export class LitView {
     const rgba = Constants.TEXTUREFORMAT_RGBA
     const linear = Texture.BILINEAR_SAMPLINGMODE
     this.material.setTexture('uHeight', height)
-    this.material.setTexture('uRelief', tex(m.relief, m.nx + 1, m.nz + 1, rgba, linear))
+    this.material.setTexture('uLight', tex(m.light.data, m.light.nx, m.light.nz, rgba, linear))
+    this.material.setVector2('uLightNodes', new Vector2(m.light.nx, m.light.nz))
+    this.material.setFloat('uLightStep', m.light.step)
     // neither the mask nor the ink's fields mipmapped: averaged, a brook or a hedge two cells wide would vanish from
     // the far view, and the water's depth would part from its fill (docs/plans/active/m6-lit-view.md, open: a
     // min-filtered mip chain for the far view)
@@ -247,14 +284,16 @@ export class LitView {
     this.setOverlay(null) // the last map's overlay is not this one's
     this.material.setFloat('uCell', m.cell)
     this.material.setFloat('uDatum', m.datum)
-    const [lx, lz] = lightXZ(m.light)
-    this.material.setVector2('uLightXZ', new Vector2(lx, lz))
+    // toward the sun, x east, y up, z north
+    const [sx, sz] = sunXZ(m.sun)
+    const el = (m.sun.el * Math.PI) / 180
+    this.material.setVector3('uSun', new Vector3(sx * Math.cos(el), Math.sin(el), sz * Math.cos(el)))
+    this.material.setFloat('uZ', m.z)
     const s = SEASON_AT[m.season]
     this.material.setColor3('uPaper', seasonColour(PAPER, s))
-    this.material.setColor3('uWaterW', seasonColour(WATER, s))
     this.material.setColor3('uLine', seasonColour(LINE, s))
     this.material.setColor3('uBarrier', Color3.FromHexString(BARRIER))
-    this.light = [lx, lz]
+    this.sun = m.sun
     this.material.setFloat('uFlat', this.flat)
     // the plane reaches far past the map (100 km), so the paper fills the screen at every zoom and tilt the page allows
     const pad = 100000
@@ -314,7 +353,9 @@ export class LitView {
     for (const h of this.houses) h.dispose()
     this.houses = []
     if (!houses.length) return
-    const [lx, lz] = this.light
+    const [lx, lz] = this.sun ? sunXZ(this.sun) : [-Math.SQRT1_2, Math.SQRT1_2]
+    // a wall's shadow is its height over the tangent of the sun's height
+    const cast = 1 / Math.tan((Math.max(5, this.sun?.el ?? 45) * Math.PI) / 180)
     const pos: number[] = []
     const col: number[] = []
     const idx: number[] = []
@@ -351,10 +392,9 @@ export class LitView {
           idx.push(v, v + 2, v + 1, v, v + 3, v + 2)
         }
       })
-      // the shadow: the footprint swept away from the light, as long as the wall is high (HOUSE_SHADOW for a 4 m
-      // wall): its copy there and a quad an edge of every ring between them (their union; the stencil keeps any
-      // overlap from darkening twice)
-      const reach = (HOUSE_SHADOW * h.height) / 4
+      // the shadow: the footprint swept away from the sun, as long as the sun's height casts the wall: its copy there
+      // and a quad an edge of every ring between them (their union; the stencil keeps any overlap from darkening twice)
+      const reach = h.height * cast
       const shift = ([x, z]: Pt): Pt => [x - lx * reach, z - lz * reach]
       const s0 = shade.length / 3
       for (const [x, z] of outline.map(shift)) shade.push(x, SHADOW_Y, z)

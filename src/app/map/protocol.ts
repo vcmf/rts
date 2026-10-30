@@ -3,7 +3,7 @@ import type { MapFile } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Resolved } from '../../map/resolve.ts'
 import type { LAYER_NAMES } from '../../map/apply.ts'
-import type { LightDir } from '../../render/lit/bake.ts'
+import type { Sun } from '../../render/lit/bake.ts'
 import type { OverlaySpec } from '../../render/lit/overlays.ts'
 
 export interface CompileRequest {
@@ -14,6 +14,10 @@ export interface CompileRequest {
   // the heightfields the map's dem sources name, by name: each with the page's version of it, and its bytes only
   // when the worker does not hold that version yet (a 10 MB file is sent once, not on every save of the map)
   files: Record<string, { version: number; bytes?: ArrayBuffer }>
+  // the sun the light is baked for and the heights' exaggeration for the light (the page's ?sun=, ?az=, ?soft=, ?z=);
+  // the map view's own (SUN, RELIEF.z) when absent
+  sun?: Sun
+  z?: number
 }
 export type LayerName = (typeof LAYER_NAMES)[number]
 export interface Compiled {
@@ -33,11 +37,16 @@ export interface Compiled {
   layers: Record<LayerName, ArrayBuffer> // Uint16Array per cell: an index into table (0: none)
   table: Resolved[]
   units: string[] // the ruleset's unit kinds, for the passability overlay
-  // the lit view's bakes (src/render/lit/bake.ts): the relief on the nodes, the masks on the cells, RGBA
-  relief: ArrayBuffer
+  // the lit view's bakes (src/render/lit/bake.ts): the light on every lightStep-th node (bakeLight), the masks on the
+  // cells, RGBA
+  light: ArrayBuffer
+  lightNx: number
+  lightNz: number
+  lightStep: number
   masks: ArrayBuffer
   ink: ArrayBuffer // the ink's distance field on the cells (bakeInk), RGBA
-  light: LightDir // the light the relief was baked for: the shader's water banks take the same
+  sun: Sun // the sun the light was baked for: the shader's slope light and the houses take the same
+  z: number // the heights' exaggeration it was baked with: the shader's slope light takes the same
   ms: { validate: number; apply: number; draw: number; bake: number; ground: number }
 }
 export interface Failed {
