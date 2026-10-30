@@ -459,10 +459,25 @@ export function derive(s: Spec = SPEC): Derived {
 // a bake's memory, MB: RGBA8 unless given (the min-spec budget counts every resident bake)
 export const bakeMB = (w: number, h: number, bytesPerTexel = 4): number => (w * h * bytesPerTexel) / (1024 * 1024)
 
+/** A map world's far ring as the bakes' memory counts it (G3a): its side, m, and its coarse light's nodes */
+export interface RingBakes {
+  side: number
+  light: number
+}
+
 /** The resident bakes' memory, MB, with a w × h shadow map: every render target also holds a 4-byte depth buffer
- *  (the shadow map, the light map and the soldiers' shade, the latter the light map's size). */
-export function bakesMB(d: Derived, w: number, h: number): number {
+ *  (the shadow map, the light map and the soldiers' shade, the latter the light map's size). A map world's far ring
+ *  (`ring`, G3a) replaces the demo's far bake and cover with its own, and adds its relief tone and its coarse light. */
+export function bakesMB(d: Derived, w: number, h: number, ring: RingBakes | null = null): number {
   const s = d.spec
+  // the ring's far bake, its cover (the far bake's texels) and relief tone (about RELIEF_CELL, 4 m), its coarse light
+  const rn = ring ? macroFarNOf(d, ring.side) : 0
+  const ringMB = ring
+    ? (bakeMB(rn, rn) * 4) / 3 +
+      bakeMB(rn, rn) +
+      bakeMB(Math.round(ring.side / 4), Math.round(ring.side / 4)) +
+      bakeMB(ring.light, 1)
+    : 0
   return (
     2 * bakeMB(w, h) +
     // the light map and the soldiers' shade (bakes.ts unitShade, its size, made under ?armies)
@@ -474,22 +489,29 @@ export function bakesMB(d: Derived, w: number, h: number): number {
     bakeMB(d.waterN, d.waterN) + // the bank normals and the water data (no mips: src/look/span-texture.ts)
     bakeMB((d.roadN * ROAD_SLOTS) / 4, d.roadN, 16) +
     bakeMB(s.minSpec.maxTexture, 1, 16) + // the roads grid and at most a row of segments (RGBA float)
-    ((bakeMB(d.macroN, d.macroN) + bakeMB(d.macroFarN, d.macroFarN)) * 4) / 3 +
-    bakeMB(s.far / s.macro.cover, s.far / s.macro.cover) // the macro colour (mipmapped) and the cover grid
+    ((bakeMB(d.macroN, d.macroN) + (ring ? 0 : bakeMB(d.macroFarN, d.macroFarN))) * 4) / 3 +
+    bakeMB(s.far / s.macro.cover, s.far / s.macro.cover) + // the macro colour (mipmapped) and the cover grid
+    ringMB
   )
 }
 
 // The shadow map, sized from the fitted box (known only once the ground is built): each side at the texel target.
 // The texel target holds on the ground: light-space y lies in the sun's vertical plane, where one texel covers
 // 1/sin(elevation) times as much ground, so that side is finer by sin(elevation).
-export function shadowMapSize(d: Derived, boxW: number, boxH: number, sunSinElev: number): { w: number; h: number } {
+export function shadowMapSize(
+  d: Derived,
+  boxW: number,
+  boxH: number,
+  sunSinElev: number,
+  ring: RingBakes | null = null,
+): { w: number; h: number } {
   const s = d.spec
   const w = Math.ceil(boxW / s.texel.shadow)
   const h = Math.ceil(boxH / (s.texel.shadow * sunSinElev))
   if (w > s.minSpec.maxTexture || h > s.minSpec.maxTexture) {
     throw new Error(`world spec: bake: shadow map ${w}×${h} > ${s.minSpec.maxTexture}² (min-spec)`)
   }
-  const mb = bakesMB(d, w, h)
+  const mb = bakesMB(d, w, h, ring)
   if (mb > s.minSpec.bakeMB) {
     throw new Error(`world spec: bake: ${mb.toFixed(0)} MB of bakes > ${s.minSpec.bakeMB} MB (min-spec)`)
   }

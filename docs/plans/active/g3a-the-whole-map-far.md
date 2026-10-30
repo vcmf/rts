@@ -94,3 +94,23 @@ and gun-smoke tests. G3a touches `spec.ts`, `world/from-map.ts`, `world/data.ts`
 - The tile's edge: the fine light's shadow map and occlusion against the coarse light's sun and sky, two different
   measures: the cross-fade by eye.
 - The build time and the files: the ring is 2.2× today's in area; the fine cover is not.
+
+## Open questions
+
+1. **The combed meadow's near bake** (`?grass=flow`) reads the window's cover about the focus; with the focus more than
+   1300 m from the window it reads past it (the edge's texels). Off the tile no grass grows, so only the comb's strokes
+   on the far ring show it: G3b's tiles bring the cover with them.
+2. **The paper's season:** the far ring's paper is the staff map's summer tone; the staff map's changes by season. One
+   paper for both views comes with the zoom handover (G4).
+
+## Review
+
+Round 1 (`/code-review high`, 10 findings, none severe; fixed or answered, then stopped):
+- fixed: the look tools' views checked against ±235 m (`__proto.play` is now the world's play rectangle); the built
+  page with no windows' data (`npm run build` builds a missing or stale one first, `--missing`); a stale or cut-short
+  window file kept (rebuilt when older than its map or its sources, written whole then moved); the ring's far side
+  counted in metres in `checkLookData` (now in far cells; tested); the bake budget blind to a map world's ring (its far
+  bake, cover, relief tone and coarse light counted: `bakesMB`, tested); the coarse light baked once a window (once a
+  map now); the macro bake's demo fallback without `FAR_O`; the paper's colour copied (the staff map's `PAPER`
+  shared); the meadow's rings drawn off the tile (skipped on the CPU when their band misses it);
+- answered: the near comb bake past the window (open question 1); the paper by season (open question 2).

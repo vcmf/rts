@@ -39,7 +39,7 @@ const SKY = [0.82, 0.88, 1.08]
 const SKY_K = 0.25
 const LAMP = 0.55
 // the paper by season, a cold white (Track K's), a touch cooler in winter: summer, early autumn, late autumn, winter
-const PAPER = ['#eceef1', '#eceef1', '#ebecee', '#eef0f3']
+export const PAPER = ['#eceef1', '#eceef1', '#ebecee', '#eef0f3']
 // the water by its depth, a pale shallow blue to a deep blue, in steps (Track K's stepped basins, flat here)
 const SHALLOW = '#a9d0ec'
 const DEEP = '#2b67b0'

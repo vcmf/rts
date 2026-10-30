@@ -344,6 +344,19 @@ describe('world spec', () => {
       )
     expect(at(3072) - at(1536)).toBeCloseTo(4 * (bakeMB(3072, 3072) - bakeMB(1536, 1536)), 9)
   })
+  it("counts a map world's far ring in place of the demo's: its far bake, cover, relief tone and coarse light (G3a)", () => {
+    const d = derive(SPEC)
+    const demo = bakesMB(d, 1000, 1000)
+    // the demo's own ring counted as a map world's: its far bake as before, plus a cover, a relief tone and a light
+    const same = bakesMB(d, 1000, 1000, { side: SPEC.far, light: 0 })
+    expect(same - demo).toBeCloseTo(bakeMB(650, 650) * 2, 9)
+    // Austerlitz's: 4143 m, 1501² nodes of light
+    const big = bakesMB(d, 1000, 1000, { side: 4142.857, light: 1501 * 1501 })
+    expect(big - demo).toBeCloseTo(
+      (bakeMB(1036, 1036) * 4) / 3 + bakeMB(1036, 1036) * 2 + bakeMB(1501 * 1501, 1) - (bakeMB(650, 650) * 4) / 3,
+      6,
+    )
+  })
   it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {
     const d = derive(SPEC)
     const sin = 0.45
@@ -853,6 +866,11 @@ describe("each world's data against the camera (checkView, nearFrameOf)", () => 
         const d = decodeLook(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer)
         expect(() => checkLookData(derive(SPEC), d)).not.toThrow()
         expect(() => checkLookData(derive(SPEC), { ...d, far: { ...d.far, x0: d.far.x0 + 1 } })).toThrow(/far ring/)
+        // a ring ending on the tile's +x and +z edges (no far cell past them for the apron)
+        const e = SPEC.tile / 2
+        const n = Math.round((e - d.far.x0) / d.far.cell) + 1
+        const short = { ...d.far, n, z0: d.far.x0, h: new Float32Array(n * n) }
+        expect(() => checkLookData(derive(SPEC), { ...d, far: short })).toThrow(/not past the tile/)
         expect(() => checkLookData(derive(SPEC), { ...d, light: null })).toThrow(/coarse light/)
         const { layers: L } = layersOf('maps/austerlitz.map.json')
         const want = bakeLight(L.height, L.nx + 1, L.nz + 1, L.cell, SUN, 1, 1)

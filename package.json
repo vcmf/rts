@@ -5,7 +5,7 @@
   "engines": { "node": ">=22.18" },
   "scripts": {
     "dev": "vite --open /app/",
-    "build": "vite build",
+    "build": "node tools/build-look-data.ts --missing && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write . --log-level warn && (eslint --fix .; s=$?; prettier --write . --log-level warn && exit $s)",

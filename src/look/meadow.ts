@@ -471,13 +471,15 @@ export function buildMeadow(
     const t = wide ? Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))) : 0
     const k = 1 - t * t * (3 - 2 * t)
     under.z = underOn && meadowOn ? k : 0
+    const f = camera.target
+    // (a map world's focus goes past the tile, G3a: a ring whose band misses it draws nothing, its map the tile's)
+    const off = Math.max(Math.abs(f.x), Math.abs(f.z)) - D.spec.tile / 2
     RINGS.forEach((r, ri) => {
       const outer = ri === RINGS.length - 1
       const b = bands[ri]
       b.set(r.band[0] * k, r.band[1] * k, outer ? r.band[2] : r.band[2] * k, outer ? r.band[3] : r.band[3] * k)
-      meshes[ri].isVisible = b.w > 0 // (visibility: the page's own switches set enabled)
+      meshes[ri].isVisible = b.w > 0 && off < b.w // (visibility: the page's own switches set enabled)
     })
-    const f = camera.target
     const y = heightAt(f.x, f.z)
     centre.set(f.x, f.z)
     RINGS.forEach((r, ri) => {

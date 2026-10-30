@@ -162,9 +162,8 @@ export function buildMacro(
   const bakeCoverTex = bakeCover === cover ? coverTex : coverTexOf(bakeCover)
   // the far ring: the demo's SPEC.far about the origin, its bake reading the cover; a map world's the whole map, its
   // bake reading the ring's own cover (G3a, docs/plans/active/g3a-the-whole-map-far.md)
-  const farRect = ring
-    ? rectOf(ring)
-    : { x0: -D.spec.far / 2, z0: -D.spec.far / 2, x1: D.spec.far / 2, z1: D.spec.far / 2 }
+  const farGrid = ring ?? { n: D.spec.farSub + 1, cell: D.farCell, x0: -D.spec.far / 2, z0: -D.spec.far / 2, h: [] }
+  const farRect = rectOf(farGrid)
   const farSide = farRect.x1 - farRect.x0
   const farN = ring ? macroFarNOf(D, farSide) : D.macroFarN
   const farCover = ringCover ?? bakeCover
@@ -291,7 +290,7 @@ export function buildMacro(
   ]
   const DEFINES = [
     ...D.defines,
-    ...(ring ? farDefines(ring) : []),
+    ...farDefines(farGrid),
     ...(meadow ? ['#define MEADOW', ...flow] : []),
     ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []),
     ...(roads ? ['#define ROADS', '#define PAVING_FAR', ...paveDefines()] : []),

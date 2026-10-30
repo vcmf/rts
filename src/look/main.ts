@@ -491,6 +491,7 @@ const bakes = buildBakes(
   soft,
   nature.trunks,
   nature.farCull,
+  look.light ? { side: ring.x1 - ring.x0, light: look.light.nx * look.light.nz } : null,
 )
 // the buildings' static light, baked after the light map (src/look/building-light.ts)
 // (each bake timed, by reading it back, on the bench only)
@@ -1390,7 +1391,7 @@ if (new URLSearchParams(location.search).get('river') === 'debug') {
 // written against the prototype's globals; SMW and MASKN are the prototype's names for TILE_W and MASK_N)
 Object.assign(window, {
   // zoom: the wanted radius (ZoomHold: read wanted, set(r))
-  __proto: { S, scene, camera, zoom: zoomOf(camera), buildPost: () => post.build(), play: D.spec.play },
+  __proto: { S, scene, camera, zoom: zoomOf(camera), buildPost: () => post.build(), play: worldGround.play },
   B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
   // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring
   // formulas the river check compares with

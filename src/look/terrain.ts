@@ -25,6 +25,7 @@ import type { LightGrid, SpanGrid } from './world/data.ts'
 import { COVER, WEAR_STEP, type CoverGrid } from './world/cover.ts'
 import { YARD_ALL, paveDefines } from './world/buildings.ts'
 import { spanTexture } from './span-texture.ts'
+import { PAPER as STAFF_PAPER } from '../render/lit/view.ts'
 import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
 
@@ -50,8 +51,9 @@ const FAR_CELL = D.farCell
 const BAND = D.band
 const MASK_N = D.spec.sizes.riverMask
 
-// the staff map's paper (src/render/lit/view.ts, PAPER: its summer tone), past a map world's edge (G3a)
-const PAPER = [0xec / 255, 0xee / 255, 0xf1 / 255]
+// the staff map's paper (src/render/lit/view.ts) in its summer tone, past a map world's edge (G3a; the paper by the
+// season, as the staff map's, with the zoom handover: G4)
+const PAPER = [1, 3, 5].map(k => parseInt(STAFF_PAPER[0].slice(k, k + 2), 16) / 255)
 const glsl = (v: number) => v.toFixed(3)
 
 /**

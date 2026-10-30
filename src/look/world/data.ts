@@ -324,9 +324,9 @@ export function checkLookData(d: Derived, look: LookData): void {
     // a map world's (ringFor): its corner on the far grid, a far cell or more past the tile on every side
     const r = rectOf(look.far)
     const e = s.tile / 2
-    const k0 = (-e - r.x0) / d.farCell
-    const k1 = (-e - r.z0) / d.farCell
-    if (!isWhole(k0) || !isWhole(k1) || Math.min(k0, k1, r.x1 - e, r.z1 - e) < 1 - 1e-9 || look.far.n > 8193) {
+    // (far cells from the tile's edges out to the ring's)
+    const k = [(-e - r.x0) / d.farCell, (-e - r.z0) / d.farCell, (r.x1 - e) / d.farCell, (r.z1 - e) / d.farCell]
+    if (!k.every(isWhole) || Math.min(...k) < 1 - 1e-9 || look.far.n > 8193) {
       bad.push(`far ring from ${r.x0}, ${r.z0} to ${r.x1}, ${r.z1}: not on the far grid, or not past the tile`)
     }
   }

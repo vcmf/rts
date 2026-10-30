@@ -36,7 +36,7 @@ export const viewStep = ([name, a, b, r, t, season]) => [
   `(async () => { const c = __proto.camera, lim = (v, lo, hi) => (lo == null || v >= lo - 1e-9) && (hi == null || v <= hi + 1e-9)
   const t = [${t}], P = __proto.play
   if (!lim(${a}, c.lowerAlphaLimit, c.upperAlphaLimit) || !lim(${b}, c.lowerBetaLimit, c.upperBetaLimit) || !lim(${r}, c.lowerRadiusLimit, c.upperRadiusLimit)
-    || typeof P !== "number" || Math.abs(t[0]) > P || Math.abs(t[2]) > P)
+    || typeof P?.x0 !== "number" || !lim(t[0], P.x0, P.x1) || !lim(t[2], P.z0, P.z1))
     throw new Error("camera ${name} is outside the page's camera limits or play area")
   c.alpha = ${a}; c.beta = ${b}; c.radius = ${r}; __proto.zoom?.set(${r}); c.target.set(...t); __proto.S.season = ${season}
   await Promise.race([__proto.scene.whenReadyAsync(true), new Promise((_, no) => setTimeout(() => no(new Error("scene never ready at camera ${name} (120 s)")), 120000))])
