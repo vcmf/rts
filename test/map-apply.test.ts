@@ -423,11 +423,51 @@ describe('M1b: applying features into the layers', () => {
     // the rim can know, so the promise is the rim's range
     const rim: number[] = []
     for (let t = -160; t <= 160; t += 10) rim.push(hAt(ground, t, 45), hAt(ground, t, -45))
+    for (let t = -40; t <= 40; t += 10) rim.push(hAt(ground, 165, t), hAt(ground, -165, t))
     for (let x = -140; x <= 140; x += 20) {
       for (let z = -30; z <= 30; z += 10) {
         expect(hAt(mended, x, z)).toBeGreaterThanOrEqual(Math.min(...rim) - 0.05)
         expect(hAt(mended, x, z)).toBeLessThanOrEqual(Math.max(...rim) + 0.05)
       }
+    }
+  })
+  it("an area's mend never reads ground another mend reaches: an embankment through its rim stays mended", () => {
+    const slope = { id: 'hill', kind: 'relief.hill', point: [900, 700] as Pt, height: 60, width: 2400 }
+    const pit = { id: 'pit', kind: 'relief.plateau', circle: [[0, 0] as Pt, 30] as [Pt, number], height: -6, edge: 6 }
+    // an embankment 5 m high passing 45 m from the pit's centre: through the ring the pit's membrane is held to
+    const bank = {
+      id: 'bank',
+      kind: 'relief.ridge',
+      line: [
+        [-180, 45],
+        [180, 45],
+      ] as Pt[],
+      height: 5,
+      width: 20,
+    }
+    const mendPit = { id: 'mend-pit', kind: 'relief.mend', circle: [[0, 0] as Pt, 36] as [Pt, number], edge: 5 }
+    const mendBank = {
+      id: 'mend-bank',
+      kind: 'relief.mend',
+      line: [
+        [-170, 45],
+        [170, 45],
+      ] as Pt[],
+      width: 30,
+      edge: 8,
+    }
+    const ground = apply(mini([slope]), cat)
+    const mended = apply(mini([slope, pit, bank, mendPit, mendBank]), cat)
+    // the pit and the embankment where it passes the pit: the ground, not the bank pulled back in by the membrane
+    for (const [x, z] of [
+      [0, 0],
+      [0, 20],
+      [0, 38],
+      [20, 30],
+      [-20, 30],
+      [0, 45],
+    ] as Pt[]) {
+      expect(Math.abs(hAt(mended, x, z) - hAt(ground, x, z))).toBeLessThan(0.3)
     }
   })
   it('a mend is part of the relief: water is levelled on the mended ground, bends mend, the order of mends is moot', () => {

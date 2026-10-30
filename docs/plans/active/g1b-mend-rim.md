@@ -35,3 +35,14 @@ ground round it by up to 3 m (the ground curves there), and the blend over its 5
   its whole reach at full weight. What remains: a faint flat patch over the west half, where the ground falls over a
   rounded shoulder to the Goldbach, and a soft line along the north edge (a membrane's slope at its rim; a biharmonic
   fill is the next step if the owner still sees it).
+
+## Review
+
+Round 1 (`/code-review high`, 3 severe): the membrane held nodes other mends reach (it read the unmended work,
+against 0073's independence: an embankment through its ring came half back); a fixed relaxation factor with a stop
+that left large mends unconverged; the off-map rim's mean lost. Fixed: only ground no mend reaches is held, a reached
+neighbour left out; the factor from the mend's extent, a 0.1 mm stop, the sweeps capped at 20 times the extent; a rim
+mostly off the map or reached keeps its mean; the inverse-distance first fill dropped (the plane starts it); the
+comments, the system doc and the decision say so. Tests: the rim's range on all four sides; an embankment mended
+through a pit's ring stays mended (0.56 m off with round 1's code, under 0.3 m now). Kept: a mend with no free ground
+round it is left as it is (0073's rule; nothing to hold it to).

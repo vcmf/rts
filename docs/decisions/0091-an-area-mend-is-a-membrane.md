@@ -15,9 +15,12 @@ for a modern earthwork (2026-10-30).
 
 ## Decision
 
-We will fill an area's or a circle's mend with a **membrane**: Laplace's equation over the mend's nodes, the ground
-round them held (`membrane`, `src/map/apply.ts`), settled by over-relaxed Gauss-Seidel from a first fill (the plane
-through the rim as before, each rim node's misfit to it added back by the inverse fourth power of its distance). The
+We will fill an area's or a circle's mend with a **membrane**: Laplace's equation over the mend's nodes, held to the
+ground round them that no mend reaches; a neighbour another mend reaches is left out, never read, so the mends stay
+independent of each other (0073). It is settled by successive over-relaxation (the factor optimal for its extent, until
+no node moves a tenth of a millimetre), started from the plane through that ground (`membrane`, `src/map/apply.ts`).
+A rim mostly off the map or reached by other mends (under a quarter of it free) keeps its mean, as 0073 has it: held
+to a short arc, a membrane would spread that arc's bumps over the whole work. The
 membrane takes the area's whole reach (its outline and `edge` past it) at full weight, not blended into the ground
 over `edge`: it meets the ground just past that by itself, and a blend mixed the work's own ground back in (the pit's
 stepped sides past its outline drew a ghost of the rectangle). The rest of 0073 stands: lines are mended and blended
@@ -39,5 +42,5 @@ as before, every mend reads the relief before any mend.
 - **The plane, with a wider blend:** a 25 m blend at the pit still stepped about 2 m over 10–20 m (measured).
 - **The plane and the misfit spread by inverse distance alone:** meets the rim better (0.73 to 0.4 m on the test's
   ground with squares, under 0.25 m with fourth powers) but overshoots the rim's range, and flat spots form round the
-  nearest rim nodes.
+  nearest rim nodes; it costs nodes × rim nodes.
 - **A biharmonic (thin-plate) fill:** matches the ground's slope at the rim too; kept for a work where the kink shows.

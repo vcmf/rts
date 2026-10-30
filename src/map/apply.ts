@@ -531,8 +531,9 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
   // before any mend, and never a node within any mend's reach, so the mends are independent of their order and of
   // each other; where two overlap, the ground takes their targets' mean by weight. Along a line, each node takes the
   // blend across the line of the ground on each side, sampled out along the line's direction over its own reach (a
-  // chord, so it turns smoothly through a bend) at the first ground no mend reaches; over an area, the plane through
-  // the ground on its rim (least squares) that no mend reaches.
+  // chord, so it turns smoothly through a bend) at the first ground no mend reaches; over an area, a membrane on the
+  // ground round it that no mend reaches (decision 0091), started from the plane through that ground (least squares),
+  // or the rim's mean where a plane would tilt on a short arc of it.
   // the mends (a subkind of relief.mend too), summed in an order of their own content, not their ids, so a rename
   // changes no bit where three or more overlap
   const isMend = (r: Resolved) => kindChain(cat, r.kind)?.includes('relief.mend') ?? false
@@ -658,8 +659,6 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
         // the rim: the nodes within two cells past the edge's blend that no mend reaches
         const [cx, cz] = [(m.box[0] + m.box[2]) / 2, (m.box[1] + m.box[3]) / 2]
         let [n1, sx, sz, sxx, sxz, szz, sh, sxh, szh] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-        // the free rim nodes themselves, about the centre, and their heights: their misfit to the plane is spread back
-        const rim: number[] = []
         // the whole rim's nodes, on the map or off it (the grid's spacing, unclipped), against which the free ones
         // (n1) are counted
         let ring = 0
@@ -674,7 +673,6 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
           const e = field.edge(x, z)
           if (e >= -m.edge || e < -m.edge - 2 * c || reached[k]) return
           const [u, v, h] = [x - cx, z - cz, H[k]]
-          rim.push(u, v, h)
           n1 += 1
           sx += u
           sz += v
@@ -700,30 +698,16 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
         const gz = flat
           ? 0
           : (n1 * (sxx * szh - sxh * sxz) - sx * (sx * szh - sxh * sz) + sh * (sx * sxz - sxx * sz)) / det
-        // the plane carries the ground's trend and each rim node's misfit to it is added back by the inverse fourth
-        // power of its distance: a first fill, which a membrane then settles (below)
-        const plane = (u: number, v: number) => p0 + gx * u + gz * v
-        const off = new Float64Array(rim.length / 3)
-        for (let r = 0; r < off.length; r++) off[r] = rim[3 * r + 2] - plane(rim[3 * r], rim[3 * r + 1])
         m.ks.forEach((k, q) => {
           const i = k % (nx + 1)
           const j = (k - i) / (nx + 1)
-          const [u, v] = [x0 + i * c - cx, z0 + j * c - cz]
-          let [sw, swr] = [0, 0]
-          for (let r = 0; r < off.length; r++) {
-            const [du, dv] = [rim[3 * r] - u, rim[3 * r + 1] - v]
-            const d2 = du * du + dv * dv + c * c
-            const w = 1 / (d2 * d2)
-            sw += w
-            swr += w * off[r]
-          }
-          target[q] = plane(u, v) + (sw > 0 ? swr / sw : 0)
+          target[q] = p0 + gx * (x0 + i * c - cx) + gz * (z0 + j * c - cz)
         })
-        // the membrane (Laplace's equation over the mend's nodes, the ground round them held): it meets the ground
-        // all round, keeps a plane a plane and never leaves the rim's range of heights, where a plane alone stepped
-        // where the rim's ground curves (the pit at Újezd stepped 3 m at its rim, G2). Over-relaxed Gauss-Seidel
-        // from the first fill, until no node moves a millimetre
-        membrane(m.ks, target, H, nx, nz)
+        // the membrane (Laplace's equation over the mend's nodes, held to the ground round them that no mend reaches):
+        // it meets that ground all round, keeps a plane a plane and stays within its range of heights, where the
+        // plane alone stepped where the ground round it curves (the pit at Újezd: 3 m, G2). A rim mostly off the map
+        // or reached by other mends keeps its mean: a membrane held to a short arc would spread that arc's bumps
+        if (4 * n1 >= ring) membrane(m.ks, target, H, nx, nz, reached)
       } else continue
       m.ks.forEach((k, q) => {
         if (Number.isNaN(target[q])) return
@@ -1175,19 +1159,31 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
 
 /**
  * Settles `target` (the heights wanted at the nodes `ks`, a first guess) into a membrane over those nodes: each the
- * mean of its four neighbours, a neighbour outside `ks` read from `H` and held (the ground round the mend).
- * Over-relaxed Gauss-Seidel until no node moves a millimetre (at most MEMBRANE_STEPS sweeps). Writes `target` in place.
+ * mean of its neighbours (four, fewer at the grid's edge), a neighbour outside `ks` that no mend reaches read from
+ * `H` and held (the ground round the mend), one another mend reaches left out (never read: decision 0073's
+ * independence). Successive over-relaxation with the factor optimal for the nodes' extent, until no node moves a tenth
+ * of a millimetre (at most MEMBRANE_SWEEPS times the extent in sweeps; optimal SOR converges in a few times the
+ * extent). Writes `target` in place.
  */
-function membrane(ks: readonly number[], target: Float64Array, H: Float64Array, nx: number, nz: number): void {
+function membrane(
+  ks: readonly number[],
+  target: Float64Array,
+  H: Float64Array,
+  nx: number,
+  nz: number,
+  reached: Uint8Array,
+): void {
   const W = nx + 1
   const at = new Map<number, number>()
   ks.forEach((k, q) => at.set(k, q))
-  // each node's four neighbours: inside the mend (its index, ≥ 0) or held (−1 − the node, its height read from H)
+  // each node's neighbours: inside the mend (its index, ≥ 0) or held (−1 − the node, its height read from H)
   const nb = new Int32Array(ks.length * 4)
   const cnt = new Uint8Array(ks.length)
+  let [i0, i1, j0, j1] = [Infinity, -Infinity, Infinity, -Infinity]
   ks.forEach((k, q) => {
     const i = k % W
     const j = (k - i) / W
+    ;[i0, i1, j0, j1] = [Math.min(i0, i), Math.max(i1, i), Math.min(j0, j), Math.max(j1, j)]
     let n = 0
     for (const [di, dj] of [
       [1, 0],
@@ -1199,12 +1195,16 @@ function membrane(ks: readonly number[], target: Float64Array, H: Float64Array, 
       if (a < 0 || a > nx || b < 0 || b > nz) continue
       const k2 = b * W + a
       const q2 = at.get(k2)
-      nb[q * 4 + n++] = q2 === undefined ? -1 - k2 : q2
+      if (q2 !== undefined) nb[q * 4 + n++] = q2
+      else if (!reached[k2]) nb[q * 4 + n++] = -1 - k2
     }
     cnt[q] = n
   })
-  const OMEGA = 1.9
-  for (let sweep = 0; sweep < MEMBRANE_STEPS; sweep++) {
+  const extent = Math.max(i1 - i0, j1 - j0) + 2
+  // the optimal factor, 2 / (1 + sin(π / extent)), with π / extent for the sine (exact across engines; the factor sets
+  // only the speed, not the result)
+  const omega = 2 / (1 + Math.PI / extent)
+  for (let sweep = 0; sweep < MEMBRANE_SWEEPS * extent; sweep++) {
     let moved = 0
     for (let q = 0; q < ks.length; q++) {
       if (!cnt[q]) continue
@@ -1213,14 +1213,14 @@ function membrane(ks: readonly number[], target: Float64Array, H: Float64Array, 
         const t = nb[q * 4 + e]
         sum += t >= 0 ? target[t] : H[-1 - t]
       }
-      const d = OMEGA * (sum / cnt[q] - target[q])
+      const d = omega * (sum / cnt[q] - target[q])
       target[q] += d
       if (Math.abs(d) > moved) moved = Math.abs(d)
     }
-    if (moved < 0.001) return
+    if (moved < 1e-4) return
   }
 }
-const MEMBRANE_STEPS = 4000
+const MEMBRANE_SWEEPS = 20
 
 // the ground at a point, bilinear between the layers' nodes, clamped to the grid (of `h`: the layers' heights unless
 // given another array on the same nodes)
