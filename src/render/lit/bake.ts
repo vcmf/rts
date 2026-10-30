@@ -27,7 +27,7 @@ export const SUN: Sun = sunFrom(-0.7, 0.45, 0.55, 2.5)
 // is the shader's, per pixel, from the 2 m heights
 export const LIGHT_STEP = 2
 export const RELIEF = {
-  z: 2, // the heights' exaggeration, for the light only (as shaded-relief prints do)
+  z: 3, // the heights' exaggeration, for the light only (as shaded-relief prints do)
 }
 // the sky's horizon is read this far from a node in each of eight directions, m: the hollows, sunken roads and stream
 // valleys of a battlefield, not a mountain range's
