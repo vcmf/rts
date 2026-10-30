@@ -66,6 +66,7 @@ export const withPainter = (src: string): string => {
 // (src/look/macro.ts); uMeadow: the meadow map (the ground under the grass, the combed meadow); uFlow, uComb: the
 // flow's textures (src/look/flow.ts)
 const MACRO_SAMPLERS = [
+  'uRelief',
   'uCover',
   'uMacro',
   'uMacroFar',
@@ -142,6 +143,7 @@ export function setSeasonUniforms(m: ShaderMaterial, s: SeasonLight = seasonSnap
 }
 // (uUnit*: the figures' cast shadows on the materials they fall on, UNIT_SHADOWS: src/look/units.ts)
 const COMMON = [
+  'uReliefK',
   ...Object.keys(MOOD_COLOURS),
   ...Object.keys(MOOD_FLOATS),
   'uUnitVP',

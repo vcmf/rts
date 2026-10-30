@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map</title>
+<style>
+  :root { --paper: #f3efe6; --ink: #211f1c; --ink-2: #5f5a52; --ink-3: #a19a8f; --rule: rgba(40, 30, 20, .14); --bad: #9a2a1a;
+          --mono: ui-monospace, Menlo, monospace; --display: system-ui, sans-serif; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #ddd6c6; color: var(--ink); font: 400 12px/1.45 var(--mono); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #map { cursor: grab; }
+  #map:active { cursor: grabbing; }
+  #map:focus { outline: none; }
+  .card { position: fixed; padding: 12px 14px; background: rgba(246, 243, 236, .95); border: 1px solid var(--rule); border-radius: 4px; }
+  #panel { top: 16px; left: 16px; width: 300px; max-height: calc(100vh - 56px); overflow-y: auto; box-sizing: border-box; }
+  #panel .t { font: 700 20px/1 var(--display); margin-bottom: 8px; }
+  #status { color: var(--ink-2); font-size: 11px; margin: 6px 0; }
+  label { margin-right: 12px; color: var(--ink-2); }
+  select { font: inherit; }
+  #errbox { margin-top: 8px; color: var(--bad); }
+  #errbox .cap { font-weight: 700; }
+  #errors { margin: 4px 0 0; padding-left: 16px; max-height: 40vh; overflow: auto; }
+  #errors li.at { cursor: pointer; text-decoration: underline dotted; }
+  #overlayHint { color: var(--ink-2); font-size: 11px; margin: 4px 0; }
+  #editbox { margin-top: 8px; border-top: 1px solid var(--rule); padding-top: 6px; }
+  #editbox .cap { font-weight: 700; }
+  #editState, #editbox .hint { color: var(--ink-2); font-size: 11px; margin: 4px 0; }
+  #conflict { color: var(--bad); margin: 4px 0; }
+  button { font: inherit; }
+  #addbox, #newbox, #scanbox { margin: 6px 0; }
+  #scanbox input[type=range] { width: 100px; vertical-align: middle; }
+  #scanState { color: var(--ink-2); font-size: 11px; }
+  #scanPoints { margin: 2px 0; padding-left: 22px; font-size: 11px; }
+  #addbox input, #newbox input { font: inherit; width: 110px; }
+  #newbox input[type=number] { width: 70px; }
+  #drawPrompt { color: #1a70c0; margin: 4px 0; }
+  #drawPrompt:empty, #refs:empty { display: none; }
+  #refs { margin: 4px 0; }
+  #form { margin: 6px 0 0; outline: none; }
+  #form input:read-only:not([type=checkbox]), #form textarea:read-only { color: var(--ink-2); background: transparent; }
+  #form .row { display: grid; grid-template-columns: 9em 1fr; gap: 0 6px; margin: 2px 0; color: var(--ink); }
+  #form .row .k { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #form .row input, #form .row select { font: inherit; min-width: 0; }
+  #form .row .hint, #form .row .bads { grid-column: 2; font-size: 10px; }
+  #form .row .hint { color: var(--ink-3); }
+  #form .bad { display: block; color: var(--bad); font-size: 10px; }
+  #form textarea { font: inherit; min-width: 0; }
+  #form textarea.json { width: 100%; box-sizing: border-box; font: 10px/1.3 var(--mono); margin-top: 6px; }
+  #readout { bottom: 16px; right: 16px; white-space: pre; min-width: 260px; }
+  #readout:empty { display: none; }
+  @media (max-width: 640px) { #panel { left: 8px; right: 8px; width: auto; } }
+</style>
+</head>
+<body>
+<canvas id="lit"></canvas>
+<canvas id="map" tabindex="-1"></canvas>
+<div id="panel" class="card">
+  <div class="t">Map</div>
+  <select id="picker" aria-label="Map"></select>
+  <div id="status">compiling…</div>
+  <label>view <select id="mode"><option value="lit">lit</option><option value="flat">flat colours</option></select></label>
+  <label>overlay <select id="overlay"><option value="">none</option></select></label>
+  <div id="overlayHint" hidden>click the map to look from a point</div>
+  <label><input id="outlines" type="checkbox" checked> outlines</label>
+  <label><input id="ids" type="checkbox" checked> ids</label>
+  <details id="scanbox"><summary>scan</summary>
+    <select id="scanPick" aria-label="Scan"></select>
+    <label>opacity <input id="scanOpacity" type="range" min="0" max="1" step="0.05" value="0.6"></label>
+    <button id="scanAdd" title="two clicks: where a landmark shows on the scan, then where it is on the map">add a point</button>
+    <div id="scanState"></div>
+    <ol id="scanPoints"></ol></details>
+  <div id="editbox">
+    <div class="cap">edit</div>
+    <div id="editState"></div>
+    <button id="save" disabled title="Cmd or Ctrl S">save</button>
+    <button id="undo" disabled title="Cmd or Ctrl Z">undo</button>
+    <button id="redo" disabled title="Shift Cmd Z, Ctrl Y">redo</button>
+    <div id="conflict" hidden><span id="conflictWhy"></span>
+      <button id="overwrite">keep my edits, overwrite it</button> <button id="takeDisk">take the file</button></div>
+    <div id="addbox">add <select id="addKind" aria-label="Kind"></select> <select id="addShape" aria-label="Shape"></select>
+      <input id="addId" aria-label="Id" spellcheck="false"> <button id="addGo">draw</button></div>
+    <div id="drawPrompt"></div>
+    <div id="refs"></div>
+    <details id="newbox"><summary>new map</summary>
+      <label>id <input id="newId" spellcheck="false" placeholder="my-map"></label>
+      <label>name <input id="newName" placeholder="My Map"></label><br>
+      <label>size <input id="newSize" type="number" value="2400" min="200" step="100"> m</label>
+      <label>play <input id="newPlay" type="number" value="1500" min="100" step="100"> m</label><br>
+      <label>seed <input id="newSeed" type="number" min="0"></label>
+      <label>season <select id="newSeason"></select></label>
+      <button id="newMake">make</button></details>
+    <div class="hint">click selects · drag a handle or the shape · double-click adds a point · Delete removes the point under the pointer, or the feature · Esc clears · drawing: Enter ends a line or an area, Backspace takes a click back, Esc drops it</div>
+    <div id="form" tabindex="-1"></div>
+  </div>
+  <div id="errbox" hidden><div class="cap">The file has errors; the last good drawing stays.</div><ul id="errors"></ul></div>
+</div>
+<div id="readout" class="card"></div>
+<script type="module" src="../src/app/map/main.ts"></script>
+</body>
+</html>

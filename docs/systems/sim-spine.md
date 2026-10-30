@@ -104,10 +104,12 @@ advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formation
   FNV-1a's byte loop, kept so the hashes stay).
   `deserialize` refuses a save made with other data or another ruleset, and checks each pending command again with
   `normaliseCommand` (one that is not canonical, written by hand or by an older sim, is refused, not applied).
-- **Replays** (`replay.ts`): `SIM_VERSION` is `s1e.3` (from `s1e.2` with #155–#158: a zero that was −0 is +0,
-  other bytes in some states, and a malformed command is stamped as `refused`), so `play` refuses an older replay
-  cleanly rather than reporting a mismatch. `SAVE_FORMAT` is 12 (a pending command may be `refused`); the bump
-  changes only the save's header, which `hashWorld` covers, so the goldens were regenerated with no state changed.
+- **Replays** (`replay.ts`): `SIM_VERSION` is `u2.1` (from `s1e.4` with U2: morale is a bar, and the state and the
+  rules change; `s1e.4` came from `s1e.3` with S1e-3b: the Napoleonic ruleset's
+  `end.broken` is 0.65, so a replay's states and its battle's end change; `s1e.3` came from `s1e.2` with #155–#158: a
+  zero that was −0 is +0, other bytes in some states, and a malformed command is stamped as `refused`), so `play`
+  refuses an older replay cleanly rather than reporting a mismatch. `SAVE_FORMAT` is 14 (U2: the bar's fields replace
+  morale's; 12 came with a pending command that may be `refused`, and that bump changed only the save's header, which `hashWorld` covers, so the goldens were regenerated with no state changed).
   - `record` runs a scenario (`{ name, setup }`) with external commands and keeps the log and the
     hashes.
   - `play` checks the ruleset, the scenario name and that the log is in tick order within the replay, re-issues it

@@ -88,7 +88,7 @@ describe('leaving the field', () => {
     const stays = s.spawn(200, -500, 0, 'line', 400)
     s.order({ type: 'side', side: 0, x: 0, z: -1 })
     s.order({ type: 'debug-kill', id: gone, men: 220 }) // under half its strength: it shatters when it breaks
-    for (const h of [gone, stays]) s.order({ type: 'debug-morale', id: h, quality: 0.1 })
+    for (const h of [gone, stays]) s.order({ type: 'debug-morale', id: h, bar: -100 })
     s.until(() => s.slot(gone) >= 0, 180)
     expect(formationSlot(s.w, gone)).toBe(-1)
     expect(s.w.sides.left[0]).toBe(180)

@@ -5,6 +5,10 @@ last_reviewed: 2026-10-10
 
 # Proposal: the map format, one description of a battlefield
 
+> **Extended by `docs/proposals/map-engine.md`** (2026-10-12), which adds the generator, the draft view, the
+> layer model, the kinds catalogue and the 2 m grids. Where the two differ, the map engine's proposal is the newer
+> design; plans that point here for the map format follow it.
+
 A structured, schema-checked data format that describes a battlefield by what is on it (relief, water,
 ground cover, roads, settlements, works), from which deterministic compilers build everything that
 needs a map: the simulation's terrain, the 3D battlefield and the staff map. Real battlefields are

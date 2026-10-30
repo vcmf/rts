@@ -165,10 +165,10 @@ export function boxPxRange(
   return out
 }
 
-/** A list of men as the figures' instance buffers hold them: matrices (16 a man), clip settings (3), moves to the next
- *  step (3) and each man's index in his battalion (1: aMan, the cross-fade's hash) */
+/** A list of men as the figures' instance buffers hold them: poses (4 a man: x, y, z, his turn), clip settings (3),
+ *  moves to the next step (3) and each man's index in his battalion (1: aMan, the cross-fade's hash) */
 export interface ManLists {
-  m: Float32Array
+  p: Float32Array
   s: Float32Array
   n: Float32Array
   i: Float32Array
@@ -187,7 +187,7 @@ export function splitLists(
   for (let i = 0; i < sel.length; i++) {
     const to = sel[i] ? near : rest
     const k = sel[i] ? a++ : b++
-    to.m.set(all.m.subarray(i * 16, i * 16 + 16), k * 16)
+    to.p.set(all.p.subarray(i * 4, i * 4 + 4), k * 4)
     to.s.set(all.s.subarray(i * 3, i * 3 + 3), k * 3)
     to.n.set(all.n.subarray(i * 3, i * 3 + 3), k * 3)
     to.i[k] = i
@@ -196,7 +196,7 @@ export function splitLists(
 }
 
 /** The buffers the near LOD draws a battalion from (setSplit): its rest list while split, else its own; each buffer
- *  with its own index list, so a man's hash goes with his matrix */
-export function nextLodBuffers(split: boolean, own: ManLists, rest: ManLists): ManLists {
+ *  with its own index list, so a man's hash goes with his pose */
+export function nextLodBuffers<L>(split: boolean, own: L, rest: L): L {
   return split ? rest : own
 }

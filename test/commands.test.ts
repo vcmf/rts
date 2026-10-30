@@ -56,21 +56,21 @@ function refusals(w: World, cmds: Command[], changes = false): string[] {
 }
 
 describe('commands: refusals', () => {
-  it('a spawn of an unknown type, a heading beyond 4π, a quality outside 0..1, an unknown fire mode', () => {
+  it('a spawn of an unknown type, a heading beyond 4π, a level outside 1..6, a negative bar, an unknown fire mode', () => {
     const w = makeWorld(data, cr, 1)
     const why = refusals(w, [
       { ...spawn(), unit: 'elephant' } as Command,
       { ...spawn(), heading: 4 * PI + 0.01 } as Command,
-      { ...spawn(), quality: 1.5 } as Command,
-      { ...spawn(), quality: -0.25 } as Command,
+      { ...spawn(), level: 7 } as Command,
+      { ...spawn(), bar: -0.25 } as Command,
       { ...spawn(), fire: 'by rank' } as Command,
       { ...spawn(), men: 0 } as Command,
     ])
     expect(why).toEqual([
       'no such unit type',
       'heading out of range',
-      'no such quality',
-      'no such quality',
+      'no such level',
+      'no such bar',
       'no such fire mode',
       'no room for those men',
     ])
@@ -137,17 +137,16 @@ describe('commands: refusals', () => {
     expect(refusals(w, [{ type: 'fire', id: a, mode: 'at will', target: fresh }], true)).toEqual([])
     expect(w.f.prefer[0]).toBe(fresh)
   })
-  it('a debug kill of no men, and a debug morale outside 0..1', () => {
+  it('a debug kill of no men, and a debug morale with no number for the bar', () => {
     const { w, a } = twoSides()
-    const q = w.f.quality[0]
+    const b = w.f.bar[0]
     expect(
       refusals(w, [
         { type: 'debug-kill', id: a, men: 0 },
-        { type: 'debug-morale', id: a, quality: 1.01 },
-        { type: 'debug-morale', id: a, quality: -0.5 },
+        { type: 'debug-morale', id: a, bar: Infinity },
       ]),
-    ).toEqual(['no men', 'no such quality', 'no such quality'])
-    expect(w.f.quality[0]).toBe(q)
+    ).toEqual(['no men', 'malformed command'])
+    expect(w.f.bar[0]).toBe(b)
   })
   it('a debug kill of more men than the formation has takes them all, and the formation is reaped', () => {
     const { w, a } = twoSides()
@@ -188,7 +187,7 @@ describe('commands: quantised when stamped', () => {
     }) as { x: number; heading: number }
     for (const v of [wheel.angle, side.x, side.z, spawn.x, spawn.heading]) expect(Object.is(v, 0)).toBe(true)
   })
-  it("a fire command without a target targets none; a spawn without a quality takes the ruleset's", () => {
+  it("a fire command without a target targets none; a spawn without a level takes the ruleset's, with its bar", () => {
     expect(quantiseCommand({ type: 'fire', id: 1, mode: 'hold' })).toEqual({
       type: 'fire',
       id: 1,
@@ -198,7 +197,7 @@ describe('commands: quantised when stamped', () => {
     const w = makeWorld(data, cr, 1)
     issue(w, spawn())
     advanceTick(w)
-    expect(w.f.quality[0]).toBe(cr.rs.morale.quality)
+    expect([w.f.level[0], w.f.barMax[0], w.f.bar[0]]).toEqual([cr.rs.morale.level, 100, 100])
   })
   it('a move with no, too many or malformed waypoints is refused when issued, with why', () => {
     const many = Array.from({ length: 65 }, (_, k): [number, number] => [k + 0.001, 0])

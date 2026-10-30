@@ -12,9 +12,12 @@ import { HASH_EVERY } from './time.ts'
 import type { Handle } from './handle.ts'
 import { assertFinite } from './num.ts'
 import { formationTick, menOf } from './formation.ts'
-import { hashWorld } from './serialize.ts'
+import { serialize } from './serialize.ts'
+import { fnv1a } from './hash.ts'
+import { buildClaims, claimFormation, claimOrder } from './claims.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
-import { moraleStep } from './morale.ts'
+import { moraleStep, threatPass } from './morale.ts'
+import { experienceStep } from './experience.ts'
 import { meleeStep, standingStep } from './melee.ts'
 import { artilleryStep } from './artillery.ts'
 import { planStep, endStep, checkPlan } from './plan.ts'
@@ -56,6 +59,8 @@ export interface Meter {
 export interface TickResult {
   tick: number
   hash: number | null
+  // on a hash tick, the world as it was hashed (serialize): a save of it at no further cost (the bench's timeline)
+  bytes: Uint8Array | null
   dropped: Dropped[]
   departed: { id: Handle; men: number }[]
 }
@@ -82,7 +87,22 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     standingStep(w)
   })
   step('5–6 formations: orders, changes, movement', () => {
-    for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i]) formationTick(w, i)
+    if (!w.claims) {
+      // in slot order, or reversed (a test switch of its own, the bench's: formations step one by one, and none may
+      // gain by its slot; a charge does today, #187)
+      for (let k = 0; k < MAX_FORMATIONS; k++) {
+        const i = w.scratch.reverseMoves ? MAX_FORMATIONS - 1 - k : k
+        if (w.f.alive[i]) formationTick(w, i)
+      }
+      return
+    }
+    // the claim grid's prototype: in a keyed order, each formation's new cells claimed after it steps (its old ones
+    // stay claimed until the next tick's rebuild, so two cannot swap places through each other)
+    buildClaims(w)
+    for (const i of claimOrder(w)) {
+      formationTick(w, i)
+      if (w.f.alive[i]) claimFormation(w, i)
+    }
   })
   // 7 vision: S2
   step('8 fire', () => {
@@ -105,12 +125,16 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     const men = w.scratch.menNow ?? (w.scratch.menNow = new Int32Array(MAX_FORMATIONS))
     // final for the tick: the morale pass reads them
     for (let i = 0; i < MAX_FORMATIONS; i++) men[i] = w.f.alive[i] ? menOf(w, i) : 0
+    // the back exposed: every battalion's drain, read before any morale changes
+    threatPass(w)
     // a test switch visits them in reverse: contagion and support read only state fixed before the step
     const rev = w.scratch.reverse === true
     for (let k = 0; k < MAX_FORMATIONS; k++) {
       const i = rev ? MAX_FORMATIONS - 1 - k : k
       if (w.f.alive[i]) moraleStep(w, i, lost[i])
     }
+    // experience (docs/proposals/morale-bar-model.md § 7): the seconds under fire, the enemies broken, the level ups
+    experienceStep(w)
   })
   // 13: the end (S1e-2); smoke: S2
   step('13 the end', () => {
@@ -141,8 +165,12 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     }
   }
   let hash: number | null = null
+  let bytes: Uint8Array | null = null
   step('15 hash', () => {
-    if (t % HASH_EVERY === 0) hash = hashWorld(w)
+    if (t % HASH_EVERY === 0) {
+      bytes = serialize(w)
+      hash = fnv1a(bytes)
+    }
   })
-  return { tick: t, hash, dropped, departed }
+  return { tick: t, hash, bytes, dropped, departed }
 }

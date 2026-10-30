@@ -3,7 +3,7 @@ precision highp float;attribute vec3 position;
 // THE SIMPLE SHADOWS (decision 0049; src/look/units.ts): each soldier draws his own shadow in the main pass, a grid lying
 // on the ground from his feet along the sun's shadow (uShDir; position: 0 to 1 across it in x, along it in z), on the
 // battalion's own instances: his place moves with him every frame (the step's place and the share of the next step's
-// move gone: aNext, uStepFrac). His facing (the matrix's turn) picks two of the shape's facings, blended; his clip's
+// move gone: aNext, uStepFrac). His facing (his pose's turn) picks two of the shape's facings, blended; his clip's
 // first step (aVAT.x) his role's row (uRoleStart). uShapeAt: the atlas's anchor, where a cell's first texel lies (m
 // from his feet, across and along: the strip moves within it, the shape's texels stay where they are); uShapeCell: a cell's texels across and along, 1 / the atlas's size; uShapeTexel: 1 / the shape's texel
 // (m), a cell's border (texels). Each vertex sits on the ground (uMeadow's R: the meadow map's height, or without one
@@ -17,9 +17,14 @@ precision highp float;attribute vec3 position;
 // far off decision 0049's strip, up close the full box with rows at his soles and at the lift ramp's end, blended by
 // the look's far share; past the soles it is drawn uShLen as long (the zoom's look, decision 0062: the shape's own texels stretched or shortened, his feet where they were).
 // vAlong: m along it from his soles at the shape's own size times uShLen (the far figures' growth leaves the
-// fragment's gradient where it lies on the shape)
+// fragment's gradient where it lies on the shape). SH_SPREAD (a figure on more than its root: a horse's hooves, a gun's
+// wheels; docs/plans/active/cavalry-artillery-demo.md): its shape drawn at its own length (a shortening about the root
+// would move the far hooves' shadow off them; the fragment's look runs from each contact instead), grown by the far
+// growth across alone, its lift at least SPREAD_FLOOR m
 uniform mat4 viewProjection;uniform vec3 uCamPos;
 attribute vec3 aVAT;attribute vec3 aNext;
+// his pose (units.vert's): x, y, z, his turn about y, as world0; his matrix from it (unitPose)
+#include<unitPose>
 uniform vec4 uRoleStart,uShapeCell,uStrip,uRows;uniform vec2 uShDir,uShapeTexel,uShapeAt;uniform float uStepFrac,uDecalLift,uShLen;
 uniform mat4 uLMVP;
 uniform sampler2D uMeadow;
@@ -40,13 +45,33 @@ varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 // phase, aVAT.y the clip's length: units.vert's); vCt: the vertex in the oval's frame (1 at its edge), linear on the
 // ground so the fragment's is exact. Only in the material drawn within the contact's zoom band (units.ts: past it
 // decision 0062's material, without SH_CONTACT)
-uniform sampler2D uContactTex;uniform float uVATStep;uniform vec4 uShContact;
+uniform sampler2D uContactTex;uniform vec4 uShContact;
 // vCell: the vertex in his shape's cell (0 to 1 inside it): the strip reaches past the cell for the oval (decalStrip),
 // and the fragment reads no shape there
 varying vec2 vCt,vCell;
 #endif
+#if defined(SH_CONTACT)||defined(SH_STEPS)
+uniform float uVATStep;
+#endif
+#ifdef SH_STEPS
+// the shape baked per animation step (?ushstep, docs/plans/done/step-shadows.md): a role's clip in uStepBins.<role>
+// bins, its first cell row uStepRow.<role>; the rows in blocks of uStepRPB side by side, each FACINGS cells wide
+// (shadowShape, stepAtlasLayout in src/look/units-data.ts). His step as units.vert poses him (its int() of his clip's
+// first step plus the mod), the exact n a GPU's mod can return wrapped to 0 (stepIndex); the bin he is in in integers,
+// ((i+1)k-1)/n (stepBin), or with SH_STEP_BLEND the two either side of him, mixed by vS (stepBlend); every bin
+// clamped into the clip's, so no rounding reads another clip's cell
+uniform vec4 uStepBins,uStepRow;uniform float uStepRPB;
+#ifdef SH_STEP_BLEND
+varying vec2 vUV2,vUV3;varying float vS;
+#endif
+// the texel place of (texels c into) the cell of row rw (role's first plus bin) and facing k
+vec2 stepUV(float rw,float k,vec2 c){
+  float bl=floor((rw+0.5)/uStepRPB);
+  return (vec2(bl*FACINGS+k,rw-bl*uStepRPB)*uShapeCell.xy+c)*uShapeCell.zw;
+}
+#endif
 void main(){
-  #include<instancesVertex>
+  mat4 finalWorld=poseWorld(world0);
   vec3 p=finalWorld[3].xyz+aNext*uStepFrac;
   float j=position.z*DECAL_ALONG;
   vec2 q=vec2(position.x,j<0.5?uRows.x:j<1.5?uRows.y:j<2.5?uRows.z:uRows.w);
@@ -54,9 +79,15 @@ void main(){
   vAlong=l.y*(l.y>0.0?uShLen:1.0);
   #ifdef FAR_SCALE
   float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fg=clamp((FAR_FROM*uFarK.y-fpx)/((FAR_FROM-0.25)*uFarK.y),0.0,1.0);
+  #ifdef SH_SPREAD
+  l*=mix(1.0,uFarScale.x,fg);
+  #else
   l*=vec2(mix(1.0,uFarScale.x,fg),mix(1.0,l.y>0.0?uFarScale.y:uFarScale.x,fg));
   #endif
+  #endif
+  #ifndef SH_SPREAD
   l.y*=l.y>0.0?uShLen:1.0;
+  #endif
   vec2 C=vec2(-uShDir.y,uShDir.x),xz=p.xz+C*l.x+uShDir*l.y;
   #ifdef SH_CONTACT
   float st=aVAT.x+mod(uVATStep+aVAT.z,aVAT.y);
@@ -66,7 +97,13 @@ void main(){
   #endif
   float gy=textureLod(uMeadow,(xz+TILE_HALF)/TILE_W,0.0).r;
   vec3 g=vec3(xz.x,gy,xz.y),toCam=normalize(uCamPos-g);
+  #ifdef SH_SPREAD
+  // (at least SPREAD_FLOOR m over its footprint: there it lies at the ground's sampled height, which the terrain can
+  // stand over and hide, as decision 0071's oval found; a few cm darken no more than the hooves' and wheels' feet)
+  float lift=max(uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y),SPREAD_FLOOR);
+  #else
   float lift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);
+  #endif
   #ifdef SH_CONTACT
   // (the contact's sunward half lies behind his soles, where the lift is 0: at the ground's sampled height the terrain
   // can stand a little higher and hide it, cutting the oval along his soles; a floor of CONTACT_FLOOR m keeps it
@@ -75,11 +112,28 @@ void main(){
   #endif
   gl_Position=viewProjection*vec4(g+toCam*(lift/max(0.2,toCam.y)),1.0);
   vec4 lp=uLMVP*vec4(g,1.0);vLM=lp.xy/lp.w*0.5+0.5;
-  float a=atan(-finalWorld[0].z,finalWorld[0].x),fk=fract(a/6.2831853)*FACINGS,k0=floor(fk),k1=mod(k0+1.0,FACINGS);
+  float a=world0.w,fk=fract(a/6.2831853)*FACINGS,k0=floor(fk),k1=mod(k0+1.0,FACINGS);
   vT=fk-k0;
   float row=abs(aVAT.x-uRoleStart.y)<0.5?1.0:abs(aVAT.x-uRoleStart.z)<0.5?2.0:abs(aVAT.x-uRoleStart.w)<0.5?3.0:0.0;
   vec2 c=(l0-uShapeAt)*uShapeTexel.x+uShapeTexel.y;
+  #ifdef SH_STEPS
+  float kb=row<0.5?uStepBins.x:row<1.5?uStepBins.y:row<2.5?uStepBins.z:uStepBins.w;
+  float r0=row<0.5?uStepRow.x:row<1.5?uStepRow.y:row<2.5?uStepRow.z:uStepRow.w;
+  int ni=max(int(aVAT.y+0.5),1),ki=max(int(kb+0.5),1);
+  int ii=int(aVAT.x+mod(uVATStep+aVAT.z,aVAT.y))-int(aVAT.x+0.5);
+  ii=clamp(ii==ni?0:ii,0,ni-1);
+  #ifdef SH_STEP_BLEND
+  float sp=(float(ii)+0.5)*float(ki)/float(ni)-0.5,sf=floor(sp);vS=clamp(sp-sf,0.0,1.0);
+  int si=int(sf);
+  float ja=float(clamp((si+ki)%ki,0,ki-1)),jb=float(clamp((si+1)%ki,0,ki-1));
+  vUV0=stepUV(r0+ja,k0,c);vUV1=stepUV(r0+ja,k1,c);vUV2=stepUV(r0+jb,k0,c);vUV3=stepUV(r0+jb,k1,c);
+  #else
+  float jb=float(clamp(((ii+1)*ki-1)/ni,0,ki-1));
+  vUV0=stepUV(r0+jb,k0,c);vUV1=stepUV(r0+jb,k1,c);
+  #endif
+  #else
   vUV0=(vec2(k0,row)*uShapeCell.xy+c)*uShapeCell.zw;vUV1=(vec2(k1,row)*uShapeCell.xy+c)*uShapeCell.zw;
+  #endif
   #ifdef SH_CONTACT
   vCell=c/uShapeCell.xy;
   #endif

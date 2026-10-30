@@ -14,8 +14,10 @@ const SAVE_MAGIC = 0x57535452 // 'RTSW'
 // 3: the formations' faces column (S1b); 4: fire, morale, sides, the seed (S1c); 5: pressed (S1c-3); 6: the rest of the
 // morale machine (S1c-2); 7: unit types (S1d-1); 8: charges, melee and the square (S1d-2); 9: the battery's shots
 // (S1d-3); 10: the men who left the field, per side (S1e-1); 11: the end and the men spawned per side (S1e-2);
-// 12: a pending command may be `refused` (#155), which an older sim would not read
-const SAVE_FORMAT = 12
+// 12: a pending command may be `refused` (#155), which an older sim would not read; 13: the wavering fall-back's
+// falling and fellBack removed (U1, decision 0087); 14: the morale bar and levels in place of quality, morale and
+// baseMen (U2)
+const SAVE_FORMAT = 14
 
 class Writer {
   buf = new Uint8Array(1024)
@@ -159,7 +161,6 @@ const CODE: Record<FieldKind, string> = {
   int: 'i',
   cm: 'f',
   ang: 'f',
-  quality: 'f',
   str: 's',
   reason: 's',
   bool: 'b',

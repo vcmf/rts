@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest'
 import { Sim, root, longIt, openBattlefield, OPEN_DATA, battleData } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { s1eBattle } from '../src/scenarios/s1e-battle.ts'
+import { PAGE_SEED } from '../src/scenarios/page.ts'
 import {
   attachScenario,
   compileRuleset,
@@ -22,7 +23,9 @@ import {
   M_TICK,
   M_END,
   M_WINNER,
+  TICK_HZ,
   END_SIDE0,
+  END_SIDE1,
   END_DRAW,
   sheltering,
   ordersFree,
@@ -134,7 +137,7 @@ describe('the plan', () => {
     s.until(() => s.shape(line) !== 'square', 150)
     expect(sheltering(s.w, 1)).toBe(true)
     const z0 = s.z(line)
-    s.w.f.morale[1] = 0.1
+    s.w.f.bar[1] = -100
     s.tick()
     expect(s.w.f.mstate[1]).toBe(MS_ROUTING)
     // it ran north, to its rear
@@ -212,7 +215,7 @@ describe('the plan', () => {
       shape: 'line',
       men: 256,
       fire: 'hold',
-      quality: 0.45,
+      bar: 14, // the old quality 0.45 on the bar's scale
     })
     s.cmd({
       type: 'debug-spawn',
@@ -223,7 +226,7 @@ describe('the plan', () => {
       shape: 'line',
       men: 400,
       fire: 'hold',
-      quality: 1,
+      bar: 260, // struck in the flank, it takes the impact's shock and its men lost at once, and stands
     })
     s.tick()
     s.advance(2)
@@ -284,7 +287,7 @@ describe('the plan', () => {
       [0, 0, -200, 0],
       [1, 200, 200, PI],
     ])
-    s.w.f.morale[1] = 0.1
+    s.w.f.bar[1] = -100
     s.tick()
     expect(s.w.f.mstate[1]).toBe(MS_ROUTING)
     s.advance(5)
@@ -313,11 +316,11 @@ describe('the end', () => {
       [1, -100, 200, PI],
       [1, 100, 200, PI],
     ])
-  it('a side with half its men out of the fight is broken and its enemy wins', () => {
+  it('a side whose share in the fight falls to end.broken is broken and its enemy wins (one of two out)', () => {
     const s = two()
     s.advance(1)
     expect(s.w.meta[M_END]).toBe(0)
-    s.order({ type: 'debug-morale', id: unitHandle(2), quality: 0 })
+    s.order({ type: 'debug-morale', id: unitHandle(2), bar: -100 })
     s.until(() => !s.w.meta[M_END], 30)
     expect([s.w.f.mstate[2], s.w.meta[M_WINNER]]).toEqual([MS_ROUTING, END_SIDE0])
     // decided once
@@ -328,7 +331,7 @@ describe('the end', () => {
   it('both broken on one tick is a draw', () => {
     // both break in the same morale step
     const s = two()
-    for (const u of [0, 2]) s.w.f.morale[u] = 0.1
+    for (const u of [0, 2]) s.w.f.bar[u] = -100
     s.tick()
     expect([s.w.f.mstate[0], s.w.f.mstate[2], s.w.meta[M_WINNER]]).toEqual([MS_ROUTING, MS_ROUTING, END_DRAW])
   })
@@ -354,7 +357,7 @@ describe('the end', () => {
       [1, -300, 300, PI],
     ])
     s.order({ type: 'side', side: 1, x: 0, z: 1 })
-    s.w.f.morale[1] = 0.1
+    s.w.f.bar[1] = -100
     s.tick()
     expect(s.w.f.mstate[1]).toBe(MS_ROUTING)
     expect(fightShares(s.w)[1]).toBeCloseTo(2 / 3, 9)
@@ -363,18 +366,33 @@ describe('the end', () => {
     expect(s.w.f.mstate[1]).toBeLessThan(MS_ROUTING)
     expect(fightShares(s.w)[1]).toBe(1)
   })
-  it('a side is not broken while more than half its men are in the fight', () => {
+  it('a side with 60% of its men in the fight is broken (two of five out; at 0.5 it was not)', () => {
+    expect(napoleonic.end.broken).toBeGreaterThanOrEqual(0.6)
+    const s = battle({}, [
+      [0, 0, -200, 0],
+      ...[-300, -150, 0, 150, 300].map((x): [number, number, number, number] => [1, x, 200, PI]),
+    ])
+    s.w.f.bar[1] = -100
+    s.tick()
+    expect(s.w.meta[M_END]).toBe(0) // one of five out: 80% in
+    s.w.f.bar[5] = -100
+    s.tick()
+    expect(fightShares(s.w)[1]).toBeCloseTo(0.6, 9)
+    expect(s.w.meta[M_WINNER]).toBe(END_SIDE0)
+  })
+  it('a side is not broken while its share in the fight is above end.broken (two of three in)', () => {
+    expect(napoleonic.end.broken).toBeGreaterThanOrEqual(1 / 2)
+    expect(napoleonic.end.broken).toBeLessThan(2 / 3) // what the setups below need
     const s = battle({}, [
       [0, -100, -200, 0],
       [1, -150, 200, PI],
       [1, 0, 200, PI],
       [1, 150, 200, PI],
     ])
-    // one of side 1's three: two thirds still in the fight
-    s.w.f.morale[1] = 0.1
-    s.tick()
+    s.w.f.bar[1] = -100
+    s.tick() // one of side 1's three: two thirds still in the fight
     expect([s.w.f.mstate[1], s.w.meta[M_END]]).toEqual([MS_ROUTING, 0])
-    s.w.f.morale[2] = 0.1
+    s.w.f.bar[2] = -100
     s.tick()
     expect(s.w.meta[M_WINNER]).toBe(END_SIDE0)
   })
@@ -387,13 +405,24 @@ describe('routers break ranks (#39)', () => {
     s.order({ type: 'form', id: h, shape: 'square' })
     // its progress into the square
     s.until(() => s.layout(h).name === 'line' && s.w.f.trans[0] === 1 && bracedOf(s.w, 0) < at, 200)
-    s.w.f.morale[0] = 0.1
+    s.w.f.bar[0] = -100
     s.tick()
     return { state: s.w.f.mstate[0], shape: s.shape(h) }
   }
   it('a battalion caught at 30% of its change runs at once as the shape it left, one at 70% as the shape it was forming', () => {
     expect(caught(0.3)).toEqual({ state: MS_ROUTING, shape: 'line' })
     expect(caught(0.7)).toEqual({ state: MS_ROUTING, shape: 'square' })
+  })
+})
+
+describe('the tuned battle (docs/plans/active/s1e3-playtest.md)', () => {
+  longIt("with no orders from you, s1e-battle at the page's seed is side 1's, decided in 15–22 minutes", () => {
+    const w = makeWorld(battleData, compileRuleset(napoleonic), PAGE_SEED, false)
+    attachScenario(w, s1eBattle)
+    s1eBattle.setup(w)
+    while (!w.meta[M_END] && w.meta[M_TICK] < 22 * 60 * TICK_HZ) advanceTick(w)
+    expect(w.meta[M_WINNER]).toBe(END_SIDE1)
+    expect(w.meta[M_END] / TICK_HZ / 60).toBeGreaterThan(15)
   })
 })
 

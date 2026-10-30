@@ -14,6 +14,7 @@ import {
   formationSlot as slotOf,
   formationHandle as handleOf,
   typeOf,
+  levelOf,
 } from './world.ts'
 import type { Handle } from './handle.ts'
 import { placeWorld, layoutOf, occupied, removeMan, nearImpassable, sheltering } from './formation.ts'
@@ -22,6 +23,8 @@ import { keyedStream, nextUnit } from './rng.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
+import { buildFaces, threatWeights } from './sectors.ts'
+import { creditMen } from './experience.ts'
 
 const sqrt = Math.sqrt
 export const RETARGET_TICKS = 10 // targets are chosen every 0.5 s, staggered by slot (one tick in ten each)
@@ -120,7 +123,23 @@ export function blockGeometry(w: World): FireGeo {
       )
     }
   }
+  buildFaces(w, G)
   return G
+}
+
+const wt = new Float64Array(3)
+/**
+ * Battalion j's exposure to fire from company k (docs/proposals/sectors-model.md § 5): its kind's depth factor
+ * times front + flank × its shape's exposure.flank + rear × exposure.rear, the weights (front, flank, rear) of k's
+ * block on j's face. G must be this tick's geometry (its faces are built with it).
+ */
+export function exposure(w: World, G: FireGeo, k: number, j: number): number {
+  const L = layoutOf(w, j)
+  const base = w.cr.depthByKind[L.kind]
+  const e = L.def.exposure
+  if (!e) return base
+  threatWeights(w, G, j, Math.floor(k / w.cr.maxC), k, wt)
+  return base * (wt[0] + wt[1] * e.flank + wt[2] * e.rear)
 }
 
 // hit chance per round at range d (linear in the table, 0 past its last point)
@@ -147,8 +166,8 @@ export const reachOf = (w: World, i: number): Reach => {
     ? { range: typeOf(w, i).def.artillery!.ray.range, cos: A.cosArc }
     : { range: w.cr.rs.fire.maxRange, cos: w.cr.cosArc }
 }
-// company k sees point (x, z) inside its arc and range
-function inArc(G: FireGeo, k: number, x: number, z: number, R: Reach): boolean {
+/** Company k sees point (x, z) inside its arc and range. */
+export function inArc(G: FireGeo, k: number, x: number, z: number, R: Reach): boolean {
   const dx = x - G.cx[k]
   const dz = z - G.cz[k]
   const d = sqrt(dx * dx + dz * dz)
@@ -210,32 +229,60 @@ function throughBlock(G: FireGeo, j: number, k: number, x0: number, z0: number, 
   }
   return slab(lx0, lx1, -hx, hx) && slab(lz0, lz1, zlo, zhi)
 }
-// the share of company k's three rays (both ends of its front and its centre) to (x, z) that no friendly
-// block, its own battalion's other companies included, stands across
-export function clearShare(w: World, G: FireGeo, i: number, c: number, x: number, z: number): number {
+/**
+ * The share of company k's rays (of battalion i: both ends of its front and its centre, or the centre alone) to (x, z)
+ * that no block of side `side` stands across, company `skipK` and battalion `skipJ` aside (−1 none).
+ */
+function rayShare(
+  w: World,
+  G: FireGeo,
+  i: number,
+  k: number,
+  x: number,
+  z: number,
+  side: number,
+  skipK: number,
+  skipJ: number,
+  centre: boolean,
+): number {
   const f = w.f
   const CS = w.cr.maxC
-  const k = i * CS + c
   const g = typeOf(w, i).geo
   const half = ((g.files - 1) * g.fileSpacing) / 2
+  const r0 = centre ? 0 : -1
   let clear = 0
-  for (let r = -1; r <= 1; r++) {
+  for (let r = r0; r <= -r0; r++) {
     const s = r * half
     const x0 = G.ox[k] + s * G.ca[k]
     const z0 = G.oz[k] + s * G.sa[k]
     let blocked = false
     for (let j = 0; j < MAX_FORMATIONS && !blocked; j++) {
-      if (!f.alive[j] || f.side[j] !== f.side[i]) continue
+      if (!f.alive[j] || f.side[j] !== side || j === skipJ) continue
       if (distToSegment(f.x[j], f.z[j], x0, z0, x, z) > G.reach[j]) continue
       for (let q = 0, C = typeOf(w, j).C; q < C && !blocked; q++) {
-        if ((j !== i || q !== c) && f.men[j * CS + q] > 0 && throughBlock(G, j, j * CS + q, x0, z0, x, z)) {
-          blocked = true
-        }
+        const m = j * CS + q
+        if (m !== skipK && f.men[m] > 0 && throughBlock(G, j, m, x0, z0, x, z)) blocked = true
       }
     }
     if (!blocked) clear++
   }
-  return clear / 3
+  return clear / (1 - 2 * r0)
+}
+/**
+ * The share of company c's three rays (both ends of its front and its centre) to (x, z) that no friendly block, its own
+ * battalion's other companies included, stands across.
+ */
+export function clearShare(w: World, G: FireGeo, i: number, c: number, x: number, z: number): number {
+  const k = i * w.cr.maxC + c
+  return rayShare(w, G, i, k, x, z, w.f.side[i], k, -1, false)
+}
+/**
+ * The share of company k's rays to company m's centre (its three, or its centre's alone) that cross no block of side
+ * `side` but m's own battalion's: whether m's friends screen it from k (docs/proposals/sectors-model.md § 6).
+ */
+export function screenShare(w: World, G: FireGeo, k: number, m: number, side: number, centre = false): number {
+  const CS = w.cr.maxC
+  return rayShare(w, G, Math.floor(k / CS), k, G.cx[m], G.cz[m], side, -1, Math.floor(m / CS), centre)
 }
 export function distToSegment(px: number, pz: number, x0: number, z0: number, x1: number, z1: number): number {
   const dx = x1 - x0
@@ -267,7 +314,8 @@ export function sees(w: World, G: FireGeo, k: number, m: number): boolean {
   cache[key] = (epoch << 1) | (clear ? 1 : 0)
   return clear
 }
-const sqDist = (G: FireGeo, k: number, m: number): number =>
+/** The squared distance between companies k and m's block centres in `G`, square metres. */
+export const sqDist = (G: FireGeo, k: number, m: number): number =>
   (G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])
 
 // battalion j's nearest company in company k's arc and range with a clear sight line, or −1: the companies
@@ -380,7 +428,10 @@ export function fireStep(w: World): void {
       }
       const d = sqrt(sqDist(G, k, m))
       volley(w, G, i, c, j, d, share, keyedStream(ks, seed, tick, h, c, K_HITS), R)
-      f.reload[k] = F.reload * (1 + F.reloadJitter * (2 * nextUnit(keyedStream(ks, seed, tick, h, c, K_RELOAD)) - 1))
+      f.reload[k] =
+        F.reload *
+        levelOf(w, i).reload *
+        (1 + F.reloadJitter * (2 * nextUnit(keyedStream(ks, seed, tick, h, c, K_RELOAD)) - 1))
       f.volleyTick[k] = tick
     }
   }
@@ -471,9 +522,10 @@ function volley(
   const lambda =
     rounds *
     pAt(w, d) *
+    levelOf(w, i).precision *
     w.cr.stateFactor[Math.min(2, f.mstate[i])] *
     (1 - F.cohesion * f.disorder[i]) *
-    w.cr.depthByKind[layoutOf(w, j).kind]
+    exposure(w, G, k, j)
   let hits = Math.floor(lambda)
   if (nextUnit(rs) < lambda - hits) hits++
   if (!hits) return
@@ -481,17 +533,28 @@ function volley(
     const m = j * CS + q
     open[q] = f.men[m] > 0 && inArc(G, k, G.cx[m], G.cz[m], R) && sees(w, G, k, m) ? 1 : 0
   }
-  oweByMen(w, j, open, hits, rs)
+  oweByMen(w, j, open, hits, rs, i)
 }
-// n men owed to battalion j's companies marked in `mask`, each drawn from rs to a marked company weighted by its
-// men (as they stood at the start of the step): a volley's hits, a charge's and a melee's losses (melee.ts)
-export function oweByMen(w: World, j: number, mask: ArrayLike<number>, n: number, rs: Uint32Array): void {
+/**
+ * n men struck in battalion j's companies marked in `mask` by formation `by`, owed after j's toughness (n ÷ toughness,
+ * the fraction drawn from rs; no draw at toughness 1), each drawn from rs to a marked company weighted by its men (as
+ * they stood at the start of the step): a volley's hits, canister's, a charge's and a melee's losses (melee.ts). `by`
+ * is credited n ÷ toughness (experience.ts).
+ */
+export function oweByMen(w: World, j: number, mask: ArrayLike<number>, n: number, rs: Uint32Array, by: number): void {
   const f = w.f
   const CS = w.cr.maxC
   const C = typeOf(w, j).C
   let tot = 0
   for (let q = 0; q < C; q++) if (mask[q]) tot += f.men[j * CS + q]
   if (!tot) return
+  const t = levelOf(w, j).toughness
+  creditMen(w, by, n / t)
+  if (t !== 1) {
+    const x = n / t
+    n = Math.floor(x)
+    if (nextUnit(rs) < x - n) n++
+  }
   for (let k = 0; k < n; k++) {
     let r = Math.floor(nextUnit(rs) * tot)
     let q = 0

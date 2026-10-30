@@ -4,7 +4,6 @@
 // layout, bins, accordion pairs and half-turn symmetry.
 import { cos, sin, PI, exp } from './num.ts'
 import { fnv1a } from './hash.ts'
-import { DT } from './time.ts'
 
 // a company in the battalion frame
 export interface Placement {
@@ -35,6 +34,9 @@ export interface FormationDef {
   // to tail): its places only; a change into or out of it passes through the block's spacing
   step?: { file: number; rank: number }
   braced?: boolean // proof against a charge from any side (the square; S1d-2)
+  // fire from its flank and from its rear over fire from its front (each ≥ 1; docs/proposals/sectors-model.md § 5);
+  // none: 1, as from the front
+  exposure?: { flank: number; rear: number }
   place(g: Geometry): Placement[]
 }
 export interface TerrainDef {
@@ -64,32 +66,54 @@ export interface FireDef {
   eye: number // eye height above the ground, metres
   sight: Record<string, number> // metres of a terrain class a sight line may cross (classes not named: any)
 }
-// loss-driven morale: morale relaxes toward quality less losses; the states follow it with hysteresis
+// the morale bar (docs/proposals/morale-bar-model.md), in points: level 2's bar holds 100
 export interface MoraleDef {
-  quality: number // a battalion's quality when the scenario gives none (0..1)
-  // weights of the share of men lost, and of men lost recently
-  losses: number
-  recent: number
-  recentTime: number // seconds over which recent losses decay (e-folding)
-  relaxTime: number // seconds for morale to close 63% of the gap to its target
-  // [enter below, leave at or above]
+  level: number // a formation's level when the scenario gives none (1..6)
+  loss: number // points the whole spawn strength costs; a man lost costs loss / start
+  regen: number // points a second the bar recovers in the fight, up to its maximum less what its losses cost
+  scar: number // the share of its losses' cost a bar never recovers (0..1)
+  // shares of the bar's maximum: [enter below, leave at or above]
   shaken: [number, number]
   wavering: [number, number]
-  rout: number // routs below this
   routPace: number // a router's pace, times its shape's
   // S1c-2 (docs/plans/active/s1c2-morale-machine.md)
-  // a friend's break: the morale lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
+  // a friend's break: the points lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
   contagion: { shock: number; front: number; back: number }
-  // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
+  // the back exposed (decision 0086): points off the effective bar per weight of flank and of rear of the worst enemy
+  // that can hurt it (docs/proposals/sectors-model.md § 5)
+  drain: { flank: number; rear: number }
+  // per secured flank: points on the effective bar; a friend within reach metres and arc radians of the left or right
+  // axis
   support: { bonus: number; reach: number; arc: number }
-  // a wavering battalion without orders Retires `metres` once its morale has fallen by more than `rate` a second for
-  // `after` seconds
-  fallback: { metres: number; after: number; rate: number }
-  // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
-  rally: { safe: number; calm: number; time: number; cost: number; max: number }
+  // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; its maximum cut by the share
+  // cut, its bar refilled to the share `share` of it; rallies allowed
+  rally: { safe: number; calm: number; time: number; cut: number; share: number; max: number }
   shatter: number // a router below this share of its spawn strength shatters
   // a shattered formation with any corner of a company block this near the map's edge (metres) leaves the field
   leave: number
+}
+// an experience level (docs/proposals/morale-bar-model.md § 8): its name, the points to reach it, its bar's maximum,
+// and its effects as factors (owed men ÷ toughness; reload, change times and the square's reaction ×; hit chance ×
+// precision; pursuit ×)
+// experience's credits (docs/proposals/morale-bar-model.md § 7), points: a man struck, a second under fire (a man
+// lost in the last `window` seconds), a charge turned away, an enemy broken in front of it
+export interface PointsDef {
+  man: number
+  fire: number
+  window: number
+  repulse: number
+  broke: number
+}
+export interface LevelDef {
+  name: string
+  points: number
+  bar: number
+  toughness: number
+  reload: number
+  precision: number
+  drill: number
+  react: number
+  pursue: number
 }
 // a type that charges (S1d-2, docs/systems/melee.md): the shapes it charges from, its paces (the approach
 // until gallopAt metres from the target, then the gallop), the metres of gallop for full momentum, the gap at
@@ -121,6 +145,8 @@ export interface MeleeDef {
   hold: number
   threat: Quarters
   impact: { kill: number; shock: Quarters }
+  // the shock of a charge striking a battalion already in melee with another, by the side it strikes (decision 0080)
+  second: { flank: number; rear: number }
   rate: number
   strength: Record<string, number>
   cohesion: number
@@ -205,8 +231,9 @@ export interface DyeSet {
   materials: Readonly<Record<string, string>>
   boots: string
 }
-/** the cloth parts a dress names a dye for */
-export type ClothPart = 'coat' | 'facings' | 'trousers' | 'waistcoat' | 'headgear' | 'greatcoat'
+/** the parts a dress names a dye for: its cloth, and the paint of its kit (a gun's carriage and wheels) */
+export const CLOTH_PARTS = ['coat', 'facings', 'trousers', 'waistcoat', 'headgear', 'greatcoat', 'paint'] as const
+export type ClothPart = (typeof CLOTH_PARTS)[number]
 /** a uniform as its cloth parts' dyes, by name, never a colour (decision 0068): its coat, facings, trousers (or
  *  breeches), waistcoat, headgear and greatcoat (worn over the coat: by a share of the men by the cold, a later step;
  *  ?uniforms=all-greatcoats, all of them), and its flag's bands by flag dye. Era data (src/rulesets/<era>-uniforms.ts),
@@ -218,6 +245,15 @@ export interface Dress {
   far?: 'coat' | 'own'
 }
 
+// where a threat stands to a formation (docs/proposals/sectors-model.md § 8): the blend's centre T and half-width H on
+// the angle measure (45°, 35° to 55°), the corner's length (metres), the slices a threat's block is cut into, and the
+// farthest an enemy presses on a battalion's morale (metres between their nearest companies)
+export interface SectorsDef {
+  blend: { T: number; H: number }
+  corner: number
+  slices: number
+  reach: number
+}
 export interface Ruleset {
   name: string
   types: Record<string, UnitType> // the first is the default
@@ -234,7 +270,10 @@ export interface Ruleset {
   dressTime: number
   fire: FireDef
   morale: MoraleDef
+  levels: LevelDef[] // six, from recruits (1) up
+  points: PointsDef
   melee: MeleeDef
+  sectors: SectorsDef
   // S1e-2: a side is broken at this share of its spawned men in the fight; at a time limit, shares within margin draw
   end: { broken: number; margin: number }
 }
@@ -312,8 +351,6 @@ export interface Compiled {
   sightByClass: Float64Array // fire: metres of each terrain class a sight line may cross (Infinity: any)
   cosArc: number // fire: cos of the arc's half-angle
   stateFactor: Float64Array // fire: by morale state (steady, shaken, wavering; a router does not fire)
-  recentDecay: number // morale: recent losses' factor per tick
-  relax: number // morale: the share of the gap to its target closed per tick
   supportCos: number // morale: cos of the support arc
   strengthByKind: Float64Array // melee: strength by kind
 }
@@ -390,7 +427,10 @@ function rulesetHash(rs: Ruleset): number {
     rs.dressTime,
     rs.fire,
     rs.morale,
+    rs.levels,
+    rs.points,
     rs.melee,
+    rs.sectors,
     rs.end,
   ])
   return fnv1a(new TextEncoder().encode(text))
@@ -416,6 +456,13 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     if (!paces.includes(d.pace)) throw new Error(`${at}: shape ${n}'s pace ${d.pace} is not one of the paces`)
     if (d.roadPace && !paces.includes(d.roadPace)) {
       throw new Error(`${at}: shape ${n}'s roadPace ${d.roadPace} is not one of the paces`)
+    }
+    // a flank or rear under 1 would make fire from the front the worst
+    if (
+      d.exposure &&
+      !(d.exposure.flank >= 1 && d.exposure.rear >= 1 && d.exposure.flank + d.exposure.rear < Infinity)
+    ) {
+      throw new Error(`${at}: shape ${n}'s exposure must be finite and ≥ 1 (flank and rear)`)
     }
   }
   // a change time naming a shape it has not would be ignored, and the default taken in silence (#156)
@@ -604,12 +651,64 @@ export function compileRuleset(rs: Ruleset): Compiled {
       throw new Error(`ruleset ${rs.name}: a wading limit names ${k}, not a kind of the terrain table`)
     }
   }
-  // one friend's break must not rout a steady battalion of default quality on its own (s1c-plan-review L2)
   const M = rs.morale
-  if (M.contagion.shock > 0.6 * (M.quality - M.rout)) {
+  const L = rs.levels
+  if (!(
+    L.length === 6 &&
+    L[0].points === 0 &&
+    L.every((l, k) => k === 0 || (l.points > L[k - 1].points && l.bar > L[k - 1].bar)) &&
+    L.every(l => l.bar > 0 && [l.toughness, l.reload, l.precision, l.drill, l.react, l.pursue].every(v => v > 0))
+  )) {
     throw new Error(
-      `ruleset ${rs.name}: morale.contagion.shock over 0.6 of the gap from the default quality to the rout`,
+      `ruleset ${rs.name}: levels must be six, their points rising from 0, their bars rising and above 0, their factors above 0`,
     )
+  }
+  const P = rs.points
+  if (!([P.man, P.fire, P.repulse, P.broke].every(v => v >= 0) && P.window > 0)) {
+    throw new Error(`ruleset ${rs.name}: points' credits must be 0 or more, their window above 0`)
+  }
+  if (!(Number.isInteger(M.level) && M.level >= 1 && M.level <= 6)) {
+    throw new Error(`ruleset ${rs.name}: morale.level must be a level, 1..6`)
+  }
+  // one shock must not rout a steady battalion of level 2 on its own (s1c-plan-review L2;
+  // docs/proposals/morale-bar-model.md § 9): contagion and a second enemy's charge. A charge's own threat and impact
+  // are left out: a charge into a flank is meant to break a line
+  const most = 0.6 * L[1].bar
+  if (M.contagion.shock > most) {
+    throw new Error(`ruleset ${rs.name}: morale.contagion.shock over 0.6 of level 2's bar`)
+  }
+  // nor a second enemy's charge (decision 0080)
+  const sec = rs.melee.second
+  if (!(sec.flank >= 0 && sec.rear >= 0 && Math.max(sec.flank, sec.rear) <= most)) {
+    throw new Error(`ruleset ${rs.name}: melee.second must be ≥ 0 and at most 0.6 of level 2's bar`)
+  }
+  if (!(
+    M.wavering[0] > 0 &&
+    M.wavering[0] < M.wavering[1] &&
+    M.wavering[1] <= M.shaken[0] &&
+    M.shaken[0] < M.shaken[1] &&
+    M.shaken[1] <= 1
+  )) {
+    throw new Error(
+      `ruleset ${rs.name}: morale needs 0 < wavering.enter < wavering.back ≤ shaken.enter < shaken.back ≤ 1`,
+    )
+  }
+  if (!(M.scar >= 0 && M.scar <= 1 && M.regen >= 0 && M.loss > 0)) {
+    throw new Error(`ruleset ${rs.name}: morale needs scar in 0..1, regen ≥ 0 and loss > 0`)
+  }
+  // a rallied formation is never wavering at once
+  if (!(M.rally.share > M.wavering[1] && M.rally.share <= 1 && M.rally.cut >= 0 && M.rally.cut < 1)) {
+    throw new Error(`ruleset ${rs.name}: morale.rally needs share above wavering's way back and at most 1, cut in 0..1`)
+  }
+  const SC = rs.sectors
+  if (!(SC.blend.H > 0 && SC.blend.T - SC.blend.H > 0 && SC.blend.T + SC.blend.H < 1)) {
+    throw new Error(`ruleset ${rs.name}: sectors.blend must lie inside the angle measure's 0..1 (0 < T − H, T + H < 1)`)
+  }
+  if (!(SC.corner > 0 && Number.isInteger(SC.slices) && SC.slices >= 1 && SC.reach > 0 && SC.reach < Infinity)) {
+    throw new Error(`ruleset ${rs.name}: sectors needs corner > 0, a whole number of slices ≥ 1 and a finite reach > 0`)
+  }
+  if (!(M.drain.flank >= 0 && M.drain.rear >= 0 && M.drain.flank + M.drain.rear < Infinity)) {
+    throw new Error(`ruleset ${rs.name}: morale.drain must be finite and ≥ 0`)
   }
   if (!(M.rally.max >= 0 && M.rally.max < 255)) {
     throw new Error(`ruleset ${rs.name}: morale.rally.max must be 0..254 (the break count is a byte)`)
@@ -650,8 +749,6 @@ export function compileRuleset(rs: Ruleset): Compiled {
     sightByClass,
     cosArc: cos(rs.fire.arc),
     stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])),
-    recentDecay: exp(-DT / rs.morale.recentTime),
-    relax: 1 - exp(-DT / rs.morale.relaxTime),
     supportCos: cos(rs.morale.support.arc),
     strengthByKind: new Float64Array(kinds.map(k => rs.melee.strength[k] ?? 1)),
     presetIndex: n => presets.indexOf(n),

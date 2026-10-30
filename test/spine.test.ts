@@ -189,7 +189,7 @@ describe('commands and handles', () => {
       men: 10,
     })
     expect([s.tick, s.seq]).toEqual([1, 0])
-    // -1: the ruleset's quality; '': the first unit type
+    // 0: the ruleset's level and its bar; '': the first unit type
     expect(s.cmd).toEqual({
       type: 'debug-spawn',
       side: 0,
@@ -198,7 +198,8 @@ describe('commands and handles', () => {
       heading: 0.1235,
       shape: 'line',
       men: 10,
-      quality: -1,
+      level: 0,
+      bar: 0,
       fire: 'at will',
       unit: '',
     })

@@ -11,14 +11,16 @@ import { issue, makeWorld, advanceTick, menOf, outOfFight } from '../sim/index.t
 export const FIGHT_Z = 120
 export const FIGHT_X = -120
 export const MEN = 400
-export const STRONG = 0.8
-export const WEAK = 0.65
+// the two lines' bars (docs/proposals/morale-bar-model.md § 8): the old qualities 0.8 and 0.65 on the bar's scale,
+// 100 × (q − 0.4) / 0.35, so only morale separates them (C-01)
+export const STRONG = 114
+export const WEAK = 71
 const E = 1.5707963267948966
 
 // a scenario's name carries every parameter that is not the default, so a replay cannot be played against a
 // variant it was not recorded on (replay.ts checks the name)
 function scenarioName(base: string, range: number, qa: number, qb: number): string {
-  const q = qa === STRONG && qb === WEAK ? '' : `-q${qa}-${qb}`
+  const q = qa === STRONG && qb === WEAK ? '' : `-b${qa}-${qb}`
   return range === 100 && !q ? base : `${base}-${range}${q}`
 }
 // each side's rear: side 0 runs west, side 1 east
@@ -40,7 +42,7 @@ export function firefight(range: number, qa = STRONG, qb = WEAK): Scenario {
         heading: E,
         shape: 'line',
         men: MEN,
-        quality: qa,
+        bar: qa,
       })
       issue(w, {
         type: 'debug-spawn',
@@ -50,7 +52,7 @@ export function firefight(range: number, qa = STRONG, qb = WEAK): Scenario {
         heading: -E,
         shape: 'line',
         men: MEN,
-        quality: qb,
+        bar: qb,
       })
     },
   }
@@ -63,15 +65,15 @@ export const levelled = (d: SimData): SimData => ({
   height: { ...d.height, h: new Float64Array(d.height.h.length) },
 })
 
-// first: the slot that routed first (−1: none); termLosses, termRecent: the two morale terms of the router at
-// the break (how much each took off its quality)
+// first: the slot that routed first (−1: none); termLosses, termShocks: what the router's losses cost and its shocks
+// not yet recovered at the break, points
 export interface FightResult {
   first: number
   tick: number
   lossA: number
   lossB: number
   termLosses: number
-  termRecent: number
+  termShocks: number
 }
 // runs a firefight to the first rout or `maxTicks`; slot 0 is the stronger line, slot 1 the weaker
 export function runFirefight(
@@ -99,8 +101,8 @@ export function runFirefight(
         tick: w.meta[0],
         lossA: w.f.startMen[0] - menOf(w, 0),
         lossB: w.f.startMen[1] - menOf(w, 1),
-        termLosses: (M.losses * (start - menOf(w, i))) / start,
-        termRecent: (M.recent * w.f.recent[i]) / start,
+        termLosses: (M.loss * (start - menOf(w, i))) / start,
+        termShocks: w.f.barMax[i] - w.f.cost[i] - w.f.bar[i],
       }
     }
   }
@@ -110,7 +112,7 @@ export function runFirefight(
     lossA: w.f.startMen[0] - menOf(w, 0),
     lossB: w.f.startMen[1] - menOf(w, 1),
     termLosses: 0,
-    termRecent: 0,
+    termShocks: 0,
   }
 }
 
@@ -139,7 +141,7 @@ export function brigade(range: number, qa = STRONG, qb = WEAK): Scenario {
             heading: h,
             shape: 'line',
             men: MEN,
-            quality: q,
+            bar: q,
           })
         }
       }

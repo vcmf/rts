@@ -3,6 +3,9 @@ precision highp float;varying vec3 vW,vN;varying float vRole,vTint,vOcc,vH;varyi
 #ifdef FAR_CROWN
 varying vec3 vEllC,vEllR;varying float vFade;
 #endif
+#ifndef FAR_CROWN
+#define PAINT_NATURE   // the painter's class for the mid tone (?midtone): the trunks, the stones, not the far crowns
+#endif
 #include<painter>
 #include<shore>
 

@@ -1,6 +1,7 @@
 // The look page (app/look.html): the painted world in the game's toolchain, ported from
 // prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
+import type { SimPlay } from './sim-armies.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Engine } from '@babylonjs/core/Engines/engine.js'
@@ -13,11 +14,14 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
+import { midtoneDefines, parseMidtone } from './midtone.ts'
 import { q, runBench, showBench } from './bench.ts'
+import { TR, tr, trNow } from './trace.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
 import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
+import { meadowLookDefines, meadowLookOf } from './meadow-look.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
@@ -25,9 +29,10 @@ import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn, zoo
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
-import { D, TUNED_R, checkGround } from './spec.ts'
+import { D, FocusFollow, TUNED_R, checkView, groundOf, maxGrid } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
-import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS } from './world/data.ts'
+import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS, type LookWorld } from './world/data.ts'
+import { windowFile, windowOf, type LookWindow } from './world/windows.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { buildTerrain, splitGround } from './terrain.ts'
@@ -40,12 +45,20 @@ const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', {
   import: 'default',
   eager: true,
 })
+// the map worlds' look data by file (data/<map>-<window>.lookdata, src/look/world/windows.ts): ?map&window picks one
+// (a glob takes a literal pattern; the page reads only the files the windows name: windowFile)
+const WINDOW_DATA = import.meta.glob<string>('../../data/*-*.lookdata', {
+  query: '?url',
+  import: 'default',
+  eager: true,
+})
 import { buildWater } from './water.ts'
+import { RELIEF_K, reliefField } from './relief.ts'
 import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
 import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
-import { BUILDINGS, YARD_ALL, YARD_BASE, onPaving, paveShape } from './world/buildings.ts'
-import { COVER } from './world/cover.ts'
+import { BUILDINGS, YARD_ALL, YARD_BASE, onPaving, paveShape, type Building } from './world/buildings.ts'
+import { COVER, coarsenCover } from './world/cover.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
@@ -53,10 +66,14 @@ import { MACRO_ARMS, SHADER_ARMS, buildMacro, isBakedArm, type MacroArm, type Ro
 import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
+import SIMPLE_LEAF_URL from '../../data/leaf-clumps-simple-v1.png?url'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import {
   SHADOW_LOOK,
   applyContactParams,
+  applyStepParams,
+  applyFootSharpParams,
+  applyNearBandParams,
   applyLookParams,
   shadeDesat,
   shadowModes,
@@ -75,26 +92,37 @@ if (!window.NATURE) {
     '<p style="padding:30px">nature-pack.data.js missing: run <code>node tools/obj-to-js.mjs</code></p>'
   throw new Error('no nature data')
 }
-// the world's data, built offline (tools/build-look-data.ts, decision 0012): the heightfield, the far ring, the river
-const res = await fetch(LOOK_URL)
-if (!res.ok) throw new Error(`look data: ${res.status} ${res.statusText} for ${LOOK_URL}`)
+// the world's data, built offline (tools/build-look-data.ts, decision 0012): the heightfield, the far ring, the river;
+// the demo's, or a map's window by ?map=<map>&window=<name> (docs/plans/active/look-austerlitz-a1.md)
+const lookWindow = windowOf(new URLSearchParams(location.search))
+const lookUrl = lookWindow ? WINDOW_DATA[`../../${windowFile(lookWindow)}`] : LOOK_URL
+if (!lookUrl) throw new Error(`look data: no ${windowFile(lookWindow!)}: run node tools/build-look-data.ts`)
+const res = await fetch(lookUrl)
+if (!res.ok) throw new Error(`look data: ${res.status} ${res.statusText} for ${lookUrl}`)
 const look = decodeLook(await res.arrayBuffer())
 checkLookData(D, look)
+checkWorld(look.world, lookWindow)
+// a map's window: no hand-placed copses, zones or buildings (the demo's), its trees from its data
+const onMap = look.world.kind === 'map'
+const worldBuildings: readonly Building[] = onMap ? [] : BUILDINGS
+// the cover the per-frame shaders read (and the road split, which must class its triangles as they paint): a map
+// world's coarsened to the spec's cells (src/look/world/cover.ts, coarsenCover); the macro colour's bakes read the fine
+const frameCover = coarsenCover(look.cover, D.spec.macro.cover)
 setRiver(look.river)
 setHeightfield(look.hf, look.far, D.spec.tile / 2)
-{
-  // the heights themselves, not the header
-  let lo = Infinity
-  let hi = -Infinity
-  let farLo = Infinity
-  for (const v of look.hf.h) {
-    if (v < lo) lo = v
-    if (v > hi) hi = v
-  }
-  for (const v of look.far.h) if (v < farLo) farLo = v
-  checkGround(D.spec, lo, hi, farLo)
-}
+// the world's ground range, from the heights themselves (not the header): the camera's checks take it (checkView), and
+// the focus keeps to its range (the demo's focus stays on its 8 m plane, SPEC.camera.focusY; a map world's follows its
+// ground in play: docs/plans/active/look-austerlitz-a1b.md)
+const worldGround = groundOf(D.spec, look.hf, look.far, onMap ? null : D.spec.camera.focusY)
+checkView(D.spec, worldGround)
 const canvas = document.getElementById('c') as HTMLCanvasElement
+
+/** Throws unless the look data holds the world the page asked for (a stale or misnamed file draws the wrong one). */
+function checkWorld(world: LookWorld, win: LookWindow | null): void {
+  const want = win ? `${win.map} ${win.name} at ${win.x}, ${win.z}` : 'the demo'
+  const got = world.kind === 'map' ? `${world.map} ${world.window} at ${world.x}, ${world.z}` : 'the demo'
+  if (want !== got) throw new Error(`look data: it holds ${got}, the page asked for ${want}: rebuild it`)
+}
 // the stencil: on the scene's target alone while the soldiers' simple shadows draw (?stencil=scene, the default), the
 // engine's own (?stencil=all) or none (?stencil=0): stencilFor (src/look/shadow-look.ts)
 const stencilAt = stencilFor(new URLSearchParams(location.search))
@@ -191,11 +219,41 @@ const grassDefines =
         ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`),
       ]
     : []
+// ?relief=0|1|2: the relief's painted tone (src/look/relief.ts): 0 off, 1 the map worlds' default, 2 stronger; off
+// on the demo unless asked (its hill reads by its own slopes). Baked into the macro colour; the shader arm's colour and
+// the live roads' and yards' paint take it too (RELIEF on every painted material: src/look/shaders/macro.glsl)
+const reliefParam = params.get('relief')
+if (reliefParam !== null && !['0', '1', '2'].includes(reliefParam)) {
+  throw new Error(`?relief must be 0, 1 or 2, not ${reliefParam}`)
+}
+const reliefK = RELIEF_K[reliefParam === null ? (onMap ? 1 : 0) : Number(reliefParam)]
+let relief: { tex: RawTexture; k: number } | null = null
+if (reliefK > 0) {
+  const f = reliefField(groundAt, D.spec.far, [SUN.x, SUN.y, SUN.z])
+  const tex = RawTexture.CreateRGBATexture(f.tex, f.n, f.n, scene, false, false, Texture.BILINEAR_SAMPLINGMODE)
+  tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE
+  relief = { tex, k: reliefK }
+}
+// ?grassup=0|1|2, ?wheatfill=0|1: the meadow's look (docs/plans/active/grass-upright.md, decision 0085; meadowLookOf in
+// src/look/meadow-look.ts)
+const meadowLook = meadowLookOf(params, grassMode)
 const grain0 = makeGrainCanvas(null)
+// ?midtone=0|1|2 or per class (u3,b2,n2,g0): how wide the ramp turns from light to shade (src/look/midtone.ts,
+// decision 0084); none is the default, u3,b2,n2,g0; 0 the hard bands from before it
+const midtone = parseMidtone(params.get('midtone'))
 const mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [
   ...softDefines(soft),
-  ...(meadowOn ? ['#define MEADOW', ...grassDefines] : []),
+  ...midtoneDefines(midtone),
+  ...(relief ? ['#define RELIEF'] : []),
+  ...(meadowOn ? ['#define MEADOW', ...grassDefines, ...meadowLookDefines(meadowLook)] : []),
 ])
+if (relief) {
+  const { tex, k } = relief
+  mats.bindAll(m => {
+    m.setTexture('uRelief', tex)
+    m.setFloat('uReliefK', k)
+  })
+}
 const keptGrains = new Set([mats.grain]) // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
 const waterT0 = performance.now()
@@ -263,7 +321,7 @@ if (!mats.webgl1) {
   })
   // the buildings' paving (docs/plans/done/buildings.md; shore.glsl, pavePaint): the buildings' shapes, on every
   // material that paints the roads; the cobbles ride in the grit (its G and B), their mean until it has loaded
-  const shapes = BUILDINGS.map(paveShape)
+  const shapes = worldBuildings.map(paveShape)
   if (shapes.length > 16) {
     throw new Error(`buildings: ${shapes.length} paved yards, the shader takes 16 (shore.glsl, pavePaint)`)
   }
@@ -271,7 +329,7 @@ if (!mats.webgl1) {
   // changed would paint one building's shape under another's yard, silently. Each building's centre texel names it
   {
     const C = look.cover
-    BUILDINGS.forEach((b, bi) => {
+    worldBuildings.forEach((b, bi) => {
       const i = Math.floor((b.x - C.x0) / C.cell)
       const j = Math.floor((b.z - C.z0) / C.cell)
       const o = (j * C.n + i) * 4
@@ -315,30 +373,54 @@ if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has(
 // the generator (a plain script that sets window.TREEGEN), loaded only for the arm that draws its trees
 if (treeSet.has('gen')) await import('../../prototypes/tree-core.js')
 const cardsOn = treeSet.has('cards')
-const leavesParam = params.get('leaves') ?? 'oak'
-for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink', 'volume']) {
+// ?leaves: the leaf atlas (docs/plans/active/crown-leaves.md): layered (the default), the owner's sheet of simple
+// leaves read as the painter's layers; oak, the oak picture the crowns had before; procedural, L7a's drawn oak clumps
+const LEAVES = ['layered', 'oak', 'procedural'] as const
+const leavesParam = params.get('leaves') ?? 'layered'
+for (const k of ['leaves', 'leafpic', 'leafscale', 'cardsize', 'cardcover', 'cardsink', 'volume']) {
   if (params.has(k) && !cardsOn) throw new Error(`?${k} needs the leaf-card crowns (the default, or ?trees=cards)`)
 }
-if (leavesParam !== 'oak' && leavesParam !== 'procedural') {
-  throw new Error(`?leaves must be oak or procedural, not ${leavesParam}`)
+if (!(LEAVES as readonly string[]).includes(leavesParam)) {
+  throw new Error(`?leaves must be ${LEAVES.join(', ')}, not ${leavesParam}`)
 }
+// ?leafpic=<url>: a sheet of four leaf clumps on black (the oak sheet's layout, black transparent, three grey values:
+// dark, mid, light) read as the layered sheet is (LEAF_PAINT): the owner's sheets swapped in without a build
+const leafPic = params.get('leafpic')
+if (leafPic !== null && (!leafPic || params.has('leaves'))) {
+  throw new Error('?leafpic takes a picture URL, and replaces ?leaves')
+}
+const paintedLeaves = leavesParam !== 'oak' && leavesParam !== 'procedural'
 const cardOpt = (k: string, d: number) => {
   const v = Number(params.get(k) ?? d)
   if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`)
   return v
 }
+// ?leafscale=<x>: the layered leaves' size, 1 the sheet's clumps at 0.8 a cell (docs/plans/active/crown-leaves.md)
+if (params.has('leafscale') && !paintedLeaves) {
+  throw new Error('?leafscale needs the layered leaves (not oak or procedural)')
+}
+const leafScale = cardOpt('leafscale', CARD_DEFAULTS.leafScale)
+// (at least 0.25: smaller, a cell takes over 48 clumps and the leaves are a few texels)
+if (!(leafScale >= 0.25 && leafScale <= 1)) throw new Error(`?leafscale must be 0.25 to 1, not ${leafScale}`)
 const cardOpts: CardOptions = {
   size: cardOpt('cardsize', CARD_DEFAULTS.size),
   cover: cardOpt('cardcover', CARD_DEFAULTS.cover),
   sink: cardOpt('cardsink', CARD_DEFAULTS.sink),
   volume: params.get('volume') !== 'off',
+  paint: paintedLeaves,
+  leafScale,
 }
 if (params.has('volume') && params.get('volume') !== 'off') {
   throw new Error(`?volume must be off, not ${params.get('volume')}`)
 }
 let leafTex: DynamicTexture | null = null
 if (cardsOn) {
-  const atlas = leavesParam === 'procedural' ? atlasProcedural() : atlasFromPicture(await loadImage(LEAF_URL))
+  const atlas =
+    leafPic || leavesParam === 'layered'
+      ? atlasFromPicture(await loadImage(leafPic ?? SIMPLE_LEAF_URL), true, leafScale)
+      : leavesParam === 'procedural'
+        ? atlasProcedural()
+        : atlasFromPicture(await loadImage(LEAF_URL))
   leafTex = new DynamicTexture('leaves', atlas, scene, true, Texture.TRILINEAR_SAMPLINGMODE)
   leafTex.hasAlpha = true
   leafTex.wrapU = leafTex.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -359,6 +441,7 @@ const nature = buildNature(
   meadowOn,
   treeSet.has('one'),
   treeSet.has('gen') ? { season: season0, clumpVolume: params.get('clumpvol') !== 'off' } : null,
+  onMap ? look.trees : null,
 )
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 {
@@ -377,10 +460,13 @@ if (bldbounceParam !== null && bldbounceParam !== '0') throw new Error(`?bldboun
 // WebGL1's always: the bake's reads are GLSL ES 3's); ?bldbounce=0: without the ground's bounce on their walls
 const bldBaked = bldlmParam === null && !mats.webgl1
 // (the runtime path without the bounce, as main had it: it computed the bounce and never added it)
-const buildings = buildBuildings(scene, mats, nature.canopy, {
-  baked: bldBaked,
-  bounce: bldBaked && bldbounceParam === null,
-})
+const buildings = buildBuildings(
+  scene,
+  mats,
+  nature.canopy,
+  { baked: bldBaked, bounce: bldBaked && bldbounceParam === null },
+  worldBuildings,
+)
 const bakes = buildBakes(
   scene,
   mats,
@@ -438,10 +524,22 @@ const meadowMap = meadowOn
 // twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
 // at the SPEC's lines). The marched depth, not the eased one (no lag as the camera zooms in), the last frame's (none
 // yet: it bakes)
-const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, {
-  reach: RINGS[0].band[3],
-  shows: () => !focusDist || ((pixA * D.spec.detail.lines) / sceneH()) * focusDist < 2 * STROKE_FOOT,
-})
+const macro = buildMacro(
+  scene,
+  mats,
+  frameCover,
+  meadowOn,
+  roadTex,
+  grassDefines,
+  flowTex,
+  meadowMap?.map ?? null,
+  {
+    reach: RINGS[0].band[3],
+    shows: () => !focusDist || ((pixA * D.spec.detail.lines) / sceneH()) * focusDist < 2 * STROKE_FOOT,
+  },
+  look.cover,
+  relief,
+)
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) {
@@ -450,7 +548,22 @@ if (!MACRO_ARMS.includes(macroArm)) {
 // (a baked arm other than the bake's own bakes as it is set)
 const armBake = await macro.setArm(macroArm)
 const macroBake = armBake.texels ? armBake : await macro.bake()
-const camera = buildCamera(scene, canvas, groundAt)
+// the camera's hold reads the highest ground near the focus from blocks of the heightfield (8 nodes, 14.3 m) and of
+// the far ring (2 nodes, 28.6 m: past the heightfield the eye's ground is the far ring's)
+const camera = (() => {
+  const nearTile = maxGrid(look.hf, 8)
+  const nearFar = maxGrid(look.far, 2)
+  return buildCamera(
+    scene,
+    canvas,
+    {
+      ground: groundAt,
+      highest: (x, z, reach) => Math.max(nearTile(x, z, reach), nearFar(x, z, reach)),
+      follow: new FocusFollow(worldGround.focus),
+    },
+    new URLSearchParams(location.search).has('frozen'),
+  )
+})()
 // the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
 // holds them and the tile's ground takes its material without them (the shader's size alone cost every ground pixel).
 // Nearing ROAD_LIVE_R the live roads fade to the baked look (uRoadFar: the wheel tracks to their dusting, the grit
@@ -473,7 +586,7 @@ if (roadTex) {
   // closest zooms; with the paving's split and its gate the buildings cost about 0.35 ms at the village's closest, from
   // 1.25: docs/plans/done/buildings.md); ?split=0 (above): the live shader
   // with the paving on the whole tile, the A/B (its share all paved)
-  const sg = splitParam === '0' ? null : splitGround(terrain, look.cover)
+  const sg = splitParam === '0' ? null : splitGround(terrain, frameCover)
   const split = sg?.material ?? live
   groundShare = sg?.share ?? [1, 0, 0]
   // (the materials the ground draws with: all three split, the live and the baked unsplit)
@@ -504,7 +617,7 @@ else if (params.has('bench') || params.has('water') || params.get('river') === '
 // ?dofnear=0: the near blur off (its cost's A/B: docs/plans/done/dof-v2.md)
 if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
-const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach) : null
+const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach, meadowLook) : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dark ground under its clumps (shore.glsl)
 // ?armies=<battalions a side>: the demo's two armies (docs/plans/active/armies-demo.md): battalions of the ruleset's
 // infantry (about 400 a battalion, decision 0018) that march up in column, deploy and fire on a scripted loop, drawn
@@ -513,8 +626,19 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dar
 // The uniforms are the era's, named by dye and resolved onto the figure's roles (world/dyes.ts, decision 0068). Test
 // switches (with ?armies): ?uniforms=all, each side's battalions wearing the scenario's reviewSides in turn;
 // ?uniforms=all-greatcoats, the same with every man in his greatcoat; ?dye=<dye>:<rrggbb>[;…] (bare, or '#' as
-// %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride)
+// %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride). The other arms
+// (docs/plans/active/cavalry-artillery-demo.md, the scenario's ARMS_DEMO): ?cavalry=0, ?artillery=0 leave them out
+// (with both, main's page before them)
 const armiesParam = params.get('armies')
+// (under ?sim the other arms are left out: their scripts are stand-ins the sim does not drive, nor place against its
+// armies; asked for there, a clear error)
+const armSwitch = (name: string) => {
+  const on = bit(name)
+  if (on && simParam) {
+    throw new Error(`?${name}=1 with ?sim: the sim drives the infantry alone; the ${name} is scripted`)
+  }
+  return on ?? !simParam
+}
 const unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
 // frame (else only when it would change); ?ushadowlod=1 casts from the LOD the view draws (else the far LOD always);
@@ -569,15 +693,25 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
 // ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one; ?ushgain=<1..3>[,<far>],
 // the darkening's strength, foot and tip alike (1, the default since decision 0071: as decision 0062 shipped it;
 // decision 0067's 2,1.5: docs/plans/done/shadow-darker.md)
-// the contact shadow (decision 0071, by default the owner's): ?ushcontact=<pad m>,<dark>[,<soft>], the oval under each
-// man's feet (0: none); ?ushcontactat=root|stride|step, where it sits; ?ushcontactband=<r0>,<r1>, the zoom band (m
-// from the focus) it fades out over; ?ushdesat=<0..1>, the ground's shade turned toward its grey (0: as before;
-// ?ushcontact=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4 is decision 0067's page)
+// the contact shadow (decision 0071; off since decision 0074): ?ushcontact=1 (0071's) or <pad m>,<dark>[,<soft>], the
+// oval under each man's feet (0: none); ?ushcontactat=root|stride|step, where it sits; ?ushcontactband=<r0>,<r1>, the
+// zoom band (m from the focus) it fades out over; ?ushdesat=<0..1>, the ground's shade turned toward its grey (0: as
+// before). The earlier pages: ?ushstep=0&ushcontact=1 is decision 0071's (main at 1093fdc3);
+// ?ushstep=0&ushdesat=0&ushgain=2,1.5&ushfoot=1.05,0.4 is decision 0067's
 // (src/look/shadow-look.ts parses them, a bad value an error at load)
 const shadowMode = shadowModes(params)
 const shadowLook = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
 const ushBand = applyLookParams(params, shadowLook.close, shadowLook.far).band
 const ushContact = applyContactParams(params)
+// the shape baked per animation step up close (decision 0074, docs/plans/done/step-shadows.md): ?ushstep=<steps a
+// clip>[,<facings>[,hold|blend]] (absent: 8,8,hold; 0: the shape averaged over each clip at every zoom, as before)
+const ushStep = applyStepParams(params)
+// ?ushfootk=<boost>[,<reach m>]: the per-step shape's feet darker and crisper, never past the ground's shade (absent:
+// 3,0.6; 1: none)
+const ushFootK = applyFootSharpParams(params)
+// ?ushnearband=<r0>,<r1>: the zoom band (m from the focus) where the per-step shape gives way to the averaged one
+// (absent: 60,100; ?ushcontactband is the oval's own, with ?ushcontact=1)
+const ushNearBand = applyNearBandParams(params)
 const ushDesat = shadeDesat(params)
 const uShadowSwitch = params.get('ushadowswitch')
 const smoothMove = bit('smoothmove')
@@ -592,6 +726,11 @@ if (
 ) {
   throw new Error(`?ushadowswitch must be <r0>,<r1> m with r0 < r1, not ${uShadowSwitch}`)
 }
+// ?sim: the armies played by the sim, not the script (battle threads PR 4b; needs ?armies)
+const simParam = params.has('sim')
+if (simParam && armiesParam === null) throw new Error('?sim plays the armies: give ?armies=<battalions a side> too')
+// (a window's armies: stage A4 of docs/plans/active/look-austerlitz-a1.md's plan)
+if (onMap && armiesParam !== null) throw new Error("?armies is the demo world's: a map window has none yet")
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 40)) {
   throw new Error(
     `?armies must be 1 to 40 battalions a side (the demo map holds 40: docs/plans/active/armies-32k.md), not ${armiesParam}`,
@@ -606,9 +745,12 @@ if (params.has('msaa')) {
   if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`)
   MSAA.samples = n
 }
-let units: Units | null = null
 // (the fight's middle: the bench's focus)
 let armiesFocus: [number, number] | null = null
+// (?lookat looks at the armies' arms: without them a clear error)
+if (armiesParam === null && params.get('lookat') !== null) {
+  throw new Error(`?lookat=${params.get('lookat')} needs ?armies: it looks at the armies' arms`)
+}
 if (armiesParam !== null) {
   if (mats.webgl1) {
     throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
@@ -616,10 +758,12 @@ if (armiesParam !== null) {
   const [
     { Units: UnitsC },
     { decodeUnits },
-    { layout, facingAt },
+    { layout, facingAt, FIELD },
     { dressAll, dyeOverride, wearInTurn },
     { RULESETS },
-    { ARMIES_DEMO },
+    { ARMIES_DEMO, ARMS_DEMO },
+    { armScript, battalionBoxes, drillScript, lookAtSpot, placeArmUnits },
+    { Trodden, ViewRays },
   ] = await Promise.all([
     import('./units.ts'),
     import('./units-data.ts'),
@@ -627,6 +771,8 @@ if (armiesParam !== null) {
     import('./world/dyes.ts'),
     import('../rulesets/index.ts'),
     import('../scenarios/armies-demo.ts'),
+    import('./world/arms.ts'),
+    import('./trodden.ts'),
   ])
   if (tinyPxParam !== null && +tinyPxParam >= UnitsC.LOD_PX) {
     throw new Error(`?tinypx must be under the far LOD's switch (${UnitsC.LOD_PX} px), not ${tinyPxParam}`)
@@ -636,8 +782,14 @@ if (armiesParam !== null) {
   if (!era) throw new Error(`armies: no ruleset ${ARMIES_DEMO.ruleset} (src/rulesets/index.ts)`)
   const type = era.ruleset.types[ARMIES_DEMO.unitType]
   if (!type) throw new Error(`armies: the ruleset ${ARMIES_DEMO.ruleset} has no unit type ${ARMIES_DEMO.unitType}`)
-  const figureUrl = FIGURES[`../../data/figures/${ARMIES_DEMO.figure}.unitdata`]
-  if (!figureUrl) throw new Error(`armies: no figure ${ARMIES_DEMO.figure} in data/figures/`)
+  // a figure's unit data by name (data/figures/<figure>.unitdata)
+  const figureData = async (figure: string) => {
+    const url = FIGURES[`../../data/figures/${figure}.unitdata`]
+    if (!url) throw new Error(`armies: no figure ${figure} in data/figures/`)
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`unit data: ${res.status} ${res.statusText} for ${url}`)
+    return decodeUnits(await res.arrayBuffer())
+  }
   const g = type.geometry
   const drill = {
     companies: g.companies,
@@ -646,8 +798,6 @@ if (armiesParam !== null) {
     fileSpacing: g.fileSpacing,
     rankSpacing: g.rankSpacing,
   }
-  const r = await fetch(figureUrl)
-  if (!r.ok) throw new Error(`unit data: ${r.status} ${r.statusText} for ${figureUrl}`)
   // the ground a battalion keeps clear of: the river and its banks, the trees (a 10 m grid of them), the buildings'
   // yards, the tile's last 30 m
   const CELL = 10
@@ -685,39 +835,36 @@ if (armiesParam !== null) {
     throw new Error(`?uniforms must be all or all-greatcoats, not ${uniformsParam}`)
   }
   const greatcoat = uniformsParam === 'all-greatcoats'
-  const uniforms = dressAll(era.uniforms, dyeOverride(params.get('dye'), era.dyes), { greatcoat })
-  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides)
-  // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
-  units = new UnitsC(
+  const dyes = dyeOverride(params.get('dye'), era.dyes)
+  const uniforms = dressAll(era.uniforms, dyes, { greatcoat })
+  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides, FIELD.centre, FIELD.gap)
+  // every figure fetched and decoded at once (the infantry's and each arm on the page)
+  const armSpecs = ARMS_DEMO.filter(spec => armSwitch(spec.name))
+  const [infantry, ...armData] = await Promise.all([ARMIES_DEMO.figure, ...armSpecs.map(a => a.figure)].map(figureData))
+  const speed = { march: infantry.ranges.march?.speed ?? 0, run: infantry.ranges.run?.speed ?? 0 }
+  if (!(speed.march > 0 && speed.run > 0)) throw new Error('units: the march and run roles have no root speed')
+  const tinyPx = tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined
+  // the ground and the grass: the figures' shadow map (with its switches) and the trodden mask fall on them
+  const receivers = [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])]
+  // the frame's corner rays, cast once for the sun's box and the trodden mask (made before them: read after it)
+  const view = new ViewRays(scene, camera)
+  // (the infantry's arm owns the figures' shadow map behind its switches, decision 0075)
+  const foot = new UnitsC(
     scene,
     camera,
     mats,
-    [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])],
-    decodeUnits(await r.arrayBuffer()),
-    drill,
+    infantry,
+    drillScript(drill, speed),
     uniformsParam === null ? placed : wearInTurn(placed, ARMIES_DEMO.reviewSides),
     uniforms,
     () => S.t,
-    { tinyPx: tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined },
+    view,
+    { tinyPx, map: receivers },
   )
-  units.lazyShadows = uShadowRate ?? true
-  units.casterNear = uShadowLod ?? false
-  units.tightCull = uCull ?? true
-  units.holdShare = smHold !== 'fixed'
-  units.proxyCasters = shadowLod !== 'far'
-  if (nearestPx !== null) units.nearestPx = +nearestPx
-  units.simpleFar = shadowMode.simpleFar
-  units.simpleClose = shadowMode.simpleClose
-  units.look = shadowLook
-  units.contact = ushContact
-  if (ushBand) units.lookBand = ushBand
-  if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
-  units.groundMap = meadow !== null
-  if (decalLift !== null) units.decalLift = +decalLift
   // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
   // after the bounce map (the season, the shadows' switch, the grain) and when the occlusion's switch changes
-  if (simpleShadowsDraw(params)) {
-    const shade = (units.shade = bakes.unitShade(ushDesat))
+  const shade = simpleShadowsDraw(params) ? bakes.unitShade(ushDesat) : null
+  if (shade) {
     let ao = S.ao
     scene.onBeforeRenderObservable.add(() => {
       if (S.ao !== ao) {
@@ -726,19 +873,114 @@ if (armiesParam !== null) {
       }
     })
   }
-  if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
-  units.setShadows(unitShadowParam !== '0')
-  units.setPosed(uVat ?? true)
-  units.setFarScale(farScale ?? true)
-  units.setLodFade(lodFade ?? true)
-  units.setTrample(trample ?? true)
-  units.setFlags(flags ?? true)
-  units.setFarRule(farPal) // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
-  // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
-  units.setSmooth(smoothMove ?? true)
-  armiesFocus = facingAt(units.battalions)
-  Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
+  // an arm's renderer given the page's switches
+  const configure = (units: Units) => {
+    units.lazyShadows = uShadowRate ?? true
+    units.casterNear = uShadowLod ?? false
+    units.tightCull = uCull ?? true
+    units.holdShare = smHold !== 'fixed'
+    units.proxyCasters = shadowLod !== 'far'
+    if (nearestPx !== null) units.nearestPx = +nearestPx
+    units.simpleFar = shadowMode.simpleFar
+    units.simpleClose = shadowMode.simpleClose
+    units.look = shadowLook
+    units.contact = ushContact
+    units.stepShadow = ushStep
+    units.stepExplicit = params.has('ushstep')
+    units.stepBand = ushNearBand
+    units.footSharp = ushFootK
+    if (ushBand) units.lookBand = ushBand
+    if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
+    units.groundMap = meadow !== null
+    if (decalLift !== null) units.decalLift = +decalLift
+    // (every arm darkens the ground to the one shade; the map's receivers read it by blade on the meadow)
+    if (shade) units.shade = shade
+    // (read only by the arm that owns the map)
+    if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
+    units.setShadows(unitShadowParam !== '0')
+    units.setPosed(uVat ?? true)
+    units.setFarScale(farScale ?? true)
+    units.setLodFade(lodFade ?? true)
+    units.setFlags(flags ?? true)
+    units.setFarRule(farPal) // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
+    // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
+    units.setSmooth(smoothMove ?? true)
+  }
+  configure(foot)
+  // the other arms (ARMS_DEMO): each side's unit placed after the infantry, clear of it and of one another; no shadow
+  // map of its own (its simple shadows); its uniforms resolved for its figure's parts
+  const arms: Record<string, Units> = {}
+  const taken = battalionBoxes(placed, drill)
+  for (const [i, spec] of armSpecs.entries()) {
+    const data = armData[i]
+    const t = era.ruleset.types[spec.unitType]
+    const f = t?.formations[spec.formation]
+    if (!t || !f) throw new Error(`armies: the ruleset has no ${spec.unitType} in ${spec.formation} (${spec.name})`)
+    const speeds = Object.fromEntries(Object.entries(data.ranges).map(([k, r]) => [k, r.speed]))
+    const { script, foot: footprint } = armScript(spec, t.geometry, g => f.place(g), speeds)
+    // (from the layout's centre, its fronts half its gap either side: src/look/world/armies.ts FIELD)
+    const placedArm = placeArmUnits(spec, footprint, FIELD.centre, FIELD.gap / 2, blocked, taken)
+    if (placedArm.length === 0) continue
+    // (its sides' dresses alone: another arm's lack this figure's parts, a carriage's paint)
+    const dress = Object.fromEntries(spec.sides.map(id => [id, era.uniforms[id]]))
+    for (const id of spec.sides) if (!era.uniforms[id]) throw new Error(`armies: no uniform ${id} (${spec.name})`)
+    const worn = dressAll(dress, dyes, { greatcoat, parts: data.parts ?? undefined })
+    const u = new UnitsC(scene, camera, mats, data, script, placedArm, worn, () => S.t, view, {
+      tinyPx,
+      flags: false,
+      tread: spec.tread,
+      shadowDarken: spec.shadowDarken,
+    })
+    configure(u)
+    arms[spec.name] = u
+  }
+  // the trodden ground (src/look/trodden.ts): every arm's men, drawn after they are placed each frame (made after them)
+  const all = [foot, ...Object.values(arms)]
+  const trodden = new Trodden(scene, view, receivers, () => S.t)
+  for (const u of all) trodden.add(u)
+  trodden.holdShare = smHold !== 'fixed'
+  trodden.setOn(trample ?? true)
+  armiesFocus = facingAt(foot.battalions)
+  // ?sim: the sim plays the infantry (src/look/sim-armies.ts, battle threads PR 4b) in place of its script (the other
+  // arms are left out under it: armSwitch)
+  let sim: SimPlay | null = null
+  if (simParam) {
+    const { playSim } = await import('./sim-armies.ts')
+    sim = await playSim(foot.battalions, drill.companies * drill.files * drill.ranks, armiesFocus, {
+      ruleset: ARMIES_DEMO.ruleset,
+      unitType: ARMIES_DEMO.unitType,
+      ...ARMIES_DEMO.sim,
+    })
+    foot.source = sim.source
+    const s = sim
+    // (first: the renderer's frame reads what the tick took)
+    scene.onBeforeRenderObservable.add(
+      () => {
+        const t = trNow()
+        s.tick(Math.min(engine.getDeltaTime() / 1000, 0.1))
+        if (t) tr(TR.simMs, performance.now() - t)
+      },
+      undefined,
+      true,
+    )
+  }
+  // the tools' hooks: __units the infantry's renderer, as before the arms (tools/guard.mjs masks and scores it alone,
+  // against its coats: like for like with main); __armies' show and setMask every arm's, arms the other arms'
+  // renderers by name (the review's cameras)
+  const show = (on: boolean) => all.forEach(u => u.show(on))
+  const setMask = (m: Parameters<Units['setMask']>[0]) => all.forEach(u => u.setMask(m))
+  const hooks = { blocked, focus: armiesFocus, coats: foot.coats(), arms, show, setMask, sim: sim?.link }
+  Object.assign(window, { __units: foot, __armies: hooks })
+  // ?lookat=<arm>[,<radius m>]: the camera starts on that arm's first unit or the fight's middle (lookAtSpot), its
+  // target on the ground there: to judge the arms by eye without panning to them
+  const firsts = Object.fromEntries(Object.entries(arms).map(([k, a]) => [k, a.battalions[0]]))
+  const at = lookAtSpot(params.get('lookat'), firsts, armiesFocus)
+  if (at) {
+    camera.target.set(at.x, groundAt(at.x, at.z), at.z)
+    zoomOf(camera).set(at.radius)
+  }
 }
+
 if (flag('rt16')) MSAA.byte = false
 // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
 if (flag('nanmark')) {
@@ -987,7 +1229,7 @@ addEventListener('drop', e => {
       URL.revokeObjectURL(url)
       let atlas: HTMLCanvasElement
       try {
-        atlas = atlasFromPicture(img)
+        atlas = atlasFromPicture(img, cardOpts.paint, cardOpts.leafScale) // read as the page reads its sheet
       } catch (err) {
         alert(String(err))
         return
@@ -1151,6 +1393,7 @@ Object.assign(window, {
   MASKN: D.spec.sizes.riverMask,
   SM_FADE_M: D.spec.shadowFade,
   SPEC: D.spec,
+  GROUND: worldGround,
   tileGround: terrain.tileGround,
   farGround: terrain.farGround,
   farTerrainMat: terrain.farTerrainMat,

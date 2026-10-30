@@ -22,9 +22,11 @@ import {
   formationSlot as slotOf,
   formationHandle as handleOf,
   typeOf,
+  levelOf,
 } from './world.ts'
 import {
   blockGeometry,
+  exposure,
   reachOf,
   chooseTarget,
   chosen,
@@ -36,12 +38,12 @@ import {
   RETARGET_TICKS,
   type FireGeo,
 } from './fire.ts'
-import { layoutOf } from './formation.ts'
 import { heightAt } from './terrain.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
 import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
+import { creditMen } from './experience.ts'
 
 const sqrt = Math.sqrt
 // keyed draws: purpose tags
@@ -121,6 +123,7 @@ export function artilleryStep(w: World): void {
       const crew = Math.min(A.crewSlow, A.crew / f.men[k]) // fewer men reload slower
       f.reload[k] =
         A.reload *
+        levelOf(w, i).reload *
         (1 + A.reloadJitter * (2 * nextUnit(keyedStream(ks, seed, tick, h, c, K_RELOAD)) - 1)) *
         Math.max(1, crew)
       f.volleyTick[k] = tick
@@ -139,7 +142,7 @@ function coneHits(T: [number, number][], d: number): number {
   }
   return 0
 }
-// the cone from piece k (muzzle mx, mz) toward (ax, az), d away: hits(d) × the target's depth factor, spread over
+// the cone from piece k (muzzle mx, mz) toward (ax, az), d away: hits(d) × the aimed target's exposure, spread over
 // the enemy companies whose centres lie inside it and in range, that the piece sees, weighted by their men
 const coneJ = new Int32Array(MAX_FORMATIONS)
 const perJ = new Int32Array(MAX_FORMATIONS)
@@ -164,7 +167,7 @@ function cone(
   const ux = (ax - mx) / d
   const uz = (az - mz) / d
   const cosH = cos(A.half)
-  const lambda = coneHits(A.hits, d) * w.cr.depthByKind[layoutOf(w, j).kind]
+  const lambda = coneHits(A.hits, d) * levelOf(w, i).precision * exposure(w, G, k, j)
   let n = Math.floor(lambda)
   if (nextUnit(rs) < lambda - n) n++
   f.shotKind[k] = SHOT_CONE
@@ -212,6 +215,7 @@ function cone(
         coneMask.subarray(coneJ[p] * MAX_COMPANIES, coneJ[p] * MAX_COMPANIES + MAX_COMPANIES),
         per[p],
         rs,
+        i,
       )
     }
   }
@@ -298,9 +302,10 @@ function ray(
   const T = w.terrain
   const STEP = R.step
   // the aim, dispersed across and in range
-  const a = R.spread * (2 * nextUnit(rs) - 1)
+  const P = levelOf(w, i).precision
+  const a = (R.spread / P) * (2 * nextUnit(rs) - 1)
   const D0 = sqrt((ax - mx) * (ax - mx) + (az - mz) * (az - mz))
-  const D = D0 * (1 + R.short * (2 * nextUnit(rs) - 1))
+  const D = D0 * (1 + (R.short / P) * (2 * nextUnit(rs) - 1))
   const ca = cos(a)
   const sa = sin(a)
   const ex = (ax - mx) / D0
@@ -365,7 +370,10 @@ function ray(
         const e = bE[p]
         const m = bM[p]
         const area = 2 * G.bx[e] * (G.bz1[e] - G.bz0[e])
-        const lambda = len * R.width * (f.men[m] / area) * R.kill * Math.min(1, (2 * energy) / R.energy)
+        // the men owed after the target's toughness, credited to the gun as expected (experience.ts)
+        const lambda =
+          (len * R.width * (f.men[m] / area) * R.kill * Math.min(1, (2 * energy) / R.energy)) / levelOf(w, e).toughness
+        if (f.side[e] !== f.side[i]) creditMen(w, i, lambda) // a ball through friends earns nothing
         let hits = Math.floor(lambda)
         if (nextUnit(rs) < lambda - hits) hits++
         if (hits) {

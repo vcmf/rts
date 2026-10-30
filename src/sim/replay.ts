@@ -4,12 +4,12 @@
 import { attachScenario, type ScenarioRules } from './plan.ts'
 import { type World, makeWorld, M_TICK } from './world.ts'
 import { issue, type Stamped } from './commands.ts'
-import { advanceTick } from './tick.ts'
+import { advanceTick, type TickResult } from './tick.ts'
 import { sectionHashes } from './serialize.ts'
 import { type SimData, DataVersionMismatch, hex } from './data.ts'
 import type { Compiled } from './ruleset.ts'
 
-export const SIM_VERSION = 's1e.3' // bumped when the state or a rule changes: older replays no longer reproduce
+export const SIM_VERSION = 'u2.1' // bumped when the state or a rule changes: older replays no longer reproduce
 
 export interface HashPoint {
   tick: number
@@ -69,6 +69,22 @@ export function record(
   }
 }
 
+/**
+ * Issues again the commands of `log` from entry `k` that are stamped for the world's next tick, as they were first
+ * issued; returns the index after them, or the mismatch when one does not take the sequence number it was logged with.
+ * The replay and the page's timeline (src/app/timeline.ts) both hand logged commands back to a world through it.
+ */
+export function reissue(w: World, log: readonly Stamped[], k: number): number | Mismatch {
+  while (k < log.length && log[k].tick === w.meta[M_TICK] + 1) {
+    const s = issue(w, log[k].cmd)
+    if (s.seq !== log[k].seq) {
+      return { tick: s.tick, expected: `command seq ${log[k].seq}`, got: `seq ${s.seq}`, section: 'command log' }
+    }
+    k++
+  }
+  return k
+}
+
 export interface Mismatch {
   tick: number
   expected: string
@@ -76,14 +92,29 @@ export interface Mismatch {
   section: string
 }
 
-// plays a replay back; returns the first mismatch against `expected`, or null. Hashes are taken every
-// HASH_EVERY ticks, so a divergence is reported at the first hash point after it (within 20 ticks).
+/**
+ * What `play` shows a caller of the world as it plays (tools/battle-report.ts). The world is read-only there: the
+ * sim changes only through commands (decision 0005), and a write would make the replay diverge from its hashes.
+ */
+export interface PlayObserver {
+  /** the world as the scenario set it up, before the first tick */
+  start?: (w: World) => void
+  /** the world after each tick, with what the tick returned (its departures), before its hash is checked */
+  tick?: (w: World, res: TickResult) => void
+}
+
+/**
+ * Plays a replay back; returns the first mismatch against `expected`, or null. Hashes are taken every HASH_EVERY
+ * ticks, so a divergence is reported at the first hash point after it (within 20 ticks). `observe` reads the world
+ * before the first tick and after each one, and must not change it (`PlayObserver`).
+ */
 export function play(
   r: Replay,
   data: SimData,
   cr: Compiled,
   scenario: Scenario,
   expected: HashPoint[],
+  observe?: PlayObserver,
 ): Mismatch | null {
   if (r.simVersion !== SIM_VERSION) throw new Error(`replay from sim ${r.simVersion}, this is ${SIM_VERSION}`)
   if (r.dataVersion >>> 0 !== data.version >>> 0) {
@@ -106,18 +137,16 @@ export function play(
   const w = makeWorld(data, cr, r.seed)
   attachScenario(w, scenario)
   scenario.setup(w)
+  observe?.start?.(w)
   let k = 0
   let e = 0
   while (w.meta[M_TICK] < r.ticks) {
     // re-issue the commands logged at this tick (stamped for the next one), checking their sequence
-    while (k < r.log.length && r.log[k].tick === w.meta[M_TICK] + 1) {
-      const s = issue(w, r.log[k].cmd)
-      if (s.seq !== r.log[k].seq) {
-        return { tick: s.tick, expected: `command seq ${r.log[k].seq}`, got: `seq ${s.seq}`, section: 'command log' }
-      }
-      k++
-    }
+    const next = reissue(w, r.log, k)
+    if (typeof next !== 'number') return next
+    k = next
     const res = advanceTick(w)
+    observe?.tick?.(w, res)
     if (res.hash === null) continue
     const want = expected[e++]
     if (!want || want.tick !== res.tick) {

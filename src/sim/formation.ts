@@ -25,6 +25,7 @@ import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
 import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
 import { cellK, impAt, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
+import { claimedAt, claimsNear, claimHit } from './claims.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
@@ -38,10 +39,15 @@ export const STATUS = [
   'cannot face about: the shape has no half-turn symmetry',
   'cannot face about: changing shape',
   'cannot face about: the shape is not centred on its trail',
+  'blocked by a formation',
+  'arrived: as near as the formations there allow',
 ]
 export const ST_HALTED = 1
 const ST_CANNOT_FORM = 2
 const ST_ARRIVED_NEAR = 3
+// the claim grid's prototype (docs/plans/active/c1-claims.md): held by another formation's cells, not the ground
+export const ST_BLOCKED = 9
+const ST_ARRIVED_CROWD = 10
 const ST_CANNOT_WHEEL = 4
 const ST_FACE_WET = 5
 const ST_FACE_ASYM = 6
@@ -53,10 +59,22 @@ const CHANGE_SAMPLES = 128
 const STALL = 0.04 // m/s: an anchor slower than this, with a held bin, is stopped by impassable ground
 const HALT_AFTER = 1 // s held and stalled before the order is given up
 const ARRIVE = 0.4 // m
+// a move held by another formation counts as arrived within this of its target, growing while it stays held
+const CROWD_NEAR = 10 // m
+const CROWD_GROW = 5 // m/s
+const CROWD_MAX = 60 // m
+const BLOCK_WAIT = 0.5 // s held by a formation before it tries only now and then
+const BLOCK_RETRY = 10 // ticks between its tries
 
 const sqrt = Math.sqrt
 const hyp = (x: number, z: number) => sqrt(x * x + z * z)
 const now = (w: World) => w.meta[M_TICK] * DT
+// impassable ground for formation i: the terrain's, and with the claim grid's prototype on, other formations' cells
+// (src/sim/claims.ts)
+const blockedAt = (w: World, i: number, imp: Uint8Array, x: number, z: number): number =>
+  impAt(w.terrain, imp, x, z) || (w.claims && claimsNear(w, i) && claimedAt(w, i, x, z) ? 1 : 0)
+// the quick rejects below read the terrain's distance field alone: with claims, they wait while others stand near
+const claimsMatter = (w: World, i: number): boolean => w.claims && claimsNear(w, i)
 
 /* ---------------- shapes, places ---------------- */
 // (a formation's shapes are its type's: f.shape and f.tShape index typeOf(w, i).shapes)
@@ -213,10 +231,10 @@ function wetSlots(w: World, i: number, c: number, ctx: Places, out: Bits): Bits 
       if (p) {
         const lx = U.slotLX[s] * p.kx
         const lz = U.slotLZ[s] * p.kz
-        if (impAt(w.terrain, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) setBit(out, s - base)
+        if (blockedAt(w, i, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) setBit(out, s - base)
       } else {
         placeAtSlot(ctx, s, pt)
-        if (impAt(w.terrain, imp, pt[0], pt[1])) setBit(out, s - base)
+        if (blockedAt(w, i, imp, pt[0], pt[1])) setBit(out, s - base)
       }
     }
   }
@@ -816,7 +834,9 @@ function clearOfImpassable(w: World, i: number): boolean {
   for (let j = 0; j < U.NB; j++) lmax = Math.max(lmax, f.lags[i * w.cr.maxNB + j])
   const kind = kindOf(w, i)
   // a company's places lie within a frontage of its origin, times its spacing
-  return w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2
+  return (
+    !claimsMatter(w, i) && w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2
+  )
 }
 // the bins with a man's place on impassable ground, for the pose as it is now, into out (a set of NB bits)
 export function wetBins(w: World, i: number, out: Bits): Bits {
@@ -843,7 +863,7 @@ export function wetBins(w: World, i: number, out: Bits): Bits {
         const s = Fl.s[k]
         const lx = U.slotLX[s] * p.kx
         const lz = U.slotLZ[s] * p.kz
-        if (impAt(w.terrain, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) {
+        if (blockedAt(w, i, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) {
           setBit(out, c * B)
           break
         }
@@ -860,7 +880,7 @@ export function wetBins(w: World, i: number, out: Bits): Bits {
       const j = c * B + L.of[s]
       if (hasBit(out, j)) continue
       placeAtSlot(ctx, s, pt)
-      if (impAt(T, imp, pt[0], pt[1])) setBit(out, j)
+      if (blockedAt(w, i, imp, pt[0], pt[1])) setBit(out, j)
     }
   }
   return out
@@ -882,6 +902,7 @@ function companyClear(ctx: Places, c: number, impd: Float64Array): boolean {
   const T = w.terrain
   const U = ctx.U
   const B = U.geo.bins
+  if (claimsMatter(w, ctx.i)) return false
   if (!ctx.snake) {
     const x0 = ctx.fx[c * B]
     const z0 = ctx.fz[c * B]
@@ -958,7 +979,7 @@ function sampleBins(w: World, i: number, pace: number, V0: number): void {
     const T = w.terrain
     const cell = cellK(T, px, pz)
     const gg = groundGAt(T, cell, kind, dx, dz)
-    if (gg <= 0 || impAt(T, imp, px + dx * look, pz + dz * look)) blkTmp[j]++
+    if (gg <= 0 || blockedAt(w, i, imp, px + dx * look, pz + dz * look)) blkTmp[j]++
     else {
       gTmp[j] += 1 / gg
       nTmp[j]++
@@ -1168,7 +1189,7 @@ export function shiftOrder(w: World, i: number): void {
   freeOrder(w, n)
 }
 // the Retire drill: face about, march `metres`, halt and dress, face the front again; the last two survive a
-// halt. Used by the `retire` command and the wavering fall-back: fills order k of RETIRE
+// halt. Used by the `retire` command: fills order k of RETIRE
 export const RETIRE = [O_FACE, O_MOVE, O_DRESS, O_FACE]
 export function fillRetire(w: World, n: number, k: number, metres: number): void {
   if (k === 1) w.ord.a[n] = metres
@@ -1237,7 +1258,12 @@ function changeWet(w: World, i: number): boolean {
   const spread = Math.max(layoutOf(w, i).spread, targetLayout(w, i).spread)
   let lmax = 0
   for (let j = 0; j < U.NB; j++) lmax = Math.max(lmax, f.lags[i * w.cr.maxNB + j])
-  if (w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2) return false
+  if (
+    !claimsMatter(w, i) &&
+    w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2
+  ) {
+    return false
+  }
   const span = f.tDelay[i * CS + C - 1] + f.tDur[i]
   for (let k = 0; k <= CHANGE_SAMPLES; k++) {
     const t = f.tStart[i] + (span * k) / CHANGE_SAMPLES
@@ -1248,7 +1274,7 @@ function changeWet(w: World, i: number): boolean {
       for (let s = c * g.ranks * g.files, e = s + g.ranks * g.files; s < e; s++) {
         const lx = U.slotLX[s] * p.kx
         const lz = U.slotLZ[s] * p.kz
-        if (impAt(w.terrain, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) return true
+        if (blockedAt(w, i, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) return true
       }
     }
   }
@@ -1623,6 +1649,19 @@ function formationStep(w: World, i: number): void {
       setOnMap(w, n, f.x[i] + sin(f.heading[i]) * o.a[n], f.z[i] + cos(f.heading[i]) * o.a[n])
       o.resolved[n] = 1
     }
+    // held by another formation for a while: it stands, and tries again only every BLOCK_RETRY ticks (each formation
+    // on its own tick of them), so a crowd of waiting formations costs little
+    if (
+      type === O_MOVE &&
+      f.status[i] === ST_BLOCKED &&
+      f.blockedFor[i] > BLOCK_WAIT &&
+      (w.meta[M_TICK] + i) % BLOCK_RETRY !== 0
+    ) {
+      f.vx[i] = 0
+      f.vz[i] = 0
+      f.blockedFor[i] += DT
+      return
+    }
     const dx = o.x[n] - f.x[i]
     const dz = o.z[n] - f.z[i]
     const dist = hyp(dx, dz)
@@ -1704,7 +1743,16 @@ function formationStep(w: World, i: number): void {
     const anyHeld = anyBit(held)
     if ((anyHeld || turnHeld) && (moved < STALL * DT || turnHeld) && (want0 > 0 || turnHeld)) {
       f.blockedFor[i] += DT
-      if (f.blockedFor[i] > HALT_AFTER) haltAtEdge(w, i, held)
+      if (w.claims && claimHit(w, i)) {
+        // held by another formation's cells, not by the ground: it keeps its orders, and a move near enough its
+        // target counts as arrived (the nearer the longer it is held)
+        const near = Math.min(CROWD_MAX, CROWD_NEAR + CROWD_GROW * f.blockedFor[i])
+        if (type === O_MOVE && hyp(o.x[n] - f.x[i], o.z[n] - f.z[i]) <= near) {
+          shiftOrder(w, i)
+          f.blockedFor[i] = 0
+          f.status[i] = ST_ARRIVED_CROWD
+        } else f.status[i] = ST_BLOCKED
+      } else if (f.blockedFor[i] > HALT_AFTER) haltAtEdge(w, i, held)
     } else {
       f.blockedFor[i] = 0
       if (moved > 0.001) f.status[i] = 0
@@ -1716,7 +1764,7 @@ function formationStep(w: World, i: number): void {
     if (o.t0[n] < 0) o.t0[n] = t
     let lmax = 0
     for (let j = 0; j < NB; j++) if (f.binN[i * NS + j]) lmax = Math.max(lmax, f.lags[i * NS + j])
-    if (lmax < 0.05 || t - o.t0[n] > w.cr.rs.dressTime) shiftOrder(w, i)
+    if (lmax < 0.05 || t - o.t0[n] > w.cr.rs.dressTime * f.drill[i]) shiftOrder(w, i)
   } else if (type === O_FACE) {
     f.vx[i] = 0
     f.vz[i] = 0
@@ -1763,7 +1811,9 @@ function formationStep(w: World, i: number): void {
     f.vz[i] = (f.z[i] - z0) / DT
     o.done[n] += wq * uw
     pushTrail(w, i)
-    if (uw === 0) haltAtEdge(w, i, null)
+    // a wheel held by another formation's cells waits with its order; one held by the ground gives it up
+    if (uw === 0 && w.claims && claimHit(w, i)) f.status[i] = ST_BLOCKED
+    else if (uw === 0) haltAtEdge(w, i, null)
     else if (o.done[n] >= Math.abs(o.a[n]) - 1e-6) {
       shiftOrder(w, i)
       f.vx[i] = 0
