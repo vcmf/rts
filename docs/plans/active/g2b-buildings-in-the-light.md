@@ -33,7 +33,8 @@ swept away from the sun as its shadow: a second light, apart from G2's baked sun
 - **The shadow's length:** from the building's wall height, at most 100 m. The ground's light reads its heights ×3 (`RELIEF.z`);
   whether a building's shadow is cast from its true height or ×3 too is the owner's call by eye: `?bz=` (default 1, its
   true height), shots of both.
-- `standing` (`src/render/lit/houses.ts`) runs in the worker too, so the mask and the boxes stand the same buildings.
+- `standing` (`src/render/lit/houses.ts`) runs once, in the worker, off the page's thread; the page raises the boxes
+  and casts their shadows from what it sends.
 
 Out of scope: the woods (after the campaign map's); the 3D world's buildings (G3).
 
@@ -48,8 +49,8 @@ Out of scope: the woods (after the campaign map's); the 3D world's buildings (G3
 
 ## Decisions
 
-- Decision 0090 amended in place (proposed still): the buildings lit by the same model, their shadows in the sun's
-  share.
+- Decision 0090 amended in place (proposed still; it now amends 0065 too): the buildings lit by the same model, their
+  shadows the ground's light with the sun's share taken out, drawn as geometry.
 
 ## Open questions
 
@@ -91,3 +92,13 @@ wall, a party wall, the map's edge), and leaving footprints out only moved the s
 onto the paper. The mask's G channel is unused again. Also from round 3: decision 0090 amends 0065 (the houses' look);
 the camera's place set before the first frame; the roof triangulated only when there is one. The round count
 restarts.
+
+After the redesign, round 1 (10 findings, none severe; fixed or answered, then stopped):
+- fixed: the shadow's normal flattened on water, as the plane's (from the water's cells); one list of the light's
+  uniforms and one include helper; the buildings' shadow constants beside `shadowQuads`, the `bz` default in one
+  place; the cap's and `bz`'s tests also check what is shaded; the plan's scope and decision; the system doc;
+- answered: the shadow as a ratio of two lights on the paper's colour, a second copy of the plane's light: the
+  stencil and a second pass of the plane with the sun's share at 0 would be exact, at the cost of drawing the plane's
+  shader twice where shadows fall (kept: the ratio matches the plane on land and water, the ink differs a little);
+  `uEye` against `gl_FrontFacing` (the quads' winding is not checked anywhere; the camera moves only through
+  `setCamera`); the height functions bound for the buildings, which do not read them (one shared chunk).

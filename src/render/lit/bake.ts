@@ -36,11 +36,6 @@ export const RELIEF = {
 const SKY_STEPS = [4, 8, 16, 32, 64, 128, 256]
 const SUN_REACH = 5000 // m: the farthest a ray toward the sun looks for what shades a node
 export const WATER_FULL = 1.5 // m: the depth the mask stores as 1
-// m: the longest shadow a building casts (a low ?sun= or a large ?bz= would sweep it across the map)
-export const SHADOW_REACH = 100
-// the buildings' shadows cast from their wall heights raised this many times: their true heights (the owner, G2b:
-// 1 first; ?bz= to try others)
-export const BUILDING_BZ = 1
 
 /**
  * A sun the bake and the shader can light by (the page's ?sun= and ?soft= take any number): its disc 1° to 20°

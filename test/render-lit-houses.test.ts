@@ -152,9 +152,14 @@ describe("G2b: the buildings' shadows on the ground", () => {
   })
   it('from a height raised bz times, at most SHADOW_REACH, and none from a negative bz', () => {
     const h = [house([rect(30, 25, 40, 35)], 6)]
+    // ×3: 31.2 m west of the wall, to x -1.2
     expect(shaded(shadowQuads(h, east, 3), [0, 30])).toBe(true)
+    expect(shaded(shadowQuads(h, east, 3), [-2, 30])).toBe(false)
+    // a 1° sun would cast it 344 m: 100 at most
+    expect(shaded(shadowQuads(h, { ...east, el: 1 }, 1), [30 - 99, 30])).toBe(true)
     expect(shaded(shadowQuads(h, { ...east, el: 1 }, 1), [30 - 101, 30])).toBe(false)
     expect(shaded(shadowQuads(h, east, -1), [29, 30])).toBe(false)
+    expect(shaded(shadowQuads(h, east), [29, 30])).toBe(true)
   })
   it('terraced houses on one wall cast one shadow, with no stripe along their party wall', () => {
     const s = shadowQuads([house([rect(30, 20, 40, 31)], 6), house([rect(30, 31, 40, 40)], 6)], east)

@@ -15,9 +15,9 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Season } from '../../map/schema.ts'
-import { BUILDING_BZ, INK_RANGE, SUN, sunXZ, type LightBake, type Sun } from './bake.ts'
+import { INK_RANGE, SUN, sunXZ, type LightBake, type Sun } from './bake.ts'
 import { paperCanvas } from './paper.ts'
-import { bridged, shadowQuads, triangulate, type Standing } from './houses.ts'
+import { BUILDING_BZ, bridged, shadowQuads, triangulate, type Standing } from './houses.ts'
 import LIT_VS from './shaders/lit.vert?raw'
 import LIT_FS from './shaders/lit.frag?raw'
 import LIGHT from './shaders/light.glsl?raw'
@@ -52,6 +52,27 @@ const BARRIER = '#3a4528' // hedges and walls, a dark olive
 // house is a little darker (the owner, G2b: "cold white, maybe a tiny bit darker"), a church a little more
 const HOUSE_TONE = 0.88
 const SHADOW_Y = 0.05 // m: the buildings' shadows over the paper
+
+// the uniforms the shared light (shaders/light.glsl) reads, set on every material it lights (G2b)
+const LIGHT_UNIFORMS = [
+  'uX0Z0',
+  'uSize',
+  'uNodes',
+  'uLightNodes',
+  'uCell',
+  'uDatum',
+  'uZ',
+  'uLightStep',
+  'uSkyK',
+  'uLamp',
+  'uFloor',
+  'uSun',
+  'uPaper',
+  'uKey',
+  'uSkyC',
+]
+/** A shader's source with the shared light (shaders/light.glsl) in place of its `#include <light>`. */
+const withLight = (src: string): string => src.replace('#include <light>', LIGHT)
 const CHURCH_TONE = 0.83
 const SEASON_AT: Record<Season, number> = { spring: 0, summer: 0, autumn: 1.5, winter: 3 }
 
@@ -141,28 +162,14 @@ export class LitView {
     this.material = new ShaderMaterial(
       'lit',
       this.scene,
-      { vertexSource: LIT_VS, fragmentSource: LIT_FS.replace('#include <light>', LIGHT) },
+      { vertexSource: LIT_VS, fragmentSource: withLight(LIT_FS) },
       {
         attributes: ['position'],
         uniforms: [
           'world',
           'viewProjection',
-          'uX0Z0',
-          'uSize',
-          'uNodes',
-          'uSun',
-          'uKey',
-          'uSkyC',
-          'uSkyK',
-          'uLamp',
-          'uFloor',
-          'uZ',
-          'uLightNodes',
-          'uLightStep',
-          'uCell',
-          'uDatum',
+          ...LIGHT_UNIFORMS,
           'uFlat',
-          'uPaper',
           'uShallow',
           'uDeep',
           'uContourMinor',
@@ -178,30 +185,13 @@ export class LitView {
     this.material.backFaceCulling = false
     // the buildings, lit by the ground's light, and their shadows on the ground in it (G2b): the light's uniforms and
     // textures set on all three materials (lit)
-    const light = [
-      'uX0Z0',
-      'uSize',
-      'uNodes',
-      'uLightNodes',
-      'uCell',
-      'uDatum',
-      'uZ',
-      'uLightStep',
-      'uSkyK',
-      'uLamp',
-      'uFloor',
-      'uSun',
-      'uPaper',
-      'uKey',
-      'uSkyC',
-    ]
     this.houseMaterial = new ShaderMaterial(
       'houses',
       this.scene,
-      { vertexSource: HOUSES_VS, fragmentSource: HOUSES_FS.replace('#include <light>', LIGHT) },
+      { vertexSource: HOUSES_VS, fragmentSource: withLight(HOUSES_FS) },
       {
         attributes: ['position', 'normal', 'color'],
-        uniforms: ['world', 'viewProjection', ...light, 'uEye'],
+        uniforms: ['world', 'viewProjection', ...LIGHT_UNIFORMS, 'uEye'],
         samplers: ['uHeight', 'uLight'],
       },
     )
@@ -211,11 +201,11 @@ export class LitView {
     this.shadowMaterial = new ShaderMaterial(
       'house-shadows',
       this.scene,
-      { vertexSource: LIT_VS, fragmentSource: SHADOWS_FS.replace('#include <light>', LIGHT) },
+      { vertexSource: LIT_VS, fragmentSource: withLight(SHADOWS_FS) },
       {
         attributes: ['position'],
-        uniforms: ['world', 'viewProjection', ...light],
-        samplers: ['uHeight', 'uLight'],
+        uniforms: ['world', 'viewProjection', ...LIGHT_UNIFORMS],
+        samplers: ['uHeight', 'uLight', 'uMask'],
         needAlphaBlending: true,
       },
     )
@@ -308,7 +298,9 @@ export class LitView {
     // neither the mask nor the ink's fields mipmapped: averaged, a brook or a hedge two cells wide would vanish from
     // the far view, and the water's depth would part from its fill (docs/plans/active/m6-lit-view.md, open: a
     // min-filtered mip chain for the far view)
-    this.material.setTexture('uMask', tex(m.masks, m.nx, m.nz, rgba, linear))
+    const mask = tex(m.masks, m.nx, m.nz, rgba, linear)
+    this.material.setTexture('uMask', mask)
+    this.shadowMaterial.setTexture('uMask', mask)
     this.material.setTexture('uInk', tex(m.ink, m.nx, m.nz, rgba, linear))
     this.material.setFloat('uInkRange', INK_RANGE)
     this.material.setTexture('uFlatT', tex(m.flat.rgba, m.flat.w, m.flat.h, rgba, Texture.NEAREST_SAMPLINGMODE))
@@ -391,7 +383,7 @@ export class LitView {
    * Stands the map's houses on the paper (M6b, `standing`): each footprint (its rings, m) raised to its wall height,
    * its roof flat, its faces lit by the ground's light (houses.frag), its shadow on the ground in it (shadows.frag).
    */
-  setHouses(houses: Standing[], bz = BUILDING_BZ): void {
+  setHouses(houses: Standing[], bz: number = BUILDING_BZ): void {
     for (const h of this.houses) h.dispose()
     this.houses = []
     if (!houses.length) return

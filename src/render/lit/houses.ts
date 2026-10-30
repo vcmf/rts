@@ -5,7 +5,13 @@ import type { Feature, Pt } from '../../map/schema.ts'
 import type { Resolved } from '../../map/resolve.ts'
 import { inRing, ringArea2 } from '../../map/geometry.ts'
 import { ringsOf } from '../../map/reach.ts'
-import { BUILDING_BZ, clampSun, SHADOW_REACH, sunXZ, type Sun } from './bake.ts'
+import { clampSun, sunXZ, type Sun } from './bake.ts'
+
+// m: the longest shadow a building casts (a low ?sun= or a large ?bz= would cast it across the map)
+export const SHADOW_REACH = 100
+// the buildings' shadows cast from their wall heights raised this many times: their true heights (the owner, G2b:
+// 1 first; ?bz= to try others)
+export const BUILDING_BZ = 1
 
 /** A building as the view stands it: its outer ring and its courtyards (counter-clockwise), wall height, kind. */
 export interface Standing {

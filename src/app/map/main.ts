@@ -12,7 +12,7 @@ import type { Compiled, CompileReply, CompileRequest, LayerName, OverlayReply, O
 import type { OverlaySpec } from '../../render/lit/overlays.ts'
 import { demFileNames } from '../../map/dem.ts'
 import { LitView, TILT } from '../../render/lit/view.ts'
-import { BUILDING_BZ, RELIEF, SUN, type Sun } from '../../render/lit/bake.ts'
+import { RELIEF, SUN, type Sun } from '../../render/lit/bake.ts'
 import { lineLength, pointAt } from '../../map/geometry.ts'
 import { Editor } from './editor.ts'
 import { ovalRing } from './edit.ts'
@@ -127,7 +127,7 @@ const sunAsked: Sun = {
 }
 const zAsked = litParam('z') ?? RELIEF.z
 // the buildings' shadows from their wall heights raised ?bz= times (G2b: the owner's choice by eye)
-const bzAsked = litParam('bz') ?? BUILDING_BZ
+const bzAsked = litParam('bz') // the view's own (BUILDING_BZ) when absent
 lit?.setTuning({ sky: litParam('sky'), lamp: litParam('lamp'), floor: litParam('floor') })
 
 const names = Object.keys(MAPS).sort()
