@@ -18,9 +18,13 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
+import { MEADOW_LOOK, type MeadowLook } from './meadow-look.ts'
 import {
   CLUMP_REACH,
+  CROP_WIDE,
   grassDefinesForClumps,
+  RINGS,
+  type Ring,
   GREEN_HEIGHT,
   HEIGHT,
   HEIGHT_MAX,
@@ -38,28 +42,14 @@ const TILE_W = D.spec.tile
 // the meadow map: 1 m texels over the tile
 const MAP_N = Math.round(TILE_W)
 
-// a ring: its cell (m), its slots a side (of the square it is cut from), the clumps' spread (their footprint grows with
-// the cell, their height does not: a clump is never taller than HEIGHT_MAX), its band of distance from the focus (m: in
-// from band[0] to band[1], out from band[2] to band[3]; the next ring fades in where this one fades out), and its clump
 // the camera's radius over which the inner rings give way to the outer one (m): the default view is 125, the widest 260
 const WIDE: [number, number] = [150, 200] // (buildMeadow's wide: false, ?nowide, keeps the rings as before: the A/B)
-// a crop's clump (docs/plans/done/crop-depth.md): CROP_WIDE times the grass clump's spread at the root, its fan undone:
-// the grass clumps' blades spread about 1 + CROP_FAN aV up their height (measured from data/meadow-grass.json: Large
-// 0.31, 0.43, 0.58 at aV 0, 0.4, 0.8; Small 0.25, 0.34, 0.50), so the stalks stand parallel
+// a crop's clump (docs/plans/done/crop-depth.md): CROP_WIDE (src/look/meadow-spec.ts) times the grass clump's spread at
+// the root, its fan undone: the grass clumps' blades spread about 1 + CROP_FAN aV up their height (measured from
+// data/meadow-grass.json: Large 0.31, 0.43, 0.58 at aV 0, 0.4, 0.8; Small 0.25, 0.34, 0.50), so the stalks stand
+// parallel (the upright grass undoes part of it too: GrassUp.fanUndo)
 const CROP_FAN = 1.15
-const CROP_WIDE = 1.5
-export interface Ring {
-  cell: number
-  n: number
-  spread: number
-  band: [number, number, number, number]
-  clump: 'Grass_Large' | 'Grass_Small'
-}
-export const RINGS: Ring[] = [
-  { cell: 0.5, n: 104, spread: 1.6, band: [0, 0, 18, 25], clump: 'Grass_Large' }, // band[1] 0: no fade in
-  { cell: 1.0, n: 104, spread: 2.85, band: [18, 25, 38, 50], clump: 'Grass_Small' },
-  { cell: 2.0, n: 104, spread: 4.2, band: [38, 50, 80, 100], clump: 'Grass_Small' },
-]
+export { RINGS, type Ring }
 
 // a ring's chunk: its slots' range on the ring's square, and its slots (the hole's apart: drawn only zoomed out)
 interface Chunk {
@@ -335,6 +325,7 @@ export function buildMeadow(
   mm: MeadowMap,
   wide = true,
   reach = CLUMP_REACH,
+  look: MeadowLook = MEADOW_LOOK,
 ): Meadow {
   const t0 = performance.now()
   const { map, growingCells, growthAt, cropAt, groundAt: groundAtMap } = mm
@@ -384,7 +375,7 @@ export function buildMeadow(
         uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'],
         samplers: ['uMeadow', 'uGB'],
         defines: [
-          ...grassDefinesForClumps(),
+          ...grassDefinesForClumps(look.up),
           '#define GROUND_BOUNCE',
           `#define MEADOW_N ${MAP_N.toFixed(1)}`,
           `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`,
