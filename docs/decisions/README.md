@@ -97,7 +97,7 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0070](0070-a-field-as-a-scale-model.md) | A real field may be fitted to a map as a scale model: distances and heights scaled by one factor (amends 0061 and 0063) | accepted |
 | [0071](0071-soldier-contact-shadow.md) | A contact shadow under the soldiers' feet; their shadows no darker than the ground's painted shadow (amends 0062, supersedes 0067's values; its oval superseded by 0074) | accepted |
 | [0072](0072-battle-threads-pr6-not-needed.md) | Battle threads: no PR 6; the look page's placing goes to the men worker instead | accepted |
-| [0073](0073-modern-works-mended-from-their-surroundings.md) | Modern works are mended out of real relief by rebuilding the ground from what lies around them | accepted |
+| [0073](0073-modern-works-mended-from-their-surroundings.md) | Modern works are mended out of real relief by rebuilding the ground from what lies around them (amended by 0091, proposed) | accepted |
 | [0074](0074-soldier-shadow-per-step.md) | The soldiers' shadow from their pose up close, baked per animation step; no contact oval (amends 0062, supersedes 0071's oval) | accepted |
 | [0075](0075-arms-share-the-units-pipeline.md) | The cavalry and the artillery share the units pipeline; a figure on more than its root measures its shadow from its contacts (amends 0062, 0074) | proposed |
 | [0077](0077-a-pond-levels-at-its-lower-bank.md) | A pond with no level of its own levels at its lower bank; a dam is drawn, never implied | accepted |
@@ -108,3 +108,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0082](0082-light-map-at-half-a-metre.md) | The baked light map at about half a metre a texel (1536² over the 800 m tile, the target 0.53 m) | accepted |
 | [0084](0084-a-soft-mid-tone-on-figures-and-buildings.md) | A soft mid tone on the figures, the buildings and the nature meshes (amends 0022) | accepted |
 | [0085](0085-upright-meadow-and-wheat-fill.md) | The meadow's grass upright and shorter, the wheat filled (`?grassup`, `?wheatfill`; amends 0041's clumps) | accepted |
+| [0091](0091-an-area-mend-is-a-membrane.md) | An area's mend is a membrane on the ground round it (amends 0073) | proposed |

@@ -373,6 +373,63 @@ describe('M1b: applying features into the layers', () => {
     )
     expect(Math.abs(hAt(cut, 0, 0) - hAt(ground, 0, 0) + 1)).toBeLessThan(0.15)
   })
+  it("an area's mend meets the ground all round its rim, on ground no plane fits (the pit at Újezd, G2)", () => {
+    // a broad hill's flank curving across the work, as the ground round the pit at Újezd: no plane fits its rim
+    const hill = { id: 'hill', kind: 'relief.hill', point: [0, 200] as Pt, height: 15, width: 500 }
+    const pit = {
+      id: 'pit',
+      kind: 'relief.plateau',
+      area: [
+        [
+          [-150, -30],
+          [150, -30],
+          [150, 30],
+          [-150, 30],
+        ],
+      ] as Pt[][],
+      height: -6,
+      edge: 4,
+    }
+    const mend = {
+      id: 'mend-pit',
+      kind: 'relief.mend',
+      area: [
+        [
+          [-160, -40],
+          [160, -40],
+          [160, 40],
+          [-160, 40],
+        ],
+      ] as Pt[][],
+      edge: 5,
+    }
+    const ground = apply(mini([hill]), cat)
+    const mended = apply(mini([hill, pit, mend]), cat)
+    // along its outline, every 10 m: the mended ground within 0.4 m of the real ground (the blend's 5 m past it
+    // eases in the rest); a plane through the rim missed it by 2.4 m here, and by 3 m at Újezd
+    let worst = 0
+    for (let t = -160; t <= 160; t += 10) {
+      for (const [x, z] of [
+        [t, 40],
+        [t, -40],
+        [160, t / 4],
+        [-160, t / 4],
+      ] as Pt[]) {
+        worst = Math.max(worst, Math.abs(hAt(mended, x, z) - hAt(ground, x, z)))
+      }
+    }
+    expect(worst).toBeLessThan(0.4)
+    // inside, within its rim's range of ground (a membrane's maximum principle): what the work took away no fill from
+    // the rim can know, so the promise is the rim's range
+    const rim: number[] = []
+    for (let t = -160; t <= 160; t += 10) rim.push(hAt(ground, t, 45), hAt(ground, t, -45))
+    for (let x = -140; x <= 140; x += 20) {
+      for (let z = -30; z <= 30; z += 10) {
+        expect(hAt(mended, x, z)).toBeGreaterThanOrEqual(Math.min(...rim) - 0.05)
+        expect(hAt(mended, x, z)).toBeLessThanOrEqual(Math.max(...rim) + 0.05)
+      }
+    }
+  })
   it('a mend is part of the relief: water is levelled on the mended ground, bends mend, the order of mends is moot', () => {
     const slope = { id: 'hill', kind: 'relief.hill', point: [900, 700] as Pt, height: 60, width: 2400 }
     const pit = {
