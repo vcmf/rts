@@ -127,6 +127,8 @@ const sunAsked: Sun = {
   size: litParam('soft') ?? SUN.size,
 }
 const zAsked = litParam('z') ?? RELIEF.z
+// the buildings' shadows from their wall heights raised ?bz= times (G2b: the owner's choice by eye; 1 by default)
+const bzAsked = litParam('bz') ?? 1
 lit?.setTuning({ sky: litParam('sky'), lamp: litParam('lamp'), floor: litParam('floor') })
 
 const names = Object.keys(MAPS).sort()
@@ -298,7 +300,7 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
   if (mine !== seq) return
   for (const [name, f] of Object.entries(files)) if (f.bytes) sentVersion.set(name, f.version)
   worker.postMessage(
-    { seq: mine, mapText, kindsText, files, sun: sunAsked, z: zAsked } satisfies CompileRequest,
+    { seq: mine, mapText, kindsText, files, sun: sunAsked, z: zAsked, bz: bzAsked } satisfies CompileRequest,
     Object.values(files).flatMap(f => (f.bytes ? [f.bytes] : [])),
   )
 }

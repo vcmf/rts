@@ -9,6 +9,8 @@ import { lineReach } from '../../map/apply.ts'
 import { categoryOf } from '../../map/catalogue.ts'
 import { sstep } from '../../look/noise.ts'
 import { SUN_TOWARD } from '../../look/sun.ts'
+import type { Standing } from './houses.ts'
+import { inRing } from '../../map/geometry.ts'
 
 /** The sun: its height above the horizon, where it stands (clockwise from north) and its disc's size, in degrees. */
 export interface Sun {
@@ -190,17 +192,74 @@ export function lightCache(
 }
 
 /**
- * The cells' mask, as RGBA bytes, the south row first: R the water's depth (0..1 over 0..WATER_FULL m), G unused, B
- * the water, A the yards (a
+ * The buildings' shadows on the ground (G2b, decision 0090): each standing building's footprint swept away from the sun
+ * as far as its wall, `bz` times its height (the owner's choice by eye), casts it at the sun's height, as each cell's
+ * share of the sun they take (0 none, 1 all), from 2 × 2 samples a cell. The swept shape is the footprint, its copy at
+ * the shadow's end and a quad along every wall between them (a courtyard's walls shade it too). The cells' mask carries
+ * it (G); the light's bake, on 8 m nodes, is too coarse for a house.
+ */
+export function bakeBuildingShadows(
+  houses: Standing[],
+  grid: { x0: number; z0: number; cell: number; nx: number; nz: number },
+  sun: Sun,
+  bz = 1,
+): Float32Array {
+  const { x0, z0, cell, nx, nz } = grid
+  const out = new Float32Array(nx * nz)
+  const [lx, lz] = sunXZ(clampSun(sun))
+  const cast = 1 / Math.tan((clampSun(sun).el * Math.PI) / 180)
+  for (const h of houses) {
+    const reach = h.height * bz * cast
+    const [dx, dz] = [-lx * reach, -lz * reach]
+    const [outer, ...holes] = h.rings
+    const inFoot = (p: Pt) => inRing(outer, p) && !holes.some(r => inRing(r, p))
+    const quads = h.rings.flatMap(ring =>
+      ring.map((a, k): Pt[] => {
+        const b = ring[(k + 1) % ring.length]
+        return [a, b, [b[0] + dx, b[1] + dz], [a[0] + dx, a[1] + dz]]
+      }),
+    )
+    const xs = outer.flatMap(p => [p[0], p[0] + dx])
+    const zs = outer.flatMap(p => [p[1], p[1] + dz])
+    const i0 = Math.max(0, Math.floor((Math.min(...xs) - x0) / cell))
+    const i1 = Math.min(nx - 1, Math.floor((Math.max(...xs) - x0) / cell))
+    const j0 = Math.max(0, Math.floor((Math.min(...zs) - z0) / cell))
+    const j1 = Math.min(nz - 1, Math.floor((Math.max(...zs) - z0) / cell))
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        let n = 0
+        for (const [u, v] of [
+          [0.25, 0.25],
+          [0.75, 0.25],
+          [0.25, 0.75],
+          [0.75, 0.75],
+        ]) {
+          const p: Pt = [x0 + (i + u) * cell, z0 + (j + v) * cell]
+          if (inFoot(p) || inFoot([p[0] - dx, p[1] - dz]) || quads.some(q => inRing(q, p))) n++
+        }
+        const k = j * nx + i
+        out[k] = Math.max(out[k], n / 4)
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * The cells' mask, as RGBA bytes, the south row first: R the water's depth (0..1 over 0..WATER_FULL m), G the share
+ * of the sun the buildings' shadows take (bakeBuildingShadows; none if not given), B the water, A the yards (a
  * village's, a farm's, ground.yard).
  */
-export function bakeMasks(L: Pick<Layers, 'nx' | 'nz' | 'water' | 'depth' | 'table' | 'built' | 'ground'>): Uint8Array {
+export function bakeMasks(
+  L: Pick<Layers, 'nx' | 'nz' | 'water' | 'depth' | 'table' | 'built' | 'ground'>,
+  shadows?: Float32Array,
+): Uint8Array {
   const n = L.nx * L.nz
   const out = new Uint8Array(n * 4)
   const yard = L.table.map(r => /^(built\.(village|farm)|ground\.yard)(\.|$)/.test(r.kind))
   for (let c = 0; c < n; c++) {
     out[c * 4] = Math.round(Math.min(1, L.depth[c] / 1000 / WATER_FULL) * 255)
-    out[c * 4 + 1] = 0 // unused
+    out[c * 4 + 1] = shadows ? Math.round(shadows[c] * 255) : 0
     out[c * 4 + 2] = L.water[c] ? 255 : 0
     out[c * 4 + 3] = (L.built[c] && yard[L.built[c] - 1]) || (L.ground[c] && yard[L.ground[c] - 1]) ? 255 : 0
   }

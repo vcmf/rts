@@ -8,7 +8,8 @@ precision highp float;
 varying vec3 vW;
 uniform sampler2D uHeight;   // the node heights, m above the datum: one float a node, read by texelFetch
 uniform sampler2D uLight;    // R the sun's soft shadow (1 lit), G the open sky (1 all of it), on every uLightStep-th node
-uniform sampler2D uMask;     // R the water's depth (0..1), B the water, A the yards, on the cells (G unused)
+uniform sampler2D uMask;     // R the water's depth (0..1), G the buildings' shadows' share of the sun, B the water,
+                             // A the yards, on the cells
 uniform sampler2D uInk;      // the ink's distance fields on the cells: R ways (their shapes), G water, B barriers, A woods
                              // (their cells), signed m
 uniform sampler2D uPaperT, uFlatT;
@@ -18,6 +19,8 @@ uniform vec2 uX0Z0, uSize, uNodes, uLightNodes;
 uniform float uCell, uDatum, uFlat, uInkRange, uLightStep, uZ, uSkyK, uLamp, uFloor;
 uniform vec3 uSun;           // toward the sun (x east, y up, z north), a unit vector
 uniform vec3 uPaper, uKey, uSkyC, uShallow, uDeep, uContourMinor, uContourIndex, uLine, uBarrier;
+
+#include <light>
 
 // a hairline where a distance field crosses 0: about a pixel wide at any zoom
 float hair(float sd) {
@@ -125,16 +128,8 @@ void main() {
     vec3 n = normalize(mix(vec3(-gx, 1.0, -gz), vec3(0.0, 1.0, 0.0), max(waterA, 1.0 - inside)));
     vec2 ln = (vW.xz - uX0Z0) / (uCell * uLightStep);   /* light node i at the centre of texel i */
     vec2 B = mix(vec2(1.0), texture2D(uLight, (ln + 0.5) / uLightNodes).rg, inside);
-    float key = min(max(0.0, dot(n, uSun)) / uSun.y, 3.0);   /* a face lit three times flat ground at most: a low ?sun= */
-    float sky = B.g * (0.55 + 0.45 * n.y);
-    vec2 toSun = normalize(uSun.xz + vec2(1e-6, 0.0));
-    float side = clamp(dot((vW.xz - uX0Z0) / uSize * 2.0 - 1.0, toSun) * 0.5, -0.5, 0.5);
-    vec3 keyC = uKey * mix(vec3(1.0), vec3(1.06, 0.96, 0.84), side * 2.0 * uLamp);
-    vec3 light = keyC * key * B.r * (1.0 + uLamp * side) * (1.0 - uSkyK) + uSkyC * sky * uSkyK;
-    light /= uKey * (1.0 - uSkyK) + uSkyC * uSkyK;
-    vec3 lit = mapC * max(light, vec3(uFloor));
-    /* a soft shoulder: the brightest faces glow toward white instead of clipping */
-    mapC = min(lit / (1.0 + 0.18 * max(lit - 1.0, 0.0)), vec3(1.0));
+    /* the buildings' shadows take their share of the sun (M.g, G2b), the hills' baked shadow the rest */
+    mapC = litBy(mapC, lightOf(n, vW.xz, B.r * (1.0 - M.g), B.g));
   }
 
   vec3 col = mapC * (0.93 + (g1 - 0.5) * 0.16 + (fine - 0.5) * 0.12);   /* the paper's grain */

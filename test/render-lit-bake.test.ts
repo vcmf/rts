@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   bakeInk,
+  bakeBuildingShadows,
   bakeLight,
   bakeMasks,
   cellField,
@@ -142,6 +143,45 @@ describe('G2: the light bake', () => {
     // north-west, about 27° high
     expect(SUN.az).toBeGreaterThan(270)
     expect(SUN.el).toBeGreaterThan(20)
+  })
+})
+
+describe("G2b: the buildings' shadows on the ground", () => {
+  // a 60 m square map of 2 m cells, its first node at (0, 0); a sun in the east 30° high
+  const grid = { x0: 0, z0: 0, cell: 2, nx: 30, nz: 30 }
+  const east = sunAt(90, 30)
+  const square = (x0: number, z0: number, x1: number, z1: number): Pt[] => [
+    [x0, z0],
+    [x1, z0],
+    [x1, z1],
+    [x0, z1],
+  ]
+  const house = (rings: Pt[][], height: number, roof = true) => ({ rings, height, church: false, roof })
+  // the share at the cell whose centre is nearest (x, z)
+  const at = (s: Float32Array, x: number, z: number) => s[Math.floor(z / 2) * 30 + Math.floor(x / 2)]
+  it("falls away from the sun, as long as the wall over the tangent of the sun's height", () => {
+    // a 10 m house 6 m high, from x 30 to 40: its shadow runs 10.4 m west of its west wall
+    const s = bakeBuildingShadows([house([square(30, 25, 40, 35)], 6)], grid, east)
+    expect(at(s, 25, 30)).toBe(1)
+    expect(at(s, 21, 30)).toBe(1)
+    expect(at(s, 17, 30)).toBe(0)
+    expect(at(s, 43, 30)).toBe(0) // none toward the sun
+    expect(at(s, 25, 39)).toBe(0) // none beside it
+  })
+  it('from a height raised bz times, when the owner asks for it', () => {
+    const s = bakeBuildingShadows([house([square(30, 25, 40, 35)], 6)], grid, east, 3)
+    expect(at(s, 11, 30)).toBe(1)
+  })
+  it("a courtyard's walls shade it in part", () => {
+    // a 20 m square with an 8 m courtyard (x 36 to 44), 3 m high: the east wing's inner face shades 5.2 m of it
+    const s = bakeBuildingShadows([house([square(30, 20, 50, 40), square(36, 26, 44, 34)], 3)], grid, east)
+    expect(at(s, 42, 30)).toBe(1)
+    expect(at(s, 37, 30)).toBe(0)
+  })
+  it('partly at a cell its edge crosses: four samples a cell', () => {
+    // a wall 9 · tan 30° high: its shadow ends at x = 21, so the cell from 20 to 22 has half its samples in it
+    const s = bakeBuildingShadows([house([square(30, 25, 40, 35)], 9 * Math.tan(Math.PI / 6))], grid, east)
+    expect(at(s, 21, 30)).toBe(0.5)
   })
 })
 
