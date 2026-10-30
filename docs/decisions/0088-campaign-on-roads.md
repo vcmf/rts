@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-27
 ---
 
-# 0074 A campaign of armies on roads, moved at once; battles come from it
+# 0088 A campaign of armies on roads, moved at once; battles come from it
 
 ## Context
 

@@ -30,7 +30,7 @@ recorded here on 2026-10-08.
 | [0015](0015-era-generic-engine.md) | The engine is era-generic, from antiquity to the Napoleonic era | accepted |
 | [0016](0016-typescript-toolchain.md) | Game code in strict TypeScript, tested with Vitest, linted with ESLint, versions pinned | accepted |
 | [0017](0017-paint-on-units-by-screen-size.md) | Paint on units follows their size on screen | proposed |
-| [0018](0018-battalion-of-400.md) | Battalions of about 400 soldiers, one figure each; the engine reaches 800 | accepted |
+| [0018](0018-battalion-of-400.md) | Battalions of about 400 soldiers, one figure each; the engine reaches 800 | superseded by 0076 |
 | [0019](0019-shading-data-from-authored-surface.md) | Shading data finer than the heightfield comes from the authored surface | proposed |
 | [0022](0022-soft-ramp-for-foliage.md) | Foliage crowns are painted with a soft ramp | accepted |
 | [0024](0024-blur-as-player-option.md) | Depth of field in gameplay is a player option, on by default | accepted |
@@ -66,6 +66,5 @@ recorded here on 2026-10-08.
 | [0067](0067-simple-shadows-darker.md) | The soldiers' simple shadows darker: a gain on their darkening (amends 0062; its values superseded by 0071) | accepted |
 | [0068](0068-dye-palette.md) | Uniforms name dyes from one palette, by cloth part | accepted |
 | [0071](0071-soldier-contact-shadow.md) | A contact shadow under the soldiers' feet; their shadows no darker than the ground's painted shadow (amends 0062, supersedes 0067's values) | accepted |
-| [0074](0074-campaign-on-roads.md) | A campaign of armies on roads, moved at once; battles come from it | proposed |
-| [0075](0075-battle-maps-2-to-6-km.md) | Battle maps 2–6 km a side, by battle | proposed |
-| [0076](0076-a-unit-is-a-division.md) | A unit stands for a division: 240 figures for line infantry; a corps is 8–10 units | proposed |
+| [0076](0076-a-unit-is-a-division.md) | A unit stands for a division: 240 figures for line infantry, a figure 25 men; a corps is 8–10 units (supersedes 0018) | accepted |
+| [0088](0088-campaign-on-roads.md) | A campaign of armies on roads, moved at once; battles come from it | proposed |

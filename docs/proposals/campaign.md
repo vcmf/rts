@@ -8,7 +8,7 @@ last_reviewed: 2026-10-27
 A campaign map of roads where every side gives its orders for the day at once and all armies then march at
 the same time. Where two enemies meet, a battle starts; allies near enough can be called to it by courier,
 and arrive during the battle, tired and strung out. The battle is the one already being built
-(`docs/proposals/sim-design.md`); this proposal is the layer around it. Decisions 0074, 0075 and 0076 (proposed)
+(`docs/proposals/sim-design.md`); this proposal is the layer around it. Decisions 0088 (proposed) and 0076 (accepted), with 0061 (accepted: square maps of 2–6 km)
 record the choices that change the vision.
 
 ## Context and goals / non-goals
@@ -43,7 +43,7 @@ map, and the battle starts with what the campaign made of it.
 | Layer | What moves | Time | Map |
 |---|---|---|---|
 | **Campaign** | armies (corps) along roads | turns of one day: orders, then the day played at once | the road network, settlements |
-| **Battle** | battalions | real time | 2–6 km a side (decision 0075) |
+| **Battle** | battalions | real time | 2–6 km a side (decision 0061) |
 
 The campaign is otherwise like Total War's (settlements, armies); its economy is out of this proposal's
 scope.
@@ -58,7 +58,7 @@ where roads can be held and cut.
 
 The armies are small on purpose: the game is a miniature of the war, not the war at full size, with unit sizes
 after Total War's. One unit on the battle map stands for a **division**; a figure is a symbol for about 25 men
-(decision 0076, proposed, which would supersede decision 0018's 400-figure battalion).
+(decision 0076, accepted 2026-10-30: it supersedes decision 0018's 400-figure battalion).
 
 | Unit | Figures | A corps has |
 |---|---|---|

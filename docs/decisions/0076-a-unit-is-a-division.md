@@ -1,19 +1,19 @@
 ---
-status: proposed
-date: 2026-10-27
+status: accepted
+date: 2026-10-30
 ---
 
 # 0076 A unit stands for a division: 240 figures for line infantry; a corps is 8–10 units
 
 ## Context
 
-With a campaign (decision 0074), battles hold several corps a side. Real corps had 15,000–30,000 men and
+With a campaign (decision 0088), battles hold several corps a side. Real corps had 15,000–30,000 men and
 more; drawn one figure per soldier, a single one is past the engine's budget. The armies are meant to be small,
 as in Total War: a miniature of the war, not the war at full size.
 
 ## Decision
 
-We will let one unit on the battle map stand for a division, a figure a symbol for about 25 men, with unit sizes
+We will let one unit on the battle map stand for a division, a figure a symbol for 25 men, with unit sizes
 after Total War's:
 - line infantry 240 figures, 4–5 a corps;
 - light infantry (skirmishers) 160, 1–2 a corps;
@@ -21,8 +21,12 @@ after Total War's:
 - artillery 4 guns, 1 a corps.
 
 Heavy cavalry is only in the reserve cavalry corps, which only the main army has. Corps compositions and unit
-sizes are ruleset data (decision 0015); the engine's word stays neutral. If accepted, this supersedes decision
-0018's battalion of about 400. The design is `docs/proposals/campaign.md` § The scale.
+sizes are ruleset data (decision 0015); the engine's word stays neutral. It supersedes decision 0018's battalion of
+about 400, and amends decision 0061's one figure a soldier: a figure stands for 25 men. The design is `docs/proposals/campaign.md` § The scale.
+
+The owner fixed these sizes on 2026-10-30, with a figure for 25 men (not about 25) and the ranges the sim uses at
+this scale (muskets 100 m, light infantry 160 m, canister 250–300 m, roundshot 1 km, a minimum range for the guns).
+How the sim is changed for them is Track S's division scale step.
 
 ## Consequences
 
