@@ -12,6 +12,7 @@ import {
   pointWeights,
   firingMen,
   changeProgress,
+  formable,
   outOfFight,
   formationSlot,
   MORALE_STATES,
@@ -71,9 +72,11 @@ export function unitCard(w: World, i: number): string[] {
   // its type's shapes it may form, or may not (docs/plans/active/formations.md § C3)
   const forms = (on: boolean) =>
     U.shapes
-      .filter((_, s) => ((f.enabled[i] & (1 << s)) !== 0) === on)
+      .filter((_, s) => formable(w, i, s) === on)
       .map(sh => sh.name)
       .join(', ')
+  const enabled = forms(true)
+  const disabled = forms(false)
   const out: string[] = [
     `#${i} ${U.name} · ${shape}${changing} · ${FIRE_MODES[f.fireMode[i]]} · ${men} figures (${men * rs.menPerFigure} men) · lost ${(f.startMen[i] - men) * rs.menPerFigure} men`,
     `  ${doing}`,
@@ -83,7 +86,7 @@ export function unitCard(w: World, i: number): string[] {
     `  musket: ${U.def.fires ? `${firing} in its sections' firing ranks (those its depth masks too) × fire ${n2(fireOf(w, i))} × precision ${n2(L.precision)}, reload ${(rs.fire.reload * L.reload).toFixed(1)} s, long range ${rs.fire.maxRange} m` : 'none'}`,
     `  melee ${n2(meleeOf(w, i))} · hits taken ${hits}`,
     `  braced ${brace} · ${movesOf(w, i) ? 'may move' : 'cannot move'}`,
-    `  formations: ${forms(true) || 'none'}${forms(false) ? ` (not enabled: ${forms(false)})` : ''}`,
+    `  formations: ${enabled || 'none'}${disabled ? ` (not enabled: ${disabled})` : ''}`,
   ]
   // the enemies in the sectors' reach, nearest first, and the side each threatens from (its centre's weights; the
   // geometry builds the faces)

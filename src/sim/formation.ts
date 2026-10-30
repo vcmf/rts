@@ -1296,6 +1296,9 @@ export function startChange(w: World, i: number, shape: number, optional = false
   const t = now(w)
   if (shape === f.shape[i] && !f.trans[i]) return false
   if (f.trans[i] && shape === f.tShape[i]) return false
+  // only into a shape it has enabled, or back into the one it is leaving (docs/plans/active/formations.md § C3): the
+  // one place every change passes, so no caller forms a disabled shape
+  if (shape !== f.shape[i] && !formable(w, i, shape)) return false
   const from: number[] = []
   const k0: number[] = []
   for (let c = 0; c < C; c++) {
@@ -1611,7 +1614,7 @@ function formationStep(w: World, i: number): void {
     if (n >= 0 && o.type[n] === O_FORM && !shelter && !f.foe[i]) {
       const s = o.shape[n]
       shiftOrder(w, i)
-      if (formable(w, i, s)) startChange(w, i, s) // one disabled since it was ordered is dropped
+      startChange(w, i, s) // one disabled since it was ordered is dropped
       return
     }
     if (t >= f.tStart[i] + f.tDelay[i * CS + C - 1] + f.tDur[i]) {
@@ -1633,7 +1636,7 @@ function formationStep(w: World, i: number): void {
   if (type === O_FORM) {
     const s = o.shape[n]
     shiftOrder(w, i)
-    if (formable(w, i, s)) startChange(w, i, s) // one disabled since it was ordered is dropped
+    startChange(w, i, s) // one disabled since it was ordered is dropped
     return
   }
   // a shape that cannot move (the square): formed against cavalry (autoFrom), it stands, keeping its moves and wheels

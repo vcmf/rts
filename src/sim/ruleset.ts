@@ -457,6 +457,7 @@ function rulesetHash(rs: Ruleset): number {
       u.refuge ?? '',
       u.artillery ?? null,
       u.traits ?? null,
+      u.enabled ?? null,
     ]
   })
   const text = JSON.stringify([
@@ -575,12 +576,8 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   if (start < 0) throw new Error(`${at}: start shape ${u.start} is not one of its shapes`)
   // a unit's set of shapes is a bit per shape in an int32
   if (S > MAX_SHAPES) throw new Error(`${at}: ${S} shapes, more than ${MAX_SHAPES}`)
-  let enabled = 0
-  for (const n of u.enabled ?? names) {
-    const s = names.indexOf(n)
-    if (s < 0) throw new Error(`${at}: enabled shape ${n} is not one of its shapes`)
-    enabled |= 1 << s
-  }
+  const enabled = shapeMask(names, u.enabled ?? names)
+  if (enabled < 0) throw new Error(`${at}: enabled shape ${unknownShape(names, u.enabled!)} is not one of its shapes`)
   if (!(enabled & (1 << start))) throw new Error(`${at}: its start shape ${u.start} is not enabled`)
   const slots = C * R * F
   const slotC = new Int32Array(slots)
@@ -911,6 +908,17 @@ function braceSides(b: BraceDef | undefined): [number, number, number] {
 // the sector blend's centre on the angle measure t = o / (d + o) for a flank beginning a radians off straight ahead
 // (docs/proposals/sectors-model.md § 3: o = sin, d = cos of the angle; 45° gives 0.5)
 const blendAt = (a: number): number => sin(a) / (sin(a) + cos(a))
+/** The shapes named in `want`, a bit per shape of `names` (each name trimmed); −1 if one is none of them. */
+export function shapeMask(names: readonly string[], want: readonly string[]): number {
+  let m = 0
+  for (const n of want) {
+    const s = names.indexOf(n.trim())
+    if (s < 0) return -1
+    m |= 1 << s
+  }
+  return m
+}
+const unknownShape = (names: readonly string[], want: readonly string[]) => want.find(n => !names.includes(n.trim()))
 const nonNegative = (v: number): boolean => v >= 0 && v < Infinity
 // the names in first-seen order, each once (the sim keeps no Set: index-ordered arrays only)
 const unique = (a: string[]): string[] => a.filter((v, i) => a.indexOf(v) === i)

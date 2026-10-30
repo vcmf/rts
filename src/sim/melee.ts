@@ -574,7 +574,6 @@ export function standingStep(w: World): void {
         f.alertAt[i] !== tick ||
         f.refugeOff[i] ||
         into === U.refuge ||
-        !formable(w, i, U.refuge) ||
         tick - f.alertSince[i] < react ||
         (tick - f.alertSince[i] - react) % REFUGE_RETRY
       ) {
@@ -595,7 +594,9 @@ export function standingStep(w: World): void {
         continue
       }
       if (f.trans[i] || tick < f.alertSince[i]) continue
-      if (!startChange(w, i, f.autoFrom[i] - 1, true)) f.alertSince[i] = tick + REFUGE_RETRY
+      // a shape disabled while it sheltered: it stays in the square until ordered into another
+      if (!formable(w, i, f.autoFrom[i] - 1)) f.autoFrom[i] = 0
+      else if (!startChange(w, i, f.autoFrom[i] - 1, true)) f.alertSince[i] = tick + REFUGE_RETRY
     }
   }
 }

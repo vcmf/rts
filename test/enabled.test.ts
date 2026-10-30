@@ -72,6 +72,32 @@ describe('enabled formations', () => {
       expect(s.shape(h).includes('square')).toBe(on)
     }
   })
+  it('disabling the shape it is changing into turns the change back; a form back into the shape it leaves is taken', () => {
+    const s = sim()
+    const h = s.spawn(0, 0, 0, 'line', FULL.infantry)
+    s.order({ type: 'form', id: h, shape: 'column' })
+    s.advance(5)
+    s.order({ type: 'enable', id: h, shape: 'column', on: false })
+    expect(s.shape(h)).toBe('line → line') // turned back: from where its sections stand, into line
+    const g = s.spawn(200, 0, 0, 'line', FULL.infantry)
+    s.order({ type: 'enable', id: g, shape: 'line', on: false })
+    s.order({ type: 'form', id: g, shape: 'column' })
+    s.advance(5)
+    expect(why(s, { type: 'form', id: g, shape: 'line' })).toEqual([])
+    expect(s.shape(g)).toBe('line → line')
+  })
+  it('a shape disabled while it sheltered in the square: it does not form back into it, and stays in the square', () => {
+    const s = sim()
+    const h = s.spawn(0, 0, 0, 'column', FULL.infantry, 1)
+    const c = s.spawn(0, -150, 0, 'line', FULL.cavalry, 0, 'cavalry')
+    s.until(() => s.shape(h) !== 'square', 120)
+    expect(s.shape(h)).toBe('square')
+    s.order({ type: 'enable', id: h, shape: 'column', on: false })
+    s.order({ type: 'move', id: c, append: false, points: [[0, -600]] })
+    s.advance(180)
+    expect(s.shape(h)).toBe('square')
+    expect(s.w.f.autoFrom[s.slot(h)]).toBe(0)
+  })
   it('the info box lists what it may form and what not', () => {
     const s = sim()
     const h = s.spawn(0, 0, 0, 'line', FULL.infantry, 0)

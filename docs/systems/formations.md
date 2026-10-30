@@ -97,8 +97,11 @@ melee, `docs/systems/fire-morale.md`, `docs/systems/melee.md`):
 **Enabled formations** (`docs/plans/active/formations.md` § C3). Each unit holds the shapes of its type it may form
 (`f.enabled`, a bit per shape, state): its type's `enabled` (every shape when it names none; it must hold the start
 shape), or a spawn's own `forms`; the `enable` command turns one on or off (later research, a general). A `form` into
-one not enabled is refused, and one queued before it was disabled is dropped; a unit keeps a shape it stands in when
-it is disabled until it forms another; the standing behaviour forms a refuge only when it is enabled.
+one not enabled is refused, and one queued before it was disabled is dropped; a change under way into a shape that is
+disabled turns back. The rule is kept in `startChange`, which every change passes: no path forms a disabled shape,
+but a change back into the shape it is leaving (a cancel) is always taken. A unit keeps a shape it stands in when it
+is disabled until it forms another; the standing behaviour forms a refuge only when it is enabled, and does not form
+back into a shape disabled while it sheltered (it stays in the square). The type's set is in the ruleset's hash.
 
 Change times at drill 1 (seconds; `docs/proposals/formations.md` § 3): line → column 30, column → line 40, column →
 square 30, line → square 90, square → line 60, square → column 30, into column of route 20, out of it 60.

@@ -38,7 +38,9 @@ import {
   RETIRE,
   fillRetire,
   formable,
+  startChange,
 } from './formation.ts'
+import { shapeMask } from './ruleset.ts'
 import { nextInt } from './rng.ts'
 import { columnsOf } from './columns.ts'
 import { movesOf } from './traits.ts'
@@ -197,15 +199,13 @@ function apply(w: World, c: Command, player = true): string {
     const U = cr.types[type]
     const shape = c.shape ? U.shapeIndex(c.shape) : U.start
     if (shape < 0) return 'no such shape'
-    let enabled = U.enabled
-    if (c.forms) {
-      enabled = 0
-      for (const n of c.forms.split(',')) {
-        const s = U.shapeIndex(n.trim())
-        if (s < 0) return 'no such shape'
-        enabled |= 1 << s
-      }
-    }
+    const enabled = c.forms
+      ? shapeMask(
+          U.shapes.map(sh => sh.name),
+          c.forms.split(','),
+        )
+      : U.enabled
+    if (enabled < 0) return 'no such shape'
     if (!(enabled & (1 << shape))) return 'formation not enabled'
     if (c.men <= 0 || c.men > U.slots) return 'no room for those men'
     if (!inside(w, c.x, c.z)) return 'outside the map'
@@ -253,8 +253,12 @@ function apply(w: World, c: Command, player = true): string {
   if (c.type === 'enable') {
     const s = typeOf(w, i).shapeIndex(c.shape)
     if (s < 0) return 'no such shape'
-    if (c.on ?? true) f.enabled[i] |= 1 << s
-    else f.enabled[i] &= ~(1 << s)
+    if (c.on !== false) f.enabled[i] |= 1 << s
+    else {
+      f.enabled[i] &= ~(1 << s)
+      // a change under way into it turns back (as a form queued for it is dropped)
+      if (f.trans[i] && f.tShape[i] === s) startChange(w, i, f.shape[i])
+    }
     return ''
   }
   // out of the fight (routing, rallying, shattered): only the debug commands reach it
@@ -284,7 +288,8 @@ function apply(w: World, c: Command, player = true): string {
     case 'form': {
       const s = typeOf(w, i).shapeIndex(c.shape)
       if (s < 0) return 'no such shape'
-      if (!formable(w, i, s)) return 'formation not enabled'
+      // (back into the shape it is leaving is a cancel, whatever is enabled)
+      if (s !== f.shape[i] && !formable(w, i, s)) return 'formation not enabled'
       return giveOrders(
         w,
         i,
