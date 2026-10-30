@@ -57,7 +57,7 @@ Times are battle time; the page plays at 2× by default.
 | C-04 | A recruit line (level 1) ordered to hold fire while an enemy advances | It cannot hold: it opens fire on its own at long range (about 150 m), wasting its first volley | Fire discipline | no |
 | C-05 | A veteran line holding fire until 60 m | Its first volley is the best of the fight (carefully loaded, at short range) | Fire discipline, first volley | no |
 | C-06 | A line fires on a square | A square is a dense target: it suffers, and fires back with one face only | Fire, shapes | yes (the square is of kind `column`: depth 1.6) |
-| C-07 | A line fires on skirmishers | Few hits: a small, spread target | Fire, shapes | no (no skirmish order; `fire.depth` has a skirmish kind that no shape uses) |
+| C-07 | A line fires on skirmishers | Few hits: a small, spread target | Fire, shapes | no (no skirmish order yet; its hits would be the shape's `traits.hits`) |
 | C-08 | A second line behind the first | It cannot fire through the first | Fire | yes |
 | C-09 | A wavering line keeps firing | It fires worse (state factor) and falls back if the losses continue | Fire, morale | yes |
 | C-10 | Fire into a wood | The men in the wood are seen to 40 m and take fewer hits (cover) | Fire, ground | partly (sight, no cover) |

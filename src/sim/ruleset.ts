@@ -38,14 +38,16 @@ export interface FormationDef {
   place(g: Geometry): Placement[]
 }
 // a shape's compiled traits (TypeTable.traits), a row of T_LEN per shape, read through src/sim/traits.ts: hits taken
-// from the front, from the flank and the rear as multiples of it, whether those two are given, melee, brace
+// from the front, from the flank and the rear as multiples of it, whether those two are given, melee, brace, and
+// whether it has no flank
 export const T_HITS = 0
 export const T_FLANK = 1
 export const T_REAR = 2
 export const T_SIDED = 3
 export const T_MELEE = 4
 export const T_BRACE = 5
-export const T_LEN = 6
+export const T_ROUND = 6 // 1: no flank, every side a front (the shape's allRound)
+export const T_LEN = 7
 /**
  * A shape's strengths and weaknesses (docs/proposals/formations.md § 5a), multipliers read through
  * src/sim/traits.ts; a field left out is neutral.
@@ -54,7 +56,7 @@ export interface TraitsDef {
   // hits taken from musketry and canister: from its front (how easy a target it is), and from its flank and its rear
   // as multiples of the front's (each ≥ 1: fire from the front is never the worst; docs/proposals/sectors-model.md
   // § 5); none: 1
-  hits?: { front: number; flank?: number; rear?: number }
+  hits?: { front?: number; flank?: number; rear?: number }
   melee?: number // its strength in melee
   brace?: number // 0..1: how far it is proof against a charge (the square 1; S1d-2)
 }
@@ -225,6 +227,7 @@ export interface UnitType {
   charge?: ChargeDef // it charges (S1d-2)
   refuge?: string // the shape it forms against a charging enemy (S1d-2, the standing behaviour)
   artillery?: ArtilleryDef // it fires shot (S1d-3)
+  traits?: TraitsDef // its shapes' traits where a shape names none (a shape's own override them, field by field)
 }
 /** how a unit looks, as the renderer paints it (docs/plans/active/armies-demo.md): resolved from its Dress (decision
  *  0068, src/look/world/dyes.ts). Its colours by the figure's colour roles (tools/bake-figure.py:
@@ -427,6 +430,7 @@ function rulesetHash(rs: Ruleset): number {
       u.charge ?? null,
       u.refuge ?? '',
       u.artillery ?? null,
+      u.traits ?? null,
     ]
   })
   const text = JSON.stringify([
@@ -474,13 +478,13 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     if (d.roadPace && !paces.includes(d.roadPace)) {
       throw new Error(`${at}: shape ${n}'s roadPace ${d.roadPace} is not one of the paces`)
     }
-    const T = d.traits ?? {}
+    const T = traitsOf(u, n)
     // a flank or rear under 1 would make fire from the front the worst
     if (
       T.hits &&
       !(
-        T.hits.front > 0 &&
-        T.hits.front < Infinity &&
+        (T.hits.front ?? 1) > 0 &&
+        (T.hits.front ?? 1) < Infinity &&
         (T.hits.flank ?? 1) >= 1 &&
         (T.hits.rear ?? 1) >= 1 &&
         (T.hits.flank ?? 1) + (T.hits.rear ?? 1) < Infinity
@@ -493,6 +497,11 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     }
     if (T.brace !== undefined && !(T.brace >= 0 && T.brace <= 1)) {
       throw new Error(`${at}: shape ${n}'s brace must be in 0..1`)
+    }
+    // a shape proof against a charge from every side has no flank; one with no flank has no flank's or rear's hits
+    if (T.brace === 1 && !d.allRound) throw new Error(`${at}: shape ${n} is fully braced but not allRound`)
+    if (d.allRound && (T.hits?.flank !== undefined || T.hits?.rear !== undefined)) {
+      throw new Error(`${at}: shape ${n} is allRound: it has no flank's or rear's hits`)
     }
   }
   // a change time naming a shape it has not would be ignored, and the default taken in silence (#156)
@@ -508,7 +517,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   }
   const shapes: ShapeLayout[] = names.map(n => layout(g, u.formations, n, kinds, paces))
   const S = names.length
-  const traits = compileTraits(names.map(n => u.formations[n]))
+  const traits = compileTraits(u, names)
   const changeTime = new Float64Array(S * S)
   for (let a = 0; a < S; a++) {
     for (let b = 0; b < S; b++) changeTime[a * S + b] = u.changeTime[names[a] + '>' + names[b]] ?? u.defaultChangeTime
@@ -554,7 +563,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     charge = { from, approach, pace }
   }
   const refuge = u.refuge === undefined ? -1 : names.indexOf(u.refuge)
-  if (u.refuge !== undefined && (refuge < 0 || (u.formations[u.refuge].traits?.brace ?? 0) < 1)) {
+  if (u.refuge !== undefined && (refuge < 0 || (traitsOf(u, u.refuge).brace ?? 0) < 1)) {
     throw new Error(`${at}: its refuge ${u.refuge} is not one of its braced shapes`)
   }
   let artillery: TypeTable['artillery'] = null
@@ -779,10 +788,10 @@ export function compileRuleset(rs: Ruleset): Compiled {
 }
 const expNeg = (x: number): number => exp(-x)
 /** Each shape's traits as a flat row (src/sim/traits.ts's fields), neutral where the ruleset says nothing. */
-function compileTraits(defs: FormationDef[]): Float64Array {
-  const out = new Float64Array(defs.length * T_LEN)
-  defs.forEach((d, s) => {
-    const t = d.traits ?? {}
+function compileTraits(u: UnitType, names: string[]): Float64Array {
+  const out = new Float64Array(names.length * T_LEN)
+  names.forEach((n, s) => {
+    const t = traitsOf(u, n)
     const o = s * T_LEN
     out[o + T_HITS] = t.hits?.front ?? 1
     out[o + T_FLANK] = t.hits?.flank ?? 1
@@ -790,8 +799,19 @@ function compileTraits(defs: FormationDef[]): Float64Array {
     out[o + T_SIDED] = t.hits?.flank !== undefined || t.hits?.rear !== undefined ? 1 : 0
     out[o + T_MELEE] = t.melee ?? 1
     out[o + T_BRACE] = t.brace ?? 0
+    out[o + T_ROUND] = u.formations[n].allRound ? 1 : 0
   })
   return out
+}
+/** Shape n of type u's traits: its own, field by field over its type's (`UnitType.traits`). */
+function traitsOf(u: UnitType, n: string): TraitsDef {
+  const a = u.traits ?? {}
+  const b = u.formations[n].traits ?? {}
+  return {
+    hits: a.hits || b.hits ? { ...a.hits, ...b.hits } : undefined,
+    melee: b.melee ?? a.melee,
+    brace: b.brace ?? a.brace,
+  }
 }
 const nonNegative = (v: number): boolean => v >= 0 && v < Infinity
 // the names in first-seen order, each once (the sim keeps no Set: index-ordered arrays only)

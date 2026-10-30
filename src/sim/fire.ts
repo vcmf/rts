@@ -23,8 +23,8 @@ import { keyedStream, nextUnit } from './rng.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
-import { buildFaces, threatWeights } from './sectors.ts'
-import { hitsTaken, sided } from './traits.ts'
+import { buildFaces } from './sectors.ts'
+import { hitsTaken } from './traits.ts'
 import { creditMen } from './experience.ts'
 
 const sqrt = Math.sqrt
@@ -128,16 +128,12 @@ export function blockGeometry(w: World): FireGeo {
   return G
 }
 
-const wt = new Float64Array(3)
 /**
  * Battalion j's exposure to fire from company k (docs/proposals/sectors-model.md § 5): its hits taken
  * (src/sim/traits.ts) for the weights (front, flank, rear) of k's block on j's face. G must be this tick's geometry
  * (its faces are built with it).
  */
-export function exposure(w: World, G: FireGeo, k: number, j: number): number {
-  if (sided(w, j)) threatWeights(w, G, j, Math.floor(k / w.cr.maxC), k, wt)
-  return hitsTaken(w, j, wt)
-}
+export const exposure = (w: World, G: FireGeo, k: number, j: number): number => hitsTaken(w, G, k, j)
 
 // hit chance per round at range d (linear in the table, 0 past its last point)
 export function pAt(w: World, d: number): number {

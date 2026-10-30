@@ -139,7 +139,9 @@ Every number in §§ 2, 2a and 3 is ruleset data, read through one place, so tun
   A new report tool prints the table from the ruleset, and the calibrations and tests take
   a ruleset variant (`{ ...napoleonic, ... }`), so a tune is tried without editing the shipped one.
 - **The first step is a pure refactor:** today's per-shape and per-kind numbers move into the table with the same
-  values, proven by the goldens not changing; the new values come after, each with its scenario.
+  values, proven by `tools/state-hashes.ts`: every page scenario's state, every section but the one that holds the
+  ruleset's hash, identical before and after (the goldens cannot prove it: they hash the ruleset's hash, which any
+  change to the ruleset's shape moves); the new values come after, each with its scenario.
 
 ## 6. The owner's answers (2026-10-30), and what is open
 

@@ -77,7 +77,7 @@ code (turn limits, the lag model, the footprint gate).
 of the other. Each block is the rectangle its places cover, as the fire step builds it (`blockGeometry`). It is
 exact face to face, a little short corner to corner, and 0 when they overlap.
 
-**Braced** (`braceOf`, `src/sim/traits.ts`), 0..1: how far a formation stands in a shape proof against a charge
+**Braced** (`braced` in what follows; `braceOf`, `src/sim/traits.ts`), 0..1: how far a formation stands in a shape proof against a charge
 (its shape's `traits.brace`: the square 1). During a change it moves from the old shape's to the new one's by the
 change's progress.
 

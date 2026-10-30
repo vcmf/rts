@@ -133,14 +133,14 @@ const cavalry: UnitType = {
     line: {
       kind: 'horse',
       pace: 'walk',
-      traits: { hits: { front: 1.3, flank: 1.2, rear: 1.1 }, melee: 1.6 }, // a horseman is a large target
+      traits: { hits: { flank: 1.2, rear: 1.1 } },
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * (BW(g) + SQ_GAP), z: 0, rot: 0, face: 0 })),
     },
     // column of squadrons at half distance: each squadron half its frontage behind the one ahead
     column: {
       kind: 'horse',
       pace: 'walk',
-      traits: { hits: { front: 1.3, flank: 1.2, rear: 1.1 }, melee: 1.6 },
+      traits: { hits: { flank: 1.2, rear: 1.1 } },
       place: g => each(g, c => ({ x: 0, z: -c * ((g.ranks - 1) * g.rankSpacing + BW(g) / 2), rot: 0, face: 0 })),
     },
     // column of route by fours at the trot: each squadron's block turned along the road as a column of twos,
@@ -150,7 +150,7 @@ const cavalry: UnitType = {
       kind: 'horse',
       pace: 'trot',
       trail: true,
-      traits: { hits: { front: 1.3, flank: 1.5, rear: 1.0 }, melee: 1.6 },
+      traits: { hits: { flank: 1.5, rear: 1.0 } },
       step: { file: 3.0, rank: 1.0 },
       place: g =>
         each(g, c => ({
@@ -175,6 +175,7 @@ const cavalry: UnitType = {
   start: 'line',
   fires: false,
   figure: 'mounted',
+  traits: { hits: { front: 1.3 }, melee: 1.6 }, // every shape: a horseman is a large target, and strong in melee
   // the charge (docs/systems/melee.md): at the trot, the gallop over the last 150 m (the research: 50–200
   // paces), full weight after 50 m of it; blown for two minutes after, recoiling 80 m from a square
   charge: {
@@ -209,7 +210,7 @@ const battery: UnitType = {
     unlimbered: {
       kind: 'guns',
       pace: 'manhandle',
-      traits: { hits: { front: 0.4, flank: 1.5, rear: 1.0 }, melee: 0.3 }, // the detachment spread round its piece
+      traits: { hits: { flank: 1.5, rear: 1.0 } },
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * 16, z: 0, rot: 0, face: 0 })),
     },
     // on the move: piece, limber and team one behind the other on the trail, 18 m apart, at the walk
@@ -217,7 +218,7 @@ const battery: UnitType = {
       kind: 'guns',
       pace: 'gunWalk',
       trail: true,
-      traits: { hits: { front: 0.4, flank: 1.5, rear: 1.0 }, melee: 0.3 },
+      traits: { hits: { flank: 1.5, rear: 1.0 } },
       place: g => each(g, c => ({ x: 0, z: -c * 18, rot: 0, face: 0 })),
     },
   },
@@ -229,6 +230,7 @@ const battery: UnitType = {
   start: 'limbered',
   fires: false, // no musketry: its pieces fire shot
   figure: 'crewed',
+  traits: { hits: { front: 0.4 }, melee: 0.3 }, // every shape: the detachment spread round its piece; weak in melee
   // roundshot and canister (docs/systems/artillery.md): a 6-pounder's ball at about 430 m/s, effective to about
   // 800 m with its grazes; canister inside 300 m (the research: 200–350 m). First guesses, tuned by
   // tools/calibrate-artillery.ts

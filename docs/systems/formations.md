@@ -96,7 +96,7 @@ The ruleset's hash is recorded in the world, the replays and the saves.
 
 **The face** (U1, `src/sim/sectors.ts`, `docs/proposals/sectors-model.md` § 2). Each tick, from the placed
 blocks, each formation's face: a formed shape's front is the box of its companies in its own frame (front and rear
-edges, left and right ends); a braced shape (the square) is all front; a trail shape (a march column) has its head
+edges, left and right ends); an `allRound` shape (the square) is all front; a trail shape (a march column) has its head
 company's frame for its front and its tail's for its rear; a formation changing shape has no front. A point, or a
 threat's block, has weights (front, flank, rear) that sum to 1 on that face, read alike by fire, charges and morale:
 front within about 35° of straight ahead from the face's nearer end, flank past 55°, a blend between; the rear the
