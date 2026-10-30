@@ -230,7 +230,7 @@ const emptySpans = (n: number, cell: number, ch: number): SpanGrid => ({
  */
 export function buildWindowData(win: LookWindow, map: MapFile, L: Layers): Uint8Array {
   const s = D.spec
-  checkWindowInside(L, win, s.far)
+  checkWindowInside(L, win, s.tile)
   const { hf, far, base } = windowHeights((x, z) => heightOf(L, x, z), win, D)
   const lines = wayLines(map.features, L.table, win, s.far)
   const areas = fineAreas(L, map.features, win, s.far, MAP_COVER_CELL)

@@ -132,7 +132,7 @@ describe('the window heights', () => {
     expect(far.n).toBe(D.spec.farSub + 1)
   })
 
-  it('refuses a window whose far ring leaves the map, or whose centre is off even metres', () => {
+  it('refuses a window whose tile leaves the map (its far ring may: paper), or whose centre is off even metres', () => {
     const L = layers()
     expect(() => checkWindowInside(L, WIN, 100)).not.toThrow()
     expect(() => checkWindowInside(L, WIN, 140)).toThrow(/leaves the map/)

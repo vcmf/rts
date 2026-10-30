@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Feature, Pt } from '../src/map/schema.ts'
 import { ringArea2 } from '../src/map/geometry.ts'
-import { churchAt, churchClear, nearestWay, placeChurch } from '../tools/villages.ts'
+import { churchAt, churchClear, minHouses, nearestWay, placeChurch } from '../tools/villages.ts'
 
 const street: Pt[] = [
   [0, 0],
@@ -11,6 +11,12 @@ const street: Pt[] = [
 ]
 
 describe("a map's villages", () => {
+  it("asks the survey's houses and requires half of them, at least one (G1: a 4x model's shorter streets)", () => {
+    expect(minHouses(10)).toBe(5)
+    expect(minHouses(7)).toBe(4)
+    expect(minHouses(1)).toBe(1)
+  })
+
   it('takes the way nearest both ends of a stretch, and their distances along it', () => {
     const ways = [
       { id: 'far', line: street.map(([x, z]): Pt => [x, z + 50]) },

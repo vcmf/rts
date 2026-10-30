@@ -3,7 +3,7 @@
   "piece": "field",
   "scan": "first-survey",
   "image": "scans/austerlitz-first-survey.png",
-  "minArea": 1500,
+  "minArea": 375,
   "meadows": [[1695, 1910], [2117, 1878], [1602, 2791], [1926, 1555], [2313, 1431], [2715, 2945], [2745, 2389]],
   "orchards": [
     {"id": "pheasantry", "note": "the pheasantry's planted beds below Kobelnitz, by Sokolnitz castle", "area": [[1617, 2126], [1710, 2157], [1586, 2389], [1517, 2374]]}
