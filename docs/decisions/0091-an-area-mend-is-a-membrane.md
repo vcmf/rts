@@ -18,15 +18,19 @@ for a modern earthwork (2026-10-30).
 We will fill an area's or a circle's mend with a **membrane**: Laplace's equation over the mend's nodes, the ground
 round them held (`membrane`, `src/map/apply.ts`), settled by over-relaxed Gauss-Seidel from a first fill (the plane
 through the rim as before, each rim node's misfit to it added back by the inverse fourth power of its distance). The
-rest of 0073 stands: lines are mended as before, every mend reads the relief before any mend, the blend over `edge`.
+membrane takes the area's whole reach (its outline and `edge` past it) at full weight, not blended into the ground
+over `edge`: it meets the ground just past that by itself, and a blend mixed the work's own ground back in (the pit's
+stepped sides past its outline drew a ghost of the rectangle). The rest of 0073 stands: lines are mended and blended
+as before, every mend reads the relief before any mend.
 
 ## Consequences
 
 - Good: the mend meets the ground all round, keeps a plane a plane, and never leaves the range of heights round it
   (the membrane's maximum principle); the Újezd pit is gone from the map.
 - Good: no measurable cost (Austerlitz compiles in about 2.1 s either way, measured).
-- Bad: a membrane crosses the rim at its own slope, not the ground's: on strongly curving ground the light can show a
-  faint change of slope at the work's edge (a biharmonic fill would match the slope too, at more cost and code).
+- Bad: a membrane crosses the rim at its own slope, not the ground's, and flattens a rounded shoulder between its
+  rims: the low sun still shows a faint flat patch over the west half of the Újezd pit (G2, the owner's screenshots)
+  and a soft line along its north edge. A biharmonic fill would match the slope too, at more cost and code.
 - Bad: the work's floor is rebuilt as the smoothest surface between its rims, not as the ground it took away, which no
   fill from the rim can know.
 

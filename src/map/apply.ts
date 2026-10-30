@@ -560,8 +560,11 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
             n = nearLine(f.line, x, z, w2 + edge)
             w = editWeight(n.d, w2, edge)
           } else {
+            // an area's membrane meets the ground just past its edge by itself: it takes the whole reach at full
+            // weight, so none of the work's own ground (a pit's stepped sides past its outline) is mixed back in
+            // (decision 0091)
             const e = field!.edge(x, z)
-            w = e >= 0 ? 1 : edge > 0 ? smooth(1 + e / edge) : 0
+            w = e >= -edge ? 1 : 0
           }
           if (w <= 0) return
           ks.push(k)
