@@ -30,3 +30,51 @@ describe('4. lint: the determinism rules hold in src/sim/', () => {
     expect(marked.length).toBeGreaterThanOrEqual(20)
   })
 })
+
+describe('lint: the exact rules hold in src/campaign/ (decision 0006)', () => {
+  it('src/campaign/ is clean', async () => {
+    const res = await new ESLint({ cwd: root }).lintFiles(['src/campaign/**/*.ts'])
+    expect(res.flatMap(r => r.messages.map(m => `${path.relative(root, r.filePath)}:${m.line} ${m.message}`))).toEqual(
+      [],
+    )
+  })
+  it('reports a transcendental, randomness, a clock and an import from outside, as in the map engine', async () => {
+    const text = [
+      'export const a = Math.hypot(3, 4)',
+      'export const b = Math.random()',
+      'export const c = Date.now()',
+      "export { d } from '../render/campaign.ts'",
+      'export const e = 2 ** 3',
+      '',
+    ].join('\n')
+    const [res] = await new ESLint({ cwd: root }).lintText(text, {
+      filePath: path.join(root, 'src', 'campaign', 'fixture-banned.ts'),
+    })
+    const lines = [...new Set(res.messages.filter(m => m.ruleId?.startsWith('no-restricted')).map(m => m.line))]
+    expect(lines.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5])
+  })
+})
+
+describe('lint: a ruleset takes only types from src/campaign/, and no path out of its folder', () => {
+  /** The no-restricted-imports lines when `text` is linted as a ruleset. */
+  const flagged = async (text: string) => {
+    const [res] = await new ESLint({ cwd: root }).lintText(text, {
+      filePath: path.join(root, 'src', 'rulesets', 'fixture-imports.ts'),
+    })
+    return res.messages.filter(m => m.ruleId === 'no-restricted-imports').map(m => m.line)
+  }
+  it('allows a type import from the campaign', async () => {
+    expect(
+      await flagged("import type { CampaignRules } from '../campaign/rules.ts'\nexport type R = CampaignRules\n"),
+    ).toEqual([])
+  })
+  it('refuses a value import from the campaign and a ./ path that climbs out', async () => {
+    const text = [
+      "import { help } from '../campaign/courier.ts'",
+      "import { x } from './../render/campaign.ts'",
+      'export { help, x }',
+      '',
+    ].join('\n')
+    expect(await flagged(text)).toEqual([1, 2])
+  })
+})

@@ -104,3 +104,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0079](0079-ids-are-named-when-made.md) | The map editor names a feature or a map when it is made; renames are done in the file | accepted |
 | [0080](0080-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | accepted |
 | [0081](0081-the-bench-timeline-in-the-battle.md) | The bench's timeline lives in the battle, wherever it runs; its overlay is a view on the page | accepted |
+| [0093](0093-campaign-map-a-lit-model.md) | The campaign map is a lit relief model: one shape for form and light, baked offline in tiles | proposed |

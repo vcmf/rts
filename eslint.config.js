@@ -36,6 +36,7 @@ const banned = [
 export const formatted = [
   'src/sim/',
   'src/map/',
+  'src/campaign/',
   'src/rulesets/',
   'src/scenarios/',
   'maps/',
@@ -70,7 +71,7 @@ const commentWidth = {
 }
 
 // the exact-number rules (decision 0006), shared by every folder whose results must match across JS engines: the
-// sim and its rulesets, and the map engine (docs/proposals/map-engine.md §4)
+// sim and its rulesets, the map engine (docs/proposals/map-engine.md §4) and the campaign (exactArea, below)
 const exactProperties = [
   ...banned.map(property => ({
     object: 'Math',
@@ -117,6 +118,39 @@ const exactSyntax = [
   { selector: 'ImportExpression', message: 'No dynamic imports in exact code.' },
 ]
 
+/**
+ * The lint block of a folder whose results must match across JS engines, apart from the sim (which also bans Map and
+ * Set): the exact-number rules, no Node and no browser, and imports only from the folder itself (no path that climbs
+ * out) and the sim's exact maths, src/sim/num.ts.
+ */
+function exactArea(dir, name, noNode) {
+  return {
+    files: [`${dir}**/*.ts`],
+    rules: {
+      'no-restricted-properties': ['error', ...exactProperties],
+      'no-restricted-globals': [
+        'error',
+        ...exactGlobals,
+        { name: 'process', message: noNode },
+        { name: 'window', message: `${name} runs without a browser.` },
+        { name: 'document', message: `${name} runs without a browser.` },
+      ],
+      'no-restricted-syntax': ['error', ...exactSyntax],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^(?!\\./(?!.*\\.\\.)|\\.\\./sim/num\\.ts$)',
+              message: `${dir} imports only from ${dir} and src/sim/num.ts.`,
+            },
+          ],
+        },
+      ],
+    },
+  }
+}
+
 export default tseslint.config(
   { ignores: ['node_modules/', 'dist/', 'scratch/', 'data/', 'prototypes/'] },
   ...tseslint.configs.recommended,
@@ -161,32 +195,11 @@ export default tseslint.config(
   // the map engine (docs/proposals/map-engine.md §4): its compilers run in Node and in browsers and must give the
   // same bytes, so the exact-number rules apply (Map and Set are allowed: their order is insertion order); it
   // imports only itself (no path that climbs out) and the sim's exact maths
-  {
-    files: ['src/map/**/*.ts'],
-    rules: {
-      'no-restricted-properties': ['error', ...exactProperties],
-      'no-restricted-globals': [
-        'error',
-        ...exactGlobals,
-        { name: 'process', message: 'The map engine runs without Node: the CLI passes it what it needs.' },
-        { name: 'window', message: 'The map engine runs without a browser.' },
-        { name: 'document', message: 'The map engine runs without a browser.' },
-      ],
-      'no-restricted-syntax': ['error', ...exactSyntax],
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              regex: '^(?!\\./(?!.*\\.\\.)|\\.\\./sim/num\\.ts$)',
-              message: 'src/map/ imports only from src/map/ and src/sim/num.ts.',
-            },
-          ],
-        },
-      ],
-    },
-  },
-  // a ruleset is data for the sim: the same rules, and it may import the sim's types and maths
+  exactArea('src/map/', 'The map engine', 'The map engine runs without Node: the CLI passes it what it needs.'),
+  // the campaign (the campaign proposal, PR #234): its turns play the same on every machine, so the same rules; it
+  // imports only itself and the sim's exact maths, never the renderer (decision 0005)
+  exactArea('src/campaign/', 'The campaign', 'The campaign runs without Node.'),
+  // a ruleset is data for the sim and the campaign: the same rules, and it may import their types and maths
   {
     files: ['src/rulesets/**/*.ts'],
     rules: {
@@ -195,8 +208,14 @@ export default tseslint.config(
         {
           patterns: [
             {
-              regex: '^(?!\\.\\./sim/[\\w-]+\\.ts$|\\./)',
-              message: 'A ruleset imports only from src/sim/ and src/rulesets/.',
+              regex: '^(?!\\.\\./(sim|campaign)/[\\w-]+\\.ts$|\\./(?!.*\\.\\.))',
+              message: 'A ruleset imports only from src/sim/, src/campaign/ (types) and src/rulesets/.',
+            },
+            {
+              // the campaign's code may use Map and Set, which the sim bans: a ruleset takes only its types
+              regex: '^\\.\\./campaign/',
+              allowTypeImports: true,
+              message: 'A ruleset imports only types from src/campaign/.',
             },
           ],
         },
