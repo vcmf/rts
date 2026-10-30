@@ -69,6 +69,8 @@ function roots(iv: Interval): [number, number] | null {
  */
 export function firstContact(a: Track, b: Track, radius: number, t0: number, t1: number): number | null {
   for (const iv of intervals(a, b, radius, t0, t1)) {
+    // already within at the interval's start: exact, where the roots of a separating pair can round past it
+    if (iv.c <= 0) return iv.ts
     const r = roots(iv)
     if (r === null) continue
     const from = Math.max(0, r[0])
@@ -85,11 +87,12 @@ export interface BattleSite {
 }
 
 /**
- * A battle's zone, a radius in metres: the ruleset's, but never more than half its map's side, so the zone lies
- * inside the map that is fought on (decision 0061: maps of 2 to 6 km a side).
+ * A battle's zone, a radius in metres: the ruleset's, never more than half its map's side (so the zone lies inside
+ * the map that is fought on) and never less than the contact radius (so an enemy that engages a corps fighting at
+ * the battle's heart joins that battle rather than starting another: no corps is in two battles).
  */
 export function zoneFor(rules: CampaignRules, mapSideM: number): number {
-  return Math.min(rules.battleZoneM, mapSideM / 2)
+  return Math.max(rules.contactRadiusM, Math.min(rules.battleZoneM, mapSideM / 2))
 }
 
 /**

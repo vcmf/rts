@@ -22,6 +22,7 @@ export function positionAt(track: Track, t: number): { x: number; z: number } {
  * the start every time: quadratic on a long route).
  */
 export function positionsAt(track: Track, times: number[]): { x: number; z: number }[] {
+  if (!track.length) throw new RangeError('positionsAt: a track of no waypoints')
   const out: { x: number; z: number }[] = []
   let k = 1
   for (const t of times) {

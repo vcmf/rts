@@ -52,6 +52,8 @@ export function network(graph: RoadGraph): Network {
   graph.roads.forEach((r, k) => {
     const ok = (t: number) => Number.isInteger(t) && t >= 0 && t < graph.towns
     if (!ok(r.a) || !ok(r.b)) throw new RangeError(`road ${k}: towns ${r.a}–${r.b} not in 0..${graph.towns - 1}`)
+    // a road with no line would be a free leap between its towns
+    if (r.points.length < 2) throw new RangeError(`road ${k}: a line of ${r.points.length} point(s)`)
   })
   const roads = graph.roads.map(r => ({ a: r.a, b: r.b, points: r.points.map(p => ({ x: p.x, z: p.z })) }))
   const touching: number[][] = Array.from({ length: graph.towns }, () => [])
@@ -107,7 +109,11 @@ export function fastestRoute(net: Network, from: number, to: number): Route | nu
   return { towns: towns.reverse(), roads: roads.reverse(), lengthM: dist[to] }
 }
 
-/** A route's line, from its first town to its last, each road's points in the direction travelled. */
+/**
+ * A route's line, from its first town to its last, each road's points in the direction travelled (a road's first
+ * point is where the previous one ended: towns join them). A route of one town and no road has no line: an empty
+ * array (a courier there is delivered at once, a corps there is already there).
+ */
 export function routePoints(net: Network, route: Route): { x: number; z: number }[] {
   const out: { x: number; z: number }[] = []
   route.roads.forEach((k, step) => {

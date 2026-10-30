@@ -58,6 +58,12 @@ describe('contact', () => {
     expect(firstContact(a, b, rules.contactRadiusM, 0, 1440)).toBeNull()
   })
 
+  it('finds a pair already within the radius as they part, exactly', () => {
+    // just inside the radius at the start, riding away fast
+    const away = walk(along(1499.999999, 100000), 0, 5000)
+    expect(firstContact(away, standing(0, 0), 1500, 0, 20)).toBe(0)
+  })
+
   it('finds contact already made at the start, even in a window of no length', () => {
     expect(firstContact(standing(0, 0), standing(1000, 0), 1500, 60, 120)).toBe(60)
     expect(firstContact(standing(0, 0), standing(10, 0), 1500, 5, 5)).toBe(5)
@@ -78,9 +84,10 @@ describe('contact', () => {
   })
 
   it('fits a battle’s zone inside its map', () => {
-    // the ruleset's 2.5 km on a 6 km map; half the side on a smaller one
+    // the ruleset's 2.5 km on a 6 km map; half the side on a smaller one, never under the contact radius
     expect(zoneFor(rules, 6000)).toBe(2500)
-    expect(zoneFor(rules, 2000)).toBe(1000)
+    expect(zoneFor(rules, 4000)).toBe(2000)
+    expect(zoneFor(rules, 2000)).toBe(rules.contactRadiusM)
   })
 
   it('joins the nearest battle when zones overlap', () => {
@@ -95,11 +102,11 @@ describe('contact', () => {
   it('joins a battle within its zone, starts one beyond', () => {
     const battles = [
       { x: 0, z: 0, zoneM: zoneFor(rules, 6000) },
-      { x: 20000, z: 0, zoneM: zoneFor(rules, 2000) },
+      { x: 20000, z: 0, zoneM: zoneFor(rules, 3000) },
     ]
     // a contact 2 km from the main fight, within its zone (2.5 km): part of it
     expect(battleFor(battles, 2000, 0)).toBe(0)
-    // 2 km from the small battle, whose zone is 1 km: a battle of its own
+    // 2 km from the small battle, whose zone is 1.5 km: a battle of its own
     expect(battleFor(battles, 22000, 0)).toBe(-1)
     // Wavre, 15 km away: a battle of its own
     expect(battleFor(battles, 0, 15000)).toBe(-1)
@@ -293,8 +300,13 @@ describe('the roads', () => {
     expect(fastestRoute(network({ towns: 2, roads: [] }), 0, 1)).toBeNull()
   })
 
-  it('refuses a road to a town that does not exist, and a route from one', () => {
-    expect(() => network({ towns: 2, roads: [{ a: 0, b: 5, points: [] }] })).toThrow(RangeError)
+  it('refuses a road to a town that does not exist, a road with no line, and a route from no town', () => {
+    const line = [
+      { x: 0, z: 0 },
+      { x: 1, z: 0 },
+    ]
+    expect(() => network({ towns: 2, roads: [{ a: 0, b: 5, points: line }] })).toThrow(RangeError)
+    expect(() => network({ towns: 2, roads: [{ a: 0, b: 1, points: [] }] })).toThrow(RangeError)
     expect(() => fastestRoute(net, 9, 0)).toThrow(RangeError)
   })
 

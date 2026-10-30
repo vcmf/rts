@@ -209,7 +209,13 @@ export default tseslint.config(
           patterns: [
             {
               regex: '^(?!\\.\\./(sim|campaign)/[\\w-]+\\.ts$|\\./)',
-              message: 'A ruleset imports only from src/sim/, src/campaign/ and src/rulesets/.',
+              message: 'A ruleset imports only from src/sim/, src/campaign/ (types) and src/rulesets/.',
+            },
+            {
+              // the campaign's code may use Map and Set, which the sim bans: a ruleset takes only its types
+              regex: '^\\.\\./campaign/',
+              allowTypeImports: true,
+              message: 'A ruleset imports only types from src/campaign/.',
             },
           ],
         },
