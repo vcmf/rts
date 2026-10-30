@@ -1,4 +1,4 @@
-// The campaign's rules as numbers (docs/proposals/campaign.md): how fast armies march, how long their columns are,
+// The campaign's rules as numbers (the campaign proposal, PR #234): how fast armies march, how long their columns are,
 // how fast a courier rides, how near two enemies must come to fight. The shape only: an era's values are ruleset
 // data (decision 0015; the Napoleonic ones are src/rulesets/napoleonic-campaign.ts). Distances in metres, times in
 // minutes, throughout the campaign's code.

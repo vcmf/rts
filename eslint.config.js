@@ -196,7 +196,7 @@ export default tseslint.config(
   // same bytes, so the exact-number rules apply (Map and Set are allowed: their order is insertion order); it
   // imports only itself (no path that climbs out) and the sim's exact maths
   exactArea('src/map/', 'The map engine', 'The map engine runs without Node: the CLI passes it what it needs.'),
-  // the campaign (docs/proposals/campaign.md): its turns play the same on every machine, so the same rules; it
+  // the campaign (the campaign proposal, PR #234): its turns play the same on every machine, so the same rules; it
   // imports only itself and the sim's exact maths, never the renderer (decision 0005)
   exactArea('src/campaign/', 'The campaign', 'The campaign runs without Node.'),
   // a ruleset is data for the sim and the campaign: the same rules, and it may import their types and maths

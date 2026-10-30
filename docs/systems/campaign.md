@@ -5,7 +5,7 @@ last_reviewed: 2026-10-29
 
 # The campaign's models
 
-What is built of the campaign (`docs/proposals/campaign.md`; Track K, `docs/plans/active/track-k.md`): its rules as
+What is built of the campaign (the campaign proposal (PR #234); Track K, `docs/plans/active/track-k.md`): its rules as
 pure, deterministic models in `src/campaign/`, tested in `test/campaign-rules.test.ts`. Nothing plays a turn yet:
 the day's loop (orders, standing orders, the turn) comes later in the track. The map's look is the K1 prototype
 (`prototypes/campaign-map.html`); it moves into the game's code in K2a–K2d.
@@ -58,5 +58,5 @@ the renderer (decision 0005). A turn played on two machines gives the same event
 
 ## Open questions
 
-The proposal's (`docs/proposals/campaign.md`, Open questions); and whether a corps' contact is its head's or any
+The proposal's (the campaign proposal (PR #234), Open questions); and whether a corps' contact is its head's or any
 point of its column's (the models track a point; a column is a segment of road).

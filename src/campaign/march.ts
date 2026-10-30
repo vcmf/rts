@@ -1,4 +1,4 @@
-// A corps on the march (docs/proposals/campaign.md, Armies are corps): its speed by march mode and size, the road
+// A corps on the march (the campaign proposal, PR #234: Armies are corps): its speed by march mode and size, the road
 // its column fills, and when its head and its tail reach a point down its route.
 import type { CampaignRules } from './rules.ts'
 

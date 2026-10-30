@@ -1,4 +1,4 @@
-// The campaign's models (src/campaign/, docs/proposals/campaign.md) against the proposal's own numbers and cases:
+// The campaign's models (src/campaign/, the campaign proposal (PR #234)) against the proposal's own numbers and cases:
 // march speeds and columns, the exact moment of contact, the courier caught on its road, the help that arrives
 // about 9 hours after a morning call, the fastest road, and the timeline's order.
 import { describe, it, expect } from 'vitest'

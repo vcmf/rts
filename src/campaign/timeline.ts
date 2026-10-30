@@ -1,4 +1,4 @@
-// A turn's day as a timeline (docs/proposals/campaign.md, A turn is a timeline): events handled one at a time in
+// A turn's day as a timeline (the campaign proposal, PR #234: A turn is a timeline): events handled one at a time in
 // the order of their time, then of their id, so events at the same minute play in the same order on every machine
 // (decisions 0006, 0013). Handling an event may queue later ones (a courier sent, an arrival due).
 

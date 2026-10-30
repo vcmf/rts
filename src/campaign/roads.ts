@@ -1,4 +1,4 @@
-// The campaign map's roads (docs/proposals/campaign.md, The road network): towns and crossroads are nodes, roads
+// The campaign map's roads (the campaign proposal, PR #234: The road network): towns and crossroads are nodes, roads
 // are edges with a line (their length is the line's). Armies and couriers move only along them; the fastest route
 // between two towns is found here, the same on every machine.
 

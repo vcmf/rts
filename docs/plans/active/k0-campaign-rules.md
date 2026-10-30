@@ -20,13 +20,12 @@ caught, help that arrives tired and strung out. Its decision numbers (0074–007
 
 **Docs**
 
-- `docs/proposals/campaign.md`: #234's proposal, its references renumbered, its battle-map size pointed to the
-  accepted decision 0061 (#234's 0075 is dropped: 0061 already says it), its models pointed to their code below,
-  and the contact rule made exact (below). The map's look stays in `docs/proposals/campaign-map.md`, updated to what
-  the prototype settled.
-- Decisions, proposed: **0084** the campaign layer (#234's 0074), **0085** a unit is a division (#234's 0076,
-  unchanged), **0086** the campaign map is a lit model: one shape for form and light, baked offline in tiles (from
-  K1).
+- The rules themselves stay in #234's proposal, worked on by the map editor track's session (into `epic/sim-engine`:
+  its decisions 0088, the campaign layer, 0076, a unit is a division, accepted, and 0089, battle maps sized by the
+  front, accepted). K0 does not copy them (a first version did, as 0084–0086; main and other branches took those
+  numbers since, and the copies went stale): it points to them, and aligns its docs when #234 lands in the epic.
+- Decision, proposed: **0093** the campaign map is a lit model: one shape for form and light, baked offline in tiles
+  (from K1).
 - `docs/systems/campaign.md`: the models as built.
 - `docs/plans/active/track-k.md`: the series as agreed with the owner (K2a–K2d, K3).
 
@@ -35,7 +34,8 @@ only itself and `src/sim/num.ts`; era values are ruleset data, decision 0015)
 
 - `rules.ts`: the rules' shape (`CampaignRules`), and `src/rulesets/napoleonic-campaign.ts` the Napoleonic values
   of #234's table (march 3 km/h for 7.5 h a day, forced 4 km/h for 8.75 h, a courier 12 km/h, an hour to get under
-  way, a contact radius of 1.5 km, a battle zone of 4 km, a help radius of 25 km, the column's length a unit).
+  way, a contact radius of 1.5 km, a battle zone of 2.5 km (a radius, kept within its map), a help radius of 25 km,
+  the column's length a unit).
 - `march.ts`: a corps' speed by march mode and size (a large corps slower), its column's length, and when its
   head and tail reach a point along its route.
 - `track.ts`: a moving thing as a track (timed waypoints, linear between them); a route walked at a speed from a

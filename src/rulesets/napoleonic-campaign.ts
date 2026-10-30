@@ -1,6 +1,6 @@
-// The Napoleonic campaign's numbers (docs/proposals/campaign.md, Starting values: estimates, to tune). A normal march
-// of 22.5 km a day (the era's 20–25 km), a forced march of 35 km (Davout's corps before Austerlitz made more), a
-// courier at a gallop between changes of horse.
+// The Napoleonic campaign's numbers (the campaign proposal, PR #234: Starting values: estimates, to tune). A normal
+// march of 22.5 km a day (the era's 20–25 km), a forced march of 35 km (Davout's corps before Austerlitz made more),
+// a courier at a gallop between changes of horse.
 import type { CampaignRules } from '../campaign/rules.ts'
 
 export const napoleonicCampaign: CampaignRules = {

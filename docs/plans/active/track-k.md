@@ -32,7 +32,7 @@ then the theatre as data, then the play. A design PR that carries a model ships 
 | Phase | What | Acceptance |
 |---|---|---|
 | **K1** | The look, prototyped (`prototypes/campaign-map.html`, `docs/plans/active/k1-theatre-look.md`): the 1805 theatre as a lit relief model, its offline-baked 100 m tiles as a proof of concept | Done: the owner's sign-off; 150 fps at 1080p on test machine A |
-| **K0** | The rules (#234's proposal, decisions 0084 and 0085), the map's look (decision 0086), and the rules' models as exact code in `src/campaign/` with tests (`docs/plans/active/k0-campaign-rules.md`) | Vitest on #234's own cases; the owner's review of the decisions |
+| **K0** | The rules (#234's proposal, decisions 0088 and 0076 (#234's)), the map's look (decision 0093), and the rules' models as exact code in `src/campaign/` with tests (`docs/plans/active/k0-campaign-rules.md`) | Vitest on #234's own cases; the owner's review of the decisions |
 | **K2a** | The bake in the game's code: one module (shape, lakes, sun shadow, sky occlusion), a tool writing binary, compressed tile levels (250 m far, 100 m close) with a manifest | Vitest; tile size and bake time measured; the prototype's image |
 | **K2b** | The campaign page (`app/`, `src/render/campaign/`): shaders in files, the raised mesh, sun and sky, water, contours, lines on the ground, FSR 1, the fps meter; no lighting at load | Page check; 150 fps at 1080p on test machine A |
 | **K2c** | Streaming done properly: a ring of tiles with partial uploads (no hitch), a mesh denser near the camera | No frame over 6.7 ms panning the Alps up close |

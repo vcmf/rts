@@ -1,4 +1,4 @@
-// When two moving things meet (docs/proposals/campaign.md, Contact and battle): the first moment two tracks come
+// When two moving things meet (the campaign proposal, PR #234: Contact and battle): the first moment two tracks come
 // within a radius, found exactly rather than at a tick (a 10-minute tick finds two corps closing at 6 km/h up to
 // 10 minutes and a kilometre late), so corps meet and couriers are caught where they do; and which battle a contact
 // joins.

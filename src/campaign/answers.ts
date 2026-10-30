@@ -1,4 +1,4 @@
-// Who answers a call for help (docs/proposals/campaign.md, Calling for help): an ally in reach by road, free (not
+// Who answers a call for help (the campaign proposal, PR #234: Calling for help): an ally in reach by road, free (not
 // fighting, and not already marching to another battle: a corps answers at most one call a day), whose standing
 // orders let it come. A corps on its way to help that meets another enemy fights there and may call for help itself,
 // but only free corps can answer; every answer and every battle takes a corps out of the free ones, so a chain of

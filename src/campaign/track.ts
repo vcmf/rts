@@ -1,6 +1,6 @@
-// A moving thing on the campaign map as a track (docs/proposals/campaign.md, A turn is a timeline): timed waypoints,
-// the position linear between them, still before the first and after the last. A corps' head on its route and a
-// courier on its ride are tracks; contact.ts finds when two of them meet.
+// A moving thing on the campaign map as a track (the campaign proposal, PR #234: A turn is a timeline): timed
+// waypoints, the position linear between them, still before the first and after the last. A corps' head on its route
+// and a courier on its ride are tracks; contact.ts finds when two of them meet.
 
 /** A waypoint: a time in minutes and a position in metres (x east, z north). */
 export interface Waypoint {

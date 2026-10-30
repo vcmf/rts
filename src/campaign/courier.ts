@@ -1,4 +1,4 @@
-// Calling for help (docs/proposals/campaign.md, Calling for help): a courier rides the fastest road to an ally; if
+// Calling for help (the campaign proposal, PR #234: Calling for help): a courier rides the fastest road to an ally; if
 // it comes within the contact zone of an enemy other than those its corps is fighting, it is caught there and its
 // message lost (and read by the enemy). Help that is called arrives when the courier has ridden, the corps has got
 // under way and has marched, its tail a column's length after its head.

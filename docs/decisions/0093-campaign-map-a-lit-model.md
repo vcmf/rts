@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-29
 ---
 
-# 0086 The campaign map is a lit relief model: one shape for form and light, baked offline in tiles
+# 0093 The campaign map is a lit relief model: one shape for form and light, baked offline in tiles
 
 ## Context
 
