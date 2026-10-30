@@ -1,4 +1,4 @@
-// The WorldCover reader's header parse (tools/worldcover.ts, docs/plans/active/k1b-forests.md): the levels of a tiled
+// The WorldCover reader's header parse (tools/worldcover.ts, docs/plans/done/k1b-forests.md): the levels of a tiled
 // little-endian TIFF, their sizes and tile tables, from its first bytes.
 import fs from 'node:fs'
 import os from 'node:os'

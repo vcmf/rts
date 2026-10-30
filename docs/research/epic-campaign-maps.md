@@ -6,7 +6,7 @@ last_reviewed: 2026-10-29
 # Epic campaign maps and crisp relief up close
 
 Two questions about the 1805 theatre of the campaign map (`prototypes/campaign-map.html`, look in
-`docs/proposals/campaign-map.md`, current state in `docs/plans/active/k1-theatre-look.md`, Results). First: how do
+`docs/proposals/campaign-map.md`, current state in `docs/plans/done/k1-theatre-look.md`, Results). First: how do
 Total War's campaign maps, and those of similar games, look epic, how are they built, and what can a relief print on
 paper take from them? Second: how do we get a crisp physical-relief look at close zoom (stacked contour sheets with
 lit edges and cast shadows, fine erosion on the slopes, sharp ridges and gullies, soft occlusion, raking light) when

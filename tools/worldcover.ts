@@ -1,6 +1,6 @@
 // ESA WorldCover 2021 (10 m land cover, © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data
 // (2021) processed by ESA WorldCover consortium; CC BY 4.0) for the campaign map's forests
-// (docs/plans/active/k1b-forests.md). The files are cloud-optimised GeoTIFFs of 3° × 3° on AWS, each holding reduced
+// (docs/plans/done/k1b-forests.md). The files are cloud-optimised GeoTIFFs of 3° × 3° on AWS, each holding reduced
 // copies of itself; only one reduced level is read, tile by tile, by range requests (the header first), and cached
 // under scratch/worldcover/: about 5 MB a file at about 70 m a pixel, where the full file is about 100 MB.
 // Its tree-cover class (10) is sampled onto a grid in the theatre's projection as a coverage, 0 to 255.

@@ -1,4 +1,4 @@
-// The pure parts of tools/campaign-theatre.ts (docs/plans/active/k1-theatre-look.md): the frame's projection and grid,
+// The pure parts of tools/campaign-theatre.ts (docs/plans/done/k1-theatre-look.md): the frame's projection and grid,
 // lines in the map's metres, and the road router. No file or network access here. Plain float64 in a tool, not the
 // sim's. Tested in test/campaign-theatre.test.ts.
 import { inRing, lineLength } from '../src/map/geometry.ts'

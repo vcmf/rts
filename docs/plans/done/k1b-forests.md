@@ -1,11 +1,11 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-30
 ---
 
 # Plan: K1b, forests printed green on the campaign map (prototype)
 
-Track K (`docs/plans/active/track-k.md`), on `epic/campaign`, after K1 (`docs/plans/active/k1-theatre-look.md`). The
+Track K (`docs/plans/active/track-k.md`), on `epic/campaign`, after K1 (`docs/plans/done/k1-theatre-look.md`). The
 owner (2026-10-30), with a reference print of Reno (a USGS sheet rendered as a lit model, its forests a bright
 green): "put some green like this to our map where it's forest; again it must be baked into the terrain before
 applying the light".

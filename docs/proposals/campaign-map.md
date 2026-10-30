@@ -15,7 +15,7 @@ of PR #234; the track is `docs/plans/active/track-k.md`.
 
 ## As settled (K1, 2026-10-29)
 
-The prototype settled the look with the owner (`docs/plans/active/k1-theatre-look.md`; decision 0093, proposed). Where
+The prototype settled the look with the owner (`docs/plans/done/k1-theatre-look.md`; decision 0093, proposed). Where
 this proposal's first draft says otherwise, this section holds:
 - **A relief model, not a print with shading**: one shape (the large forms kept, mountain regions lifted, raised
   ×2.5, lakes sunk as stepped basins) displaces a 3D surface and is lit; the camera tilts from 30° far out to 45° up

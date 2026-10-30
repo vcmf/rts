@@ -1,4 +1,4 @@
-// Builds the campaign map prototype's theatre (docs/plans/active/k1-theatre-look.md) from the hand-written data file
+// Builds the campaign map prototype's theatre (docs/plans/done/k1-theatre-look.md) from the hand-written data file
 // prototypes/campaign-1805.data.js, into a generated .js under scratch/ (git-ignored, never committed):
 //   window.THEATRE = { frame, cell, nx, nz, h, forest, forestBoxM, towns, regions, rivers, lakes, roads, credit }
 // - h: heights in whole metres on a `cell` grid (250 m by default) in a Lambert azimuthal equal-area projection

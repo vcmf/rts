@@ -8,7 +8,7 @@ date: 2026-10-29
 ## Context
 
 The campaign map's look was settled by eye with the owner in the K1 prototype (`prototypes/campaign-map.html`,
-`docs/plans/active/k1-theatre-look.md`). Its early rounds stacked effects on a flat print: a relief light read one
+`docs/plans/done/k1-theatre-look.md`). Its early rounds stacked effects on a flat print: a relief light read one
 set of heights, the 3D surface another, grain and tone curves on top; the owner found it weak. The rebuild that
 settled it made the map a physical model lit once, as the reference prints are made, and a proof of concept baked
 its close zoom offline.

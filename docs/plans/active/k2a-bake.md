@@ -5,8 +5,8 @@ last_reviewed: 2026-10-30
 
 # Plan: K2a, the campaign map's bake in the game's code
 
-Track K (`docs/plans/active/track-k.md`), on `epic/campaign`, after K1 (`docs/plans/active/k1-theatre-look.md`) and
-K1b (`docs/plans/active/k1b-forests.md`). The first step of moving the prototype's map into the game: the bake that
+Track K (`docs/plans/active/track-k.md`), on `epic/campaign`, after K1 (`docs/plans/done/k1-theatre-look.md`) and
+K1b (`docs/plans/done/k1b-forests.md`). The first step of moving the prototype's map into the game: the bake that
 makes the map's one shape and its light, as one module the game owns, and a tool that writes its output as binary,
 compressed tile levels with a manifest. The page that draws them is K2b.
 
