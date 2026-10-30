@@ -113,9 +113,12 @@ void main() {
      edge (its heights there are the edge's, held). Divided by what flat open ground gets, so that comes out in the
      paper's own tone: the faces toward the sun warmer, the shade cooler */
   {
-    vec2 e = vec2(uCell, 0.0);
-    float gx = (heightAt(vW.xz + e.xy) - heightAt(vW.xz - e.xy)) / (2.0 * uCell) * uZ;
-    float gz = (heightAt(vW.xz + e.yx) - heightAt(vW.xz - e.yx)) / (2.0 * uCell) * uZ;
+    /* the differences one-sided within a cell of the map's edge (the heights past it are held, which would halve
+       the slope there) */
+    vec2 lo = uX0Z0, hi = uX0Z0 + (uNodes - 1.0) * uCell;
+    vec2 p0 = clamp(vW.xz - uCell, lo, hi), p1 = clamp(vW.xz + uCell, lo, hi);
+    float gx = (heightAt(vec2(p1.x, vW.z)) - heightAt(vec2(p0.x, vW.z))) / max(p1.x - p0.x, 1e-3) * uZ;
+    float gz = (heightAt(vec2(vW.x, p1.y)) - heightAt(vec2(vW.x, p0.y))) / max(p1.y - p0.y, 1e-3) * uZ;
     vec3 n = normalize(mix(vec3(-gx, 1.0, -gz), vec3(0.0, 1.0, 0.0), max(waterA, 1.0 - inside)));
     vec2 ln = (vW.xz - uX0Z0) / (uCell * uLightStep);   /* light node i at the centre of texel i */
     vec2 B = mix(vec2(1.0), texture2D(uLight, (ln + 0.5) / uLightNodes).rg, inside);

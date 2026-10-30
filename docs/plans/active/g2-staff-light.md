@@ -72,3 +72,5 @@ To be filled with the PR's measurements.
 1. The readability bound (#141: the darkest about 0.6 of the paper): K1's shade is darker. `?floor=` sets it; checked
    when armies are on the map (G4).
 2. The woods' tone on the cold paper, after the campaign map's (the owner).
+3. The water is K1's blue in every season: M6a's pale winter wash is gone, and on a winter map (Austerlitz) the deep
+   blue is near the armies' saturation. The owner has seen it in the G2 shots and asked no change; checked with the armies (G4).

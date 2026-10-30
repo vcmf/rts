@@ -6,14 +6,16 @@ import {
   bakeLight,
   bakeMasks,
   cellField,
+  clampSun,
   INK_RANGE,
+  lightCache,
   SUN,
   sunFrom,
   sunXZ,
   waysOf,
   type Sun,
 } from '../src/render/lit/bake.ts'
-import { SUN as WORLD_SUN } from '../src/look/materials.ts'
+import { SUN_TOWARD } from '../src/look/sun.ts'
 import type { Pt } from '../src/map/schema.ts'
 import type { Resolved } from '../src/map/resolve.ts'
 
@@ -63,6 +65,45 @@ describe('G2: the light bake', () => {
     }
     expect(partial(10)).toBeGreaterThan(partial(1))
   })
+  it("the highest ground's shadow keeps its soft edge: the disc's lower rim, not its middle, ends the ray", () => {
+    // a sun in the east 30° high, its disc 10° across: the block (the highest ground) shades nodes 17 and 18 in part
+    // (36 and 34 m west of its edge), where the disc's middle already clears the block but its lower rim does not
+    const L = lit(block, sunAt(90, 30, 10))
+    for (const i of [17, 18]) {
+      expect(L(i, 40)[0]).toBeGreaterThan(10)
+      expect(L(i, 40)[0]).toBeLessThan(245)
+    }
+  })
+  it('a narrow bank shades every node in its shadow, not one in a few', () => {
+    // a bank 6 m wide (three nodes) and 8 m high, raised three times as the map's light reads it; a sun in the east
+    // 20° high casts it 66 m west
+    const M = 121
+    const bank = new Float64Array(M * M)
+    for (let j = 0; j < M; j++) for (const i of [100, 101, 102]) bank[j * M + i] = 8
+    const b = bakeLight(bank, M, M, 2, sunAt(90, 20), 1, 3)
+    const missed: number[] = []
+    // 10 to 56 m west of the bank: well inside its shadow
+    for (let i = 72; i <= 95; i++) if (b.data[(60 * M + i) * 4] > 64) missed.push(i)
+    expect(missed).toEqual([])
+  })
+  it('a sun on the horizon or with no disc (?sun=0, ?soft=0) still lights flat ground', () => {
+    for (const sun of [sunAt(90, 0), sunAt(90, 30, 0), sunAt(90, -5)]) {
+      expect(lit(new Float64Array(N * N), sun)(40, 40)[0]).toBe(255)
+      expect(clampSun(sun).el - clampSun(sun).size / 2).toBeGreaterThan(0)
+    }
+  })
+  it('the light cache bakes again only when the heights, the sun or z change, and copies its bytes', () => {
+    const bake = lightCache()
+    const h = Float64Array.from(block)
+    const a = bake(h, N, N, 2, SUN, 1, 1)
+    const b = bake(h, N, N, 2, SUN, 1, 1)
+    expect(b.data).not.toBe(a.data)
+    expect(b.data).toEqual(a.data)
+    h[20 * N + 20] = 30 // a tower west of the block
+    expect(bake(h, N, N, 2, SUN, 1, 1).data).toEqual(bakeLight(h, N, N, 2, SUN, 1, 1).data)
+    expect(bake(h, N, N, 2, sunAt(90), 1, 1).data).toEqual(bakeLight(h, N, N, 2, sunAt(90), 1, 1).data)
+    expect(bake(h, N, N, 2, sunAt(90), 1, 3).data).toEqual(bakeLight(h, N, N, 2, sunAt(90), 1, 3).data)
+  })
   it("a pit's floor sees less of the sky than the ground round it", () => {
     const pit = Float64Array.from(block, v => -v)
     const L = lit(pit, SUN)
@@ -84,7 +125,7 @@ describe('G2: the light bake', () => {
     }
   })
   it("is lit by the 3D world's sun (the owner, 2026-10-30: one sun for both views)", () => {
-    const w = sunFrom(WORLD_SUN.x, WORLD_SUN.y, WORLD_SUN.z, SUN.size)
+    const w = sunFrom(...SUN_TOWARD, SUN.size)
     expect(SUN.el).toBeCloseTo(w.el, 6)
     expect(SUN.az).toBeCloseTo(w.az, 6)
     // north-west, about 27° high

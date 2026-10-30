@@ -15,7 +15,7 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Season } from '../../map/schema.ts'
-import { INK_RANGE, sunXZ, type LightBake, type Sun } from './bake.ts'
+import { INK_RANGE, SUN, sunXZ, type LightBake, type Sun } from './bake.ts'
 import { paperCanvas } from './paper.ts'
 import type { Pt } from '../../map/schema.ts'
 import { bridged, triangulate, type Standing } from './houses.ts'
@@ -103,7 +103,7 @@ export class LitView {
   private overlay: RawTexture | null = null
   private readonly noOverlay: RawTexture
   private grid: { nx: number; nz: number } | null = null
-  private sun: Sun | null = null
+  private sun: Sun = SUN // the compile's (setMap), the map's own default until then
   private textures: Texture[] = []
   private viewProj = Matrix.Identity()
   private inverse = Matrix.Identity()
@@ -353,9 +353,9 @@ export class LitView {
     for (const h of this.houses) h.dispose()
     this.houses = []
     if (!houses.length) return
-    const [lx, lz] = this.sun ? sunXZ(this.sun) : [-Math.SQRT1_2, Math.SQRT1_2]
+    const [lx, lz] = sunXZ(this.sun)
     // a wall's shadow is its height over the tangent of the sun's height
-    const cast = 1 / Math.tan((Math.max(5, this.sun?.el ?? 45) * Math.PI) / 180)
+    const cast = 1 / Math.tan((Math.max(5, this.sun.el) * Math.PI) / 180)
     const pos: number[] = []
     const col: number[] = []
     const idx: number[] = []

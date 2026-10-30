@@ -6,7 +6,17 @@ import { checkFiles, validate } from '../../map/validate.ts'
 import { expand } from '../../map/expand.ts'
 import { apply, LAYER_NAMES } from '../../map/apply.ts'
 import { draft } from '../../map/draft.ts'
-import { bakeInk, bakeLight, bakeMasks, LIGHT_STEP, RELIEF, SUN, waysOf, type Sun } from '../../render/lit/bake.ts'
+import {
+  bakeInk,
+  bakeMasks,
+  clampSun,
+  lightCache,
+  LIGHT_STEP,
+  RELIEF,
+  SUN,
+  waysOf,
+  type Sun,
+} from '../../render/lit/bake.ts'
 import { groundOf, overlay, unitKinds, type Ground } from '../../render/lit/overlays.ts'
 import { napoleonic } from '../../rulesets/napoleonic.ts'
 import { classifyNapoleonic } from '../../rulesets/napoleonic-ground.ts'
@@ -19,6 +29,8 @@ const CLASSIFY = classifyNapoleonic
 // it dropped as overtaken is never drawn on); the last few are kept
 const grounds = new Map<number, Ground>()
 const KEEP = 3
+// the last light bake, kept while the heights, the sun and z stay as they were
+const bakeLightCached = lightCache()
 
 self.onmessage = (e: MessageEvent<CompileRequest | OverlayRequest>) => {
   if (e.data.type === 'overlay') {
@@ -64,7 +76,7 @@ self.onmessage = (e: MessageEvent<CompileRequest | OverlayRequest>) => {
     return
   }
   try {
-    compile(seq, map, cat, mine, sun ?? SUN, z ?? RELIEF.z)
+    compile(seq, map, cat, mine, clampSun(sun ?? SUN), Math.max(0, z ?? RELIEF.z))
   } catch (err) {
     fail('', `the compiler failed: ${(err as Error).message} (a bug, or a catalogue the validator does not check)`)
   }
@@ -112,7 +124,7 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles, sun
   const t2 = performance.now()
   const img = draft(L)
   const t3 = performance.now()
-  const light = bakeLight(L.height, L.nx + 1, L.nz + 1, L.cell, sun, LIGHT_STEP, z)
+  const light = bakeLightCached(L.height, L.nx + 1, L.nz + 1, L.cell, sun, LIGHT_STEP, z)
   const masks = bakeMasks(L)
   const ink = bakeInk(L, waysOf(ex.map.features, L.table))
   const t4 = performance.now()

@@ -8,6 +8,7 @@ import type { Resolved } from '../../map/resolve.ts'
 import { lineReach } from '../../map/apply.ts'
 import { categoryOf } from '../../map/catalogue.ts'
 import { sstep } from '../../look/noise.ts'
+import { SUN_TOWARD } from '../../look/sun.ts'
 
 /** The sun: its height above the horizon, where it stands (clockwise from north) and its disc's size, in degrees. */
 export interface Sun {
@@ -20,9 +21,9 @@ export function sunFrom(x: number, y: number, z: number, size: number): Sun {
   const deg = 180 / Math.PI
   return { el: Math.atan2(y, Math.hypot(x, z)) * deg, az: (((Math.atan2(x, z) * deg) % 360) + 360) % 360, size }
 }
-// the 3D world's sun (src/look/materials.ts SUN: north-west, about 27° high), so the light does not turn at the
-// zoom's handover (the owner, 2026-10-30: docs/plans/active/track-g.md); its disc 2.5° across, as Track K's
-export const SUN: Sun = sunFrom(-0.7, 0.45, 0.55, 2.5)
+// the 3D world's sun (src/look/sun.ts: north-west, about 27° high), so the light does not turn at the zoom's handover
+// (the owner, 2026-10-30: docs/plans/active/track-g.md); its disc 2.5° across, as Track K's
+export const SUN: Sun = sunFrom(...SUN_TOWARD, 2.5)
 // the light's bake on every LIGHT_STEP-th node: 4 m, about 1 s for a 3 km map in Node (G2, measured); the slope's light
 // is the shader's, per pixel, from the 2 m heights
 export const LIGHT_STEP = 2
@@ -34,6 +35,15 @@ export const RELIEF = {
 const SKY_STEPS = [4, 8, 16, 32, 64, 128, 256]
 const SUN_REACH = 5000 // m: the farthest a ray toward the sun looks for what shades a node
 export const WATER_FULL = 1.5 // m: the depth the mask stores as 1
+
+/**
+ * A sun the bake and the shader can light by (the page's ?sun= and ?soft= take any number): its disc 0.1° to 20°
+ * across, its lower rim at least half a degree above the horizon, its middle at most 89.5° high.
+ */
+export function clampSun(sun: Sun): Sun {
+  const size = Math.min(20, Math.max(0.1, sun.size))
+  return { el: Math.min(89.5, Math.max(size / 2 + 0.5, sun.el)), az: sun.az, size }
+}
 
 /** The sun's horizontal direction, a unit vector (x east, z north) toward it. */
 export function sunXZ(sun: Sun): [number, number] {
@@ -68,6 +78,7 @@ export function bakeLight(
   step = 1,
   z = RELIEF.z,
 ): LightBake {
+  sun = clampSun(sun)
   // plain loops: a mapped Float32Array.from and a destructuring min-max cost seconds over millions of nodes
   const h = new Float32Array(nx * nz)
   let lo = Infinity
@@ -81,10 +92,14 @@ export function bakeLight(
   const rad = Math.PI / 180
   const tanEl = Math.tan(sun.el * rad)
   const tanR = Math.tan((sun.size / 2) * rad)
+  // the disc's lower rim: the last ray anything can shade (clampSun keeps it above the horizon)
+  const tanLo = Math.tan((sun.el - sun.size / 2) * rad)
   const [sx, sz] = sunXZ(sun)
-  const reach = Math.min(SUN_REACH, (hi - lo) / tanEl)
+  const reach = Math.min(SUN_REACH, (hi - lo) / tanLo)
+  // steps no longer than the penumbra's width there (nor shorter than a cell), so a bank's soft edge is sampled
+  // across, not jumped
   const sunSteps: number[] = []
-  for (let d = cell; d <= reach + cell; d *= 1.15) sunSteps.push(d)
+  for (let d = cell; d <= reach + cell; d += Math.max(cell, 2 * tanR * d)) sunSteps.push(d)
   const dirs: [number, number][] = []
   for (let a = 0; a < 8; a++) dirs.push([Math.cos((a * Math.PI) / 4), Math.sin((a * Math.PI) / 4)])
   // the heights at a point (m from the grid's first node), bilinear, the edges repeated
@@ -108,7 +123,7 @@ export function bakeLight(
       const h0 = h[j * nx + i]
       let lit = 1
       for (const d of sunSteps) {
-        if (h0 + d * tanEl >= hi) break // above the highest ground: nothing further shades it
+        if (h0 + d * tanLo >= hi) break // the whole disc above the highest ground: nothing further shades it
         const clear = (h0 + d * tanEl - at(x + sx * d, z + sz * d)) / d
         lit = Math.min(lit, Math.min(1, Math.max(0, 0.5 + (0.5 * clear) / tanR)))
         if (lit <= 0) break
@@ -126,6 +141,36 @@ export function bakeLight(
     }
   }
   return { data: out, nx: bnx, nz: bnz, step }
+}
+
+/**
+ * bakeLight, remembering its last bake: a compile that leaves the heights, the sun, `z` and `step` as they were (an
+ * edit of a hedge, a name, a save) bakes nothing. Each call returns its own copy of the bytes, so the caller can
+ * transfer them.
+ */
+export function lightCache(): (
+  heights: Float64Array,
+  nx: number,
+  nz: number,
+  cell: number,
+  sun: Sun,
+  step: number,
+  z: number,
+) => LightBake {
+  let key = ''
+  let last: LightBake | null = null
+  return (heights, nx, nz, cell, sun, step, z) => {
+    // FNV-1a over the heights' bits: about 10 ms for a 3 km map, against about a second for the bake
+    const w = new Uint32Array(heights.buffer, heights.byteOffset, heights.length * 2)
+    let f = 0x811c9dc5
+    for (let k = 0; k < w.length; k++) f = Math.imul(f ^ w[k], 0x01000193)
+    const k = [nx, nz, cell, sun.el, sun.az, sun.size, step, z, f >>> 0].join(',')
+    if (!last || k !== key) {
+      last = bakeLight(heights, nx, nz, cell, sun, step, z)
+      key = k
+    }
+    return { ...last, data: last.data.slice() }
+  }
 }
 
 /**

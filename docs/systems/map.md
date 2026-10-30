@@ -232,12 +232,14 @@ maps/kinds.json ──► checkCatalogue ─┐
     0055, `?tilt=`), its shader ported from the prototype's lit and shaded paths, lit since G2 as a model (decision
     0090): a cold white paper and its worn border (no woods drawn for now: the owner), the light baked in the worker on
     every second node (`bakeLight`: the sun's soft shadow toward a disc 2.5° across, the sky each node sees in eight
-    directions), the 3D world's sun (north-west, about 27° high), the slope's light per pixel from the node heights
+    directions; the last bake kept while the heights, the sun and the exaggeration stay as they were), the 3D world's
+    sun (`src/look/sun.ts`: north-west, about 27° high), the slope's light per pixel from the node heights
     raised three times for the light only (`RELIEF.z`), a quarter of the light the sky's, divided by flat ground's;
-    `?sun=`, `?az=`, `?soft=`, `?z=`, `?sky=`, `?lamp=`, `?floor=` to tune; the water stepped from a pale to a deep
-    blue by its depth, sunk below its banks, contours (grey, the index lines orange) every 5 m and 25 m from the node
+    `?sun=`, `?az=`, `?soft=`, `?z=`, `?sky=`, `?lamp=`, `?floor=` to tune (the sun kept above the horizon,
+    `clampSun`); the water flat, stepped from a pale to a deep blue by its depth in every season, contours (grey, the index lines orange) every 5 m and 25 m from the node
     heights (a float texture read by `texelFetch`), the yards (a village's, a farm's), the ink, the
-    paper's grain; the ink (decision 0065, M6b): the water, the woods and the barriers from their cells (what the sim
+    paper's grain; the ink (decision 0065, M6b): the water, the woods (their field kept, not drawn for now) and the
+    barriers from their cells (what the sim
     reads), every cell reading as its own kind at its centre and every edge within half a cell of the cells' sides
     (`cellField`: smoothed for the water and the woods, square for the barriers, saddle corners joined); the ways'
     edges as crisp hairlines from their shapes at the width apply paints them, drawn only on and beside their cells;
@@ -465,7 +467,9 @@ scale below 1); the test map's real heights and its sim compile.
 
 `test/render-lit-bake.test.ts` (M6a, G2): the light on flat ground (in the sun, open to the sky), a block's shadow
 away from the sun at every azimuth, its length from the sun's height, its edge softer with a larger disc, a pit's
-floor seeing less sky than its rim, every second node the same light, the default sun the 3D world's; the cells' mask with its yards;
+floor seeing less sky than its rim, the highest ground's soft edge kept, a narrow bank's whole shadow, a sun on the
+horizon or with no disc clamped, the cache baking again only on a change, every second node the same light, the
+default sun the 3D world's; the cells' mask with its yards;
 (M6b) a way's field, its square ends and its cells' gate, the widths `waysOf` takes from `lineReach`, the contract
 (every cell's kind at its centre on stair-steps, saddles, one-cell lines and diagonals), a cell field's 0 on the
 cells' sides, a smoothed diagonal without stairs, narrow streams and clearings kept, diagonal cells joined, a wood's
