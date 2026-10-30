@@ -68,3 +68,4 @@ recorded here on 2026-10-08.
 | [0071](0071-soldier-contact-shadow.md) | A contact shadow under the soldiers' feet; their shadows no darker than the ground's painted shadow (amends 0062, supersedes 0067's values) | accepted |
 | [0076](0076-a-unit-is-a-division.md) | A unit stands for a division: 240 figures for line infantry, a figure 25 men; a corps is 8–10 units (supersedes 0018) | accepted |
 | [0088](0088-campaign-on-roads.md) | A campaign of armies on roads, moved at once; battles come from it | proposed |
+| [0089](0089-maps-sized-by-the-front.md) | Battle maps sized by the armies' front: 2 to 4 km a side; Austerlitz 3 km (amends 0061 and 0070) | proposed |

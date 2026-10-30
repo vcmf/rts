@@ -1,6 +1,6 @@
 ---
 status: draft
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-30
 ---
 
 # Proposal: the campaign, armies on roads and battles that come from it
@@ -8,7 +8,7 @@ last_reviewed: 2026-10-27
 A campaign map of roads where every side gives its orders for the day at once and all armies then march at
 the same time. Where two enemies meet, a battle starts; allies near enough can be called to it by courier,
 and arrive during the battle, tired and strung out. The battle is the one already being built
-(`docs/proposals/sim-design.md`); this proposal is the layer around it. Decisions 0088 (proposed) and 0076 (accepted), with 0061 (accepted: square maps of 2–6 km)
+(`docs/proposals/sim-design.md`); this proposal is the layer around it. Decisions 0088 (proposed), 0076 (accepted) and 0089 (proposed: battle maps of 2–4 km, amending 0061)
 record the choices that change the vision.
 
 ## Context and goals / non-goals
@@ -43,7 +43,7 @@ map, and the battle starts with what the campaign made of it.
 | Layer | What moves | Time | Map |
 |---|---|---|---|
 | **Campaign** | armies (corps) along roads | turns of one day: orders, then the day played at once | the road network, settlements |
-| **Battle** | battalions | real time | 2–6 km a side (decision 0061) |
+| **Battle** | divisions | real time | 2–4 km a side (decision 0089) |
 
 The campaign is otherwise like Total War's (settlements, armies); its economy is out of this proposal's
 scope.
@@ -70,6 +70,10 @@ after Total War's. One unit on the battle map stands for a **division**; a figur
 A corps is **8–10 units, about 1,300–1,700 figures**. Three corps a side make about 25–30 units and
 4,000–5,000 figures a side, inside the 32,000-soldier budget (`docs/plans/active/armies-32k.md`). A line unit of
 240 in three ranks is about 50 m wide, so a corps holds about 500 m of front.
+
+The battle maps are sized by that front, not by the figures (decision 0089, proposed): about twice one army's
+front, 2 km for a corps a side, 3 km for 2–3 corps (the default), 4 km for the largest battles. The 2–6 km of
+decision 0061 were sized for a figure a soldier; at 25 men a figure the armies would be lost on 6 km.
 
 - **Light infantry** is two thirds of a line unit: the British Light Division, the nearest real one, had about
   3,000–4,000 men against 5,000–7,000 for a line division. Fewer men, but faster, in open order (harder to hit
@@ -218,7 +222,7 @@ has to write the same contract.
 | Courier | about 12 km/h |
 | Getting under way | about 1 hour |
 | Stragglers of a forced march | 10–20 % of each battalion, back in 1–2 days |
-| Battle zone | a few km, inside the 2–6 km battle map |
+| Battle zone | a few km, inside the 2–4 km battle map |
 
 ## Alternatives considered
 
@@ -237,7 +241,7 @@ has to write the same contract.
 
 - A battle cannot end early and free its corps to march the same day.
 - Many contacts in one day mean many pauses; contacts in the same hour could be grouped.
-- 2–6 km battle maps are larger than the 1–1.5 km the engine was budgeted for (decision 0011): its bakes,
+- 2–4 km battle maps are larger than the 1–1.5 km the engine was budgeted for (decision 0011): its bakes,
   memory and frame rate must be measured again.
 - The AI has to play the campaign: routes, standing orders, when to call and whether to come
   (`docs/proposals/ai.md`).
