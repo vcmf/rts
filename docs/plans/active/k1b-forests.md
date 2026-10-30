@@ -38,10 +38,21 @@ theatre's data (K3).
   range requests, cached; `parseCog` is tested (`test/worldcover.test.ts`). The cover at 250 m (3 × 3 samples a node)
   for the theatre, at 100 m (2 × 2) for the tiles. Plausible: the Black Forest 0.74 covered, the Bohemian Forest
   0.68, the Danube plain at Straubing 0.05, the Munich gravel plain 0.00. The theatre's build rose to 17–20 s, the
-  tiles' to 85–90 s (the cover's sampling).
+  tiles' to 85–90 s (the cover's sampling), 76 s once the cover is sampled while the light bakes.
 - First look, the cover printed as is: today's farm copses speckled the whole map (35 % of it). Generalised as the
   reference does: the cover smoothed over about 1 km, printed where it passes 0.6 (`?woodfrom=`), in a light
   yellow-green (`#97c158`, `?woods=` its strength, 0.8): the large forests (the Black Forest, the Bohemian and
   Bavarian Forests, the Alps' lower slopes, the Vienna Woods) read as green masses, lit and shaded with the relief.
 - A frame on test machine A at 1600 × 900, close up with 144 tiles: 1.7 ms still, 2.2 ms with the ink.
+
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe: a range answered with the whole file (200) or cut short was cached as a
+  tile, poisoning every later build. Fixed: only a 206 of exactly the length asked is kept, a cached range of another
+  length fetched again. With: a missing file (open sea, 404) and empty tiles skipped; the cover smoothed once, by the
+  tools (`WOOD_BLUR_M`), recorded in the theatre and the tiles' meta and checked by the page; the files' tiles and the
+  files fetched side by side; the cover sampled while the light bakes; the detail area read once a pixel; one base64
+  decoder; the header parse guarded against reading past its bytes and against a directory chain that loops;
+  `fileName`, `chooseLevel` and `pixelOf` pulled out and tested, one behaviour a test; the attribution in full, as
+  ESA asks.
 

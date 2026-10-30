@@ -1,7 +1,7 @@
 // The WorldCover reader's header parse (tools/worldcover.ts, docs/plans/active/k1b-forests.md): the levels of a tiled
 // little-endian TIFF, their sizes and tile tables, from its first bytes.
 import { describe, it, expect } from 'vitest'
-import { parseCog } from '../tools/worldcover.ts'
+import { chooseLevel, fileName, parseCog, pixelOf, type CogLevel } from '../tools/worldcover.ts'
 
 /** A little-endian TIFF of the given levels, each a directory with its size, tile size and tile tables. */
 function tiff(levels: { size: number; tile: number; offsets: number[]; counts: number[] }[]): Buffer {
@@ -66,9 +66,47 @@ describe('the WorldCover reader', () => {
     ])
   })
 
-  it('refuses a file that is not a little-endian TIFF, and a table past the bytes read', () => {
+  it('refuses a file that is not a little-endian TIFF', () => {
     expect(() => parseCog(Buffer.from('MM\u0000*'))).toThrow(/not a little-endian TIFF/)
+  })
+
+  it('refuses a directory chain that loops back on itself', () => {
+    const looped = tiff([{ size: 1024, tile: 1024, offsets: [500], counts: [50] }])
+    // the first directory's next-directory pointer back to itself
+    const entries = looped.readUInt16LE(8)
+    looped.writeUInt32LE(8, 8 + 2 + 12 * entries)
+    expect(() => parseCog(looped)).toThrow(/loops back/)
+  })
+
+  it('refuses a table past the bytes read', () => {
     const cut = tiff([{ size: 2048, tile: 1024, offsets: [100, 200, 300, 400], counts: [10, 20, 30, 40] }])
     expect(() => parseCog(cut.subarray(0, 1024))).toThrow(/past the 1024 bytes read/)
+  })
+
+  it('names the 3° files by their south-west corner', () => {
+    expect(fileName(45, 9)).toBe('ESA_WorldCover_10m_2021_v200_N45E009_Map.tif')
+    expect(fileName(-3, -60)).toBe('ESA_WorldCover_10m_2021_v200_S03W060_Map.tif')
+  })
+
+  it('reads the smallest level at least as wide as asked, the full size if none is', () => {
+    const level = (width: number): CogLevel => ({
+      width,
+      height: width,
+      tile: 1024,
+      offsets: [],
+      counts: [],
+      compression: 8,
+    })
+    const levels = [36000, 18000, 9000, 4500, 2250].map(level)
+    expect(chooseLevel(levels, 4500).width).toBe(4500)
+    expect(chooseLevel(levels, 5000).width).toBe(9000)
+    expect(chooseLevel(levels, 50000).width).toBe(36000)
+  })
+
+  it('maps a place to its pixel, the north row first', () => {
+    // a sheet of 300 pixels for 3°: 0.01° a pixel
+    expect(pixelOf(45, 9, 300, 47.995, 9.005)).toEqual([0, 0])
+    expect(pixelOf(45, 9, 300, 45.005, 11.995)).toEqual([299, 299])
+    expect(pixelOf(45, 9, 300, 46.505, 10.505)).toEqual([150, 149])
   })
 })

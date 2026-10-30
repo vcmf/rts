@@ -30,7 +30,7 @@ import {
 } from './campaign-bake.ts'
 import { projection, type Pt } from './campaign-theatre-lib.ts'
 import { sampleGrid } from './terrarium.ts'
-import { forestCover } from './worldcover.ts'
+import { forestCover, WOOD_BLUR_M } from './worldcover.ts'
 
 // the grid, the tiles' zoom, the tile size in nodes, the shape's storage step in metres
 const CELL = 100
@@ -140,7 +140,16 @@ function writeTiles(dir: string, grid: Grid, shape: Float32Array, light: Uint8Ar
 
 /** The parameters the tiles were baked with, as the page compares them. */
 function paramsKey() {
-  return { vert: SHAPE.vert, fine: SHAPE.fine, mount: SHAPE.mount, sun: SUN.el, az: SUN.az, soft: SUN.size, bytes: 3 }
+  return {
+    vert: SHAPE.vert,
+    fine: SHAPE.fine,
+    mount: SHAPE.mount,
+    sun: SUN.el,
+    az: SUN.az,
+    soft: SUN.size,
+    bytes: 3,
+    woodBlurM: WOOD_BLUR_M,
+  }
 }
 
 async function main() {
@@ -168,12 +177,14 @@ async function main() {
   })
   sinkLakes(shape, lakeDistance(rings, grid, LAKE_BLUR_M), CELL, SINK)
   console.log(`shape and lakes: ${Math.round(performance.now() - t0)} ms`)
-  const light = await bakeLight(shape, grid)
-  console.log(`light on ${os.cpus().length} cores: ${Math.round(performance.now() - t0)} ms`)
-  // the cover smoothed over about 1 km, as the page does at 250 m: farm copses fade, the large forests stay
-  const cover = await forestCover(proj, grid.x0, grid.z0, CELL, grid.nx, grid.nz, 2)
-  const forest = Uint8Array.from(blur(cover, grid.nx, grid.nz, 1000 / CELL), v => Math.round(v))
-  console.log(`forests: ${Math.round(performance.now() - t0)} ms`)
+  // the light on the workers and the tree cover on this thread, side by side (they do not depend on each other); the
+  // cover smoothed as the theatre's is (WOOD_BLUR_M): farm copses fade, the large forests stay
+  const [light, cover] = await Promise.all([
+    bakeLight(shape, grid),
+    forestCover(proj, grid.x0, grid.z0, CELL, grid.nx, grid.nz, 2),
+  ])
+  const forest = Uint8Array.from(blur(cover, grid.nx, grid.nz, WOOD_BLUR_M / CELL), v => Math.round(v))
+  console.log(`light on ${os.cpus().length} cores and forests: ${Math.round(performance.now() - t0)} ms`)
   const n = writeTiles(dir, grid, shape, light, forest)
   console.log(`${dir}: ${n} tiles of ${SIZE} × ${SIZE} nodes; built in ${Math.round(performance.now() - t0)} ms`)
 }
