@@ -106,5 +106,6 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0080](0080-melee-holds-cornered-routers-cut-down.md) | A melee holds until one side breaks; a router the enemy reaches is cut down, never surrenders | accepted |
 | [0081](0081-the-bench-timeline-in-the-battle.md) | The bench's timeline lives in the battle, wherever it runs; its overlay is a view on the page | accepted |
 | [0082](0082-light-map-at-half-a-metre.md) | The baked light map at about half a metre a texel (1536² over the 800 m tile, the target 0.53 m) | accepted |
+| [0083](0083-smoke-as-soft-painted-banks.md) | Powder smoke as soft painted banks, thinned over the formations | proposed |
 | [0084](0084-a-soft-mid-tone-on-figures-and-buildings.md) | A soft mid tone on the figures, the buildings and the nature meshes (amends 0022) | accepted |
 | [0085](0085-upright-meadow-and-wheat-fill.md) | The meadow's grass upright and shorter, the wheat filled (`?grassup`, `?wheatfill`; amends 0041's clumps) | accepted |

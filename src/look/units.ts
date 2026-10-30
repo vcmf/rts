@@ -74,6 +74,7 @@ import {
   type StepShadow,
 } from './shadow-look.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
+import { FOOT_FLOATS } from './world/smoke.ts'
 import { VIEW_REACH, type ViewRays } from './trodden.ts'
 import {
   FADE_WIDTH,
@@ -106,7 +107,7 @@ import {
   MAX_ROLES,
   type UnitData,
 } from './units-data.ts'
-import { farPalette, farRule, type Battalion, type ManState, type Uniform } from './world/armies.ts'
+import { farPalette, farRule, scriptClock, type Battalion, type ManState, type Uniform } from './world/armies.ts'
 import type { Script, ScriptPhase } from './world/arms.ts'
 
 interface Host {
@@ -142,6 +143,7 @@ interface Host {
   cz: number
   lo: Vector3
   hi: Vector3
+  foot: Float32Array // its men's roots in its own frame as placed by the script: [x0, z0, x1, z1] m (footprints)
   step: number // the 1/fps step its poses were written for (a moving battalion moves once a step)
   phase: string | null // the script's phase its men were last written in (a halted one is written once a phase)
   stale: boolean[] // per LOD: its GPU copy of the poses is older than the poses
@@ -204,7 +206,8 @@ const SM_HOLD = 6 // m: lazy, the held sun box must cover the view by this much
 const FLAG_W = 1.4
 const FLAG_H = 1.1
 const FLAG_TOP = 3.0
-const FLAG_WIND = 0.6
+/** the wind's way, rad from +x toward +z: the flags fly and the smoke drifts toward (cos, sin) of it */
+export const FLAG_WIND = 0.6
 const FLAG_MIN_PX = 12
 // the far figure's growth at a quarter of the LOD switch's height
 const FAR_SCALE_XZ = 1.35
@@ -297,7 +300,8 @@ export class Units {
     c: new Vector3(),
     pts: Array.from({ length: 9 }, () => new Vector3()),
   }
-  private readonly script: Script
+  /** its script (the guns' smoke reads its pieces' places and work starts) */
+  readonly script: Script
   // the figure's roles (its data's, in the shadow's row order), its height (m: the LOD switch's figure height), its
   // highest point posed (m, SHADOW_H at least: the shadows' reach), a man's sphere for the nearest LOD's view test (m)
   private readonly roles: readonly string[]
@@ -326,6 +330,14 @@ export class Units {
   /** its men moved since the trodden mask last took them (the mask clears it when it draws) */
   trod = false
   private readonly man: ManState = { x: 0, z: 0, face: 0, role: 'halt', since: 0, moving: false }
+  private readonly clockAt = { cycle: 0, local: 0 } // (scratch: scriptClock)
+  /** the script held in its fire phase (?firehold=1: every battalion in line firing, for the bench and the smoke's
+   *  stills; scriptClock), set before the first frame */
+  holdFire = false
+  /** m its footprint (footprints) reaches past its men's roots: left, behind, right, ahead (a piece's crew and
+   *  carriage round the root it stands for) */
+  footPad: readonly [number, number, number, number] = [0, 0, 0, 0]
+  private placed = 0 // battalions placed so far (placeCount)
   /** Where the men stand when not the script (?sim: the sim's, src/look/sim-men.ts); null: the script. */
   source: MenSource | null = null
   // the sim's placing: the battalion it looks at first next frame (round robin), the ones picked this frame, and the
@@ -909,7 +921,8 @@ export class Units {
             null)
     // (the proxy: shown to the map alone; the simple shadows and the tiny LOD: shown by frame())
     if (li >= this.proxyLod) host.isVisible = false
-    if (li === this.decalLod) host.alphaIndex = 1000 // (after everything else)
+    // (after the opaque scene, before the smoke's 2000: src/look/smoke.ts)
+    if (li === this.decalLod) host.alphaIndex = 1000
     // (a clone of a disabled source is disabled: enabled while the figures show; the nearest LOD's by setSplit)
     host.isPickable = false
     host.alwaysSelectAsActiveMesh = false
@@ -971,6 +984,7 @@ export class Units {
       cz: b.z,
       lo: new Vector3(),
       hi: new Vector3(),
+      foot: new Float32Array(4),
       step: -1,
       phase: null,
       stale: all(),
@@ -1014,6 +1028,10 @@ export class Units {
     let maxX = -Infinity
     let maxY = -Infinity
     let maxZ = -Infinity
+    let fx0 = Infinity
+    let fz0 = Infinity
+    let fx1 = -Infinity
+    let fz1 = -Infinity
     let changed = false
     // the moves changed (sent again then), and any not zero
     let nextChanged = false
@@ -1077,6 +1095,10 @@ export class Units {
         sc.man(i, ls, p, jitter[i * 4 + 3], man)
         const lx = man.x + jitter[i * 4]
         const lz = man.z + jitter[i * 4 + 1]
+        fx0 = Math.min(fx0, lx)
+        fx1 = Math.max(fx1, lx)
+        fz0 = Math.min(fz0, lz)
+        fz1 = Math.max(fz1, lz)
         x = b.x + c * lx + s * lz
         z = b.z - s * lx + c * lz
         // the figure faces -z in its own frame: turned by the battalion's heading and his own way (and a little jitter)
@@ -1139,6 +1161,13 @@ export class Units {
     }
     h.cx = (minX + maxX) / 2
     h.cz = (minZ + maxZ) / 2
+    // (the script's men in the battalion's frame; the sim's (?sim) stand where it puts them: no footprint, no smoke)
+    if (!src && fx0 <= fx1) {
+      h.foot[0] = fx0
+      h.foot[1] = fz0
+      h.foot[2] = fx1
+      h.foot[3] = fz1
+    }
     // thin-instance bounds do not follow the animation: padded by a figure's height (his bayonet up,
     // SHADOW_H at least: topH, as tall as the far figures grow, FAR_SCALE_Y) and his reach (sidePad: from the baked
     // poses); cull() stretches the same box
@@ -1146,6 +1175,7 @@ export class Units {
     const pad = this.sidePad
     h.lo.set(minX - pad, minY - 0.3 - this.slopePad, minZ - pad)
     h.hi.set(maxX + pad, maxY + top + this.slopePad, maxZ + pad)
+    this.placed++
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
     // (the simple shadow's bounds: stretched away from the sun by the longest shadow, as tall as the far figures grow)
     const k = this.scratch
@@ -1433,14 +1463,14 @@ export class Units {
         this.srcMapDue = false
       }
     }
+    const hold = this.holdFire ? (this.script.hold ?? null) : null
     for (const h of this.hosts) {
       if (!this.shown) continue
       if (this.source) {
         h.moving = false
       } else {
-        const t = T - h.b.offset
-        const cycle = Math.floor(t / this.script.cycle)
-        const local = t - cycle * this.script.cycle
+        // (a reserve stands in column whatever the hold)
+        const { cycle, local } = scriptClock(T, h.b.offset, h.b.reserve ? null : hold, this.clockAt, this.script.cycle)
         const cycleStart = T - local
         const sp = this.script.phase(local, h.b.reserve === true)
         const p = sp.phase
@@ -2469,6 +2499,37 @@ export class Units {
   /** each unit's middle where its men stand now (m: x, z; the review's cameras follow a riding unit) */
   centres(): [number, number][] {
     return this.hosts.map(h => [h.cx, h.cz])
+  }
+  /** how many times a battalion's men have been placed: it changes whenever a formation's ground does (the smoke's
+   *  mask of the formations, src/look/smoke.ts) */
+  get placeCount(): number {
+    return this.placed
+  }
+  /** a man's own lag in a battalion (-1 to 1: the script's jitter, the time his role's clip starts by): the guns'
+   *  smoke times a piece's shots by it */
+  lagOf(battalion: number, man: number): number {
+    return this.hosts[battalion].jitter[man * 4 + 3]
+  }
+  /** each battalion's footprint as it stands, in its own frame (the smoke's cap over the men, src/look/smoke.ts): its
+   *  place and heading and its men's roots' bounds there, [x, z, heading, x0, z0, x1, z1] (FOOT_FLOATS a battalion)
+   *  into out (at least FOOT_FLOATS × battalions); returns how many. A line askew to the world's axes keeps its own
+   *  narrow box (a world box round it would take in the ground before it) */
+  footprints(out: Float32Array): number {
+    let n = 0
+    for (const h of this.hosts) {
+      if (h.step < 0) continue // (not placed yet)
+      const o = n * FOOT_FLOATS
+      out[o] = h.b.x
+      out[o + 1] = h.b.z
+      out[o + 2] = h.b.heading
+      const p = this.footPad
+      out[o + 3] = h.foot[0] - p[0]
+      out[o + 4] = h.foot[1] - p[1]
+      out[o + 5] = h.foot[2] + p[2]
+      out[o + 6] = h.foot[3] + p[3]
+      n++
+    }
+    return n
   }
   /** the battalions as placed (the tools aim their cameras at them) */
   get battalions(): Battalion[] {

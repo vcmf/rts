@@ -21,6 +21,9 @@ export const ARMS_DEMO: readonly ArmSpec[] = [
     tread: 6,
     // (the owner, 2026-10-28: the guns' shadows "a tiny bit darker"; a gun's is open and low)
     shadowDarken: 1.18,
+    // (the era's gun smoke, on the Fire clip's shot; a piece's carriage and its four gunners about 1.5 m either side
+    // of its root, its trail and the gunners behind it to 3 m back, the sponger by the muzzle)
+    smoke: { puffs: 'gun', event: 'shot', crew: [1.5, 3, 1.5, 1.5] },
   },
   {
     name: 'cavalry',

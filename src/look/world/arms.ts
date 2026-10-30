@@ -12,6 +12,7 @@ import {
   APPROACH,
   CYCLE,
   extents,
+  fireStart,
   manAt,
   phaseAt,
   slots,
@@ -31,10 +32,12 @@ export interface ScriptPhase {
 /** What the renderer asks of a unit's script (src/look/units.ts): its men, its cycle (s), the man who carries its
  *  flag, the width a far figure may grow into (its file spacing, m: farWidthScale), the roles it gives, and at a
  *  unit's local time its phase, whether the phase moves its men, and each man's place (m, the unit's frame), way (rad,
- *  0 its front), role and the time his role's clip started (s, local) */
+ *  0 its front), role and the time his role's clip started (s, local); and where ?firehold=1 holds it (hold: the local
+ *  time its fire runs from to the cycle's end, over again: scriptClock; none: the hold leaves it running whole) */
 export interface Script<P extends ScriptPhase = ScriptPhase> {
   readonly men: number
   readonly cycle: number
+  readonly hold?: number
   readonly bearer: number
   readonly fileSpacing: number
   readonly roles: readonly string[]
@@ -63,6 +66,7 @@ export function drillScript(d: Drill, speed: { march: number; run: number }): Sc
   return {
     men: s.line.length,
     cycle: CYCLE,
+    hold: fireStart(d, speed.march, speed.run),
     bearer,
     fileSpacing: d.fileSpacing,
     roles: ['halt', 'march', 'run', 'fire'],
@@ -196,6 +200,8 @@ export function serveScript(
   return {
     men: n,
     cycle: times.cycle,
+    // (?firehold: from the last piece's start, every piece at work)
+    hold: times.rest + (n - 1) * times.lag,
     bearer: 0,
     fileSpacing,
     roles: [roles.rest, roles.work],
@@ -347,6 +353,11 @@ export interface ArmSpec {
   tread: number
   /** its simple shadows' share of the samples raised by this (1 to 1.5; none: 1), never past the ground's shade */
   shadowDarken?: number
+  /** the smoke its pieces' shots leave (docs/plans/active/artillery-smoke.md): the era's smoke by name (its PuffDef,
+   *  src/rulesets/index.ts), the figure's clip event its shot falls on (data/figures/index.json), and how far the
+   *  ground a piece's crew and carriage take reaches past its root (m: left, behind, right, ahead), for the smoke's
+   *  cap over the men */
+  smoke?: { puffs: string; event: string; crew: readonly [number, number, number, number] }
 }
 
 /** An arm's script (rideScript, serveScript) from its spec, its type's geometry and formation, and its figure's roles'
