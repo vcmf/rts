@@ -27,6 +27,10 @@ We will light the staff map as a model:
   colour; a floor and a soft shoulder on the brightest faces.
 - **The plane stays flat** (0064). The light alone reads the heights raised three times, as shaded-relief prints do;
   nothing is raised.
+- **The buildings are part of the landscape** (G2b, the owner): the paper's tone a little darker, lit by the same
+  light (the sun on each face, in the hills' baked shadow and sky where they stand); their shadows on the ground are
+  the sun's share they take, under the same sky, not a decal of their own: the footprint swept away from the sun as far
+  as its wall casts, on the 2 m cells (the light's 8 m nodes are too coarse for a house).
 - **The palette** is the campaign map's: a cold white paper, a warm sun, a cool sky, grey contours with orange index
   lines, the water stepped from a pale to a deep blue by its depth.
 
