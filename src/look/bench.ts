@@ -2,8 +2,8 @@
 // with ?bench runs fixed cameras, records frame times, GPU time per pass, draw calls, triangles and texture memory,
 // and offers the result as JSON. The owner runs it on the laptop; tools/bench-look.mjs runs it headless here.
 //   ?bench            the default run; ?hold=<s> seconds measured per camera and arm (default 3); ?benchpan=1 each
-//                     camera panning as it is measured; ?benchtrace=1 a record of each frame (below: timings come
-//                     from untraced runs, the trace explains them)
+//                     camera panning as it is measured (?benchpan=orbit: turning about its focus); ?benchtrace=1 a
+//                     record of each frame (below: timings come from untraced runs, the trace explains them)
 // GPU time per pass is only as good as the browser's timer queries: passesOverFrame (the passes' medians over the
 // frame's) far above 1 means the backend inflates them (ANGLE on Metal does), and only the frame time stands.
 // Arms are variants of the page measured in the same session, interleaved A B B A per camera so that heat and clock
@@ -247,13 +247,18 @@ const WHOLE_ONLY = passesParam === '0'
 // ?benchpan=1: each camera pans while it is measured, its focus sliding along the view's right and back, PAN_A m
 // either side at PAN_V m/s (a player scrolling: the figures' shadow map is drawn again as the view moves,
 // docs/plans/active/armies-demo.md batch B), from the warm-up frames through the hold
+// ?benchpan=orbit: each camera turns about its focus instead, ORBIT_A rad either side at ORBIT_V rad/s (a player
+// orbiting: what moves the big smoke cards' drawing order, src/look/smoke.ts)
 const panParam = new URLSearchParams(location.search).get('benchpan')
-if (panParam !== null && panParam !== '0' && panParam !== '1') {
-  throw new Error(`?benchpan must be 0 or 1, not ${panParam}`)
+if (panParam !== null && panParam !== '0' && panParam !== '1' && panParam !== 'orbit') {
+  throw new Error(`?benchpan must be 0, 1 or orbit, not ${panParam}`)
 }
 const PAN = panParam === '1'
+const ORBIT = panParam === 'orbit'
 const PAN_A = 20
 const PAN_V = 8
+const ORBIT_A = 0.6
+const ORBIT_V = 0.3
 // ?benchtrace=1: a record of every measured frame (its interval and the trace's counters, src/look/trace.ts: what was
 // drawn, written, uploaded, compiled in it) in each run, and a summary over the runs: for the frames over their run's
 // 90th percentile, the share with each event against its share of all frames (traceSummary). Off: nothing installed.
@@ -508,17 +513,26 @@ export async function runBench(
       const rz = Math.sin(ra)
       const pt0 = performance.now()
       // (inserted first: the pan moves the focus before the camera's hold follows the ground under it)
-      const pan = PAN
-        ? scene.onBeforeRenderObservable.add(
-            () => {
-              const u = ((((performance.now() - pt0) / 1000) * PAN_V) / (4 * PAN_A)) % 1
-              const o = PAN_A * (u < 0.25 ? 4 * u : u < 0.75 ? 2 - 4 * u : 4 * u - 4)
-              camera.target.set(focus.x + rx * o, camera.target.y, focus.z + rz * o)
-            },
-            undefined,
-            true,
-          )
-        : null
+      /** a triangle wave of amplitude amp at speed v (a unit a second), from 0 */
+      const tri = (amp: number, v: number) => {
+        const u = ((((performance.now() - pt0) / 1000) * v) / (4 * amp)) % 1
+        return amp * (u < 0.25 ? 4 * u : u < 0.75 ? 2 - 4 * u : 4 * u - 4)
+      }
+      const pan =
+        PAN || ORBIT
+          ? scene.onBeforeRenderObservable.add(
+              () => {
+                if (ORBIT) {
+                  camera.alpha = cam.alpha + tri(ORBIT_A, ORBIT_V)
+                  return
+                }
+                const o = tri(PAN_A, PAN_V)
+                camera.target.set(focus.x + rx * o, camera.target.y, focus.z + rz * o)
+              },
+              undefined,
+              true,
+            )
+          : null
       if (pan) undo.push(() => scene.onBeforeRenderObservable.remove(pan))
       for (const arm of [...arms, ...[...arms].reverse()]) {
         await arm.apply()
@@ -572,7 +586,7 @@ export async function runBench(
         const trace = TRACING ? traceOf(recMs, recC, recRt, recN, recLost) : undefined
         runs.push({
           trace,
-          cam: cam.name + (PAN ? '+pan' : ''),
+          cam: cam.name + (PAN ? '+pan' : ORBIT ? '+orbit' : ''),
           arm: arm.name,
           size: sceneSize(),
           frames: frameMs.length,
@@ -596,13 +610,13 @@ export async function runBench(
   const r = engine.getRenderingCanvas()
   return {
     tool: 'look-bench',
-    // 9: each run's longTasks (and longTasksObserved), the trace's simMs (battle threads PR 6's measurement); 8:
-    // trace (?benchtrace=1: each run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is
-    // measured); 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under
-    // the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render
-    // scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits
-    // the start
-    version: 9,
+    // 10: orbit (?benchpan=orbit: each camera turns about its focus as it is measured); 9: each run's longTasks (and
+    // longTasksObserved), the trace's simMs (battle threads PR 6's measurement); 8: trace (?benchtrace=1: each run's
+    // frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is measured); 6: each run's size is the
+    // scene's (the finishing chain's first target: smaller than the canvas under the upscale, decision 0045); 5:
+    // wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest
+    // zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
+    version: 10,
     build: __BUILD__,
     date: new Date().toISOString(),
     userAgent: navigator.userAgent,
@@ -615,6 +629,7 @@ export async function runBench(
     holdS,
     focus,
     pan: PAN ? { metres: PAN_A, mPerS: PAN_V } : null,
+    orbit: ORBIT ? { rad: ORBIT_A, radPerS: ORBIT_V } : null,
     arms: arms.map(a => a.name),
     textureMB: textureMB(engine),
     queriesRefused: timer.refused,

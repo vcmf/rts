@@ -1164,9 +1164,10 @@ and `?lookat` without `?armies` throw, naming it.
   cards over each other share no holes; the billows and the torn rim gentler, and the thinning with age a fade more
   than holes. (The owner, 2026-10-29: the battery's merged clouds from far read as a camouflage pattern.)
 - **The draw order**: the muskets' smoke first, then each arm's (one draw each, in that order; unsorted within, as
-  the muskets': one colour family).
-- **Memory**: the rings, 64 B a puff (the muskets' 1,512 puffs at 20 a side: 97 KB; the guns' 192: 12 KB; on the GPU
-  and the CPU; 14 of its 16 floats used), and the mask, 256 KB, one for all.
+  the muskets': one colour family), except the arms' big cards with their body (below): those back to front.
+- **Memory**: the rings, 64 B a puff (the muskets' 1,512 puffs at 20 a side: 97 KB; the guns' 192: 12 KB, and as
+  much again for their sorted copy; on the GPU and the CPU; 14 of its 16 floats used), and the mask, 256 KB, one for
+  all.
 
 ### The guns' smoke (with `?armies`; decision 0083, proposed)
 
@@ -1195,6 +1196,24 @@ shared (`SmokeMask`, drawn once a frame before the smokes).
   (`?armsmoke` with `?smoke=0`, `?sim` or no smoking arm on the page throws).
 - **Cost** (the plan's Results): about +0.2 to 0.4 ms GPU at 25, 40 and 90 m on the battery, both batteries firing
   without pause (`?firehold=1`); its fill is cut by leaving a card's corners before any texture is read.
+- **The body** (the arms' big cards only, `uBig`; the muskets' as approved; the owner, 2026-10-30: the guns' smoke
+  "a bit flat: denser, less transparent, more 3D"; the plan's round 2): each card painted as a volume (`smoke.frag`):
+  its core from the card's large shape alone (the smaller billows and the grain left to the rim), dense through and
+  its opacity holding to half its life (`vOpC`; a thin puff, a gap between clouds, has none: a faint core reads as a
+  grey film), fading with the erosion; its light from a dome over the card's shape, its lobes the large billows
+  embossed a step toward the sun (their values, not their texels' derivatives, which the 8-bit grain steps into
+  terraces), lit through a soft mid tone (decision 0084) from a warm white to a pale cool shade, the underside cooler
+  and deeper, the core deeper in the shade than the rim, a faint warm rim on the sun's side; the thin veils lit as
+  before. Over the men (the mask's cover) the core is dropped, so the cap leaves a formation reading through cards
+  over each other (dense cores had brought two overlapping cards to about 0.82 there). Drawn back to front
+  (`depthOrder`, pure, tested: the live puffs' middles as the vertex shader moves them, their depth along the view's
+  axis, so a pan changes nothing; seeded with the last frame's order, a pair swapped only past 0.5 m of depth, so an
+  orbit or the drift does not swap it back and forth; only the live ones drawn, `thinInstanceCount`) and uploaded
+  when due (`uploadDue`: at once for a puff born or gone, a swap alone at most every 0.25 s; an upload every frame
+  cost 3.5 ms of GPU frame on Metal, the buffer's update waiting on the frame before): about 5 uploads a second at
+  rest, panning or orbiting. The muskets' cards: their shader path unchanged up to rounding (the cap's factor now
+  computed apart from the opacity). Cost: the
+  guns' smoke +0.4 to 0.7 ms GPU at 25 m on the battery, ≤ 0.5 from 40 m out (the plan's round 2).
 
 ### The readability guard (L2a)
 

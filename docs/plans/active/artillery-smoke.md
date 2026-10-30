@@ -249,11 +249,89 @@ Built as the approach says, with what the stills taught:
   on the second (facing the camera), on and off (a compare page: space flips), a battery's volley over a minute
   (`volley-life.gif`, `seq-sheet.png`), and the tuning rounds (`it2` to `it6`).
 
+## Round 2: the clouds' body (2026-10-30)
+
+The owner, on the merged guns' smoke (#266): its motion and look approved, but "still a bit flat: it must be denser,
+less transparent, and more 3D". Refs: `output/smoke-refs/owner-2026-10-28/` (the Patriot's volley bank, Cossacks 2's
+volley, the musket plume) and `docs/research/smoke.md`; this plan's open question 1 (a thicker bank).
+
+**Scope**: the arms' big cards only (the muskets' smoke as approved: `uBig` 0 on its material); painted, no
+volumetrics or ray marching; the formations' cap kept over every card; the far-zoom fix (`vFar`) kept. Built as
+variants behind a switch for the owner's eye (0, the cards as approved; 1, the body; 2, the body and lobes); **the
+owner picked 1** (2026-10-30: both liked, 1 for its cost; "for this I don't need options"): it is the guns' smoke now,
+the switch, 0 and 2 removed.
+
+**Approach** (`src/look/shaders/smoke.frag`, `smoke.vert`, `src/look/smoke.ts`; `docs/systems/look.md`, the body):
+
+- **Denser**: a core from the card's large shape alone (the falloff and the large billows; the smaller billows and
+  the grain left to the rim, which stays torn and soft), near-opaque through and its opacity holding to half its life
+  (`vOpC`), then fading with the erosion; the rim thinning as before. A thin puff (one in seven, the gaps between
+  clouds; a far strung puff's lower density) gets no core: a faint core read as a grey film (seen in the first stills).
+- **3D**: a dome over the card's shape (its normal from the card's coordinates), its lobes the large billows embossed
+  a step toward the sun; lit by the sun through a soft mid tone (decision 0084) from a warm white to a pale cool shade,
+  the underside cooler and deeper, the core deeper in the shade than the rim, a faint warm rim on the sun's side. The
+  thin veils lit as before (the body's light weighted by the core's shape). First built with the billows' slope from
+  the screen's derivatives (and then a strong emboss): the 8-bit grain's large blotches step, and the light came out in
+  terraces, a blocky camouflage; the gentle emboss of values does not.
+- **Front and back**: the cards drawn back to front (`depthOrder`: the ring's live puffs' middles at the shader's clock,
+  an insertion sort each frame into a second buffer, only the live ones drawn); with dense cores an unsorted blend put a
+  back card's lit top over a front card.
+- **Variant 2, dropped**: one lobe more on each of the first two strung puffs, the muzzle's cloud and the next (a lit
+  top up and to one side, a shaded underbelly low on the other, set off by shares of the puff's radius, two more
+  floats a puff): 6 cards a shot for 4 (first built with a lobe on all four, 8 cards). Fuller and rounder, but +0.75
+  to 1.0 ms at 25 m (below); removed with the switch.
+
+**Stills** (`output/armies-review/29-gun-smoke-volume/`, not in git: its compare page of the variants, side by side
+or space to cycle 0 → 1 → 2; 25, 40, 90, 150 m at 66 s and 40 m at 64 s; one volley's life every 2 s,
+`seq-sheet.png` and a gif a variant; the refs). Read: 1 and 2 turn the flat white patches into rounded, lit clouds with
+a cool shaded side and underside; 2 is fuller and rounder, its far puffs more of a cloud; the crews and the cavalry
+riding through still read (the cap); at 90 and 150 m soft shaded masses, no camouflage pattern.
+
+**Cost**: `?armies=20&firehold=1&bench=smokebody&benchat=60,-43&benchr=25,40,90,150` (a bench arm built for the
+comparison, removed with the switch; the built page, Metal, 1920 × 1080; `body0`, `body1`, `body2`, `noarmsmoke`
+alternated in one page, each camera's arms run forward and back; three rounds each started at a 1-min load ≤ 3 under
+the bench lock; the arms' share = body less `noarmsmoke`, GPU frame p50, ms):
+  - First built uploading the sorted cards every frame: bodies 1 and 2 cost +3.2 to +6.5 ms of GPU frame at every view
+    (one round), their draws' own share (`other`) only +0.1 to +0.6: the buffer's update waiting on the frame before,
+    on Metal. Uploaded only when the drawn list changes now.
+  - With 4 lobes (8 cards a shot; three rounds): body 1 +0.12 to +0.80, body 2 +0.40 to +1.09 (25 m, yaw −45°).
+  - As built (body 2 with 2 lobes; three rounds; ranges over the rounds):
+
+    | view (m) | body 0 (today) | body 1 | body 2 |
+    |---|---|---|---|
+    | 25 | +0.17 to +0.52 | +0.43 to +0.71 | +0.73 to +1.04 |
+    | 40 | −0.02 to +0.40 | +0.12 to +0.51 | +0.46 to +0.58 |
+    | 90 | −0.16 to +0.71 | −0.09 to +0.45 | +0.19 to +0.49 |
+    | 150 | +0.03 to +0.31 | +0.12 to +1.03 (one camera, one round: noise) | +0.30 to +0.76 |
+
+  Body 1 (as shipped) keeps about the budget (≤ ~0.5 ms) but at 25 m on the battery (+0.4 to 0.7); body 2 is about
+  +0.5 from 40 m out and +0.75 to 1.0 at 25 m, over it. The fill of the denser, longer-held cores at the closest view
+  is the cost; the half-resolution smoke target (the musket plan's Out) stays the fallback. Today's (body 0) measured
+  here +0.0 to +0.7, the earlier round's +0.16 to +0.39: this machine's noise between days.
+
+**Review** (one round, `/code-review high`, nothing severe; fixed): the cap over the men was weaker with dense cores
+(two overlapping cards about 0.82 over the men, three 0.92): the core is dropped where the mask says men, the rim's
+cap as before (before and after at 40 m with the cavalry riding through the battery's smoke:
+`output/armies-review/29-gun-smoke-volume/review/`, the riders read more clearly, the clouds elsewhere unchanged).
+The order by distance changed with every camera move and the drift, and any swap uploaded the buffer again (the stall
+could come back while panning or orbiting): sorted along the view's axis now (a pan changes nothing), seeded with the
+last frame's order with a 0.5 m dead band (no swapping back and forth, no pop where two dense cards cross; a slow
+orbit's stills and gif, `review/orbit-40.gif`), and a swap alone uploaded at most every 0.25 s (`uploadDue`, tested).
+Uploads counted in the page (the built page, 40 m on the battery, 10 s each): 108 at rest, 437 orbiting, 95 panning
+before the rate; 51, 60 and 56 after. Bench while panning and orbiting (`?benchpan=1|orbit`, added for it):
+`?armies=20&firehold=1&bench=smoke&benchpan=1|orbit&benchat=60,-43&benchr=25,40,90`, two rounds (1-min load 2.84
+and 2.51 at their starts, under the bench lock), the arms' share (smoke less `noarmsmoke`, GPU frame p50) averaged
+over each radius's three yaws: panning +0.19 to +0.23 ms, orbiting +0.03 to +0.68 (single cameras −0.23 to +0.70
+panning, −0.60 to +1.34 orbiting: a moving camera's arms see different frames); no stall of the 3.5 ms kind.
+
 ## Open questions for the owner
 
 1. **How long should a gun's cloud stay, and how thick the bank?** 14 to 22 s as built (cut from 20 to 30 s for the
    cost): a battery in action keeps a ragged row of clouds before its guns, not a continuous bank. A thicker,
    longer bank is truer to Mercer and costs about 0.3 ms more at the worst views (measured with the first def).
+   Round 2 makes each cloud denser and rounder at the same life. **Answered** (2026-10-30): the owner liked bodies 1
+   and 2 alike and picked **1** for its cost (+0.4 to 0.7 ms at 25 m, ≤ 0.5 from 40 m out, against 2's +0.7 to
+   1.0), with no switch: it is the guns' smoke.
 2. **Dust**: a low, warm brown puff at the ground under the muzzle as the blast kicks it up (Leonardo's smoke and
    dust), or white smoke only?
 3. **The flash**: a short spark only (as the muskets'), or a warm glow lighting the young cloud for a tenth of a second?

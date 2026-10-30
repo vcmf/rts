@@ -9,16 +9,17 @@ precision highp float;attribute vec3 position;
 // puff's a little its own), growth from uGrow.x to uGrow.y over uGrow.z. Young, the card is long along the shot
 // (uPlume: its stretch at birth, its relaxing time), narrow at the muzzle (smoke.frag); grown, wider along the front
 // than tall (uPlume.z, more with age), into its neighbours. A puff not born or past its life, of no density, or
-// thinned out by the zoom (keepScale: uKeep, its share kept and the shrink's band), is put outside the view
+// thinned out by the zoom (keepScale: uKeep, its share kept and the shrink's band), is put outside the view. A big
+// card's body (uBig 1: smoke.frag): its core's opacity (vOpC) holds through most of the life, its rim's (vOp) thins
 uniform mat4 viewProjection;uniform vec3 uCamPos,uWind;uniform vec4 uJet,uGrow;uniform vec2 uKeep;uniform vec3 uPlume;
 uniform float uSmokeT,uHeight,uRoll,uThin,uBig;
-varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl,vFar;
+varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl,vFar,vOpC;
 void main(){
   float birth=world0.w,life=world1.w,seed=world1.z,age=uSmokeT-birth;
   float keep=uKeep.x,sc=clamp((keep*(1.0+uKeep.y)-fract(seed*13.73))/(uKeep.y*keep),0.0,1.0)/sqrt(keep);
   if(age<0.0||age>=life||sc<=0.0||world2.w<=0.0){
     gl_Position=vec4(2.0,2.0,2.0,1.0);vW=vU=vV=vC=vec3(0.0);vQ=vM=vec2(0.0);
-    vAge=vErode=vSeed=vGround=vOp=vR=vPl=vFar=0.0;return;}
+    vAge=vErode=vSeed=vGround=vOp=vR=vPl=vFar=vOpC=0.0;return;}
   float r=(uGrow.x+(uGrow.y-uGrow.x)*(1.0-exp(-age/uGrow.z)))*world2.x*sc;
   vec3 fwd=vec3(world1.x,0.0,world1.y),side=vec3(-fwd.z,0.0,fwd.x);
   float reach=(uJet.x*uJet.y*(1.0-exp(-age/uJet.y))+uRoll*age)*world2.y;
@@ -51,4 +52,7 @@ void main(){
   vFar=uBig*smoothstep(50.0,85.0,length(uCamPos-c));
   vErode=clamp((age/life-uGrow.w)/(1.0-uGrow.w),0.0,1.0);
   vOp=(1.0-uThin*min(1.0,age/life))*world2.w;
+  // (the core: whole until half its life, a dense puff's; a thin one, a gap between clouds, has none: a faint core
+  // reads as a grey film, not smoke)
+  vOpC=(1.0-uThin*smoothstep(0.5,1.0,age/life))*smoothstep(0.3,0.6,world2.w);
   vW=p;gl_Position=viewProjection*vec4(p,1.0);}
