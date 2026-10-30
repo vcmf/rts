@@ -44,7 +44,6 @@ import {
   ordersFree,
   setOnMap,
   layoutOf,
-  changeProgress,
   startChange,
   targetShape,
 } from './formation.ts'
@@ -56,6 +55,7 @@ import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
 import { threatWeights, byWeights } from './sectors.ts'
 import { sin, cos } from './num.ts'
+import { braceOf, meleeOf } from './traits.ts'
 import { TICK_HZ, DT } from './time.ts'
 
 const sqrt = Math.sqrt
@@ -180,22 +180,12 @@ function sideOf(w: World, G: FireGeo, i: number, j: number, mask: Uint8Array | n
 }
 const side = new Float64Array(3)
 
-// how far battalion i stands in a shape proof against a charge from any side (0..1): during a change into one,
-// the change's progress; out of one, 1 less it
-export function bracedOf(w: World, i: number): number {
-  const f = w.f
-  const U = typeOf(w, i)
-  const from = U.shapes[f.shape[i]].def.braced ? 1 : 0
-  if (!f.trans[i]) return from
-  const to = U.shapes[f.tShape[i]].def.braced ? 1 : 0
-  return from + (to - from) * changeProgress(w, i, w.meta[M_TICK] * DT)
-}
-// battalion i's strength in melee: its kind's, less its disorder's share (all of it while changing shape), by its
-// morale state
+// battalion i's strength in melee: its shape's (src/sim/traits.ts), less its disorder's share (all of it while
+// changing shape), by its morale state
 function strengthOf(w: World, i: number): number {
   const f = w.f
   return (
-    w.cr.strengthByKind[layoutOf(w, i).kind] *
+    meleeOf(w, i) *
     (1 - w.cr.rs.melee.cohesion * (f.trans[i] ? 1 : f.disorder[i])) *
     w.cr.stateFactor[Math.min(2, f.mstate[i])]
   )
@@ -419,7 +409,7 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
     f.chUntil[i] = tick + Math.round(ch.pursue * levelOf(w, i).pursue * TICK_HZ)
     return
   }
-  const b = bracedOf(w, j)
+  const b = braceOf(w, j)
   // the test before contact, once (a charge launched inside the test's distance takes it at once)
   if (f.chPhase[i] === CH_CLOSING && gap <= ch.test) {
     f.chPhase[i] = CH_TESTED
@@ -487,7 +477,7 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
   }
   // a charging type does not press a foe that has formed its refuge (a square) and holds it: it turns away. One
   // wavering or worse is pressed (it was broken into, or will be)
-  if (typeOf(w, i).charge && bracedOf(w, j) >= 1 && f.mstate[j] < MS_WAVERING) {
+  if (typeOf(w, i).charge && braceOf(w, j) >= 1 && f.mstate[j] < MS_WAVERING) {
     leave(w, i, j)
     recoil(w, i, j, tick)
     return

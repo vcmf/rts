@@ -10,7 +10,7 @@ decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-eng
 A cavalry regiment charges an enemy: it trots, gallops the last 150 m, and either the target breaks before it
 arrives, or the horses strike it and the two fight until one side breaks. A battalion that sees cavalry near
 forms square. A square turns charges away; a battalion caught while forming one is struck as in the flank.
-Every number is ruleset data (`UnitType.charge`, `UnitType.refuge`, `FormationDef.braced`, `melee`). The
+Every number is ruleset data (`UnitType.charge`, `UnitType.refuge`, a shape's `traits.brace` and `traits.melee`, `melee`). The
 numbers are calibrated on outcomes (`tools/calibrate-charge.ts`), not taken from history.
 
 ```
@@ -77,8 +77,9 @@ code (turn limits, the lag model, the footprint gate).
 of the other. Each block is the rectangle its places cover, as the fire step builds it (`blockGeometry`). It is
 exact face to face, a little short corner to corner, and 0 when they overlap.
 
-**Braced** (`bracedOf`), 0..1: how far a formation stands in a shape proof against a charge from any side
-(`braced`, the square). During a change into one it is the change's progress; out of one, 1 less it.
+**Braced** (`braceOf`, `src/sim/traits.ts`), 0..1: how far a formation stands in a shape proof against a charge
+(its shape's `traits.brace`: the square 1). During a change it moves from the old shape's to the new one's by the
+change's progress.
 
 **The side struck** (U1, `sideOf`, `docs/proposals/sectors-model.md` § 5): weights (front, flank, rear) that sum
 to 1, the charger's companies' threat weights on the target's face (`src/sim/sectors.ts`), each weighted by its
@@ -116,7 +117,7 @@ when the way is behind it, and is blown for `charge.rest`.
 men of its companies within `contact + hold` of each.
 - **Losses:** `rate × DT × men in contact × strength`, owed to the struck companies in contact, weighted by
   their men.
-- **Strength:** `strength[kind] × (1 − cohesion × disorder) × the fire's morale-state factor`. Changing
+- **Strength:** its shape's `traits.melee` (`src/sim/traits.ts`) × (1 − cohesion × disorder) × the fire's morale-state factor`. Changing
   shape counts as full disorder.
 - **No fire:** neither side fires (`mayFire`); a wavering battalion keeps fighting (decision 0087).
 - **It ends when:**

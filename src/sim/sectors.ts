@@ -107,7 +107,7 @@ export function buildFaces(w: World, G: FireGeo): Faces {
   for (let j = 0; j < MAX_FORMATIONS; j++) {
     if (!f.alive[j]) continue
     const def = layoutOf(w, j).def
-    const kind = f.trans[j] ? FACE_NONE : def.braced ? FACE_ALL : def.trail ? FACE_TRAIL : FACE_ONE
+    const kind = f.trans[j] ? FACE_NONE : def.allRound ? FACE_ALL : def.trail ? FACE_TRAIL : FACE_ONE
     F.kind[j] = kind
     if (kind === FACE_ALL) continue
     const C = typeOf(w, j).C

@@ -151,11 +151,12 @@ outside contagion's reach and its breaks spread over 35–135 s instead of one t
   of its bar).
 
 **Exposure** (U1, `docs/proposals/sectors-model.md` § 5). A volley's expected hits, and canister's
-(`docs/systems/artillery.md`), are multiplied by the target's exposure to the firing company: its kind's depth
-factor × (front + flank × `exposure.flank` + rear × `exposure.rear`), the weights (front, flank, rear) of the
-firing company's block on the target's face (`src/sim/sectors.ts`). A shape's numbers are its formation's
-`exposure`: a line 1.8 and 1.2 (fire down its length), a column 1.2 and 1.1, a march column 1.5 and 1.0, cavalry
-1.2 and 1.1 (1.5 and 1.0 in march), a battery 1.5 and 1.0; a square has no flank. Fire from ahead is unchanged, so
+(`docs/systems/artillery.md`), are multiplied by the target's exposure to the firing company: its shape's hits taken
+(`traits.hits`, read through `src/sim/traits.ts`): from the front × (front + flank × the flank's multiple + rear ×
+the rear's), the weights (front, flank, rear) of the firing company's block on the target's face
+(`src/sim/sectors.ts`). From the front: a line 1.0, a column, a square and a march column 1.6, cavalry 1.3, a battery
+0.4; the flank's and rear's multiples: a line 1.8 and 1.2 (fire down its length), a column 1.2 and 1.1, a march
+column 1.5 and 1.0, cavalry 1.2 and 1.1 (1.5 and 1.0 in march), a battery 1.5 and 1.0; a square has no flank. Fire from ahead is unchanged, so
 the line-on-line calibration's front is.
 
 **The back exposed** (decision 0086, sectors-model § 6). Before the morale loop, `threatPass` gives each battalion

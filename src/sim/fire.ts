@@ -17,13 +17,14 @@ import {
   levelOf,
 } from './world.ts'
 import type { Handle } from './handle.ts'
-import { placeWorld, layoutOf, occupied, removeMan, nearImpassable, sheltering } from './formation.ts'
+import { placeWorld, occupied, removeMan, nearImpassable, sheltering } from './formation.ts'
 import { heightAt, cellK } from './terrain.ts'
 import { keyedStream, nextUnit } from './rng.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
 import { buildFaces, threatWeights } from './sectors.ts'
+import { hitsTaken, sided } from './traits.ts'
 import { creditMen } from './experience.ts'
 
 const sqrt = Math.sqrt
@@ -129,17 +130,13 @@ export function blockGeometry(w: World): FireGeo {
 
 const wt = new Float64Array(3)
 /**
- * Battalion j's exposure to fire from company k (docs/proposals/sectors-model.md § 5): its kind's depth factor
- * times front + flank × its shape's exposure.flank + rear × exposure.rear, the weights (front, flank, rear) of k's
- * block on j's face. G must be this tick's geometry (its faces are built with it).
+ * Battalion j's exposure to fire from company k (docs/proposals/sectors-model.md § 5): its hits taken
+ * (src/sim/traits.ts) for the weights (front, flank, rear) of k's block on j's face. G must be this tick's geometry
+ * (its faces are built with it).
  */
 export function exposure(w: World, G: FireGeo, k: number, j: number): number {
-  const L = layoutOf(w, j)
-  const base = w.cr.depthByKind[L.kind]
-  const e = L.def.exposure
-  if (!e) return base
-  threatWeights(w, G, j, Math.floor(k / w.cr.maxC), k, wt)
-  return base * (wt[0] + wt[1] * e.flank + wt[2] * e.rear)
+  if (sided(w, j)) threatWeights(w, G, j, Math.floor(k / w.cr.maxC), k, wt)
+  return hitsTaken(w, j, wt)
 }
 
 // hit chance per round at range d (linear in the table, 0 past its last point)

@@ -147,9 +147,20 @@ describe('compileRuleset refuses', () => {
       /support.arc must be in/,
     ],
     [
-      'a melee strength for a kind the terrain table has not',
-      { ...N, melee: { ...N.melee, strength: { ...N.melee.strength, camel: 2 } } },
-      /melee.strength names camel/,
+      'a melee strength not above 0',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { melee: 0 } } },
+      }),
+      /shape line's melee must be finite and above 0/,
+    ],
+    [
+      'a brace outside 0..1',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, square: { ...inf.formations.square, traits: { brace: 1.5 } } },
+      }),
+      /shape square's brace must be in 0..1/,
     ],
     [
       'a shape whose pace is not a pace (#156)',
@@ -216,9 +227,12 @@ describe('compileRuleset refuses', () => {
       /fire.sight.woods is -1/,
     ],
     [
-      'a target depth that is not a number',
-      { ...N, fire: { ...N.fire, depth: { ...N.fire.depth, line: NaN } } },
-      /fire.depth.line is NaN/,
+      'hits from the front that are not a number',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { hits: { front: NaN } } } },
+      }),
+      /shape line's hits must be finite/,
     ],
     [
       'a disorder scale below 0',
@@ -231,9 +245,12 @@ describe('compileRuleset refuses', () => {
       /fire.sight names jungle/,
     ],
     [
-      'a target depth for a kind the terrain table has not',
-      { ...N, fire: { ...N.fire, depth: { ...N.fire.depth, camel: 1 } } },
-      /fire.depth names camel/,
+      "hits from a flank under the front's",
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { hits: { front: 1, flank: 0.9 } } } },
+      }),
+      /shape line's hits must be finite, the front above 0, the flank and rear ≥ 1/,
     ],
     [
       'a disorder scale for a kind the terrain table has not',

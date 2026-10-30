@@ -29,7 +29,7 @@ import {
   END_DRAW,
   sheltering,
   ordersFree,
-  bracedOf,
+  braceOf,
   fightShares,
   issue,
   type World,
@@ -404,7 +404,7 @@ describe('routers break ranks (#39)', () => {
     const h = unitHandle(0)
     s.order({ type: 'form', id: h, shape: 'square' })
     // its progress into the square
-    s.until(() => s.layout(h).name === 'line' && s.w.f.trans[0] === 1 && bracedOf(s.w, 0) < at, 200)
+    s.until(() => s.layout(h).name === 'line' && s.w.f.trans[0] === 1 && braceOf(s.w, 0) < at, 200)
     s.w.f.bar[0] = -100
     s.tick()
     return { state: s.w.f.mstate[0], shape: s.shape(h) }

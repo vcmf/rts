@@ -33,11 +33,30 @@ export interface FormationDef {
   // a trail shape's spacing of files and ranks when it is not the block's (a column of route of horses, nose
   // to tail): its places only; a change into or out of it passes through the block's spacing
   step?: { file: number; rank: number }
-  braced?: boolean // proof against a charge from any side (the square; S1d-2)
-  // fire from its flank and from its rear over fire from its front (each ≥ 1; docs/proposals/sectors-model.md § 5);
-  // none: 1, as from the front
-  exposure?: { flank: number; rear: number }
+  allRound?: boolean // no flank: every side a front (the square)
+  traits?: TraitsDef // its strengths and weaknesses; none: neutral
   place(g: Geometry): Placement[]
+}
+// a shape's compiled traits (TypeTable.traits), a row of T_LEN per shape, read through src/sim/traits.ts: hits taken
+// from the front, from the flank and the rear as multiples of it, whether those two are given, melee, brace
+export const T_HITS = 0
+export const T_FLANK = 1
+export const T_REAR = 2
+export const T_SIDED = 3
+export const T_MELEE = 4
+export const T_BRACE = 5
+export const T_LEN = 6
+/**
+ * A shape's strengths and weaknesses (docs/proposals/formations.md § 5a), multipliers read through
+ * src/sim/traits.ts; a field left out is neutral.
+ */
+export interface TraitsDef {
+  // hits taken from musketry and canister: from its front (how easy a target it is), and from its flank and its rear
+  // as multiples of the front's (each ≥ 1: fire from the front is never the worst; docs/proposals/sectors-model.md
+  // § 5); none: 1
+  hits?: { front: number; flank?: number; rear?: number }
+  melee?: number // its strength in melee
+  brace?: number // 0..1: how far it is proof against a charge (the square 1; S1d-2)
 }
 export interface TerrainDef {
   g: Record<string, number>
@@ -60,7 +79,6 @@ export interface FireDef {
   reloadJitter: number
   firingRanks: number // the front ranks that fire
   misfire: number // share of rounds that do not go off
-  depth: Record<string, number> // how easy a target is to hit, by its kind
   state: Record<string, number> // how well a battalion fires, by morale state (steady, shaken, wavering)
   cohesion: number // fire falls by this share at full disorder
   eye: number // eye height above the ground, metres
@@ -148,7 +166,6 @@ export interface MeleeDef {
   // the shock of a charge striking a battalion already in melee with another, by the side it strikes (decision 0080)
   second: { flank: number; rear: number }
   rate: number
-  strength: Record<string, number>
   cohesion: number
   refuse: number
   breach: number
@@ -323,6 +340,7 @@ export interface TypeTable {
   shapes: ShapeLayout[]
   shapeIndex(name: string): number
   changeTime: Float64Array // [from·S + to]
+  traits: Float64Array // [shape·T_LEN + field] (src/sim/traits.ts)
   start: number // the spawn's shape
   // the shapes it charges from (1 by shape) and its paces' indices; null: it does not charge
   charge: { from: Uint8Array; approach: number; pace: number } | null
@@ -347,12 +365,10 @@ export interface Compiled {
   presets: string[]
   presetIndex(name: string): number
   slope: Float64Array // 401 entries over rise/run −1..1
-  depthByKind: Float64Array // fire: the target's depth factor, by kind
   sightByClass: Float64Array // fire: metres of each terrain class a sight line may cross (Infinity: any)
   cosArc: number // fire: cos of the arc's half-angle
   stateFactor: Float64Array // fire: by morale state (steady, shaken, wavering; a router does not fire)
   supportCos: number // morale: cos of the support arc
-  strengthByKind: Float64Array // melee: strength by kind
 }
 
 // the morale states that fire, in MS_* order (world.ts)
@@ -398,7 +414,8 @@ function rulesetHash(rs: Ruleset): number {
             !!d.trail,
             !!d.closeAcross,
             d.step ?? null,
-            !!d.braced,
+            !!d.allRound,
+            d.traits ?? null,
             d.place(geo),
           ]
         }),
@@ -457,12 +474,25 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     if (d.roadPace && !paces.includes(d.roadPace)) {
       throw new Error(`${at}: shape ${n}'s roadPace ${d.roadPace} is not one of the paces`)
     }
+    const T = d.traits ?? {}
     // a flank or rear under 1 would make fire from the front the worst
     if (
-      d.exposure &&
-      !(d.exposure.flank >= 1 && d.exposure.rear >= 1 && d.exposure.flank + d.exposure.rear < Infinity)
+      T.hits &&
+      !(
+        T.hits.front > 0 &&
+        T.hits.front < Infinity &&
+        (T.hits.flank ?? 1) >= 1 &&
+        (T.hits.rear ?? 1) >= 1 &&
+        (T.hits.flank ?? 1) + (T.hits.rear ?? 1) < Infinity
+      )
     ) {
-      throw new Error(`${at}: shape ${n}'s exposure must be finite and ≥ 1 (flank and rear)`)
+      throw new Error(`${at}: shape ${n}'s hits must be finite, the front above 0, the flank and rear ≥ 1`)
+    }
+    if (T.melee !== undefined && !(T.melee > 0 && T.melee < Infinity)) {
+      throw new Error(`${at}: shape ${n}'s melee must be finite and above 0`)
+    }
+    if (T.brace !== undefined && !(T.brace >= 0 && T.brace <= 1)) {
+      throw new Error(`${at}: shape ${n}'s brace must be in 0..1`)
     }
   }
   // a change time naming a shape it has not would be ignored, and the default taken in silence (#156)
@@ -478,6 +508,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   }
   const shapes: ShapeLayout[] = names.map(n => layout(g, u.formations, n, kinds, paces))
   const S = names.length
+  const traits = compileTraits(names.map(n => u.formations[n]))
   const changeTime = new Float64Array(S * S)
   for (let a = 0; a < S; a++) {
     for (let b = 0; b < S; b++) changeTime[a * S + b] = u.changeTime[names[a] + '>' + names[b]] ?? u.defaultChangeTime
@@ -523,7 +554,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     charge = { from, approach, pace }
   }
   const refuge = u.refuge === undefined ? -1 : names.indexOf(u.refuge)
-  if (u.refuge !== undefined && (refuge < 0 || !u.formations[u.refuge].braced)) {
+  if (u.refuge !== undefined && (refuge < 0 || (u.formations[u.refuge].traits?.brace ?? 0) < 1)) {
     throw new Error(`${at}: its refuge ${u.refuge} is not one of its braced shapes`)
   }
   let artillery: TypeTable['artillery'] = null
@@ -577,6 +608,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     shapes,
     shapeIndex: n => names.indexOf(n),
     changeTime,
+    traits,
     start,
     charge,
     refuge,
@@ -624,7 +656,6 @@ export function compileRuleset(rs: Ruleset): Compiled {
     }
   }
   byName('fire.sight', rs.fire.sight, classes, 'a terrain class')
-  byName('fire.depth', rs.fire.depth, kinds, 'a kind of the terrain table')
   byName('disorder.scale', rs.disorder.scale, kinds, 'a kind of the terrain table')
   const paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const typeNames = Object.keys(rs.types)
@@ -638,7 +669,6 @@ export function compileRuleset(rs: Ruleset): Compiled {
     const a = sl + 0.05 < 0 ? -(sl + 0.05) : sl + 0.05
     slope[i] = Math.min(1, rs.slopeK * expNeg(3.5 * (a - 0.05)))
   }
-  const depthByKind = new Float64Array(kinds.map(k => rs.fire.depth[k] ?? 1))
   const sightByClass = new Float64Array(Object.keys(rs.terrain).map(c => rs.fire.sight[c] ?? Infinity))
   for (const s of FIRING_STATES) {
     if (!(s in rs.fire.state)) throw new Error(`ruleset ${rs.name}: fire.state has no ${s}`)
@@ -718,11 +748,6 @@ export function compileRuleset(rs: Ruleset): Compiled {
       `ruleset ${rs.name}: morale.support.arc must be in (0, π/2]: wider, a friend ahead would count as a flank`,
     )
   }
-  for (const k of Object.keys(rs.melee.strength)) {
-    if (!kinds.includes(k)) {
-      throw new Error(`ruleset ${rs.name}: melee.strength names ${k}, not a kind of the terrain table`)
-    }
-  }
   let maxC = 0
   let maxNB = 0
   let maxSlots = 0
@@ -745,16 +770,29 @@ export function compileRuleset(rs: Ruleset): Compiled {
     paceSpeed,
     presets,
     slope,
-    depthByKind,
     sightByClass,
     cosArc: cos(rs.fire.arc),
     stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])),
     supportCos: cos(rs.morale.support.arc),
-    strengthByKind: new Float64Array(kinds.map(k => rs.melee.strength[k] ?? 1)),
     presetIndex: n => presets.indexOf(n),
   }
 }
 const expNeg = (x: number): number => exp(-x)
+/** Each shape's traits as a flat row (src/sim/traits.ts's fields), neutral where the ruleset says nothing. */
+function compileTraits(defs: FormationDef[]): Float64Array {
+  const out = new Float64Array(defs.length * T_LEN)
+  defs.forEach((d, s) => {
+    const t = d.traits ?? {}
+    const o = s * T_LEN
+    out[o + T_HITS] = t.hits?.front ?? 1
+    out[o + T_FLANK] = t.hits?.flank ?? 1
+    out[o + T_REAR] = t.hits?.rear ?? 1
+    out[o + T_SIDED] = t.hits?.flank !== undefined || t.hits?.rear !== undefined ? 1 : 0
+    out[o + T_MELEE] = t.melee ?? 1
+    out[o + T_BRACE] = t.brace ?? 0
+  })
+  return out
+}
 const nonNegative = (v: number): boolean => v >= 0 && v < Infinity
 // the names in first-seen order, each once (the sim keeps no Set: index-ordered arrays only)
 const unique = (a: string[]): string[] => a.filter((v, i) => a.indexOf(v) === i)

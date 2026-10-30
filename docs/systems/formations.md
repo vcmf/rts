@@ -58,8 +58,9 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
 first is the default), each with:
 - its block geometry: companies, files, ranks, spacings, the minimum spacing, the accordion gap, bins per
   company;
-- its shapes as company placements, with kind, pace, road pace, `trail`, `closeAcross`, `braced`, the
-  `exposure` to fire from a flank and the rear (U1, `docs/systems/fire-morale.md`) and, for a trail shape, an
+- its shapes as company placements, with kind, pace, road pace, `trail`, `closeAcross`, `allRound` (no flank: the
+  square), its `traits` (hits taken from the front, the flank and the rear, melee strength, bracing; read through
+  `src/sim/traits.ts`, `docs/proposals/formations.md` § 5a) and, for a trail shape, an
   optional `step`: the spacing of its places' files and ranks when it is not the block's (a column
   of route of horses, nose to tail);
 - its change times, the shape a spawn takes, and whether it fires by company (S1c's musketry).
@@ -86,8 +87,9 @@ It refuses, with a message naming what is wrong, a ruleset the world could not r
 them a name that points at nothing (#156): a shape's `pace` or `roadPace` that is not a pace, a change time that does
 not name two of the type's shapes, and a terrain class that gives some kind no speed; and values out of their range:
 a pace not > 0, a change time not ≥ 0, a q table for no pace or with a factor not > 0, a pace's q table leaving out
-the ground of some class (it would read as 1), and `fire.sight`, `fire.depth` or `disorder.scale` naming no class or
-kind or giving a value not a finite number ≥ 0. That terrain only slows (a factor ≤ 1) is a convention of the
+the ground of some class (it would read as 1), and `fire.sight` or `disorder.scale` naming no class or kind or giving a
+value not a finite number ≥ 0; a shape's traits out of range (hits from the front not above 0, from the flank or
+the rear under the front's, melee not above 0, a brace outside 0..1), and a refuge not fully braced. That terrain only slows (a factor ≤ 1) is a convention of the
 shipped data, checked there, not a rule of the engine.
 
 The ruleset's hash is recorded in the world, the replays and the saves.
