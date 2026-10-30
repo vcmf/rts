@@ -74,6 +74,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/u1-sectors.md`](plans/active/u1-sectors.md) (U1: sectors, exposure by shape, the back exposed, the second enemy in melee),
   [`plans/active/u2-morale-bar.md`](plans/active/u2-morale-bar.md) (U2: the morale bar, levels and experience),
   [`plans/active/division-scale.md`](plans/active/division-scale.md) (the division scale and the formations: the traits table, the scale, the formations' strengths and weaknesses),
+  [`plans/active/formations.md`](plans/active/formations.md) (its step C: the traits' new fields, their values, the thin line),
   [`plans/active/paper-layers.md`](plans/active/paper-layers.md) (paper layers: the relief as stacked lit sheets in the staff map prototype),
   [`plans/active/brigades-proto.md`](plans/active/brigades-proto.md) (brigades of two battalions in the staff map prototype),
   [`plans/active/water-paper.md`](plans/active/water-paper.md) (water as a paper wash, sunk below the land, in the staff map prototype),

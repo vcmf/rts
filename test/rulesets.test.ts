@@ -10,12 +10,21 @@ import {
   T_HITS,
   T_FLANK,
   T_MELEE,
+  T_BRACE,
+  T_BRACE_FLANK,
+  T_BRACE_REAR,
+  T_FIRE,
+  T_SHOCK,
+  T_FLANK_SHOCK,
+  T_BLEND,
+  T_MOVES,
   type Ruleset,
   type UnitType,
 } from '../src/sim/index.ts'
 import { napoleonic, ceiling } from '../src/rulesets/napoleonic.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
 import { data } from './fx.ts'
+import { PI } from '../src/sim/num.ts'
 
 const N = napoleonic
 const T = N.types
@@ -144,7 +153,7 @@ describe('compileRuleset refuses', () => {
     [
       "a friend's break strong enough to rout a steady battalion on its own",
       { ...N, morale: { ...N.morale, contagion: { ...N.morale.contagion, shock: 61 } } },
-      /contagion.shock over 0.6/,
+      /contagion.shock, by the shapes' shock, over 0.6/,
     ],
     [
       'more rallies than a byte counts',
@@ -193,6 +202,82 @@ describe('compileRuleset refuses', () => {
         formations: { ...inf.formations, square: { ...inf.formations.square, traits: { brace: 1.5 } } },
       }),
       /shape square's brace must be in 0..1/,
+    ],
+    ...(
+      [
+        ['shock', { shock: NaN }],
+        ['flankShock', { flankShock: Infinity }],
+      ] as const
+    ).map(([k, t]): [string, Ruleset, RegExp] => [
+      `a ${k} not finite and above 0`,
+      withType('infantry', { ...inf, formations: { ...inf.formations, line: { ...inf.formations.line, traits: t } } }),
+      new RegExp(`shape line's ${k} must be finite and above 0`),
+    ]),
+    [
+      'a fire below 0',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { fire: -0.1 } } },
+      }),
+      /shape line's fire must be finite and ≥ 0/,
+    ],
+    [
+      'a flankFrom past a right angle',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { flankFrom: 1.6 } } },
+      }),
+      /shape line's flankFrom must lie in 0..π\/2/,
+    ],
+    [
+      'an allRound shape braced more on one side than another',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, square: { ...inf.formations.square, traits: { brace: { front: 1 } } } },
+      }),
+      /shape square is allRound: it is braced alike on every side/,
+    ],
+    [
+      'a refuge braced on one side only',
+      withType('infantry', {
+        ...inf,
+        refuge: 'column',
+        formations: { ...inf.formations, column: { ...inf.formations.column, traits: { brace: { front: 1 } } } },
+      }),
+      /refuge column/,
+    ],
+    [
+      'a charge from a shape that cannot move',
+      withType('cavalry', {
+        ...cav,
+        formations: { ...cav.formations, line: { ...cav.formations.line, traits: { moves: false } } },
+        start: 'column',
+      }),
+      /it charges from line, a shape that cannot move/,
+    ],
+    [
+      "contagion that, by a shape's shock, would rout a steady battalion at once",
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { shock: 100 } } },
+      }),
+      /morale.contagion.shock, by the shapes' shock/,
+    ],
+    [
+      "a second enemy's charge that, by a shape's flank shock, would rout a steady battalion at once",
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { flankShock: 100 } } },
+      }),
+      /melee.second must be ≥ 0 and, by the shapes' shock/,
+    ],
+    [
+      'a start shape that cannot move',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { moves: false } } },
+      }),
+      /its start shape line cannot move/,
     ],
     [
       'a shape whose pace is not a pace (#156)',
@@ -331,6 +416,30 @@ describe("a shape's traits (docs/proposals/formations.md § 5a)", () => {
     const b = row(own, 'cavalry', 'column')
     expect([a[T_HITS], a[T_FLANK], a[T_MELEE]]).toEqual([2, 1, 2])
     expect([b[T_HITS], b[T_MELEE]]).toEqual([1.3, 1.6])
+  })
+  it('are neutral where neither names a field', () => {
+    const r = row(N, 'cavalry', 'line')
+    const sq = row(N, 'infantry', 'square')
+    const at = (x: Float64Array) =>
+      [T_FIRE, T_SHOCK, T_FLANK_SHOCK, T_MOVES, T_BRACE, T_BRACE_FLANK, T_BRACE_REAR].map(t => x[t])
+    expect(at(r)).toEqual([1, 1, 1, 1, 0, 0, 0])
+    expect(at(sq).slice(4)).toEqual([1, 1, 1]) // a number braces every side
+    expect(r[T_BLEND]).toBe(N.sectors.blend.T)
+  })
+  it("brace by side over the type's, field by field; flankFrom as the blend's centre; moves", () => {
+    const own = withType('infantry', {
+      ...inf,
+      traits: { ...inf.traits, brace: 0.2 },
+      formations: {
+        ...inf.formations,
+        column: { ...inf.formations.column, traits: { brace: { front: 0.5 }, flankFrom: PI / 4, moves: false } },
+        line: { ...inf.formations.line, traits: { ...inf.formations.line.traits, flankFrom: (80 * PI) / 180 } },
+      },
+    })
+    const c = row(own, 'infantry', 'column')
+    expect([c[T_BRACE], c[T_BRACE_FLANK], c[T_BRACE_REAR], c[T_MOVES]]).toEqual([0.5, 0.2, 0.2, 0])
+    expect(c[T_BLEND]).toBeCloseTo(0.5, 12)
+    expect(row(own, 'infantry', 'line')[T_BLEND]).toBeCloseTo(0.85, 2) // tan 80° / (1 + tan 80°)
   })
 })
 

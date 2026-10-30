@@ -24,7 +24,7 @@ import { MAX_COMPANIES } from './ruleset.ts'
 import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
 import { buildFaces } from './sectors.ts'
-import { hitsTaken } from './traits.ts'
+import { fireOf, hitsTaken } from './traits.ts'
 import { creditMen } from './experience.ts'
 
 const sqrt = Math.sqrt
@@ -337,13 +337,14 @@ export function aimAt(w: World, G: FireGeo, k: number, j: number, R: Reach): num
   return -1
 }
 
-// a battalion may fire: of a type that fires, halted (no order at its head but a dress), not changing shape, in
-// the fight and not in melee, at will
+// a battalion may fire: of a type that fires, in a shape that fires (not the column of route), halted (no order at
+// its head but a dress), not changing shape, in the fight and not in melee, at will
 export function mayFire(w: World, i: number): boolean {
   const f = w.f
   const n = f.ordHead[i]
   return (
     typeOf(w, i).def.fires &&
+    fireOf(w, i) > 0 &&
     f.fireMode[i] === FIRE_AT_WILL &&
     !outOfFight(f.mstate[i]) &&
     !f.foe[i] &&
@@ -353,7 +354,7 @@ export function mayFire(w: World, i: number): boolean {
 }
 
 // men in company c's firing ranks
-function firingMen(w: World, i: number, c: number): number {
+export function firingMen(w: World, i: number, c: number): number {
   const g = typeOf(w, i).geo
   let n = 0
   for (let r = 0; r < Math.min(g.ranks, w.cr.rs.fire.firingRanks); r++) {
@@ -518,6 +519,7 @@ function volley(
     levelOf(w, i).precision *
     w.cr.stateFactor[Math.min(2, f.mstate[i])] *
     (1 - F.cohesion * f.disorder[i]) *
+    fireOf(w, i) *
     exposure(w, G, k, j)
   let hits = Math.floor(lambda)
   if (nextUnit(rs) < lambda - hits) hits++

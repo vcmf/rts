@@ -28,6 +28,7 @@ import { cellK, impAt, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
 import { claimedAt, claimsNear, claimHit } from './claims.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
+import { movesOf } from './traits.ts'
 
 export const STATUS = [
   '',
@@ -82,6 +83,8 @@ export const layoutOf = (w: World, i: number): ShapeLayout => typeOf(w, i).shape
 // the shape a formation is in, or changing into
 export const targetShape = (w: World, i: number): number => (w.f.trans[i] ? w.f.tShape[i] : w.f.shape[i])
 const targetLayout = (w: World, i: number): ShapeLayout => typeOf(w, i).shapes[targetShape(w, i)]
+/** Whether formation i may form shape s of its type (its enabled set, docs/plans/active/formations.md § C3). */
+export const formable = (w: World, i: number, s: number): boolean => (w.f.enabled[i] & (1 << s)) !== 0
 export const snakes = (w: World, i: number): boolean => !w.f.trans[i] && !!layoutOf(w, i).def.trail
 const kindOf = (w: World, i: number) => targetLayout(w, i).kind
 const BW = (U: TypeTable) => U.geo.files * U.geo.fileSpacing // a company's frontage
@@ -1293,6 +1296,9 @@ export function startChange(w: World, i: number, shape: number, optional = false
   const t = now(w)
   if (shape === f.shape[i] && !f.trans[i]) return false
   if (f.trans[i] && shape === f.tShape[i]) return false
+  // only into a shape it has enabled, or back into the one it is leaving (docs/plans/active/formations.md § C3): the
+  // one place every change passes, so no caller forms a disabled shape
+  if (shape !== f.shape[i] && !formable(w, i, shape)) return false
   const from: number[] = []
   const k0: number[] = []
   for (let c = 0; c < C; c++) {
@@ -1608,7 +1614,7 @@ function formationStep(w: World, i: number): void {
     if (n >= 0 && o.type[n] === O_FORM && !shelter && !f.foe[i]) {
       const s = o.shape[n]
       shiftOrder(w, i)
-      startChange(w, i, s)
+      startChange(w, i, s) // one disabled since it was ordered is dropped
       return
     }
     if (t >= f.tStart[i] + f.tDelay[i * CS + C - 1] + f.tDur[i]) {
@@ -1630,7 +1636,17 @@ function formationStep(w: World, i: number): void {
   if (type === O_FORM) {
     const s = o.shape[n]
     shiftOrder(w, i)
-    startChange(w, i, s)
+    startChange(w, i, s) // one disabled since it was ordered is dropped
+    return
+  }
+  // a shape that cannot move (the square): formed against cavalry (autoFrom), it stands, keeping its moves and wheels
+  // for the shape it forms back into; else the move is dropped and its orders go on (a later form). One out of the
+  // fight runs or re-forms whatever its shape
+  if ((type === O_MOVE || type === O_WHEEL) && !movesOf(w, i) && !outOfFight(f.mstate[i])) {
+    f.vx[i] = 0
+    f.vz[i] = 0
+    if (!f.autoFrom[i]) shiftOrder(w, i)
+    lagSettle(w, i)
     return
   }
   const [V0, pace] = paceOf(w, i)

@@ -9,7 +9,7 @@ import type { FireGeo } from './fire.ts'
 import type { SectorsDef } from './ruleset.ts'
 import { layoutOf } from './formation.ts'
 import { sin, cos } from './num.ts'
-import { allRoundOf } from './traits.ts'
+import { allRoundOf, blendOf } from './traits.ts'
 
 /** The face's kinds (§ 2): none (changing shape), one (a formed shape's front), all (braced), trail (head and tail). */
 export const FACE_NONE = 0
@@ -153,16 +153,17 @@ function copyFrame(F: Faces, from: number, to: number): void {
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v)
 
 /**
- * The weight toward frame q's front (side 1) or rear (side −1) of the point (x, y) in that frame (§ 3): the blend on
- * the angle measure t = o / (max(d, 0) + o + c), o metres beyond the face's nearer end and d ahead of its edge (1
- * within 35° of straight ahead from the nearer end, 0 past 55°), times the corner ramp (1 ahead of the edge, 0 a
- * corner's length c behind it).
+ * The weight toward frame q's front (side 1) or rear (side −1) of the point (x, y) in that frame (§ 3): the blend
+ * centred on T (the front's from its formation's shape's flankFrom, src/sim/traits.ts; the rear's the ruleset's) on
+ * the angle measure t = o / (max(d, 0) + o + c), o metres beyond the face's nearer end and d ahead of its edge (with
+ * T 0.5: 1 within 35° of straight ahead from the nearer end, 0 past 55°), times the corner ramp (1 ahead of the edge,
+ * 0 a corner's length c behind it).
  */
-function sideWeight(S: SectorsDef, F: Faces, q: number, x: number, y: number, side: number): number {
+function sideWeight(S: SectorsDef, T: number, F: Faces, q: number, x: number, y: number, side: number): number {
   const o = Math.max(F.L[q] - x, x - F.R[q], 0)
   const d = side > 0 ? y - F.F[q] : F.B[q] - y
   const t = o / (Math.max(d, 0) + o + S.corner)
-  return clamp01((S.blend.T + S.blend.H - t) / (2 * S.blend.H)) * clamp01(1 + d / S.corner)
+  return clamp01((T + S.blend.H - t) / (2 * S.blend.H)) * clamp01(1 + d / S.corner)
 }
 
 /** The world point (px, pz) in frame q, as (x, y) into `xy`. */
@@ -202,9 +203,9 @@ export function pointWeights(w: World, j: number, x: number, z: number, out: Flo
   const kind = F.kind[j]
   if (kind === FACE_ALL) return finish(1, 0, out)
   toFrame(F, 2 * j, x, z, xy)
-  const front = kind === FACE_NONE ? 0 : sideWeight(S, F, 2 * j, xy[0], xy[1], 1)
+  const front = kind === FACE_NONE ? 0 : sideWeight(S, blendOf(w, j), F, 2 * j, xy[0], xy[1], 1)
   toFrame(F, 2 * j + 1, x, z, xy)
-  const rear = sideWeight(S, F, 2 * j + 1, xy[0], xy[1], -1)
+  const rear = sideWeight(S, S.blend.T, F, 2 * j + 1, xy[0], xy[1], -1)
   return finish(front, rear, out)
 }
 
@@ -212,7 +213,16 @@ export function pointWeights(w: World, j: number, x: number, z: number, out: Flo
  * The mean over sectors.slices of the weight toward frame q's front (side 1) or rear (−1) of the block of company k of
  * formation i, each slice read at its nearest point to the frame's box (§ 4).
  */
-function blockSide(S: SectorsDef, F: Faces, q: number, G: FireGeo, i: number, k: number, side: number): number {
+function blockSide(
+  S: SectorsDef,
+  T: number,
+  F: Faces,
+  q: number,
+  G: FireGeo,
+  i: number,
+  k: number,
+  side: number,
+): number {
   cornersOf(G, i, k)
   let x0 = Infinity
   let x1 = -Infinity
@@ -242,7 +252,7 @@ function blockSide(S: SectorsDef, F: Faces, q: number, G: FireGeo, i: number, k:
       ymax = Math.max(ymax, y, y2)
     }
     const y = ymin > F.F[q] ? ymin : ymax < F.B[q] ? ymax : Math.min(Math.max(mid, ymin), ymax)
-    sum += sideWeight(S, F, q, x, y, side)
+    sum += sideWeight(S, T, F, q, x, y, side)
   }
   return sum / N
 }
@@ -256,8 +266,8 @@ export function threatWeights(w: World, G: FireGeo, j: number, i: number, k: num
   const kind = F.kind[j]
   if (kind === FACE_ALL) return finish(1, 0, out)
   const S = w.cr.rs.sectors
-  const front = kind === FACE_NONE ? 0 : blockSide(S, F, 2 * j, G, i, k, 1)
-  const rear = blockSide(S, F, 2 * j + 1, G, i, k, -1)
+  const front = kind === FACE_NONE ? 0 : blockSide(S, blendOf(w, j), F, 2 * j, G, i, k, 1)
+  const rear = blockSide(S, S.blend.T, F, 2 * j + 1, G, i, k, -1)
   return finish(front, rear, out)
 }
 

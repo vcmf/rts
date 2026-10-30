@@ -46,6 +46,7 @@ import {
   layoutOf,
   startChange,
   targetShape,
+  formable,
 } from './formation.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
 import { creditRepulse } from './experience.ts'
@@ -55,7 +56,7 @@ import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
 import { threatWeights, byWeights } from './sectors.ts'
 import { sin, cos } from './num.ts'
-import { braceOf, meleeOf } from './traits.ts'
+import { braceOf, bracedAllRound, flankShockOf, meleeOf } from './traits.ts'
 import { TICK_HZ, DT } from './time.ts'
 
 const sqrt = Math.sqrt
@@ -409,12 +410,13 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
     f.chUntil[i] = tick + Math.round(ch.pursue * levelOf(w, i).pursue * TICK_HZ)
     return
   }
-  const b = braceOf(w, j)
   // the test before contact, once (a charge launched inside the test's distance takes it at once)
   if (f.chPhase[i] === CH_CLOSING && gap <= ch.test) {
     f.chPhase[i] = CH_TESTED
     S.shockTo[i] = j
     sideOf(w, G, i, j, null, side)
+    const b = braceOf(w, j, side)
+    side[1] *= flankShockOf(w, j)
     S.shockBy[i] += byWeights(M.threat, side) * (1 - b) * (0.5 + nextUnit(keyedStream(ks, seed, tick, h, j, K_TEST)))
     if (
       b > 0 &&
@@ -425,14 +427,16 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
     }
   }
   if (gap > M.contact) return
-  // the impact: a wavering braced target may be broken into
+  // the impact, braced by the side its men in contact strike: a wavering braced target may be broken into
+  const men = inContact(w, G, i, j, M.contact, S.mi)
+  inContact(w, G, j, i, M.contact, S.mj)
+  sideOf(w, G, i, j, S.mi, side)
+  const b = braceOf(w, j, side)
+  side[1] *= flankShockOf(w, j)
   const bb =
     b > 0 && f.mstate[j] >= MS_WAVERING && nextUnit(keyedStream(ks, seed, tick, h, j, K_BREACH)) < M.breach ? 0 : b
   const mom = Math.min(1, f.chRun[i] / ch.build)
-  const men = inContact(w, G, i, j, M.contact, S.mi)
-  inContact(w, G, j, i, M.contact, S.mj)
   owe(w, j, S.mj, M.impact.kill * mom * men * (1 - bb), keyedStream(ks, seed, tick, h, j, K_IMPACT), i)
-  sideOf(w, G, i, j, S.mi, side)
   S.shockTo[i] = j
   S.shockBy[i] += byWeights(M.impact.shock, side) * mom * (1 - bb)
   // a second enemy (decision 0080): j was already in melee with another when the step began; once, whatever the
@@ -477,7 +481,7 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
   }
   // a charging type does not press a foe that has formed its refuge (a square) and holds it: it turns away. One
   // wavering or worse is pressed (it was broken into, or will be)
-  if (typeOf(w, i).charge && braceOf(w, j) >= 1 && f.mstate[j] < MS_WAVERING) {
+  if (typeOf(w, i).charge && bracedAllRound(w, j) && f.mstate[j] < MS_WAVERING) {
     leave(w, i, j)
     recoil(w, i, j, tick)
     return
@@ -590,7 +594,9 @@ export function standingStep(w: World): void {
         continue
       }
       if (f.trans[i] || tick < f.alertSince[i]) continue
-      if (!startChange(w, i, f.autoFrom[i] - 1, true)) f.alertSince[i] = tick + REFUGE_RETRY
+      // a shape disabled while it sheltered: it stays in the square until ordered into another
+      if (!formable(w, i, f.autoFrom[i] - 1)) f.autoFrom[i] = 0
+      else if (!startChange(w, i, f.autoFrom[i] - 1, true)) f.alertSince[i] = tick + REFUGE_RETRY
     }
   }
 }

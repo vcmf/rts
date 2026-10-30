@@ -6,7 +6,7 @@ last_reviewed: 2026-10-30
 # Proposal: formations, each with its strengths and weaknesses
 
 For discussion with the owner before any code. A unit is one block of 240 figures (decision 0076; the division
-scale, `docs/proposals/division-scale.md`) with five formations: line, thin line (British only), attack column,
+scale, `docs/proposals/division-scale.md`) with five formations: line, thin line (a formation a unit may be given, § 6), attack column,
 square and march column. The owner asked that each give clear strengths and weaknesses, as in Total War, and that
 changing formation and the flanks matter. Two research notes back it: `docs/research/formations-history.md` (what the
 formations did; its numbers marked by how well they are sourced) and `docs/research/formations-in-games.md` (how
@@ -143,9 +143,22 @@ Every number in §§ 2, 2a and 3 is ruleset data, read through one place, so tun
   ruleset's hash, identical before and after (the goldens cannot prove it: they hash the ruleset's hash, which any
   change to the ruleset's shape moves); the new values come after, each with its scenario.
 
+## 5b. Results (step C2, `docs/plans/active/formations.md`)
+
+The shipped values are § 2's and § 2a's, with three settled in play:
+- **The attack column's fire** is 1.25 over what its depth masks: its head alone gives 0.24 of a line's, and B-11
+  asked for about 0.3 (0.29 with it).
+- **`flankFrom` moves the front's blend only**: with the rear's moved too, a line would be flanked only within 10° of
+  square to its side.
+- **A second enemy's charge** is 38 points from the flank and 48 from the rear (43 and 57 before): the guard that no
+  one shock routs a steady line of level 2 counts the shapes' shock, and the thin line's and the march column's
+  1.25 must pass it (the owner, 2026-10-30).
+
 ## 6. The owner's answers (2026-10-30), and what is open
 
 - The square cannot move. The column is second best against cavalry, head on (§ 2a), and weak to guns and muskets.
-  Ordre mixte is deferred. The info box (§ 5) comes first, for debugging. The thin line is the British only.
+  Ordre mixte is deferred. The info box (§ 5) comes first, for debugging. The thin line is not a nation's unit type but a
+  formation each unit has enabled or not, to be given later by research or a general's ability (the owner, the same
+  day): every formation may be enabled or disabled per unit (`docs/plans/active/formations.md` § C3).
 - **Open:** the bracing numbers of § 2a; the size of the modifiers (Total War-sized, 20–50%, unless the owner wants
   them subtler).

@@ -35,8 +35,8 @@ describe('the battle report', () => {
     const m = lines.indexOf('01:30  MARK the column')
     expect(m).toBeGreaterThan(0)
     expect(lines.slice(m + 1, m + 17).every(l => / men at \(-?\d+, -?\d+\)$/.test(l))).toBe(true) // the 16 formations
-    // the end table (side 1's battery has hit it)
-    expect(lines).toContain('  side 0 #0 infantry: column, steady, 229 of 240 men')
+    // the end table (side 1's battery has hit it: the attack column is a deep target)
+    expect(lines).toContain('  side 0 #0 infantry: column, steady, 218 of 240 men')
   })
   it('refuses a session that does not reproduce', () => {
     const bad: Session = {

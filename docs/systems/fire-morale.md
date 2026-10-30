@@ -101,9 +101,9 @@ disorder, take none (a march through a wood pins disorder at 1 with no enemy in 
 
 ```
 each man lost:  bar −= loss / start, and cost += the same     // loss 357: level 2 breaks at 28% losses
-each shock:     bar −= shock                                  // contagion, a charge's threat and impact
+each shock:     bar −= shock × its shape's shock              // contagion, a charge's threat and impact
 in the fight:   bar rises at regen (2 a second) up to barMax − scar · cost   // shocks wear off, losses never
-effective bar:  E = bar + support − min(drain, max(0, E0 − wavering.enter · barMax))
+effective bar:  E = bar + support − min(drain × its shape's shock, max(0, E0 − wavering.enter · barMax))
 ```
 
 **States**, by the share E / barMax with hysteresis (data):
@@ -150,11 +150,15 @@ outside contagion's reach and its breaks spread over 35–135 s instead of one t
   one link per tick. The ruleset is refused if one shock could rout a steady battalion of level 2 (more than 0.6
   of its bar).
 
+**The shape's fire.** A volley's expected hits are multiplied by the firing shape's `traits.fire`, its share of
+musketry beyond what its geometry masks (`docs/systems/formations.md`: the attack column's head 1.25, the column of
+route 0, which does not fire at all).
+
 **Exposure** (U1, `docs/proposals/sectors-model.md` § 5). A volley's expected hits, and canister's
 (`docs/systems/artillery.md`), are multiplied by the target's exposure to the firing company: its shape's hits taken
 (`traits.hits`, read through `src/sim/traits.ts`): from the front × (front + flank × the flank's multiple + rear ×
 the rear's), the weights (front, flank, rear) of the firing company's block on the target's face
-(`src/sim/sectors.ts`). From the front: a line 1.0, a column, a square and a march column 1.6, cavalry 1.3, a battery
+(`src/sim/sectors.ts`). From the front: a line 1.0, an attack column 1.3, a square 1.4, a march column 1.2, cavalry 1.3, a battery
 0.4; the flank's and rear's multiples: a line 1.8 and 1.2 (fire down its length), a column 1.2 and 1.1, a march
 column 1.5 and 1.0, cavalry 1.2 and 1.1 (1.5 and 1.0 in march), a battery 1.5 and 1.0; a square has no flank. Fire from ahead is unchanged, so
 the line-on-line calibration's front is.

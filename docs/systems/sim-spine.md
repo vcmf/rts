@@ -69,11 +69,12 @@ advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formation
 - **Scratch** (`world.scratch`): per-world working buffers (places, the trail arc cache), never state and
   never shared between worlds.
 - **Commands** (`commands.ts`):
-  - `move` (waypoints, replace or append), `form` (a shape by name), `wheel` (an angle), `face`, `retire`
-    (metres), `halt`, `style` (an order preset by name);
+  - `move` (waypoints, replace or append), `form` (a shape by name, one the unit has enabled), `wheel` (an angle),
+    `face`, `retire` (metres), `halt`, `style` (an order preset by name), `enable` (a shape the unit may form or
+    not, whatever it is doing: `docs/systems/formations.md`);
   - `debug-spawn` (a unit type, `unit`, the ruleset's first when left out; a shape, the type's start when
-    left out), `debug-kill` (men drawn by company with the sim RNG). Malformed waypoints are dropped,
-    not thrown.
+    left out; the shapes it may form, `forms`, comma-separated, its type's when left out), `debug-kill` (men drawn
+    by company with the sim RNG). Malformed waypoints are dropped, not thrown.
 
   `issue` stamps `tick + 1` and a sequence number, and quantises positions to 1 cm and angles to 0.1 mrad.
   It never throws. One table per command type (`command-fields.ts`: its fields in save order and the kind of

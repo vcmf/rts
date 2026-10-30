@@ -203,6 +203,7 @@ describe('commands and handles', () => {
       bar: 0,
       fire: 'at will',
       unit: '',
+      forms: '',
     })
     const h = makeHandle(KIND_FORMATION, 0, 0)
     const bad: Command[] = [

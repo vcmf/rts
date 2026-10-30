@@ -61,8 +61,10 @@ first is the default), each with:
 - its block geometry: companies, files, ranks, spacings, the minimum spacing, the accordion gap, bins per
   company;
 - its shapes as company placements, with kind, pace, road pace, `trail`, `closeAcross`, `allRound` (no flank: the
-  square), its `traits` (hits taken from the front, the flank and the rear, melee strength, bracing; read through
-  `src/sim/traits.ts`, `docs/proposals/formations.md` § 5a) and, for a trail shape, an
+  square), its `traits` (hits taken from the front, the flank and the rear, melee strength, bracing by the side
+  struck, its share of musketry, the morale shocks it takes, a charge's shock from its flank, where its flank begins
+  (`flankFrom`) and whether it may move; a type's `traits` are its shapes' defaults; read through `src/sim/traits.ts`,
+  `docs/proposals/formations.md` § 5a) and, for a trail shape, an
   optional `step`: the spacing of its places' files and ranks when it is not the block's (a column
   of route of horses, nose to tail);
 - its change times, the shape a spawn takes, and whether it fires by company (S1c's musketry).
@@ -75,9 +77,34 @@ The Napoleonic types (`docs/plans/active/s1d1-unit-types.md`):
 
 | Type | Block | Shapes | Paces |
 |---|---|---|---|
-| Line infantry (decision 0076, a division: a figure for 25 men) | 4 sections of 20 files × 3 ranks, 240 places; 8 bins a section; a line about 54 m | line, square (four faces, front and rear first: 2, 1, 2, 1), column of divisions, column of route | ordinary, route step |
+| Line infantry (decision 0076, a division: a figure for 25 men) | 4 sections of 20 files × 3 ranks, 240 places; 8 bins a section; a line about 54 m | line, square (four faces, front and rear first: 2, 1, 2, 1; it cannot move), attack column (one section wide, the others behind: 20 files × 12 ranks), column of route | ordinary, route step |
 | Light cavalry | 2 squadrons of 20 files × 2 ranks, 80 places; 1 m a file, 3 m a rank; a line about 41 m | line, column of squadrons at half distance, column of route by fours (each squadron a column of twos, horses 3 m apart: a `step`) | walk; the march at the trot |
 | Foot battery | 4 pieces, each a detachment of 4 files × 3 ranks (48 figures); one bin a piece | unlimbered (16 m apart), limbered (18 m apart on the trail) | by hand; the walk |
+
+The line infantry's shapes' traits (`docs/proposals/formations.md` §§ 2, 2a; the other types' are their hits and
+melee, `docs/systems/fire-morale.md`, `docs/systems/melee.md`):
+
+| | Line | Attack column | Square | Column of route |
+|---|---|---|---|---|
+| Fire (beyond what the geometry masks) | 1 | 1.25 (its head: about 0.3 of a line's, B-11) | 1 (one face) | 0 |
+| Hits taken from the front; × flank, × rear | 1; × 1.8, × 1.2 | 1.3; × 1.2, × 1.1 | 1.4, every side | 1.2; × 1.5, × 1.0 |
+| Shock taken | 1 | 0.75 | 0.8 | 1.25 |
+| Melee | 1 | 1.4 | 0.6 | 0.5 |
+| Braced front, flank, rear | 0 | 0.5, 0.25, 0 (the flank's shock × 0.7) | 1 | 0 |
+| Flanked from (off its front) | 80° | 40° | never | 60° |
+| Moves | yes | yes | no | yes |
+
+**Enabled formations** (`docs/plans/active/formations.md` § C3). Each unit holds the shapes of its type it may form
+(`f.enabled`, a bit per shape, state): its type's `enabled` (every shape when it names none; it must hold the start
+shape), or a spawn's own `forms`; the `enable` command turns one on or off (later research, a general). A `form` into
+one not enabled is refused, and one queued before it was disabled is dropped; a change under way into a shape that is
+disabled turns back. The rule is kept in `startChange`, which every change passes: no path forms a disabled shape,
+but a change back into the shape it is leaving (a cancel) is always taken. A unit keeps a shape it stands in when it
+is disabled until it forms another; the standing behaviour forms a refuge only when it is enabled, and does not form
+back into a shape disabled while it sheltered (it stays in the square). The type's set is in the ruleset's hash.
+
+Change times at drill 1 (seconds; `docs/proposals/formations.md` § 3): line → column 30, column → line 40, column →
+square 30, line → square 90, square → line 60, square → column 30, into column of route 20, out of it 60.
 
 `compileRuleset` indexes it and precomputes, per type, its slot tables, and per shape:
 - the straight layout;
@@ -91,7 +118,9 @@ not name two of the type's shapes, and a terrain class that gives some kind no s
 a pace not > 0, a change time not ≥ 0, a q table for no pace or with a factor not > 0, a pace's q table leaving out
 the ground of some class (it would read as 1), and `fire.sight` or `disorder.scale` naming no class or kind or giving a
 value not a finite number ≥ 0; a shape's traits out of range (hits from the front not above 0, from the flank or
-the rear under the front's, melee not above 0, a brace outside 0..1), and a refuge not fully braced. That terrain only slows (a factor ≤ 1) is a convention of the
+the rear under the front's, melee, fire, shock or flank shock not above 0, a brace outside 0..1 on any side, a fully
+braced shape with a flank, an allRound shape braced unevenly, a flankFrom outside 0..π/2 or its blend outside the
+angle measure), a start shape that cannot move, and a refuge not fully braced on every side. That terrain only slows (a factor ≤ 1) is a convention of the
 shipped data, checked there, not a rule of the engine.
 
 The ruleset's hash is recorded in the world, the replays and the saves.
@@ -102,7 +131,9 @@ edges, left and right ends); an `allRound` shape (the square) is all front; a tr
 company's frame for its front and its tail's for its rear; a formation changing shape has no front. A point, or a
 threat's block, has weights (front, flank, rear) that sum to 1 on that face, read alike by fire, charges and morale:
 front within about 35° of straight ahead from the face's nearer end, flank past 55°, a blend between; the rear the
-same behind; `sectors` in the ruleset holds the blend, the corner, the slices and the reach. Scratch, not state.
+same behind; `sectors` in the ruleset holds the blend, the corner, the slices and the reach, and a shape's
+`traits.flankFrom` moves the front's blend centre for that shape (45° when it names none; the rear's stays 45°): a
+line is flanked only from 80° off its front, an attack column from 40°, a march column from 60°. Scratch, not state.
 
 **Types in the world.** A formation stores its type (`f.type`), and `f.shape` indexes its type's shapes. The
 per-company and per-bin rows of the world are strided by the most of any type (`cr.maxC`, `cr.maxNB`,

@@ -59,8 +59,9 @@ class S extends Sim {
   }
 }
 
-// a time read off by `until`, T or a tick short of it (the change may end on the tick it is checked)
-const near = (t: number, T: number): boolean => t >= T - 0.05 - 1e-9 && t <= T + 1e-9
+// a time read off by `until`, within a tick of T (the change may end on the tick it is checked, and a time that is no
+// whole number of ticks ends on the next)
+const near = (t: number, T: number): boolean => t >= T - 0.05 - 1e-9 && t <= T + 0.05 + 1e-9
 
 describe('drill', () => {
   it('a change of shape and a Face about take their times × the level’s drill', () => {
@@ -71,7 +72,7 @@ describe('drill', () => {
       expect(
         near(
           s.until(() => s.busy(h), 200),
-          100 * L[lv - 1].drill,
+          napoleonic.types.infantry.changeTime['line>square'] * L[lv - 1].drill,
         ),
       ).toBe(true)
       const a = new S()

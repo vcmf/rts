@@ -38,16 +38,28 @@ export interface FormationDef {
   place(g: Geometry): Placement[]
 }
 // a shape's compiled traits (TypeTable.traits), a row of T_LEN per shape, read through src/sim/traits.ts: hits taken
-// from the front, from the flank and the rear as multiples of it, whether those two are given, melee, brace, and
-// whether it has no flank
+// from the front, from the flank and the rear as multiples of it, whether those two are given, melee, brace by the side
+// struck, whether it has no flank, its fire, the shocks it takes, the charge's shock from its flank, the sector blend's
+// centre and whether it may move
 export const T_HITS = 0
 export const T_FLANK = 1
 export const T_REAR = 2
 export const T_SIDED = 3
 export const T_MELEE = 4
-export const T_BRACE = 5
+export const T_BRACE = 5 // struck in front
 export const T_ROUND = 6 // 1: no flank, every side a front (the shape's allRound)
-export const T_LEN = 7
+export const T_FIRE = 7
+export const T_SHOCK = 8
+export const T_BRACE_FLANK = 9
+export const T_BRACE_REAR = 10
+export const T_FLANK_SHOCK = 11
+export const T_BLEND = 12 // the sector blend's centre on the angle measure (sectors.blend.T, or the flankFrom)
+export const T_MOVES = 13 // 1: it may be given a move
+export const T_LEN = 14
+// a unit's enabled shapes are a bit each in an int32 (World f.enabled)
+export const MAX_SHAPES = 31
+/** Bracing by the side a charge strikes, each 0..1; a number: the same on every side. */
+export type BraceDef = number | { front?: number; flank?: number; rear?: number }
 /**
  * A shape's strengths and weaknesses (docs/proposals/formations.md § 5a), multipliers read through
  * src/sim/traits.ts; a field left out is neutral.
@@ -58,7 +70,14 @@ export interface TraitsDef {
   // § 5); none: 1
   hits?: { front?: number; flank?: number; rear?: number }
   melee?: number // its strength in melee
-  brace?: number // 0..1: how far it is proof against a charge (the square 1; S1d-2)
+  brace?: BraceDef // how far it is proof against a charge, by the side struck (the square 1; S1d-2); none: 0
+  fire?: number // ≥ 0: the share of its musketry's hit chance (geometry already masks what cannot fire); none: 1
+  shock?: number // the morale shocks it takes: a charge's, contagion's and the drain (never its losses' cost); none: 1
+  flankShock?: number // a charge's shock from its flank, as a multiple; none: 1
+  // radians off straight ahead from its front's ends where its flank begins (the front's sector blend's centre,
+  // docs/proposals/sectors-model.md § 3; the rear's stays the ruleset's); none: sectors.blend.T
+  flankFrom?: number
+  moves?: boolean // whether it may be given a move (the square cannot); none: true
 }
 export interface TerrainDef {
   g: Record<string, number>
@@ -223,6 +242,9 @@ export interface UnitType {
   changeTime: Record<string, number>
   defaultChangeTime: number
   start: string // the shape a spawn takes when it names none
+  // the shapes a unit of this type may form unless given its own set (docs/plans/active/formations.md § C3: a
+  // formation enabled or not per unit, later by research or a general); none: every shape
+  enabled?: string[]
   fires: boolean // fires by company (S1c's musketry)
   // how its men are drawn: on foot, on horseback, or serving pieces (the renderer's; no rule reads it)
   figure: 'foot' | 'mounted' | 'crewed'
@@ -348,6 +370,7 @@ export interface TypeTable {
   changeTime: Float64Array // [from·S + to]
   traits: Float64Array // [shape·T_LEN + field] (src/sim/traits.ts)
   start: number // the spawn's shape
+  enabled: number // the shapes a unit may form unless given its own set: bit s for shape s
   // the shapes it charges from (1 by shape) and its paces' indices; null: it does not charge
   charge: { from: Uint8Array; approach: number; pace: number } | null
   refuge: number // the shape it forms against cavalry, −1 none
@@ -434,6 +457,7 @@ function rulesetHash(rs: Ruleset): number {
       u.refuge ?? '',
       u.artillery ?? null,
       u.traits ?? null,
+      u.enabled ?? null,
     ]
   })
   const text = JSON.stringify([
@@ -498,13 +522,33 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     if (T.melee !== undefined && !(T.melee > 0 && T.melee < Infinity)) {
       throw new Error(`${at}: shape ${n}'s melee must be finite and above 0`)
     }
-    if (T.brace !== undefined && !(T.brace >= 0 && T.brace <= 1)) {
-      throw new Error(`${at}: shape ${n}'s brace must be in 0..1`)
-    }
-    // a shape proof against a charge from every side has no flank; one with no flank has no flank's or rear's hits
-    if (T.brace === 1 && !d.allRound) throw new Error(`${at}: shape ${n} is fully braced but not allRound`)
+    const b = braceSides(T.brace)
+    if (!b.every(v => v >= 0 && v <= 1)) throw new Error(`${at}: shape ${n}'s brace must be in 0..1 on every side`)
+    // a shape proof against a charge from every side has no flank; one with no flank has no flank's or rear's hits,
+    // and is braced alike on every side
+    if (b.every(v => v === 1) && !d.allRound) throw new Error(`${at}: shape ${n} is fully braced but not allRound`)
     if (d.allRound && (T.hits?.flank !== undefined || T.hits?.rear !== undefined)) {
       throw new Error(`${at}: shape ${n} is allRound: it has no flank's or rear's hits`)
+    }
+    if (d.allRound && !(b[0] === b[1] && b[1] === b[2])) {
+      throw new Error(`${at}: shape ${n} is allRound: it is braced alike on every side`)
+    }
+    // a shape may fire none (the column of route), never less
+    if (T.fire !== undefined && !nonNegative(T.fire)) throw new Error(`${at}: shape ${n}'s fire must be finite and ≥ 0`)
+    for (const [k, v] of [
+      ['shock', T.shock],
+      ['flankShock', T.flankShock],
+    ] as const) {
+      if (v !== undefined && !(v > 0 && v < Infinity)) {
+        throw new Error(`${at}: shape ${n}'s ${k} must be finite and above 0`)
+      }
+    }
+    if (T.flankFrom !== undefined) {
+      const t = blendAt(T.flankFrom)
+      const H = rs.sectors.blend.H
+      if (!(T.flankFrom > 0 && T.flankFrom < PI / 2 && t - H > 0 && t + H < 1)) {
+        throw new Error(`${at}: shape ${n}'s flankFrom must lie in 0..π/2, its blend inside the angle measure's 0..1`)
+      }
     }
   }
   // a change time naming a shape it has not would be ignored, and the default taken in silence (#156)
@@ -520,13 +564,21 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   }
   const shapes: ShapeLayout[] = names.map(n => layout(g, u.formations, n, kinds, paces))
   const S = names.length
-  const traits = compileTraits(u, names)
+  if (u.formations[u.start] && traitsOf(u, u.start).moves === false) {
+    throw new Error(`${at}: its start shape ${u.start} cannot move`)
+  }
+  const traits = compileTraits(u, names, rs.sectors.blend.T)
   const changeTime = new Float64Array(S * S)
   for (let a = 0; a < S; a++) {
     for (let b = 0; b < S; b++) changeTime[a * S + b] = u.changeTime[names[a] + '>' + names[b]] ?? u.defaultChangeTime
   }
   const start = names.indexOf(u.start)
   if (start < 0) throw new Error(`${at}: start shape ${u.start} is not one of its shapes`)
+  // a unit's set of shapes is a bit per shape in an int32
+  if (S > MAX_SHAPES) throw new Error(`${at}: ${S} shapes, more than ${MAX_SHAPES}`)
+  const enabled = shapeMask(names, u.enabled ?? names)
+  if (enabled < 0) throw new Error(`${at}: enabled shape ${unknownShape(names, u.enabled!)} is not one of its shapes`)
+  if (!(enabled & (1 << start))) throw new Error(`${at}: its start shape ${u.start} is not enabled`)
   const slots = C * R * F
   const slotC = new Int32Array(slots)
   const slotLX = new Float64Array(slots)
@@ -557,6 +609,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
       const k = names.indexOf(n)
       if (k < 0) throw new Error(`${at}: it charges from ${n}, not one of its shapes`)
       if (u.formations[n].trail) throw new Error(`${at}: it charges from ${n}, a trail shape`)
+      if (traitsOf(u, n).moves === false) throw new Error(`${at}: it charges from ${n}, a shape that cannot move`)
       from[k] = 1
     }
     if (approach < 0 || pace < 0) throw new Error(`${at}: a charge pace is not one of the paces`)
@@ -566,7 +619,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     charge = { from, approach, pace }
   }
   const refuge = u.refuge === undefined ? -1 : names.indexOf(u.refuge)
-  if (u.refuge !== undefined && (refuge < 0 || (traitsOf(u, u.refuge).brace ?? 0) < 1)) {
+  if (u.refuge !== undefined && (refuge < 0 || braceSides(traitsOf(u, u.refuge).brace).some(v => v < 1))) {
     throw new Error(`${at}: its refuge ${u.refuge} is not one of its braced shapes`)
   }
   let artillery: TypeTable['artillery'] = null
@@ -625,6 +678,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     changeTime,
     traits,
     start,
+    enabled,
     charge,
     refuge,
     artillery,
@@ -675,6 +729,11 @@ export function compileRuleset(rs: Ruleset): Compiled {
   const paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const typeNames = Object.keys(rs.types)
   if (!typeNames.length) throw new Error(`ruleset ${rs.name}: no unit types`)
+  // before the types: a shape's flankFrom is checked against the blend
+  const SC = rs.sectors
+  if (!(SC.blend.H > 0 && SC.blend.T - SC.blend.H > 0 && SC.blend.T + SC.blend.H < 1)) {
+    throw new Error(`ruleset ${rs.name}: sectors.blend must lie inside the angle measure's 0..1 (0 < T − H, T + H < 1)`)
+  }
   const types = typeNames.map(t => compileType(rs, t, kinds, paces))
   const presets = Object.keys(rs.orders)
   // Tobler's hiking curve capped at the drill pace, over rise/run −1..1 in 400 steps, from exact operations
@@ -717,15 +776,26 @@ export function compileRuleset(rs: Ruleset): Compiled {
   }
   // one shock must not rout a steady battalion of level 2 on its own (s1c-plan-review L2;
   // docs/proposals/morale-bar-model.md § 9): contagion and a second enemy's charge. A charge's own threat and impact
-  // are left out: a charge into a flank is meant to break a line
+  // are left out: a charge into a flank is meant to break a line. Each as the shape that takes it worst does: its
+  // shock, and a flank's by its flank shock
   const most = 0.6 * L[1].bar
-  if (M.contagion.shock > most) {
-    throw new Error(`ruleset ${rs.name}: morale.contagion.shock over 0.6 of level 2's bar`)
+  let shock = 0
+  let flankShock = 0
+  for (const U of types) {
+    for (let o = 0; o < U.traits.length; o += T_LEN) {
+      shock = Math.max(shock, U.traits[o + T_SHOCK])
+      flankShock = Math.max(flankShock, U.traits[o + T_SHOCK] * U.traits[o + T_FLANK_SHOCK])
+    }
+  }
+  if (M.contagion.shock * shock > most) {
+    throw new Error(`ruleset ${rs.name}: morale.contagion.shock, by the shapes' shock, over 0.6 of level 2's bar`)
   }
   // nor a second enemy's charge (decision 0080)
   const sec = rs.melee.second
-  if (!(sec.flank >= 0 && sec.rear >= 0 && Math.max(sec.flank, sec.rear) <= most)) {
-    throw new Error(`ruleset ${rs.name}: melee.second must be ≥ 0 and at most 0.6 of level 2's bar`)
+  if (!(sec.flank >= 0 && sec.rear >= 0 && Math.max(sec.flank * flankShock, sec.rear * shock) <= most)) {
+    throw new Error(
+      `ruleset ${rs.name}: melee.second must be ≥ 0 and, by the shapes' shock, at most 0.6 of level 2's bar`,
+    )
   }
   if (!(
     M.wavering[0] > 0 &&
@@ -744,10 +814,6 @@ export function compileRuleset(rs: Ruleset): Compiled {
   // a rallied formation is never wavering at once
   if (!(M.rally.share > M.wavering[1] && M.rally.share <= 1 && M.rally.cut >= 0 && M.rally.cut < 1)) {
     throw new Error(`ruleset ${rs.name}: morale.rally needs share above wavering's way back and at most 1, cut in 0..1`)
-  }
-  const SC = rs.sectors
-  if (!(SC.blend.H > 0 && SC.blend.T - SC.blend.H > 0 && SC.blend.T + SC.blend.H < 1)) {
-    throw new Error(`ruleset ${rs.name}: sectors.blend must lie inside the angle measure's 0..1 (0 < T − H, T + H < 1)`)
   }
   if (!(SC.corner > 0 && Number.isInteger(SC.slices) && SC.slices >= 1 && SC.reach > 0 && SC.reach < Infinity)) {
     throw new Error(`ruleset ${rs.name}: sectors needs corner > 0, a whole number of slices ≥ 1 and a finite reach > 0`)
@@ -793,8 +859,9 @@ export function compileRuleset(rs: Ruleset): Compiled {
   }
 }
 const expNeg = (x: number): number => exp(-x)
-/** Each shape's traits as a flat row (src/sim/traits.ts's fields), neutral where the ruleset says nothing. */
-function compileTraits(u: UnitType, names: string[]): Float64Array {
+/** Each shape's traits as a flat row (src/sim/traits.ts's fields), neutral where the ruleset says nothing; `blend`:
+ * the sector blend's centre for a shape that names no flankFrom. */
+function compileTraits(u: UnitType, names: string[], blend: number): Float64Array {
   const out = new Float64Array(names.length * T_LEN)
   names.forEach((n, s) => {
     const t = traitsOf(u, n)
@@ -804,8 +871,16 @@ function compileTraits(u: UnitType, names: string[]): Float64Array {
     out[o + T_REAR] = t.hits?.rear ?? 1
     out[o + T_SIDED] = t.hits?.flank !== undefined || t.hits?.rear !== undefined ? 1 : 0
     out[o + T_MELEE] = t.melee ?? 1
-    out[o + T_BRACE] = t.brace ?? 0
+    const b = braceSides(t.brace)
+    out[o + T_BRACE] = b[0]
+    out[o + T_BRACE_FLANK] = b[1]
+    out[o + T_BRACE_REAR] = b[2]
     out[o + T_ROUND] = u.formations[n].allRound ? 1 : 0
+    out[o + T_FIRE] = t.fire ?? 1
+    out[o + T_SHOCK] = t.shock ?? 1
+    out[o + T_FLANK_SHOCK] = t.flankShock ?? 1
+    out[o + T_BLEND] = t.flankFrom === undefined ? blend : blendAt(t.flankFrom)
+    out[o + T_MOVES] = t.moves === false ? 0 : 1
   })
   return out
 }
@@ -816,9 +891,34 @@ function traitsOf(u: UnitType, n: string): TraitsDef {
   return {
     hits: a.hits || b.hits ? { ...a.hits, ...b.hits } : undefined,
     melee: b.melee ?? a.melee,
-    brace: b.brace ?? a.brace,
+    brace: a.brace === undefined && b.brace === undefined ? undefined : { ...asSides(a.brace), ...asSides(b.brace) },
+    fire: b.fire ?? a.fire,
+    shock: b.shock ?? a.shock,
+    flankShock: b.flankShock ?? a.flankShock,
+    flankFrom: b.flankFrom ?? a.flankFrom,
+    moves: b.moves ?? a.moves,
   }
 }
+const asSides = (b: BraceDef | undefined) => (typeof b === 'number' ? { front: b, flank: b, rear: b } : (b ?? {}))
+/** Bracing as [front, flank, rear], 0 where it names none. */
+function braceSides(b: BraceDef | undefined): [number, number, number] {
+  const s = asSides(b)
+  return [s.front ?? 0, s.flank ?? 0, s.rear ?? 0]
+}
+// the sector blend's centre on the angle measure t = o / (d + o) for a flank beginning a radians off straight ahead
+// (docs/proposals/sectors-model.md § 3: o = sin, d = cos of the angle; 45° gives 0.5)
+const blendAt = (a: number): number => sin(a) / (sin(a) + cos(a))
+/** The shapes named in `want`, a bit per shape of `names` (each name trimmed); −1 if one is none of them. */
+export function shapeMask(names: readonly string[], want: readonly string[]): number {
+  let m = 0
+  for (const n of want) {
+    const s = names.indexOf(n.trim())
+    if (s < 0) return -1
+    m |= 1 << s
+  }
+  return m
+}
+const unknownShape = (names: readonly string[], want: readonly string[]) => want.find(n => !names.includes(n.trim()))
 const nonNegative = (v: number): boolean => v >= 0 && v < Infinity
 // the names in first-seen order, each once (the sim keeps no Set: index-ordered arrays only)
 const unique = (a: string[]): string[] => a.filter((v, i) => a.indexOf(v) === i)

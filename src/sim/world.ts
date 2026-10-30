@@ -154,6 +154,8 @@ export interface Formations {
   alertSince: Int32Array
   autoFrom: Int32Array
   refugeOff: Uint8Array
+  // the shapes of its type it may form, bit s for shape s (docs/plans/active/formations.md § C3)
+  enabled: Int32Array
 }
 // per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it), the men of its shattered
 // formations that left the field at the map's edge (S1e-1), and the men it spawned (S1e-2: the end condition)
@@ -349,6 +351,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     alertSince: i32(N),
     autoFrom: i32(N),
     refugeOff: u8(N),
+    enabled: i32(N),
   }
   const M = MAX_ORDERS
   const ord: Orders = {

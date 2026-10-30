@@ -38,6 +38,8 @@ import {
   type ScenarioRules,
 } from '../src/sim/index.ts'
 import { FULL } from '../src/scenarios/sizes.ts'
+// the bracing struck head on
+const FRONT = new Float64Array([1, 0, 0])
 
 const PI = Math.PI
 // a world on the open battlefield with a scenario's plan and limit, and units spawned in order (unit k is slot k)
@@ -441,7 +443,7 @@ describe('routers break ranks (#39)', () => {
     const h = unitHandle(0)
     s.order({ type: 'form', id: h, shape: 'square' })
     // its progress into the square
-    s.until(() => s.layout(h).name === 'line' && s.w.f.trans[0] === 1 && braceOf(s.w, 0) < at, 200)
+    s.until(() => s.layout(h).name === 'line' && s.w.f.trans[0] === 1 && braceOf(s.w, 0, FRONT) < at, 200)
     s.w.f.bar[0] = -100
     s.tick()
     return { state: s.w.f.mstate[0], shape: s.shape(h) }

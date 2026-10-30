@@ -44,6 +44,7 @@ import { StaffMap, toW, toS, type View } from '../render/map.ts'
 import { Overlay, LAYERS, type Layer } from '../render/overlay.ts'
 import { startLink, type Seen } from './battle-link.ts'
 import { pruneSelection, runSpeed, lastDropped, clockText as clock, parseTime } from './page-rules.ts'
+import { unitCard } from './unit-card.ts'
 
 const SPEEDS = [0, 0.25, 0.5, 1, 2, 4, 8]
 
@@ -588,10 +589,20 @@ async function main(): Promise<void> {
       `<text x="1" y="8" font-size="9" font-family="monospace" fill="#5f5a52">0</text><text x="${px}" y="8" font-size="9" font-family="monospace" fill="#5f5a52" text-anchor="end">${len} m</text>`
   }
   const statsEl = document.getElementById('stats')!
+  // the info box as last built: for formation i at a tick of world w
+  let card: { i: number; tick: number; w: World | null; lines: string[] } = { i: -1, tick: -1, w: null, lines: [] }
   function readout(): void {
     const lines: string[] = []
     if (selected.size > 6) lines.push(`${selected.size} battalions selected`)
-    else {
+    // one: its info box, every number the sim uses on it (docs/proposals/formations.md § 5), built once a tick
+    else if (selected.size === 1) {
+      for (const i of selected) {
+        if (card.i !== i || card.tick !== w.meta[M_TICK] || card.w !== w) {
+          card = { i, tick: w.meta[M_TICK], w, lines: unitCard(w, i) }
+        }
+        lines.push(...card.lines)
+      }
+    } else {
       for (const i of selected) {
         const U = typeOf(w, i)
         const s = U.shapes[w.f.shape[i]].name + (w.f.trans[i] ? ' → ' + U.shapes[w.f.tShape[i]].name : '')

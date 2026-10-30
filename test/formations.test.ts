@@ -6,12 +6,12 @@ import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { groundG, TRAIL_MIN, type Ruleset, type Geometry } from '../src/sim/index.ts'
 
 describe('timed changes', () => {
-  it('line → square takes the ruleset time (100 s), and the companies are evened out', () => {
+  it('line → square takes the ruleset time (90 s), and the companies are evened out', () => {
     const s = new Sim()
     const h = s.spawn(-20, -40, 0, 'line', 97)
     s.order({ type: 'form', id: h, shape: 'square' })
     const t = s.until(() => s.busy(h), 200)
-    expect(t).toBeCloseTo(100 - 0.05, 1)
+    expect(t).toBeCloseTo(cr.rs.types.infantry.changeTime['line>square'] - 0.05, 1)
     const C = cr.types[0].C
     const CS = cr.maxC
     const i = s.slot(h)

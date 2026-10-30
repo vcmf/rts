@@ -36,6 +36,8 @@ import {
   type World,
   type Compiled,
   type Ruleset,
+  type Geometry,
+  type Placement,
   type Terrain,
   type SimData,
   type Dropped,
@@ -78,8 +80,32 @@ export function openBattlefield(rs: Ruleset = napoleonic): Terrain {
 // mechanics tests on this field (the crest, the stream, the woods) were placed for before the division scale moved
 // the shipped ones (docs/proposals/division-scale.md § 3); the shipped numbers are the scenarios', the goldens' and the
 // calibrations'
+// the S1a block's shapes as the mechanics tests were placed for: the column of divisions, two sections wide (the
+// shipped attack column is one wide, docs/proposals/formations.md § 2), and a square that may move (the shipped one
+// cannot): the engine's geometry under test, not the formations' values
+const block = withBlock(napoleonic, 'infantry', { companies: 4, files: 9, bins: 3 })
+const sinf = block.types.infantry
+const BW = (g: Geometry) => g.files * g.fileSpacing
+const columnOfDivisions = (g: Geometry): Placement[] =>
+  Array.from({ length: g.companies }, (_, c) => ({
+    x: c === g.companies - 1 && g.companies % 2 ? 0 : ((c % 2) - 0.5) * (BW(g) + g.fileSpacing),
+    z: 0 - Math.floor(c / 2) * (g.ranks * g.rankSpacing + 3.2),
+    rot: 0,
+    face: 0,
+  }))
 export const small: Ruleset = {
-  ...withBlock(napoleonic, 'infantry', { companies: 4, files: 9, bins: 3 }),
+  ...block,
+  types: {
+    ...block.types,
+    infantry: {
+      ...sinf,
+      formations: {
+        ...sinf.formations,
+        column: { ...sinf.formations.column, place: columnOfDivisions },
+        square: { ...sinf.formations.square, traits: { ...sinf.formations.square.traits, moves: true } },
+      },
+    },
+  },
   name: `${napoleonic.name}, the S1a block`,
   fire: {
     ...napoleonic.fire,

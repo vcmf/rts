@@ -34,6 +34,8 @@ import {
   type Ruleset,
 } from '../src/sim/index.ts'
 import { FULL } from '../src/scenarios/sizes.ts'
+// the bracing struck head on
+const FRONT = new Float64Array([1, 0, 0])
 
 const PI = Math.PI
 const crN = compileRuleset(napoleonic)
@@ -154,7 +156,7 @@ describe('the charge', () => {
     const s = new S()
     const t = s.inf(0, 0, 0, 1)
     const a = s.cav(0, 80, PI)
-    const b = s.cav(120, -5, -PI / 2)
+    const b = s.cav(120, -25, -PI / 2) // its squadrons beside the line, none ahead of its front (flanked from 80°)
     const c = s.cav(0, -80, 0)
     const [fa, fb, fc] = [a, b, c].map(h => sideStruck(s.w, s.slot(h), s.slot(t)))
     expect(fa).toEqual([1, 0, 0])
@@ -182,16 +184,16 @@ describe('the charge', () => {
     const s = new S()
     const sq = s.inf(-80, 0, 0, 1, 'square')
     const ln = s.inf(80, 0, 0, 1)
-    expect(braceOf(s.w, s.slot(sq))).toBe(1)
-    expect(braceOf(s.w, s.slot(ln))).toBe(0)
+    expect(braceOf(s.w, s.slot(sq), FRONT)).toBe(1)
+    expect(braceOf(s.w, s.slot(ln), FRONT)).toBe(0)
     s.order({ type: 'form', id: ln, shape: 'square' })
     s.order({ type: 'form', id: sq, shape: 'line' })
     const into: number[] = []
     const out: number[] = []
     for (let k = 0; k < 6; k++) {
       s.advance(5)
-      into.push(braceOf(s.w, s.slot(ln)))
-      out.push(braceOf(s.w, s.slot(sq)))
+      into.push(braceOf(s.w, s.slot(ln), FRONT))
+      out.push(braceOf(s.w, s.slot(sq), FRONT))
     }
     for (let k = 1; k < 6; k++) {
       expect(into[k]).toBeGreaterThan(into[k - 1])
@@ -200,8 +202,8 @@ describe('the charge', () => {
     expect(into[5]).toBeLessThan(1)
     expect(out[5]).toBeGreaterThan(0)
     s.advance(120)
-    expect(braceOf(s.w, s.slot(ln))).toBe(1)
-    expect(braceOf(s.w, s.slot(sq))).toBe(0)
+    expect(braceOf(s.w, s.slot(ln), FRONT)).toBe(1)
+    expect(braceOf(s.w, s.slot(sq), FRONT)).toBe(0)
   })
 })
 
@@ -370,7 +372,7 @@ describe('melee', () => {
     for (const seed of [1, 3]) {
       const s = new S(seed, rs)
       const foe = s.inf(0, 60, PI, 1, 'line', 1)
-      const cav = s.cav(0, -40, 0)
+      const cav = s.cav(0, -20, 0) // it strikes well before the square forms (90 s)
       s.charge(cav, foe)
       s.until(() => !s.f(cav, 'foe'), 60)
       expect(s.w.f.trans[s.slot(foe)]).toBe(1) // caught mid-change
@@ -505,7 +507,7 @@ describe('a second enemy (decision 0080, E-16)', () => {
     let braced = 0
     s.until(() => {
       if (s.f(b, 'foe')) return false
-      braced = braceOf(s.w, s.slot(t))
+      braced = braceOf(s.w, s.slot(t), FRONT)
       return s.f(b, 'chPhase') !== 0
     }, 60)
     if (!alone) expect(s.f(t, 'foe')).toBe(a)

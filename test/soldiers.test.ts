@@ -428,7 +428,7 @@ describe("the men's arrays", () => {
         dead += 1 - alive
       }
     }
-    expect({ hash: h.toString(16), men: M.n, dead }).toEqual({ hash: 'fb2d2119', men: 810, dead: 3 })
+    expect({ hash: h.toString(16), men: M.n, dead }).toEqual({ hash: 'df4b6d54', men: 810, dead: 3 })
   })
 })
 
