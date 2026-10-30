@@ -36,11 +36,11 @@ streaming at all, only the whole map as its far ring and a fine area that follow
 |---|---|---|
 | **G0** | This plan; the epic branch | The owner accepts the outline |
 | **G1** | Austerlitz at 3 km: the relief piece at 4× (decision 0089), the M8 tools' inputs (ways, works, villages, ground, labels) scaled and run again, the water and ponds recompiled | The map validates and compiles; the owner's check of the field (M8's, started over) |
-| **G2** | The far view lit as a model (decision 0090, proposed): the sun's soft shadow and the sky's occlusion baked, the campaign map's palette, no height exaggeration (the owner, 2026-10-30); the staff map at the 3D world's sun (open question 1) | The owner's eye against K1's print; the bake within budget at 3 km (measured) |
-| **G3** | The whole 3 km map in 3D: the far ring becomes the map, the camera's focus clamped to the map's play area, the light coarse for the whole map (2 m, at build time) and fine around the camera (0.5 m, at run time), the cover, roads, villages and water from the look compiler over the whole map, not a window | Austerlitz edge to edge on the look page; no seam where the fine light ends; the frame measured panning across the map at the widest zoom |
-| **G4** | One page, one camera: past a zoom threshold (today's widest 3D view, 260 m) the lit map takes over, in the staff map's stages (`docs/proposals/staff-map/design.md` §9): the painted world's far ground fades into the paper, the figures into slabs; below it, the 3D world | Zooming from the whole map to 15 m shows one place with no jump; both renderers' cost across the blend measured |
+| **G2** | The far view lit as a model (decision 0090, proposed): the sun's soft shadow and the sky's occlusion baked, the campaign map's palette, no height exaggeration (the owner, 2026-10-30); the staff map lit by the 3D world's sun (decided, below) | The owner's eye against K1's print; the bake within budget at 3 km (measured) |
+| **G3** | The whole 3 km map in 3D: the far ring becomes the map, paper past its edge (decided, below), the camera's focus clamped to the map's play area, the light coarse for the whole map (2 m, at build time) and fine around the camera (0.5 m, at run time), the cover, roads, villages and water from the look compiler over the whole map, not a window | Austerlitz edge to edge on the look page; no seam where the fine light ends; the frame measured panning across the map at the widest zoom |
+| **G4** | One page, one camera: past today's zoom threshold (the 3D world's widest view, 260 m; decided, below) the lit map takes over, in the staff map's stages (`docs/proposals/staff-map/design.md` §9): the painted world's far ground fades into the paper, the figures into slabs; below it, the 3D world | Zooming from the whole map to 15 m shows one place with no jump; both renderers' cost across the blend measured |
 | **G5** | Performance: 150 fps at 1080p on test machine A at every zoom and across the blend (the owner's target for K1 and the staff map, `perf-150.md`), FSR 1 above 1080p (as K1, decisions 0045, 0059), an fps meter on the page | Measured on the preview build (benches serialised by the bench lock) |
-| **G6** | Fog of war: each side sees the ground around its units as far as each sees (the sim's vision); the seen ground in the painted world's colour and light, the rest as the lit map (the owner's idea of 2026-10-28: the paper as the fog), enemy units only where seen, a last-seen ghost where lost. A research note first (how RTS and wargames draw it: Total War, Company of Heroes, Supreme Commander, Scourge of War) | A side's view on Austerlitz with an army moving: what it sees, what it last saw, the frame within budget |
+| **G6** | Fog of war on the enemy's units only (decided, below): the terrain is known and drawn whole at every zoom; an enemy unit shows only where one of the side's units sees it (the sim's vision), and where it is lost, a last-seen ghost. A research note first (how RTS and wargames draw it: Total War, Company of Heroes, Supreme Commander, Scourge of War) | A side's view on Austerlitz with an army moving: what it sees, what it last saw, the frame within budget |
 
 **Order.** G1 and G2 first, side by side (the map, and the far view on it). G3 after G1. G4 after G2 and G3. G5 runs
 through every phase (each measures its frame) and closes after G4. G6 after G4 and after vision is a rule in the sim
@@ -65,7 +65,7 @@ through every phase (each measures its frame) and closes after G4. G6 after G4 a
   per map and sun, coarse for the whole map, fine lazily around the camera, deterministically; only moving things get
   per-frame lighting" (AGENTS.md's invariant amended).
 - **The zoom threshold and the handover** (G4), superseding the staff map design's stages where they differ.
-- **Fog of war** (G6): what is hidden, what is remembered, and how each zoom draws it.
+- **Fog of war** (G6): how a unit's sight is read, what is remembered of a lost enemy, and how each zoom draws it.
 
 ## Risks
 
@@ -77,11 +77,11 @@ through every phase (each measures its frame) and closes after G4. G6 after G4 a
   phase's plan lists the branches in flight, as the look plan does.
 - **Vision in the sim** is not there yet: G6 waits for it or uses a stand-in.
 
-## Open questions for the owner
+## Decided (the owner, 2026-10-30)
 
-1. **One sun.** The 3D world's sun stands in the north-west, about 27° high (`src/look/materials.ts`); K1's in the
-   north-east, 20°, warm. At the handover one light is simplest. Proposed: the world's sun for both, K1's colours.
-2. **The threshold**: at the 3D world's widest view (260 m) as today, or higher, so the 3D world is seen wider?
-3. **What fog of war hides**: only units (the terrain known, decision 0061's "fog of war on units, the terrain
-   known"), or also the ground's detail (the paper idea)?
-4. **Austerlitz's border**: what lies past the 3 km map's edge (the `.rdem`'s collar of real ground, or paper)?
+1. **One sun**: the staff map is lit by the 3D world's sun (north-west, about 27° high, `src/look/materials.ts`),
+   with K1's colours, so the light does not change at the handover.
+2. **The threshold**: as today, at the 3D world's widest view (260 m).
+3. **Fog of war hides only the enemy's units**: the terrain is known (decision 0061). The look plan's idea of the paper
+   as the fog over unseen ground is not taken.
+4. **Past the map's edge**: paper, not the relief's collar.
