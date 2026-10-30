@@ -8,6 +8,10 @@ last_reviewed: 2026-10-28
 Step 5 of `docs/plans/active/one-map-austerlitz.md` (the look compiler M4, E-tiles, the zoom handover), cut into
 stages the owner can see one by one. A plan only: each stage gets its own plan, or its own section here, when it starts.
 
+> **Since G1 (2026-10-30, `docs/plans/active/g1-austerlitz-3km.md`):** Austerlitz is a 3 km map at 4× (decision 0089),
+> so the window centres below are halved (Kobelnitz (−226, 176), the Pratzen (350, 126), `src/look/world/windows.ts`),
+> their contents and relief differ from the figures here, and a far ring may pass the map's edge.
+
 ## Problem
 
 The map engine (Track M, PR #49, on `main` at `5b54752d`) holds Austerlitz in the map language:

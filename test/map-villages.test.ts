@@ -15,6 +15,7 @@ describe("a map's villages", () => {
     expect(minHouses(10)).toBe(5)
     expect(minHouses(7)).toBe(4)
     expect(minHouses(1)).toBe(1)
+    expect(minHouses(0)).toBe(0) // a village that asks none (a church alone) requires none
   })
 
   it('takes the way nearest both ends of a stretch, and their distances along it', () => {

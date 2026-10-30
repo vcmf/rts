@@ -1,8 +1,9 @@
 // The named windows of the maps the look page draws (docs/plans/active/look-austerlitz-a1.md): a square of a map the
 // size of the look world (SPEC: the tile, the far ring, the play area), its centre in the map's metres. Austerlitz's
-// are at 4× since G1 (decision 0089): their far rings pass the 3 km map's edge, as paper. The look
-// world's origin is the window's centre, with the map's axes. The compiler (tools/build-look-data.ts --window) writes
-// each into data/<map>-<window>.lookdata; the page loads one by ?map=<map>&window=<name>.
+// are at 4× since G1 (decision 0089, accepted on #234): their far rings pass the 3 km map's edge, where the ground
+// is the default cover (meadow) on the edge's heights held, a stopgap until G3's paper. The look world's origin is
+// the window's centre, with the map's axes. The compiler (tools/build-look-data.ts --window) writes each into
+// data/<map>-<window>.lookdata; the page loads one by ?map=<map>&window=<name>.
 
 export interface LookWindow {
   map: string // the map's name: its file is maps/<map>.map.json

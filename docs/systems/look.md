@@ -85,8 +85,9 @@ Kobelnitz on Austerlitz, (−226, 176); the Pratzen, (350, 126), on the 3 km map
 (`layersOf`, `maps/engine.ts`) and `src/look/world/from-map.ts` reads the window's layers into today's inputs:
 
 - the heights from the layers' nodes (bilinear, `heightOf`), taken down by the window's lowest node so it meets 0;
-  the window's tile must lie inside the map; its far ring may pass the map's edge, as paper: the edge's heights
-  held (`heightOf` clamps), the cover plain, no ways, water or trees (G1, `docs/plans/active/g1-austerlitz-3km.md`);
+  the window's tile must lie inside the map; its far ring may pass the map's edge: there the edge's heights are
+  held (`heightOf` clamps) and the cover is the default meadow, with no ways, water or trees, a stopgap until G3 draws
+  paper there (G1, `docs/plans/active/g1-austerlitz-3km.md`);
 - the cover at 1 m cells (`MAP_COVER_CELL`, half the demo's 2 m), its ground, vegetation and built areas rasterised
   from the map's own shapes by apply's rules (`fineAreas`: the painting order, a ground area clearing the vegetation
   under it, an area's `clear` keep-offs, the lines' reach), not read off the layers' 2 m cells (the water and a

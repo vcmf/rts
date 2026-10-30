@@ -98,8 +98,9 @@ const maxOf = (a: Float32Array): number => a.reduce((v, x) => Math.max(v, x), -I
 
 /**
  * Throws unless the window's tile (side `tile` m) lies inside the layers. Its far ring may run past the map's edge
- * (docs/plans/active/g1-austerlitz-3km.md): there the ground is paper, the edge's heights held (`heightOf` clamps) and
- * the cover plain, with no ways, water or trees (`cellAt` is −1 off the layers).
+ * (docs/plans/active/g1-austerlitz-3km.md): there the edge's heights are held (`heightOf` clamps) and the cover is the
+ * default (meadow: `groundClass` of no cell), with no ways, water or trees (`cellAt` is −1 off the layers). A stopgap:
+ * G3 draws paper past the map's edge (docs/plans/active/track-g.md).
  */
 export function checkWindowInside(L: Layers, win: LookWindow, tile: number): void {
   const h = tile / 2
