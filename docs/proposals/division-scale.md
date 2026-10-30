@@ -5,10 +5,10 @@ last_reviewed: 2026-10-30
 
 # Model: the division scale
 
-The sim's units become decision 0076's (`docs/proposals/campaign.md` § The scale, #234): one unit stands for a
+The sim's units become decision 0076's (the campaign proposal's § The scale, #234): one unit stands for a
 division, a figure for 25 men. The owner fixed the sizes and the ranges on 2026-10-30; this document says what changes
 in the sim, exactly enough to build and check, as `docs/proposals/morale-bar-model.md` does. Its properties are P-56
-to P-63 (U3's model, `docs/proposals/closing-model.md`, holds P-41 to P-55). A review reads the properties first.
+to P-63 (U3's model, the closing model on U3's branch, holds P-41 to P-55). A review reads the properties first.
 
 It comes before U3: U3's ranges (close range, the first volley, fire discipline's modes) are set at this scale.
 
@@ -75,7 +75,7 @@ Each distance in the ruleset belongs to one of three groups, and moves with its 
 | **The guns and the ground** | unchanged | canister; `sectors.reach` (300: no threat farther than canister); `morale.leave`; the terrain's and the movement's numbers |
 
 Paces and times (the clock) are unchanged here: a unit crosses 3 km in about 55 minutes at today's 0.9 m/s. That
-belongs to the battle's time scale (`docs/proposals/campaign.md`, open question 8), decided with the 2–6 km maps.
+belongs to the battle's time scale (the campaign proposal's open question 8, #234), decided with the 2–6 km maps.
 
 - **P-57:** every ruleset distance is its group's factor × today's, to the metre (the table above); the guards that read
   distances hold.
@@ -133,5 +133,6 @@ belongs to the battle's time scale (`docs/proposals/campaign.md`, open question 
 1. This document reviewed.
 2. The units and `menPerFigure`; the distances (§§ 3, 5); the guns' minimum.
 3. The calibrations at the new distances (§ 7), the scenarios and the bench (§ 8), retuned.
-4. The docs (`docs/systems/fire-morale.md`, `melee.md`, `artillery.md`, `formations.md`), the goldens, `/code-review
+4. The docs (`docs/systems/fire-morale.md`, `docs/systems/melee.md`, `docs/systems/artillery.md`,
+   `docs/systems/formations.md`), the goldens, `/code-review
    high`, the PR.
