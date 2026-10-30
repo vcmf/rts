@@ -13,6 +13,9 @@ assets/**/*.blend
 assets/**/*.blend1
 
 # Build / tooling output (for later game code)
+# the map windows' look data: built, not committed (tools/build-look-data.ts; Vitest builds a missing one: test/look-data-setup.ts)
+data/*-*.lookdata
+!data/painted-world.lookdata
 node_modules
 dist/
 coverage/

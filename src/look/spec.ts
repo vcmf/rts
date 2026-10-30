@@ -121,14 +121,51 @@ export interface Derived {
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9 * Math.max(1, Math.abs(a))
 const isInt = (x: number) => near(x, Math.round(x))
 
-/** The heights a world's camera meets, m (groundOf, from its look data at load): the tile's lowest and highest ground
- *  (its heightfield, margin included), the far ring's lowest, and the range the focus keeps to (FocusFollow clamps
- *  its height to it: the demo's a single height, SPEC.camera.focusY; a map world's its ground in play) */
+/** A rectangle of the world, m: x0..x1 by z0..z1 */
+export interface Rect {
+  x0: number
+  z0: number
+  x1: number
+  z1: number
+}
+
+/** The demo's play area: the focus within ±SPEC.play (a map world's is its map's: its look data's world) */
+export const playOf = (s: Spec): Rect => ({ x0: -s.play, z0: -s.play, x1: s.play, z1: s.play })
+
+/** The rectangle a grid's nodes span */
+export const rectOf = (g: NodeGrid): Rect => {
+  const w = (g.n - 1) * g.cell
+  return { x0: g.x0, z0: g.z0, x1: g.x0 + w, z1: g.z0 + w }
+}
+
+/** The heights a world's camera meets, m (groundOf, from its look data at load): the lowest and highest ground the
+ *  camera can stand over (the tile's heightfield, margin included, and the far ring's nodes in play), the far ring's
+ *  lowest, and the range the focus keeps to (FocusFollow clamps its height to it: the demo's a single height,
+ *  SPEC.camera.focusY; a map world's its ground in play); where the focus may go (play) and the far ring's rectangle */
 export interface WorldGround {
   lo: number
   hi: number
   farLo: number
   focus: readonly [number, number]
+  play: Rect
+  ring: Rect
+}
+
+/**
+ * A map world's far ring (G3a, docs/plans/active/g3a-the-whole-map-far.md): its nodes on the demo's far grid (far
+ * cells of `farCell` m, the tile's edges on grid lines, so the apron joins them), holding the play area and `reach` m
+ * past it each way, at least a far cell past the tile; square, its extra cells on the far side. The demo's ring is
+ * SPEC.far about the origin.
+ */
+export function ringFor(d: Derived, play: Rect, reach: number): { n: number; cell: number; x0: number; z0: number } {
+  const e = d.spec.tile / 2
+  const c = d.farCell
+  // the far cells from the tile's edge out to a coordinate past it (at least one)
+  const out = (past: number) => Math.max(1, Math.ceil((past - e) / c - 1e-9))
+  const kx0 = out(reach - play.x0)
+  const kz0 = out(reach - play.z0)
+  const cells = Math.max(kx0 + out(play.x1 + reach), kz0 + out(play.z1 + reach)) + Math.round(d.spec.tile / c)
+  return { n: cells + 1, cell: c, x0: -e - kx0 * c, z0: -e - kz0 * c }
 }
 
 // Points of the frame (image x, y in −1..1, y up), cast onto ground planes `drop` m below the focus (the focus's
@@ -200,7 +237,14 @@ export const nearReachOf = (s: Spec, g: WorldGround): number =>
   )
 
 // flat ground with the focus on it: the camera's own checks (derive), before any world's ground is known
-const FLAT: WorldGround = { lo: 0, hi: 0, farLo: 0, focus: [0, 0] }
+const flatOf = (s: Spec): WorldGround => ({
+  lo: 0,
+  hi: 0,
+  farLo: 0,
+  focus: [0, 0],
+  play: playOf(s),
+  ring: { x0: -s.far / 2, z0: -s.far / 2, x1: s.far / 2, z1: s.far / 2 },
+})
 
 /** The camera against a world's ground (at load: src/look/main.ts): the whole frame inside the far ring, no view held
  *  inside the ground or near the horizon (decision 0002). Throws on a world the camera cannot show; returns the two
@@ -220,10 +264,21 @@ export function checkView(s: Spec, g: WorldGround): { footprint: number; nearRea
   const footprint = footprintOf(s, g)
   if (!isFinite(footprint)) {
     bad.push(`camera: a frame corner comes within ${c.horizonMargin} rad of the horizon (no sky, decision 0002)`)
-  } else if (s.play + footprint > s.far / 2) {
-    bad.push(
-      `coverage: play + footprint = ${(s.play + footprint).toFixed(0)} m > far/2 = ${s.far / 2} m (a view sees past the world)`,
+  } else {
+    // the play area grown by the footprint each way, inside the far ring
+    const p = g.play
+    const r = g.ring
+    const short = Math.max(
+      r.x0 - (p.x0 - footprint),
+      r.z0 - (p.z0 - footprint),
+      p.x1 + footprint - r.x1,
+      p.z1 + footprint - r.z1,
     )
+    if (short > 1e-9) {
+      bad.push(
+        `coverage: the play area plus the footprint (${footprint.toFixed(0)} m) passes the far ring by ${short.toFixed(0)} m (a view sees past the world)`,
+      )
+    }
   }
   if (bad.length) {
     const at = `ground ${g.lo.toFixed(1)}..${g.hi.toFixed(1)} m, far ring from ${g.farLo.toFixed(1)} m, focus ${g.focus[0].toFixed(1)}..${g.focus[1].toFixed(1)} m`
@@ -262,7 +317,7 @@ export function derive(s: Spec = SPEC): Derived {
   else {
     // the camera's own checks on flat ground (each world's: checkView, at load, and nearFrameOf on its data)
     try {
-      const { nearReach } = checkView(s, FLAT)
+      const { nearReach } = checkView(s, flatOf(s))
       if (nearReach > s.margin) {
         bad.push(
           `coverage: the frame below the focus reaches ${nearReach.toFixed(0)} m > margin ${s.margin} m (the far ring would show beside the play edge)`,
@@ -368,7 +423,6 @@ export function derive(s: Spec = SPEC): Derived {
     waterN: Math.round(s.tile / s.water.texel),
     defines: [
       `#define SBIAS ${sbias}`,
-      `#define FAR_W ${s.far.toFixed(1)}`,
       `#define TILE_HALF ${(s.tile / 2).toFixed(1)}`,
       `#define TILE_W ${s.tile.toFixed(1)}`,
       `#define ROAD_CELL ${s.road.cell.toFixed(1)}`,
@@ -523,22 +577,24 @@ export interface OrbitView {
 }
 
 /** A world's ground as the camera's hold reads it (src/look/post.ts): its height at x, z (the drawn ground), the
- *  highest ground within `reach` m of x, z (or above it: a bound; maxGrid), and the focus's follower */
+ *  highest ground within `reach` m of x, z (or above it: a bound; maxGrid), the focus's follower, and where the focus
+ *  may go (the world's play area: WorldGround) */
 export interface HoldGround {
   ground: (x: number, z: number) => number
   highest: (x: number, z: number, reach: number) => number
   follow: FocusFollow
+  play: Rect
 }
 
-/** The camera's hold, once a frame before it renders (src/look/post.ts): the focus kept within ±play, its height on the
- *  ground under it (FocusFollow; dt, s, since the last frame), and the radius the zoom hold gives, held out over high
- *  ground where the eye could come within its clearance of it (clearRadius below clearBelow of the highest ground
- *  within the eye's reach), the player's wanted zoom kept apart so it comes back in on lower ground (#145). dt
+/** The camera's hold, once a frame before it renders (src/look/post.ts): the focus kept in the play area, its height
+ *  on the ground under it (FocusFollow; dt, s, since the last frame), and the radius the zoom hold gives, held out
+ *  over high ground where the eye could come within its clearance of it (clearRadius below clearBelow of the highest
+ *  ground within the eye's reach), the player's wanted zoom kept apart so it comes back in on lower ground (#145). dt
  *  Infinity settles the focus at once (a frozen page: the tools' views do not hang on the frames' timing) */
 export function holdView(s: Spec, zoom: ZoomHold, cam: OrbitView, w: HoldGround, dt: number): void {
   const t = cam.target
-  t.x = Math.max(-s.play, Math.min(s.play, t.x))
-  t.z = Math.max(-s.play, Math.min(s.play, t.z))
+  t.x = Math.max(w.play.x0, Math.min(w.play.x1, t.x))
+  t.z = Math.max(w.play.z0, Math.min(w.play.z1, t.z))
   const wanted = zoom.peek(cam.radius)
   t.y = w.follow.step(t.x, t.z, Number.isNaN(wanted) ? cam.radius : wanted, dt, w.ground)
   const below = clearBelow(s, w.highest(t.x, t.z, eyeReach(s)) - t.y)
@@ -714,29 +770,62 @@ export function maxGrid(g: NodeGrid, block: number): (x: number, z: number, reac
   }
 }
 
-/** A world's ground from its look data (src/look/main.ts at load): the heightfield's range, the far ring's lowest, and
- *  the focus's range: one height on a world whose focus keeps a plane (`plane`: the demo's), else the lowest and
- *  highest node within ±play (the ground the focus can stand over) */
-export function groundOf(s: Spec, hf: NodeGrid, far: NodeGrid, plane: number | null): WorldGround {
+/** A world's ground from its look data (src/look/main.ts at load), its focus kept in `play` (the demo's ±SPEC.play; a
+ *  map world's its map's): the range of the heightfield and of the far ring's nodes in play past the tile, the far
+ *  ring's lowest, and the focus's range: one height on a world whose focus keeps a plane (`plane`: the demo's), else
+ *  the lowest and highest node in play (the ground the focus can stand over) */
+export function groundOf(
+  s: Spec,
+  hf: NodeGrid,
+  far: NodeGrid,
+  plane: number | null,
+  play: Rect = playOf(s),
+): WorldGround {
   let lo = Infinity
   let hi = -Infinity
   let pLo = Infinity
   let pHi = -Infinity
+  const inPlay = (x: number, z: number) => x >= play.x0 && x <= play.x1 && z >= play.z0 && z <= play.z1
   for (let j = 0; j < hf.n; j++) {
     const z = hf.z0 + j * hf.cell
     for (let i = 0; i < hf.n; i++) {
       const v = hf.h[j * hf.n + i]
       if (v < lo) lo = v
       if (v > hi) hi = v
-      if (Math.abs(hf.x0 + i * hf.cell) <= s.play && Math.abs(z) <= s.play) {
+      if (inPlay(hf.x0 + i * hf.cell, z)) {
         if (v < pLo) pLo = v
         if (v > pHi) pHi = v
       }
     }
   }
+  // the far ring's nodes past the tile (inside it the heightfield is the ground)
+  const e = s.tile / 2
   let farLo = Infinity
-  for (let k = 0; k < far.h.length; k++) if (far.h[k] < farLo) farLo = far.h[k]
-  return { lo, hi, farLo, focus: plane === null ? [pLo, pHi] : [plane, plane] }
+  for (let j = 0; j < far.n; j++) {
+    const z = far.z0 + j * far.cell
+    for (let i = 0; i < far.n; i++) {
+      const v = far.h[j * far.n + i]
+      if (v < farLo) farLo = v
+      const x = far.x0 + i * far.cell
+      if (Math.max(Math.abs(x), Math.abs(z)) > e && inPlay(x, z)) {
+        if (v < lo) lo = v
+        if (v > hi) hi = v
+        if (v < pLo) pLo = v
+        if (v > pHi) pHi = v
+      }
+    }
+  }
+  return { lo, hi, farLo, focus: plane === null ? [pLo, pHi] : [plane, plane], play, ring: rectOf(far) }
 }
+
+/** The far ring's place for the shaders (its relief tone, its macro colour's bake, its painted river: a world point's
+ *  texel at (xz − FAR_O) / FAR_W): its corner and side, from the world's ring (the demo's SPEC.far about the origin) */
+export function farDefines(far: NodeGrid): string[] {
+  const r = rectOf(far)
+  return [`#define FAR_O vec2(${r.x0.toFixed(3)},${r.z0.toFixed(3)})`, `#define FAR_W ${(r.x1 - r.x0).toFixed(3)}`]
+}
+
+/** The far macro bake's texels per side over a ring `side` m across: SPEC.macro.far m each, or a little less */
+export const macroFarNOf = (d: Derived, side: number): number => Math.ceil(side / d.spec.macro.far - 1e-9)
 
 export const D = derive()

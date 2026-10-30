@@ -42,20 +42,23 @@ export function blur(f: Float32Array, n: number, r: number, passes = 3): Float32
 }
 
 /**
- * The relief's tone over a square of side `side` m centred on the origin at RELIEF_CELL m cells, as RGBA bytes: R the
- * hillshade (0.5 flat; brighter turned to the light, `sun` the direction toward it, unit, y up), G the crest (0.5 the
- * mean ground; brighter on a crest, darker in a valley). `heightAt`: the ground (m) at a world point.
+ * The relief's tone over a square of side `side` m from (x0, z0) (by default centred on the origin) at about
+ * RELIEF_CELL m cells (a whole number of them over the side), as RGBA bytes: R the hillshade (0.5 flat; brighter
+ * turned to the light, `sun` the direction toward it, unit, y up), G the crest (0.5 the mean ground; brighter on a
+ * crest, darker in a valley). `heightAt`: the ground (m) at a world point.
  */
 export function reliefField(
   heightAt: (x: number, z: number) => number,
   side: number,
   sun: readonly [number, number, number],
+  x0 = -side / 2,
+  z0 = x0,
 ): { n: number; cell: number; tex: Uint8Array } {
   const n = Math.round(side / RELIEF_CELL)
-  const x0 = -side / 2
+  const cell = side / n
   const h = new Float32Array(n * n)
   for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) h[j * n + i] = heightAt(x0 + (i + 0.5) * RELIEF_CELL, x0 + (j + 0.5) * RELIEF_CELL)
+    for (let i = 0; i < n; i++) h[j * n + i] = heightAt(x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell)
   }
   const hs = blur(h, n, SMOOTH)
   const mean = blur(h, n, LOCAL)
@@ -64,8 +67,8 @@ export function reliefField(
   const byte = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255)
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
-      const gx = ((at(i + 1, j) - at(i - 1, j)) / (2 * RELIEF_CELL)) * EXAGGERATE
-      const gz = ((at(i, j + 1) - at(i, j - 1)) / (2 * RELIEF_CELL)) * EXAGGERATE
+      const gx = ((at(i + 1, j) - at(i - 1, j)) / (2 * cell)) * EXAGGERATE
+      const gz = ((at(i, j + 1) - at(i, j - 1)) / (2 * cell)) * EXAGGERATE
       const l = Math.hypot(gx, 1, gz)
       const lit = (-gx * sun[0] + sun[1] - gz * sun[2]) / l - sun[1]
       const crest = (h[j * n + i] - mean[j * n + i]) / CREST_M
@@ -75,7 +78,7 @@ export function reliefField(
       tex[o + 3] = 255
     }
   }
-  return { n, cell: RELIEF_CELL, tex }
+  return { n, cell, tex }
 }
 
 /** The page's ?relief: 0 off, 1 the map worlds' default, 2 stronger; each one's strength (the shader's uReliefK). */

@@ -3,18 +3,28 @@
 // and the cover, from the authoring formulas in src/look/world/author.ts, once, in Node. The page reads the
 // file and never evaluates the formulas.
 // A map's window (docs/plans/active/look-austerlitz-a1.md) is compiled from the map's layers instead
-// (src/look/world/from-map.ts), into data/<map>-<window>.lookdata.
+// (src/look/world/from-map.ts), into data/<map>-<window>.lookdata: built, not committed (G3a, the owner's choice: about
+// 12 MB each; Vitest builds a missing one, test/look-data-setup.ts).
 //   node tools/build-look-data.ts                   writes the demo's and every window's (src/look/world/windows.ts)
 //   node tools/build-look-data.ts --window <name>   writes that window's alone
-//   node tools/build-look-data.ts --check           rebuilds in memory and fails if any differs from the committed file
+//   node tools/build-look-data.ts --check           rebuilds the demo's in memory and fails if it differs from the
+//                                                   committed file (the windows' are not committed)
 // Each node's x and z use the same expression as Babylon's CreateGround vertices, so the authored heights land on
 // the mesh exactly.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { D, ROAD_SLOTS } from '../src/look/spec.ts'
+import { D, ROAD_SLOTS, footprintOf, macroFarNOf, ringFor, type WorldGround } from '../src/look/spec.ts'
+import { bakeLight, SUN } from '../src/render/lit/bake.ts'
 import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
-import { encodeLook, ROAD_SEG, type LookData, type RoadGrid, type SpanGrid } from '../src/look/world/data.ts'
+import {
+  encodeLook,
+  LOOK_VERSION,
+  ROAD_SEG,
+  type LookData,
+  type RoadGrid,
+  type SpanGrid,
+} from '../src/look/world/data.ts'
 import { bakeWater, packWater } from '../src/look/world/water-data.ts'
 import { sstep } from '../src/look/noise.ts'
 import { riverQuery } from '../src/look/river.ts'
@@ -25,7 +35,9 @@ import { heightOf } from '../src/map/apply.ts'
 import type { MapFile } from '../src/map/schema.ts'
 import { noRiver } from '../src/look/river.ts'
 import {
+  boxCover,
   checkWindowInside,
+  mapRects,
   fineAreas,
   MAP_COVER_CELL,
   mapCover,
@@ -209,6 +221,8 @@ export function buildLookData(): Uint8Array {
     cover: authorCover(s.far, s.macro.cover),
     world: { kind: 'demo' },
     trees: new Float32Array(0),
+    farCover: null,
+    light: null,
   }
   return encodeLook(data)
 }
@@ -226,12 +240,33 @@ const emptySpans = (n: number, cell: number, ch: number): SpanGrid => ({
 
 /**
  * A map's window as look data (src/look/world/from-map.ts): its heights, cover, roads and trees from the map's layers;
- * no river, water or bank normals yet (the plan's PR c). `map`: the expanded map; `L`: its layers.
+ * no river, water or bank normals yet (the plan's PR c). Its far ring is the whole map (G3a,
+ * docs/plans/active/g3a-the-whole-map-far.md): the play area and the camera's widest footprint past it (on the map's
+ * whole range of heights, a bound), its own cover at the far bake's texels, and the map's coarse light (bakeLight on
+ * its true heights, the look's sun). `map`: the expanded map; `L`: its layers.
  */
 export function buildWindowData(win: LookWindow, map: MapFile, L: Layers): Uint8Array {
   const s = D.spec
   checkWindowInside(L, win, s.tile)
-  const { hf, far, base } = windowHeights((x, z) => heightOf(L, x, z), win, D)
+  const { play, edge } = mapRects(L, map.play, win)
+  let lo = Infinity
+  let hi = -Infinity
+  for (const v of L.height) {
+    if (v < lo) lo = v
+    if (v > hi) hi = v
+  }
+  const g: WorldGround = { lo, hi, farLo: lo, focus: [lo, hi], play, ring: play }
+  const ring = ringFor(D, play, Math.ceil(footprintOf(s, g)) + D.farCell)
+  const { hf, far, base } = windowHeights((x, z) => heightOf(L, x, z), win, D, ring)
+  const side = (ring.n - 1) * ring.cell
+  const farCover = boxCover(L, map.features, win, { x0: ring.x0, z0: ring.z0, side }, side / macroFarNOf(D, side))
+  const b = bakeLight(L.height, L.nx + 1, L.nz + 1, L.cell, SUN, 1, 1)
+  const rg = new Uint8Array(b.nx * b.nz * 2)
+  for (let k = 0; k < b.nx * b.nz; k++) {
+    rg[k * 2] = b.data[k * 4]
+    rg[k * 2 + 1] = b.data[k * 4 + 1]
+  }
+  const light = { nx: b.nx, nz: b.nz, cell: L.cell, x0: L.x0 - win.x, z0: L.z0 - win.z, rg }
   const lines = wayLines(map.features, L.table, win, s.far)
   const areas = fineAreas(L, map.features, win, s.far, MAP_COVER_CELL)
   const data: LookData = {
@@ -242,15 +277,19 @@ export function buildWindowData(win: LookWindow, map: MapFile, L: Layers): Uint8
     water: emptySpans(D.waterN, s.water.texel, 4),
     roads: roadGrid(lines),
     cover: mapCover(areas, L.table, win, lines),
-    world: { kind: 'map', map: win.map, window: win.name, x: win.x, z: win.z, base },
+    world: { kind: 'map', map: win.map, window: win.name, x: win.x, z: win.z, base, play, edge },
     trees: packTrees(mapTrees(L, areas, win)),
+    farCover,
+    light,
   }
   return encodeLook(data)
 }
 
-/** Every look data file this run builds: the demo's (unless one window is asked for) and the windows'. */
-function* builds(only: string | null): Generator<{ file: string; build: () => Uint8Array }> {
+/** Every look data file this run builds: the demo's (unless one window is asked for) and the windows' (none with
+ *  `demoOnly`). */
+function* builds(only: string | null, demoOnly = false): Generator<{ file: string; build: () => Uint8Array }> {
   if (only === null) yield { file: LOOK_FILE, build: buildLookData }
+  if (demoOnly) return
   const wins = WINDOWS.filter(w => only === null || w.name === only)
   if (only !== null && !wins.length) throw new Error(`--window ${only}: no such window (src/look/world/windows.ts)`)
   // each map compiled once, for all its windows
@@ -272,6 +311,25 @@ function* builds(only: string | null): Generator<{ file: string; build: () => Ui
   }
 }
 
+/**
+ * Writes each window's look data that is missing or that this build cannot read (another LOOK_VERSION); returns the
+ * files written. The tests' global setup (test/look-data-setup.ts): the windows' data is built, not committed. A file
+ * this version reads is kept even if its map or the compiler changed since: rebuild it then (`npm run build:data`).
+ */
+export function buildMissingWindows(): string[] {
+  const out: string[] = []
+  for (const { file, build } of builds(null)) {
+    if (file === LOOK_FILE) continue
+    if (fs.existsSync(file)) {
+      const b = fs.readFileSync(file)
+      if (b.length >= 8 && b.toString('latin1', 0, 4) === 'LOOK' && b.readUInt32LE(4) === LOOK_VERSION) continue
+    }
+    fs.writeFileSync(file, build())
+    out.push(path.relative(ROOT, file))
+  }
+  return out
+}
+
 /** f's result, its time and the process's resident memory printed after `what`. */
 function timed<T>(what: string, f: () => T): T {
   const t0 = performance.now()
@@ -288,7 +346,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const only = wi >= 0 ? (args[wi + 1] ?? null) : null
   if (wi >= 0 && only === null) throw new Error('--window takes a window name')
   let bad = 0
-  for (const { file, build } of builds(only)) {
+  for (const { file, build } of builds(only, check && only === null)) {
     const rel = path.relative(ROOT, file)
     const t0 = performance.now()
     const bytes = build()

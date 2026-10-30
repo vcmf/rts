@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-30
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, data/leaf-clumps-simple-v1.png, test/leaves.test.ts, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/trodden.ts, src/look/world/arms.ts, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/arms.test.ts, src/look/meadow-look.ts, test/meadow-look.test.ts, test/meadow-spec.test.ts]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, test/look-data-setup.ts, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, data/leaf-clumps-simple-v1.png, test/leaves.test.ts, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/trodden.ts, src/look/world/arms.ts, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/arms.test.ts, src/look/meadow-look.ts, test/meadow-look.test.ts, test/meadow-spec.test.ts]
 decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline, 0084-a-soft-mid-tone-on-figures-and-buildings]
 ---
 
@@ -37,7 +37,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 |---|---|
 | `src/look/spec.ts` | The world SPEC: sizes declared once, the rest derived (cells, the apron band, the camera footprint, the shader macros), and the invariants checked on derive: grids meet exactly, the tile holds play ⊕ margin, the far ring holds every view on flat ground, no frame corner near the horizon (the closest zoom, 15 m, held out over high ground until the eye is the camera's clearance, 6 m, above it: `clearRadius`, decision 0051); each world's ground against the camera at load (`groundOf`, `checkView`) and its focus on its ground (`FocusFollow`: below, "The camera on a world's ground"), yaw ≤ ±45°, bakes at their texel targets and within min-spec. The shadow map is sized from its fitted box at the texel target |
 | `src/look/world/author.ts` | The authoring formulas (`baseH`, the meander's generation, the trough and the carve). Run in Node by the build tool; the page uses them only for checks |
-| `tools/build-look-data.ts` | Builds `data/painted-world.lookdata`: the heightfield (tile plus `aoMargin`), the far ring's nodes, the river's samples, the bank normals (W2), the water data (W3, `src/look/world/water-data.ts`) and the cover (L5a, below); and each map window's `data/<map>-<window>.lookdata` (below; `--window <name>` builds one) (`--check` compares them all) |
+| `tools/build-look-data.ts` | Builds `data/painted-world.lookdata`: the heightfield (tile plus `aoMargin`), the far ring's nodes, the river's samples, the bank normals (W2), the water data (W3, `src/look/world/water-data.ts`) and the cover (L5a, below); and each map window's `data/<map>-<window>.lookdata` (below; `--window <name>` builds one; built, not committed: Vitest's global setup, `test/look-data-setup.ts`, builds a missing one) (`--check` compares the demo's) |
 | `src/look/world/data.ts` | The look data's binary format (version 9): arrays, span grids (a grid's covered texels only) for the bank normals and the water data, the cover's runs, the roads' segments and grid, the world it holds (the demo or a map's window) and a map world's trees |
 | `src/look/world/windows.ts`, `src/look/world/from-map.ts` | A map's named windows and the look compiler (M4) that turns a window of the map's layers into the look data (below) |
 | `src/look/world/cover.ts` | The ground's cover (L5a, below): authored, rasterised to a grid, run-length coded |
@@ -79,15 +79,14 @@ and on.
 ### A map's window (`?map=<map>&window=<name>`, A1)
 
 The look compiler (M4, `docs/plans/active/look-austerlitz-a1.md`; decision 0057: the map language is the one
-description of the ground) draws a window of a map file on the look page: a square the size of the demo world (the
-800 m tile, the 2600 m far ring, ±235 m of play, `SPEC` unchanged) round a named centre (`src/look/world/windows.ts`;
+description of the ground) draws a window of a map file on the look page: the demo world's 800 m tile round a named
+centre, in a far ring that is the whole map (G3a, below) (`src/look/world/windows.ts`;
 Kobelnitz on Austerlitz, (−226, 176); the Pratzen, (350, 126), on the 3 km map since G1). `tools/build-look-data.ts` compiles the map with the map engine
 (`layersOf`, `maps/engine.ts`) and `src/look/world/from-map.ts` reads the window's layers into today's inputs:
 
 - the heights from the layers' nodes (bilinear, `heightOf`), taken down by the window's lowest node so it meets 0;
-  the window's tile must lie inside the map; its far ring may pass the map's edge: there the edge's heights are
-  held (`heightOf` clamps) and the cover is the default meadow, with no ways, water or trees, a stopgap until G3 draws
-  paper there (G1, `docs/plans/active/g1-austerlitz-3km.md`);
+  the window's tile must lie inside the map; its far ring passes the map's edge: there the edge's heights are held
+  (`heightOf` clamps), the cover is the default meadow with no ways, water or trees, and the page paints paper;
 - the cover at 1 m cells (`MAP_COVER_CELL`, half the demo's 2 m), its ground, vegetation and built areas rasterised
   from the map's own shapes by apply's rules (`fineAreas`: the painting order, a ground area clearing the vegetation
   under it, an area's `clear` keep-offs, the lines' reach), not read off the layers' 2 m cells (the water and a
@@ -121,6 +120,26 @@ the far ring at 4 m, smoothed, their slopes as if four times steeper, lit from t
 the colour (`RELIEF`, `reliefTone` in `src/look/shaders/macro.glsl`; static light), and the same tone on the shader
 arm's colour and on the live roads' and yards' paint (`shore.glsl`), so they match the ground beside them. 1 on a map world by
 default, 2 stronger; off on the demo unless asked (`?relief=1` to judge it there).
+
+**The whole map far (G3a, `docs/plans/active/g3a-the-whole-map-far.md`).** A map world's far ring is its whole map:
+`ringFor` (`src/look/spec.ts`) lays it on the demo's far grid (14.3 m cells, the tile's edges on its lines, so the
+apron joins them), holding the map's play area (`map.play` about the map's centre, not the window's) and the camera's
+widest footprint past it, on the map's whole range of heights (Austerlitz: 291² nodes, 4.1 km). Its rectangle is the
+data's, not `±SPEC.far/2`: the shaders read it as `FAR_O` and `FAR_W` (`farDefines`), the far macro bake and the
+relief tone cover it, and the cover is read through `uCoverBox` (its corner, side and cell): the tile's materials the
+per-frame cover about the window, the far ring and its bake the ring's own cover at the bake's 4 m texels
+(`boxCover`, `farCover` in the data). Past the map's edge the far ring is the staff map's paper with a fine ink line
+(`MAP_EDGE`, `terrain.frag`). Off the tile it takes the map's coarse light (decision 0092, `COARSE_LIGHT`): G2's
+`bakeLight` (`src/render/lit/bake.ts`) on the map's true heights under the staff map's sun (`SUN`, a 2.5° disc), the
+soft sun shadow and the open sky at the map's 2 m nodes, baked by the compiler (1.6 s on the dev Mac) and stored in
+the data, in the light map's place (no mist, no contact); on the tile the light map as before, switched at the tile's
+edge (no cross-fade: the tile's materials are at 15 of Metal's 16 samplers). The camera's focus goes anywhere over the
+map's play area (`holdView` clamps it to the world's `play`, `FocusFollow`'s range takes the far ring's nodes in play
+past the tile; `checkView` holds the play area plus the footprint inside the ring); `SPEC.play` and `margin` keep
+their meaning for the tile (`nearFrameOf`). What is the tile's stays on it: the grass fades out over the tile's last
+20 m (`meadow.vert`; its map is the tile's), the armies, the live roads, the trees' shadows; past the window's 2600 m
+square no trees (G3d). A window's data is about 12 MB (the ring's cover and the light), built in about 6 s, not
+committed.
 
 The page loads that window's data (`windowOf`; an unknown name throws, and so does a file holding another world).
 On a map world the demo's hand-placed copses, woods, hedgerows, extras, wheat lattice and formation zones are off;

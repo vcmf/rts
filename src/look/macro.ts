@@ -13,7 +13,7 @@ import { Viewport } from '@babylonjs/core/Maths/math.viewport.js'
 import { Vector4 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { withPainter, type Materials } from './materials.ts'
-import { D, bakeMB } from './spec.ts'
+import { D, bakeMB, farDefines, macroFarNOf, rectOf, type NodeGrid } from './spec.ts'
 import type { CoverGrid } from './world/cover.ts'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 import BRUSH_URL from '../../data/meadow-brush.png?url'
@@ -93,6 +93,9 @@ export interface BakeStats {
 }
 export interface Macro {
   cover: RawTexture
+  // the far ring's cover and its place (a map world's whole map: G3a; the demo's the bake's), which the far ring's
+  // ground reads too (src/look/main.ts)
+  farCover: { tex: BaseTexture; box: Vector4 }
   tile: RenderTargetTexture
   far: RenderTargetTexture
   // a baked arm other than the one the bakes hold rebakes them (the stats of that rebake, else zeros)
@@ -109,6 +112,10 @@ export interface Macro {
   // the earth's texture loaded (or failed: earthOn stays off), so uEarthOn holds (the bench's arms, src/look/main.ts)
   earthLoaded: Promise<void>
 }
+
+/** A cover grid's place as macro.glsl's uCoverBox reads it: its corner, its side and its cell, m */
+export const coverBoxOf = (g: CoverGrid): [number, number, number, number] => [g.x0, g.z0, g.n * g.cell, g.cell]
+const coverBox = (g: CoverGrid): Vector4 => new Vector4(...coverBoxOf(g))
 
 // meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
 // the roads' textures (src/look/main.ts): the bake paints them in (BAKE_FS, roadPaint as far out: uRoadFar 1), so far
@@ -138,6 +145,8 @@ export function buildMacro(
   near: { reach: number; shows: () => boolean } = { reach: 25, shows: () => true },
   bakeCover: CoverGrid = cover,
   relief: { tex: BaseTexture; k: number } | null = null,
+  ring: NodeGrid | null = null,
+  ringCover: CoverGrid | null = null,
 ): Macro {
   const engine = scene.getEngine() as AbstractEngine
   const s = D.spec.macro
@@ -151,6 +160,15 @@ export function buildMacro(
   }
   const coverTex = coverTexOf(cover)
   const bakeCoverTex = bakeCover === cover ? coverTex : coverTexOf(bakeCover)
+  // the far ring: the demo's SPEC.far about the origin, its bake reading the cover; a map world's the whole map, its
+  // bake reading the ring's own cover (G3a, docs/plans/active/g3a-the-whole-map-far.md)
+  const farRect = ring
+    ? rectOf(ring)
+    : { x0: -D.spec.far / 2, z0: -D.spec.far / 2, x1: D.spec.far / 2, z1: D.spec.far / 2 }
+  const farSide = farRect.x1 - farRect.x0
+  const farN = ring ? macroFarNOf(D, farSide) : D.macroFarN
+  const farCover = ringCover ?? bakeCover
+  const farCoverTex = ringCover ? coverTexOf(ringCover) : bakeCoverTex
   // mipmapped on WebGL2; WebGL1 cannot mipmap a texture whose sides are not powers of two (1600², 650²), so there the
   // bakes are read bilinear, without mips (an incomplete mipmapped texture would read black)
   const mips = !mats.webgl1
@@ -168,7 +186,7 @@ export function buildMacro(
     return t
   }
   const tile = target('macroTile', D.macroN)
-  const far = target('macroFar', D.macroFarN)
+  const far = target('macroFar', farN)
   // arm 5's scratch: the bake before its filter, read texel by texel; one a size, made on arm 5's first bake and kept
   const makeScratch = (n: number) => {
     const t = new RenderTargetTexture('macroScratch', n, scene, {
@@ -239,6 +257,7 @@ export function buildMacro(
     })
   mats.bindAll(m => {
     m.setTexture('uCover', coverTex)
+    m.setVector4('uCoverBox', coverBox(cover))
     m.setTexture('uMacro', tile)
     m.setTexture('uMacroFar', far)
     m.setTexture('uSurf', surf)
@@ -252,6 +271,7 @@ export function buildMacro(
     'uRoadOn',
     'uRoadSegN',
     'uRoadFar',
+    'uCoverBox',
     'uPaveA',
     'uPaveB',
     'uPaveN',
@@ -271,6 +291,7 @@ export function buildMacro(
   ]
   const DEFINES = [
     ...D.defines,
+    ...(ring ? farDefines(ring) : []),
     ...(meadow ? ['#define MEADOW', ...flow] : []),
     ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []),
     ...(roads ? ['#define ROADS', '#define PAVING_FAR', ...paveDefines()] : []),
@@ -355,7 +376,8 @@ export function buildMacro(
     renderer.restoreStates()
     return draws
   }
-  // one bake over the world square centred on 0 of side `world` m: the macro colour, then on arm 5 (kuw) its filter.
+  // one bake over the world square from (x0, z0) of side `world` m (by default centred on 0), reading the cover `cov`
+  // (its texture `covTex`): the macro colour, then on arm 5 (kuw) its filter.
   // mb: the target with its mips, and arm 5's scratch beside it (`temp`: a scratch freed after
   // the bake, the full-size run's)
   const draw = async (
@@ -364,26 +386,30 @@ export function buildMacro(
     world: number,
     kuw: boolean,
     temp = false,
+    x0 = -world / 2,
+    z0 = x0,
+    cov: CoverGrid = bakeCover,
+    covTex: BaseTexture = bakeCoverTex,
   ): Promise<BakeStats> => {
     await ready(wrapper)
     if (kuw) await ready(kuwahara())
     const lost0 = losses
     const t0 = performance.now()
-    const x0 = -world / 2
     const src = !kuw ? t : temp ? makeScratch(n) : scratch(n)
     try {
       let draws = pass(src, n, wrapper, (e, i, j, w, h) => {
         e.setFloat4(
           'uRect',
           x0 + (i / n) * world,
-          x0 + (j / n) * world,
+          z0 + (j / n) * world,
           x0 + ((i + w) / n) * world,
-          x0 + ((j + h) / n) * world,
+          z0 + ((j + h) / n) * world,
         )
         e.setFloat('uTexel', world / n)
         e.setFloat('uSeason', 0)
         e.setTexture('uGrain', mats.grain)
-        e.setTexture('uCover', bakeCoverTex)
+        e.setTexture('uCover', covTex)
+        e.setFloat4('uCoverBox', ...coverBoxOf(cov))
         if (relief) {
           e.setTexture('uRelief', relief.tex)
           e.setFloat('uReliefK', relief.k)
@@ -459,7 +485,7 @@ export function buildMacro(
     const w = wanted()
     baked = ''
     const a = await draw(tile, D.macroN, D.spec.tile, w.kuw)
-    const b = await draw(far, D.macroFarN, D.spec.far, w.kuw)
+    const b = await draw(far, farN, farSide, w.kuw, false, farRect.x0, farRect.z0, farCover, farCoverTex)
     baked = w.key
     return {
       ms: a.ms + b.ms,
@@ -527,7 +553,7 @@ export function buildMacro(
       vertexShader: BAKE_VS,
       fragmentShader: withPainter(NEAR_FS),
       attributeNames: ['position'],
-      uniformNames: ['uRect', 'uTexel'],
+      uniformNames: ['uRect', 'uTexel', 'uCoverBox'],
       samplerNames: SAMPLERS,
       defines: DEFINES,
     })
@@ -564,6 +590,7 @@ export function buildMacro(
       e.setFloat('uTexel', t)
       e.setTexture('uGrain', mats.grain)
       e.setTexture('uCover', bakeCoverTex)
+      e.setFloat4('uCoverBox', ...coverBoxOf(bakeCover))
       if (brush) e.setTexture('uMeadowBrush', brush)
       e.setTexture('uFlow', flowTex.flow)
       e.setTexture('uComb', flowTex.comb)
@@ -578,6 +605,7 @@ export function buildMacro(
   }
   return {
     cover: coverTex,
+    farCover: { tex: farCoverTex, box: coverBox(farCover) },
     tile,
     far,
     setArm,

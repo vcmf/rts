@@ -29,7 +29,7 @@ import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn, zoo
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
-import { D, FocusFollow, TUNED_R, checkView, groundOf, maxGrid } from './spec.ts'
+import { D, FocusFollow, TUNED_R, checkView, farDefines, groundOf, maxGrid, rectOf } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS, type LookWorld } from './world/data.ts'
 import { windowFile, windowOf, type LookWindow } from './world/windows.ts'
@@ -112,8 +112,13 @@ setRiver(look.river)
 setHeightfield(look.hf, look.far, D.spec.tile / 2)
 // the world's ground range, from the heights themselves (not the header): the camera's checks take it (checkView), and
 // the focus keeps to its range (the demo's focus stays on its 8 m plane, SPEC.camera.focusY; a map world's follows its
-// ground in play: docs/plans/done/look-austerlitz-a1b.md)
-const worldGround = groundOf(D.spec, look.hf, look.far, onMap ? null : D.spec.camera.focusY)
+// ground in play: docs/plans/done/look-austerlitz-a1b.md) and goes anywhere over its map's play area (G3a)
+const worldGround =
+  look.world.kind === 'map'
+    ? groundOf(D.spec, look.hf, look.far, null, look.world.play)
+    : groundOf(D.spec, look.hf, look.far, D.spec.camera.focusY)
+// the far ring's rectangle (a map world's the whole map: G3a, docs/plans/active/g3a-the-whole-map-far.md)
+const ring = rectOf(look.far)
 checkView(D.spec, worldGround)
 const canvas = document.getElementById('c') as HTMLCanvasElement
 
@@ -229,7 +234,7 @@ if (reliefParam !== null && !['0', '1', '2'].includes(reliefParam)) {
 const reliefK = RELIEF_K[reliefParam === null ? (onMap ? 1 : 0) : Number(reliefParam)]
 let relief: { tex: RawTexture; k: number } | null = null
 if (reliefK > 0) {
-  const f = reliefField(groundAt, D.spec.far, [SUN.x, SUN.y, SUN.z])
+  const f = reliefField(groundAt, ring.x1 - ring.x0, [SUN.x, SUN.y, SUN.z], ring.x0, ring.z0)
   const tex = RawTexture.CreateRGBATexture(f.tex, f.n, f.n, scene, false, false, Texture.BILINEAR_SAMPLINGMODE)
   tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE
   relief = { tex, k: reliefK }
@@ -242,6 +247,7 @@ const grain0 = makeGrainCanvas(null)
 // decision 0084); none is the default, u3,b2,n2,g0; 0 the hard bands from before it
 const midtone = parseMidtone(params.get('midtone'))
 const mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [
+  ...farDefines(look.far),
   ...softDefines(soft),
   ...midtoneDefines(midtone),
   ...(relief ? ['#define RELIEF'] : []),
@@ -259,7 +265,15 @@ const keptGrains = new Set([mats.grain]) // grains the look tools switch back to
 const waterT0 = performance.now()
 const waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData')
 const waterTexMs = performance.now() - waterT0
-const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
+const terrain = buildTerrain(
+  scene,
+  mats,
+  look.far,
+  look.bank,
+  waterData,
+  look.light,
+  look.world.kind === 'map' ? look.world.edge : null,
+)
 // the page's options (?watersab, ?detail, ?water, ?bench: below)
 // ?watersab=nodive: the band check's sabotage (tools/water-look-check.mjs), the ribbon's
 // columns never dive under the banks
@@ -539,7 +553,14 @@ const macro = buildMacro(
   },
   look.cover,
   relief,
+  look.far,
+  look.farCover,
 )
+// a map world's far ring reads its whole map's cover, as its bake does (G3a); the demo's keeps the per-frame one
+if (look.farCover) {
+  terrain.farTerrainMat.setTexture('uCover', macro.farCover.tex)
+  terrain.farTerrainMat.setVector4('uCoverBox', macro.farCover.box)
+}
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) {
@@ -560,6 +581,7 @@ const camera = (() => {
       ground: groundAt,
       highest: (x, z, reach) => Math.max(nearTile(x, z, reach), nearFar(x, z, reach)),
       follow: new FocusFollow(worldGround.focus),
+      play: worldGround.play,
     },
     new URLSearchParams(location.search).has('frozen'),
   )
@@ -1767,11 +1789,17 @@ if (params.has('bench')) {
     .get('benchat')
     ?.split(',')
     .map(p => (p.trim() === '' ? NaN : Number(p)))
-  if (at && (at.length !== 2 || !at.every(v => Number.isFinite(v) && Math.abs(v) <= D.spec.play))) {
-    throw new Error(`?benchat must be <x>,<z> in metres within ±${D.spec.play}, not ${params.get('benchat')}`)
+  const P = worldGround.play
+  if (
+    at &&
+    (at.length !== 2 || !at.every(Number.isFinite) || at[0] < P.x0 || at[0] > P.x1 || at[1] < P.z0 || at[1] > P.z1)
+  ) {
+    throw new Error(
+      `?benchat must be <x>,<z> in metres within the play area (${P.x0}..${P.x1}, ${P.z0}..${P.z1}), not ${params.get('benchat')}`,
+    )
   }
   // with ?armies and no ?benchat, between the two sides' battalions facing each other (armies.ts, facing), clamped to
-  // the play area: the bench's cameras on the fight
+  // the tile's play area (the armies are the tile's): the bench's cameras on the fight
   const mid = armiesFocus
   const clampPlay = (v: number) => Math.max(-D.spec.play, Math.min(D.spec.play, v))
   const focus = at ? { x: at[0], z: at[1] } : mid ? { x: clampPlay(mid[0]), z: clampPlay(mid[1]) } : undefined

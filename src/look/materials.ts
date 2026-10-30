@@ -177,6 +177,7 @@ const COMMON = [
   ...Object.keys(SEASON_UNIFORMS),
   'uEarthOn',
   'uCombNearRect',
+  'uCoverBox',
   'uFocusZ',
   'uCamFwd',
 ]

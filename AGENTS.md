@@ -92,7 +92,8 @@ commits or PRs.
 - **The painterly look lives in assets and materials**, not in a heavy full-screen filter.
 - **Readable first**: armies stand out from the ground by colour or by value; never hide a formation.
 - **Pack colours are never used**: materials map to roles and our palette paints them.
-- **Static light is baked once per map**; only moving things get runtime lighting.
+- **Static light is never computed per frame**: baked once per map and sun, coarse for the whole map, fine lazily
+  around the camera, deterministically; only moving things get per-frame lighting (decision 0092).
 - **The simulation never imports the renderer** and changes only through commands (decision 0005,
   `docs/architecture.md`), and it is deterministic: restricted float64, replays match across
   browsers (decisions 0006, 0013).

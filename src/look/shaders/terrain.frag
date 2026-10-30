@@ -7,6 +7,14 @@ precision highp float;varying vec3 vW,vN;varying float vRiver;
 #ifdef FARRING
 uniform sampler2D uRiverMask;
 #endif
+#ifdef COARSE_LIGHT
+// a map world's coarse light off the tile (G3a, docs/plans/active/g3a-the-whole-map-far.md): the map's soft sun shadow
+// and open sky (src/render/lit/bake.ts, bakeLight) in the light map's place, no mist, no contact
+uniform sampler2D uCoarse;
+vec4 coarseLM(vec3 wp,vec4 lm){
+  if(max(abs(wp.x),abs(wp.z))<=TILE_HALF)return lm;
+  return vec4(texture2D(uCoarse,(wp.xz-COARSE_O)/COARSE_W).rg,0.0,1.0);}
+#endif
 // the ground's colour: its cover's (groundAt, the macro colour's arm: macro.glsl, shared with the shore band), stony
 // where steep, the banks, the seasons. wt: the water data here (WATERDATA)
 vec3 albedo(vec3 wp,vec3 n,vec4 wt){
@@ -49,7 +57,15 @@ void main(){
   #ifdef MACRO_DEBUG
   gl_FragColor=vec4(classAt(vW.xz)*20.0/255.0,0.0,0.0,1.0);return;   // the class check's view (macro.glsl): the class ×20 in red
   #endif
+  #ifdef MAP_EDGE
+  // past a map world's edge, the staff map's paper (G3a), its edge a fine ink line about a pixel and a half wide
+  vec2 eq=max(EDGE_LO-vW.xz,vW.xz-EDGE_HI);float ed=max(eq.x,eq.y),ew=1.5*fwidth(ed);
+  if(ed>-ew){gl_FragColor=lensOut(mix(PAPER*0.55,PAPER,smoothstep(ew*0.5,ew,abs(ed))),vW);return;}
+  #endif
   vec3 N=normalize(vN);vec4 lm=LM(vW);float bankTurn=0.0;
+  #ifdef COARSE_LIGHT
+  lm=coarseLM(vW,lm);
+  #endif
   #ifdef BANKN
   vec3 bN=bankNormal(N,vW.xz);   // the fine bank normals (src/look/shaders/shore.glsl)
   bankTurn=step(0.001,1.0-dot(bN,N));N=bN;   // where the bank normals turn the shading normal by over about 2.5°
@@ -68,7 +84,7 @@ void main(){
   #endif
   vec3 alb=albedo(vW,N,wt);
   #ifdef FARRING
-  float rm=texture2D(uRiverMask,vW.xz/FAR_W+0.5).r;                   // painted river line on the far ring
+  float rm=texture2D(uRiverMask,(vW.xz-FAR_O)/FAR_W).r;                   // painted river line on the far ring
   alb=mix(alb,alb*vec3(0.72,0.78,0.70),smoothstep(0.0,0.15,rm));
   alb=mix(alb,uFarRiver,smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
   #endif

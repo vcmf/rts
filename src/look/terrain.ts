@@ -6,7 +6,7 @@
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
-import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
+import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import type { GroundMesh } from '@babylonjs/core/Meshes/groundMesh.js'
@@ -19,9 +19,9 @@ import type { Materials } from './materials.ts'
 import { HF } from './heightfield.ts'
 import { RIVER, bandOf, riverQuery } from './river.ts'
 import { sstep } from './noise.ts'
-import { D } from './spec.ts'
+import { D, rectOf, type Rect } from './spec.ts'
 import type { Grid } from './heightfield.ts'
-import type { SpanGrid } from './world/data.ts'
+import type { LightGrid, SpanGrid } from './world/data.ts'
 import { COVER, WEAR_STEP, type CoverGrid } from './world/cover.ts'
 import { YARD_ALL, paveDefines } from './world/buildings.ts'
 import { spanTexture } from './span-texture.ts'
@@ -46,14 +46,57 @@ export interface Terrain {
 
 const TILE_W = D.spec.tile
 const TILE_SUB = D.spec.tileSub
-const FAR_W = D.spec.far
-const FAR_SUB = D.spec.farSub
 const FAR_CELL = D.farCell
 const BAND = D.band
 const MASK_N = D.spec.sizes.riverMask
 
-// heights come from the look data: the tile from the heightfield (decision 0012), the far ring from its own nodes
-export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: SpanGrid, water: RawTexture): Terrain {
+// the staff map's paper (src/render/lit/view.ts, PAPER: its summer tone), past a map world's edge (G3a)
+const PAPER = [0xec / 255, 0xee / 255, 0xf1 / 255]
+const glsl = (v: number) => v.toFixed(3)
+
+/**
+ * The far ring's own defines on a map world (G3a, docs/plans/active/g3a-the-whole-map-far.md): the map's coarse light
+ * off the tile (COARSE_LIGHT: its texture's corner and size, a node at a texel's centre) and the paper past the map's
+ * edge (MAP_EDGE); none on the demo.
+ */
+export function farRingDefines(light: LightGrid | null, edge: Rect | null): string[] {
+  const out: string[] = []
+  if (light) {
+    out.push(
+      '#define COARSE_LIGHT',
+      `#define COARSE_O vec2(${glsl(light.x0 - light.cell / 2)},${glsl(light.z0 - light.cell / 2)})`,
+      `#define COARSE_W vec2(${glsl(light.nx * light.cell)},${glsl(light.nz * light.cell)})`,
+    )
+  }
+  if (edge) {
+    out.push(
+      '#define MAP_EDGE',
+      `#define EDGE_LO vec2(${glsl(edge.x0)},${glsl(edge.z0)})`,
+      `#define EDGE_HI vec2(${glsl(edge.x1)},${glsl(edge.z1)})`,
+      `#define PAPER vec3(${PAPER.map(glsl).join(',')})`,
+    )
+  }
+  return out
+}
+
+// heights come from the look data: the tile from the heightfield (decision 0012), the far ring from its own nodes (a
+// map world's: the whole map, ringFor in src/look/spec.ts), lit off the tile by the map's coarse light (`light`) and
+// paper past its `edge`
+export function buildTerrain(
+  scene: Scene,
+  mats: Materials,
+  far: Grid,
+  bank: SpanGrid,
+  water: RawTexture,
+  light: LightGrid | null = null,
+  edge: Rect | null = null,
+): Terrain {
+  const ring = rectOf(far)
+  const FAR_W = ring.x1 - ring.x0
+  const FAR_SUB = far.n - 1
+  // the ring's centre: its mesh is built about the origin and moved there
+  const fcx = (ring.x0 + ring.x1) / 2
+  const fcz = (ring.z0 + ring.z1) / 2
   // DETAIL: the detail layer (src/look/shaders/painter.glsl), on the terrain and the water. BANKN: the tile shades the
   // river's banks with the fine bank normals (docs/plans/done/w2-river-banks.md). WATERDATA: the water data (W3), for
   // the shore band the tile paints near the water as the water does (docs/plans/done/w4-water-surface.md)
@@ -112,8 +155,8 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
     const g = riverMaskCanvas.getContext('2d')!
     const C = RIVER
     const k = MASK_N / FAR_W
-    const X = (i: number) => (C.px[i] + FAR_W / 2) * k
-    const Z = (i: number) => (C.pz[i] + FAR_W / 2) * k
+    const X = (i: number) => (C.px[i] - ring.x0) * k
+    const Z = (i: number) => (C.pz[i] - ring.z0) * k
     const w = (i: number) => Math.round(C.W[i] * k * 2) / 2
     g.fillStyle = '#000'
     g.fillRect(0, 0, MASK_N, MASK_N)
@@ -136,13 +179,26 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   riverMask.update(false)
   const farTerrainMat = mats.make('farTerrain', TER_VS, TER_FS, {
     attributes: ['position', 'normal', 'aRiver'],
-    samplers: ['uRiverMask'],
-    defines: ['#define FARRING', '#define DETAIL'],
+    samplers: ['uRiverMask', ...(light ? ['uCoarse'] : [])],
+    defines: ['#define FARRING', '#define DETAIL', ...farRingDefines(light, edge)],
   })
   farTerrainMat.setTexture('uRiverMask', riverMask)
+  if (light) {
+    // R the sun's soft shadow, G the open sky (bilinear, its nodes at the texels' centres)
+    const rgba = new Uint8Array(light.nx * light.nz * 4)
+    for (let k = 0; k < light.nx * light.nz; k++) {
+      rgba[k * 4] = light.rg[k * 2]
+      rgba[k * 4 + 1] = light.rg[k * 2 + 1]
+      rgba[k * 4 + 3] = 255
+    }
+    const t = RawTexture.CreateRGBATexture(rgba, light.nx, light.nz, scene, false, false, Texture.BILINEAR_SAMPLINGMODE)
+    t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
+    farTerrainMat.setTexture('uCoarse', t)
+  }
 
-  function ground(size: number, sub: number): GroundMesh {
+  function ground(size: number, sub: number, cx = 0, cz = 0): GroundMesh {
     const g = CreateGround('t', { width: size, height: size, subdivisions: sub, updatable: true }, scene)
+    g.position.set(cx, 0, cz)
     const p = g.getVerticesData(VertexBuffer.PositionKind)!
     const coarse = size > TILE_W
     const rv = new Float32Array(p.length / 3)
@@ -166,9 +222,9 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
       const ix = g.getIndices()!
       const keep: number[] = []
       for (let t = 0; t < ix.length; t += 3) {
-        const cx = (p[ix[t] * 3] + p[ix[t + 1] * 3] + p[ix[t + 2] * 3]) / 3
-        const cz = (p[ix[t] * 3 + 2] + p[ix[t + 1] * 3 + 2] + p[ix[t + 2] * 3 + 2]) / 3
-        if (Math.max(Math.abs(cx), Math.abs(cz)) > BAND) keep.push(ix[t], ix[t + 1], ix[t + 2])
+        const tx = cx + (p[ix[t] * 3] + p[ix[t + 1] * 3] + p[ix[t + 2] * 3]) / 3
+        const tz = cz + (p[ix[t] * 3 + 2] + p[ix[t + 1] * 3 + 2] + p[ix[t + 2] * 3 + 2]) / 3
+        if (Math.max(Math.abs(tx), Math.abs(tz)) > BAND) keep.push(ix[t], ix[t + 1], ix[t + 2])
       }
       g.setIndices(keep)
     }
@@ -180,7 +236,7 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
     return g
   }
   const tileGround = ground(TILE_W, TILE_SUB)
-  const farGround = ground(FAR_W, FAR_SUB)
+  const farGround = ground(FAR_W, FAR_SUB, fcx, fcz)
 
   // vertex index of grid point (x,z) in a CreateGround mesh (rows run from +z to -z)
   const gridV = (size: number, sub: number, x: number, z: number) => {
@@ -201,12 +257,22 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   const E2 = TILE_W / 2
   // 8 tile cells per far cell
   const R = Math.round((TILE_SUB * FAR_CELL) / TILE_W)
-  // each apron vertex is a copy of a tile or far vertex (position, normal, bank value), so the seams are exact
-  const add = (src: ArrayLike<number>, sn: ArrayLike<number>, k: number, r: number, x: number, z: number) => {
-    if (Math.abs(src[k * 3] - x) > 1e-3 || Math.abs(src[k * 3 + 2] - z) > 1e-3) {
+  // each apron vertex is a copy of a tile or far vertex (position, normal, bank value; a far vertex moved by its mesh's
+  // place, ox, oz), so the seams are exact
+  const add = (
+    src: ArrayLike<number>,
+    sn: ArrayLike<number>,
+    k: number,
+    r: number,
+    x: number,
+    z: number,
+    ox = 0,
+    oz = 0,
+  ) => {
+    if (Math.abs(src[k * 3] + ox - x) > 1e-3 || Math.abs(src[k * 3 + 2] + oz - z) > 1e-3) {
       throw Error(`apron: no grid vertex at ${x},${z}`)
     }
-    pos.push(src[k * 3], src[k * 3 + 1], src[k * 3 + 2])
+    pos.push(src[k * 3] + ox, src[k * 3 + 1], src[k * 3 + 2] + oz)
     nor.push(sn[k * 3], sn[k * 3 + 1], sn[k * 3 + 2])
     rv.push(r)
     return pos.length / 3 - 1
@@ -215,7 +281,7 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
     const k = gridV(TILE_W, TILE_SUB, x, z)
     return add(tp, tn, k, tr[k], x, z)
   }
-  const Fv = (x: number, z: number) => add(fp, fn, gridV(FAR_W, FAR_SUB, x, z), 8, x, z)
+  const Fv = (x: number, z: number) => add(fp, fn, gridV(FAR_W, FAR_SUB, x - fcx, z - fcz), 8, x, z, fcx, fcz)
   // same winding as the ground meshes (their face normals point up)
   const ti = tileGround.getIndices()!
   const up = (a: number, b: number, c: number, P: ArrayLike<number>) => {
@@ -237,7 +303,7 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
     [0, -1, -1, 0],
   ]) {
     // edge direction, outward normal
-    for (let s = 0; s < Math.round((FAR_SUB * TILE_W) / FAR_W); s++) {
+    for (let s = 0; s < Math.round(TILE_W / FAR_CELL); s++) {
       // one far cell along the edge
       const at = (t: number, o: number): [number, number] => [
         -ux * E2 + ox * E2 + ux * t + ox * o,

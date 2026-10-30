@@ -21,22 +21,24 @@ no sky occlusion (`painter.glsl`), the shadow map covers the tile alone.
 
 1. **The map ring.** In a map world the far ring covers the map's play area (`map.play`, 3000 m square about the
    map's centre, which is not the window's) and every view from it, and comes from the window's data: its corner and
-   size are no longer `±SPEC.far/2`. Its cells are 17.86 m, ten tile cells (16 m, the G3 plan's figure, is not a whole
-   even number of tile cells, which the apron needs: `derive`); its edges lie on the tile's grid. The side: the play
-   area plus the camera's widest footprint each way (403 m on flat ground, `checkView`), rounded up: about
-   3900 m, about 220² nodes, 96,000 triangles. The demo world keeps `SPEC.far`.
+   size are no longer `±SPEC.far/2`. Its cells stay the demo's 14.3 m, eight tile cells (16 m, the G3 plan's figure,
+   is not a whole even number of tile cells, which the apron needs: `derive`; one far cell size kept); its edges lie
+   on the tile's grid (`ringFor`). The side: the play area plus the camera's widest footprint each way (544 m on the
+   map's whole range of heights), rounded up a cell: on Austerlitz 4.1 km, 291² nodes, about 170,000 triangles. The
+   demo world keeps `SPEC.far`.
 2. **What reads the ring as a square on the origin** reads its rectangle instead (a uniform, `uFar`: its corner and
    side): the far macro bake, the relief tone, the painted river mask, the far ring's mesh and the apron.
 3. **The ring's cover:** the macro colour's far bake (4 m texels) reads a cover of its own over the ring at 4 m
    (`fineAreas` at 4 m, the ways cut to the ring); the fine cover (1 m, the tile's bakes and pixels) stays over
-   `SPEC.far` about the window. The trees over the ring as far groups (`mapTrees`, `farCuller`).
+   `SPEC.far` about the window. The trees stay within `SPEC.far` about the window, as today (the whole map's: G3d).
 4. **Paper past the map's edge** (the owner's choice, track-g.md): the ring's ground past the map's extent is the staff
    map's paper (`src/render/lit/`'s colour), unlit, its heights the edge's held as today, a fine ink line on the edge.
-5. **The coarse light.** G2's `bakeLight` on the map's heights (2 m nodes, ×1, the look's sun `SUN_TOWARD`, a 2°
-   disc), at build time, stored in the window's data (R the sun's soft shadow, G the open sky; 1501² × 2 bytes,
-   4.5 MB): measured 1.6 s in Node on the dev Mac (load 10). Off the tile `LM()` reads it, the sun's shadow and the sky
-   standing in for the tile's shadow map and occlusion; over the tile's last 60 m the two cross-fade (as the macro
-   colour's bakes do).
+5. **The coarse light.** G2's `bakeLight` on the map's heights (2 m nodes, ×1, the staff map's `SUN`: the look's
+   direction, a 2.5° disc), at build time, stored in the window's data (R the sun's soft shadow, G the open sky;
+   1501² × 2 bytes, 4.5 MB): measured 1.6 s in Node on the dev Mac (load 10). Off the tile the far ring reads it in
+   the light map's place (`COARSE_LIGHT`), the sun's shadow and the sky standing in for the tile's shadow map and
+   occlusion; switched at the tile's edge, not cross-faded: the tile's materials use 15 of Metal's 16 samplers
+   (measured, `__look.mats.samplers`), and no seam showed in the shots.
 6. **The camera free over the map:** `holdView` clamps the focus to the map's play area (in the window's metres, from
    its data), not `±SPEC.play`; `FocusFollow`'s height range is the map's ground in play (the ring's nodes), not the
    tile's; `checkView` holds the play rectangle plus the footprint inside the ring's rectangle. `SPEC.play` and
@@ -46,9 +48,10 @@ no sky occlusion (`painter.glsl`), the shadow map covers the tile alone.
    map is the tile's: off it the grass would stand on the edge texel's height), the armies stay on the tile (Track E's
    A4), the roads' live paint is the tile's (the ring shows the far bake's 4 m roads), the trees off the tile cast no
    shadow. These are G3b's and G3c's.
-8. **The tile data built, not committed:** `data/austerlitz-*.lookdata` git-ignored, written by
-   `npm run build:data`; a Vitest global setup builds a missing one before the tests that read it; CI builds them in
-   the check job. `check:data` compares the demo world's file only. The demo world's stays committed.
+8. **The tile data built, not committed:** `data/<map>-<window>.lookdata` git-ignored, written by
+   `npm run build:data`; a Vitest global setup (`test/look-data-setup.ts`) builds a missing or out-of-version one
+   before the tests (CI's test jobs so build them). `check:data` compares the demo world's file only. The demo world's
+   stays committed.
 9. **The static light invariant** amended (AGENTS.md, decision 0092): "static light is never computed per frame:
    baked once per map and sun, coarse for the whole map, fine lazily around the camera, deterministically; only moving
    things get per-frame lighting".
