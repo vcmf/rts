@@ -62,6 +62,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
   [`plans/active/track-s.md`](plans/active/track-s.md) (Track S: the sim engine's remaining phases before the playtest, the `epic/sim-engine` branch),
   [`plans/active/track-k.md`](plans/active/track-k.md) (Track K: the campaign, its phases K0–K7, the `epic/campaign` branch),
+  [`plans/active/k1-theatre-look.md`](plans/active/k1-theatre-look.md) (K1: the 1805 theatre in the lit style, a prototype),
   [`plans/active/c0-bench.md`](plans/active/c0-bench.md) (C0: the visual bench, its overlay, time controls and cases),
   [`plans/active/ci-faster-tests.md`](plans/active/ci-faster-tests.md) (CI's tests and coverage in three shards each, the bench split in five files),
   [`plans/active/c1-claims.md`](plans/active/c1-claims.md) (C1: a prototype of the claim grid, experimental; its weak points and their order),
@@ -111,6 +112,8 @@ designs, kept true as they change (nothing is frozen; what is built is described
 - [`research/map-size-battle-density.md`](research/map-size-battle-density.md): how much ground armies occupied, 1700–1815 and antiquity: frontages, battle densities, approach distances, vision; for sizing the maps.
 - [`research/map-size-rts-map-sizes.md`](research/map-size-rts-map-sizes.md): battle map size against soldier count in large-scale RTS and wargames (Total War, Scourge of War, Grand Tactician, HistWar, Graviteam and others).
 - [`research/period-maps.md`](research/period-maps.md): period map scans to trace battle maps from (Habsburg surveys, Meilenblätter, Schroetter, Ferraris, Schubert, Reymann) and datasets for a Europe theatre layer: coverage, georeferencing, licences for tracing and for committing.
+- [`research/relief-generalization.md`](research/relief-generalization.md): how small-scale relief maps are simplified (resolution bumping, the Laplacian terrain equalizer, Swiss tone rules, ridge and valley accents, generalised contours, line integral convolution, Eduard, texture shading) and what the campaign map should try first.
+- [`research/epic-campaign-maps.md`](research/epic-campaign-maps.md): how Total War, Crusader Kings III and similar games make campaign maps look epic, how to get crisp relief up close from a 250 m grid (finer heights by zoom, per-pixel light, erosion filter, horizon occlusion, contour sheets), and what the campaign map should try first.
 - [`research/map-view-style.md`](research/map-view-style.md): a light map view with a 3D feel: shaded relief, cast shadows and sky occlusion baked on the GPU, woods, roofs and lines, raised army blocks; what games document; costs measured and estimated.
 - [`research/colour-and-light-review.md`](research/colour-and-light-review.md): the owner's colour and light references, and the coats' colour lost to the warm light, measured.
 - [`research/grass-and-fields.md`](research/grass-and-fields.md): grass and fields at an RTS camera: Tiny Glade, Total War, the techniques (ground pattern, blades, cards, shells) and their pitfalls.
