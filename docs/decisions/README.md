@@ -112,3 +112,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0086](0086-the-back-exposed.md) | The back exposed: a pressure while it lasts, not a retreat detected (supersedes 0080's retreat shock) | accepted |
 | [0087](0087-wavering-keeps-fighting.md) | A wavering battalion keeps fighting: no automatic fall-back | accepted |
 | [0088](0088-campaign-on-roads.md) | A campaign of armies on roads, moved at once; battles come from it | proposed |
+| [0089](0089-maps-sized-by-the-front.md) | Battle maps sized by the armies' front: 2 to 4 km a side; Austerlitz 3 km (amends 0061 and 0070) | accepted |

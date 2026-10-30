@@ -1,6 +1,6 @@
 ---
 status: draft
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-30
 ---
 
 # Proposal: the campaign, armies on roads and battles that come from it
@@ -8,7 +8,7 @@ last_reviewed: 2026-10-27
 A campaign map of roads where every side gives its orders for the day at once and all armies then march at
 the same time. Where two enemies meet, a battle starts; allies near enough can be called to it by courier,
 and arrive during the battle, tired and strung out. The battle is the one already being built
-(`docs/proposals/sim-design.md`); this proposal is the layer around it. Decisions 0088 (proposed) and 0076 (accepted), with 0061 (accepted: square maps of 2–6 km)
+(`docs/proposals/sim-design.md`); this proposal is the layer around it. Decisions 0088 (proposed), 0076 (accepted) and 0089 (accepted: battle maps of 2–4 km, amending 0061)
 record the choices that change the vision.
 
 ## Context and goals / non-goals
@@ -43,7 +43,7 @@ map, and the battle starts with what the campaign made of it.
 | Layer | What moves | Time | Map |
 |---|---|---|---|
 | **Campaign** | armies (corps) along roads | turns of one day: orders, then the day played at once | the road network, settlements |
-| **Battle** | battalions | real time | 2–6 km a side (decision 0061) |
+| **Battle** | divisions | real time | 2–4 km a side (decision 0089) |
 
 The campaign is otherwise like Total War's (settlements, armies); its economy is out of this proposal's
 scope.
@@ -70,6 +70,12 @@ after Total War's. One unit on the battle map stands for a **division**; a figur
 A corps is **8–10 units, about 1,300–1,700 figures**. Three corps a side make about 25–30 units and
 4,000–5,000 figures a side, inside the 32,000-soldier budget (`docs/plans/active/armies-32k.md`). A line unit of
 240 in three ranks is about 50 m wide, so a corps holds about 500 m of front.
+
+The battle maps are sized by that front, not by the figures (decision 0089, accepted): about twice one army's
+front, 2 km for a corps a side, 3 km for 2–3 corps (the default), 4 km for the largest battles. The 2–6 km of
+decision 0061 were sized for a figure a soldier; at 25 men a figure the armies would be lost on 6 km.
+**Austerlitz** is a 3 km map: its whole field, about 12 km, as a 4× model (decision 0070), and its whole battle,
+about 6,300 figures (73,000 French and 85,000 allies at 25 men a figure), the size of a typical match.
 
 - **Light infantry** is two thirds of a line unit: the British Light Division, the nearest real one, had about
   3,000–4,000 men against 5,000–7,000 for a line division. Fewer men, but faster, in open order (harder to hit
@@ -139,7 +145,8 @@ machine, like the battle (decisions 0006, 0013).
 
 ### The battle zone
 
-Each battle has a **battle zone**, a circle of a few km around it, which the battle map covers.
+Each battle has a **battle zone**: the ground its battle map models, a square around the contact whose side is
+the map's (2–4 km, decision 0089) times the model's factor (§ What the campaign hands to the battle).
 - A contact **inside** a battle zone joins that battle: both corps enter from the map's edge on their road, at
   their times.
 - A contact **outside** every zone is a new, separate battle.
@@ -190,7 +197,9 @@ couriers, which travel and can be caught. Every other corps keeps its orders unt
 ### What the campaign hands to the battle
 
 The contract between the two layers, the same one a historical scenario fills by hand:
-- the map: the region around the battle zone, with its roads;
+- the map: the battle zone with its roads, as a model of the ground: a real field is fitted to the 2–4 km
+  map at a scale (decision 0070; Austerlitz 4×), so a kilometre on the campaign is shorter on the battle map, and
+  the roads enter at the map's edge where they cross it;
 - each corps on each side, with its strength, stragglers, fatigue, food and morale;
 - for each, deployed or in column, and where on which road;
 - the arrivals: which corps, by which road, at what time, in what state;
@@ -218,7 +227,7 @@ has to write the same contract.
 | Courier | about 12 km/h |
 | Getting under way | about 1 hour |
 | Stragglers of a forced march | 10–20 % of each battalion, back in 1–2 days |
-| Battle zone | a few km, inside the 2–6 km battle map |
+| Battle zone | the battle map's ground: 2–4 km a side times the model's factor (Austerlitz about 12 km) |
 
 ## Alternatives considered
 
@@ -237,7 +246,7 @@ has to write the same contract.
 
 - A battle cannot end early and free its corps to march the same day.
 - Many contacts in one day mean many pauses; contacts in the same hour could be grouped.
-- 2–6 km battle maps are larger than the 1–1.5 km the engine was budgeted for (decision 0011): its bakes,
+- 2–4 km battle maps are larger than the 1–1.5 km the engine was budgeted for (decision 0011): its bakes,
   memory and frame rate must be measured again.
 - The AI has to play the campaign: routes, standing orders, when to call and whether to come
   (`docs/proposals/ai.md`).
@@ -246,7 +255,8 @@ has to write the same contract.
 ## Open questions
 
 1. **Urgent orders**: a pause on contact (proposed) or standing orders only?
-2. **Battle zone**: a fixed radius, or one that grows with the size of the corps involved?
+2. **Battle zone**: a fixed model factor, or one that grows with the size of the corps involved (more ground in
+   the same 2–4 km)? And the times: a corps arriving across a 4× model covers its last kilometres four times faster.
 3. **Fatigue**: a new value per battalion, or forced marches only lower morale (which battalions have, with
    toughness and experience)?
 4. **Refusing battle**: can a corps inside the contact radius slip away in the night after a day of battle, as
