@@ -136,7 +136,7 @@ Every number in §§ 2, 2a and 3 is ruleset data, read through one place, so tun
 - **Guards:** each field's range is checked when the ruleset is compiled (multipliers above 0, bracing in 0..1, a
   square's `moves` false, a shape that `charges` has the fix bayonets mode), so a bad tune is refused, not played.
 - **The same numbers everywhere:** the info box (§ 5) reads the accessor, so what it shows is what the sim uses.
-  A report tool (`tools/formations-report.ts`) prints the table from the ruleset, and the calibrations and tests take
+  A new report tool prints the table from the ruleset, and the calibrations and tests take
   a ruleset variant (`{ ...napoleonic, ... }`), so a tune is tried without editing the shipped one.
 - **The first step is a pure refactor:** today's per-shape and per-kind numbers move into the table with the same
   values, proven by the goldens not changing; the new values come after, each with its scenario.
