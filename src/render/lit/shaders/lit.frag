@@ -1,7 +1,7 @@
 #extension GL_OES_standard_derivatives : enable
 precision highp float;
 // The lit map view (docs/plans/active/m6-lit-view.md, decision 0058; its light G2, decision 0090, after Track K's
-// campaign map): the print (the paper and its worn border, the woods darkening it, the water by its depth in steps,
+// campaign map): the print (the paper and its worn border, the water by its depth in steps,
 // contours every 5 m and 25 m, the yards, the ink of the ways, banks and barriers from their shapes, M6b) multiplied by
 // the light (a warm sun on the slope, per pixel, in its baked soft shadow; a cool sky in its baked share), the paper's
 // grain; or the flat draft's colours (a debug setting). Every texture but the paper's runs south row first: v grows with z (north).
@@ -47,7 +47,6 @@ void main() {
      cells' sides (decision 0065) */
   vec4 I = (texture2D(uInk, cuv) * 255.0 - 128.0) / 127.0 * uInkRange;
   float waterA = clamp(0.5 - I.g / max(fwidth(I.g), 1e-5), 0.0, 1.0) * inside;
-  float woodA = clamp(0.5 - I.a / max(fwidth(I.a), 1e-5), 0.0, 1.0) * inside;
 
   /* the paper */
   float g1 = texture2D(uPaperT, vW.xz / 95.0).r, g2 = texture2D(uPaperT, vW.xz / 900.0 + 0.37).r;
@@ -57,8 +56,8 @@ void main() {
   paper *= mix(vec3(1.0), vec3(0.90, 0.845, 0.75),
                smoothstep(0.0, 0.006, edge) * (1.0 - smoothstep(0.006, 0.02, edge)) * inside);   /* a thin worn border */
   vec3 mapC = paper;
-  /* woods: a dark warm grey, the paper itself darkened */
-  mapC = mix(mapC, paper * vec3(0.6, 0.57, 0.52), woodA * 0.85);
+  /* no woods drawn for now (the owner, 2026-10-30: they come back after the campaign map's, G2); their field stays in
+     the ink (A) */
   /* the water by its depth (0..1 over the mask's full depth), a pale shallow blue to a deep blue in six steps, each
      step's edge a pixel wide (Track K's stepped basins, flat here) */
   {
