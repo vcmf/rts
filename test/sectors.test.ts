@@ -119,13 +119,24 @@ describe('the weight of a point (§ 3)', () => {
       expect(wt(s.w, j, x, F.F[2 * j] + at(0, 300))[0]).toBe(1)
     }
   })
-  it('P-6: on the 45° line from the nearer end front is half, 35° and less front, 55° and more flank', () => {
-    const { s, j, F } = one('line')
-    for (const d of [50, 100, 200, 300]) {
-      const tol = d >= 150 ? 0.02 : 0.05
-      expect(Math.abs(wt(s.w, j, ...fromEnd(F, j, d, 45 * D))[0] - 0.5)).toBeLessThan(tol)
-      expect(wt(s.w, j, ...fromEnd(F, j, d, 35 * D))[0]).toBeGreaterThan(1 - tol)
-      expect(wt(s.w, j, ...fromEnd(F, j, d, 55 * D))[0]).toBeLessThan(tol)
+  it("P-6: on its flankFrom's line from the nearer end front is half, inside the blend front, past it flank", () => {
+    // the blend's band as angles off straight ahead: t = tan a / (1 + tan a)
+    const H = napoleonic.sectors.blend.H
+    const angle = (t: number) => Math.atan(t / (1 - t))
+    // the line flanked from 80°; cavalry on the ruleset's blend, 45° (35° to 55°)
+    for (const [shape, men, unit, deg] of [
+      ['line', FULL.infantry, undefined, 80],
+      ['line', FULL.cavalry, 'cavalry', 45],
+    ] as const) {
+      const { s, j, F } = one(shape, men, unit)
+      const T = Math.tan(deg * D) / (1 + Math.tan(deg * D))
+      for (const d of [50, 100, 200, 300]) {
+        // the corner's metre moves a steep line's half the more (at 80°: by 0.08 at 50 m, 0.02 at 200 m)
+        const tol = deg < 60 ? (d >= 150 ? 0.02 : 0.05) : d >= 150 ? 0.03 : d >= 100 ? 0.05 : 0.1
+        expect(Math.abs(wt(s.w, j, ...fromEnd(F, j, d, deg * D))[0] - 0.5)).toBeLessThan(tol)
+        expect(wt(s.w, j, ...fromEnd(F, j, d, angle(T - H) - D))[0]).toBeGreaterThan(1 - tol)
+        expect(wt(s.w, j, ...fromEnd(F, j, d, angle(T + H) + D))[0]).toBeLessThan(tol)
+      }
     }
   })
   it('P-7: at range the weights hardly change with scale', () => {

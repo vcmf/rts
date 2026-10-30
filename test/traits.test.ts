@@ -112,8 +112,8 @@ describe('flankFrom', () => {
       const z = F.F[2 * j] + 30 * Math.cos(60 * D)
       return Array.from(pointWeights(s.w, j, x, z, new Float64Array(3)))
     }
-    expect(at(napoleonic)[1]).toBeCloseTo(1, 6)
-    expect(at(withTraits('line', { flankFrom: 80 * D }))[0]).toBeCloseTo(1, 6)
+    expect(at(withTraits('line', { flankFrom: 45 * D }))[1]).toBeCloseTo(1, 6)
+    expect(at(napoleonic)[0]).toBeCloseTo(1, 6) // the shipped line's, 80°
   })
 })
 

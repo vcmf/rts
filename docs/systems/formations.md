@@ -77,9 +77,25 @@ The Napoleonic types (`docs/plans/active/s1d1-unit-types.md`):
 
 | Type | Block | Shapes | Paces |
 |---|---|---|---|
-| Line infantry (decision 0076, a division: a figure for 25 men) | 4 sections of 20 files × 3 ranks, 240 places; 8 bins a section; a line about 54 m | line, square (four faces, front and rear first: 2, 1, 2, 1), column of divisions, column of route | ordinary, route step |
+| Line infantry (decision 0076, a division: a figure for 25 men) | 4 sections of 20 files × 3 ranks, 240 places; 8 bins a section; a line about 54 m | line, square (four faces, front and rear first: 2, 1, 2, 1; it cannot move), attack column (one section wide, the others behind: 20 files × 12 ranks), column of route | ordinary, route step |
 | Light cavalry | 2 squadrons of 20 files × 2 ranks, 80 places; 1 m a file, 3 m a rank; a line about 41 m | line, column of squadrons at half distance, column of route by fours (each squadron a column of twos, horses 3 m apart: a `step`) | walk; the march at the trot |
 | Foot battery | 4 pieces, each a detachment of 4 files × 3 ranks (48 figures); one bin a piece | unlimbered (16 m apart), limbered (18 m apart on the trail) | by hand; the walk |
+
+The line infantry's shapes' traits (`docs/proposals/formations.md` §§ 2, 2a; the other types' are their hits and
+melee, `docs/systems/fire-morale.md`, `docs/systems/melee.md`):
+
+| | Line | Attack column | Square | Column of route |
+|---|---|---|---|---|
+| Fire (beyond what the geometry masks) | 1 | 1.25 (its head: about 0.3 of a line's, B-11) | 1 (one face) | 0 |
+| Hits taken from the front; × flank, × rear | 1; × 1.8, × 1.2 | 1.3; × 1.2, × 1.1 | 1.4, every side | 1.2; × 1.5, × 1.0 |
+| Shock taken | 1 | 0.75 | 0.8 | 1.25 |
+| Melee | 1 | 1.4 | 0.6 | 0.5 |
+| Braced front, flank, rear | 0 | 0.5, 0.25, 0 (the flank's shock × 0.7) | 1 | 0 |
+| Flanked from (off its front) | 80° | 40° | never | 60° |
+| Moves | yes | yes | no | yes |
+
+Change times at drill 1 (seconds; `docs/proposals/formations.md` § 3): line → column 30, column → line 40, column →
+square 30, line → square 90, square → line 60, square → column 30, into column of route 20, out of it 60.
 
 `compileRuleset` indexes it and precomputes, per type, its slot tables, and per shape:
 - the straight layout;
@@ -107,7 +123,8 @@ company's frame for its front and its tail's for its rear; a formation changing 
 threat's block, has weights (front, flank, rear) that sum to 1 on that face, read alike by fire, charges and morale:
 front within about 35° of straight ahead from the face's nearer end, flank past 55°, a blend between; the rear the
 same behind; `sectors` in the ruleset holds the blend, the corner, the slices and the reach, and a shape's
-`traits.flankFrom` moves the blend's centre for that shape (45° when it names none). Scratch, not state.
+`traits.flankFrom` moves the front's blend centre for that shape (45° when it names none; the rear's stays 45°): a
+line is flanked only from 80° off its front, an attack column from 40°, a march column from 60°. Scratch, not state.
 
 **Types in the world.** A formation stores its type (`f.type`), and `f.shape` indexes its type's shapes. The
 per-company and per-bin rows of the world are strided by the most of any type (`cr.maxC`, `cr.maxNB`,

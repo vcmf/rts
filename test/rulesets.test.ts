@@ -205,7 +205,6 @@ describe('compileRuleset refuses', () => {
     ],
     ...(
       [
-        ['fire', { fire: 0 }],
         ['shock', { shock: NaN }],
         ['flankShock', { flankShock: Infinity }],
       ] as const
@@ -214,6 +213,14 @@ describe('compileRuleset refuses', () => {
       withType('infantry', { ...inf, formations: { ...inf.formations, line: { ...inf.formations.line, traits: t } } }),
       new RegExp(`shape line's ${k} must be finite and above 0`),
     ]),
+    [
+      'a fire below 0',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { fire: -0.1 } } },
+      }),
+      /shape line's fire must be finite and ≥ 0/,
+    ],
     [
       'a flankFrom past a right angle',
       withType('infantry', {
@@ -411,7 +418,7 @@ describe("a shape's traits (docs/proposals/formations.md § 5a)", () => {
     expect([b[T_HITS], b[T_MELEE]]).toEqual([1.3, 1.6])
   })
   it('are neutral where neither names a field', () => {
-    const r = row(N, 'infantry', 'line')
+    const r = row(N, 'cavalry', 'line')
     const sq = row(N, 'infantry', 'square')
     const at = (x: Float64Array) =>
       [T_FIRE, T_SHOCK, T_FLANK_SHOCK, T_MOVES, T_BRACE, T_BRACE_FLANK, T_BRACE_REAR].map(t => x[t])

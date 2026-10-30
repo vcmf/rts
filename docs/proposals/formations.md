@@ -143,6 +143,17 @@ Every number in §§ 2, 2a and 3 is ruleset data, read through one place, so tun
   ruleset's hash, identical before and after (the goldens cannot prove it: they hash the ruleset's hash, which any
   change to the ruleset's shape moves); the new values come after, each with its scenario.
 
+## 5b. Results (step C2, `docs/plans/active/formations.md`)
+
+The shipped values are § 2's and § 2a's, with three settled in play:
+- **The attack column's fire** is 1.25 over what its depth masks: its head alone gives 0.24 of a line's, and B-11
+  asked for about 0.3 (0.29 with it).
+- **`flankFrom` moves the front's blend only**: with the rear's moved too, a line would be flanked only within 10° of
+  square to its side.
+- **A second enemy's charge** is 38 points from the flank and 48 from the rear (43 and 57 before): the guard that no
+  one shock routs a steady line of level 2 counts the shapes' shock, and the thin line's and the march column's
+  1.25 must pass it (the owner, 2026-10-30).
+
 ## 6. The owner's answers (2026-10-30), and what is open
 
 - The square cannot move. The column is second best against cavalry, head on (§ 2a), and weak to guns and muskets.

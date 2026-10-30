@@ -44,6 +44,7 @@ import { StaffMap, toW, toS, type View } from '../render/map.ts'
 import { Overlay, LAYERS, type Layer } from '../render/overlay.ts'
 import { startLink, type Seen } from './battle-link.ts'
 import { pruneSelection, runSpeed, lastDropped, clockText as clock, parseTime } from './page-rules.ts'
+import { unitCard } from './unit-card.ts'
 
 const SPEEDS = [0, 0.25, 0.5, 1, 2, 4, 8]
 
@@ -591,6 +592,8 @@ async function main(): Promise<void> {
   function readout(): void {
     const lines: string[] = []
     if (selected.size > 6) lines.push(`${selected.size} battalions selected`)
+    // one: its info box, every number the sim uses on it (docs/proposals/formations.md § 5)
+    else if (selected.size === 1) for (const i of selected) lines.push(...unitCard(w, i))
     else {
       for (const i of selected) {
         const U = typeOf(w, i)

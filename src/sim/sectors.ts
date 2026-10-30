@@ -154,9 +154,10 @@ const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v)
 
 /**
  * The weight toward frame q's front (side 1) or rear (side −1) of the point (x, y) in that frame (§ 3): the blend
- * centred on T (its formation's shape's, src/sim/traits.ts) on the angle measure t = o / (max(d, 0) + o + c), o metres
- * beyond the face's nearer end and d ahead of its edge (with T 0.5: 1 within 35° of straight ahead from the nearer
- * end, 0 past 55°), times the corner ramp (1 ahead of the edge, 0 a corner's length c behind it).
+ * centred on T (the front's from its formation's shape's flankFrom, src/sim/traits.ts; the rear's the ruleset's) on
+ * the angle measure t = o / (max(d, 0) + o + c), o metres beyond the face's nearer end and d ahead of its edge (with
+ * T 0.5: 1 within 35° of straight ahead from the nearer end, 0 past 55°), times the corner ramp (1 ahead of the edge,
+ * 0 a corner's length c behind it).
  */
 function sideWeight(S: SectorsDef, T: number, F: Faces, q: number, x: number, y: number, side: number): number {
   const o = Math.max(F.L[q] - x, x - F.R[q], 0)
@@ -201,11 +202,10 @@ export function pointWeights(w: World, j: number, x: number, z: number, out: Flo
   const S = w.cr.rs.sectors
   const kind = F.kind[j]
   if (kind === FACE_ALL) return finish(1, 0, out)
-  const T = blendOf(w, j)
   toFrame(F, 2 * j, x, z, xy)
-  const front = kind === FACE_NONE ? 0 : sideWeight(S, T, F, 2 * j, xy[0], xy[1], 1)
+  const front = kind === FACE_NONE ? 0 : sideWeight(S, blendOf(w, j), F, 2 * j, xy[0], xy[1], 1)
   toFrame(F, 2 * j + 1, x, z, xy)
-  const rear = sideWeight(S, T, F, 2 * j + 1, xy[0], xy[1], -1)
+  const rear = sideWeight(S, S.blend.T, F, 2 * j + 1, xy[0], xy[1], -1)
   return finish(front, rear, out)
 }
 
@@ -266,9 +266,8 @@ export function threatWeights(w: World, G: FireGeo, j: number, i: number, k: num
   const kind = F.kind[j]
   if (kind === FACE_ALL) return finish(1, 0, out)
   const S = w.cr.rs.sectors
-  const T = blendOf(w, j)
-  const front = kind === FACE_NONE ? 0 : blockSide(S, T, F, 2 * j, G, i, k, 1)
-  const rear = blockSide(S, T, F, 2 * j + 1, G, i, k, -1)
+  const front = kind === FACE_NONE ? 0 : blockSide(S, blendOf(w, j), F, 2 * j, G, i, k, 1)
+  const rear = blockSide(S, S.blend.T, F, 2 * j + 1, G, i, k, -1)
   return finish(front, rear, out)
 }
 

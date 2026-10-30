@@ -47,6 +47,11 @@ function square(g: Geometry): Placement[] {
   return out
 }
 
+const DEG = PI / 180
+// the attack column's gap between its sections, metres, and its fire's share beyond what its geometry masks
+// (B-11: the column fires about 0.3 of a line's, its head's fire and the trait together)
+const COLUMN_GAP = 1.5
+const COLUMN_FIRE = 1.25
 const infantry: UnitType = {
   geometry,
   // shapes: the company blocks placed in the battalion frame (x across, z ahead)
@@ -56,7 +61,8 @@ const infantry: UnitType = {
       kind: 'line',
       pace: 'ordinary',
       closeAcross: true,
-      traits: { hits: { front: 1.0, flank: 1.8, rear: 1.2 } }, // enfiladed, the ball runs down the files
+      // the shape that fires: enfiladed, the ball runs down the files; flanked only from well off its front
+      traits: { hits: { front: 1.0, flank: 1.8, rear: 1.2 }, flankFrom: 80 * DEG },
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * (BW(g) + g.fileSpacing), z: 0, rot: 0, face: 0 })),
     },
     // the companies over four faces, facing out (square, above)
@@ -64,22 +70,25 @@ const infantry: UnitType = {
       kind: 'column',
       pace: 'ordinary',
       allRound: true,
-      traits: { hits: { front: 1.6 }, brace: 1 },
+      // proof against horse, a dense target for guns and muskets, one face's fire; it cannot move (the owner)
+      traits: { hits: { front: 1.4 }, brace: 1, shock: 0.8, melee: 0.6, moves: false },
       place: square,
     },
-    // column of divisions: two companies wide, one division behind another (an odd last company centred;
-    // 0 − keeps the first division at +0)
+    // the attack column: one section wide, the others behind it (20 files × 12 ranks); its head fires, it holds and
+    // strikes, braced in part against horse head on (docs/proposals/formations.md § 2a), a deep target for guns
     column: {
       kind: 'column',
       pace: 'ordinary',
-      traits: { hits: { front: 1.6, flank: 1.2, rear: 1.1 } },
-      place: g =>
-        each(g, c => ({
-          x: c === g.companies - 1 && g.companies % 2 ? 0 : ((c % 2) - 0.5) * (BW(g) + g.fileSpacing),
-          z: 0 - Math.floor(c / 2) * (g.ranks * g.rankSpacing + 3.2),
-          rot: 0,
-          face: 0,
-        })),
+      traits: {
+        hits: { front: 1.3, flank: 1.2, rear: 1.1 },
+        fire: COLUMN_FIRE,
+        shock: 0.75,
+        melee: 1.4,
+        brace: { front: 0.5, flank: 0.25, rear: 0 },
+        flankShock: 0.7,
+        flankFrom: 40 * DEG,
+      },
+      place: g => each(g, c => ({ x: 0, z: -c * (g.ranks * g.rankSpacing + COLUMN_GAP), rot: 0, face: 0 })),
     },
     // column of route by files, ranks centred on the line of march; follows its head's trail
     march: {
@@ -87,25 +96,27 @@ const infantry: UnitType = {
       pace: 'ordinary',
       roadPace: 'routeStep',
       trail: true,
-      traits: { hits: { front: 1.6, flank: 1.5, rear: 1.0 } },
+      // it moves and does nothing else: no fire, frays, weak in melee, flanked from a little off its head
+      traits: { hits: { front: 1.2, flank: 1.5, rear: 1.0 }, fire: 0, shock: 1.25, melee: 0.5, flankFrom: 60 * DEG },
       place: g =>
         each(g, c => ({ x: ((g.ranks - 1) * g.rankSpacing) / 2, z: -c * (BW(g) + 1.0), rot: -PI / 2, face: 0 })),
     },
   },
   // regulation-like times in seconds at drill factor 1
+  // (docs/proposals/formations.md § 3: the closed column forms square fastest)
   changeTime: {
     'line>column': 30,
     'column>line': 40,
-    'column>square': 60,
-    'line>square': 100,
+    'column>square': 30,
+    'line>square': 90,
     'square>line': 60,
     'square>column': 30,
     'line>march': 20,
     'march>line': 60,
     'column>march': 20,
-    'march>column': 30,
+    'march>column': 60,
     'march>square': 60,
-    'square>march': 40,
+    'square>march': 20,
   },
   defaultChangeTime: 30,
   start: 'line',
@@ -452,7 +463,8 @@ export const napoleonic: Ruleset = {
     hold: 3,
     threat: { front: 34, flank: 71, rear: 86 }, // points
     impact: { kill: 0.06, shock: { front: 57, flank: 100, rear: 114 } },
-    second: { flank: 43, rear: 57 }, // under the guard: 0.6 × level 2's 100
+    // under the guard: 0.6 × level 2's 100, by the shape that takes it worst (shock 1.25, its flank's × 1.25)
+    second: { flank: 38, rear: 48 },
     rate: 0.01,
     cohesion: 0.5,
     refuse: 0.9,

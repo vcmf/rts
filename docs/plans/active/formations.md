@@ -62,6 +62,19 @@ Where the proposal and this plan differ, the proposal holds. Three slices, each 
 - **The look:** `src/look/world/armies.ts` and `arms.ts` read the type's geometry. Before this lands, the owner and the
   look track agree on how they read a shape's block.
 
+## C2's results
+
+- **The calibrations:** C-01 unchanged (the line's values are; its table identical). The artillery's six checks pass,
+  the two column checks with them: the attack column loses men 3.2× as fast as a line in 5 minutes (10.4 a minute
+  against 3.2) and breaks in 10 in every seed (PR B's two failures: 1.8×, and no break). The charges pass; the line struck head on breaks in 71% over 200 seeds (68% over 50:
+  the line is flanked only from 80° now, so a regiment over its end strikes more front).
+- **The S1e battle:** side 1's at 17:11 at the page's seed, as before.
+- **The scenarios:** B-11, B-14, B-15, B-18, B-19 and B-20's pace pass. **B-20's order does not:** the disorder model
+  reads the lag across a front, so a line meeting a straight edge keeps its order and a deep column crossing it loses
+  all of its own (the old column of divisions did the same). Left for a disorder model that reads depth, with the
+  dressing of a line; an expected failure in `test/formations-scenarios.test.ts`.
+- **The info box:** `src/app/unit-card.ts`, on the sim page for one selected unit.
+
 ## Open
 
 - The column's bracing numbers (§ 2a) and the modifiers' size (Total War-sized) stand as first guesses until the

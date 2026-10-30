@@ -156,7 +156,7 @@ describe('the charge', () => {
     const s = new S()
     const t = s.inf(0, 0, 0, 1)
     const a = s.cav(0, 80, PI)
-    const b = s.cav(120, -5, -PI / 2)
+    const b = s.cav(120, -25, -PI / 2) // its squadrons beside the line, none ahead of its front (flanked from 80°)
     const c = s.cav(0, -80, 0)
     const [fa, fb, fc] = [a, b, c].map(h => sideStruck(s.w, s.slot(h), s.slot(t)))
     expect(fa).toEqual([1, 0, 0])
@@ -372,7 +372,7 @@ describe('melee', () => {
     for (const seed of [1, 3]) {
       const s = new S(seed, rs)
       const foe = s.inf(0, 60, PI, 1, 'line', 1)
-      const cav = s.cav(0, -40, 0)
+      const cav = s.cav(0, -20, 0) // it strikes well before the square forms (90 s)
       s.charge(cav, foe)
       s.until(() => !s.f(cav, 'foe'), 60)
       expect(s.w.f.trans[s.slot(foe)]).toBe(1) // caught mid-change

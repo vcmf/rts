@@ -353,7 +353,7 @@ export function mayFire(w: World, i: number): boolean {
 }
 
 // men in company c's firing ranks
-function firingMen(w: World, i: number, c: number): number {
+export function firingMen(w: World, i: number, c: number): number {
   const g = typeOf(w, i).geo
   let n = 0
   for (let r = 0; r < Math.min(g.ranks, w.cr.rs.fire.firingRanks); r++) {

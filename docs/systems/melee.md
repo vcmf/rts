@@ -107,7 +107,8 @@ front.
   inflicts nothing.
 - **Shock:** the target loses `impact.shock[side] × momentum × (1 − braced)` points of its bar (57, 100 and 114).
 - **A second enemy** (E-16, decision 0080): a target already in melee with another when the step began loses
-  besides flank × `second.flank` + rear × `second.rear` (43 and 57 points) of its bar, the weights of the side
+  besides flank × `second.flank` + rear × `second.rear` (38 and 48 points: under the guard by the shape that takes it
+  worst, a shock of 1.25 and a flank's × 1.25) of its bar, the weights of the side
   struck, × (1 − braced) as the impact's shock, once per impact; a charge from its front adds nothing.
 - **Then:** the charger recoils with chance `braced`, else both are in melee (`foe`). A target struck while
   not in melee takes on its lowest-slot attacker, and any charge of its own ends; its other orders are kept for

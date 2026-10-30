@@ -32,15 +32,18 @@ const wt = new Float64Array(3)
 /**
  * Formation j's hits taken from company k's fire (docs/proposals/sectors-model.md § 5): its shape's hits from the
  * front, times front + flank × the flank's multiple + rear × the rear's, the weights (front, flank, rear) of k's block
- * on j's face; the front's alone for a shape with neither multiple. G must be this tick's geometry (its faces are
- * built with it).
+ * on j's face; the front's alone for a shape with neither multiple. While changing, the higher of the two shapes'
+ * (docs/proposals/formations.md § 3). G must be this tick's geometry (its faces are built with it).
  */
 export function hitsTaken(w: World, G: FireGeo, k: number, j: number): number {
+  const f = w.f
   const T = typeOf(w, j).traits
-  const o = w.f.shape[j] * T_LEN
-  if (!T[o + T_SIDED]) return T[o + T_HITS]
+  const a = f.shape[j] * T_LEN
+  const b = f.trans[j] ? f.tShape[j] * T_LEN : a
+  if (!T[a + T_SIDED] && !T[b + T_SIDED]) return Math.max(T[a + T_HITS], T[b + T_HITS])
   threatWeights(w, G, j, Math.floor(k / w.cr.maxC), k, wt)
-  return T[o + T_HITS] * (wt[0] + wt[1] * T[o + T_FLANK] + wt[2] * T[o + T_REAR])
+  const by = (o: number) => T[o + T_HITS] * (wt[0] + wt[1] * T[o + T_FLANK] + wt[2] * T[o + T_REAR])
+  return a === b ? by(a) : Math.max(by(a), by(b))
 }
 
 /** Formation i's melee strength from its shape (before its disorder and its morale state, melee.ts). */

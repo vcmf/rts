@@ -164,11 +164,7 @@ export const OVERLAP_TODAY = new Set([
 ])
 // every step reversed, the formation step too: a charge steers at its target as moved earlier in that step, so two
 // regiments charging each other, or one pursuing a router, depend on their slots today (#187)
-export const ORDER_TODAY = new Set([
-  'x01-clash',
-  'q02-charge-in-a-chain', // at the division scale the charge's result follows the slots' order too
-  'x18-flank-charge',
-])
+export const ORDER_TODAY = new Set(['x01-clash', 'x18-flank-charge'])
 
 /** The plain cases' invariants, the `k`th of `n` shares. */
 export const plainInvariants = (k: number, n: number) =>

@@ -157,7 +157,7 @@ musketry beyond what its geometry masks (1 on every shape until the formations' 
 (`docs/systems/artillery.md`), are multiplied by the target's exposure to the firing company: its shape's hits taken
 (`traits.hits`, read through `src/sim/traits.ts`): from the front × (front + flank × the flank's multiple + rear ×
 the rear's), the weights (front, flank, rear) of the firing company's block on the target's face
-(`src/sim/sectors.ts`). From the front: a line 1.0, a column, a square and a march column 1.6, cavalry 1.3, a battery
+(`src/sim/sectors.ts`). From the front: a line 1.0, an attack column 1.3, a square 1.4, a march column 1.2, cavalry 1.3, a battery
 0.4; the flank's and rear's multiples: a line 1.8 and 1.2 (fire down its length), a column 1.2 and 1.1, a march
 column 1.5 and 1.0, cavalry 1.2 and 1.1 (1.5 and 1.0 in march), a battery 1.5 and 1.0; a square has no flank. Fire from ahead is unchanged, so
 the line-on-line calibration's front is.

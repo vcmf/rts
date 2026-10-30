@@ -69,11 +69,11 @@ export interface TraitsDef {
   hits?: { front?: number; flank?: number; rear?: number }
   melee?: number // its strength in melee
   brace?: BraceDef // how far it is proof against a charge, by the side struck (the square 1; S1d-2); none: 0
-  fire?: number // the share of its musketry's hit chance (geometry already masks what cannot fire); none: 1
+  fire?: number // ≥ 0: the share of its musketry's hit chance (geometry already masks what cannot fire); none: 1
   shock?: number // the morale shocks it takes: a charge's, contagion's and the drain (never its losses' cost); none: 1
   flankShock?: number // a charge's shock from its flank, as a multiple; none: 1
-  // radians off straight ahead from a face's end where its flank begins (the sector blend's centre,
-  // docs/proposals/sectors-model.md § 3); none: sectors.blend.T
+  // radians off straight ahead from its front's ends where its flank begins (the front's sector blend's centre,
+  // docs/proposals/sectors-model.md § 3; the rear's stays the ruleset's); none: sectors.blend.T
   flankFrom?: number
   moves?: boolean // whether it may be given a move (the square cannot); none: true
 }
@@ -526,8 +526,9 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     if (d.allRound && !(b[0] === b[1] && b[1] === b[2])) {
       throw new Error(`${at}: shape ${n} is allRound: it is braced alike on every side`)
     }
+    // a shape may fire none (the column of route), never less
+    if (T.fire !== undefined && !nonNegative(T.fire)) throw new Error(`${at}: shape ${n}'s fire must be finite and ≥ 0`)
     for (const [k, v] of [
-      ['fire', T.fire],
       ['shock', T.shock],
       ['flankShock', T.flankShock],
     ] as const) {

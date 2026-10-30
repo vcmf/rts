@@ -46,6 +46,16 @@ Times are battle time; the page plays at 2× by default.
 | B-08 | A column of route meets the enemy unexpectedly | It must form line or square before it can fight; caught on the march it is at its weakest | Changes, closing | partly |
 | B-09 | Face about under fire | 3 s, then it fires the other way; a battalion cannot spin to face every threat at once | Facing | yes |
 | B-10 | Change front by 90° in line | A timed drill (a wheel on a flank, or a change front on the centre), tens of seconds for a battalion, not an instant turn | Facing, changes | partly (wheels) |
+| B-11 | A line and an attack column exchange fire at 50 m | The line wins clearly (fire 1 against about 0.3) | Formations | yes (`test/formations-scenarios.test.ts`: 0.29) |
+| B-12 | An attack column assaults a recruit line, or a shaken one | The line breaks at the assault's test, before contact | Formations, closing | no (U3) |
+| B-13 | The same column assaults a steady line in close volleys | The column stalls or breaks | Formations, closing | no (U3) |
+| B-14 | A square is charged by cavalry | It holds; the cavalry turns away blown | Formations, charges | yes (`tools/calibrate-charge.ts`: holds and turns them in every seed) |
+| B-15 | A square held by cavalry while a battery fires on it | It bleeds fast, far faster than a line | Formations, artillery | yes (about 1.9× a line's losses) |
+| B-16 | A thin line against a 3-rank line at 50 m | The thin line wins the firefight | Formations | no (step C3) |
+| B-17 | Cavalry charges a thin line in the flank | It is destroyed in minutes | Formations, charges | no (step C3) |
+| B-18 | A line forming square when cavalry arrives | Struck at its partial bracing; caught half-formed it is lost | Formations, charges | yes (B-05's tests) |
+| B-19 | An attack column takes a line's fire in its flank | Enfiladed through its depth; its morale breaks | Formations, sectors | yes (more lost, the bar lower than head on) |
+| B-20 | A column fights through rough ground against a line | The column keeps its pace and order; the line halts to dress | Formations, terrain | partly (its pace; not its order: the disorder model reads the lag across a front) |
 
 ## C. Musketry
 
@@ -56,7 +66,7 @@ Times are battle time; the page plays at 2× by default.
 | C-03 | The same two lines at 50 m | Much bloodier; the recruits break in a few minutes, or refuse to stand at that range | Fire, morale bar | partly |
 | C-04 | A recruit line (level 1) ordered to hold fire while an enemy advances | It cannot hold: it opens fire on its own at long range (about 150 m), wasting its first volley | Fire discipline | no |
 | C-05 | A veteran line holding fire until 60 m | Its first volley is the best of the fight (carefully loaded, at short range) | Fire discipline, first volley | no |
-| C-06 | A line fires on a square | A square is a dense target: it suffers, and fires back with one face only | Fire, shapes | yes (the square is of kind `column`: depth 1.6) |
+| C-06 | A line fires on a square | A square is a dense target: it suffers, and fires back with one face only | Fire, shapes | yes (the square's hits taken 1.4) |
 | C-07 | A line fires on skirmishers | Few hits: a small, spread target | Fire, shapes | no (no skirmish order yet; its hits would be the shape's `traits.hits`) |
 | C-08 | A second line behind the first | It cannot fire through the first | Fire | yes |
 | C-09 | A wavering line keeps firing | It fires worse (state factor) and falls back if the losses continue | Fire, morale | yes |
