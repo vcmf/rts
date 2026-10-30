@@ -6,7 +6,7 @@ date: 2026-10-29
 # 0082 The baked light map at about half a metre a texel
 
 Accepted by the owner on 2026-10-29, from the light resolution test's sheets. The plan and its measurements:
-`docs/plans/active/lightmap-half.md`; as built: `docs/systems/look.md`.
+`docs/plans/done/lightmap-half.md`; as built: `docs/systems/look.md`.
 
 ## Context
 

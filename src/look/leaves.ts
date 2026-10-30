@@ -37,7 +37,7 @@ function gutter(empty: (k: number) => boolean, lo: number, hi: number): number {
 
 /**
  * The atlas from a picture of four clumps on black. painted: a sheet of flat-valued simple leaves (the owner's,
- * docs/plans/active/crown-leaves.md) read as the painter's layers (layered)
+ * docs/plans/done/crown-leaves.md) read as the painter's layers (layered)
  */
 export function atlasFromPicture(
   img: CanvasImageSource & { width: number; height: number },
@@ -128,7 +128,7 @@ export function atlasFromPicture(
   return painted ? layered(out, leafScale) : withTilt(out)
 }
 
-/** The layered sheet's layers (docs/plans/active/crown-leaves.md), the value in R: dark base, mid, light, highlight */
+/** The layered sheet's layers (docs/plans/done/crown-leaves.md), the value in R: dark base, mid, light, highlight */
 export const LAYER = [0.12, 0.42, 0.72, 1.0]
 /** A sheet's normalised value: under the first a dark leaf, under the second a mid one, else a light one */
 export const SPLIT = [0.44, 0.82]

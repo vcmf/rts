@@ -1,6 +1,6 @@
 ---
-status: active
-last_reviewed: 2026-10-29
+status: done
+last_reviewed: 2026-10-30
 ---
 
 # Plan: upright meadow grass and wheat without bare earth

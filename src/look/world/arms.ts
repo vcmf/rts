@@ -1,4 +1,4 @@
-// The armies demo's arms (docs/plans/active/cavalry-artillery-demo.md): what a unit's script tells the renderer (a
+// The armies demo's arms (docs/plans/done/cavalry-artillery-demo.md): what a unit's script tells the renderer (a
 // phase, each man's place, way and role), the infantry's script (src/look/world/armies.ts) behind it, and the other
 // arms' scripts, the sim's stand-ins: a ride (a column that walks, trots and gallops a little, then halts) and a
 // service (pieces that rest, then fire in turn). Era-generic (decision 0015): the roles, their speeds, the shapes and
