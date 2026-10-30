@@ -38,6 +38,8 @@ import {
   type ScenarioRules,
 } from '../src/sim/index.ts'
 import { FULL } from '../src/scenarios/sizes.ts'
+// the bracing struck head on
+const FRONT = new Float64Array([1, 0, 0])
 
 const PI = Math.PI
 // a world on the open battlefield with a scenario's plan and limit, and units spawned in order (unit k is slot k)
@@ -75,8 +77,26 @@ describe('the plan', () => {
       map: 'battlefield',
       plan,
       setup: (w: World) => {
-        issue(w, { type: 'debug-spawn', side: 0, x: 0, z: -200, heading: 0, shape: 'line', men: FULL.infantry, fire: 'hold' })
-        issue(w, { type: 'debug-spawn', side: 1, x: 200, z: 200, heading: PI, shape: 'line', men: FULL.infantry, fire: 'hold' })
+        issue(w, {
+          type: 'debug-spawn',
+          side: 0,
+          x: 0,
+          z: -200,
+          heading: 0,
+          shape: 'line',
+          men: FULL.infantry,
+          fire: 'hold',
+        })
+        issue(w, {
+          type: 'debug-spawn',
+          side: 1,
+          x: 200,
+          z: 200,
+          heading: PI,
+          shape: 'line',
+          men: FULL.infantry,
+          fire: 'hold',
+        })
       },
     }
     const cr = compileRuleset(napoleonic)
@@ -189,7 +209,16 @@ describe('the plan', () => {
       men: FULL.cavalry,
       fire: 'hold',
     })
-    s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: 0, shape: 'line', men: FULL.infantry, fire: 'at will' })
+    s.cmd({
+      type: 'debug-spawn',
+      side: 1,
+      x: 0,
+      z: 100,
+      heading: 0,
+      shape: 'line',
+      men: FULL.infantry,
+      fire: 'at will',
+    })
     // infantry 100 m off its rear face
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 200, heading: PI, shape: 'line', men: FULL.infantry, fire: 'hold' })
     s.tick()
@@ -302,7 +331,16 @@ describe('the plan', () => {
     const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)
     attachScenario(s.w, { plan })
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: -100, heading: 0, shape: 'line', men: FULL.infantry, fire: 'hold' })
-    s.cmd({ type: 'debug-spawn', side: 1, unit: 'cavalry', x: 0, z: 200, heading: PI, shape: 'line', men: FULL.cavalry })
+    s.cmd({
+      type: 'debug-spawn',
+      side: 1,
+      unit: 'cavalry',
+      x: 0,
+      z: 200,
+      heading: PI,
+      shape: 'line',
+      men: FULL.cavalry,
+    })
     s.tick()
     s.advance(1)
     expect(s.w.f.chTarget[1]).toBe(unitHandle(0))
@@ -405,7 +443,7 @@ describe('routers break ranks (#39)', () => {
     const h = unitHandle(0)
     s.order({ type: 'form', id: h, shape: 'square' })
     // its progress into the square
-    s.until(() => s.layout(h).name === 'line' && s.w.f.trans[0] === 1 && braceOf(s.w, 0) < at, 200)
+    s.until(() => s.layout(h).name === 'line' && s.w.f.trans[0] === 1 && braceOf(s.w, 0, FRONT) < at, 200)
     s.w.f.bar[0] = -100
     s.tick()
     return { state: s.w.f.mstate[0], shape: s.shape(h) }

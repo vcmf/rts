@@ -38,16 +38,26 @@ export interface FormationDef {
   place(g: Geometry): Placement[]
 }
 // a shape's compiled traits (TypeTable.traits), a row of T_LEN per shape, read through src/sim/traits.ts: hits taken
-// from the front, from the flank and the rear as multiples of it, whether those two are given, melee, brace, and
-// whether it has no flank
+// from the front, from the flank and the rear as multiples of it, whether those two are given, melee, brace by the side
+// struck, whether it has no flank, its fire, the shocks it takes, the charge's shock from its flank, the sector blend's
+// centre and whether it may move
 export const T_HITS = 0
 export const T_FLANK = 1
 export const T_REAR = 2
 export const T_SIDED = 3
 export const T_MELEE = 4
-export const T_BRACE = 5
+export const T_BRACE = 5 // struck in front
 export const T_ROUND = 6 // 1: no flank, every side a front (the shape's allRound)
-export const T_LEN = 7
+export const T_FIRE = 7
+export const T_SHOCK = 8
+export const T_BRACE_FLANK = 9
+export const T_BRACE_REAR = 10
+export const T_FLANK_SHOCK = 11
+export const T_BLEND = 12 // the sector blend's centre on the angle measure (sectors.blend.T, or the flankFrom)
+export const T_MOVES = 13 // 1: it may be given a move
+export const T_LEN = 14
+/** Bracing by the side a charge strikes, each 0..1; a number: the same on every side. */
+export type BraceDef = number | { front?: number; flank?: number; rear?: number }
 /**
  * A shape's strengths and weaknesses (docs/proposals/formations.md § 5a), multipliers read through
  * src/sim/traits.ts; a field left out is neutral.
@@ -58,7 +68,14 @@ export interface TraitsDef {
   // § 5); none: 1
   hits?: { front?: number; flank?: number; rear?: number }
   melee?: number // its strength in melee
-  brace?: number // 0..1: how far it is proof against a charge (the square 1; S1d-2)
+  brace?: BraceDef // how far it is proof against a charge, by the side struck (the square 1; S1d-2); none: 0
+  fire?: number // the share of its musketry's hit chance (geometry already masks what cannot fire); none: 1
+  shock?: number // the morale shocks it takes: a charge's, contagion's and the drain (never its losses' cost); none: 1
+  flankShock?: number // a charge's shock from its flank, as a multiple; none: 1
+  // radians off straight ahead from a face's end where its flank begins (the sector blend's centre,
+  // docs/proposals/sectors-model.md § 3); none: sectors.blend.T
+  flankFrom?: number
+  moves?: boolean // whether it may be given a move (the square cannot); none: true
 }
 export interface TerrainDef {
   g: Record<string, number>
@@ -498,13 +515,32 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     if (T.melee !== undefined && !(T.melee > 0 && T.melee < Infinity)) {
       throw new Error(`${at}: shape ${n}'s melee must be finite and above 0`)
     }
-    if (T.brace !== undefined && !(T.brace >= 0 && T.brace <= 1)) {
-      throw new Error(`${at}: shape ${n}'s brace must be in 0..1`)
-    }
-    // a shape proof against a charge from every side has no flank; one with no flank has no flank's or rear's hits
-    if (T.brace === 1 && !d.allRound) throw new Error(`${at}: shape ${n} is fully braced but not allRound`)
+    const b = braceSides(T.brace)
+    if (!b.every(v => v >= 0 && v <= 1)) throw new Error(`${at}: shape ${n}'s brace must be in 0..1 on every side`)
+    // a shape proof against a charge from every side has no flank; one with no flank has no flank's or rear's hits,
+    // and is braced alike on every side
+    if (b.every(v => v === 1) && !d.allRound) throw new Error(`${at}: shape ${n} is fully braced but not allRound`)
     if (d.allRound && (T.hits?.flank !== undefined || T.hits?.rear !== undefined)) {
       throw new Error(`${at}: shape ${n} is allRound: it has no flank's or rear's hits`)
+    }
+    if (d.allRound && !(b[0] === b[1] && b[1] === b[2])) {
+      throw new Error(`${at}: shape ${n} is allRound: it is braced alike on every side`)
+    }
+    for (const [k, v] of [
+      ['fire', T.fire],
+      ['shock', T.shock],
+      ['flankShock', T.flankShock],
+    ] as const) {
+      if (v !== undefined && !(v > 0 && v < Infinity)) {
+        throw new Error(`${at}: shape ${n}'s ${k} must be finite and above 0`)
+      }
+    }
+    if (T.flankFrom !== undefined) {
+      const t = blendAt(T.flankFrom)
+      const H = rs.sectors.blend.H
+      if (!(T.flankFrom > 0 && T.flankFrom < PI / 2 && t - H > 0 && t + H < 1)) {
+        throw new Error(`${at}: shape ${n}'s flankFrom must lie in 0..π/2, its blend inside the angle measure's 0..1`)
+      }
     }
   }
   // a change time naming a shape it has not would be ignored, and the default taken in silence (#156)
@@ -520,7 +556,10 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   }
   const shapes: ShapeLayout[] = names.map(n => layout(g, u.formations, n, kinds, paces))
   const S = names.length
-  const traits = compileTraits(u, names)
+  if (u.formations[u.start] && traitsOf(u, u.start).moves === false) {
+    throw new Error(`${at}: its start shape ${u.start} cannot move`)
+  }
+  const traits = compileTraits(u, names, rs.sectors.blend.T)
   const changeTime = new Float64Array(S * S)
   for (let a = 0; a < S; a++) {
     for (let b = 0; b < S; b++) changeTime[a * S + b] = u.changeTime[names[a] + '>' + names[b]] ?? u.defaultChangeTime
@@ -566,7 +605,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     charge = { from, approach, pace }
   }
   const refuge = u.refuge === undefined ? -1 : names.indexOf(u.refuge)
-  if (u.refuge !== undefined && (refuge < 0 || (traitsOf(u, u.refuge).brace ?? 0) < 1)) {
+  if (u.refuge !== undefined && (refuge < 0 || braceSides(traitsOf(u, u.refuge).brace).some(v => v < 1))) {
     throw new Error(`${at}: its refuge ${u.refuge} is not one of its braced shapes`)
   }
   let artillery: TypeTable['artillery'] = null
@@ -793,8 +832,9 @@ export function compileRuleset(rs: Ruleset): Compiled {
   }
 }
 const expNeg = (x: number): number => exp(-x)
-/** Each shape's traits as a flat row (src/sim/traits.ts's fields), neutral where the ruleset says nothing. */
-function compileTraits(u: UnitType, names: string[]): Float64Array {
+/** Each shape's traits as a flat row (src/sim/traits.ts's fields), neutral where the ruleset says nothing; `blend`:
+ * the sector blend's centre for a shape that names no flankFrom. */
+function compileTraits(u: UnitType, names: string[], blend: number): Float64Array {
   const out = new Float64Array(names.length * T_LEN)
   names.forEach((n, s) => {
     const t = traitsOf(u, n)
@@ -804,8 +844,16 @@ function compileTraits(u: UnitType, names: string[]): Float64Array {
     out[o + T_REAR] = t.hits?.rear ?? 1
     out[o + T_SIDED] = t.hits?.flank !== undefined || t.hits?.rear !== undefined ? 1 : 0
     out[o + T_MELEE] = t.melee ?? 1
-    out[o + T_BRACE] = t.brace ?? 0
+    const b = braceSides(t.brace)
+    out[o + T_BRACE] = b[0]
+    out[o + T_BRACE_FLANK] = b[1]
+    out[o + T_BRACE_REAR] = b[2]
     out[o + T_ROUND] = u.formations[n].allRound ? 1 : 0
+    out[o + T_FIRE] = t.fire ?? 1
+    out[o + T_SHOCK] = t.shock ?? 1
+    out[o + T_FLANK_SHOCK] = t.flankShock ?? 1
+    out[o + T_BLEND] = t.flankFrom === undefined ? blend : blendAt(t.flankFrom)
+    out[o + T_MOVES] = t.moves === false ? 0 : 1
   })
   return out
 }
@@ -816,9 +864,23 @@ function traitsOf(u: UnitType, n: string): TraitsDef {
   return {
     hits: a.hits || b.hits ? { ...a.hits, ...b.hits } : undefined,
     melee: b.melee ?? a.melee,
-    brace: b.brace ?? a.brace,
+    brace: a.brace === undefined && b.brace === undefined ? undefined : { ...asSides(a.brace), ...asSides(b.brace) },
+    fire: b.fire ?? a.fire,
+    shock: b.shock ?? a.shock,
+    flankShock: b.flankShock ?? a.flankShock,
+    flankFrom: b.flankFrom ?? a.flankFrom,
+    moves: b.moves ?? a.moves,
   }
 }
+const asSides = (b: BraceDef | undefined) => (typeof b === 'number' ? { front: b, flank: b, rear: b } : (b ?? {}))
+/** Bracing as [front, flank, rear], 0 where it names none. */
+function braceSides(b: BraceDef | undefined): [number, number, number] {
+  const s = asSides(b)
+  return [s.front ?? 0, s.flank ?? 0, s.rear ?? 0]
+}
+// the sector blend's centre on the angle measure t = o / (d + o) for a flank beginning a radians off straight ahead
+// (docs/proposals/sectors-model.md § 3: o = sin, d = cos of the angle; 45° gives 0.5)
+const blendAt = (a: number): number => sin(a) / (sin(a) + cos(a))
 const nonNegative = (v: number): boolean => v >= 0 && v < Infinity
 // the names in first-seen order, each once (the sim keeps no Set: index-ordered arrays only)
 const unique = (a: string[]): string[] => a.filter((v, i) => a.indexOf(v) === i)

@@ -52,6 +52,7 @@ import {
 import { formedFits, freeSpot } from './claims.ts'
 import { blockGeometry, inArc, sees, screenShare, sqDist, reachOf, type FireGeo } from './fire.ts'
 import { buildFaces, threatWeights } from './sectors.ts'
+import { shockOf } from './traits.ts'
 import { sin, cos, PI } from './num.ts'
 import { DT, TICK_HZ } from './time.ts'
 
@@ -92,7 +93,7 @@ export function effectiveBar(w: World, i: number, flanks: number): number {
   const f = w.f
   const M = w.cr.rs.morale
   const e0 = f.bar[i] + M.support.bonus * flanks
-  return e0 - Math.min(f.drain[i], Math.max(0, e0 - M.wavering[0] * f.barMax[i]))
+  return e0 - Math.min(f.drain[i] * shockOf(w, i), Math.max(0, e0 - M.wavering[0] * f.barMax[i]))
 }
 /**
  * Formation i's effective bar as a share of its maximum, for the page: 0 at the rout, 1 full; with the flanks its
@@ -129,7 +130,8 @@ export function moraleStep(w: World, i: number, lost: number): void {
     const ceiling = f.barMax[i] - M.scar * f.cost[i]
     if (f.bar[i] < ceiling) f.bar[i] = Math.min(ceiling, f.bar[i] + M.regen * DT)
   }
-  if (s !== MS_ROUTING) f.bar[i] -= near.shock + owedShock // routing and shattered (returned above) are not shocked
+  // routing and shattered (returned above) are not shocked; its shape's shock multiplies what it takes
+  if (s !== MS_ROUTING) f.bar[i] -= (near.shock + owedShock) * shockOf(w, i)
   f.flanks[i] = near.left + near.right
   const e = effectiveBar(w, i, f.flanks[i])
   const m = e / f.barMax[i]

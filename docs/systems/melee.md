@@ -78,8 +78,11 @@ of the other. Each block is the rectangle its places cover, as the fire step bui
 exact face to face, a little short corner to corner, and 0 when they overlap.
 
 **Braced** (`braced` in what follows; `braceOf`, `src/sim/traits.ts`), 0..1: how far a formation stands in a shape proof against a charge
-(its shape's `traits.brace`: the square 1). During a change it moves from the old shape's to the new one's by the
-change's progress.
+by the side the charge strikes (its shape's `traits.brace`, front, flank and rear: the square 1 on every side),
+front × the front's + flank × the flank's + rear × the rear's, with the side's weights below (at the test the whole
+charger's, at the impact its men in contact). During a change it moves from the old shape's to the new one's by the
+change's progress. A charger turns from a square only when it is fully braced on every side (`bracedAllRound`).
+A shape's `traits.flankShock` multiplies the flank's weight in the test's, the impact's and the second enemy's shock.
 
 **The side struck** (U1, `sideOf`, `docs/proposals/sectors-model.md` § 5): weights (front, flank, rear) that sum
 to 1, the charger's companies' threat weights on the target's face (`src/sim/sectors.ts`), each weighted by its

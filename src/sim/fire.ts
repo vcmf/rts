@@ -24,7 +24,7 @@ import { MAX_COMPANIES } from './ruleset.ts'
 import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
 import { buildFaces } from './sectors.ts'
-import { hitsTaken } from './traits.ts'
+import { fireOf, hitsTaken } from './traits.ts'
 import { creditMen } from './experience.ts'
 
 const sqrt = Math.sqrt
@@ -518,6 +518,7 @@ function volley(
     levelOf(w, i).precision *
     w.cr.stateFactor[Math.min(2, f.mstate[i])] *
     (1 - F.cohesion * f.disorder[i]) *
+    fireOf(w, i) *
     exposure(w, G, k, j)
   let hits = Math.floor(lambda)
   if (nextUnit(rs) < lambda - hits) hits++

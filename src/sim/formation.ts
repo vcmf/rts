@@ -28,6 +28,7 @@ import { cellK, impAt, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
 import { claimedAt, claimsNear, claimHit } from './claims.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
+import { movesOf } from './traits.ts'
 
 export const STATUS = [
   '',
@@ -1631,6 +1632,14 @@ function formationStep(w: World, i: number): void {
     const s = o.shape[n]
     shiftOrder(w, i)
     startChange(w, i, s)
+    return
+  }
+  // a shape that cannot move (the square, formed against cavalry with a move still to make) stands, keeping its moves
+  // for the shape it forms back into
+  if (type === O_MOVE && !movesOf(w, i)) {
+    f.vx[i] = 0
+    f.vz[i] = 0
+    lagSettle(w, i)
     return
   }
   const [V0, pace] = paceOf(w, i)

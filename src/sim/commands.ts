@@ -40,6 +40,7 @@ import {
 } from './formation.ts'
 import { nextInt } from './rng.ts'
 import { columnsOf } from './columns.ts'
+import { movesOf } from './traits.ts'
 
 export type Command =
   | { type: 'move'; id: Handle; points: [number, number][]; append: boolean }
@@ -230,6 +231,7 @@ function apply(w: World, c: Command, player = true): string {
   switch (c.type) {
     case 'move': {
       for (const [x, z] of c.points) if (!inside(w, x, z)) return 'waypoint outside the map'
+      if (!movesOf(w, i)) return 'cannot move in this shape'
       return giveOrders(
         w,
         i,
@@ -273,6 +275,7 @@ function apply(w: World, c: Command, player = true): string {
       return giveOrders(w, i, [O_FACE], false, () => {}, player)
     case 'retire': // the Retire drill (formation.ts)
       if (c.metres <= 0 || c.metres > 1000) return 'no such retreat'
+      if (!movesOf(w, i)) return 'cannot move in this shape'
       return giveOrders(w, i, RETIRE, false, (n, k) => fillRetire(w, n, k, c.metres), player)
     case 'halt':
       clearOrders(w, i)

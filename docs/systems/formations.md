@@ -61,8 +61,10 @@ first is the default), each with:
 - its block geometry: companies, files, ranks, spacings, the minimum spacing, the accordion gap, bins per
   company;
 - its shapes as company placements, with kind, pace, road pace, `trail`, `closeAcross`, `allRound` (no flank: the
-  square), its `traits` (hits taken from the front, the flank and the rear, melee strength, bracing; read through
-  `src/sim/traits.ts`, `docs/proposals/formations.md` § 5a) and, for a trail shape, an
+  square), its `traits` (hits taken from the front, the flank and the rear, melee strength, bracing by the side
+  struck, its share of musketry, the morale shocks it takes, a charge's shock from its flank, where its flank begins
+  (`flankFrom`) and whether it may move; a type's `traits` are its shapes' defaults; read through `src/sim/traits.ts`,
+  `docs/proposals/formations.md` § 5a) and, for a trail shape, an
   optional `step`: the spacing of its places' files and ranks when it is not the block's (a column
   of route of horses, nose to tail);
 - its change times, the shape a spawn takes, and whether it fires by company (S1c's musketry).
@@ -91,7 +93,9 @@ not name two of the type's shapes, and a terrain class that gives some kind no s
 a pace not > 0, a change time not ≥ 0, a q table for no pace or with a factor not > 0, a pace's q table leaving out
 the ground of some class (it would read as 1), and `fire.sight` or `disorder.scale` naming no class or kind or giving a
 value not a finite number ≥ 0; a shape's traits out of range (hits from the front not above 0, from the flank or
-the rear under the front's, melee not above 0, a brace outside 0..1), and a refuge not fully braced. That terrain only slows (a factor ≤ 1) is a convention of the
+the rear under the front's, melee, fire, shock or flank shock not above 0, a brace outside 0..1 on any side, a fully
+braced shape with a flank, an allRound shape braced unevenly, a flankFrom outside 0..π/2 or its blend outside the
+angle measure), a start shape that cannot move, and a refuge not fully braced on every side. That terrain only slows (a factor ≤ 1) is a convention of the
 shipped data, checked there, not a rule of the engine.
 
 The ruleset's hash is recorded in the world, the replays and the saves.
@@ -102,7 +106,8 @@ edges, left and right ends); an `allRound` shape (the square) is all front; a tr
 company's frame for its front and its tail's for its rear; a formation changing shape has no front. A point, or a
 threat's block, has weights (front, flank, rear) that sum to 1 on that face, read alike by fire, charges and morale:
 front within about 35° of straight ahead from the face's nearer end, flank past 55°, a blend between; the rear the
-same behind; `sectors` in the ruleset holds the blend, the corner, the slices and the reach. Scratch, not state.
+same behind; `sectors` in the ruleset holds the blend, the corner, the slices and the reach, and a shape's
+`traits.flankFrom` moves the blend's centre for that shape (45° when it names none). Scratch, not state.
 
 **Types in the world.** A formation stores its type (`f.type`), and `f.shape` indexes its type's shapes. The
 per-company and per-bin rows of the world are strided by the most of any type (`cr.maxC`, `cr.maxNB`,

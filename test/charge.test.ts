@@ -34,6 +34,8 @@ import {
   type Ruleset,
 } from '../src/sim/index.ts'
 import { FULL } from '../src/scenarios/sizes.ts'
+// the bracing struck head on
+const FRONT = new Float64Array([1, 0, 0])
 
 const PI = Math.PI
 const crN = compileRuleset(napoleonic)
@@ -182,16 +184,16 @@ describe('the charge', () => {
     const s = new S()
     const sq = s.inf(-80, 0, 0, 1, 'square')
     const ln = s.inf(80, 0, 0, 1)
-    expect(braceOf(s.w, s.slot(sq))).toBe(1)
-    expect(braceOf(s.w, s.slot(ln))).toBe(0)
+    expect(braceOf(s.w, s.slot(sq), FRONT)).toBe(1)
+    expect(braceOf(s.w, s.slot(ln), FRONT)).toBe(0)
     s.order({ type: 'form', id: ln, shape: 'square' })
     s.order({ type: 'form', id: sq, shape: 'line' })
     const into: number[] = []
     const out: number[] = []
     for (let k = 0; k < 6; k++) {
       s.advance(5)
-      into.push(braceOf(s.w, s.slot(ln)))
-      out.push(braceOf(s.w, s.slot(sq)))
+      into.push(braceOf(s.w, s.slot(ln), FRONT))
+      out.push(braceOf(s.w, s.slot(sq), FRONT))
     }
     for (let k = 1; k < 6; k++) {
       expect(into[k]).toBeGreaterThan(into[k - 1])
@@ -200,8 +202,8 @@ describe('the charge', () => {
     expect(into[5]).toBeLessThan(1)
     expect(out[5]).toBeGreaterThan(0)
     s.advance(120)
-    expect(braceOf(s.w, s.slot(ln))).toBe(1)
-    expect(braceOf(s.w, s.slot(sq))).toBe(0)
+    expect(braceOf(s.w, s.slot(ln), FRONT)).toBe(1)
+    expect(braceOf(s.w, s.slot(sq), FRONT)).toBe(0)
   })
 })
 
@@ -505,7 +507,7 @@ describe('a second enemy (decision 0080, E-16)', () => {
     let braced = 0
     s.until(() => {
       if (s.f(b, 'foe')) return false
-      braced = braceOf(s.w, s.slot(t))
+      braced = braceOf(s.w, s.slot(t), FRONT)
       return s.f(b, 'chPhase') !== 0
     }, 60)
     if (!alone) expect(s.f(t, 'foe')).toBe(a)
