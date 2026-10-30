@@ -37,6 +37,7 @@ import {
   removeMan,
   RETIRE,
   fillRetire,
+  formable,
 } from './formation.ts'
 import { nextInt } from './rng.ts'
 import { columnsOf } from './columns.ts'
@@ -63,12 +64,16 @@ export type Command =
       bar?: number // the bar's maximum, points; 0 or left out: its level's
       fire?: string
       unit?: string
+      forms?: string // the shapes it may form, comma-separated; '' or left out: its type's (UnitType.enabled)
     }
   | { type: 'fire'; id: Handle; mode: string; target?: Handle }
   | { type: 'side'; side: number; x: number; z: number }
   | { type: 'debug-kill'; id: Handle; men: number }
   | { type: 'debug-morale'; id: Handle; bar: number }
   | { type: 'charge'; id: Handle; target: Handle }
+  // a shape formation id may form or not (docs/plans/active/formations.md § C3); one it stands in it keeps until it
+  // forms another
+  | { type: 'enable'; id: Handle; shape: string; on?: boolean }
   // what `issue` stamps in place of a command it cannot take (an unknown type, malformed waypoints): dropped with
   // its reason when applied, and saved and replayed like any other (#155)
   | { type: 'refused'; reason: string }
@@ -192,6 +197,16 @@ function apply(w: World, c: Command, player = true): string {
     const U = cr.types[type]
     const shape = c.shape ? U.shapeIndex(c.shape) : U.start
     if (shape < 0) return 'no such shape'
+    let enabled = U.enabled
+    if (c.forms) {
+      enabled = 0
+      for (const n of c.forms.split(',')) {
+        const s = U.shapeIndex(n.trim())
+        if (s < 0) return 'no such shape'
+        enabled |= 1 << s
+      }
+    }
+    if (!(enabled & (1 << shape))) return 'formation not enabled'
     if (c.men <= 0 || c.men > U.slots) return 'no room for those men'
     if (!inside(w, c.x, c.z)) return 'outside the map'
     if (Math.abs(c.heading) > 4 * PI) return 'heading out of range'
@@ -206,6 +221,7 @@ function apply(w: World, c: Command, player = true): string {
     f.side[i] = c.side
     f.type[i] = type
     f.shape[i] = shape
+    f.enabled[i] = enabled
     f.style[i] = cr.presetIndex(cr.rs.start.orders)
     f.x[i] = c.x
     f.z[i] = c.z
@@ -233,6 +249,14 @@ function apply(w: World, c: Command, player = true): string {
   }
   const i = formationSlot(w, c.id)
   if (i < 0) return 'no such formation'
+  // what it may form: whatever it is doing (research, a general: docs/plans/active/formations.md § C3)
+  if (c.type === 'enable') {
+    const s = typeOf(w, i).shapeIndex(c.shape)
+    if (s < 0) return 'no such shape'
+    if (c.on ?? true) f.enabled[i] |= 1 << s
+    else f.enabled[i] &= ~(1 << s)
+    return ''
+  }
   // out of the fight (routing, rallying, shattered): only the debug commands reach it
   if (outOfFight(f.mstate[i]) && c.type !== 'debug-kill' && c.type !== 'debug-morale') return MORALE_STATES[f.mstate[i]]
   // in melee: only the debug commands (it ends by a rout, docs/systems/melee.md)
@@ -260,6 +284,7 @@ function apply(w: World, c: Command, player = true): string {
     case 'form': {
       const s = typeOf(w, i).shapeIndex(c.shape)
       if (s < 0) return 'no such shape'
+      if (!formable(w, i, s)) return 'formation not enabled'
       return giveOrders(
         w,
         i,

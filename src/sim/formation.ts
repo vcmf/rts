@@ -83,6 +83,8 @@ export const layoutOf = (w: World, i: number): ShapeLayout => typeOf(w, i).shape
 // the shape a formation is in, or changing into
 export const targetShape = (w: World, i: number): number => (w.f.trans[i] ? w.f.tShape[i] : w.f.shape[i])
 const targetLayout = (w: World, i: number): ShapeLayout => typeOf(w, i).shapes[targetShape(w, i)]
+/** Whether formation i may form shape s of its type (its enabled set, docs/plans/active/formations.md § C3). */
+export const formable = (w: World, i: number, s: number): boolean => (w.f.enabled[i] & (1 << s)) !== 0
 export const snakes = (w: World, i: number): boolean => !w.f.trans[i] && !!layoutOf(w, i).def.trail
 const kindOf = (w: World, i: number) => targetLayout(w, i).kind
 const BW = (U: TypeTable) => U.geo.files * U.geo.fileSpacing // a company's frontage
@@ -1609,7 +1611,7 @@ function formationStep(w: World, i: number): void {
     if (n >= 0 && o.type[n] === O_FORM && !shelter && !f.foe[i]) {
       const s = o.shape[n]
       shiftOrder(w, i)
-      startChange(w, i, s)
+      if (formable(w, i, s)) startChange(w, i, s) // one disabled since it was ordered is dropped
       return
     }
     if (t >= f.tStart[i] + f.tDelay[i * CS + C - 1] + f.tDur[i]) {
@@ -1631,7 +1633,7 @@ function formationStep(w: World, i: number): void {
   if (type === O_FORM) {
     const s = o.shape[n]
     shiftOrder(w, i)
-    startChange(w, i, s)
+    if (formable(w, i, s)) startChange(w, i, s) // one disabled since it was ordered is dropped
     return
   }
   // a shape that cannot move (the square): formed against cavalry (autoFrom), it stands, keeping its moves and wheels

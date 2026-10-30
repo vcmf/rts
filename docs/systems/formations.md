@@ -94,6 +94,12 @@ melee, `docs/systems/fire-morale.md`, `docs/systems/melee.md`):
 | Flanked from (off its front) | 80° | 40° | never | 60° |
 | Moves | yes | yes | no | yes |
 
+**Enabled formations** (`docs/plans/active/formations.md` § C3). Each unit holds the shapes of its type it may form
+(`f.enabled`, a bit per shape, state): its type's `enabled` (every shape when it names none; it must hold the start
+shape), or a spawn's own `forms`; the `enable` command turns one on or off (later research, a general). A `form` into
+one not enabled is refused, and one queued before it was disabled is dropped; a unit keeps a shape it stands in when
+it is disabled until it forms another; the standing behaviour forms a refuge only when it is enabled.
+
 Change times at drill 1 (seconds; `docs/proposals/formations.md` § 3): line → column 30, column → line 40, column →
 square 30, line → square 90, square → line 60, square → column 30, into column of route 20, out of it 60.
 

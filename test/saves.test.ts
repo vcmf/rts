@@ -60,10 +60,12 @@ const ONE_OF_EACH: Record<(typeof COMMAND_TYPES)[number], Command> = {
     bar: 43.5,
     fire: 'hold',
     unit: 'infantry',
+    forms: 'line,square',
   },
   'debug-kill': { type: 'debug-kill', id: h(6), men: 9 },
   'debug-morale': { type: 'debug-morale', id: h(6), bar: 30.25 },
   charge: { type: 'charge', id: h(7), target: h(8) },
+  enable: { type: 'enable', id: h(2), shape: 'march', on: false },
 }
 
 // commands that are not what they claim: each field of each type given, in turn, something it is not (a number as a

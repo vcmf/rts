@@ -56,6 +56,8 @@ export const T_FLANK_SHOCK = 11
 export const T_BLEND = 12 // the sector blend's centre on the angle measure (sectors.blend.T, or the flankFrom)
 export const T_MOVES = 13 // 1: it may be given a move
 export const T_LEN = 14
+// a unit's enabled shapes are a bit each in an int32 (World f.enabled)
+export const MAX_SHAPES = 31
 /** Bracing by the side a charge strikes, each 0..1; a number: the same on every side. */
 export type BraceDef = number | { front?: number; flank?: number; rear?: number }
 /**
@@ -240,6 +242,9 @@ export interface UnitType {
   changeTime: Record<string, number>
   defaultChangeTime: number
   start: string // the shape a spawn takes when it names none
+  // the shapes a unit of this type may form unless given its own set (docs/plans/active/formations.md § C3: a
+  // formation enabled or not per unit, later by research or a general); none: every shape
+  enabled?: string[]
   fires: boolean // fires by company (S1c's musketry)
   // how its men are drawn: on foot, on horseback, or serving pieces (the renderer's; no rule reads it)
   figure: 'foot' | 'mounted' | 'crewed'
@@ -365,6 +370,7 @@ export interface TypeTable {
   changeTime: Float64Array // [from·S + to]
   traits: Float64Array // [shape·T_LEN + field] (src/sim/traits.ts)
   start: number // the spawn's shape
+  enabled: number // the shapes a unit may form unless given its own set: bit s for shape s
   // the shapes it charges from (1 by shape) and its paces' indices; null: it does not charge
   charge: { from: Uint8Array; approach: number; pace: number } | null
   refuge: number // the shape it forms against cavalry, −1 none
@@ -567,6 +573,15 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   }
   const start = names.indexOf(u.start)
   if (start < 0) throw new Error(`${at}: start shape ${u.start} is not one of its shapes`)
+  // a unit's set of shapes is a bit per shape in an int32
+  if (S > MAX_SHAPES) throw new Error(`${at}: ${S} shapes, more than ${MAX_SHAPES}`)
+  let enabled = 0
+  for (const n of u.enabled ?? names) {
+    const s = names.indexOf(n)
+    if (s < 0) throw new Error(`${at}: enabled shape ${n} is not one of its shapes`)
+    enabled |= 1 << s
+  }
+  if (!(enabled & (1 << start))) throw new Error(`${at}: its start shape ${u.start} is not enabled`)
   const slots = C * R * F
   const slotC = new Int32Array(slots)
   const slotLX = new Float64Array(slots)
@@ -666,6 +681,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     changeTime,
     traits,
     start,
+    enabled,
     charge,
     refuge,
     artillery,

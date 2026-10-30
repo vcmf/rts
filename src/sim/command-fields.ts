@@ -18,6 +18,7 @@ export const COMMAND_TYPES = [
   'debug-kill',
   'debug-morale',
   'charge',
+  'enable',
 ] as const
 export type CommandType = (typeof COMMAND_TYPES)[number]
 export const FIRE_MODES = ['at will', 'hold'] // index = FIRE_AT_WILL, FIRE_HOLD
@@ -61,12 +62,14 @@ export const COMMAND_FIELDS: Record<CommandType | 'refused', readonly Field[]> =
     F('bar', 'cm', 0), // 0: its level's
     F('fire', 'str', FIRE_MODES[0]),
     F('unit', 'str', ''), // '': the ruleset's first type
+    F('forms', 'str', ''), // the shapes it may form, by name, comma-separated; '': its type's
   ],
   'debug-kill': [F('id', 'id'), F('men', 'int')],
   'debug-morale': [F('id', 'id'), F('bar', 'cm')],
   fire: [F('id', 'id'), F('mode', 'str'), F('target', 'id', 0)],
   side: [F('side', 'int'), F('x', 'ang'), F('z', 'ang')],
   charge: [F('id', 'id'), F('target', 'id')],
+  enable: [F('id', 'id'), F('shape', 'str'), F('on', 'bool', true)],
   // what `issue` stamps in place of a command it cannot take
   refused: [F('reason', 'reason')],
 }

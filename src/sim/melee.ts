@@ -46,6 +46,7 @@ import {
   layoutOf,
   startChange,
   targetShape,
+  formable,
 } from './formation.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
 import { creditRepulse } from './experience.ts'
@@ -573,6 +574,7 @@ export function standingStep(w: World): void {
         f.alertAt[i] !== tick ||
         f.refugeOff[i] ||
         into === U.refuge ||
+        !formable(w, i, U.refuge) ||
         tick - f.alertSince[i] < react ||
         (tick - f.alertSince[i] - react) % REFUGE_RETRY
       ) {

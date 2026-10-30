@@ -58,9 +58,11 @@ one more formation of line infantry, disabled unless enabled.
 
 - **Enabled formations:** each unit holds the set of its type's shapes it may form (a bit per shape, world state,
   hashed and saved). A type names the shapes enabled by default (`UnitType.enabled`; every shape if it names none);
-  `debug-spawn` may give the set; a command enables or disables one on a unit (for the page and tests now, research
-  and generals later). A `form` into a disabled shape is refused ('formation not enabled'); the standing behaviour's
-  refuge must stay enabled. Disabling the shape it stands in leaves it there until it forms another.
+  `debug-spawn` may give the set (`forms`); `enable` turns one on or off on a unit, whatever it is doing (for the page
+  and tests now, research and generals later). A `form` into a disabled shape is refused ('formation not enabled'),
+  one queued before it was disabled dropped; the standing behaviour forms its refuge only when it is enabled.
+  Disabling the shape it stands in leaves it there until it forms another. Done: `test/enabled.test.ts`; no page
+  scenario's state moves but the new column (`tools/state-hashes.ts`, the column left out: identical).
 - **The 2-rank line** (`thinLine`, off by default): fire 1.5, hits 0.8, shock 1.25, melee 0.7, flank shock × 1.25,
   line ↔ thin line in 20 s.
 - **Engine:** a shape may set its own block (`block: { files, ranks }`, the same men per section: 60 as 30 × 2). The
