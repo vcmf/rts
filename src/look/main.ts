@@ -41,7 +41,7 @@ import { buildBuildingLight } from './building-light.ts'
 import type { Units } from './units.ts'
 import type { PuffSource, Smoke } from './smoke.ts'
 import type { ArmSpec } from './world/arms.ts'
-import { BODY_LOOKS, FOOT_FLOATS, type ClipInfo } from './world/smoke.ts'
+import { FOOT_FLOATS, type ClipInfo } from './world/smoke.ts'
 import type { Drill } from './world/armies.ts'
 import type { PuffDef } from '../sim/ruleset.ts'
 // the figures' unit data by file (data/figures/<figure>.unitdata): a scenario names its figure, the page finds it here
@@ -773,7 +773,7 @@ const fireHold = bit('firehold')
 let armiesFocus: [number, number] | null = null
 // (the smoke's and the armies' switches do nothing without the armies: said, not ignored)
 if (armiesParam === null) {
-  const needs = ['smokecap', 'smokestep', 'smokebody', 'lookat', 'firehold', 'armsmoke'].filter(k => params.has(k))
+  const needs = ['smokecap', 'smokestep', 'lookat', 'firehold', 'armsmoke'].filter(k => params.has(k))
   if (params.has('smoke') && params.get('smoke') !== '0') needs.unshift('smoke')
   if (needs.length) throw new Error(`?${needs.join(', ?')} need ?armies=<n> (the armies and their smoke)`)
 }
@@ -1026,8 +1026,6 @@ if (armiesParam !== null) {
           : 'no arm on this page smokes'
     if (none) throw new Error(`?armsmoke: ${none} (src/look/smoke.ts)`)
   }
-  // (?smokebody, the arms' clouds' body, with their smoke left out: said)
-  if (params.has('smokebody') && armSmoke === false) throw new Error('?smokebody: ?armsmoke=0 has no big clouds')
   const armsOn = armSpecs.flatMap(spec => (arms[spec.name] ? [{ spec, units: arms[spec.name] }] : []))
   smoke = simParam ? null : await buildSmoke(foot, drill, era.smoke, ARMIES_DEMO.figure, armsOn)
 }
@@ -1814,17 +1812,8 @@ if (params.has('bench')) {
   // ?bench=earth: the bare earth's surface up close off and on (earthOn, docs/plans/done/bare-earth.md)
   // ?bench=dof: the gameplay depth of field off and on (decision 0024)
   // ?bench=smoke (with ?armies): the smoke on, the arms' smoke alone off, and all off (decision 0083; best with
-  // ?firehold=1); ?bench=smokebody: the arms' clouds in each body (BODY_LOOKS: ?smokebody) and off
-  const benchSmoke = params.get('bench') === 'smoke' || params.get('bench') === 'smokebody'
-  if (benchSmoke && !smoke) throw new Error(`?bench=${params.get('bench')} needs the smoke: ?armies, no ?smoke=0`)
-  if (params.get('bench') === 'smokebody' && !(smoke && smoke.parts.length > 1)) {
-    throw new Error('?bench=smokebody needs an arm that smokes (no ?armsmoke=0)')
-  }
-  /** the bench's arm: the smoke on, the arms' clouds in body b (BODY_LOOKS) */
-  const bodyArm = (b: number) => () => {
-    smoke?.setOn(true)
-    smoke?.parts.slice(1).forEach(p => p.setBody(b))
-  }
+  // ?firehold=1)
+  if (params.get('bench') === 'smoke' && !smoke) throw new Error('?bench=smoke needs the smoke: ?armies, no ?smoke=0')
   // (each material set as it stands, no binder left behind, once the texture's load has set 1: else a late load would
   // turn the off arm on)
   const earthArm = (on: number) => async () => {
@@ -1924,43 +1913,32 @@ if (params.has('bench')) {
                       { name: 'earth', apply: earthArm(1) },
                       { name: 'noearth', apply: earthArm(0) },
                     ]
-                  : params.get('bench') === 'smokebody' && smoke
+                  : params.get('bench') === 'smoke' && smoke
                     ? [
-                        ...BODY_LOOKS.map((_, b) => ({ name: `body${b}`, apply: bodyArm(b) })),
-                        {
-                          name: 'noarmsmoke',
-                          apply: () => {
-                            smoke?.setOn(true)
-                            smoke?.parts.slice(1).forEach(p => p.setOn(false))
-                          },
-                        },
-                      ]
-                    : params.get('bench') === 'smoke' && smoke
-                      ? [
-                          { name: 'smoke', apply: () => smoke?.setOn(true) },
-                          // (the arms' smoke off, the muskets' on: the arms' share, artillery-smoke.md)
-                          ...(smoke.parts.length > 1
-                            ? [
-                                {
-                                  name: 'noarmsmoke',
-                                  apply: () => {
-                                    smoke?.setOn(true)
-                                    smoke?.parts.slice(1).forEach(p => p.setOn(false))
-                                  },
+                        { name: 'smoke', apply: () => smoke?.setOn(true) },
+                        // (the arms' smoke off, the muskets' on: the arms' share, docs/plans/active/artillery-smoke.md)
+                        ...(smoke.parts.length > 1
+                          ? [
+                              {
+                                name: 'noarmsmoke',
+                                apply: () => {
+                                  smoke?.setOn(true)
+                                  smoke?.parts.slice(1).forEach(p => p.setOn(false))
                                 },
-                              ]
-                            : []),
-                          { name: 'nosmoke', apply: () => smoke?.setOn(false) },
+                              },
+                            ]
+                          : []),
+                        { name: 'nosmoke', apply: () => smoke?.setOn(false) },
+                      ]
+                    : params.get('bench') === 'dof'
+                      ? [
+                          { name: 'nodof', apply: dofArm(0) },
+                          { name: 'dof', apply: dofArm(1) },
                         ]
-                      : params.get('bench') === 'dof'
-                        ? [
-                            { name: 'nodof', apply: dofArm(0) },
-                            { name: 'dof', apply: dofArm(1) },
-                          ]
-                        : [
-                            { name: 'l2', apply: () => setDetail([]) },
-                            { name: 'l0', apply: () => setDetail(['DETAIL_L0']) },
-                          ]
+                      : [
+                          { name: 'l2', apply: () => setDetail([]) },
+                          { name: 'l0', apply: () => setDetail(['DETAIL_L0']) },
+                        ]
   // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench:
   // docs/plans/done/forest-bench.md) inside the play area: the camera's focus is clamped to it every frame
   // (src/look/post.ts)

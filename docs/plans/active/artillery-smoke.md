@@ -255,9 +255,11 @@ The owner, on the merged guns' smoke (#266): its motion and look approved, but "
 less transparent, and more 3D". Refs: `output/smoke-refs/owner-2026-10-28/` (the Patriot's volley bank, Cossacks 2's
 volley, the musket plume) and `docs/research/smoke.md`; this plan's open question 1 (a thicker bank).
 
-**Scope**: the arms' big cards only (the muskets' smoke as approved: `uBody` 0 on its material); painted, no
-volumetrics or ray marching; the formations' cap kept over every card; the far-zoom fix (`vFar`) kept. Variants behind
-`?smokebody=0|1|2` (0, today's, the default until the owner picks; `BODY_LOOKS`, `src/look/world/smoke.ts`).
+**Scope**: the arms' big cards only (the muskets' smoke as approved: `uBig` 0 on its material); painted, no
+volumetrics or ray marching; the formations' cap kept over every card; the far-zoom fix (`vFar`) kept. Built as
+variants behind a switch for the owner's eye (0, the cards as approved; 1, the body; 2, the body and lobes); **the
+owner picked 1** (2026-10-30: both liked, 1 for its cost; "for this I don't need options"): it is the guns' smoke now,
+the switch, 0 and 2 removed.
 
 **Approach** (`src/look/shaders/smoke.frag`, `smoke.vert`, `src/look/smoke.ts`; `docs/systems/look.md`, the body):
 
@@ -273,19 +275,21 @@ volumetrics or ray marching; the formations' cap kept over every card; the far-z
   terraces, a blocky camouflage; the gentle emboss of values does not.
 - **Front and back**: the cards drawn back to front (`depthOrder`: the ring's live puffs' middles at the shader's clock,
   an insertion sort each frame into a second buffer, only the live ones drawn); with dense cores an unsorted blend put a
-  back card's lit top over a front card. **2** adds one lobe to each of the first two strung puffs, the muzzle's cloud
-  and the next (`BODY_LAYERS`: a lit top up and to one side, a shaded underbelly low on the other; set off by shares
-  of the puff's radius, so they grow apart with it): 6 cards a shot for 4 (first built with a lobe on all four, 8
-  cards: about twice the budget at 25 m, below). Fewer, bigger, denser cards over many translucent ones (the fill is the cost).
+  back card's lit top over a front card.
+- **Variant 2, dropped**: one lobe more on each of the first two strung puffs, the muzzle's cloud and the next (a lit
+  top up and to one side, a shaded underbelly low on the other, set off by shares of the puff's radius, two more
+  floats a puff): 6 cards a shot for 4 (first built with a lobe on all four, 8 cards). Fuller and rounder, but +0.75
+  to 1.0 ms at 25 m (below); removed with the switch.
 
-**Stills** (`output/armies-review/29-gun-smoke-volume/`, not in git: its compare page, side by side or space to cycle
-0 → 1 → 2; 25, 40, 90, 150 m at 66 s and 40 m at 64 s; one volley's life every 2 s, `seq-sheet.png` and a gif a
+**Stills** (`output/armies-review/29-gun-smoke-volume/`, not in git: its compare page of the variants, side by side or space
+to cycle 0 → 1 → 2; 25, 40, 90, 150 m at 66 s and 40 m at 64 s; one volley's life every 2 s, `seq-sheet.png` and a gif a
 variant; the refs). Read: 1 and 2 turn the flat white patches into rounded, lit clouds with a cool shaded side and
 underside; 2 is fuller and rounder, its far puffs more of a cloud; the crews and the cavalry riding through still read
 (the cap); at 90 and 150 m soft shaded masses, no camouflage pattern.
 
-**Cost**: `?armies=20&firehold=1&bench=smokebody&benchat=60,-43&benchr=25,40,90,150` (the built page, Metal,
-1920 × 1080; `body0`, `body1`, `body2`, `noarmsmoke` alternated in one page, each camera's arms run forward and back;
+**Cost**: `?armies=20&firehold=1&bench=smokebody&benchat=60,-43&benchr=25,40,90,150` (a bench arm built for the
+comparison, removed with the switch; the built page, Metal, 1920 × 1080; `body0`, `body1`, `body2`, `noarmsmoke`
+alternated in one page, each camera's arms run forward and back;
 three rounds each started at a 1-min load ≤ 3 under the bench lock; the arms' share = body less `noarmsmoke`, GPU frame
 p50, ms):
   - First built uploading the sorted cards every frame: bodies 1 and 2 cost +3.2 to +6.5 ms of GPU frame at every view
@@ -301,10 +305,9 @@ p50, ms):
     | 90 | −0.16 to +0.71 | −0.09 to +0.45 | +0.19 to +0.49 |
     | 150 | +0.03 to +0.31 | +0.12 to +1.03 (one camera, one round: noise) | +0.30 to +0.76 |
 
-  Body 1 keeps about the budget (≤ ~0.5 ms) but at 25 m on the battery (+0.6 to 0.7); body 2 is about +0.5 from 40 m
-  out and +0.75 to 1.0 at 25 m, over it. The fill of the denser, longer-held cores at the closest view is the cost;
-  the fallbacks if the owner picks 2: the lobes on the muzzle's cloud only, or the half-resolution smoke target (the
-  musket plan's Out). Today's (body 0) measured here +0.0 to +0.7, the earlier round's +0.16 to +0.39: this
+  Body 1 (as shipped) keeps about the budget (≤ ~0.5 ms) but at 25 m on the battery (+0.4 to 0.7); body 2 is about
+  +0.5 from 40 m out and +0.75 to 1.0 at 25 m, over it. The fill of the denser, longer-held cores at the closest view
+  is the cost; the half-resolution smoke target (the musket plan's Out) stays the fallback. Today's (body 0) measured here +0.0 to +0.7, the earlier round's +0.16 to +0.39: this
   machine's noise between days.
 
 ## Open questions for the owner
@@ -312,8 +315,9 @@ p50, ms):
 1. **How long should a gun's cloud stay, and how thick the bank?** 14 to 22 s as built (cut from 20 to 30 s for the
    cost): a battery in action keeps a ragged row of clouds before its guns, not a continuous bank. A thicker,
    longer bank is truer to Mercer and costs about 0.3 ms more at the worst views (measured with the first def).
-   Round 2 (`?smokebody`) makes each cloud denser and rounder at the same life; which body (0, 1, 2) is the owner's
-   pick.
+   Round 2 makes each cloud denser and rounder at the same life. **Answered** (2026-10-30): the owner liked bodies 1
+   and 2 alike and picked **1** for its cost (+0.4 to 0.7 ms at 25 m, ≤ 0.5 from 40 m out, against 2's +0.7 to
+   1.0), with no switch: it is the guns' smoke.
 2. **Dust**: a low, warm brown puff at the ground under the muzzle as the blast kicks it up (Leonardo's smoke and
    dust), or white smoke only?
 3. **The flash**: a short spark only (as the muskets'), or a warm glow lighting the young cloud for a tenth of a second?

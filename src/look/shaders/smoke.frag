@@ -1,7 +1,7 @@
-precision highp float;varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl,vFar,vOpC,vShade;
+precision highp float;varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl,vFar,vOpC;
 // the smoke's own colour and its flash (the era's, PuffDef), a puff's densest (uOpacity), the factor on a card's
 // opacity over the men (uCap) and the formations' mask (uClear: its origin x, z, 1 / its side in m, a man's body m)
-uniform vec3 uSmokeCol,uFlashCol;uniform float uFlashT,uOpacity,uCap,uSmokeT,uBody;
+uniform vec3 uSmokeCol,uFlashCol;uniform float uFlashT,uOpacity,uCap,uSmokeT,uBig;
 #ifdef CLEAR
 uniform sampler2D uClearTex;uniform vec4 uClear;
 #endif
@@ -17,16 +17,16 @@ uniform sampler2D uClearTex;uniform vec4 uClear;
 // read there (src/look/world/smoke.ts, coverAt, coverCap): this card's opacity takes the factor uCap there (a factor
 // per card: cards over each other add up). The lens term: the blend keeps what lies behind it (as the soldiers'
 // simple shadows: src/look/smoke.ts). The flash: the young jet's muzzle end in the flash's colour for uFlashT s.
-// A BODY (uBody 1, the big clouds': ?smokebody, docs/plans/active/artillery-smoke.md): the card painted as a volume,
+// A BODY (uBig 1, the big clouds': docs/plans/active/artillery-smoke.md, round 2): the card painted as a volume,
 // no volumetrics: its core dense (a core from the large shape alone, its own opacity vOpC holding through most of the
 // life, the rim's vOp thinning, the smaller billows and the grain left to the rim), and its light from a normal of its
 // own: a dome over the card's shape (its round edge, the young jet's narrow muzzle end), its lobes the large billows
 // (embossed toward the sun: the lobes the edge shows), lit by the sun through a soft mid tone (decision 0084) to a pale
-// cool shade on the far side and a cooler underside, the core a little deeper in the shade than the rim, a lobe under
-// its puff deeper (vShade), and a faint warm rim where the thin edge faces the sun. Painted, not photoreal: three
+// cool shade on the far side and a cooler underside, the core a little deeper in the shade than the rim, and a
+// faint warm rim where the thin edge faces the sun. Painted, not photoreal: three
 // close values
 float maxOf(vec3 c){return max(c.r,max(c.g,c.b));}
-/** the body's light (uBody 1): the card's colour lit as a volume. q: the card's shape coordinates (±1), d its length,
+/** the body's light (uBig 1): the card's colour lit as a volume. q: the card's shape coordinates (±1), d its length,
  *  bil the large billows (0 to 1) and bilS the same a step toward the sun across the card (the lobes' slope: lit where
  *  they fall toward it, an emboss of their values, not of their texels' derivatives, which step), core the dense
  *  share, sun the sun's way across the card, warm and cool the sun's and the shade's tints */
@@ -40,9 +40,9 @@ vec3 bodyLight(vec2 q,float d,float bil,float bilS,float core,vec2 sun,vec3 warm
   vec3 lit=uSmokeCol*warm,shade=uSmokeCol*cool*0.68,mid=mix(shade,lit,0.6);
   vec3 c=mix(shade,mid,smoothstep(-0.6,0.0,l));
   c=mix(c,lit,smoothstep(-0.1,0.5,l));
-  // the underside cooler and deeper (the sky's light from above), a lobe under its puff deeper still, the core in
+  // the underside cooler and deeper (the sky's light from above), the core in
   // the shade a little deeper than the rim (light through the thin edge)
-  c*=1.0-0.12*smoothstep(0.05,-0.6,N.y)-0.12*vShade-0.08*core*(1.0-smoothstep(-0.2,0.3,l));
+  c*=1.0-0.12*smoothstep(0.05,-0.6,N.y)-0.08*core*(1.0-smoothstep(-0.2,0.3,l));
   // the rim: the thin edge on the sun's side a little brighter, warmer
   c+=warm*uSmokeCol*0.1*(1.0-core)*smoothstep(0.55,0.95,d)*smoothstep(0.2,0.8,dot(q/max(d,1e-3),sun));
   return c;}
@@ -65,7 +65,7 @@ void main(){
     +(fib-0.5)*(0.06+0.35*smoothstep(0.5,0.95,d));
   // (a body: a core from the large shape alone, the smaller billows and the grain left to the rim, dense through and
   // its opacity holding through most of the life; the rim as before)
-  float core=smoothstep(0.25,0.55,low)*(1.0-smoothstep(0.0,0.6,vErode))*uBody;
+  float core=smoothstep(0.25,0.55,low)*(1.0-smoothstep(0.0,0.6,vErode))*uBig;
   float a=max(smoothstep(0.0,0.5+0.2*vPl,dens)*vOp,core*max(vOp,vOpC))*smoothstep(1.0,0.8,d);
   a*=uOpacity*smoothstep(0.0,0.7,vW.y-vGround)*(1.0-vFar*0.85*vErode);
   #ifdef CLEAR
@@ -80,12 +80,12 @@ void main(){
   vec2 sun=normalize(vec2(dot(uSunDir,vU),dot(uSunDir,vV))+1e-4);
   float l=dot(q,sun)*0.9+(bil-0.5)*1.6+(sub-0.5)*0.6+0.2;
   // (a body's lobes: the billows a step toward the sun, about a metre up close, a tenth of the card far out)
-  float bilS=uBody>0.5?G(((gm+sun*mix(2.0,0.5,vFar)).yx+s)*0.15+drift).g:bil;
+  float bilS=uBig>0.5?G(((gm+sun*mix(2.0,0.5,vFar)).yx+s)*0.15+drift).g:bil;
   vec3 warm=mix(vec3(1.0),uSunCol/maxOf(uSunCol),0.35);
   vec3 cool=mix(vec3(1.0),uShadowCol/max(dot(uShadowCol,LUMA),1e-3),0.2);
   vec3 c=mix(uSmokeCol*cool*0.84,uSmokeCol*warm,smoothstep(-0.08,0.08,l));
   // (a body's light where the cloud is thick: its thin veils, an old cloud's, lit as before, light, not a grey film)
-  if(uBody>0.5)c=mix(c,bodyLight(q,d,bil,bilS,core,sun,warm,cool),smoothstep(-0.1,0.4,low)*(1.0-0.7*vErode));
+  if(uBig>0.5)c=mix(c,bodyLight(q,d,bil,bilS,core,sun,warm,cool),smoothstep(-0.1,0.4,low)*(1.0-0.7*vErode));
   vec4 lm=LM(vC);float sh=(1.0-lm.r)*uShadowsOn;
   c*=mix(1.0,0.84,sh);
   c=cloudShade(c,cloud(vC),0.0);

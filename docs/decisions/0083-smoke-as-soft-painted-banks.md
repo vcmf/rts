@@ -69,7 +69,7 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
   by the ring and thinned with zoom; the paired bench (`?bench=smoke`) measures it (the plan's Results).
 - Cards cross the men's figures with a straight edge where a card's plane passes through them (no soft-particle depth
   read); translucent and capped over the men, it reads as the smoke's edge.
-- Cards in one draw are not sorted: they blend in their slots' order (birth order as the clock runs; a rebuild writes
+- Cards in one draw are not sorted (a big card with a body is, below): they blend in their slots' order (birth order as the clock runs; a rebuild writes
   battalion by battalion). The smoke is one colour family, the same up to blend order, so the order is not seen. It
   draws after the soldiers' simple shadows (alphaIndex 2000 against their 1000).
 - Big cards (the guns') meet rising ground and the depth test cuts them in a hard line: such a puff is lifted by the
@@ -78,6 +78,11 @@ hard-edged grey boulders lying in front of the line. It is replaced here, before
 - Far out (50 to 85 m and beyond), a big card's grain is read in its own frame, not in metres, its billows gentler and
   its thinning a fade: an old grown card read the grain's blotches as an even mottle of holes, and the battery's
   merged clouds as a camouflage pattern (the owner, 2026-10-29).
+- A big card has a body (2026-10-30, the owner: the guns' smoke "a bit flat"; picked from three variants): a dense
+  core holding to half its life and a light of its own (a dome lit by the sun through a soft mid tone to a cool
+  underside), so its cards are drawn back to front (sorted on the CPU, uploaded only when the order changes); about
+  +0.1 to 0.3 ms over the flat cards, +0.4 to 0.7 ms in all at 25 m on the battery. The muskets' cards stay flat and
+  unsorted.
 - The muskets' smoke draws first, then each arm's (one draw each); within a draw the cards are unsorted, as above.
 - The sim's smoke (sight, `docs/proposals/sim-design.md` §11) will drive the puffs instead of the script; the cap then
   reads the sim's formations.

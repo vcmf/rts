@@ -122,10 +122,9 @@ export function hash(a: number, b = 0, c = 0, d = 0): number {
 
 /** floats a puff: its birth place (x, y, z m) and clock (s), its way ahead (x, z: a unit vector), its seed (0 to 1)
  *  and its life (s), then its own factors on the era's size, reach (the blast's and the roll's), rise and density
- *  (puffVary), then the ground's rise along its way (m: pathGround) and that way's length (m), then its place in its
- *  cloud as shares of its radius, across its way and up (a big cloud's layers, BODY_LAYERS; 0, 0 for every other
- *  puff): an instance's four columns (src/look/shaders/smoke.vert) */
-export const PUFF_FLOATS = 16
+ *  (puffVary), then the ground's rise along its way (m: pathGround) and that way's length (m): an instance's first
+ *  three columns and two of its fourth (src/look/shaders/smoke.vert) */
+export const PUFF_FLOATS = 14
 
 /** The ground along a puff's way (smoke.vert lifts the puff by it, so a cloud carried tens of metres over rising
  *  ground is not cut by it): how far the blast and the roll carry it in its life (m, puffAt's at its end, its reach
@@ -228,8 +227,6 @@ export function volleyPuffs(
         v.rise,
         v.density * st.density * clump(ca, cb, lx, def.clumps),
         ...pathGround(def, v.reach * st.reach, life, x, z, [s, c], ground),
-        0,
-        0,
       )
     }
   }
@@ -300,9 +297,7 @@ export function pieceShotsBetween(
 /** The puffs of one piece's shot, unit `index` (its place among the units that fire so): the era's `strung` puffs from
  *  its muzzle (`ahead` m before the piece's place, `height` m over the ground there; spread ±`lateral`/2 across),
  *  strung along its jet (strungPuff), at the shot's clock (± the era's `jitter`), each with its own seed, life and
- *  factors (puffVary); with `layers` (a big cloud's body, BODY_LAYERS), each of the first `layers[1]` strung puffs
- *  followed by `layers[0]` lobes of its own cloud (bodyLayer: born and carried with it, set off across and up by shares
- *  of its radius); pushed onto out, PUFF_FLOATS each. place: the piece's place in the unit's frame (m) */
+ *  factors (puffVary); pushed onto out, PUFF_FLOATS each. place: the piece's place in the unit's frame (m) */
 export function piecePuffs(
   b: Battalion,
   index: number,
@@ -311,7 +306,6 @@ export function piecePuffs(
   def: PuffDef,
   ground: (x: number, z: number) => number,
   out: number[],
-  layers: readonly [number, number] = [0, 0],
 ): void {
   const c = Math.cos(b.heading)
   const s = Math.sin(b.heading)
@@ -327,92 +321,29 @@ export function piecePuffs(
     const v = puffVary(h(H.size), h(H.reach), h(H.rise), hd, def.vary)
     const st = strungPuff(k, n, def.strung[1])
     const life = def.life[0] + (def.life[1] - def.life[0]) * h(H.life)
-    const born = shot.t + (h(H.jitter) * 2 - 1) * def.jitter
-    const path = pathGround(def, v.reach * st.reach, life, x, z, [s, c], ground)
-    const y = ground(x, z) + def.height
-    const reach = v.reach * st.reach
     out.push(
       x,
-      y,
+      ground(x, z) + def.height,
       z,
-      born,
+      shot.t + (h(H.jitter) * 2 - 1) * def.jitter,
       s,
       c,
       h(H.seed),
       life,
       v.size * st.size,
-      reach,
+      v.reach * st.reach,
       v.rise,
       v.density * st.density,
-      ...path,
-      0,
-      0,
+      ...pathGround(def, v.reach * st.reach, life, x, z, [s, c], ground),
     )
-    if (k >= layers[1]) continue
-    for (let j = 0; j < layers[0]; j++) {
-      // (a lobe's own draws from its own hashes: its puff's are unchanged, so the cloud's front is today's)
-      const L = bodyLayer(k + j, hash(index * 256 + shot.piece, shot.cycle, shot.n * 64 + k, 301 + j))
-      out.push(x, y, z, born, s, c, L.seed, life, v.size * st.size * L.size, reach, v.rise * L.rise)
-      out.push(Math.min(1, v.density * st.density * L.density), ...path, L.across, L.up)
-    }
   }
-}
-
-/** A big cloud's lobes (?smokebody=2, docs/plans/active/artillery-smoke.md): the cards a strung puff's own cloud adds
- *  round it, so the cloud has a top, an underside and a back, each a share of its puff's radius across its way and
- *  up, its size and density factors on its puff's: a lobe up and to one side (the cloud's lit top), one low on the
- *  other (its shaded underbelly: smoke.vert shades a lobe by how far below its puff it lies). Fewer, bigger cards over
- *  many small ones: the fill is the cost */
-export const BODY_LAYERS: readonly {
-  across: number
-  up: number
-  size: number
-  rise: number
-  density: number
-}[] = [
-  { across: 0.45, up: 0.3, size: 0.78, rise: 1.15, density: 0.95 },
-  { across: -0.4, up: -0.18, size: 0.85, rise: 0.9, density: 1 },
-]
-/** the lobe i of a big cloud's (BODY_LAYERS, in turn), its side flipped by its hash h (0 to 1) so the clouds are not
- *  all lopsided one way, and its seed from it */
-export function bodyLayer(
-  i: number,
-  h: number,
-): { across: number; up: number; size: number; rise: number; density: number; seed: number } {
-  const L = BODY_LAYERS[i % BODY_LAYERS.length]
-  return { ...L, across: h < 0.5 ? L.across : -L.across, seed: fract(h * 7.77 + 0.31) }
-}
-
-/** a big cloud's body (?smokebody): light, 1 for the cards painted as volumes (smoke.frag: a lit top and sun side, a
- *  shaded underside, the core dense, its opacity falling at the rim and with age; drawn back to front, depthOrder);
- *  layers, [lobes a strung puff, the strung puffs that get them] (piecePuffs) */
-export interface BodyLook {
-  light: 0 | 1
-  layers: readonly [number, number]
-}
-/** the variants: 0 the cards as approved (2026-10-29), 1 painted as volumes, 2 that and a lobe more round each of the
- *  first two strung puffs, the muzzle's cloud and the next (its top, the other's underbelly; four lobes cost about
- *  twice the budget at 25 m, plan's round 2) */
-export const BODY_LOOKS: readonly BodyLook[] = [
-  { light: 0, layers: [0, 0] },
-  { light: 1, layers: [0, 0] },
-  { light: 1, layers: [1, 2] },
-]
-/** ?smokebody=0|1|2: the big clouds' body (BODY_LOOKS; absent: 0); a bad value throws */
-export function smokeBody(params: URLSearchParams): number {
-  const v = params.get('smokebody')
-  if (v === null) return 0
-  if (!/^[0-9]$/.test(v) || +v >= BODY_LOOKS.length) {
-    throw new Error(`?smokebody must be 0 to ${BODY_LOOKS.length - 1}, not ${v}`)
-  }
-  return +v
 }
 
 /** The order big cards are drawn in (their blend: front over back, as their dense cores need): the live puffs of a
  *  ring (PUFF_FLOATS each in slots of `stride` floats; n slots) at clock T, farthest from the eye first, their slots
  *  into order; returns how many. A puff's middle as smoke.vert's: its birth place, carried by the blast and the roll
- *  along its way and up by the air (puffAt, its own factors), the wind (its own share of `wind`), set off across and
- *  up by its layer's shares of its radius; not lifted by the ground (the order needs only near and far) */
+ *  along its way and up by the air (puffAt, its own factors) and the wind (its own share of `wind`); not lifted by the
+ *  ground (the order needs only near and far) */
 export function depthOrder(
   ring: Float32Array,
   n: number,
@@ -434,10 +365,9 @@ export function depthOrder(
     const fx = ring[o + 4]
     const fz = ring[o + 5]
     const w = age * (0.7 + 0.6 * fract(ring[o + 6] * 2.93))
-    const r = p.radius * ring[o + 8]
-    const x = ring[o] + fx * p.ahead * ring[o + 9] + wind[0] * w - fz * ring[o + 14] * r
-    const y = ring[o + 1] + p.up * ring[o + 10] + wind[1] * w + ring[o + 15] * r
-    const z = ring[o + 2] + fz * p.ahead * ring[o + 9] + wind[2] * w + fx * ring[o + 14] * r
+    const x = ring[o] + fx * p.ahead * ring[o + 9] + wind[0] * w
+    const y = ring[o + 1] + p.up * ring[o + 10] + wind[1] * w
+    const z = ring[o + 2] + fz * p.ahead * ring[o + 9] + wind[2] * w
     keys[i] = (x - eye[0]) ** 2 + (y - eye[1]) ** 2 + (z - eye[2]) ** 2
     order[m++] = i
   }
@@ -489,11 +419,10 @@ export function cardLift(cy: number, uy: number, rx: number, ground: number): nu
 }
 
 /** the ring's size in puffs for units of pieces: every piece's puffs alive at once at the most (its shots within a
- *  puff's longest life and spread, and one more, × the era's strung puffs and the lobes a shot adds), at least 64 and
- *  at most max */
-export function pieceRingSize(pieces: number, f: ServeTiming, def: PuffDef, max = 8192, lobes = 0): number {
+ *  puff's longest life and spread, and one more, × the era's strung puffs), at least 64 and at most max */
+export function pieceRingSize(pieces: number, f: ServeTiming, def: PuffDef, max = 8192): number {
   const shots = Math.ceil((def.life[1] + 2 * def.jitter) / f.period) + 1
-  return Math.max(64, Math.min(max, pieces * shots * (def.strung[0] + lobes)))
+  return Math.max(64, Math.min(max, pieces * shots * def.strung[0]))
 }
 
 /** The era's smoke and the script's fire checked once (the Smoke's constructor): every time constant, life, size and
@@ -693,25 +622,22 @@ export function coverCap(cover: number, cap: number): number {
 }
 
 /** the smoke's look (the owner's comparisons): step, the clock stepped at that many fps (0: smooth); cap, the
- *  opacity kept over the men (1: none taken, the formations' mask not drawn); body, the big clouds' (BODY_LOOKS'
- *  index: ?smokebody) */
+ *  opacity kept over the men (1: none taken, the formations' mask not drawn) */
 export interface SmokeLook {
   step: number
   cap: number
-  body: number
 }
 /** the variants (?smoke=soft|step): soft, smooth; step, its clock stepped at 12 fps (the art bible's stepped
  *  effects) */
 export const SMOKE_LOOKS: Readonly<Record<'soft' | 'step', Readonly<SmokeLook>>> = {
-  soft: { step: 0, cap: 0.6, body: 0 },
-  step: { step: 12, cap: 0.6, body: 0 },
+  soft: { step: 0, cap: 0.6 },
+  step: { step: 12, cap: 0.6 },
 }
 /** the variant drawn without ?smoke */
 export const SMOKE_DEFAULT: keyof typeof SMOKE_LOOKS = 'soft'
 
 /** The page's smoke switches: ?smoke=0 (none: null), ?smoke=soft|step (a variant; 1 or absent: the default), and the
- *  knobs over it: ?smokestep=<fps> (0: smooth), ?smokecap=<0 to 1> (the opacity kept over the men; 1 none taken),
- *  ?smokebody=<0 to 2> (the big clouds' body: smokeBody).
+ *  knobs over it: ?smokestep=<fps> (0: smooth), ?smokecap=<0 to 1> (the opacity kept over the men; 1 none taken).
  *  A bad value throws */
 export function smokeLook(params: URLSearchParams): SmokeLook | null {
   const v = params.get('smoke') ?? '1'
@@ -730,6 +656,5 @@ export function smokeLook(params: URLSearchParams): SmokeLook | null {
     if (!(v >= 0 && v <= 1)) throw new Error(`?smokecap must be a number from 0 to 1, not ${cap}`)
     look.cap = v
   }
-  look.body = smokeBody(params)
   return look
 }
