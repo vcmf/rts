@@ -11,6 +11,7 @@ import {
   PUFF_FLOATS,
   cardLift,
   depthOrder,
+  uploadDue,
   pathGround,
   pieceStarts,
   pieceRingSize,
@@ -235,57 +236,101 @@ describe("the era's gun smoke checked", () => {
   })
 })
 
-describe("the big cards' order (depthOrder)", () => {
-  /** a ring of puffs from one shot of each piece, its slots 16 floats */
+describe("the big cards' order (depthOrder, orderChanged)", () => {
+  /** a ring of puffs from one shot of each piece, its slots 16 floats, and one not yet born, one dead, one of no
+   *  density at its end */
   function ring(T: number): { buf: Float32Array; n: number } {
     const out: number[] = []
     for (let i = 0; i < 8; i++) {
       piecePuffs(battery, 0, { t: T - 1 - i * 0.5, piece: i, cycle: 0, n: 0 }, places[i], GUN, () => 0, out)
     }
-    // (one not yet born, one dead, one of no density)
-    out.push(...out.slice(0, PUFF_FLOATS))
-    out[out.length - PUFF_FLOATS + 3] = T + 5
-    out.push(...out.slice(0, PUFF_FLOATS))
-    out[out.length - PUFF_FLOATS + 3] = T - 100
-    out.push(...out.slice(0, PUFF_FLOATS))
-    out[out.length - PUFF_FLOATS + 11] = 0
+    for (const [k, v] of [
+      [3, T + 5],
+      [3, T - 100],
+      [11, 0],
+    ]) {
+      out.push(...out.slice(0, PUFF_FLOATS))
+      out[out.length - PUFF_FLOATS + k] = v
+    }
     const n = out.length / PUFF_FLOATS
     const buf = new Float32Array(n * 16)
     for (let i = 0; i < n; i++) buf.set(out.slice(i * PUFF_FLOATS, (i + 1) * PUFF_FLOATS), i * 16)
     return { buf, n }
   }
-  it('the live puffs, farthest from the eye first, by their middles as the vertex shader moves them', () => {
-    const T = 40
+  const T = 40
+  const wind: [number, number, number] = [0.1, 0, 0.15]
+  const down = (x: number, y: number, z: number): [number, number, number] => {
+    const l = Math.hypot(x, y, z)
+    return [x / l, y / l, z / l]
+  }
+  /** the order from the eye along fwd, seeded with prev */
+  function sorted(
+    eye: [number, number, number],
+    fwd: [number, number, number],
+    prev: Uint32Array = new Uint32Array(0),
+    eps = 0,
+  ): { order: number[]; keys: Float32Array; buf: Float32Array } {
     const { buf, n } = ring(T)
     const order = new Uint32Array(n)
     const keys = new Float32Array(n)
+    const m = depthOrder(buf, n, 16, T, GUN, wind, eye, fwd, prev, prev.length, eps, order, keys, new Uint8Array(n))
+    return { order: [...order.slice(0, m)], keys, buf }
+  }
+  it('the live puffs, farthest along the view first, by their middles as the vertex shader moves them', () => {
     const eye: [number, number, number] = [60, 60, -120]
-    const wind: [number, number, number] = [0.1, 0, 0.15]
-    const m = depthOrder(buf, n, 16, T, GUN, wind, eye, order, keys)
-    expect(m).toBe(n - 3)
-    const seen = new Set(order.slice(0, m))
-    expect(seen.size).toBe(m)
-    for (const dead of [n - 3, n - 2, n - 1]) expect(seen.has(dead)).toBe(false)
-    for (let i = 1; i < m; i++) expect(keys[order[i - 1]]).toBeGreaterThanOrEqual(keys[order[i]])
-    // (a middle as smoke.vert's: the birth, the blast and roll along the way, the rise, the wind)
-    const i = order[0]
-    const o = i * 16
+    const fwd = down(0, -60, 77)
+    const { order, keys, buf } = sorted(eye, fwd)
+    const n = buf.length / 16
+    expect(order.length).toBe(n - 3)
+    expect(new Set(order).size).toBe(order.length)
+    for (const dead of [n - 3, n - 2, n - 1]) expect(order).not.toContain(dead)
+    for (let i = 1; i < order.length; i++) expect(keys[order[i - 1]]).toBeGreaterThanOrEqual(keys[order[i]])
+    // (a middle as smoke.vert's: the birth, the blast and roll along the way, the rise, the wind; its depth along fwd)
+    const o = order[0] * 16
     const p = puffAt(GUN, T - buf[o + 3], buf[o + 7])
     const w = (T - buf[o + 3]) * (0.7 + 0.6 * ((buf[o + 6] * 2.93) % 1))
-    const x = buf[o] + buf[o + 4] * p.ahead * buf[o + 9] + wind[0] * w
-    const y = buf[o + 1] + p.up * buf[o + 10]
-    const z = buf[o + 2] + buf[o + 5] * p.ahead * buf[o + 9] + wind[2] * w
-    expect(keys[i]).toBeCloseTo((x - eye[0]) ** 2 + (y - eye[1]) ** 2 + (z - eye[2]) ** 2, 1)
+    const c = [
+      buf[o] + buf[o + 4] * p.ahead * buf[o + 9] + wind[0] * w,
+      buf[o + 1] + p.up * buf[o + 10],
+      buf[o + 2] + buf[o + 5] * p.ahead * buf[o + 9] + wind[2] * w,
+    ]
+    const depth = (c[0] - eye[0]) * fwd[0] + (c[1] - eye[1]) * fwd[1] + (c[2] - eye[2]) * fwd[2]
+    expect(keys[order[0]]).toBeCloseTo(depth, 3)
   })
-  it('the order turns over when the eye goes round to the other side', () => {
-    const T = 40
-    const { buf, n } = ring(T)
-    const a = new Uint32Array(n)
-    const b = new Uint32Array(n)
-    const keys = new Float32Array(n)
-    const m = depthOrder(buf, n, 16, T, GUN, [0, 0, 0], [60, 40, -200], a, keys)
-    depthOrder(buf, n, 16, T, GUN, [0, 0, 0], [60, 40, 200], b, keys)
-    expect(a[0]).not.toBe(b[0])
-    expect(a[m - 1]).not.toBe(b[m - 1])
+  it('a pan (the eye moved across the view) keeps the order; going round to the other side turns it over', () => {
+    const fwd = down(0, -60, 77)
+    const a = sorted([60, 60, -120], fwd).order
+    expect(sorted([90, 60, -120], fwd).order).toEqual(a)
+    const b = sorted([60, 60, 200], down(0, -60, -77)).order
+    expect(b[0]).not.toBe(a[0])
+    expect(b[b.length - 1]).not.toBe(a[a.length - 1])
+  })
+  it('seeded with the last order, a pair within the dead band is left as it was, one past it swapped', () => {
+    const eye: [number, number, number] = [60, 60, -120]
+    const fwd = down(0, -60, 77)
+    const { order, keys } = sorted(eye, fwd)
+    // (the last order with its two nearest swapped: within the band they stay so, without it they come back)
+    const prev = Uint32Array.from(order)
+    const m = prev.length
+    ;[prev[m - 2], prev[m - 1]] = [prev[m - 1], prev[m - 2]]
+    const gap = keys[order[m - 2]] - keys[order[m - 1]]
+    expect(sorted(eye, fwd, prev, gap + 0.01).order).toEqual([...prev])
+    expect(sorted(eye, fwd, prev, gap / 2).order).toEqual(order)
+    // (a slot in the last order now dead is dropped; the new ones follow)
+    const stale = Uint32Array.from([prev.length + 1, ...prev.slice(0, 3)])
+    const seeded = sorted(eye, fwd, stale, 1e9).order
+    expect(seeded.slice(0, 3)).toEqual([...prev.slice(0, 3)])
+    expect(seeded.length).toBe(order.length)
+  })
+  it('an upload at once when the ring was written or the count changed, a swap only every so often, none when all is as drawn', () => {
+    const a = Uint32Array.from([3, 1, 2])
+    const same = Uint32Array.from([3, 1, 2])
+    const swapped = Uint32Array.from([3, 2, 1])
+    expect(uploadDue(a, 3, same, 3, false, 9, 0.25)).toBe(false)
+    expect(uploadDue(a, 3, same, 3, true, 0, 0.25)).toBe(true)
+    expect(uploadDue(a, 2, same, 3, false, 0, 0.25)).toBe(true)
+    expect(uploadDue(a, 3, same, -1, false, 0, 0.25)).toBe(true)
+    expect(uploadDue(a, 3, swapped, 3, false, 0.1, 0.25)).toBe(false)
+    expect(uploadDue(a, 3, swapped, 3, false, 0.25, 0.25)).toBe(true)
   })
 })

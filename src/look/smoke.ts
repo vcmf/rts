@@ -28,6 +28,7 @@ import {
   FOOT_FLOATS,
   PUFF_FLOATS,
   depthOrder,
+  uploadDue,
   PUFF_THIN,
   drawClearance,
   validateSmoke,
@@ -60,6 +61,8 @@ const MASK_MARGIN = 1.0
 const SMOKE_ALPHA_INDEX = 2000
 const MASK_EVERY = 1 / 12 // s: the mask redrawn at most this often while formations move
 const REBUILD = 1 // s: a clock jump past this rebuilds the ring from the last life's shots
+const DEPTH_EPS = 0.5 // m: two big cards swap their drawing order only past this difference in depth (depthOrder)
+const SWAP_EVERY = 0.25 // s: a swap alone in the big cards' order uploaded at most this often (uploadDue)
 
 /** what the musket smoke needs of the armies: the battalions (only those in line fire), their drill, the script's fire
  *  timing (its start, the shot's moment, the loop, the ranks, the hold) */
@@ -211,7 +214,10 @@ export class Smoke {
   private readonly keys: Float32Array
   private readonly drawn: Uint32Array // the order last uploaded, and how many
   private drawnN = -1
+  private uploadedAt = -Infinity // s (the page's clock): the last upload of the drawn cards
+  private readonly seen: Uint8Array
   private readonly eye: [number, number, number] = [0, 0, 0]
+  private readonly fwd: [number, number, number] = [0, 0, 1]
   private readonly wind: [number, number, number]
   private next = 0 // the ring's next slot
   private dirtyLo = Infinity // the ring's slots written since the last upload
@@ -224,6 +230,8 @@ export class Smoke {
   private on = true
   /** puffs written so far (the bench's and the checks') */
   written = 0
+  /** a big smoke's sorted uploads so far (the checks': a pan uploads only as puffs are born and die) */
+  uploads = 0
 
   /** name: the mesh's (smoke, the muskets'; an arm's smoke-<arm>) */
   constructor(
@@ -251,6 +259,7 @@ export class Smoke {
     this.order = new Uint32Array(source.big ? this.cap : 0)
     this.keys = new Float32Array(source.big ? this.cap : 0)
     this.drawn = new Uint32Array(source.big ? this.cap : 0)
+    this.seen = new Uint8Array(source.big ? this.cap : 0)
     this.wind = [Math.cos(FLAG_WIND) * def.drift, 0, Math.sin(FLAG_WIND) * def.drift]
     this.mesh = this.cardMesh(name)
     this.mat = this.cardMaterial(mats)
@@ -339,19 +348,40 @@ export class Smoke {
     else this.upload()
   }
 
-  /** the big cards drawn back to front: the ring's live puffs at the shader's clock ordered from the eye
-   *  (depthOrder) into the drawn buffer, only they drawn; uploaded when the list changes */
+  /** the big cards drawn back to front: the ring's live puffs at the shader's clock ordered along the view's axis
+   *  from the last frame's order (depthOrder, its dead band DEPTH_EPS) into the drawn buffer, only they drawn; uploaded
+   *  when due (uploadDue: an upload every frame cost about 3.5 ms of the GPU's frame on Metal, the buffer's update
+   *  waiting on the frame before) */
   private sort(T: number): void {
     const p = this.camera.position
+    const t = this.camera.target
+    const len = Math.hypot(t.x - p.x, t.y - p.y, t.z - p.z) || 1
     this.eye[0] = p.x
     this.eye[1] = p.y
     this.eye[2] = p.z
-    const n = depthOrder(this.ring, this.cap, 16, T, this.def, this.wind, this.eye, this.order, this.keys)
-    // (uploaded only when the drawn list changed: a puff born or gone, two swapped, the ring rebuilt. An upload every
-    // frame cost about 3.5 ms of the GPU's frame on Metal, the buffer's update waiting on the frame before)
-    let same = n === this.drawnN && this.dirtyHi < 0
-    for (let i = 0; same && i < n; i++) same = this.order[i] === this.drawn[i]
-    if (same) return
+    this.fwd[0] = (t.x - p.x) / len
+    this.fwd[1] = (t.y - p.y) / len
+    this.fwd[2] = (t.z - p.z) / len
+    const n = depthOrder(
+      this.ring,
+      this.cap,
+      16,
+      T,
+      this.def,
+      this.wind,
+      this.eye,
+      this.fwd,
+      this.drawn,
+      Math.max(0, this.drawnN),
+      DEPTH_EPS,
+      this.order,
+      this.keys,
+      this.seen,
+    )
+    const now = performance.now() / 1000
+    const since = now - this.uploadedAt
+    if (!uploadDue(this.order, n, this.drawn, this.drawnN, this.dirtyHi >= 0, since, SWAP_EVERY)) return
+    this.uploadedAt = now
     this.drawn.set(this.order.subarray(0, n))
     this.drawnN = n
     for (let i = 0; i < n; i++) this.buf.set(this.ring.subarray(this.order[i] * 16, this.order[i] * 16 + 16), i * 16)
@@ -361,6 +391,7 @@ export class Smoke {
     if (n === 0) this.buf.fill(0, 0, 16)
     this.mesh.thinInstanceCount = Math.max(1, n)
     this.mesh.thinInstancePartialBufferUpdate('matrix', Math.max(1, n), 0)
+    this.uploads++
   }
 
   /** the shots since the last frame written as puffs: a clock that ran back or jumped (a load, the bench) rebuilds the

@@ -340,10 +340,15 @@ export function piecePuffs(
 }
 
 /** The order big cards are drawn in (their blend: front over back, as their dense cores need): the live puffs of a
- *  ring (PUFF_FLOATS each in slots of `stride` floats; n slots) at clock T, farthest from the eye first, their slots
- *  into order; returns how many. A puff's middle as smoke.vert's: its birth place, carried by the blast and the roll
- *  along its way and up by the air (puffAt, its own factors) and the wind (its own share of `wind`); not lifted by the
- *  ground (the order needs only near and far) */
+ *  ring (PUFF_FLOATS each in slots of `stride` floats; n slots) at clock T, farthest first along the view's axis (fwd,
+ *  a unit vector, from the eye), their slots into order; returns how many. Seeded with the last frame's order (prev,
+ *  prevN; its puffs still live first, in that order, the new ones after), and two puffs swapped only when their depths
+ *  differ by more than eps (m): so a pan (the eye moving across the view) changes nothing, an orbit or the drift swaps
+ *  a pair only once it is clearly out of order, not back and forth (each change is an upload, and a pop where two
+ *  dense cards cross), and the sort is about linear. A puff's middle as smoke.vert's: its birth place, carried by the
+ *  blast and the roll along its way and up by the air (puffAt's terms, its own factors) and the wind (its own share
+ *  of `wind`); not lifted by the ground (the order needs only near and far). keys (its depth, NaN for a dead slot) and
+ *  seen: scratch, n each */
 export function depthOrder(
   ring: Float32Array,
   n: number,
@@ -352,37 +357,75 @@ export function depthOrder(
   def: PuffDef,
   wind: readonly [number, number, number],
   eye: readonly [number, number, number],
+  fwd: readonly [number, number, number],
+  prev: Uint32Array,
+  prevN: number,
+  eps: number,
   order: Uint32Array,
   keys: Float32Array,
+  seen: Uint8Array,
 ): number {
-  let m = 0
+  const [jet, jetT] = def.jet
+  const [rise, riseT] = def.rise
   for (let i = 0; i < n; i++) {
     const o = i * stride
     const age = T - ring[o + 3]
-    const life = ring[o + 7]
-    if (!puffLive(age, life) || !(ring[o + 11] > 0)) continue
-    const p = puffAt(def, age, life)
-    const fx = ring[o + 4]
-    const fz = ring[o + 5]
+    seen[i] = 0
+    if (!puffLive(age, ring[o + 7]) || !(ring[o + 11] > 0)) {
+      keys[i] = NaN
+      continue
+    }
+    // (puffAt's reach and rise, inlined: no object a puff a frame)
+    const ahead = (jet * jetT * (1 - Math.exp(-age / jetT)) + def.roll * age) * ring[o + 9]
+    const up = rise * riseT * (1 - Math.exp(-age / riseT)) * ring[o + 10]
     const w = age * (0.7 + 0.6 * fract(ring[o + 6] * 2.93))
-    const x = ring[o] + fx * p.ahead * ring[o + 9] + wind[0] * w
-    const y = ring[o + 1] + p.up * ring[o + 10] + wind[1] * w
-    const z = ring[o + 2] + fz * p.ahead * ring[o + 9] + wind[2] * w
-    keys[i] = (x - eye[0]) ** 2 + (y - eye[1]) ** 2 + (z - eye[2]) ** 2
-    order[m++] = i
+    const x = ring[o] + ring[o + 4] * ahead + wind[0] * w - eye[0]
+    const y = ring[o + 1] + up + wind[1] * w - eye[1]
+    const z = ring[o + 2] + ring[o + 5] * ahead + wind[2] * w - eye[2]
+    keys[i] = x * fwd[0] + y * fwd[1] + z * fwd[2]
   }
-  // (an insertion sort: a few hundred at most, and nearly in order from the last frame's ring)
+  let m = 0
+  for (let j = 0; j < prevN; j++) {
+    const i = prev[j]
+    if (i < n && !seen[i] && keys[i] === keys[i]) {
+      seen[i] = 1
+      order[m++] = i
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    if (!seen[i] && keys[i] === keys[i]) order[m++] = i
+  }
+  // (an insertion sort with a dead band: nearly in order already, a puff moves past another only when clearly nearer)
   for (let a = 1; a < m; a++) {
     const v = order[a]
     const k = keys[v]
     let b = a - 1
-    while (b >= 0 && keys[order[b]] < k) {
+    while (b >= 0 && keys[order[b]] < k - eps) {
       order[b + 1] = order[b]
       b--
     }
     order[b + 1] = v
   }
   return m
+}
+
+/** whether a big smoke's drawn cards are uploaded again this frame: at once when the ring was written since (dirty)
+ *  or the count of live puffs changed (n slots against drawnN: a puff born shows, one gone is not drawn), and for a
+ *  mere swap in the order only once `since` s have passed since the last upload reach `every` (an orbit swaps pairs
+ *  often: each upload waits on the frame before, and a fraction of a second in the old order is not seen) */
+export function uploadDue(
+  order: Uint32Array,
+  n: number,
+  drawn: Uint32Array,
+  drawnN: number,
+  dirty: boolean,
+  since: number,
+  every: number,
+): boolean {
+  if (dirty || n !== drawnN) return true
+  if (since < every) return false
+  for (let i = 0; i < n; i++) if (order[i] !== drawn[i]) return true
+  return false
 }
 
 /** A unit of pieces as its smoke reads it from its script (src/look/world/arms.ts serveScript): at its cycle's end

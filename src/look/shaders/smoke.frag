@@ -1,4 +1,5 @@
-precision highp float;varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl,vFar,vOpC;
+precision highp float;varying vec3 vW,vU,vV,vC;varying vec2 vQ,vM;
+varying float vAge,vErode,vSeed,vGround,vOp,vR,vPl,vFar,vOpC;
 // the smoke's own colour and its flash (the era's, PuffDef), a puff's densest (uOpacity), the factor on a card's
 // opacity over the men (uCap) and the formations' mask (uClear: its origin x, z, 1 / its side in m, a man's body m)
 uniform vec3 uSmokeCol,uFlashCol;uniform float uFlashT,uOpacity,uCap,uSmokeT,uBig;
@@ -23,8 +24,8 @@ uniform sampler2D uClearTex;uniform vec4 uClear;
 // own: a dome over the card's shape (its round edge, the young jet's narrow muzzle end), its lobes the large billows
 // (embossed toward the sun: the lobes the edge shows), lit by the sun through a soft mid tone (decision 0084) to a pale
 // cool shade on the far side and a cooler underside, the core a little deeper in the shade than the rim, and a
-// faint warm rim where the thin edge faces the sun. Painted, not photoreal: three
-// close values
+// faint warm rim where the thin edge faces the sun. Painted, not photoreal: three close values. Over the men its core
+// is dropped (the mask's cover), so the cap leaves a formation reading through the cards over each other
 float maxOf(vec3 c){return max(c.r,max(c.g,c.b));}
 /** the body's light (uBig 1): the card's colour lit as a volume. q: the card's shape coordinates (±1), d its length,
  *  bil the large billows (0 to 1) and bilS the same a step toward the sun across the card (the lobes' slope: lit where
@@ -63,17 +64,19 @@ void main(){
   float low=(1.0-d)*1.3-0.05-vQ.x*(0.25+0.3*vPl)+(bil-0.5)*mix(1.6,1.0,vFar)-vErode*mix(1.5,0.4,vFar);
   float dens=low+(sub-0.5)*(0.7+0.5*smoothstep(0.35,0.9,d))*mix(1.0,0.6,vFar)
     +(fib-0.5)*(0.06+0.35*smoothstep(0.5,0.95,d));
-  // (a body: a core from the large shape alone, the smaller billows and the grain left to the rim, dense through and
-  // its opacity holding through most of the life; the rim as before)
-  float core=smoothstep(0.25,0.55,low)*(1.0-smoothstep(0.0,0.6,vErode))*uBig;
-  float a=max(smoothstep(0.0,0.5+0.2*vPl,dens)*vOp,core*max(vOp,vOpC))*smoothstep(1.0,0.8,d);
-  a*=uOpacity*smoothstep(0.0,0.7,vW.y-vGround)*(1.0-vFar*0.85*vErode);
+  // how much of a formation this pixel lies over (CLEAR: the mask read where the view ray meets a man's body)
+  float cv=0.0;
   #ifdef CLEAR
   vec3 dv=vW-uCamPos;
   if(dv.y<-1e-3){vec2 p=uCamPos.xz+dv.xz*((vGround+uClear.w-uCamPos.y)/dv.y);
-    float cv=clamp((texture2D(uClearTex,(p-uClear.xy)*uClear.z).r-0.15)/0.5,0.0,1.0);
-    a*=1.0-(1.0-uCap)*cv*cv*(3.0-2.0*cv);}
+    cv=clamp((texture2D(uClearTex,(p-uClear.xy)*uClear.z).r-0.15)/0.5,0.0,1.0);
+    cv=cv*cv*(3.0-2.0*cv);}
   #endif
+  // (a body: a core from the large shape alone, the smaller billows and the grain left to the rim, dense through and
+  // its opacity holding through most of the life, none over the men; the rim as before)
+  float core=smoothstep(0.25,0.55,low)*(1.0-smoothstep(0.0,0.6,vErode))*(1.0-cv)*uBig;
+  float a=max(smoothstep(0.0,0.5+0.2*vPl,dens)*vOp,core*max(vOp,vOpC))*smoothstep(1.0,0.8,d);
+  a*=uOpacity*smoothstep(0.0,0.7,vW.y-vGround)*(1.0-vFar*0.85*vErode)*(1.0-(1.0-uCap)*cv);
   if(a<0.004)discard;
   // the light: the sun's way across the card (its frame's U, V) against the puff's middle, its edge the billows':
   // the side toward the sun lit, the far side in a pale cool shade, the billows' tops catching it (painted bands)
