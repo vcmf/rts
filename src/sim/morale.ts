@@ -12,7 +12,7 @@
 // fan about the stored one. Enemies that reach a router cut it down (the melee step). A router
 // whose run has ended, safe and calm, rallies: its losses so far are written off and its quality drops. A
 // battalion that breaks too often, or routs below half strength, shatters and runs for good. A wavering
-// battalion keeps fighting until it recovers or routs (decision 0082): nothing moves it back by itself.
+// battalion keeps fighting until it recovers or routs (decision 0087): nothing moves it back by itself.
 //
 // Everything one battalion reads of another (its state, whether it broke, its men) was fixed before this
 // step began, so no outcome depends on the order battalions are visited in. One thing does: routs take orders
@@ -109,7 +109,7 @@ export function moraleStep(w: World, i: number, lost: number): void {
     (M.losses * (base - men)) / base -
     (M.recent * f.recent[i]) / start +
     M.support.bonus * (near.left + near.right)
-  // the back exposed (decision 0081): down to the wavering threshold at most, nothing for a target already below it
+  // the back exposed (decision 0086): down to the wavering threshold at most, nothing for a target already below it
   const target = tau - Math.min(w.scratch.drain?.[i] ?? 0, Math.max(0, tau - M.wavering[0]))
   f.morale[i] += (target - f.morale[i]) * w.cr.relax
   if (s !== MS_ROUTING) f.morale[i] -= near.shock + owedShock // routing and shattered (returned above) are not shocked

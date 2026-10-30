@@ -43,4 +43,30 @@ function bench(w: World): void {
   }
 }
 export const s1bBench: Scenario = { name: 's1b-bench', setup: bench }
-export const S1B_SCENARIOS: Record<string, Scenario> = { 's1b-field': s1bField, 's1b-bench': s1bBench }
+
+// the 32,000-men bench (docs/plans/done/battle-threads.md, PR 3): 80 battalions of 400 in column on the 1.2 km
+// battlefield, 40 a side in five rows of eight on the two ridges, the stream between them (the page at
+// ?scenario=s1b-bench-80)
+function bench80(w: World): void {
+  for (let side = 0; side < 2; side++) {
+    for (let k = 0; k < 40; k++) {
+      const z = (side ? 1 : -1) * (240 + Math.floor(k / 8) * 60)
+      issue(w, {
+        type: 'debug-spawn',
+        side,
+        x: -385 + (k % 8) * 110,
+        z,
+        heading: side ? Math.PI : 0,
+        shape: 'column',
+        men: 400,
+        fire: 'hold',
+      })
+    }
+  }
+}
+export const s1bBench80: Scenario = { name: 's1b-bench-80', setup: bench80, map: 'battlefield' }
+export const S1B_SCENARIOS: Record<string, Scenario> = {
+  's1b-field': s1bField,
+  's1b-bench': s1bBench,
+  's1b-bench-80': s1bBench80,
+}

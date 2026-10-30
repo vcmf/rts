@@ -5,6 +5,9 @@ date: 2026-10-13
 
 # 0022 Foliage crowns are painted with a soft ramp
 
+Amended by [0084](0084-a-soft-mid-tone-on-figures-and-buildings.md) (2026-10-30): the figures, the buildings and the nature
+meshes no longer keep the hard three bands; the ground and the water do.
+
 ## Context
 
 The art bible's core rule paints every surface in three value bands, light, mid and shadow, with grain-broken

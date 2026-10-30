@@ -48,7 +48,7 @@ const SOUTH: Row[] = [
   // S1e-3: on the first line's eastern flank, turned 25° inwards: its arc (±20°) sweeps the ground in front of the
   // line, which no piece's fire crosses (on the outer flank, facing ahead, no enemy ever came into its arc). U1: 50 m
   // behind the line, not 50 m ahead of it; from there its fire takes the enemy's line in the flank, which since
-  // sectors (decision 0081) drains it and broke it by 13 minutes on every seed, the battle yours with no orders
+  // sectors (decision 0086) drains it and broke it by 13 minutes on every seed, the battle yours with no orders
   { unit: 'battery', shape: 'unlimbered', men: 96, x: 180, z: -330, a: -0.44, part: 'battery' },
 ]
 // side 1's (S1e-3), veteran infantry: four battalions up, so its line overlaps yours at both ends, and two in
