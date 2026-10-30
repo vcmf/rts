@@ -40,7 +40,8 @@ theatre's data (K3).
   0.68, the Danube plain at Straubing 0.05, the Munich gravel plain 0.00. The theatre's build rose to 17–20 s, the
   tiles' to 85–90 s (the cover's sampling), 76 s once the cover is sampled while the light bakes.
 - First look, the cover printed as is: today's farm copses speckled the whole map (35 % of it). Generalised as the
-  reference does: the cover smoothed over about 1 km, printed where it passes 0.6 (`?woodfrom=`), in a light
+  reference does: the cover smoothed over about 1 km, printed where it passes 0.6 (`?woodfrom=`; the smoothing then made three box means of 500 m either side, so both grids
+  smooth alike), in a light
   yellow-green (`#97c158`, `?woods=` its strength, 0.8): the large forests (the Black Forest, the Bohemian and
   Bavarian Forests, the Alps' lower slopes, the Vienna Woods) read as green masses, lit and shaded with the relief.
 - A frame on test machine A at 1600 × 900, close up with 144 tiles: 1.7 ms still, 2.2 ms with the ink.
@@ -55,4 +56,13 @@ theatre's data (K3).
   decoder; the header parse guarded against reading past its bytes and against a directory chain that loops;
   `fileName`, `chooseLevel` and `pixelOf` pulled out and tested, one behaviour a test; the attribution in full, as
   ESA asks.
+- **Round 2**: severe: the theatre and the tiles smoothed by different widths (each grid rounded the radius), so forest
+  edges jumped where the tiles fade in; the format was not checked (a predictor or another band would decode silently
+  wrong). Fixed: `smoothCover`, three box means of 500 m either side, which both cells divide, recorded as
+  `forestBoxM` and checked by the page; the bits, bands and predictor checked, a missing tag named. With: downloads 8
+  at a time and retried; the forest texture without mips (averaged it fell under the print threshold far out); the
+  files to read cover the samples' half-cell reach; the page's warning names the stale theatre; a file shorter than
+  the header's range accepted by its Content-Range; the sampling loop indexed numerically (the tile build at 70 s);
+  round 1's caching fix tested (`range` takes its fetch). Left: the TIFF tag reading also in `tools/dem-tiff.ts` (one
+  shared reader when the importers meet, Track M).
 

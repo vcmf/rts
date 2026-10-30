@@ -4,11 +4,13 @@
 // copies of itself; only one reduced level is read, tile by tile, by range requests (the header first), and cached
 // under scratch/worldcover/: about 5 MB a file at about 70 m a pixel, where the full file is about 100 MB.
 // Its tree-cover class (10) is sampled onto a grid in the theatre's projection as a coverage, 0 to 255.
-// WOOD_BLUR_M: the cover is smoothed over about this many metres before it is printed (the large forests stay, the
-// farm copses fade); the theatre and the tiles both smooth by it, and record it so the page can check they agree.
+// smoothCover: the cover is smoothed before it is printed (the large forests stay, the farm copses fade) by three box
+// means of WOOD_BOX_M either side, in metres, so the theatre (250 m) and the tiles (100 m) smooth alike; both record
+// it, and the page checks they agree.
 import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
+import { boxMean } from './campaign-bake.ts'
 import type { projection } from './campaign-theatre-lib.ts'
 
 const BASE = 'https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map'
@@ -19,7 +21,7 @@ const HEADER_BYTES = 65536
 const TREES = 10
 // the level read: the one closest to (and not coarser than) this many pixels across a 3° file
 const LEVEL_PX = 4500
-export const WOOD_BLUR_M = 1000
+export const WOOD_BOX_M = 500
 export const WORLDCOVER_CREDIT =
   'Forests: © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA ' +
   'WorldCover consortium, CC BY 4.0.'
@@ -73,37 +75,95 @@ export function parseCog(head: Buffer): CogLevel[] {
       }
       tags.set(tag, values)
     }
+    const need = (tag: number) => {
+      const v = tags.get(tag)
+      if (!v) throw new Error(`a TIFF directory at ${ifd} without tag ${tag}`)
+      return v
+    }
+    // one band of 8-bit classes, chunky, with no predictor: what the reader decodes (anything else would decode
+    // silently wrong)
+    const bits = tags.get(258)?.[0] ?? 1
+    const bands = tags.get(277)?.[0] ?? 1
+    const predictor = tags.get(317)?.[0] ?? 1
+    if (bits !== 8 || bands !== 1 || predictor !== 1) {
+      throw new Error(`a TIFF directory at ${ifd} of ${bands} band(s) of ${bits} bits, predictor ${predictor}`)
+    }
     levels.push({
-      width: tags.get(256)![0],
-      height: tags.get(257)![0],
-      tile: tags.get(322)![0],
-      offsets: tags.get(324)!,
-      counts: tags.get(325)!,
-      compression: tags.get(259)![0],
+      width: need(256)[0],
+      height: need(257)[0],
+      tile: need(322)[0],
+      offsets: need(324),
+      counts: need(325),
+      compression: need(259)[0],
     })
     ifd = head.readUInt32LE(ifd + 2 + entries * 12)
   }
   return levels
 }
 
+/** A fetch, as range() uses it (a test passes its own). */
+export type Fetch = (url: string, init: { headers: Record<string, string> }) => Promise<Response>
+
 /**
  * A byte range of a file, from the cache or fetched and cached: only a partial answer (206) of exactly the length
- * asked is kept (a server that ignored the range would answer the whole file; a cut answer would poison the cache).
- * A cached range of another length is fetched again. Null when the file does not exist (404: open sea has none).
+ * asked (or the rest of a shorter file, as its Content-Range says) is kept: a server that ignored the range would
+ * answer the whole file, a cut answer would poison the cache. A cached range of another length is fetched again; a
+ * failed fetch is tried three times. Null when the file does not exist (404: open sea has none).
  */
-async function range(url: string, file: string, start: number, length: number): Promise<Buffer | null> {
+export async function range(
+  url: string,
+  file: string,
+  start: number,
+  length: number,
+  get: Fetch = fetch,
+): Promise<Buffer | null> {
   if (fs.existsSync(file)) {
     const kept = fs.readFileSync(file)
-    if (kept.length === length) return kept
+    if (kept.length === length || fs.existsSync(file + '.short')) return kept
   }
-  const res = await fetch(url, { headers: { Range: `bytes=${start}-${start + length - 1}` } })
-  if (res.status === 404) return null
-  if (res.status !== 206) throw new Error(`${url}: HTTP ${res.status}, not a partial answer to a range`)
-  const bytes = Buffer.from(await res.arrayBuffer())
-  if (bytes.length !== length) throw new Error(`${url}: ${bytes.length} bytes for a range of ${length}`)
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, bytes)
-  return bytes
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await get(url, { headers: { Range: `bytes=${start}-${start + length - 1}` } })
+      if (res.status === 404) return null
+      if (res.status !== 206) throw new Error(`${url}: HTTP ${res.status}, not a partial answer to a range`)
+      const bytes = Buffer.from(await res.arrayBuffer())
+      // the file's whole size, from "bytes a-b/total": a range past its end answers only what is there
+      const total = Number((res.headers.get('content-range') ?? '').split('/')[1])
+      const expected = Number.isFinite(total) ? Math.min(length, total - start) : length
+      if (bytes.length !== expected) throw new Error(`${url}: ${bytes.length} bytes for a range of ${expected}`)
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      fs.writeFileSync(file, bytes)
+      if (expected < length) fs.writeFileSync(file + '.short', '')
+      return bytes
+    } catch (e) {
+      if (attempt >= 3) throw e
+    }
+  }
+}
+
+/** Runs the jobs, at most `n` at once, in order of their results. */
+async function pool<T>(jobs: (() => Promise<T>)[], n: number): Promise<T[]> {
+  const out: T[] = new Array(jobs.length)
+  let next = 0
+  const worker = async () => {
+    while (next < jobs.length) {
+      const k = next++
+      out[k] = await jobs[k]()
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(n, jobs.length) }, worker))
+  return out
+}
+
+/**
+ * The cover smoothed for printing: three box means of WOOD_BOX_M either side, in metres. The grid's cell must divide
+ * it, so grids of different cells smooth alike.
+ */
+export function smoothCover(cover: Uint8Array, nx: number, nz: number, cell: number): Uint8Array {
+  const r = WOOD_BOX_M / cell
+  if (!Number.isInteger(r)) throw new RangeError(`smoothCover: a cell of ${cell} m does not divide ${WOOD_BOX_M} m`)
+  const smooth = boxMean(boxMean(boxMean(cover, nx, nz, r), nx, nz, r), nx, nz, r)
+  return Uint8Array.from(smooth, v => Math.round(v))
 }
 
 /** The file name of the 3° WorldCover file whose south-west corner is (lat, lon). */
@@ -127,13 +187,14 @@ export function chooseLevel(levels: CogLevel[], px: number): CogLevel {
 }
 
 /**
- * Where (lat, lon) falls in a 3° sheet of `size` pixels whose south-west corner is (lat0, lon0): its column and row,
- * the north row first, as the file stores it.
+ * Where (lat, lon) falls in a 3° sheet of `size` pixels whose south-west corner is (lat0, lon0): the index of its
+ * pixel, row × size + column, the north row first as the file stores it (a number, not a pair: the sampling loop
+ * calls it 160 million times).
  */
-export function pixelOf(lat0: number, lon0: number, size: number, lat: number, lon: number): [number, number] {
+export function pixelOf(lat0: number, lon0: number, size: number, lat: number, lon: number): number {
   const col = Math.min(size - 1, Math.floor(((lon - lon0) / 3) * size))
   const row = Math.min(size - 1, Math.floor(((lat0 + 3 - lat) / 3) * size))
-  return [col, row]
+  return row * size + col
 }
 
 /**
@@ -149,12 +210,14 @@ async function readSheet(lat0: number, lon0: number): Promise<Sheet | null> {
   if (level.compression !== 8) throw new Error(`${name}: compression ${level.compression}, not Deflate`)
   const across = Math.ceil(level.width / level.tile)
   const classes = new Uint8Array(level.width * level.height)
-  const tiles = await Promise.all(
-    level.offsets.map((offset, t) =>
-      level.counts[t]
-        ? range(url, path.join(CACHE, name, `${level.width}-${t}.bin`), offset, level.counts[t])
-        : Promise.resolve(null),
+  const tiles = await pool(
+    level.offsets.map(
+      (offset, t) => () =>
+        level.counts[t]
+          ? range(url, path.join(CACHE, name, `${level.width}-${t}.bin`), offset, level.counts[t])
+          : Promise.resolve(null),
     ),
+    8,
   )
   for (let t = 0; t < tiles.length; t++) {
     const raw = tiles[t]
@@ -191,6 +254,8 @@ export async function forestCover(
   let latHi = -Infinity
   let lonLo = Infinity
   let lonHi = -Infinity
+  // the samples reach half a cell past the edge nodes
+  const reach = step / 2
   for (let k = 0; k <= 32; k++) {
     for (const [fx, fz] of [
       [k / 32, 0],
@@ -198,7 +263,9 @@ export async function forestCover(
       [0, k / 32],
       [1, k / 32],
     ]) {
-      const [lat, lon] = proj.inverse(x0 + fx * (nx - 1) * step, z0 + fz * (nz - 1) * step)
+      const x = x0 - reach + fx * ((nx - 1) * step + 2 * reach)
+      const z = z0 - reach + fz * ((nz - 1) * step + 2 * reach)
+      const [lat, lon] = proj.inverse(x, z)
       latLo = Math.min(latLo, lat)
       latHi = Math.max(latHi, lat)
       lonLo = Math.min(lonLo, lon)
@@ -209,23 +276,30 @@ export async function forestCover(
   for (let lat = Math.floor(latLo / 3) * 3; lat <= latHi; lat += 3) {
     for (let lon = Math.floor(lonLo / 3) * 3; lon <= lonHi; lon += 3) need.push(`${lat},${lon}`)
   }
-  const read = await Promise.all(
-    need.map(key => {
-      const [lat0, lon0] = key.split(',').map(Number)
-      return readSheet(lat0, lon0)
-    }),
-  )
+  const read: (Sheet | null)[] = []
+  for (const key of need) {
+    const [lat0, lon0] = key.split(',').map(Number)
+    read.push(await readSheet(lat0, lon0))
+  }
   need.forEach((key, k) => {
     const sheet = read[k]
     if (sheet) sheets.set(key, sheet)
   })
   console.log(`forests: ${sheets.size} WorldCover files`)
+  // the sheets by their 3° cell, indexed numerically (a string key a sample cost minutes over 160 million samples)
+  const lat3 = Math.floor(latLo / 3)
+  const lon3 = Math.floor(lonLo / 3)
+  const cols = Math.floor(lonHi / 3) - lon3 + 1
+  const grid: (Sheet | undefined)[] = []
+  for (const [key, sheet] of sheets) {
+    const [la, lo] = key.split(',').map(Number)
+    grid[(la / 3 - lat3) * cols + (lo / 3 - lon3)] = sheet
+  }
   const out = new Uint8Array(nx * nz)
   const sample = (lat: number, lon: number) => {
-    const sheet = sheets.get(`${Math.floor(lat / 3) * 3},${Math.floor(lon / 3) * 3}`)
+    const sheet = grid[(Math.floor(lat / 3) - lat3) * cols + (Math.floor(lon / 3) - lon3)]
     if (!sheet) return 0
-    const [col, row] = pixelOf(sheet.lat0, sheet.lon0, sheet.size, lat, lon)
-    return sheet.classes[row * sheet.size + col] === TREES ? 1 : 0
+    return sheet.classes[pixelOf(sheet.lat0, sheet.lon0, sheet.size, lat, lon)] === TREES ? 1 : 0
   }
   for (let j = 0; j < nz; j++) {
     for (let i = 0; i < nx; i++) {

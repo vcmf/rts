@@ -234,7 +234,7 @@ const SUN = (() => {
 /** The tree cover a node (0–255, the south row first) from the generated file, or none when it has no forests. */
 function decodeForest() {
   if (!T.forest) return new Uint8Array(NX * NZ);
-  // smoothed by the tool (its forestBlurM), as the tiles are
+  // smoothed by the tool (its forestBoxM), as the tiles are
   const bytes = fromBase64(T.forest);
   if (bytes.length !== NX * NZ) throw new Error('theatre forests: ' + bytes.length + ' values, expected ' + NX * NZ);
   return bytes;
@@ -1109,7 +1109,9 @@ material.setColor3('uShallow', B.Color3.FromArray(hex('#a9d0ec')));
 // the woods' green (the owner's Reno print: a bright yellow-green in the sun) and how much of it is printed (?woods=)
 material.setColor3('uWood', B.Color3.FromArray(hex('#97c158')));
 material.setFloat('uWoodK', WOODS);
-material.setTexture('uForest', byteTexture(decodeForest(), NX, NZ, B.Engine.TEXTUREFORMAT_LUMINANCE, true));
+// no mips: averaged forest and field would fall under the print threshold and the forests shrink as the camera pulls
+// back; the cover is smooth enough (a box of 1.5 km) not to shimmer when minified
+material.setTexture('uForest', byteTexture(decodeForest(), NX, NZ, B.Engine.TEXTUREFORMAT_LUMINANCE, false));
 material.setColor3('uDeep', B.Color3.FromArray(hex('#2b67b0')));
 material.setTexture('uLakeD', floatTexture(LAKE_D, NX, NZ));
 // the sun warm, the sky cool; with the sky's share, flat open ground in the sun comes to about 1
@@ -1608,7 +1610,7 @@ function tilesMatch(meta) {
   const sun = same(p.sun, SUN_EL) && same(p.az, SUN_AZ) && same(p.soft, SUN_R);
   const frame = same((meta.nx - 1) * meta.cell, 2 * halfX) && same((meta.nz - 1) * meta.cell, 2 * halfZ);
   // three bytes a node: the sun, the sky and the tree cover (older tiles had two), smoothed as the theatre's
-  return params && sun && frame && p.bytes === 3 && p.woodBlurM === T.forestBlurM;
+  return params && sun && frame && p.bytes === 3 && p.woodBoxM === T.forestBoxM;
 }
 
 /**
@@ -1624,7 +1626,10 @@ function loadTiles() {
     script.remove();
     const meta = window.CAMPAIGN_TILES;
     if (!meta || !tilesMatch(meta)) {
-      console.warn('campaign map: the tiles were baked with other parameters: run node tools/campaign-tiles.ts');
+      // a theatre built before the forests cannot match any tiles: it is the one to build again
+      const theatre = 'tools/campaign-theatre.ts, then tools/campaign-tiles.ts';
+      const stale = !T.forestBoxM ? theatre : 'tools/campaign-tiles.ts';
+      console.warn('campaign map: the tiles do not match this page and its theatre: run node ' + stale);
       return;
     }
     DETAIL.meta = meta;

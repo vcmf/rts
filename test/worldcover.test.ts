@@ -1,7 +1,10 @@
 // The WorldCover reader's header parse (tools/worldcover.ts, docs/plans/active/k1b-forests.md): the levels of a tiled
 // little-endian TIFF, their sizes and tile tables, from its first bytes.
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { chooseLevel, fileName, parseCog, pixelOf, type CogLevel } from '../tools/worldcover.ts'
+import { chooseLevel, fileName, parseCog, pixelOf, range, type CogLevel, type Fetch } from '../tools/worldcover.ts'
 
 /** A little-endian TIFF of the given levels, each a directory with its size, tile size and tile tables. */
 function tiff(levels: { size: number; tile: number; offsets: number[]; counts: number[] }[]): Buffer {
@@ -23,6 +26,7 @@ function tiff(levels: { size: number; tile: number; offsets: number[]; counts: n
     const entries: [number, number, number, number][] = [
       [256, 4, 1, level.size],
       [257, 4, 1, level.size],
+      [258, 3, 1, 8],
       [259, 3, 1, 8],
       [322, 3, 1, level.tile],
       [323, 3, 1, level.tile],
@@ -78,6 +82,15 @@ describe('the WorldCover reader', () => {
     expect(() => parseCog(looped)).toThrow(/loops back/)
   })
 
+  it('refuses a level it cannot decode: a predictor', () => {
+    const predicted = tiff([{ size: 1024, tile: 1024, offsets: [500], counts: [50] }])
+    // the BitsPerSample entry (the third) turned into a Predictor of 2
+    const e = 8 + 2 + 12 * 2
+    predicted.writeUInt16LE(317, e)
+    predicted.writeUInt16LE(2, e + 8)
+    expect(() => parseCog(predicted)).toThrow(/predictor 2/)
+  })
+
   it('refuses a table past the bytes read', () => {
     const cut = tiff([{ size: 2048, tile: 1024, offsets: [100, 200, 300, 400], counts: [10, 20, 30, 40] }])
     expect(() => parseCog(cut.subarray(0, 1024))).toThrow(/past the 1024 bytes read/)
@@ -105,8 +118,63 @@ describe('the WorldCover reader', () => {
 
   it('maps a place to its pixel, the north row first', () => {
     // a sheet of 300 pixels for 3°: 0.01° a pixel
-    expect(pixelOf(45, 9, 300, 47.995, 9.005)).toEqual([0, 0])
-    expect(pixelOf(45, 9, 300, 45.005, 11.995)).toEqual([299, 299])
-    expect(pixelOf(45, 9, 300, 46.505, 10.505)).toEqual([150, 149])
+    expect(pixelOf(45, 9, 300, 47.995, 9.005)).toBe(0)
+    expect(pixelOf(45, 9, 300, 45.005, 11.995)).toBe(299 * 300 + 299)
+    // column 150, row 149
+    expect(pixelOf(45, 9, 300, 46.505, 10.505)).toBe(149 * 300 + 150)
+  })
+})
+
+describe('the WorldCover ranges', () => {
+  /** A fetch that answers with this status, these bytes and this Content-Range, and counts its calls. */
+  const answer = (status: number, bytes: number, contentRange?: string) => {
+    const calls = { n: 0 }
+    const get: Fetch = async () => {
+      calls.n++
+      const headers = contentRange ? { 'content-range': contentRange } : undefined
+      return new Response(status === 404 ? null : new Uint8Array(bytes), { status, headers })
+    }
+    return { get, calls }
+  }
+  const scratch = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'worldcover-')), 'r.bin')
+
+  it('keeps a partial answer of the length asked, and reads it back from the cache', async () => {
+    const file = scratch()
+    const { get, calls } = answer(206, 100, 'bytes 0-99/5000')
+    expect((await range('u', file, 0, 100, get))!.length).toBe(100)
+    expect((await range('u', file, 0, 100, get))!.length).toBe(100)
+    expect(calls.n).toBe(1)
+  })
+
+  it('refuses a whole file answered to a range, and caches nothing', async () => {
+    const file = scratch()
+    const { get } = answer(200, 5000)
+    await expect(range('u', file, 0, 100, get)).rejects.toThrow(/not a partial answer/)
+    expect(fs.existsSync(file)).toBe(false)
+  })
+
+  it('refuses a cut answer, and caches nothing', async () => {
+    const file = scratch()
+    const { get } = answer(206, 60, 'bytes 0-99/5000')
+    await expect(range('u', file, 0, 100, get)).rejects.toThrow(/60 bytes for a range of 100/)
+    expect(fs.existsSync(file)).toBe(false)
+  })
+
+  it('fetches again a cached range of another length', async () => {
+    const file = scratch()
+    fs.writeFileSync(file, Buffer.alloc(5000))
+    const { get, calls } = answer(206, 100, 'bytes 0-99/5000')
+    expect((await range('u', file, 0, 100, get))!.length).toBe(100)
+    expect(calls.n).toBe(1)
+  })
+
+  it('accepts the rest of a file shorter than the range', async () => {
+    const { get } = answer(206, 40, 'bytes 0-39/40')
+    expect((await range('u', scratch(), 0, 100, get))!.length).toBe(40)
+  })
+
+  it('answers no file for a 404 (open sea)', async () => {
+    const { get } = answer(404, 0)
+    expect(await range('u', scratch(), 0, 100, get)).toBeNull()
   })
 })

@@ -19,7 +19,6 @@ import vm from 'node:vm'
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads'
 import {
   bakeLightRows,
-  blur,
   buildShape,
   despiked,
   lakeDistance,
@@ -30,7 +29,7 @@ import {
 } from './campaign-bake.ts'
 import { projection, type Pt } from './campaign-theatre-lib.ts'
 import { sampleGrid } from './terrarium.ts'
-import { forestCover, WOOD_BLUR_M } from './worldcover.ts'
+import { forestCover, smoothCover, WOOD_BOX_M } from './worldcover.ts'
 
 // the grid, the tiles' zoom, the tile size in nodes, the shape's storage step in metres
 const CELL = 100
@@ -148,7 +147,7 @@ function paramsKey() {
     az: SUN.az,
     soft: SUN.size,
     bytes: 3,
-    woodBlurM: WOOD_BLUR_M,
+    woodBoxM: WOOD_BOX_M,
   }
 }
 
@@ -178,12 +177,12 @@ async function main() {
   sinkLakes(shape, lakeDistance(rings, grid, LAKE_BLUR_M), CELL, SINK)
   console.log(`shape and lakes: ${Math.round(performance.now() - t0)} ms`)
   // the light on the workers and the tree cover on this thread, side by side (they do not depend on each other); the
-  // cover smoothed as the theatre's is (WOOD_BLUR_M): farm copses fade, the large forests stay
+  // cover smoothed as the theatre's is (smoothCover): farm copses fade, the large forests stay
   const [light, cover] = await Promise.all([
     bakeLight(shape, grid),
     forestCover(proj, grid.x0, grid.z0, CELL, grid.nx, grid.nz, 2),
   ])
-  const forest = Uint8Array.from(blur(cover, grid.nx, grid.nz, WOOD_BLUR_M / CELL), v => Math.round(v))
+  const forest = smoothCover(cover, grid.nx, grid.nz, CELL)
   console.log(`light on ${os.cpus().length} cores and forests: ${Math.round(performance.now() - t0)} ms`)
   const n = writeTiles(dir, grid, shape, light, forest)
   console.log(`${dir}: ${n} tiles of ${SIZE} × ${SIZE} nodes; built in ${Math.round(performance.now() - t0)} ms`)

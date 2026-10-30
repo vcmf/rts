@@ -1,6 +1,6 @@
 // Builds the campaign map prototype's theatre (docs/plans/active/k1-theatre-look.md) from the hand-written data file
 // prototypes/campaign-1805.data.js, into a generated .js under scratch/ (git-ignored, never committed):
-//   window.THEATRE = { frame, cell, nx, nz, h, forest, forestBlurM, towns, regions, rivers, lakes, roads, credit }
+//   window.THEATRE = { frame, cell, nx, nz, h, forest, forestBoxM, towns, regions, rivers, lakes, roads, credit }
 // - h: heights in whole metres on a `cell` grid (250 m by default) in a Lambert azimuthal equal-area projection
 //   centred on the frame, nodes from edge to edge, base64 of little-endian Int16, the south row first. From the AWS
 //   terrain tiles (Terrarium PNGs at zoom 9, about 200 m a pixel here; built from SRTM, GMTED2010 and EU-DEM), cached
@@ -31,8 +31,7 @@ import {
   type Pt,
 } from './campaign-theatre-lib.ts'
 import { cached, sampleGrid } from './terrarium.ts'
-import { blur } from './campaign-bake.ts'
-import { forestCover, WOOD_BLUR_M, WORLDCOVER_CREDIT } from './worldcover.ts'
+import { forestCover, smoothCover, WOOD_BOX_M, WORLDCOVER_CREDIT } from './worldcover.ts'
 
 const DATA_FILE = 'prototypes/campaign-1805.data.js'
 const TILE_ZOOM = 9
@@ -190,19 +189,16 @@ async function main() {
     nx: heights.nx,
     nz: heights.nz,
     h: Buffer.from(heights.h.buffer).toString('base64'),
-    // the tree cover a node, 0–255, the south row first, smoothed over forestBlurM metres (tools/worldcover.ts)
+    // the tree cover a node, 0–255, the south row first, smoothed for printing (tools/worldcover.ts, smoothCover)
     forest: Buffer.from(
-      Uint8Array.from(
-        blur(
-          await forestCover(proj, -frame.halfX, -frame.halfZ, cell, heights.nx, heights.nz),
-          heights.nx,
-          heights.nz,
-          WOOD_BLUR_M / cell,
-        ),
-        v => Math.round(v),
+      smoothCover(
+        await forestCover(proj, -frame.halfX, -frame.halfZ, cell, heights.nx, heights.nz),
+        heights.nx,
+        heights.nz,
+        cell,
       ),
     ).toString('base64'),
-    forestBlurM: WOOD_BLUR_M,
+    forestBoxM: WOOD_BOX_M,
     towns: Object.fromEntries([...towns].map(([id, p]) => [id, p.map(Math.round)])),
     regions: data.regions.map(r => proj.forward(r.lat, r.lon).map(Math.round)),
     rivers: water.rivers,
