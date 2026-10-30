@@ -201,10 +201,11 @@ export function pointWeights(w: World, j: number, x: number, z: number, out: Flo
   const S = w.cr.rs.sectors
   const kind = F.kind[j]
   if (kind === FACE_ALL) return finish(1, 0, out)
+  const T = blendOf(w, j)
   toFrame(F, 2 * j, x, z, xy)
-  const front = kind === FACE_NONE ? 0 : sideWeight(S, blendOf(w, j), F, 2 * j, xy[0], xy[1], 1)
+  const front = kind === FACE_NONE ? 0 : sideWeight(S, T, F, 2 * j, xy[0], xy[1], 1)
   toFrame(F, 2 * j + 1, x, z, xy)
-  const rear = sideWeight(S, blendOf(w, j), F, 2 * j + 1, xy[0], xy[1], -1)
+  const rear = sideWeight(S, T, F, 2 * j + 1, xy[0], xy[1], -1)
   return finish(front, rear, out)
 }
 
@@ -265,8 +266,9 @@ export function threatWeights(w: World, G: FireGeo, j: number, i: number, k: num
   const kind = F.kind[j]
   if (kind === FACE_ALL) return finish(1, 0, out)
   const S = w.cr.rs.sectors
-  const front = kind === FACE_NONE ? 0 : blockSide(S, blendOf(w, j), F, 2 * j, G, i, k, 1)
-  const rear = blockSide(S, blendOf(w, j), F, 2 * j + 1, G, i, k, -1)
+  const T = blendOf(w, j)
+  const front = kind === FACE_NONE ? 0 : blockSide(S, T, F, 2 * j, G, i, k, 1)
+  const rear = blockSide(S, T, F, 2 * j + 1, G, i, k, -1)
   return finish(front, rear, out)
 }
 

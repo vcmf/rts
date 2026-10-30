@@ -153,7 +153,7 @@ describe('compileRuleset refuses', () => {
     [
       "a friend's break strong enough to rout a steady battalion on its own",
       { ...N, morale: { ...N.morale, contagion: { ...N.morale.contagion, shock: 61 } } },
-      /contagion.shock over 0.6/,
+      /contagion.shock, by the shapes' shock, over 0.6/,
     ],
     [
       'more rallies than a byte counts',
@@ -238,6 +238,31 @@ describe('compileRuleset refuses', () => {
         formations: { ...inf.formations, column: { ...inf.formations.column, traits: { brace: { front: 1 } } } },
       }),
       /refuge column/,
+    ],
+    [
+      'a charge from a shape that cannot move',
+      withType('cavalry', {
+        ...cav,
+        formations: { ...cav.formations, line: { ...cav.formations.line, traits: { moves: false } } },
+        start: 'column',
+      }),
+      /it charges from line, a shape that cannot move/,
+    ],
+    [
+      "contagion that, by a shape's shock, would rout a steady battalion at once",
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { shock: 100 } } },
+      }),
+      /morale.contagion.shock, by the shapes' shock/,
+    ],
+    [
+      "a second enemy's charge that, by a shape's flank shock, would rout a steady battalion at once",
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, traits: { flankShock: 100 } } },
+      }),
+      /melee.second must be ≥ 0 and, by the shapes' shock/,
     ],
     [
       'a start shape that cannot move',

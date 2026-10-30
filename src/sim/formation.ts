@@ -1635,8 +1635,8 @@ function formationStep(w: World, i: number): void {
     return
   }
   // a shape that cannot move (the square, formed against cavalry with a move still to make) stands, keeping its moves
-  // for the shape it forms back into
-  if (type === O_MOVE && !movesOf(w, i)) {
+  // and wheels for the shape it forms back into; one out of the fight runs or re-forms whatever its shape
+  if ((type === O_MOVE || type === O_WHEEL) && !movesOf(w, i) && !outOfFight(f.mstate[i])) {
     f.vx[i] = 0
     f.vz[i] = 0
     lagSettle(w, i)

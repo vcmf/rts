@@ -20,11 +20,15 @@ Where the proposal and this plan differ, the proposal holds. Three slices, each 
   - `flankFrom`: the sector blend's angle from the front, by shape (today's 45° on every shape, `sectors.blend`);
   - `moves`: whether it may be given a move (true).
 - **Approach:** the compiled row gains its fields. `braceOf(w, j, side)` takes the charge's side weights, as `sideOf`
-  gives them in `src/sim/melee.ts`; the refuge's rule, that the square is fully braced, reads the front. The guards are
-  § 5a's: fields > 0, bracing in 0..1, a shape that cannot move is not the type's start shape, and a refuge is braced
-  1 on every side.
+  gives them in `src/sim/melee.ts`; a charger turns from a refuge only when it is braced 1 on every side
+  (`bracedAllRound`). While changing, the shock and the flank shock are the higher of the two shapes', the fire the
+  lower (§ 3). A move or a wheel is refused to the player when the shape the formation will stand in when it is reached
+  cannot move, and held in that shape if it gets one anyway (a plan's, or one kept from before a square formed against
+  cavalry); a formation out of the fight runs and re-forms whatever its shape. The guards are § 5a's: fields > 0,
+  bracing in 0..1, a shape that cannot move is neither the type's start shape nor one it charges from, a refuge is
+  braced 1 on every side, and the guards on one shock (contagion, a second enemy) count the shapes' shock.
 - **Acceptance:** `tools/state-hashes.ts` identical on every page scenario (3000 ticks); the guards' tests; the system
-  docs (`docs/systems/formations.md`, `melee.md`) on the new fields.
+  docs (`docs/systems/formations.md`, `docs/systems/melee.md`) on the new fields.
 
 ## C2. The values, the attack column, the square that holds, the info box
 
@@ -41,7 +45,7 @@ Where the proposal and this plan differ, the proposal holds. Three slices, each 
 - **The info box:** § 5's lines for the selected unit, on the sim page (`src/app/`), every number read through the
   accessors that the sim uses (`traits.ts`, `levelOf`, the morale bar, `threatWeights`), none recomputed.
 - **Scenarios:** B-11, B-14, B-15, B-18, B-19 and B-20 as tests or calibration cases. B-12 and B-13 need the assault and
-  close volleys, so they come with U3 (`docs/proposals/closing-model.md`). The artillery calibration's two column checks
+  close volleys, so they come with U3 (its closing model, on the branch `sim/u3-closing`). The artillery calibration's two column checks
   are retried at the new column.
 - **Acceptance:** the scenarios; the existing calibrations (C-01, the charges) still meet their targets with the line's
   values unchanged; the S1e battle still decided in its window.

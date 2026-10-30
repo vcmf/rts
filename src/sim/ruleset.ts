@@ -596,6 +596,7 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
       const k = names.indexOf(n)
       if (k < 0) throw new Error(`${at}: it charges from ${n}, not one of its shapes`)
       if (u.formations[n].trail) throw new Error(`${at}: it charges from ${n}, a trail shape`)
+      if (traitsOf(u, n).moves === false) throw new Error(`${at}: it charges from ${n}, a shape that cannot move`)
       from[k] = 1
     }
     if (approach < 0 || pace < 0) throw new Error(`${at}: a charge pace is not one of the paces`)
@@ -714,6 +715,11 @@ export function compileRuleset(rs: Ruleset): Compiled {
   const paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const typeNames = Object.keys(rs.types)
   if (!typeNames.length) throw new Error(`ruleset ${rs.name}: no unit types`)
+  // before the types: a shape's flankFrom is checked against the blend
+  const SC = rs.sectors
+  if (!(SC.blend.H > 0 && SC.blend.T - SC.blend.H > 0 && SC.blend.T + SC.blend.H < 1)) {
+    throw new Error(`ruleset ${rs.name}: sectors.blend must lie inside the angle measure's 0..1 (0 < T − H, T + H < 1)`)
+  }
   const types = typeNames.map(t => compileType(rs, t, kinds, paces))
   const presets = Object.keys(rs.orders)
   // Tobler's hiking curve capped at the drill pace, over rise/run −1..1 in 400 steps, from exact operations
@@ -756,15 +762,26 @@ export function compileRuleset(rs: Ruleset): Compiled {
   }
   // one shock must not rout a steady battalion of level 2 on its own (s1c-plan-review L2;
   // docs/proposals/morale-bar-model.md § 9): contagion and a second enemy's charge. A charge's own threat and impact
-  // are left out: a charge into a flank is meant to break a line
+  // are left out: a charge into a flank is meant to break a line. Each as the shape that takes it worst does: its
+  // shock, and a flank's by its flank shock
   const most = 0.6 * L[1].bar
-  if (M.contagion.shock > most) {
-    throw new Error(`ruleset ${rs.name}: morale.contagion.shock over 0.6 of level 2's bar`)
+  let shock = 0
+  let flankShock = 0
+  for (const U of types) {
+    for (let o = 0; o < U.traits.length; o += T_LEN) {
+      shock = Math.max(shock, U.traits[o + T_SHOCK])
+      flankShock = Math.max(flankShock, U.traits[o + T_SHOCK] * U.traits[o + T_FLANK_SHOCK])
+    }
+  }
+  if (M.contagion.shock * shock > most) {
+    throw new Error(`ruleset ${rs.name}: morale.contagion.shock, by the shapes' shock, over 0.6 of level 2's bar`)
   }
   // nor a second enemy's charge (decision 0080)
   const sec = rs.melee.second
-  if (!(sec.flank >= 0 && sec.rear >= 0 && Math.max(sec.flank, sec.rear) <= most)) {
-    throw new Error(`ruleset ${rs.name}: melee.second must be ≥ 0 and at most 0.6 of level 2's bar`)
+  if (!(sec.flank >= 0 && sec.rear >= 0 && Math.max(sec.flank * flankShock, sec.rear * shock) <= most)) {
+    throw new Error(
+      `ruleset ${rs.name}: melee.second must be ≥ 0 and, by the shapes' shock, at most 0.6 of level 2's bar`,
+    )
   }
   if (!(
     M.wavering[0] > 0 &&
@@ -783,10 +800,6 @@ export function compileRuleset(rs: Ruleset): Compiled {
   // a rallied formation is never wavering at once
   if (!(M.rally.share > M.wavering[1] && M.rally.share <= 1 && M.rally.cut >= 0 && M.rally.cut < 1)) {
     throw new Error(`ruleset ${rs.name}: morale.rally needs share above wavering's way back and at most 1, cut in 0..1`)
-  }
-  const SC = rs.sectors
-  if (!(SC.blend.H > 0 && SC.blend.T - SC.blend.H > 0 && SC.blend.T + SC.blend.H < 1)) {
-    throw new Error(`ruleset ${rs.name}: sectors.blend must lie inside the angle measure's 0..1 (0 < T − H, T + H < 1)`)
   }
   if (!(SC.corner > 0 && Number.isInteger(SC.slices) && SC.slices >= 1 && SC.reach > 0 && SC.reach < Infinity)) {
     throw new Error(`ruleset ${rs.name}: sectors needs corner > 0, a whole number of slices ≥ 1 and a finite reach > 0`)

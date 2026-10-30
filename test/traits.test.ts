@@ -6,6 +6,7 @@ import { Sim, OPEN_DATA, openBattlefield } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { blockGeometry, buildFaces, pointWeights, moraleShare, type Ruleset, type TraitsDef } from '../src/sim/index.ts'
 import { braceOf, movesOf } from '../src/sim/traits.ts'
+import { applyNow } from '../src/sim/commands.ts'
 import { FULL } from '../src/scenarios/sizes.ts'
 
 const FIELD = openBattlefield()
@@ -36,12 +37,44 @@ describe('moves', () => {
     }
     expect(why({ type: 'move', id: sq, append: false, points: [[0, 100]] })).toEqual(['cannot move in this shape'])
     expect(why({ type: 'retire', id: sq, metres: 50 })).toEqual(['cannot move in this shape'])
+    expect(why({ type: 'wheel', id: sq, angle: 0.5 })).toEqual(['cannot move in this shape'])
+    expect(why({ type: 'face', id: sq })).toEqual([])
     s.order({ type: 'form', id: sq, shape: 'line' })
-    expect(movesOf(s.w, s.slot(sq))).toBe(true)
+    expect(movesOf(s.w, s.slot(sq))).toBe(false) // it still stands in the square, but forms line
     expect(why({ type: 'move', id: sq, append: true, points: [[0, 100]] })).toEqual([])
     const ln = s.spawn(200, 0, 0, 'line', FULL.infantry)
     s.order({ type: 'form', id: ln, shape: 'square' })
     expect(why({ type: 'move', id: ln, append: true, points: [[200, 100]] })).toEqual(['cannot move in this shape'])
+  })
+  it('reads the queue: a move appended behind a square still to form is refused, behind a line still to form taken', () => {
+    const s = sim(still)
+    const ln = s.spawn(0, 0, 0, 'line', FULL.infantry)
+    const sq = s.spawn(200, 0, 0, 'square', FULL.infantry)
+    // both in one tick, so the form is still queued when the move comes
+    s.cmd({ type: 'form', id: ln, shape: 'square' })
+    s.cmd({ type: 'move', id: ln, append: true, points: [[0, 100]] })
+    s.cmd({ type: 'form', id: sq, shape: 'line' })
+    s.cmd({ type: 'move', id: sq, append: true, points: [[200, 100]] })
+    const n = s.dropped.length
+    s.tick()
+    expect(s.dropped.slice(n).map(d => d.reason)).toEqual(['cannot move in this shape'])
+  })
+  it("keeps a scenario's plan's move to a square, for the shape it forms next", () => {
+    const s = sim(still)
+    const h = s.spawn(0, 0, 0, 'square', FULL.infantry)
+    expect(applyNow(s.w, { type: 'move', id: h, append: false, points: [[0, 100]] })).toBe('')
+    const z = s.z(h)
+    s.advance(5)
+    expect(s.z(h)).toBe(z)
+    expect(s.orders(h)).toBe(1)
+  })
+  it('a router runs, whatever its shape', () => {
+    const s = sim(still)
+    const h = s.spawn(0, 0, 0, 'square', FULL.infantry)
+    const z = s.z(h)
+    s.w.f.bar[s.slot(h)] = -100
+    s.advance(20)
+    expect(Math.abs(s.z(h) - z)).toBeGreaterThan(10)
   })
   it('a shape that cannot move, handed a move (as the square against cavalry keeps one), stands and keeps it', () => {
     const s = sim(still)
@@ -93,7 +126,7 @@ describe('shock', () => {
       return moraleShare(s.w, i)
     }
     const one = 1 - share(napoleonic)
-    expect(1 - share(withTraits('line', { shock: 2 }))).toBeCloseTo(2 * one, 9)
+    expect(1 - share(withTraits('line', { shock: 1.05 }))).toBeCloseTo(1.05 * one, 9)
   })
 })
 
