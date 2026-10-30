@@ -83,7 +83,7 @@ export interface MoraleDef {
   // S1c-2 (docs/plans/active/s1c2-morale-machine.md)
   // a friend's break: the morale lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
   contagion: { shock: number; front: number; back: number }
-  // the back exposed (decision 0081): the target's drain per weight of flank and of rear of the worst enemy that can
+  // the back exposed (decision 0086): the target's drain per weight of flank and of rear of the worst enemy that can
   // hurt it (docs/proposals/sectors-model.md § 5)
   drain: { flank: number; rear: number }
   // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
@@ -210,8 +210,9 @@ export interface DyeSet {
   materials: Readonly<Record<string, string>>
   boots: string
 }
-/** the cloth parts a dress names a dye for */
-export type ClothPart = 'coat' | 'facings' | 'trousers' | 'waistcoat' | 'headgear' | 'greatcoat'
+/** the parts a dress names a dye for: its cloth, and the paint of its kit (a gun's carriage and wheels) */
+export const CLOTH_PARTS = ['coat', 'facings', 'trousers', 'waistcoat', 'headgear', 'greatcoat', 'paint'] as const
+export type ClothPart = (typeof CLOTH_PARTS)[number]
 /** a uniform as its cloth parts' dyes, by name, never a colour (decision 0068): its coat, facings, trousers (or
  *  breeches), waistcoat, headgear and greatcoat (worn over the coat: by a share of the men by the cold, a later step;
  *  ?uniforms=all-greatcoats, all of them), and its flag's bands by flag dye. Era data (src/rulesets/<era>-uniforms.ts),

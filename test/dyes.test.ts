@@ -24,7 +24,8 @@ describe('the dye set', () => {
   it('is a short list of named colours, each one sRGB value, every one worn', () => {
     const names = Object.keys(DYES.dyes)
     expect(names.length).toBeGreaterThanOrEqual(12)
-    expect(names.length).toBeLessThanOrEqual(16)
+    // (16, then the guns' olive paint: docs/plans/active/cavalry-artillery-demo.md)
+    expect(names.length).toBeLessThanOrEqual(17)
     for (const t of [DYES.dyes, DYES.flags, DYES.materials]) for (const h of Object.values(t)) expect(h).toMatch(HEX)
     expect(new Set(Object.values(DYES.dyes)).size).toBe(names.length)
     const worn = new Set(Object.values(UNIFORMS).flatMap(d => Object.values(d.parts)))

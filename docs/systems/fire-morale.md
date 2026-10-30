@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-28
 code: [src/sim/fire.ts, src/sim/morale.ts, src/sim/sectors.ts, src/sim/rng.ts, src/sim/tick.ts, src/rulesets/napoleonic.ts, src/scenarios/s1c-firefight.ts, tools/calibrate-fire.ts, test/fire.test.ts, test/morale.test.ts]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0018-battalion-of-400, 0080-melee-holds-cornered-routers-cut-down, 0081-the-back-exposed, 0082-wavering-keeps-fighting]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0018-battalion-of-400, 0080-melee-holds-cornered-routers-cut-down, 0086-the-back-exposed, 0087-wavering-keeps-fighting]
 ---
 
 # Fire and morale (S1c)
@@ -153,7 +153,7 @@ firing company's block on the target's face (`src/sim/sectors.ts`). A shape's nu
 1.2 and 1.1 (1.5 and 1.0 in march), a battery 1.5 and 1.0; a square has no flank. Fire from ahead is unchanged, so
 the line-on-line calibration's front is.
 
-**The back exposed** (decision 0081, sectors-model § 6). Before the morale loop, `threatPass` gives each battalion
+**The back exposed** (decision 0086, sectors-model § 6). Before the morale loop, `threatPass` gives each battalion
 its drain: the worst over the enemies that can hurt it (`drainBy`) of flank × `drain.flank` + rear × `drain.rear`
 (0.1 and 0.2), the weights of that enemy's nearest company on its face. An enemy can hurt it when it is in the
 fight, not in melee and not changing shape, its nearest company is within `sectors.reach` (300 m), and either it
@@ -163,7 +163,7 @@ of three clear for musketry, all three for a battery), or it can charge now (not
 threshold at most: a pressure while it lasts, gone when the flank is covered or the enemy leaves; it breaks a
 battalion only with the losses.
 
-**No fall-back** (decision 0082). A wavering battalion keeps fighting, with the penalties it already has, until it
+**No fall-back** (decision 0087). A wavering battalion keeps fighting, with the penalties it already has, until it
 recovers or routs; nothing moves it back by itself. A player may still order a Retire.
 
 **Rally** (`morale.rally`). A router rallies when all of these hold:

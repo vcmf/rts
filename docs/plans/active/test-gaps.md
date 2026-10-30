@@ -72,7 +72,7 @@ coverage they fail their budgets: V8's block counters, `test/fx.ts`); `longIt` t
 What `src/sim/` leaves uncovered after this PR (76 lines): the serializer's big-endian path (no target runs it); the
 metered tick (`Meter`, run by the cost tests, skipped on CI); and paths only the long tests reach, skipped under
 coverage (`longIt`): the trail ring dropping its oldest point on a long march, a loss moved to a neighbouring
-company, the order pool running out mid-fight. They run in `npm test` and CI's check job.
+company, the order pool running out mid-fight. They run in `npm test` and CI's test job.
 
 The tests this PR adds (`test/`, 103 tests in about 7 s on the dev Mac in parallel, none a cost test):
 

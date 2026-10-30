@@ -12,6 +12,7 @@ uniform vec3 uWall,uRoof,uTimber,uOpening,uAccent,uShutter;uniform float uDetail
 // mask, A the light map's sun (stored from 1/255); the bounce at the instance's root (uBldBounce, a texel an instance)
 uniform sampler2D uBldLight,uBldBounce;varying vec2 vLUV;varying float vTileI;
 #endif
+#define PAINT_BUILDING   // the painter's class for the mid tone (?midtone)
 #include<painter>
 #include<shore>
 vec3 roleCol(float r){

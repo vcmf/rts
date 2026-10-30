@@ -111,7 +111,7 @@ can:
 
 ### 6. The checks
 
-- **`test/bench.test.ts`:** each case is played for its length.
+- **`test/bench*.test.ts`** (`test/bench-fx.ts`, the sets of what fails today; split over files for CI, `docs/plans/active/ci-faster-tests.md`): each case is played for its length.
   - **Invariant 1** (`formedOverlaps` is empty every tick) and the case's outcome are written as the proposal
     wants them. Those that fail today are marked `it.fails`, with today's behaviour in a comment; C1–C4 turn them
     into plain tests as they land.

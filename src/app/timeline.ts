@@ -59,6 +59,9 @@ export interface Timeline {
   reached: number // the furthest tick played
   warning: string // the last divergence found ('' if none)
   warnings: number // how many divergences were found: a new one is one more
+  // moves on whenever the lists may have changed other than by growing (a cut, going to a time): their readers
+  // elsewhere (the sim worker's messages to the page: src/app/sim-host.ts) look again from the start then
+  cuts: number
 }
 
 /** An empty timeline. */
@@ -74,6 +77,7 @@ export const mkTimeline = (): Timeline => ({
   reached: 0,
   warning: '',
   warnings: 0,
+  cuts: 0,
 })
 
 /**
@@ -81,6 +85,7 @@ export const mkTimeline = (): Timeline => ({
  * would still fit at half of it.
  */
 function cut(tl: Timeline, t: number): void {
+  tl.cuts++
   tl.snaps = tl.snaps.filter(s => s.tick <= t)
   tl.recent = tl.recent.filter(s => s.tick <= t)
   tl.hashes = tl.hashes.filter(h => h.tick <= t)
@@ -212,5 +217,6 @@ export function goTo(
   } else w = begin(c, fresh())
   while (w.meta[M_TICK] < T) step(c, w)
   Object.assign(tl, c)
+  tl.cuts++
   return w
 }

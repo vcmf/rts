@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-27
 ---
 
-# 0081 The back exposed: a pressure while it lasts, not a retreat detected
+# 0086 The back exposed: a pressure while it lasts, not a retreat detected
 
 Supersedes decision 0080's one-off morale shock for a retreat ordered within enemy range; the rest of 0080 stands.
 
