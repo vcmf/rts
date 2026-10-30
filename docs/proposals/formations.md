@@ -6,7 +6,7 @@ last_reviewed: 2026-10-30
 # Proposal: formations, each with its strengths and weaknesses
 
 For discussion with the owner before any code. A unit is one block of 240 figures (decision 0076; the division
-scale, `docs/proposals/division-scale.md`) with five formations: line, thin line (British only), attack column,
+scale, `docs/proposals/division-scale.md`) with five formations: line, thin line (a formation a unit may be given, § 6), attack column,
 square and march column. The owner asked that each give clear strengths and weaknesses, as in Total War, and that
 changing formation and the flanks matter. Two research notes back it: `docs/research/formations-history.md` (what the
 formations did; its numbers marked by how well they are sourced) and `docs/research/formations-in-games.md` (how
@@ -157,6 +157,8 @@ The shipped values are § 2's and § 2a's, with three settled in play:
 ## 6. The owner's answers (2026-10-30), and what is open
 
 - The square cannot move. The column is second best against cavalry, head on (§ 2a), and weak to guns and muskets.
-  Ordre mixte is deferred. The info box (§ 5) comes first, for debugging. The thin line is the British only.
+  Ordre mixte is deferred. The info box (§ 5) comes first, for debugging. The thin line is not a nation's unit type but a
+  formation each unit has enabled or not, to be given later by research or a general's ability (the owner, the same
+  day): every formation may be enabled or disabled per unit (`docs/plans/active/formations.md` § C3).
 - **Open:** the bracing numbers of § 2a; the size of the modifiers (Total War-sized, 20–50%, unless the owner wants
   them subtler).

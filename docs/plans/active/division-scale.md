@@ -29,6 +29,6 @@ proposals and this plan differ, the proposals hold. Three PRs into `epic/sim-eng
 ## C. The formations
 
 - **Scope:** the traits' new values (`docs/proposals/formations.md` § 2), bracing by the side struck (§ 2a), the thin
-  line for British line infantry, the square that cannot move, the changes' times (§ 3), and the unit's info box (§ 5).
+  line as a formation a unit may be given (enabled per unit), the square that cannot move, the changes' times (§ 3), and the unit's info box (§ 5).
 - **Acceptance:** scenarios B-11 to B-20, each with its test or calibration case.
 - **Plan:** `docs/plans/active/formations.md` (three slices: the table's new fields, the values, the thin line).

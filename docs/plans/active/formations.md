@@ -50,17 +50,28 @@ Where the proposal and this plan differ, the proposal holds. Three slices, each 
 - **Acceptance:** the scenarios; the existing calibrations (C-01, the charges) still meet their targets with the line's
   values unchanged; the S1e battle still decided in its window.
 
-## C3. The thin line (the British)
+## C3. Formations a unit may have, and the 2-rank line
 
+The owner (2026-10-30): the thin line is not a British unit type but a formation a unit may be given or not, later by
+research or a general's ability. So each formation of a type is enabled or disabled per unit, and the 2-rank line is
+one more formation of line infantry, disabled unless enabled.
+
+- **Enabled formations:** each unit holds the set of its type's shapes it may form (a bit per shape, world state,
+  hashed and saved). A type names the shapes enabled by default (`UnitType.enabled`; every shape if it names none);
+  `debug-spawn` may give the set; a command enables or disables one on a unit (for the page and tests now, research
+  and generals later). A `form` into a disabled shape is refused ('formation not enabled'); the standing behaviour's
+  refuge must stay enabled. Disabling the shape it stands in leaves it there until it forms another.
+- **The 2-rank line** (`thinLine`, off by default): fire 1.5, hits 0.8, shock 1.25, melee 0.7, flank shock × 1.25,
+  line ↔ thin line in 20 s.
 - **Engine:** a shape may set its own block (`block: { files, ranks }`, the same men per section: 60 as 30 × 2). The
   slots keep their order. A section's men fill the shape's grid, so `occupied`, the slot positions, the fire geometry's
   block and the soldier layer read the shape's grid, not the type's. A change into or out of it passes through
   the regridding as a change of spacing does (`step`, the column of route's).
-- **The type:** `britishInfantry`, the line infantry's geometry and shapes plus `thinLine` (fire 1.5, hits 0.8, shock
-  1.25, melee 0.7, flank shock × 1.25), and line ↔ thin line in 20 s. The sides' armies and the page may then field it.
+- **Order:** the enabled set first (no new shape, the look untouched), then the 2-rank block.
 - **Scenarios:** B-16, B-17.
-- **The look:** `src/look/world/armies.ts` and `arms.ts` read the type's geometry. Before this lands, the owner and the
-  look track agree on how they read a shape's block.
+- **The look:** `src/look/world/armies.ts` and `arms.ts` read the type's block (`geometry.files`, `ranks`) for every
+  shape. Once a shape may have its own, they must read the shape's for a unit in it; the owner passes this to the
+  look track before the 2-rank block lands.
 
 ## C2's results
 
