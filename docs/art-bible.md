@@ -129,7 +129,9 @@ These are decisions, not preferences. Don't propose against them.
 ## 4. Colour & light
 
 ### The shading ramp (the core rule)
-Every surface is painted with **three value bands**, not a smooth gradient:
+Every surface is painted with **three value bands**, not a photographic gradient; on
+the figures, the buildings and the nature meshes they now meet over **wide, soft
+edges**, a real mid tone (decision 0084, below):
 
 | Band | Colour rule |
 |---|---|
@@ -147,8 +149,15 @@ near every band edge (`docs/plans/done/ground-light.md`).
 the leaf-card arm, `?trees=cards`): the same three colours, the shadow still
 cool, blended over a wide range of light instead of three steps, so a crown
 reads as a round mass of leaves. Its light wraps round the crown, it is darker
-inside, and single leaves catch the sun. Every other surface (ground, water,
-buildings, armies) keeps the three bands.
+inside, and single leaves catch the sun.
+
+**A soft mid tone between light and shade** (decision 0084, accepted 2026-10-30,
+amending 0022's "every other surface keeps the three bands"): the same three
+colours, but no longer meeting over a cel-like 0.08 of the light. The figures turn
+through the mid over most of the side away from the low sun (a near-white coat
+keeps the hard bands: its shade parts it from snow), the buildings and the nature
+meshes take a wide mid tone with the light wrapped a little round the form. The
+ground and the water keep their bands (their own edges, at least 0.12 wide).
 
 ### Palette
 The colour theme is **epic, not a normal camera's**: the landscape carries
