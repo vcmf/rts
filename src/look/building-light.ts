@@ -88,8 +88,6 @@ export interface BuildingLight {
   ms: () => number | null
   baked: () => number
   bytes: number
-  // what is not the scene's: its effect wrappers (a moved tile's buildings taken away: src/look/owned.ts)
-  release(): void
 }
 
 // the tile of instance i in the atlas, as the shaders take it (aTile: offset x, y and size x, y, in the atlas's UVs)
@@ -174,6 +172,7 @@ function bakeOutlines(
   })
 }
 
+// release: where it hands what is not the scene's (its effect wrappers and renderer: src/look/owned.ts)
 // bounce: the ground's bounce on the walls (?bldbounce=0 without: no target, no quad); timed: each bake's time, read
 // back (it waits for the GPU: the bench and the checks only)
 export function buildBuildingLight(
@@ -182,7 +181,11 @@ export function buildBuildingLight(
   bakes: Bakes,
   meshes: Mesh[],
   instances: LitInstance[],
-  { bounce: withBounce = true, timed = false } = {},
+  {
+    bounce: withBounce = true,
+    timed = false,
+    release,
+  }: { bounce?: boolean; timed?: boolean; release?: (undo: () => void) => void } = {},
 ): BuildingLight {
   if (mats.webgl1) {
     throw new Error("the buildings' light bake needs WebGL2 (main.ts takes the runtime's taps on WebGL1)")
@@ -315,11 +318,14 @@ void main(){vec4 c=texture2D(uSrc,vUV);if(c.a>0.0){gl_FragColor=c;return;}
     clearTo(scene, atlas, NEUTRAL)
     light.arm()
   })
-  const release = () => {
+  // (what is not the scene's, handed to the part's owner as it is made: a moved tile's buildings taken away,
+  // src/look/owned.ts)
+  release?.(() => {
     occE.dispose()
     dilate.dispose()
-  }
-  if (!withBounce) return { atlas, raw, bounce: null, ms: () => ms, baked: () => count, bytes, release }
+    renderer.dispose()
+  })
+  if (!withBounce) return { atlas, raw, bounce: null, ms: () => ms, baked: () => count, bytes }
   // the bounce: a quad an instance on its texel, seen only by its own camera; none until the ground's is baked
   const bounce = new RenderTargetTexture('bldBounce', { width: n, height: 1 }, scene, {
     ...opts,
@@ -362,5 +368,5 @@ void main(){vec4 c=texture2D(uSrc,vUV);if(c.a>0.0){gl_FragColor=c;return;}
     clearTo(scene, bounce, new Color4(0, 0, 0, 1))
     bounced.arm()
   })
-  return { atlas, raw, bounce, ms: () => ms, baked: () => count, bytes: bytes + n * 8, release } // (and the bounce)
+  return { atlas, raw, bounce, ms: () => ms, baked: () => count, bytes: bytes + n * 8 } // (and the bounce)
 }

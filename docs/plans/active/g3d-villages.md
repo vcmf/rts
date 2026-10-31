@@ -63,3 +63,16 @@ ring turned to its road; the churches 11 × 24 m); on the 3D page their ground i
   leaves the page as a fresh one. A move followed (Metal): 280–330 ms (the buildings 1 ms, their light's setup 3–5 ms;
   its bake on the GPU in the next frames). Shots of Pratze, Šlapanice, Újezd and Telnitz, the tile carried there by
   the follower: `scratch/g3d/villages.png`.
+
+## Review
+
+Round 1 (`/code-review high`, 10 findings, 3 severe):
+- fixed, severe: a house's model picked by its place on the tile, so a move gave the same house another model (now by
+  its place on the map; tested: fails at the pick before); the light's effect renderer left on every move (its
+  buffers: now undone with its wrappers); the buildings' detail textures made again on a move (their materials wait on
+  the images' loading: the buildings dropped out for frames; now made once a page, outside any part);
+- fixed: the window's data rebuilt when the staff map's buildings' rule changes (`src/render/lit` among its sources);
+  the buildings' records checked on decoding (`decodeBuildings`, with `BUILDING_FLOATS`; tested); what a build makes
+  outside the scene's lists handed to its owner as it is made (`release`), so a build that throws undoes it too
+  (tested, with the context-restored hooks); the map's standing buildings found once a map in the worker; a stale
+  comment; the shared hash.

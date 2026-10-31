@@ -52,7 +52,7 @@ import { windowFile, windowOf, type LookWindow } from './world/windows.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { buildTerrain, splitGround } from './terrain.ts'
-import { buildBuildings } from './buildings.ts'
+import { buildBuildings, loadBuildingDetails } from './buildings.ts'
 import { buildBuildingLight } from './building-light.ts'
 import type { Units } from './units.ts'
 // the figures' unit data by file (data/figures/<figure>.unitdata): a scenario names its figure, the page finds it here
@@ -80,7 +80,7 @@ import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
 import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
 import { BUILDINGS, YARD_ALL, YARD_BASE, onPaving, paveShape, type Building } from './world/buildings.ts'
-import { BUILDING_FLOATS, BUILDING_MODELS } from './world/map-buildings.ts'
+import { decodeBuildings } from './world/map-buildings.ts'
 import { COVER, coarsenCover, type CoverGrid } from './world/cover.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
@@ -136,15 +136,8 @@ checkLookData(D, look)
 checkWorld(look.world, lookWindow)
 // a map's window: no hand-placed copses, zones or buildings (the demo's), its trees from its data
 const onMap = look.world.kind === 'map'
-// a tile's buildings: the demo's own list, or a map world's from its data (G3d: src/look/world/map-buildings.ts)
-const buildingsOf = (d: LookData): Building[] => {
-  const out: Building[] = []
-  for (let k = 0; k < d.buildings.length; k += BUILDING_FLOATS) {
-    const [m, x, z, yaw, scale] = d.buildings.subarray(k, k + BUILDING_FLOATS)
-    out.push({ model: BUILDING_MODELS[m], x, z, yaw, scale })
-  }
-  return out
-}
+// a tile's buildings: the demo's own list, or a map world's from its data (G3d: decodeBuildings)
+const buildingsOf = (d: LookData): Building[] => decodeBuildings(d.buildings)
 const worldBuildings: readonly Building[] = onMap ? buildingsOf(look) : BUILDINGS
 // the buildings whose yards are paved: the demo's (a map world's are not yet: at most 16, apart and off the roads,
 // where the villages' houses stand 3 m from their road; G3d)
@@ -546,6 +539,7 @@ const tileBuildings = (n: Nature, list: readonly Building[]) =>
   owned(scene, mats, () =>
     buildBuildings(scene, mats, n.canopy, { baked: bldBaked, bounce: bldBaked && bldbounceParam === null }, list),
   )
+loadBuildingDetails(scene)
 let buildingsOwned = tileBuildings(nature, worldBuildings)
 let buildings = buildingsOwned.value
 const tileBakes = (n: Nature, leaving?: (m: AbstractMesh) => boolean) =>
@@ -572,11 +566,12 @@ const bakeHooks: (() => void)[] = []
 // (each bake timed, by reading it back, on the bench only)
 // (a part of the tile: a moved tile's own, bound to its bakes and its buildings, retile)
 const tileBldLight = (bk: Bakes, b: typeof buildings) =>
-  owned(scene, mats, () => {
+  owned(scene, mats, release => {
     if (!(bldBaked && b.meshes.length)) return null
     const l = buildBuildingLight(scene, mats, bk, b.meshes, b.instances, {
       bounce: bldbounceParam === null,
       timed: params.has('bench'),
+      release,
     })
     for (const m of b.meshes) {
       const mt = m.material as ShaderMaterial
@@ -1594,7 +1589,6 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
   }
   // every check before the first change: a tile refused leaves the page as it was
   if (look.world.kind !== 'map') throw new Error("retile: a map world only (the demo's river is its tile's)")
-  // (what is not rebuilt yet: the buildings' light and the units' shade hang on the bakes; a map world has neither)
   // (the armies' shade hangs on the bakes and their places on the first tile: not on a map world yet)
   if (armiesParam !== null) throw new Error('retile: not with armies (not on a map world yet)')
   // (the water, the banks and the river are the first tile's and stay: neither tile may have any yet, G3d)

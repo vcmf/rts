@@ -5,6 +5,7 @@ import type { Pt } from '../../map/schema.ts'
 import type { Standing } from '../../render/lit/houses.ts'
 import { FOOT, type Building } from './buildings.ts'
 import { segD } from './geom.ts'
+import { hash } from '../noise.ts'
 import type { MapLine } from './from-map.ts'
 
 // the models a building may take, by their index in the look data (BUILDING_MODELS[k])
@@ -41,12 +42,6 @@ function frame(ring: readonly Pt[]): { c: Pt; u: Pt; length: number; width: numb
   }
 }
 
-/** A small hash of a place, 0..1 (the pick among fits) */
-const pick = (x: number, z: number) => {
-  const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453
-  return s - Math.floor(s)
-}
-
 /**
  * The buildings of a tile as models, in the window's metres: each standing building (map metres; ruins, roofless,
  * left out: no burnt model) whose centre lies within `half` m of the tile's centre `at` (map metres; the window's
@@ -76,7 +71,8 @@ export function mapBuildings(
       })
       const best = Math.min(...err)
       const good = HOUSES.filter((_, k) => err[k] <= best + FIT_SLACK)
-      model = good[Math.min(good.length - 1, Math.floor(pick(x, z) * good.length))]
+      // (picked by its place on the map, not on the tile: a house keeps its model whichever tile holds it)
+      model = good[Math.min(good.length - 1, Math.floor(hash(f.c[0], f.c[1]) * good.length))]
     }
     const scale = f.length / (2 * (FOOT[model].hx ?? 1))
     // the front: across the long axis, toward the nearest road's segment
@@ -103,4 +99,17 @@ export function mapBuildings(
     out.push(BUILDING_MODELS.indexOf(model), x, z, yaw, scale)
   }
   return Float32Array.from(out)
+}
+
+/** A tile's buildings from its data (BUILDING_FLOATS each) as the page's list. Throws on a record cut short or a model
+ *  no index names. */
+export function decodeBuildings(b: Float32Array): Building[] {
+  if (b.length % BUILDING_FLOATS) throw new Error(`buildings: ${b.length} floats, not a whole number of buildings`)
+  const out: Building[] = []
+  for (let k = 0; k < b.length; k += BUILDING_FLOATS) {
+    const model = BUILDING_MODELS[b[k]]
+    if (!model) throw new Error(`buildings: no model ${b[k]} (building ${k / BUILDING_FLOATS})`)
+    out.push({ model, x: b[k + 1], z: b[k + 2], yaw: b[k + 3], scale: b[k + 4] })
+  }
+  return out
 }

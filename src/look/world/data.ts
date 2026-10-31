@@ -8,6 +8,7 @@ import type { Grid, Heightfield } from '../heightfield.ts'
 import { ROAD_SLOTS, macroFarNOf, rectOf, type Derived, type Rect } from '../spec.ts'
 import { SAMPLE_KEYS, type RiverParams, type RiverSamples } from '../river.ts'
 import { packCover, unpackCover, type CoverGrid } from './cover.ts'
+import { BUILDING_FLOATS } from './map-buildings.ts'
 
 // 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/done/roads.md); 9: the world it holds
 // (the demo, or a map's window) and a map world's trees (docs/plans/active/look-austerlitz-a1.md); 10: a map world's
@@ -135,7 +136,7 @@ export function moveLook(d: LookData, [dx, dz]: TileAt): LookData {
   }
   // (a building's x and z: its second and third floats)
   const buildings = Float32Array.from(d.buildings)
-  for (let k = 0; k < buildings.length; k += 5) {
+  for (let k = 0; k < buildings.length; k += BUILDING_FLOATS) {
     buildings[k + 1] += dx
     buildings[k + 2] += dz
   }
@@ -327,6 +328,9 @@ export function decodeLook(buf: ArrayBuffer): LookData {
   if (!meta.cover || !u8.coverRuns) throw new Error('look data: no cover grid')
   const cover: CoverGrid = { ...meta.cover, tex: unpackCover(meta.cover.n, u8.coverRuns) }
   if (!meta.world || !arr.trees || arr.trees.length % TREE_FLOATS) throw new Error('look data: no world, or no trees')
+  if (!arr.buildings || arr.buildings.length % BUILDING_FLOATS) {
+    throw new Error('look data: no buildings, or a short one')
+  }
   if (!meta.farCover !== !u8.farCoverRuns) {
     throw new Error("look data: the far ring's cover without its grid, or its grid without it")
   }
@@ -348,7 +352,7 @@ export function decodeLook(buf: ArrayBuffer): LookData {
     farCover,
     light,
     tileAt: meta.tileAt,
-    buildings: arr.buildings ?? new Float32Array(0),
+    buildings: arr.buildings,
   }
 }
 

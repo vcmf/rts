@@ -1,7 +1,7 @@
 // A map's buildings as the look page's models (src/look/world/map-buildings.ts, G3d): each standing building in the
 // tile a model fitted to its footprint, its front toward its road.
 import { describe, expect, it } from 'vitest'
-import { BUILDING_FLOATS, BUILDING_MODELS, mapBuildings } from '../src/look/world/map-buildings.ts'
+import { BUILDING_FLOATS, BUILDING_MODELS, decodeBuildings, mapBuildings } from '../src/look/world/map-buildings.ts'
 import { FOOT, toWorld } from '../src/look/world/buildings.ts'
 import type { Standing } from '../src/render/lit/houses.ts'
 import { COVER } from '../src/look/world/cover.ts'
@@ -65,5 +65,28 @@ describe("a map's buildings as models (mapBuildings)", () => {
     expect(b.length).toBe(BUILDING_FLOATS)
     expect(BUILDING_MODELS[b[0]]).toBe('manor')
     expect(b[4]).toBeCloseTo(24 / (2 * FOOT.manor.hx!), 5)
+  })
+
+  it('gives a house the same model whichever tile holds it (the bug: picked by its place on the tile)', () => {
+    // thirty houses of sizes between the models' shapes, in tiles 200 m apart that both hold them
+    const ring = Array.from({ length: 30 }, (_, k) =>
+      house(box(20 + (k % 6) * 25, 30 + Math.floor(k / 6) * 25, 9 + (k % 5), 6.5 + (k % 3) * 0.8, 0.1 * k)),
+    )
+    const models = (at: { x: number; z: number }) => {
+      const b = mapBuildings(ring, at, 400, road)
+      return Array.from({ length: b.length / BUILDING_FLOATS }, (_, k) => b[k * BUILDING_FLOATS])
+    }
+    expect(models({ x: 0, z: 0 })).toEqual(models({ x: 200, z: -200 }))
+    expect(new Set(models({ x: 0, z: 0 })).size).toBeGreaterThan(1)
+  })
+})
+
+describe("a tile's buildings from its data (decodeBuildings)", () => {
+  it('reads each record, and refuses one cut short or a model no index names', () => {
+    expect(decodeBuildings(Float32Array.from([1, 2, 3, 0.5, 1.25]))).toEqual([
+      { model: 'house', x: 2, z: 3, yaw: 0.5, scale: 1.25 },
+    ])
+    expect(() => decodeBuildings(Float32Array.from([1, 2, 3, 0.5]))).toThrow(/whole number/)
+    expect(() => decodeBuildings(Float32Array.from([7, 2, 3, 0.5, 1]))).toThrow(/no model 7/)
   })
 })

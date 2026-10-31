@@ -78,6 +78,28 @@ const DETAIL_AMT = 0.35 // how much of the texture's value shows (the paint's gr
 // bounce: the ground's bounce on the walls (paint's BOUNCE: computed before and never added;
 // the baked path's only: main.ts)
 /** The world's buildings (`list`: the demo's BUILDINGS, none on a map's window yet) as instanced, painted meshes. */
+// the models' detail textures, once a page (a moved tile's buildings reuse them: made again, their materials would
+// wait on the images' loading and the buildings drop out for a few frames, G3d); made before the first buildings by
+// loadBuildingDetails, outside any rebuilt part (src/look/owned.ts would take them away with it)
+const DETAILS = new WeakMap<Scene, Map<string, Texture>>()
+function detailTexture(scene: Scene, model: Building['model']): Texture {
+  let m = DETAILS.get(scene)
+  if (!m) DETAILS.set(scene, (m = new Map()))
+  let t = m.get(model)
+  if (!t) {
+    const p = PALETTE[model]
+    t = new Texture(p.detail, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) =>
+      console.error(`the ${model}'s detail texture (${p.detail}): ${msg}`),
+    )
+    m.set(model, t)
+  }
+  return t
+}
+/** Every model's detail texture made (and loading) for the page, once: before the first buildings (src/look/main.ts) */
+export function loadBuildingDetails(scene: Scene): void {
+  for (const model of Object.keys(PALETTE) as Building['model'][]) detailTexture(scene, model)
+}
+
 export function buildBuildings(
   scene: Scene,
   mats: Materials,
@@ -127,12 +149,7 @@ export function buildBuildings(
       mat.setColor3(u, Color3.FromHexString(hex))
     }
     mat.setFloat('uDetailAmt', DETAIL_AMT)
-    mat.setTexture(
-      'uDetail',
-      new Texture(p.detail, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) =>
-        console.error(`the ${model}'s detail texture (${p.detail}): ${msg}`),
-      ),
-    )
+    mat.setTexture('uDetail', detailTexture(scene, model))
     const m = new Mesh('building_' + model, scene)
     m.setVerticesData(VertexBuffer.PositionKind, d.pos)
     m.setVerticesData(VertexBuffer.NormalKind, d.nrm)
