@@ -2,10 +2,11 @@
 // by the page and by the tile worker for a moved tile's meadow map (G3c, src/look/tile-worker.ts).
 import { COVER, coverAt, fieldAt, type CoverGrid } from './cover.ts'
 
-export const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood]
+const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood]
 export const LINE_COVER: readonly number[] = [COVER.road, COVER.track, COVER.village]
 export const TRODDEN: readonly number[] = [...LINE_COVER, COVER.bare]
-// the models that keep to grass (coverAllows), and so never stand on a field: the hidden rule below skips them
+// the models that keep to grass (coverAllows), and so never stand on a field (src/look/nature.ts's hidden rule skips
+// them)
 export const GRASSY_MODEL = /^(Grass|Flowers|Plant_1|Bush|TreeStump|WoodLog)/
 // The point and eight points EDGE m around it must all pass: the shader paints a class edge pushed up to 1.5 m along
 // each axis by the grain (coverWarp, src/look/shaders/macro.glsl), and the bake blends it over ±1 m, so an instance
@@ -15,6 +16,8 @@ export const AROUND = [
   [0, 0],
   ...Array.from({ length: 8 }, (_, k) => [Math.cos((k * Math.PI) / 4), Math.sin((k * Math.PI) / 4)]),
 ]
+/** Whether a model may stand at a point by the cover: the point and the eight round it EDGE m out, each a class the
+ *  model keeps to (the wheat to the wheat, the grassy models to grass, the rest off the ways and the village) */
 export function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boolean {
   const ok = (c: number) =>
     model === 'Wheat'

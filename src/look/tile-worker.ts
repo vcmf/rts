@@ -78,7 +78,8 @@ self.onmessage = (e: MessageEvent<TileRequest>) => {
     // the meadow map's data (src/look/meadow-data.ts): on a map world its rules are the cover's alone (no formation
     // zones, no river: src/look/nature.ts, growthAllowed, is true there)
     let meadow: MeadowData | null = null
-    if (world.meadow) {
+    // (a tile with a river has banks the worker cannot keep the grass off: the page's move refuses one, G3d)
+    if (world.meadow && !data.river.n) {
       const { growth, crop } = meadowGrowth(data.cover)
       const t = D.spec.tile
       const all = () => true

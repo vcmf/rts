@@ -31,10 +31,10 @@ import { meadowLookDefines, meadowLookOf } from './meadow-look.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature, type Nature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
-import type { MeadowData } from './meadow-data.ts'
+import { meadowMapData, meadowN, type MeadowData } from './meadow-data.ts'
 import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn, zoomOf } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
-import { groundAt, setHeightfield } from './heightfield.ts'
+import { groundAt, heightAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
 import { D, FocusFollow, TUNED_R, checkView, farDefines, groundOf, maxGrid, rectOf } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
@@ -594,7 +594,11 @@ const tileMeadowMap = (n: Nature, made?: MeadowData) =>
     // (the same rule as the crops' on the default: one pass)
     const allowed =
       grassReach === CLUMP_REACH ? n.growthAllowed : (x: number, z: number) => n.growthAllowed(x, z, grassReach)
-    return buildMeadowMap(scene, mats, n.growth, allowed, n.crop, n.growthAllowed, made)
+    const t = D.spec.tile
+    // (a moved tile's from the worker; else made here, about the tile's centre: src/look/tile.ts)
+    const md =
+      made ?? meadowMapData(TILE_O.x - t / 2, TILE_O.y - t / 2, t, n.growth, allowed, n.crop, n.growthAllowed, heightAt)
+    return buildMeadowMap(scene, mats, md)
   })
 let meadowMapOwned = meadowOn ? tileMeadowMap(nature) : null
 const meadowMapAtLoad = meadowMapOwned?.value ?? null
@@ -1646,6 +1650,11 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
     const flowN = Math.round(D.spec.tile / FLOW_TEXEL)
     if (fl && fl.length !== flowN * flowN * 4) {
       throw new Error(`retile: the tile's flow is ${fl.length} bytes, not ${flowN ** 2 * 4}`)
+    }
+    const mN = meadowN(D.spec.tile)
+    const mmd = made?.meadow
+    if (mmd && (mmd.data.length !== mN * mN * 4 || mmd.g.length !== mN * mN || mmd.cropG.length !== mN * mN)) {
+      throw new Error("retile: the tile's meadow map is not the page's size")
     }
     if (frame.n !== frameNow.n || frame.tex.length !== frame.n * frame.n * 4) {
       throw new Error("retile: the tile's per-frame cover is not the page's size")

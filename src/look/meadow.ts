@@ -7,8 +7,8 @@
 // outer ring, the ground's own pattern (groundAt, MEADOW) carries the meadow.
 import { TILE_O, tileEdge } from './tile.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
-import { FromHalfFloat, ToHalfFloat } from '@babylonjs/core/Misc/textureTools.js'
-import { bilerp, meadowMapData, type MeadowData } from './meadow-data.ts'
+import { FromHalfFloat, ToHalfFloat } from '@babylonjs/core/Misc/halfFloat.js'
+import { bilerp, meadowN, type MeadowData } from './meadow-data.ts'
 import type { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
@@ -42,7 +42,7 @@ import MEADOW_GLSL from './shaders/meadow.glsl?raw'
 
 const TILE_W = D.spec.tile
 // the meadow map: 1 m texels over the tile
-const MAP_N = Math.round(TILE_W)
+const MAP_N = meadowN(TILE_W)
 
 // the camera's radius over which the inner rings give way to the outer one (m): the default view is 125, the widest 260
 const WIDE: [number, number] = [150, 200] // (buildMeadow's wide: false, ?nowide, keeps the rings as before: the A/B)
@@ -149,31 +149,15 @@ export interface Meadow {
   croppingCells: number // texels where a crop grows
 }
 
-// a bilinear blend of at(i, j) at the grid point (u, v)
-
-// growth(x, z): how much grass grows at a point (0..1, by the cover and its edges) and its height factor; allowed(x,
-// z): the placement rule's hard edges at any point; crop(x, z): a sown field there, 0 or 1 (src/look/nature.ts)
-// allowedCrop: the crops' rule (the grass's by default: a combed clump reaches farther than a crop's, which neither
-// widens nor leans). Built before the ground's bake: the combed meadow's bake reads it (src/look/macro.ts)
-export function buildMeadowMap(
-  scene: Scene,
-  mats: Materials,
-  growth: (x: number, z: number) => [number, number],
-  allowed: (x: number, z: number) => boolean,
-  crop: (x: number, z: number) => number,
-  allowedCrop = allowed,
-  made?: MeadowData,
-): MeadowMap {
+// md: the map's data (src/look/meadow-data.ts, meadowMapData: the page's, or a moved tile's from the tile worker,
+// G3c). Built before the ground's bake: the combed meadow's bake reads it (src/look/macro.ts)
+export function buildMeadowMap(scene: Scene, mats: Materials, md: MeadowData): MeadowMap {
   const t0 = performance.now()
   // the map's corner: the tile's (src/look/tile.ts)
   const X0 = TILE_O.x - TILE_W / 2
   const Z0 = TILE_O.y - TILE_W / 2
-  // the meadow map: R the ground's height, G the growth, B the height factor (half floats, filtered by the GPU). The
-  // cover's growth on its 2 m grid, each texel interpolating the cells round it (the edge follows no grid); then the
-  // rules at the texel itself (the cover's edge, the formation zones, the banks) zero it; then the growing area
-  // shrinks by a texel, so the GPU's bilinear read, which blends a texel with its neighbours, never carries grass
-  // across a rule (between the last growing texel and a zero one it stays inside the allowed ground)
-  const md = made ?? meadowMapData(X0, Z0, TILE_W, growth, allowed, crop, allowedCrop, heightAt)
+  // the meadow map: R the ground's height, G the growth, B the height factor, A the crops (half floats, filtered by
+  // the GPU; how they are made: meadowMapData)
   const { data, g, growingCells } = md
   const crops = { g: md.cropG, count: md.croppingCells }
   const map = new RawTexture(

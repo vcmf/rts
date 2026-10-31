@@ -109,3 +109,10 @@ Measured (the dev Mac, Metal, Kobelnitz, a move followed):
 
 Next (G3c-3): the move spread over frames (each part built in its own frame beside the last tile, the swap one step),
 the terrain's heights and normals and the split from the worker.
+
+G3c-2, round 1 (`/code-review high`, 9 findings, none severe; fixed or answered, then stopped): the worker's meadow map
+checked against the page's size before the swap; the worker refuses a tile with a river (its banks' rule is the
+page's); one count of the map's texels (`meadowN`) for the page and the worker; `buildMeadowMap` takes the map's data
+(its callers make it: the rules no longer passed and ignored); the meadow's half floats from Babylon's half-float module; doc
+comments and a stale cross-reference; answered: the worker making the meadow map for a tile the page may drop (G3c-3:
+a move's cost).

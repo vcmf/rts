@@ -4,9 +4,10 @@
 // half floats.
 import { ToHalfFloat } from '@babylonjs/core/Misc/halfFloat.js'
 
-// the map's texels a side: 1 m over the tile
+/** The map's texels a side over a tile of side `tile` m: 1 m texels (the page's texture and the worker's data) */
 export const meadowN = (tile: number): number => Math.round(tile)
 
+/** A bilinear blend of at(i, j) at the grid point (u, v) */
 export const bilerp = (at: (i: number, j: number) => number, u: number, v: number) => {
   const i = Math.floor(u)
   const j = Math.floor(v)
@@ -24,7 +25,13 @@ export interface MeadowData {
   croppingCells: number
 }
 
-/** The meadow map's data over a tile of side `tile` m from (X0, Z0) (src/look/meadow.ts: the rules, the growth) */
+/**
+ * The meadow map's data over a tile of side `tile` m from (X0, Z0): the cover's growth on its 2 m grid, each texel
+ * interpolating the cells round it (the edge follows no grid); then the rules at the texel itself (the cover's edge,
+ * the formation zones, the banks) zero it; then the growing area shrinks by a texel, so the GPU's bilinear read never
+ * carries grass across a rule. growth(x, z): how much grass grows (0..1) and its height factor; allowed(x, z): the
+ * placement rule's hard edges; crop(x, z): a sown field, 0 or 1; allowedCrop: the crops' rule; heightAt: the ground, m
+ */
 export function meadowMapData(
   X0: number,
   Z0: number,
