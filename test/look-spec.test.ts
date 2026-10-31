@@ -38,7 +38,9 @@ import { checkLookData, decodeLook, encodeLook } from '../src/look/world/data.ts
 import { longIt } from './fx.ts'
 import { layersOf } from '../maps/engine.ts'
 import { bakeLight, SUN } from '../src/render/lit/bake.ts'
-import { LOOK_FILE, buildLookData } from '../tools/build-look-data.ts'
+import { LOOK_FILE, buildLookData, buildWindowData, coarseLight } from '../tools/build-look-data.ts'
+import { WINDOWS } from '../src/look/world/windows.ts'
+import { heightOf } from '../src/map/apply.ts'
 
 const with_ = (f: (s: Spec) => void): Spec => {
   const s = structuredClone(SPEC)
@@ -58,6 +60,21 @@ describe('world spec', () => {
     expect(SPEC.play + checkView(SPEC, OLD).footprint).toBeLessThanOrEqual(SPEC.far / 2)
   })
   const cases: [string, (s: Spec) => void, RegExp][] = [
+    [
+      "a tile step off the far grid (G3b: a moved tile's apron)",
+      s => {
+        s.tileStep = 210
+      },
+      /tile step 210 m/,
+    ],
+    [
+      // (7 far cells and 56 tile cells, but 12.5 road cells: a moved tile's roads half a cell off the first's)
+      'a tile step off the road grid',
+      s => {
+        s.tileStep = 100
+      },
+      /tile step 100 m is not a whole number of road cells/,
+    ],
     [
       'far cells not a whole number of tile cells',
       s => {
@@ -884,4 +901,31 @@ describe("each world's data against the camera (checkView, nearFrameOf)", () => 
       })
     }
   }
+})
+
+describe("a window's data with its tile moved (buildWindowData's tileAt, G3b-1)", () => {
+  longIt("is the window's frame and height base, its tile's heights read 400 m east, and checks as the spec's", () => {
+    const { map, layers: L } = layersOf('maps/austerlitz.map.json')
+    const win = WINDOWS.find(w => w.name === 'kobelnitz')!
+    const read = (b: Uint8Array) => decodeLook(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer)
+    const light = coarseLight(L)
+    const home = read(buildWindowData(win, map, L, light))
+    const moved = read(buildWindowData(win, map, L, light, [400, 0]))
+    expect(moved.tileAt).toEqual([400, 0])
+    expect(moved.world).toEqual(home.world)
+    expect([moved.hf.x0, moved.hf.z0]).toEqual([home.hf.x0 + 400, home.hf.z0])
+    // the moved tile's nodes: the map's heights there, less the window's own base
+    const base = (home.world as Extract<typeof home.world, { kind: 'map' }>).base
+    for (const [i, j] of [
+      [0, 0],
+      [100, 300],
+      [moved.hf.n - 1, 7],
+    ]) {
+      const x = moved.hf.x0 + i * moved.hf.cell + win.x
+      const z = moved.hf.z0 + j * moved.hf.cell + win.z
+      expect(moved.hf.h[j * moved.hf.n + i]).toBeCloseTo(heightOf(L, x, z) - base, 3)
+    }
+    expect(() => checkLookData(derive(SPEC), moved)).not.toThrow()
+    expect(() => checkLookData(derive(SPEC), { ...moved, tileAt: [410, 0] })).toThrow(/200 m grid/)
+  })
 })

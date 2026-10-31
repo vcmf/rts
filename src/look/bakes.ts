@@ -2,6 +2,7 @@
 // prototypes/painted-cinematic.html: a sun shadow depth pass, a CPU occlusion and valley-mist mask, and a top-down
 // light map (R sun visibility, G occlusion, B valley mask, A the contact under trees) the materials read. Trees keep a
 // small runtime lookup of the shadow map for self-shadowing.
+import { TILE_O } from './tile.ts'
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
@@ -98,8 +99,10 @@ export function buildBakes(
   ring: RingBakes | null = null,
 ): Bakes {
   /* ---------- shadow pass: an orthographic camera at the sun, depth of every caster, rendered ONCE ---------- */
-  const lightCam = new FreeCamera('lightCam', SUN.scale(700), scene)
-  lightCam.setTarget(Vector3.Zero())
+  // (about the tile's centre: src/look/tile.ts)
+  const T = new Vector3(TILE_O.x, 0, TILE_O.y)
+  const lightCam = new FreeCamera('lightCam', SUN.scale(700).addInPlace(T), scene)
+  lightCam.setTarget(T)
   let smTexel: Vector2
   let smFade: Vector2
   let sm: { w: number; h: number }
@@ -120,8 +123,8 @@ export function buildBakes(
     let ey = 0
     let z0 = Infinity
     let z1 = -Infinity
-    for (const x of [-h, h]) {
-      for (const z of [-h, h]) {
+    for (const x of [T.x - h, T.x + h]) {
+      for (const z of [T.z - h, T.z + h]) {
         for (const y of [lo, hi + 60]) {
           const v = Vector3.TransformCoordinates(new Vector3(x, y, z), V)
           ex = Math.max(ex, Math.abs(v.x))
@@ -275,8 +278,8 @@ export function buildBakes(
     }
     for (let j = 0; j < N; j++) {
       for (let i = 0; i < N; i++) {
-        const x = ((i + 0.5) / N) * TILE_W - TILE_W / 2
-        const z = ((j + 0.5) / N) * TILE_W - TILE_W / 2
+        const x = T.x + ((i + 0.5) / N) * TILE_W - TILE_W / 2
+        const z = T.z + ((j + 0.5) / N) * TILE_W - TILE_W / 2
         const h = heightAt(x, z)
         const near = ring(x, z, 7)
         const far = ring(x, z, D.spec.aoRing)
@@ -297,8 +300,8 @@ export function buildBakes(
     // 0.45 crown radii and at least 1.5 texels (about 1.6 m), in R, which the light map carries in its alpha to the
     // ground alone (the crowns read G: the core would darken their tops)
     const disc = (x: number, z: number, r: number, inner: string) => {
-      const px = ((x + TILE_W / 2) / TILE_W) * AO_N
-      const pz = ((z + TILE_W / 2) / TILE_W) * AO_N
+      const px = ((x - T.x + TILE_W / 2) / TILE_W) * AO_N
+      const pz = ((z - T.z + TILE_W / 2) / TILE_W) * AO_N
       const pr = Math.max(1.5, (r / TILE_W) * AO_N)
       const gr = aog.createRadialGradient(px, pz, 0, px, pz, pr)
       gr.addColorStop(0, inner)
@@ -341,8 +344,8 @@ export function buildBakes(
   bakeMat.setTexture('uShadowMap', shadowRT)
   bakeMat.setMatrix('uLightVP', lightVP)
   bakeMat.setVector2('uSMTexel', smTexel)
-  const lmCam = new FreeCamera('lmCam', new Vector3(0, 500, 0), scene)
-  lmCam.setTarget(new Vector3(0, 0, 0.01))
+  const lmCam = new FreeCamera('lmCam', new Vector3(T.x, 500, T.z), scene)
+  lmCam.setTarget(new Vector3(T.x, 0, T.z + 0.01))
   lmCam.mode = Camera.ORTHOGRAPHIC_CAMERA
   Object.assign(lmCam, {
     orthoLeft: -TILE_W / 2,
@@ -472,18 +475,21 @@ export function buildBakes(
 function skyOcclusion(g: CanvasRenderingContext2D, canopy: Nature['canopy']): SkyBake {
   const t0 = performance.now()
   const px = TILE_W / AO_N
+  // (the occlusion's grid over the tile, from its corner: src/look/tile.ts)
+  const X0 = TILE_O.x - TILE_W / 2
+  const Z0 = TILE_O.y - TILE_W / 2
   const vis = new Float32Array(AO_N * AO_N).fill(1)
   const ground = new Float32Array(AO_N * AO_N).fill(NaN)
   for (const [x, z, , , , h, r, op] of canopy) {
     const sy = heightAt(x, z) + h
-    const i0 = Math.max(0, Math.floor((x - SKY_REACH + TILE_W / 2) / px))
-    const i1 = Math.min(AO_N - 1, Math.floor((x + SKY_REACH + TILE_W / 2) / px))
-    const j0 = Math.max(0, Math.floor((z - SKY_REACH + TILE_W / 2) / px))
-    const j1 = Math.min(AO_N - 1, Math.floor((z + SKY_REACH + TILE_W / 2) / px))
+    const i0 = Math.max(0, Math.floor((x - SKY_REACH - X0) / px))
+    const i1 = Math.min(AO_N - 1, Math.floor((x + SKY_REACH - X0) / px))
+    const j0 = Math.max(0, Math.floor((z - SKY_REACH - Z0) / px))
+    const j1 = Math.min(AO_N - 1, Math.floor((z + SKY_REACH - Z0) / px))
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
-        const tx = (i + 0.5) * px - TILE_W / 2
-        const tz = (j + 0.5) * px - TILE_W / 2
+        const tx = X0 + (i + 0.5) * px
+        const tz = Z0 + (j + 0.5) * px
         const dx = x - tx
         const dz = z - tz
         const h2 = dx * dx + dz * dz

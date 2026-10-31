@@ -11,8 +11,9 @@ import { packCover, unpackCover, type CoverGrid } from './cover.ts'
 
 // 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/done/roads.md); 9: the world it holds
 // (the demo, or a map's window) and a map world's trees (docs/plans/active/look-austerlitz-a1.md); 10: a map world's
-// far ring the whole map, its cover and its coarse light (docs/plans/active/g3a-the-whole-map-far.md)
-export const LOOK_VERSION = 10
+// far ring the whole map, its cover and its coarse light (docs/plans/done/g3a-the-whole-map-far.md); 11: the tile's
+// centre (G3b, docs/plans/active/g3b-the-detail-follows.md)
+export const LOOK_VERSION = 11
 
 // the trees' species a map world's data names by index (src/look/world/from-map.ts; the page draws each as its
 // generated model, src/look/nature.ts)
@@ -93,6 +94,63 @@ export interface LookData {
   trees: Float32Array // a map world's trees, TREE_FLOATS each (none on the demo: its scatter is the page's)
   farCover: CoverGrid | null
   light: LightGrid | null
+  // the tile's centre in the world's frame, m (G3b): on SPEC.tileStep's grid; [0, 0] but for a moved tile
+  tileAt: TileAt
+}
+
+/** A tile's centre, m (x, z) */
+export type TileAt = readonly [number, number]
+
+/** Throws unless a tile's centre lies on the tile grid (`step`: SPEC.tileStep, every grid of the tile and the ring
+ *  lines up) */
+export function checkTileAt(t: TileAt, step: number): void {
+  const on = (v: number) => Number.isFinite(v) && Math.abs(v / step - Math.round(v / step)) < 1e-9
+  if (!on(t[0]) || !on(t[1])) throw new Error(`a tile's centre ${t[0]}, ${t[1]} is not on the ${step} m grid`)
+}
+
+/**
+ * The look data with every place moved by (dx, dz) m and its tile's centre with it (G3b): the heightfield, the far
+ * ring, the span grids, the roads (their grid and segments), the covers, the coarse light, the trees and a map world's
+ * play area and edge. The heights and the arrays that hold no place are shared, not copied. The demo's river (its
+ * samples' places) is not moved: a moved world must have none.
+ */
+export function moveLook(d: LookData, [dx, dz]: TileAt): LookData {
+  if (!dx && !dz) return d
+  if (d.river.n) throw new Error('look data: a world with a river cannot be moved')
+  const segs = Float32Array.from(d.roads.segs)
+  for (let k = 0; k < segs.length; k += ROAD_SEG) {
+    segs[k] += dx
+    segs[k + 1] += dz
+    segs[k + 2] += dx
+    segs[k + 3] += dz
+  }
+  const trees = Float32Array.from(d.trees)
+  for (let k = 0; k < trees.length; k += TREE_FLOATS) {
+    trees[k] += dx
+    trees[k + 1] += dz
+  }
+  const m = moveGrids(d, [dx, dz])
+  return { ...m, roads: { ...m.roads, segs }, trees }
+}
+
+/** The look data's grids, rectangles and tile centre moved by (dx, dz) m, their arrays shared (moveLook moves the
+ *  places in its arrays too; the checks, checkLookData, need the grids alone) */
+function moveGrids(d: LookData, [dx, dz]: TileAt): LookData {
+  const at = <T extends { x0: number; z0: number }>(g: T): T => ({ ...g, x0: g.x0 + dx, z0: g.z0 + dz })
+  const rect = (r: Rect): Rect => ({ x0: r.x0 + dx, z0: r.z0 + dz, x1: r.x1 + dx, z1: r.z1 + dz })
+  return {
+    ...d,
+    hf: at(d.hf),
+    far: at(d.far),
+    bank: at(d.bank),
+    water: at(d.water),
+    roads: at(d.roads),
+    cover: at(d.cover),
+    farCover: d.farCover && at(d.farCover),
+    light: d.light && at(d.light),
+    world: d.world.kind === 'map' ? { ...d.world, play: rect(d.world.play), edge: rect(d.world.edge) } : d.world,
+    tileAt: [d.tileAt[0] + dx, d.tileAt[1] + dz],
+  }
 }
 
 const SPAN_GRIDS = ['bank', 'water'] as const
@@ -108,6 +166,7 @@ interface Meta {
   cover: { n: number; cell: number; x0: number; z0: number }
   farCover?: { n: number; cell: number; x0: number; z0: number }
   light?: { nx: number; nz: number; cell: number; x0: number; z0: number }
+  tileAt: TileAt
   world: LookWorld
   arrays: [string, number, 'f32' | 'u8'][]
 }
@@ -146,6 +205,7 @@ export function encodeLook(d: LookData): Uint8Array {
     cover: { n: d.cover.n, cell: d.cover.cell, x0: d.cover.x0, z0: d.cover.z0 },
     ...(d.farCover && { farCover: { n: d.farCover.n, cell: d.farCover.cell, x0: d.farCover.x0, z0: d.farCover.z0 } }),
     ...(d.light && { light: { nx: d.light.nx, nz: d.light.nz, cell: d.light.cell, x0: d.light.x0, z0: d.light.z0 } }),
+    tileAt: d.tileAt,
     world: d.world,
     arrays: arrays.map(([k, a]) => [k, a.length, type(a)]),
   }
@@ -276,6 +336,7 @@ export function decodeLook(buf: ArrayBuffer): LookData {
     trees: arr.trees,
     farCover,
     light,
+    tileAt: meta.tileAt,
   }
 }
 
@@ -301,8 +362,11 @@ export function unpackSpans(g: SpanGrid, fill: [number, number, number, number])
 
 // The data must be the one this spec describes: a stale file (an old build, a cached download) would otherwise be
 // indexed with the new spec's sizes and draw a subtly wrong world.
-export function checkLookData(d: Derived, look: LookData): void {
+export function checkLookData(d: Derived, moved: LookData): void {
   const s = d.spec
+  // (a moved tile's data is checked at the origin: every grid's place is the tile's centre's plus the spec's)
+  checkTileAt(moved.tileAt, s.tileStep)
+  const look = moveGrids(moved, [-moved.tileAt[0], -moved.tileAt[1]])
   const bad: string[] = []
   const m = d.hfMargin
   const n = s.tileSub + 1 + 2 * m

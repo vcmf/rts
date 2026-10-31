@@ -2,6 +2,7 @@
 // enough that it dives under the banks; what it paints comes from the water data (depth, shore distance, flow), and
 // near the shore it paints the shore band, as the terrain does there (src/look/shaders/shore.glsl), so the shoreline
 // is the data's, not the triangles'.
+import { TILE_O } from './tile.ts'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
 import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
@@ -122,6 +123,7 @@ export function buildWater(
   const idx: number[] = []
   const C = RIVER
   const COLS = 12
+  // (the river is the demo's, whose tile is at the origin: a moved world has none, moveLook)
   const E2 = TILE_W / 2 - 0.01
   const lim = TILE_W / 2 + (1.35 * RIVER.WMAX) / 2 + 0.5
   let k = 0
@@ -215,8 +217,8 @@ export function buildWater(
   const finish = (sc: Scene) => {
     const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity]
     for (const [x, z, r] of reflTrees) {
-      const px = ((x + TILE_W / 2) / TILE_W) * REFL_N
-      const pz = ((z + TILE_W / 2) / TILE_W) * REFL_N
+      const px = ((x - TILE_O.x + TILE_W / 2) / TILE_W) * REFL_N
+      const pz = ((z - TILE_O.y + TILE_W / 2) / TILE_W) * REFL_N
       const pr = Math.max(2, (r / TILE_W) * REFL_N)
       reflG.fillStyle = '#fff'
       reflG.beginPath()

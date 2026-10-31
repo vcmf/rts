@@ -8,11 +8,11 @@ precision highp float;varying vec3 vW,vN;varying float vRiver;
 uniform sampler2D uRiverMask;
 #endif
 #ifdef COARSE_LIGHT
-// a map world's coarse light off the tile (G3a, docs/plans/active/g3a-the-whole-map-far.md): the map's soft sun shadow
+// a map world's coarse light off the tile (G3a, docs/plans/done/g3a-the-whole-map-far.md): the map's soft sun shadow
 // and open sky (src/render/lit/bake.ts, bakeLight) in the light map's place, no mist, no contact
 uniform sampler2D uCoarse;
 vec4 coarseLM(vec3 wp,vec4 lm){
-  if(max(abs(wp.x),abs(wp.z))<=TILE_HALF)return lm;
+  if(tileEdge(wp.xz)<=TILE_HALF)return lm;
   return vec4(texture2D(uCoarse,(wp.xz-COARSE_O)/COARSE_W).rg,0.0,1.0);}
 #endif
 // the ground's colour: its cover's (groundAt, the macro colour's arm: macro.glsl, shared with the shore band), stony
@@ -32,7 +32,7 @@ vec3 albedo(vec3 wp,vec3 n,vec4 wt){
   // margin, shore.glsl)
   float sd=waterSdf(wt),fsd=1.5*fwidth(sd),land=max(-sd,0.0);vec3 cb=c;
   if(sd<fsd&&-sd<BANK_REACH+fsd)cb=bankPaint(c,wp.xz,land,-waterDepth(wt),bankNormal(vec3(0.0,1.0,0.0),wp.xz).y);
-  c=mix(cr,cb,1.0-smoothstep(TILE_HALF-BANK_EDGE,TILE_HALF,max(abs(wp.x),abs(wp.z))));
+  c=mix(cr,cb,1.0-smoothstep(TILE_HALF-BANK_EDGE,TILE_HALF,tileEdge(wp.xz)));
   #else
   c=cr;
   #endif

@@ -27,7 +27,7 @@ void main(){vec3 N=normalize(vN);
   float vis=1.0-s/12.0;
   vis=smoothstep(0.35,0.65,vis+(G(vW.xz/3.0).r-0.5)*0.35);                  // painted edge, decided once
   #endif
-  vec4 a=texture2D(uAOTex,(vW.xz+TILE_HALF)/TILE_W);
+  vec4 a=texture2D(uAOTex,tileUV(vW.xz));
   #ifdef WATERDATA
   a.b*=waterMist(waterSdf(waterTexel(vW.xz)));   // the mist thinner over the water (waterdata.glsl)
   #endif

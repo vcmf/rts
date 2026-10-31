@@ -4,7 +4,7 @@
 // WATER_DEBUG adds its debug views. Without WATERDATA nothing here is compiled
 #ifdef WATERDATA
 uniform sampler2D uWater;
-vec4 waterTexel(vec2 xz){vec2 uv=(xz+TILE_HALF)/TILE_W;
+vec4 waterTexel(vec2 xz){vec2 uv=tileUV(xz);
   #ifdef WATER_SAB_FLIP
   uv.y=1.0-uv.y;   // the page check's sabotage: the texture read upside down
   #endif

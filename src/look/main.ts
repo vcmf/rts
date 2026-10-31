@@ -1,6 +1,7 @@
 // The look page (app/look.html): the painted world in the game's toolchain, ported from
 // prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
+import { TILE_O, tileEdge } from './tile.ts'
 import type { SimPlay } from './sim-armies.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
@@ -31,7 +32,15 @@ import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
 import { D, FocusFollow, TUNED_R, checkView, farDefines, groundOf, maxGrid, rectOf } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
-import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS, type LookWorld } from './world/data.ts'
+import {
+  checkLookData,
+  checkTileAt,
+  decodeLook,
+  unpackSpans,
+  ROAD_SEG,
+  ROAD_SLOTS,
+  type LookWorld,
+} from './world/data.ts'
 import { windowFile, windowOf, type LookWindow } from './world/windows.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
@@ -95,8 +104,17 @@ if (!window.NATURE) {
 // the world's data, built offline (tools/build-look-data.ts, decision 0012): the heightfield, the far ring, the river;
 // the demo's, or a map's window by ?map=<map>&window=<name> (docs/plans/active/look-austerlitz-a1.md)
 const lookWindow = windowOf(new URLSearchParams(location.search))
-const lookUrl = lookWindow ? WINDOW_DATA[`../../${windowFile(lookWindow)}`] : LOOK_URL
-if (!lookUrl) throw new Error(`look data: no ${windowFile(lookWindow!)}: run node tools/build-look-data.ts`)
+// ?tileat=<x>,<z>: the window's data with its tile there (G3b-1's check; built by tools/build-look-data.ts --tileat)
+const tileAtParam = new URLSearchParams(location.search).get('tileat')
+const tileAt = tileAtParam === null ? undefined : (tileAtParam.split(',').map(Number) as [number, number])
+if (tileAt && !lookWindow) throw new Error('?tileat=<x>,<z> needs ?map and ?window')
+if (tileAt && tileAt.length !== 2) throw new Error(`?tileat must be <x>,<z> in metres, not ${tileAtParam}`)
+if (tileAt) checkTileAt(tileAt, D.spec.tileStep)
+const lookUrl = lookWindow ? WINDOW_DATA[`../../${windowFile(lookWindow, tileAt)}`] : LOOK_URL
+if (!lookUrl) {
+  const make = tileAt ? ` --window ${lookWindow!.name} --tileat ${tileAt.join(',')}` : ''
+  throw new Error(`look data: no ${windowFile(lookWindow!, tileAt)}: run node tools/build-look-data.ts${make}`)
+}
 const res = await fetch(lookUrl)
 if (!res.ok) throw new Error(`look data: ${res.status} ${res.statusText} for ${lookUrl}`)
 const look = decodeLook(await res.arrayBuffer())
@@ -109,15 +127,17 @@ const worldBuildings: readonly Building[] = onMap ? [] : BUILDINGS
 // world's coarsened to the spec's cells (src/look/world/cover.ts, coarsenCover); the macro colour's bakes read the fine
 const frameCover = coarsenCover(look.cover, D.spec.macro.cover)
 setRiver(look.river)
+// the tile's centre (G3b: a moved tile's data, `?tileat`), before anything reads the tile's place
+TILE_O.set(look.tileAt[0], look.tileAt[1])
 setHeightfield(look.hf, look.far, D.spec.tile / 2)
 // the world's ground range, from the heights themselves (not the header): the camera's checks take it (checkView), and
 // the focus keeps to its range (the demo's focus stays on its 8 m plane, SPEC.camera.focusY; a map world's follows its
 // ground in play: docs/plans/done/look-austerlitz-a1b.md) and goes anywhere over its map's play area (G3a)
 const worldGround =
   look.world.kind === 'map'
-    ? groundOf(D.spec, look.hf, look.far, null, look.world.play)
+    ? groundOf(D.spec, look.hf, look.far, null, look.world.play, look.tileAt)
     : groundOf(D.spec, look.hf, look.far, D.spec.camera.focusY)
-// the far ring's rectangle (a map world's the whole map: G3a, docs/plans/active/g3a-the-whole-map-far.md)
+// the far ring's rectangle (a map world's the whole map: G3a, docs/plans/done/g3a-the-whole-map-far.md)
 const ring = rectOf(look.far)
 checkView(D.spec, worldGround)
 const canvas = document.getElementById('c') as HTMLCanvasElement
@@ -849,7 +869,7 @@ if (armiesParam !== null) {
     return false
   }
   const blocked = (x: number, z: number) => {
-    if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - 30) return true
+    if (tileEdge(x, z) > D.spec.tile / 2 - 30) return true
     const q = riverQuery(x, z)
     return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z)
   }
@@ -860,7 +880,9 @@ if (armiesParam !== null) {
   const greatcoat = uniformsParam === 'all-greatcoats'
   const dyes = dyeOverride(params.get('dye'), era.dyes)
   const uniforms = dressAll(era.uniforms, dyes, { greatcoat })
-  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides, FIELD.centre, FIELD.gap)
+  // (the field about the tile's centre: src/look/tile.ts)
+  const fieldAt: [number, number] = [FIELD.centre[0] + TILE_O.x, FIELD.centre[1] + TILE_O.y]
+  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides, fieldAt, FIELD.gap)
   // every figure fetched and decoded at once (the infantry's and each arm on the page)
   const armSpecs = ARMS_DEMO.filter(spec => armSwitch(spec.name))
   const [infantry, ...armData] = await Promise.all([ARMIES_DEMO.figure, ...armSpecs.map(a => a.figure)].map(figureData))
@@ -942,7 +964,7 @@ if (armiesParam !== null) {
     const speeds = Object.fromEntries(Object.entries(data.ranges).map(([k, r]) => [k, r.speed]))
     const { script, foot: footprint } = armScript(spec, t.geometry, g => f.place(g), speeds)
     // (from the layout's centre, its fronts half its gap either side: src/look/world/armies.ts FIELD)
-    const placedArm = placeArmUnits(spec, footprint, FIELD.centre, FIELD.gap / 2, blocked, taken)
+    const placedArm = placeArmUnits(spec, footprint, fieldAt, FIELD.gap / 2, blocked, taken)
     if (placedArm.length === 0) continue
     // (its sides' dresses alone: another arm's lack this figure's parts, a carriage's paint)
     const dress = Object.fromEntries(spec.sides.map(id => [id, era.uniforms[id]]))
@@ -1802,8 +1824,12 @@ if (params.has('bench')) {
   // with ?armies and no ?benchat, between the two sides' battalions facing each other (armies.ts, facing), clamped to
   // the tile's play area (the armies are the tile's): the bench's cameras on the fight
   const mid = armiesFocus
-  const clampPlay = (v: number) => Math.max(-D.spec.play, Math.min(D.spec.play, v))
-  const focus = at ? { x: at[0], z: at[1] } : mid ? { x: clampPlay(mid[0]), z: clampPlay(mid[1]) } : undefined
+  const clampPlay = (v: number, c: number) => Math.max(c - D.spec.play, Math.min(c + D.spec.play, v))
+  const focus = at
+    ? { x: at[0], z: at[1] }
+    : mid
+      ? { x: clampPlay(mid[0], TILE_O.x), z: clampPlay(mid[1], TILE_O.y) }
+      : undefined
   void runBench(scene, camera, passes, arms, hold, focus).then(
     r => {
       Object.assign(window, { __bench: r })

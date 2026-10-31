@@ -65,13 +65,15 @@ export function cellAt(L: Layers, x: number, z: number): number {
  * The window's heights: the tile's nodes and their margin (the demo's layout, tools/build-look-data.ts) and the far
  * ring's (`ring`: its nodes, ringFor in src/look/spec.ts; by default the demo's, SPEC.far about the centre), read from
  * `heightAt` (map metres to m above the datum), all taken down by the lowest of them, so the window's lowest ground is
- * 0 (its range read at load: groundOf, src/look/spec.ts). `base`: the height taken off, m.
+ * 0 (its range read at load: groundOf, src/look/spec.ts), or by `fixedBase` (a moved tile keeps its window's, G3b).
+ * `base`: the height taken off, m.
  */
 export function windowHeights(
   heightAt: (x: number, z: number) => number,
   win: Pick<LookWindow, 'x' | 'z'>,
   d: Derived,
   ring: { n: number; x0: number; z0: number } = { n: d.spec.farSub + 1, x0: -d.spec.far / 2, z0: -d.spec.far / 2 },
+  fixedBase?: number,
 ): { hf: Heightfield; far: Grid; base: number } {
   const s = d.spec
   const m = d.hfMargin
@@ -88,7 +90,7 @@ export function windowHeights(
     }
   }
   // (the lowest node lands on 0: a world's ground range comes from its data, groundOf in src/look/spec.ts)
-  const base = Math.min(minOf(h), minOf(fh))
+  const base = fixedBase ?? Math.min(minOf(h), minOf(fh))
   for (let k = 0; k < h.length; k++) h[k] -= base
   for (let k = 0; k < fh.length; k++) fh[k] -= base
   const x0 = (-m * s.tile) / s.tileSub - s.tile / 2
@@ -104,7 +106,7 @@ const maxOf = (a: Float32Array): number => a.reduce((v, x) => Math.max(v, x), -I
 
 /**
  * Throws unless the window's tile (side `tile` m) lies inside the layers. Its far ring runs past the map's edge
- * (docs/plans/active/g3a-the-whole-map-far.md): there the edge's heights are held (`heightOf` clamps) and the cover is
+ * (docs/plans/done/g3a-the-whole-map-far.md): there the edge's heights are held (`heightOf` clamps) and the cover is
  * the default (meadow: `groundClass` of no cell), with no ways, water or trees (`cellAt` is −1 off the layers); the
  * page paints it paper (the world's edge: mapRects).
  */

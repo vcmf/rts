@@ -11,7 +11,7 @@ AGENTS.md held "static light is baked once per map; only moving things get runti
 800 m tile, baked once at load. Track G's G3 (`docs/plans/active/g3-austerlitz-in-3d.md`) draws the whole of a map in
 3D: at the tile's light texel (0.52 m, decision 0082) a 3 km map's light map alone would be about 5,800² texels, so the
 fine light can only be held near the camera, baked as the detail moves (G3c). G3a
-(`docs/plans/active/g3a-the-whole-map-far.md`) lights the rest of the map with G2's coarse light (decision 0090's
+(`docs/plans/done/g3a-the-whole-map-far.md`) lights the rest of the map with G2's coarse light (decision 0090's
 `bakeLight`, the map's soft sun shadow and open sky at 2 m, under the same sun). The owner accepted the wording below
 on PR #290 (2026-10-30).
 

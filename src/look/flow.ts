@@ -2,6 +2,7 @@
 // bake and the clumps read the same flow with one fetch instead of evaluating it (five value noises a call; the
 // strokes made several calls a pixel). The field: flowAt in src/look/shaders/meadow.glsl, here in JS (its hash in
 // float64: the textures, not the GLSL, are the field wherever they reach)
+import { TILE_O } from './tile.ts'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
@@ -88,7 +89,10 @@ export function buildFlow(scene: Scene): FlowTextures {
   const f = new Uint8Array(n * n * 4)
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
-      const [dx, dz, lie] = flowAt((i + 0.5) * FLOW_TEXEL - TILE / 2, (j + 0.5) * FLOW_TEXEL - TILE / 2)
+      const [dx, dz, lie] = flowAt(
+        TILE_O.x + (i + 0.5) * FLOW_TEXEL - TILE / 2,
+        TILE_O.y + (j + 0.5) * FLOW_TEXEL - TILE / 2,
+      )
       const k = (j * n + i) * 4
       f[k] = Math.round((dx * 0.5 + 0.5) * 255)
       f[k + 1] = Math.round((dz * 0.5 + 0.5) * 255)

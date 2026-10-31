@@ -19,7 +19,7 @@ vec3 bankNormal(vec3 N,vec2 xz){
   #ifdef BANKN_OFF
   return N;
   #else
-  vec4 bk=texture2D(uBankN,(xz+TILE_HALF)/TILE_W);vec2 b=bk.xy*2.0-1.0;
+  vec4 bk=texture2D(uBankN,tileUV(xz));vec2 b=bk.xy*2.0-1.0;
   return normalize(mix(N,vec3(b.x,sqrt(max(0.0,1.0-dot(b,b))),b.y),bk.z));
   #endif
 }
@@ -140,7 +140,7 @@ float track1(float a,vec2 xz,float s,float c,float k){
 vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT,out float dusty){
   jn=0.0;dist=1e9;past=0.0;otherT=0.0;dusty=0.0;float bestT=0.0;
   if(coverAt(xz).w>ROAD_NEAR)return vec4(0.0);
-  vec2 g=(xz+TILE_HALF)/ROAD_CELL;
+  vec2 g=tileUV(xz)*ROAD_N;
   if(any(lessThan(g,vec2(0.0)))||any(greaterThanEqual(g,vec2(ROAD_N))))return vec4(0.0);
   vec2 c=floor(g);float best=1e9,other=1e9,bestLine=-1.0;vec4 r=vec4(0.0);bool done=false;
   for(int k=0;k<ROAD_SLOTS/4;k++){
@@ -242,8 +242,8 @@ vec3 roadPaint(vec3 c,vec2 xz){
   // a cell of it, in the same earth: the road and track classes' colours are ROAD_EARTH's and TRACK_EARTH's). Never
   // past ROAD_EDGE m from the side (about 1.06 here, |wob| under 1.4): ROAD_NEAR, the road gate and the road split's
   // triangles rest on it (src/look/spec.ts, road.edge)
-  float rag=wob*clamp(hw/4.0,0.5,1.0),inside=(1.0-smoothstep(hw-0.3+rag*0.3,min(hw+0.5+rag*0.4,hw+ROAD_EDGE),dist))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))))
-    *(1.0-smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y))));   // (and as the tile's bake hands over to the far ring's, which has none: bakeOnce)
+  float rag=wob*clamp(hw/4.0,0.5,1.0),inside=(1.0-smoothstep(hw-0.3+rag*0.3,min(hw+0.5+rag*0.4,hw+ROAD_EDGE),dist))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,tileEdge(xz)))
+    *(1.0-smoothstep(TILE_HALF-60.0,TILE_HALF,tileEdge(xz)));   // (and as the tile's bake hands over to the far ring's, which has none: bakeOnce)
   if(inside<=0.0)return c;
   // none at a junction, nor round a dead end's cap. Where a pixel spans more than a track is wide (0.3 m: far out) they
   // are not drawn but their mean, a light dusting (under a pixel they would shimmer, and cost: docs/plans/done/roads.md)

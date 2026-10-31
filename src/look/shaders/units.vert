@@ -29,7 +29,8 @@ uniform sampler2D uVATP;attribute float aVid;
 // upright), each foot, hoof, wheel and the trail end on the ground under it on a slope (one rigid figure at its
 // root's height sank the men downhill of it into the ground and floated those uphill)
 uniform sampler2D uMeadow;
-float groundH(vec2 xz){return textureLod(uMeadow,(xz+TILE_HALF)/TILE_W,0.0).r;}
+#include<tile>
+float groundH(vec2 xz){return textureLod(uMeadow,tileUV(xz),0.0).r;}
 #endif
 #ifdef DEPTH
 varying float vD;

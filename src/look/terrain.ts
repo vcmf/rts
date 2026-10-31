@@ -3,6 +3,7 @@
 // (14.3 m) both have lines on the tile edge, and one far cell spans exactly 8 tile cells. The far ring drops every
 // triangle inside the band one far cell beyond the tile; the apron fills that band, joining the tile's edge
 // vertices to the far ring's vertices one for one.
+import { TILE_O, tileEdge } from './tile.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
@@ -57,7 +58,7 @@ const PAPER = [1, 3, 5].map(k => parseInt(STAFF_PAPER[0].slice(k, k + 2), 16) / 
 const glsl = (v: number) => v.toFixed(3)
 
 /**
- * The far ring's own defines on a map world (G3a, docs/plans/active/g3a-the-whole-map-far.md): the map's coarse light
+ * The far ring's own defines on a map world (G3a, docs/plans/done/g3a-the-whole-map-far.md): the map's coarse light
  * off the tile (COARSE_LIGHT: its texture's corner and size, a node at a texel's centre) and the paper past the map's
  * edge (MAP_EDGE); none on the demo.
  */
@@ -140,8 +141,7 @@ export function buildTerrain(
   }
   // the bank colours turn symmetric over the bank normals' edge fade, to meet the far ring's painted river (stroked
   // at the river's width) at the tile's edge
-  const edgeK = (x: number, z: number) =>
-    1 - sstep(TILE_W / 2 - D.spec.bank.edge, TILE_W / 2, Math.max(Math.abs(x), Math.abs(z)))
+  const edgeK = (x: number, z: number) => 1 - sstep(TILE_W / 2 - D.spec.bank.edge, TILE_W / 2, tileEdge(x, z))
   // the lab's test hill: the terrain's material without the ground's bank normals (they would shade its faces)
   const hillMat = mats.make('hill', TER_VS, TER_FS, {
     attributes: ['position', 'normal', 'aRiver'],
@@ -214,7 +214,7 @@ export function buildTerrain(
           rv[k] = 8
         } else {
           p[k * 3 + 1] = HF.h[(sub - row + m) * HF.n + col + m]
-          rv[k] = bandOf(riverQuery(p[k * 3], p[k * 3 + 2]), edgeK(p[k * 3], p[k * 3 + 2]))
+          rv[k] = bandOf(riverQuery(cx + p[k * 3], cz + p[k * 3 + 2]), edgeK(cx + p[k * 3], cz + p[k * 3 + 2]))
         }
       }
     }
@@ -226,7 +226,7 @@ export function buildTerrain(
       for (let t = 0; t < ix.length; t += 3) {
         const tx = cx + (p[ix[t] * 3] + p[ix[t + 1] * 3] + p[ix[t + 2] * 3]) / 3
         const tz = cz + (p[ix[t] * 3 + 2] + p[ix[t + 1] * 3 + 2] + p[ix[t + 2] * 3 + 2]) / 3
-        if (Math.max(Math.abs(tx), Math.abs(tz)) > BAND) keep.push(ix[t], ix[t + 1], ix[t + 2])
+        if (tileEdge(tx, tz) > BAND) keep.push(ix[t], ix[t + 1], ix[t + 2])
       }
       g.setIndices(keep)
     }
@@ -237,7 +237,10 @@ export function buildTerrain(
     g.material = coarse ? farTerrainMat : terrainMat
     return g
   }
-  const tileGround = ground(TILE_W, TILE_SUB)
+  // (the tile about its centre, src/look/tile.ts; the apron below built about it)
+  const tcx = TILE_O.x
+  const tcz = TILE_O.y
+  const tileGround = ground(TILE_W, TILE_SUB, tcx, tcz)
   const farGround = ground(FAR_W, FAR_SUB, fcx, fcz)
 
   // vertex index of grid point (x,z) in a CreateGround mesh (rows run from +z to -z)
@@ -279,11 +282,13 @@ export function buildTerrain(
     rv.push(r)
     return pos.length / 3 - 1
   }
+  // (x, z: from the tile's centre)
   const T = (x: number, z: number) => {
     const k = gridV(TILE_W, TILE_SUB, x, z)
-    return add(tp, tn, k, tr[k], x, z)
+    return add(tp, tn, k, tr[k], x + tcx, z + tcz, tcx, tcz)
   }
-  const Fv = (x: number, z: number) => add(fp, fn, gridV(FAR_W, FAR_SUB, x - fcx, z - fcz), 8, x, z, fcx, fcz)
+  const Fv = (x: number, z: number) =>
+    add(fp, fn, gridV(FAR_W, FAR_SUB, x + tcx - fcx, z + tcz - fcz), 8, x + tcx, z + tcz, fcx, fcz)
   // same winding as the ground meshes (their face normals point up)
   const ti = tileGround.getIndices()!
   const up = (a: number, b: number, c: number, P: ArrayLike<number>) => {
@@ -380,8 +385,8 @@ export function splitGround(
   const kind = new Uint8Array(n * n).fill(2)
   for (let cz = 0; cz < n; cz++) {
     for (let cx = 0; cx < n; cx++) {
-      const x0 = cx * w - h
-      const z0 = cz * w - h
+      const x0 = TILE_O.x + cx * w - h
+      const z0 = TILE_O.y + cz * w - h
       // (a village texel's field id is 0: its B is the yard's mark or 0; the first yard texel settles the cell)
       scan: for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z0 + w + M - C.z0) / C.cell); j++) {
         for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x0 + w + M - C.x0) / C.cell); i++) {

@@ -2,6 +2,7 @@
 // tile's grid, built offline and shipped in the look data. The tile mesh is built from it vertex for vertex, and
 // heightAt interpolates it on the mesh's own triangles, so the ground drawn and the ground used are equal by
 // construction. It extends beyond the tile (SPEC.aoMargin) for the occlusion bake.
+import { onTile } from './tile.ts'
 
 // node (i, j) at x0 + i·cell, z0 + j·cell
 export interface Grid {
@@ -49,10 +50,11 @@ function sample(f: Grid, x: number, z: number): number {
 
 export const heightAt = (x: number, z: number): number => sample(HF, x, z)
 
-// the ground anywhere: the heightfield on the tile, the far ring's nodes beyond it (the far ring is drawn from
-// them on the same split; only the 14 m apron between the two is approximated by the far grid)
+// the ground anywhere: the heightfield on the tile (about its centre: src/look/tile.ts), the far ring's nodes beyond
+// it (the far ring is drawn from them on the same split; only the 14 m apron between the two is approximated by the
+// far grid)
 export const groundAt = (x: number, z: number): number =>
-  Math.abs(x) <= TILE_HALF && Math.abs(z) <= TILE_HALF ? sample(HF, x, z) : sample(FAR, x, z)
+  onTile(x, z, TILE_HALF) ? sample(HF, x, z) : sample(FAR, x, z)
 
 // the prototype's name: every caller that asked H(x, z) reads the drawn ground
 export const H = groundAt

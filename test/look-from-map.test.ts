@@ -26,7 +26,15 @@ import {
   wayLines,
   windowHeights,
 } from '../src/look/world/from-map.ts'
-import { TREE_FLOATS, TREE_SPECIES, decodeLook, encodeLook } from '../src/look/world/data.ts'
+import {
+  TREE_FLOATS,
+  TREE_SPECIES,
+  checkTileAt,
+  decodeLook,
+  encodeLook,
+  moveLook,
+  type LookData,
+} from '../src/look/world/data.ts'
 import { WINDOWS, windowOf, type LookWindow } from '../src/look/world/windows.ts'
 import { noRiver } from '../src/look/river.ts'
 import fs from 'node:fs'
@@ -476,6 +484,7 @@ describe('the page and the data', () => {
       trees: Float32Array.from([1, 2, 3, 4]),
       farCover,
       light,
+      tileAt: [0, 0],
     })
     const back = decodeLook(c.buffer.slice(c.byteOffset, c.byteOffset + c.byteLength) as ArrayBuffer)
     expect(back.world).toEqual(world)
@@ -614,5 +623,64 @@ describe("the frame's coarse cover and the roads' gate", () => {
     expect(worst).toBeLessThanOrEqual(slack)
     // a fine cell's half diagonal and the wear's rounding: well inside it
     expect(worst).toBeLessThanOrEqual(Math.SQRT1_2 + 0.05)
+  })
+})
+
+describe('a moved tile (G3b-1)', () => {
+  it('keeps a tile on the 200 m grid, and refuses one off it', () => {
+    expect(() => checkTileAt([400, -1200], 200)).not.toThrow()
+    expect(() => checkTileAt([0, 0], 200)).not.toThrow()
+    expect(() => checkTileAt([401, 0], 200)).toThrow(/not on the 200 m grid/)
+    expect(() => checkTileAt([0, NaN], 200)).toThrow(/not on the 200 m grid/)
+  })
+
+  it('moves every place in the data with the tile, and back again', () => {
+    const grid = { n: 2, cell: 1, x0: -3, z0: -4, h: new Float32Array([1, 2, 3, 4]) }
+    const spans = { n: 1, cell: 1, x0: -5, z0: -6, ch: 4, spans: new Float32Array(0), tex: new Uint8Array(0) }
+    const play = { x0: -1, z0: -2, x1: 3, z1: 4 }
+    const d: LookData = {
+      hf: { ...grid, min: 1, max: 4 },
+      far: { ...grid, x0: -30, z0: -40 },
+      river: noRiver(),
+      bank: { ...spans, ch: 3 },
+      water: spans,
+      roads: {
+        segs: Float32Array.from({ length: 12 }, (_, k) => k + 1),
+        n: 1,
+        cell: 8,
+        x0: -7,
+        z0: -8,
+        ids: new Float32Array(ROAD_SLOTS),
+      },
+      cover: { n: 1, cell: 1, x0: -9, z0: -10, tex: new Uint8Array(4) },
+      world: { kind: 'map', map: 'test', window: 'test', x: 2, z: 4, base: 1.5, play, edge: play },
+      trees: Float32Array.from([1, 2, 3, 4, 5, 6, 7, 8]),
+      farCover: { n: 1, cell: 4, x0: -11, z0: -12, tex: new Uint8Array(4) },
+      light: { nx: 1, nz: 1, cell: 2, x0: -13, z0: -14, rg: new Uint8Array(2) },
+      tileAt: [0, 0],
+    }
+    const m = moveLook(d, [400, -200])
+    expect(m.tileAt).toEqual([400, -200])
+    for (const k of ['hf', 'far', 'bank', 'water', 'roads', 'cover', 'farCover', 'light'] as const) {
+      expect([m[k]!.x0, m[k]!.z0]).toEqual([d[k]!.x0 + 400, d[k]!.z0 - 200])
+    }
+    // a segment's ends move, its distance along, half width, index, flags and mitres do not
+    expect(Array.from(m.roads.segs)).toEqual([401, -198, 403, -196, 5, 6, 7, 8, 9, 10, 11, 12])
+    expect(Array.from(m.trees)).toEqual([401, -198, 3, 4, 405, -194, 7, 8])
+    expect(m.world).toMatchObject({ play: { x0: 399, z0: -202, x1: 403, z1: -196 } })
+    // the heights are shared, not copied; and back again is the data
+    expect(m.hf.h).toBe(d.hf.h)
+    const back = moveLook(m, [-400, 200])
+    expect({
+      ...back,
+      roads: { ...back.roads, segs: Array.from(back.roads.segs) },
+      trees: Array.from(back.trees),
+    }).toEqual({
+      ...d,
+      roads: { ...d.roads, segs: Array.from(d.roads.segs) },
+      trees: Array.from(d.trees),
+    })
+    // a world with a river is not moved (its samples' places are the demo's)
+    expect(() => moveLook({ ...d, river: { ...d.river, n: 1 } }, [200, 0])).toThrow(/river/)
   })
 })

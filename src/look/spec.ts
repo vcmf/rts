@@ -8,6 +8,8 @@ export interface Spec {
   far: number // the far ring's side, m: the backdrop out to the edge of any view
   farSub: number // far grid cells per side
   play: number // the camera focus stays within ±play in x and z
+  // a map world's tile is centred on this grid about the origin (G3b): every grid of the tile and the far ring lines up
+  tileStep: number
   // detail ⊇ play ⊕ margin: views near the play edge see the far ring only toward the top (checked against the camera)
   margin: number
   // the heightfield extends this far beyond the tile, so the occlusion bake reads real ground at the edge
@@ -72,6 +74,7 @@ export const SPEC: Spec = {
   far: 2600,
   farSub: 182,
   play: 235,
+  tileStep: 200,
   margin: 165,
   aoMargin: 40,
   aoRing: 40,
@@ -152,7 +155,7 @@ export interface WorldGround {
 }
 
 /**
- * A map world's far ring (G3a, docs/plans/active/g3a-the-whole-map-far.md): its nodes on the demo's far grid (far
+ * A map world's far ring (G3a, docs/plans/done/g3a-the-whole-map-far.md): its nodes on the demo's far grid (far
  * cells of `farCell` m, the tile's edges on grid lines, so the apron joins them), holding the play area and `reach` m
  * past it each way, at least a far cell past the tile; square, its extra cells on the far side. The demo's ring is
  * SPEC.far about the origin.
@@ -326,6 +329,25 @@ export function derive(s: Spec = SPEC): Derived {
     } catch (e) {
       bad.push((e as Error).message.replace(/^world spec \([^)]*\): /, ''))
     }
+  }
+  // a moved tile (G3b): its edges on the far grid (the apron), and every grid over it on the first tile's (a swap
+  // moves no ground, road, cover edge or texel): the tile's nodes, the roads', the covers', the meadow map's 1 m and
+  // its growth's 2 m (src/look/meadow.ts), the light map's, the occlusion's and the bakes' texels
+  const steps: [string, number][] = [
+    ['far cells', farCell],
+    ['tile cells', cell],
+    ['road cells', s.road.cell],
+    ['cover cells', s.macro.cover],
+    ['macro texels', s.macro.texel],
+    ['bank texels', s.bank.texel],
+    ['water texels', s.water.texel],
+    ['light map texels', s.tile / s.sizes.lightMap],
+    ['occlusion texels', s.tile / s.sizes.aoTex],
+    ['meadow cells', 2],
+  ]
+  const off = steps.filter(([, c]) => !isInt(s.tileStep / c)).map(([k]) => k)
+  if (!(s.tileStep > 0) || off.length) {
+    bad.push(`grid: the tile step ${s.tileStep} m is not a whole number of ${off.join(', ') || 'metres'}`)
   }
   if (s.aoMargin < s.aoRing) {
     bad.push(`bake: the heightfield's margin ${s.aoMargin} m < the occlusion ring ${s.aoRing} m`)
@@ -802,6 +824,7 @@ export function groundOf(
   far: NodeGrid,
   plane: number | null,
   play: Rect = playOf(s),
+  tileAt: readonly [number, number] = [0, 0],
 ): WorldGround {
   let lo = Infinity
   let hi = -Infinity
@@ -820,8 +843,9 @@ export function groundOf(
       }
     }
   }
-  // the far ring's nodes past the tile (inside it the heightfield is the ground)
+  // the far ring's nodes past the tile (inside it the heightfield is the ground; `tileAt` its centre, G3b)
   const e = s.tile / 2
+  const [tx, tz] = tileAt
   let farLo = Infinity
   for (let j = 0; j < far.n; j++) {
     const z = far.z0 + j * far.cell
@@ -829,7 +853,7 @@ export function groundOf(
       const v = far.h[j * far.n + i]
       if (v < farLo) farLo = v
       const x = far.x0 + i * far.cell
-      if (Math.max(Math.abs(x), Math.abs(z)) > e && inPlay(x, z)) {
+      if (Math.max(Math.abs(x - tx), Math.abs(z - tz)) > e && inPlay(x, z)) {
         if (v < lo) lo = v
         if (v > hi) hi = v
         if (v < pLo) pLo = v
