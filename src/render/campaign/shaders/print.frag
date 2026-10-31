@@ -116,10 +116,14 @@ bool slotHolds(vec2 k) {
   return all(lessThan(abs(held - tile), vec2(0.5)));
 }
 // whether every tile the detail reads at a point is in its slot: the reads reach two nodes either way (the
-// Catmull-Rom pass from one before to two after), so the corners of that box, which between them touch every tile
-// it does (a tile is far wider than the box)
+// Catmull-Rom pass from one before to two after); inside a tile, its own slot alone, near its edge the corners of
+// that box, which between them touch every tile it does (a tile is far wider than the box)
 bool detailHeld(vec2 w) {
   vec2 k = floor(detailNode(w));
+  vec2 local = k - floor(k / uDetailSize) * uDetailSize;
+  if (all(greaterThanEqual(local, vec2(2.0))) && all(lessThanEqual(local, vec2(uDetailSize - 4.0)))) {
+    return slotHolds(k);
+  }
   return slotHolds(k + vec2(-2.0, -2.0)) && slotHolds(k + vec2(3.0, -2.0)) &&
          slotHolds(k + vec2(-2.0, 3.0)) && slotHolds(k + vec2(3.0, 3.0));
 }

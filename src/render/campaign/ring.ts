@@ -74,23 +74,34 @@ export function assignSlots(
   return { given: next, changed }
 }
 
+/** A tile's failures: when it last failed (ms) and how many times in a row. */
+export interface Failure {
+  at: number
+  tries: number
+}
+
+/** How long a tile that failed `tries` times in a row waits before it is tried again: `first` ms, doubled each time. */
+export function retryWait(tries: number, first: number, most: number): number {
+  return Math.min(most, first * 2 ** Math.max(0, tries - 1))
+}
+
 /**
- * The tiles of the area to load, the nearest (ti, tj) first: those not cached, not loading, and not failed within
- * the last `retryMs` (a failure at `failed.get(key)` ms is tried again after it).
+ * The tiles of the area to load, the nearest (ti, tj) first: those not present (cached, or already in their slot),
+ * not loading, and not waiting after a failure (`retryWait` from its last).
  */
 export function tilesToLoad(
   tiles: TileAt[],
   ti: number,
   tj: number,
-  have: { cached: (key: string) => boolean; loading: (key: string) => boolean },
-  failed: Map<string, number>,
+  have: { present: (key: string) => boolean; loading: (key: string) => boolean },
+  failed: Map<string, Failure>,
   now: number,
-  retryMs: number,
+  wait: (tries: number) => number,
 ): TileAt[] {
   const wanted = tiles.filter(t => {
     const key = tileKey(t)
-    const at = failed.get(key)
-    return !have.cached(key) && !have.loading(key) && (at === undefined || now - at >= retryMs)
+    const f = failed.get(key)
+    return !have.present(key) && !have.loading(key) && (!f || now - f.at >= wait(f.tries))
   })
   return nearestFirst(wanted, ti, tj)
 }

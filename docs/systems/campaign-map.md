@@ -89,7 +89,7 @@ The tools around it: `tools/campaign-theatre.ts` (the theatre's data, its 250 m 
 manifest (`readManifest`: its format, its levels spanning the frame, its fields), the far level's 104 tiles (eight
 at once) and the fields, inflates them with the browser's own stream, and hands them to the view; nothing is baked.
 Drag pans, the wheel zooms to the cursor; `?view=x,z,km`, `?upscale=off|<factor>`, `?fps=0` as the prototype's. The
-page keeps `window.__campaign` for the checks: `setView`, `view`, `detail`, `upscale`, `bench(n)` and the load's
+page keeps `window.__campaign` for the checks: `setView`, `view`, `detail`, `upscale`, `bench(n)`, `start` and `stop` (the render loop) and the load's
 `loadedMs` and `readyMs`.
 
 `src/render/campaign/`:
@@ -99,7 +99,7 @@ page keeps `window.__campaign` for the checks: `setView`, `view`, `detail`, `ups
 | `view.ts` | `CampaignMapView`: Babylon, the map raised by the far level's shape on a mesh (a vertex every two nodes), the plate's sides and the table; the textures from the tiles and fields (the lakes' mask halved, a mean of 2 × 2, where the GPU's textures are smaller); the detail area of the close level around the camera (`ring.ts`), 6 tiles loading at once, 320 kept, 2 uploaded a frame; FSR 1 above 1080p; a frame every display frame (the clouds drift) |
 | `shaders/print.vert`, `shaders/print.frag` | the prototype's print: the paper, the forests, the contours, the water's steps, the lines, then the sun and the sky per pixel, the clouds, the lamp, the haze; `shaders/side.*` the plate's sides |
 | `level.ts` | pure: the manifest checked, a level put together from its tiles, a tile copied into a window, the fields' planes made ready for the GPU |
-| `ring.ts` | pure (K2c1): the detail area as a ring of 12 × 12 tile slots, the tile at (i, j) always in slot (i mod 12, j mod 12) of textures that wrap, so a move loads only the tiles that come in; the area's place (moved when the target is more than a tile off its middle), its tiles nearest first, the slots' table (the tile each slot holds, 16 bits a column and a row: the shader draws a slot only where it holds the tile there), the uploads waiting (one a slot, a cleared slot or a tile, each into its own rectangle of the textures) |
+| `ring.ts` | pure (K2c1): the detail area as a ring of 12 × 12 tile slots, the tile at (i, j) always in slot (i mod 12, j mod 12) of textures that wrap, so a move loads only the tiles that come in; the area's place (moved when the target is more than a tile off its middle), its tiles nearest first, the slots' table (the tile each slot holds, 16 bits a column and a row: the shader uses the detail only where every tile its reads reach is in its slot), the tiles to load (not cached nor in their slot, a failed one again after 5 s, doubling to 60 s), the uploads waiting (one a slot, each tile into its own rectangle of the textures, 2 a frame) |
 | `camera.ts` | pure: the tilt (30° far to 45° at the closest), the view kept on the map and above its ground, the camera's place, a ray's ground point |
 | `paper.ts` | the paper's grain and the clouds' noise, two canvases drawn at load |
 
@@ -107,8 +107,9 @@ Tested in `test/campaign-page.test.ts` and `test/campaign-ring.test.ts`. Against
 mean of 1 to 2 levels a channel at four views; 2.7 to 5.3 ms a frame at 1080p on test machine A, 2.7 to 6.7 ms at 4K
 with FSR 1; ready in 2.4 s (the prototype 6.5 s, 5.5 s of it its bake).
 
-Panning up close (K2c1, `docs/plans/active/k2c-stream.md`): the worst frame 4.8 ms at 1080p and 5.5 ms at 4K on
-test machine A, where the refilling window of K2b took 80 to 100 ms.
+Panning up close (K2c1, `docs/plans/active/k2c-stream.md`): a mean of 2.6 to 3.0 ms a frame and the worst about
+5 ms at 1080p on test machine A (single frames of 7 to 13 ms when the GPU is shared), where the refilling window of
+K2b took 80 to 100 ms.
 
 ## Open questions
 

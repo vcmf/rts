@@ -5,6 +5,7 @@ import {
   areaOrigin,
   areaTiles,
   assignSlots,
+  retryWait,
   tilesToLoad,
   EMPTY,
   nearestFirst,
@@ -142,21 +143,22 @@ describe('the tiles to load', () => {
     [2, 0],
     [3, 0],
   ]
-  const have = { cached: (key: string) => key === '1,0', loading: (key: string) => key === '2,0' }
+  const have = { present: (key: string) => key === '1,0', loading: (key: string) => key === '2,0' }
+  const wait = (tries: number) => retryWait(tries, 5000, 60000)
 
-  it('are those neither cached nor loading, the nearest first', () => {
-    expect(tilesToLoad(tiles, 3, 0, have, new Map(), 0, 5000)).toEqual([
+  it('are those neither present nor loading, the nearest first', () => {
+    expect(tilesToLoad(tiles, 3, 0, have, new Map(), 0, wait)).toEqual([
       [3, 0],
       [0, 0],
     ])
   })
 
-  it('leave out a tile that failed, until the retry time has passed', () => {
-    const failed = new Map([['3,0', 1000]])
-    expect(tilesToLoad(tiles, 3, 0, have, failed, 5999, 5000)).toEqual([[0, 0]])
-    expect(tilesToLoad(tiles, 3, 0, have, failed, 6000, 5000)).toEqual([
-      [3, 0],
-      [0, 0],
-    ])
+  it('leave out a tile that failed until its wait has passed, the wait doubling with each failure', () => {
+    const failed = new Map([['3,0', { at: 1000, tries: 1 }]])
+    expect(tilesToLoad(tiles, 3, 0, have, failed, 5999, wait)).toEqual([[0, 0]])
+    expect(tilesToLoad(tiles, 3, 0, have, failed, 6000, wait)).toHaveLength(2)
+    failed.set('3,0', { at: 1000, tries: 2 })
+    expect(tilesToLoad(tiles, 3, 0, have, failed, 6000, wait)).toEqual([[0, 0]])
+    expect([1, 2, 3, 5, 9].map(wait)).toEqual([5000, 10000, 20000, 60000, 60000])
   })
 })

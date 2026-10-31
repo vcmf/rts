@@ -65,6 +65,15 @@ same image as before at the four views of K2b2 once the tiles have loaded (a mea
   every tile its reads reach is in its slot; the move's logic pulled out of the view into `ring.ts` and tested
   (`assignSlots`, `tilesToLoad`); a second `start` no longer adds a second render loop; the half floats converted into
   a reused array; one value for the textures' side.
+- **Round 2**: no severe finding; fixed: a tile already in its slot but let go by the cache was fetched again (now
+  present when cached or in its slot); a failed tile's retry timer could come a hair before its wait ended and drop
+  it (the timer now 100 ms after), and failures retried every 5 s for ever (now doubling to 60 s); failures of tiles
+  that left the area forgotten; cached tiles sent nearest the target first after a jump; the shader reads the slots'
+  table once inside a tile, four times only near its edge; the system doc. Left: loads under way for tiles that left
+  the area are not cancelled (they finish into the cache); the detail starts at a tile's edge without a fade while
+  its neighbour loads (the far level shows there for a few frames). Measured, the version of round 1 and this one
+  alternated three times on test machine A: a mean of 2.7 to 3.0 ms against 2.6 to 2.9 ms, the worst 5.0 to 13.3 ms
+  against 4.9 to 8.5 ms: the same, the single slow frames in both (the GPU shared with another page in that hour).
 
 ## K2c2: a denser mesh near the camera
 

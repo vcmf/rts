@@ -27,11 +27,14 @@ import {
   areaOrigin,
   areaTiles,
   assignSlots,
+  nearestFirst,
+  retryWait,
   slotOf,
   SlotTable,
   tileKey,
   tilesToLoad,
   Uploads,
+  type Failure,
   type TileAt,
 } from './ring.ts'
 import { numbers, type Plane } from './fields.ts'
@@ -96,8 +99,10 @@ const SLACK = 1
 const TILE_CACHE = 320
 const LOADS = 6
 const UPLOADS = 2
-// a tile that failed to load is tried again this long after, ms
+// a tile that failed to load is tried again RETRY_MS after, then twice as long after each failure, RETRY_MOST_MS
+// at most
 const RETRY_MS = 5000
+const RETRY_MOST_MS = 60000
 // the upscale (decisions 0045, 0059): FSR 1 when the canvas holds more than UPSCALE_FROM pixels, at a factor that
 // brings it back to about that many, 1.3 to 2
 const UPSCALE_FROM = 1920 * 1080 * 1.15
@@ -149,8 +154,8 @@ interface Detail {
   given: (string | null)[]
   cache: Map<string, Tile>
   loading: Set<string>
-  // when each tile that failed last failed (ms), tried again RETRY_MS after
-  failed: Map<string, number>
+  // the tiles that failed, when last and how many times in a row (tried again after retryWait)
+  failed: Map<string, Failure>
   queue: TileAt[]
   uploads: Uploads<Tile>
   // the tile under the target when the area last moved
@@ -503,8 +508,18 @@ export class CampaignMapView {
     const z0 = -this.half.z + origin.oz * spanKm
     const lastKm = ((d.n - 1) * level.cell) / 1000
     this.material.setVector4('uDetailRect', new Vector4(x0, z0, x0 + lastKm, z0 + lastKm))
-    const { given, changed } = assignSlots(d.given, areaTiles(level, AREA, origin), AREA)
+    const tiles = areaTiles(level, AREA, origin)
+    const { given, changed } = assignSlots(d.given, tiles, AREA)
     d.given = given
+    // the cached tiles sent nearest the target first: the uploads go out in the order they were set
+    const near = new Map(
+      nearestFirst(
+        changed.map(([, t]) => t),
+        ti,
+        tj,
+      ).map((t, k) => [tileKey(t), k]),
+    )
+    changed.sort((a, b) => near.get(tileKey(a[1]))! - near.get(tileKey(b[1]))!)
     for (const [s, tile] of changed) {
       d.table.set(s, null)
       d.tableChanged = true
@@ -512,6 +527,9 @@ export class CampaignMapView {
       const cached = d.cache.get(tileKey(tile))
       if (cached) d.uploads.set(s, cached)
     }
+    // the failures of tiles no longer in the area forgotten
+    const inArea = new Set(tiles.map(tileKey))
+    for (const key of d.failed.keys()) if (!inArea.has(key)) d.failed.delete(key)
     this.queueTiles()
   }
 
@@ -519,11 +537,21 @@ export class CampaignMapView {
   private queueTiles() {
     const d = this.detail
     if (!d || !d.origin) return
-    const have = { cached: (key: string) => d.cache.has(key), loading: (key: string) => d.loading.has(key) }
+    // a tile is present when cached, or written in its slot (the cache may have let it go since)
+    const inSlot = (key: string) => {
+      const [i, j] = key.split(',').map(Number)
+      const held = d.table.get(slotOf(i, j, AREA))
+      return held !== null && held[0] === i && held[1] === j
+    }
+    const have = {
+      present: (key: string) => d.cache.has(key) || inSlot(key),
+      loading: (key: string) => d.loading.has(key),
+    }
     const tiles = areaTiles(d.level, AREA, d.origin)
     const [ti, tj] = d.target
+    const wait = (tries: number) => retryWait(tries, RETRY_MS, RETRY_MOST_MS)
     // nearest last: the queue is taken from its end
-    d.queue = tilesToLoad(tiles, ti, tj, have, d.failed, performance.now(), RETRY_MS).reverse()
+    d.queue = tilesToLoad(tiles, ti, tj, have, d.failed, performance.now(), wait).reverse()
     this.pumpTiles()
   }
 
@@ -542,10 +570,12 @@ export class CampaignMapView {
           this.tileLoaded(key, loaded)
         })
         .catch((e: unknown) => {
-          d.failed.set(key, performance.now())
-          console.warn(`campaign map: tile ${key} of the close level failed, tried again in ${RETRY_MS} ms:`, e)
-          // tried again if it is still in the area then
-          setTimeout(() => this.queueTiles(), RETRY_MS)
+          const tries = (d.failed.get(key)?.tries ?? 0) + 1
+          d.failed.set(key, { at: performance.now(), tries })
+          const wait = retryWait(tries, RETRY_MS, RETRY_MOST_MS)
+          console.warn(`campaign map: tile ${key} of the close level failed (${tries}), tried again in ${wait} ms:`, e)
+          // tried again if it is still in the area then; a little after, so the timer never comes before the wait ends
+          setTimeout(() => this.queueTiles(), wait + 100)
         })
         .finally(() => {
           d.loading.delete(key)
