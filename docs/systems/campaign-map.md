@@ -96,22 +96,24 @@ page keeps `window.__campaign` for the checks: `setView`, `view`, `detail`, `ups
 
 | Module | What |
 |---|---|
-| `view.ts` | `CampaignMapView`: Babylon, the map raised by the far level's shape on a mesh (a vertex every two nodes), the plate's sides and the table; the textures from the tiles and fields (the lakes' mask halved, a mean of 2 × 2, where the GPU's textures are smaller); the detail area of 12 × 12 tiles of the close level around the camera, 6 loading at once, 320 kept, uploaded at most every 120 ms; FSR 1 above 1080p; a frame every display frame (the clouds drift) |
+| `view.ts` | `CampaignMapView`: Babylon, the map raised by the far level's shape on a mesh (a vertex every two nodes), the plate's sides and the table; the textures from the tiles and fields (the lakes' mask halved, a mean of 2 × 2, where the GPU's textures are smaller); the detail area of the close level around the camera (`ring.ts`), 6 tiles loading at once, 320 kept, 2 uploaded a frame; FSR 1 above 1080p; a frame every display frame (the clouds drift) |
 | `shaders/print.vert`, `shaders/print.frag` | the prototype's print: the paper, the forests, the contours, the water's steps, the lines, then the sun and the sky per pixel, the clouds, the lamp, the haze; `shaders/side.*` the plate's sides |
-| `level.ts` | pure: the manifest checked, a level put together from its tiles, a tile copied into a window, the detail area's window (`detailOrigin`), the fields' planes made ready for the GPU |
+| `level.ts` | pure: the manifest checked, a level put together from its tiles, a tile copied into a window, the fields' planes made ready for the GPU |
+| `ring.ts` | pure (K2c1): the detail area as a ring of 12 × 12 tile slots, the tile at (i, j) always in slot (i mod 12, j mod 12) of textures that wrap, so a move loads only the tiles that come in; the area's place (moved when the target is more than a tile off its middle), its tiles nearest first, the slots' table (the tile each slot holds, 16 bits a column and a row: the shader draws a slot only where it holds the tile there), the uploads waiting (one a slot, a cleared slot or a tile, each into its own rectangle of the textures) |
 | `camera.ts` | pure: the tilt (30° far to 45° at the closest), the view kept on the map and above its ground, the camera's place, a ray's ground point |
 | `paper.ts` | the paper's grain and the clouds' noise, two canvases drawn at load |
 
-Tested in `test/campaign-page.test.ts`. Against the prototype (`docs/plans/active/k2b-page.md`): the same image to a
+Tested in `test/campaign-page.test.ts` and `test/campaign-ring.test.ts`. Against the prototype (`docs/plans/done/k2b-page.md`): the same image to a
 mean of 1 to 2 levels a channel at four views; 2.7 to 5.3 ms a frame at 1080p on test machine A, 2.7 to 6.7 ms at 4K
 with FSR 1; ready in 2.4 s (the prototype 6.5 s, 5.5 s of it its bake).
+
+Panning up close (K2c1, `docs/plans/active/k2c-stream.md`): the worst frame 4.8 ms at 1080p and 5.5 ms at 4K on
+test machine A, where the refilling window of K2b took 80 to 100 ms.
 
 ## Open questions
 
 - One light model for both map views (decision 0058): the battle map's lit view bakes its own relief
   (`src/render/lit/bake.ts`), at another scale; the campaign page has its own renderer (K2b), the question settled in
   K3.
-- Panning up close, the detail area's refill and its upload of 75 MB take a frame of about 90 ms: K2c streams the
-  tiles in pieces.
 - A smaller format (a predictor for the light planes, another codec), if the size matters once the whole of Europe
   is baked (K6).

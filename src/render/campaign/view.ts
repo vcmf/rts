@@ -22,7 +22,8 @@ import '@babylonjs/core/PostProcesses/RenderPipeline/postProcessRenderPipelineMa
 // the scene's createPickingRay (groundAt)
 import '@babylonjs/core/Culling/ray.js'
 import { FSR1RenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/fsr1RenderingPipeline.js'
-import { blitTile, detailOrigin, halved, interleave, type LevelData } from './level.ts'
+import { blitTile, halved, interleave, type LevelData } from './level.ts'
+import { areaOrigin, areaTiles, nearestFirst, slotOf, SlotTable, Uploads, type TileAt } from './ring.ts'
 import { numbers, type Plane } from './fields.ts'
 import type { Level, Manifest, Tile } from './tiles.ts'
 import {
@@ -77,12 +78,14 @@ const COLOURS: Record<string, string> = {
 // the sun warm, the sky cool; with the sky's share, flat open ground in the sun comes to about 1
 const KEY: [number, number, number] = [1.3, 0.98, 0.66]
 const SKY_COLOUR: [number, number, number] = [0.82, 0.88, 1.08]
-// the detail area: AREA × AREA tiles around the camera's target, the tiles decoded kept in a cache of TILE_CACHE (the
-// oldest dropped), LOADS of them loading at once; an upload at most every UPLOAD_MS (an area is about 75 MB)
+// the detail area (K2c1, ./ring.ts): AREA × AREA tile slots around the camera's target, moved when the target is
+// more than SLACK tiles off its middle; the tiles decoded kept in a cache of TILE_CACHE (the oldest dropped), LOADS of
+// them loading at once; at most UPLOADS slots written to the GPU a frame (each about 0.5 MB)
 const AREA = 12
+const SLACK = 1
 const TILE_CACHE = 320
 const LOADS = 6
-const UPLOAD_MS = 120
+const UPLOADS = 2
 // the upscale (decisions 0045, 0059): FSR 1 when the canvas holds more than UPSCALE_FROM pixels, at a factor that
 // brings it back to about that many, 1.3 to 2
 const UPSCALE_FROM = 1920 * 1080 * 1.15
@@ -116,22 +119,27 @@ function toHalf(v: number): number {
 /** '#rrggbb' as a Color3. */
 const colour = (hex: string) => Color3.FromHexString(hex)
 
-/** The detail area's state: its level, its window, its arrays and textures, its tiles. */
+/** The detail area's state: its level, its place, its textures and slots' table, its tiles. */
 interface Detail {
   level: Level
   load: TileLoader
   origin: { ox: number; oz: number } | null
+  // the textures' side in nodes (AREA tiles)
   n: number
-  shape: Float32Array
-  light: Uint8Array
   texS: RawTexture
   texL: RawTexture
+  table: SlotTable
+  texT: RawTexture
+  tableChanged: boolean
+  // a slot's worth of shape and light, reused for every upload
+  scratch: { shape: Float32Array; light: Uint8Array }
+  // the tile each slot is given to (loaded or not), by slot
+  given: (string | null)[]
   cache: Map<string, Tile>
   loading: Set<string>
   failed: Set<string>
-  queue: [number, number][]
-  upload: boolean
-  lastUpload: number
+  queue: TileAt[]
+  uploads: Uploads<Tile>
 }
 
 /**
@@ -196,13 +204,24 @@ export class CampaignMapView {
           'worldViewProjection',
           ...['uHalf', 'uTexel', 'uLightTexel', 'uLakeTexel', 'uDetailTexel', 'uDetailRect'],
           ...['uSun', 'uPaper', 'uTable', 'uKey', 'uSky', ...Object.keys(COLOURS)],
-          ...['uCellKm', 'uDetailCellKm', 'uDetailK', 'uSkyK', 'uLamp', 'uContour', 'uContourIndex', 'uContourK'],
+          ...[
+            'uCellKm',
+            'uDetailCellKm',
+            'uDetailSize',
+            'uDetailArea',
+            'uDetailK',
+            'uSkyK',
+            'uLamp',
+            'uContour',
+            'uContourIndex',
+            'uContourK',
+          ],
           ...['uTime', 'uCloudK', 'uHaze', 'uScreenH', 'uWoodK', 'uWoodFrom', 'uStepKm', 'uStep', 'uBands'],
           'uLineReachKm',
         ],
         samplers: [
           ...['uShape', 'uShapeL', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uLakeD', 'uContourH'],
-          ...['uDetailS', 'uDetailL', 'uPaperT', 'uClouds'],
+          ...['uDetailS', 'uDetailL', 'uDetailT', 'uPaperT', 'uClouds'],
         ],
       },
     )
@@ -232,8 +251,11 @@ export class CampaignMapView {
     m.setTexture('uDetailS', this.floatTexture(new Float32Array(1), 1, 1))
     m.setTexture('uDetailL', this.byteTexture(new Uint8Array(4), 1, 1, Constants.TEXTUREFORMAT_RGBA))
     m.setVector4('uDetailRect', new Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1))
+    m.setTexture('uDetailT', this.byteTexture(new SlotTable(1).bytes, 1, 1, Constants.TEXTUREFORMAT_RGBA))
     m.setVector2('uDetailTexel', new Vector2(1, 1))
     m.setFloat('uDetailCellKm', 0.1)
+    m.setFloat('uDetailSize', 1)
+    m.setFloat('uDetailArea', 1)
     return m
   }
 
@@ -258,9 +280,10 @@ export class CampaignMapView {
     return t
   }
 
-  /** Uploads new numbers into a float texture made by floatTexture. */
-  private updateFloat(t: RawTexture, values: Float32Array) {
-    t.update(this.full ? values : Uint16Array.from(values, toHalf))
+  /** Writes numbers into a square of `size` texels of a float texture made by floatTexture, from texel (x, z). */
+  private updateFloatRect(t: RawTexture, values: Float32Array, x: number, z: number, size: number) {
+    const data = this.full ? values : Uint16Array.from(values, toHalf)
+    this.engine.updateTextureData(t.getInternalTexture()!, data, x, z, size, size)
   }
 
   /** A raw byte texture, clamped, bilinear; mipmapped (trilinear) when `mips`. */
@@ -398,43 +421,55 @@ export class CampaignMapView {
   /** The close zoom's level and how to load its tiles: from then on, the detail area follows the camera. */
   setDetail(level: Level, load: TileLoader) {
     const n = AREA * level.size
-    const shape = new Float32Array(n * n)
-    const light = new Uint8Array(n * n * 4)
-    const texS = this.floatTexture(shape, n, n)
+    const texS = this.floatTexture(new Float32Array(n * n), n, n)
     texS.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
-    const texL = this.byteTexture(light, n, n, Constants.TEXTUREFORMAT_RGBA)
+    const texL = this.byteTexture(new Uint8Array(n * n * 4), n, n, Constants.TEXTUREFORMAT_RGBA)
+    // the slots wrap: a node's place in the textures is its place in the level modulo the area
+    for (const t of [texS, texL]) t.wrapU = t.wrapV = Texture.WRAP_ADDRESSMODE
+    const table = new SlotTable(AREA)
+    const texT = this.byteTexture(table.bytes, AREA, AREA, Constants.TEXTUREFORMAT_RGBA)
+    texT.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
     this.detail = {
       level,
       load,
       origin: null,
       n,
-      shape,
-      light,
       texS,
       texL,
+      table,
+      texT,
+      tableChanged: false,
+      scratch: { shape: new Float32Array(level.size * level.size), light: new Uint8Array(level.size * level.size * 4) },
+      given: new Array<string | null>(AREA * AREA).fill(null),
       cache: new Map(),
       loading: new Set(),
       failed: new Set(),
       queue: [],
-      upload: false,
-      lastUpload: 0,
+      uploads: new Uploads<Tile>(),
     }
-    this.material.setTexture('uDetailS', texS)
-    this.material.setTexture('uDetailL', texL)
-    this.material.setVector2('uDetailTexel', new Vector2(1 / n, 1 / n))
-    this.material.setFloat('uDetailCellKm', level.cell / 1000)
+    const m = this.material
+    m.setTexture('uDetailS', texS)
+    m.setTexture('uDetailL', texL)
+    m.setTexture('uDetailT', texT)
+    m.setVector2('uDetailTexel', new Vector2(1 / n, 1 / n))
+    m.setFloat('uDetailCellKm', level.cell / 1000)
+    m.setFloat('uDetailSize', level.size)
+    m.setFloat('uDetailArea', AREA)
     this.dirty = true
   }
 
   /** The detail area's state, for the fps meter and the checks. */
   detailState() {
     const d = this.detail
-    return d ? { tiles: d.cache.size, loading: d.loading.size, queued: d.queue.length, failed: d.failed.size } : null
+    if (!d) return null
+    const { size: uploads } = d.uploads
+    return { tiles: d.cache.size, loading: d.loading.size, queued: d.queue.length, failed: d.failed.size, uploads }
   }
 
   /**
    * Moves the detail area under the camera when it is close enough to use it (about 3 px a km and more) and its
-   * target has left the area's middle; queues the tiles the area needs, the nearest first.
+   * target is more than SLACK tiles off the area's middle: the slots of the tiles that left are given to those that
+   * came in, cleared at once in the table (and on the GPU, in turn), and the new tiles queued, the nearest first.
    */
   private wantDetail(ppk: number) {
     const d = this.detail
@@ -443,28 +478,31 @@ export class CampaignMapView {
     const spanKm = (level.size * level.cell) / 1000
     const ti = Math.floor((this.viewNow.x + this.half.x) / spanKm)
     const tj = Math.floor((this.viewNow.z + this.half.z) / spanKm)
-    const origin = detailOrigin(level, AREA, ti, tj, d.origin)
+    const origin = areaOrigin(level, AREA, ti, tj, d.origin, SLACK)
     if (origin === d.origin) return
     d.origin = origin
-    d.light.fill(0)
     // a tile that failed (the server restarted, a fetch cut) is tried again once the area moves
     d.failed.clear()
     const x0 = -this.half.x + origin.ox * spanKm
     const z0 = -this.half.z + origin.oz * spanKm
-    const lastKm = ((d.n - 1) * level.cell) / 1000
+    const lastKm = ((AREA * level.size - 1) * level.cell) / 1000
     this.material.setVector4('uDetailRect', new Vector4(x0, z0, x0 + lastKm, z0 + lastKm))
-    d.queue = []
-    for (let j = origin.oz; j < Math.min(level.tilesZ, origin.oz + AREA); j++) {
-      for (let i = origin.ox; i < Math.min(level.tilesX, origin.ox + AREA); i++) {
-        const key = `${i},${j}`
-        const tile = d.cache.get(key)
-        if (tile) this.blitDetail(tile)
-        else if (!d.failed.has(key)) d.queue.push([i, j])
-      }
+    const wanted: TileAt[] = []
+    for (const [i, j] of areaTiles(level, AREA, origin)) {
+      const key = `${i},${j}`
+      const s = slotOf(i, j, AREA)
+      if (d.given[s] === key) continue
+      // the slot's old tile out of the table now, its texels cleared in turn, unless this tile is cached
+      d.given[s] = key
+      d.table.set(s, null)
+      d.tableChanged = true
+      const cached = d.cache.get(key)
+      d.uploads.set(s, cached ?? null)
+      if (!cached) wanted.push([i, j])
     }
-    // the nearest last: the queue is taken from its end
-    d.queue.sort((a, b) => Math.hypot(b[0] - ti, b[1] - tj) - Math.hypot(a[0] - ti, a[1] - tj))
-    d.upload = true
+    // the tiles no longer in the area are not loaded; those still wanted, nearest last (taken from the end)
+    const inArea = ([i, j]: TileAt) => d.given[slotOf(i, j, AREA)] === `${i},${j}`
+    d.queue = nearestFirst([...d.queue.filter(inArea), ...wanted], ti, tj).reverse()
     this.pumpTiles()
   }
 
@@ -475,7 +513,7 @@ export class CampaignMapView {
     while (d.loading.size < LOADS && d.queue.length) {
       const [i, j] = d.queue.pop()!
       const key = `${i},${j}`
-      if (d.loading.has(key) || d.cache.has(key)) continue
+      if (d.loading.has(key) || d.cache.has(key) || d.failed.has(key)) continue
       d.loading.add(key)
       d.load(i, j)
         .then(tile => this.tileLoaded(key, tile))
@@ -490,35 +528,44 @@ export class CampaignMapView {
     }
   }
 
-  /** A loaded tile kept in the cache (the oldest dropped) and copied into the area if it lies in it. */
+  /** A loaded tile kept in the cache (the oldest dropped) and sent to its slot if the slot is still given to it. */
   private tileLoaded(key: string, tile: Tile) {
     const d = this.detail
     if (!d) return
     d.cache.set(key, tile)
     if (d.cache.size > TILE_CACHE) d.cache.delete(d.cache.keys().next().value!)
-    const o = d.origin
-    if (o && tile.column >= o.ox && tile.column < o.ox + AREA && tile.row >= o.oz && tile.row < o.oz + AREA) {
-      this.blitDetail(tile)
-      d.upload = true
-    }
+    const s = slotOf(tile.column, tile.row, AREA)
+    if (d.given[s] === key) d.uploads.set(s, tile)
   }
 
-  /** Copies a tile into the detail area's arrays. */
-  private blitDetail(tile: Tile) {
-    const d = this.detail!
-    const { size } = d.level
-    const into = { shape: d.shape, light: d.light, n: d.n, m: d.n, ox: d.origin!.ox * size, oz: d.origin!.oz * size }
-    blitTile(tile, d.level, into)
-  }
-
-  /** Uploads the detail area when tiles came in, at most every UPLOAD_MS. */
-  private uploadDetail(now: number) {
+  /**
+   * Writes up to UPLOADS waiting slots to the GPU, each into its own rectangle of the two textures (the slot cleared,
+   * or its tile written and entered in the table), and the table when it changed.
+   */
+  private uploadDetail() {
     const d = this.detail
-    if (!d || !d.upload || now - d.lastUpload < UPLOAD_MS) return
-    this.updateFloat(d.texS, d.shape)
-    d.texL.update(d.light)
-    d.upload = false
-    d.lastUpload = now
+    if (!d) return
+    const { size } = d.level
+    for (const [s, tile] of d.uploads.take(UPLOADS)) {
+      // the next upload reuses the scratch arrays: the GL call has copied them by then
+      const x = (s % AREA) * size
+      const z = Math.floor(s / AREA) * size
+      const { shape, light } = d.scratch
+      if (!tile) {
+        shape.fill(0)
+        light.fill(0)
+      } else {
+        blitTile(tile, d.level, { shape, light, n: size, m: size, ox: tile.column * size, oz: tile.row * size })
+        d.table.set(s, [tile.column, tile.row])
+        d.tableChanged = true
+      }
+      this.updateFloatRect(d.texS, shape, x, z, size)
+      this.engine.updateTextureData(d.texL.getInternalTexture()!, light, x, z, size, size)
+    }
+    if (d.tableChanged) {
+      d.texT.update(d.table.bytes)
+      d.tableChanged = false
+    }
   }
 
   /** The view: where the camera looks. */
@@ -649,7 +696,7 @@ export class CampaignMapView {
       this.wantDetail(ppk)
       this.onViewChanged?.(ppk)
     }
-    this.uploadDetail(t)
+    this.uploadDetail()
     this.scene.render()
     this.onFrame?.(performance.now() - t)
   }
@@ -657,6 +704,11 @@ export class CampaignMapView {
   /** Starts drawing every frame. */
   start() {
     this.engine.runRenderLoop(() => this.frame())
+  }
+
+  /** Stops drawing every frame (the checks then draw each frame themselves, with bench). */
+  stop() {
+    this.engine.stopRenderLoop()
   }
 
   /** Renders n frames back to back, waiting for the GPU after each; returns the mean in ms. */

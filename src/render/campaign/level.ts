@@ -1,6 +1,6 @@
 // What the campaign page makes of the tool's output (docs/systems/campaign-map.md): the manifest checked, a level's
-// tiles put together into the arrays its textures take, the detail area's window of tiles. Pure: the page fetches and
-// inflates (src/app/campaign/main.ts), the view uploads (src/render/campaign/view.ts).
+// tiles put together into the arrays its textures take (the detail area's ring of tiles: ./ring.ts). Pure: the page
+// fetches and inflates (src/app/campaign/main.ts), the view uploads (src/render/campaign/view.ts).
 import type { Plane } from './fields.ts'
 import { MANIFEST_FORMAT, type Level, type Manifest, type Tile } from './tiles.ts'
 
@@ -91,27 +91,6 @@ export function assembleLevel(level: Level, tiles: Tile[]): LevelData {
   const into = { shape: data.shape, light: data.light, n: level.nx, m: level.nz, ox: 0, oz: 0 }
   for (const tile of tiles) blitTile(tile, level, into)
   return data
-}
-
-/**
- * Where the detail area's window of `area` × `area` tiles should start, its first column and row: centred on the tile
- * (ti, tj) under the camera's target, kept on the level, and left where it is (`now`) unless that is more than two
- * tiles off, so it does not refill at every small move. Compared after the clamp, or at the map's edge the area would
- * refill at every redraw.
- */
-export function detailOrigin(
-  level: Level,
-  area: number,
-  ti: number,
-  tj: number,
-  now: { ox: number; oz: number } | null,
-): { ox: number; oz: number } {
-  const clamp = (v: number, hi: number) => Math.min(Math.max(0, hi), Math.max(0, v))
-  const half = area / 2
-  const ox = clamp(ti - half, level.tilesX - area)
-  const oz = clamp(tj - half, level.tilesZ - area)
-  if (now && Math.abs(ox - now.ox) <= 2 && Math.abs(oz - now.oz) <= 2) return now
-  return { ox, oz }
 }
 
 /** A byte plane of one channel halved: each texel the mean of 2 × 2 (the last row or column kept when odd). */

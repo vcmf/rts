@@ -1,10 +1,9 @@
 // The campaign page's pure parts (src/render/campaign/level.ts, src/render/campaign/camera.ts): the manifest checked,
-// a level put together from its tiles, the detail area's window, the fields' planes for the GPU, the camera.
+// a level put together from its tiles, the fields' planes for the GPU, the camera.
 import { describe, it, expect } from 'vitest'
 import {
   assembleLevel,
   blitTile,
-  detailOrigin,
   halved,
   interleave,
   readManifest,
@@ -112,26 +111,6 @@ describe('a level from its tiles', () => {
     const into = { shape: new Float32Array(6), light: new Uint8Array(24), n: 3, m: 2, ox: 3, oz: 1 }
     blitTile(tile(1, 0), level, into)
     expect([...into.light.filter((_, k) => k % 4 === 0)]).toEqual([0, 14, 15, 0, 24, 25])
-  })
-})
-
-describe('the detail area', () => {
-  const close: Level = { ...level, tilesX: 32, tilesZ: 20 }
-
-  it('centres its window on the tile under the target, kept on the level', () => {
-    expect(detailOrigin(close, 12, 16, 10, null)).toEqual({ ox: 10, oz: 4 })
-    expect(detailOrigin(close, 12, 1, 19, null)).toEqual({ ox: 0, oz: 8 })
-  })
-
-  it('stays where it is for a move of two tiles or less, and moves for more', () => {
-    const now = { ox: 10, oz: 4 }
-    expect(detailOrigin(close, 12, 18, 12, now)).toBe(now)
-    expect(detailOrigin(close, 12, 19, 10, now)).toEqual({ ox: 13, oz: 4 })
-  })
-
-  it('at the level edge, stays put however far the target moves along it', () => {
-    const now = detailOrigin(close, 12, 31, 10, null)
-    expect(detailOrigin(close, 12, 28, 10, now)).toBe(now)
   })
 })
 

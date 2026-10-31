@@ -1,4 +1,4 @@
-// The campaign page (app/campaign.html; docs/systems/campaign-map.md, docs/plans/active/k2b-page.md): the campaign map
+// The campaign page (app/campaign.html; docs/systems/campaign-map.md, docs/plans/done/k2b-page.md): the campaign map
 // drawn from the tool's output (tools/campaign-tiles.ts). It loads the manifest, the far level's tiles and its
 // fields, and hands them to the view (src/render/campaign/view.ts); up close, the view streams the 100 m tiles. Drag
 // to pan, the wheel to zoom to the cursor.
@@ -197,6 +197,8 @@ async function main() {
       detail: () => view.detailState(),
       upscale: () => view.upscaleFactor(),
       bench: (n?: number) => view.bench(n),
+      start: () => view.start(),
+      stop: () => view.stop(),
     },
   })
 }
