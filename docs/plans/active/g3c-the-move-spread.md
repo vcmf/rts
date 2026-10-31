@@ -80,3 +80,10 @@ Measured (the dev Mac, Metal, Kobelnitz):
 Next (G3c-2): the meadow map's arithmetic in the worker (its growth and crops read the tile's cover alone on a map
 world), the trees' generated models made once a page, the ground's split by cell and the tile mesh's heights and
 normals from the worker.
+
+G3c-1, round 1 (`/code-review high`, 10 findings, none severe; fixed, then stopped): the relief patched once over
+both squares' box (two patches read and blurred their overlap twice), from a copy made by `slice`; the worker's cover
+and flow checked against the page's textures' sizes before the swap; a failed move's parts' times kept (marked); the
+worker's flow made only for a combed meadow, its cover copied only when the coarsening kept it; the move's laps named
+for what they hold (`checks`, `settle`, `heightfield`); the flow's dead setter and re-export gone; the doc over
+`retile` again; the patch tested at the field's edge, the blur on a field not square.

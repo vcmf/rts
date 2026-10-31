@@ -62,4 +62,31 @@ describe("the relief's tone made again where the heights changed (reliefPatch, G
     for (let k = 0; k < tex.length; k++) if (tex[k] !== before.tex[k]) changed++
     expect(changed).toBeGreaterThan(1000)
   })
+
+  it("is the whole field's tone at the field's edge too, its read window clipped there", () => {
+    const sun: [number, number, number] = [-0.7, 0.45, 0.55]
+    const hill = (x: number, z: number) => 15 * Math.sin(x / 60) * Math.cos(z / 80)
+    // a square against the field's west and south edges (the field from −800, −700)
+    const sq = { x0: -800, z0: -700, x1: -500, z1: -400 }
+    const inSq = (x: number, z: number) => x >= sq.x0 && x <= sq.x1 && z >= sq.z0 && z <= sq.z1
+    const moved = (x: number, z: number) => hill(x, z) + (inSq(x, z) ? 4 * Math.cos(x / 5) : 0)
+    const before = reliefField(hill, 1600, sun, -800, -700)
+    const after = reliefField(moved, 1600, sun, -800, -700)
+    const tex = Uint8Array.from(before.tex)
+    reliefPatch(moved, { n: before.n, cell: before.cell, x0: -800, z0: -700 }, sq, sun, tex)
+    let worst = 0
+    for (let k = 0; k < tex.length; k++) worst = Math.max(worst, Math.abs(tex[k] - after.tex[k]))
+    expect(worst).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('a box blur of a field that is not square', () => {
+  it('blurs each axis over its own length, clamped at its own edges', () => {
+    // 5 × 3: a step along x, constant along z: the z pass leaves it, the x pass smooths it, clamped at x's ends
+    const f = Float32Array.from([0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1])
+    const b = blur(f, 5, 1, 1, 3)
+    const row = Array.from(b.subarray(0, 5)).map(v => +v.toFixed(4))
+    expect(row).toEqual([0, 0.3333, 0.6667, 1, 1])
+    for (let j = 1; j < 3; j++) expect(Array.from(b.subarray(j * 5, j * 5 + 5)).map(v => +v.toFixed(4))).toEqual(row)
+  })
 })

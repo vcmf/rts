@@ -8,8 +8,7 @@ import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { D } from './spec.ts'
-import { FLOW, FLOW_TEXEL, flowAt, flowBytes, mHash, mValue } from './flow-field.ts'
-export { FLOW, FLOW_TEXEL, flowAt }
+import { FLOW, FLOW_TEXEL, flowBytes, mHash, mValue } from './flow-field.ts'
 
 export const flowDefines = (): string[] =>
   [

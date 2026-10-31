@@ -15,7 +15,15 @@ import { D } from './spec.ts'
 
 /** The page's requests: the map (once, first), then a tile by its centre (on the tile grid, in the window's frame) */
 export type TileRequest =
-  | { type: 'map'; win: LookWindow; mapText: string; kindsText: string; files: Record<string, ArrayBuffer> }
+  // (flow: whether the page's meadow is combed, and so reads a tile's flow)
+  | {
+      type: 'map'
+      win: LookWindow
+      mapText: string
+      kindsText: string
+      files: Record<string, ArrayBuffer>
+      flow: boolean
+    }
   | { type: 'tile'; seq: number; at: TileAt }
 /** The replies: the map compiled (its time, ms), a tile's look data (its bytes, its time), or what failed */
 export type TileReply =
@@ -28,12 +36,12 @@ export type TileReply =
       at: TileAt
       bytes: ArrayBuffer
       frame: { n: number; cell: number; x0: number; z0: number; tex: ArrayBuffer }
-      flow: ArrayBuffer
+      flow: ArrayBuffer | null
       ms: number
     }
   | { type: 'error'; seq: number | null; message: string }
 
-let world: { win: LookWindow; map: MapFile; layers: Layers; light: LightGrid } | null = null
+let world: { win: LookWindow; map: MapFile; layers: Layers; light: LightGrid; flow: boolean } | null = null
 const post = (r: TileReply, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(r, transfer)
 
 self.onmessage = (e: MessageEvent<TileRequest>) => {
@@ -44,7 +52,7 @@ self.onmessage = (e: MessageEvent<TileRequest>) => {
       const cat = JSON.parse(q.kindsText) as Catalogue
       const files = new Map(Object.entries(q.files).map(([k, b]) => [k, new Uint8Array(b)]))
       const { map, layers } = compileMap(q.win.map, JSON.parse(q.mapText), cat, files)
-      world = { win: q.win, map, layers, light: coarseLight(layers) }
+      world = { win: q.win, map, layers, light: coarseLight(layers), flow: q.flow }
       post({ type: 'map', ms: performance.now() - t0 })
       return
     }
@@ -53,14 +61,15 @@ self.onmessage = (e: MessageEvent<TileRequest>) => {
     const data = windowData(world.win, world.map, world.layers, world.light, q.at)
     const bytes = encodeLook(data)
     const frame = coarsenCover(data.cover, D.spec.macro.cover)
-    const flow = flowBytes(q.at[0], q.at[1], D.spec.tile)
+    const flow = world.flow ? flowBytes(q.at[0], q.at[1], D.spec.tile) : null
     // (the encoding's own buffer when it is all of it: transferred, not copied)
     const whole = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
     const buf = (
       whole ? bytes.buffer : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
     ) as ArrayBuffer
-    const ft = frame.tex.slice().buffer as ArrayBuffer
-    const fb = flow.buffer as ArrayBuffer
+    // (the cover's own bytes are the encoding's source: copied only when the coarsening kept them)
+    const ft = (frame === data.cover ? frame.tex.slice() : frame.tex).buffer as ArrayBuffer
+    const fb = flow ? (flow.buffer as ArrayBuffer) : null
     post(
       {
         type: 'tile',
@@ -71,7 +80,7 @@ self.onmessage = (e: MessageEvent<TileRequest>) => {
         flow: fb,
         ms: performance.now() - t0,
       },
-      [buf, ft, fb],
+      fb ? [buf, ft, fb] : [buf, ft],
     )
   } catch (err) {
     post({ type: 'error', seq: q.type === 'tile' ? q.seq : null, message: (err as Error).message })

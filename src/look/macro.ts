@@ -97,7 +97,6 @@ export interface Macro {
   // a moved tile's covers (G3b-2): the per-frame one and the bakes', of the first's sizes, written in place (then bake)
   setCovers(frame: CoverGrid, bake: CoverGrid): void
   setMeadowMap(t: BaseTexture | null): void // a moved tile's meadow map (G3b-2), which the bakes read
-  setFlow(f: FlowTextures | null): void // a moved tile's flow (G3b-2), which the bakes read
   // the far ring's cover and its place (a map world's whole map: G3a; the demo's the bake's), which the far ring's
   // ground reads too (src/look/main.ts)
   farCover: { tex: BaseTexture; box: Vector4 }
@@ -169,8 +168,6 @@ export function buildMacro(
   const covers = { frame: cover, bake: bakeCover }
   // the meadow map the bakes read (a moved tile's: setMeadowMap)
   let meadowTex = meadowMap
-  // the flow's textures the bakes read (a moved tile's: setFlow)
-  let flowNow = flowTex
   const frameBox = coverBox(cover)
   // the far ring: the demo's SPEC.far about the origin, its bake reading the cover; a map world's the whole map, its
   // bake reading the ring's own cover (G3a, docs/plans/done/g3a-the-whole-map-far.md)
@@ -428,9 +425,9 @@ export function buildMacro(
           e.setFloat('uReliefK', relief.k)
         }
         if (brush) e.setTexture('uMeadowBrush', brush)
-        if (flowNow) {
-          e.setTexture('uFlow', flowNow.flow)
-          e.setTexture('uComb', flowNow.comb)
+        if (flowTex) {
+          e.setTexture('uFlow', flowTex.flow)
+          e.setTexture('uComb', flowTex.comb)
         }
         if (meadowTex) e.setTexture('uMeadow', meadowTex)
         // the roads, without the grit (its marks are finer than a texel)
@@ -618,8 +615,8 @@ export function buildMacro(
       e.setFloat4('uCoverBox', ...coverBoxOf(covers.bake))
       e.setVector2('uTileO', TILE_O)
       if (brush) e.setTexture('uMeadowBrush', brush)
-      e.setTexture('uFlow', flowNow!.flow)
-      e.setTexture('uComb', flowNow!.comb)
+      e.setTexture('uFlow', flowTex!.flow)
+      e.setTexture('uComb', flowTex!.comb)
       if (meadowTex) e.setTexture('uMeadow', meadowTex)
       nearRenderer.draw()
       engine.unBindFramebuffer(nearRT.renderTarget!, false)
@@ -642,9 +639,6 @@ export function buildMacro(
     },
     setMeadowMap(t) {
       meadowTex = t
-    },
-    setFlow(f) {
-      flowNow = f
     },
     farCover: { tex: farCoverTex, box: coverBox(farCover) },
     tile,

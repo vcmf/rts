@@ -25,7 +25,7 @@ import { TR, tr, trNow } from './trace.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
-import { flowBytes } from './flow-field.ts'
+import { FLOW_TEXEL, flowBytes } from './flow-field.ts'
 import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { meadowLookDefines, meadowLookOf } from './meadow-look.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
@@ -1533,20 +1533,21 @@ Object.defineProperties(
     __buildMs: performance.now() - T0,
   }),
 )
+// what the tile worker made with a tile (G3c): its per-frame cover and its flow's texels (else the move makes them)
+interface TileMade {
+  frame: CoverGrid
+  flow?: Uint8Array
+}
 /**
  * The tile moved (G3b-2, docs/plans/done/g3b-the-detail-follows.md): a tile's data in the page's frame (the first
  * window's; tools/build-look-data.ts --tileat, the page's worker from G3b-3) takes the tile's place: its centre
  * (src/look/tile.ts) and heightfield, the ground's meshes about it (terrain.retile), its covers and roads, the ground's
  * split, the relief's tone (it reads the drawn ground), and, built again with the last disposed (src/look/owned.ts),
- * its trees, the bakes (the shadow map, the light map, the occlusion, the bounce), the flow and the meadow map;
+ * its trees, the bakes (the shadow map, the light map, the occlusion, the bounce) and the meadow map; the flow's
+ * texture written in place;
  * then the camera's ground and the macro colour's bake. The far ring is the whole map's and stays. Not on the demo (its
  * river is the tile's). Its time, ms (until G3c spreads it over frames, one hitch)
  */
-// what the tile worker made with a tile (G3c): its per-frame cover and its flow's texels (else the move makes them)
-interface TileMade {
-  frame: CoverGrid
-  flow: Uint8Array
-}
 function retile(next: LookData, made?: TileMade): Promise<number> {
   // one move at a time (the follower and the tools' hook): a move asked for during one waits for it
   const p = moving.then(() => move(next, made))
@@ -1597,6 +1598,7 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
   const ground = groundOf(D.spec, next.hf, look.far, null, worldGround.play, next.tileAt)
   checkView(D.spec, ground)
   // (a colour bake under way finishes on the last tile's place and covers first: the move then writes them)
+  lap('checks')
   await macro.settled()
   lap('settle')
   // Built beside the last, in one task (no frame between): the tile's place (TILE_O, the heightfield, the ground's
@@ -1606,7 +1608,7 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
   const at = (d: LookData, f: CoverGrid) => {
     TILE_O.set(d.tileAt[0], d.tileAt[1])
     setHeightfield(d.hf, look.far, D.spec.tile / 2)
-    lap('place')
+    lap('heightfield')
     terrain.retile()
     lap('terrain')
     macro.setCovers(f, d.cover)
@@ -1624,7 +1626,6 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
   let parts
   try {
     at(next, frame)
-    lap('place')
     const roads = roadsOwned && build(tileRoads(next.roads))
     lap('roads')
     const n = build(tileNature(next))
@@ -1639,6 +1640,14 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
     lap('bakes')
     // (the flow's texels: its texture written in place at the swap, its comb the tile's never)
     const fl = flowOwned && (made?.flow ?? flowBytes(next.tileAt[0], next.tileAt[1], D.spec.tile))
+    // (what the worker made: the sizes the page's textures take, checked before the swap)
+    const flowN = Math.round(D.spec.tile / FLOW_TEXEL)
+    if (fl && fl.length !== flowN * flowN * 4) {
+      throw new Error(`retile: the tile's flow is ${fl.length} bytes, not ${flowN ** 2 * 4}`)
+    }
+    if (frame.n !== frameNow.n || frame.tex.length !== frame.n * frame.n * 4) {
+      throw new Error("retile: the tile's per-frame cover is not the page's size")
+    }
     lap('flow')
     const mm = meadowMapOwned && build(tileMeadowMap(n.value))
     lap('meadowMap')
@@ -1648,16 +1657,24 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
     // (the tone made again where the drawn ground changed: the last tile's square and the new one's)
     let tone: Uint8Array | null = null
     if (relief) {
-      tone = Uint8Array.from(relief.bytes)
+      tone = relief.bytes.slice()
       const field = { n: relief.n, cell: relief.cell, x0: ring.x0, z0: ring.z0 }
       const h = D.spec.tile / 2
-      for (const [tx, tz] of [tileNow.tileAt, next.tileAt]) {
-        reliefPatch(groundAt, field, { x0: tx - h, z0: tz - h, x1: tx + h, z1: tz + h }, [SUN.x, SUN.y, SUN.z], tone)
+      const [a, b] = [tileNow.tileAt, next.tileAt]
+      // (one patch over both squares: two would read and blur their overlap twice)
+      const box = {
+        x0: Math.min(a[0], b[0]) - h,
+        z0: Math.min(a[1], b[1]) - h,
+        x1: Math.max(a[0], b[0]) + h,
+        z1: Math.max(a[1], b[1]) + h,
       }
+      reliefPatch(groundAt, field, box, [SUN.x, SUN.y, SUN.z], tone)
     }
     lap('relief')
     parts = { roads, n, bk, fl, mm, share, tone }
   } catch (err) {
+    // (a failed move's parts' times too, marked)
+    moveParts = { ...parts0, failed: 1 }
     for (const o of built.reverse()) o.dispose()
     at(tileNow, frameNow)
     if (roadsOwned && roadTex && splitParam !== '0') splitGround(terrain, frameNow)
@@ -1768,7 +1785,7 @@ const follower = (() => {
       try {
         state.lastSwapMs = await retile(decodeLook(r.bytes), {
           frame: { ...r.frame, tex: new Uint8Array(r.frame.tex) },
-          flow: new Uint8Array(r.flow),
+          flow: r.flow ? new Uint8Array(r.flow) : undefined,
         })
         state.moves++
         choose.moved()
@@ -1815,7 +1832,7 @@ const follower = (() => {
     const names = demFileNames(JSON.parse(mapText))
     const bytes = await Promise.all(names.map(async n => (await get(n)).arrayBuffer()))
     const files = Object.fromEntries(names.map((n, k) => [n, bytes[k]]))
-    const req: TileRequest = { type: 'map', win, mapText, kindsText, files }
+    const req: TileRequest = { type: 'map', win, mapText, kindsText, files, flow: !!flowOwned }
     worker.postMessage(req, bytes)
   }
   scene.onBeforeRenderObservable.add(() => {
@@ -1970,7 +1987,7 @@ Object.assign(window, {
       return bakes.sky // (the tile's now: a moved tile's, retile)
     },
     meadowBakeMs: meadow?.bakeMs ?? null, // (on load: the map's and the near meadow's, as the bench has read it)
-    // (the combed meadow's flow textures: the last built, on load or a move)
+    // (the combed meadow's flow textures, on load: a move writes the flow's texels, made by the worker)
     get flowBuildMs() {
       return flowOwned?.value.ms ?? null
     },
