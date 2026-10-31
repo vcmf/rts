@@ -1,14 +1,14 @@
 ---
 status: current
-last_reviewed: 2026-10-30
+last_reviewed: 2026-10-31
 ---
 
-# The campaign map's bake and tiles
+# The campaign map
 
 What is built of the campaign map in the game's code (Track K, `docs/plans/active/track-k.md`; the look is decision
-0093 and `docs/proposals/campaign-map.md`): the bake that makes the map's one shape and its light, and the tiles it
-is stored in. The page that draws them is K2b; until then the K1 prototype (`prototypes/campaign-map.html`) draws
-the map, from its own tiles written by the same bake.
+0093 and `docs/proposals/campaign-map.md`): the bake that makes the map's one shape and its light, the tiles and
+fields it is stored in, and the page that draws them (`app/campaign.html`, K2b). The page has no names or towns yet
+(K2d); the K1 prototype (`prototypes/campaign-map.html`) keeps them, from its own tiles written by the same bake.
 
 ## The bake
 
@@ -82,9 +82,36 @@ and the prototype reads its tiles from there, so it never draws a mix of two run
 The tools around it: `tools/campaign-theatre.ts` (the theatre's data, its 250 m heights, the forest field),
 `tools/worldcover.ts` (the forests' source), `tools/terrarium.ts` (the heights' source).
 
+## The page
+
+`app/campaign.html` and `src/app/campaign/main.ts`: `npm run dev`, then `/app/campaign.html` (the tool's output under
+`scratch/campaign/`, which the dev server serves; `?tiles=` another manifest of the page's origin). It fetches the
+manifest (`readManifest`: its format, its levels spanning the frame, its fields), the far level's 104 tiles (eight
+at once) and the fields, inflates them with the browser's own stream, and hands them to the view; nothing is baked.
+Drag pans, the wheel zooms to the cursor; `?view=x,z,km`, `?upscale=off|<factor>`, `?fps=0` as the prototype's. The
+page keeps `window.__campaign` for the checks: `setView`, `view`, `detail`, `upscale`, `bench(n)` and the load's
+`loadedMs` and `readyMs`.
+
+`src/render/campaign/`:
+
+| Module | What |
+|---|---|
+| `view.ts` | `CampaignMapView`: Babylon, the map raised by the far level's shape on a mesh (a vertex every two nodes), the plate's sides and the table; the textures from the tiles and fields (the lakes' mask halved, a mean of 2 × 2, where the GPU's textures are smaller); the detail area of 12 × 12 tiles of the close level around the camera, 6 loading at once, 320 kept, uploaded at most every 120 ms; FSR 1 above 1080p; a frame every display frame (the clouds drift) |
+| `shaders/print.vert`, `shaders/print.frag` | the prototype's print: the paper, the forests, the contours, the water's steps, the lines, then the sun and the sky per pixel, the clouds, the lamp, the haze; `shaders/side.*` the plate's sides |
+| `level.ts` | pure: the manifest checked, a level put together from its tiles, a tile copied into a window, the detail area's window (`detailOrigin`), the fields' planes made ready for the GPU |
+| `camera.ts` | pure: the tilt (30° far to 45° at the closest), the view kept on the map and above its ground, the camera's place, a ray's ground point |
+| `paper.ts` | the paper's grain and the clouds' noise, two canvases drawn at load |
+
+Tested in `test/campaign-page.test.ts`. Against the prototype (`docs/plans/active/k2b-page.md`): the same image to a
+mean of 1 to 2 levels a channel at four views; 2.7 to 3.7 ms a frame at 1080p on test machine A, and the same at 4K
+with FSR 1; ready in 2.4 s (the prototype 6.5 s, 5.5 s of it its bake).
+
 ## Open questions
 
 - One light model for both map views (decision 0058): the battle map's lit view bakes its own relief
-  (`src/render/lit/bake.ts`), at another scale; settled with the renderer in K2b.
+  (`src/render/lit/bake.ts`), at another scale; the campaign page has its own renderer (K2b), the question settled in
+  K3.
+- Panning up close, the detail area's refill and its upload of 75 MB take a frame of about 90 ms: K2c streams the
+  tiles in pieces.
 - A smaller format (a predictor for the light planes, another codec), if the size matters once the whole of Europe
   is baked (K6).

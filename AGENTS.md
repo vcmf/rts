@@ -42,6 +42,8 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
   `node tools/detail-check.mjs <url> --selftest`, the water data's `node tools/water-check.mjs [<url>] --selftest`,
   the painted water's `node tools/water-look-check.mjs <url> --selftest`; see their headers.
 - Maps (Track M): `node tools/map.ts check|expand|resolve|draft`, the page `app/map.html`: see `docs/systems/map.md`.
+- The campaign map (Track K): `node tools/campaign-theatre.ts`, then `node tools/campaign-tiles.ts`; the page
+  `app/campaign.html` (`npm run dev`): see `docs/systems/campaign-map.md`.
 - Browsers (decision 0060): checks are the scripts above; `SHOT_CDP=http://127.0.0.1:9222` attaches them to a running
   Chrome (from WSL, Windows Chrome: `tools/win-chrome.sh`, see its header). To explore (play the page, a trace), opt in:
   `claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@1.10.1 --isolated`.

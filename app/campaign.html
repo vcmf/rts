@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Campaign map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* the campaign page (src/app/campaign/main.ts; docs/systems/campaign-map.md): the prototype's cartouche, scale and
+     frame rate over the map */
+  :root { --paper: #f1f2f4; --ink: #211f1c; --ink-2: #5f5a52; --ink-3: #8f877b;
+          --mono: "JetBrains Mono", ui-monospace, Menlo, monospace; --serif: "Instrument Serif", Georgia, serif; }
+  html, body { height: 100%; margin: 0; overflow: hidden; background: #cbc9cf; color: var(--ink); }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #cart { position: fixed; left: 16px; top: 14px; width: 290px; padding: 12px 14px; pointer-events: none;
+          background: radial-gradient(130% 120% at 30% 30%, var(--paper) 55%, rgba(241, 242, 244, 0) 100%); }
+  #cart h1 { margin: 0; font: 400 26px/1.05 var(--serif); letter-spacing: 0.01em; }
+  #cart .sub { font: italic 400 15px/1.3 var(--serif); color: var(--ink-2); }
+  #cart .rule { height: 5px; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); margin-top: 10px; }
+  #cart .m { font: 400 10.5px/1.6 var(--mono); color: var(--ink-2); margin-top: 8px; letter-spacing: 0.02em; }
+  #cart .n { font: 400 9.5px/1.5 var(--mono); color: var(--ink-3); margin-top: 6px; }
+  #scale { position: fixed; left: 18px; bottom: 16px; pointer-events: none; font: 400 10px/1 var(--mono); color: var(--ink-2); }
+  #scale .bar { height: 5px; border: 1px solid var(--ink); border-top: 0; margin-bottom: 5px; }
+  #fps { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); pointer-events: none; padding: 6px 12px;
+         font: 500 11px/1 var(--mono); letter-spacing: 0.06em; white-space: nowrap; color: var(--ink);
+         background: rgba(241, 242, 244, 0.86); border: 1px solid rgba(40, 30, 20, 0.15); }
+  #fps b { font-size: 15px; }
+  #fps span { opacity: 0.6; margin-left: 10px; }
+  #missing { position: fixed; inset: 0; display: none; place-items: center; padding: 24px;
+             font: 400 13px/1.7 var(--mono); color: var(--ink); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cart">
+  <h1>The Theatre of 1805</h1>
+  <div class="sub">from the Rhine to Austerlitz</div>
+  <div class="rule"></div>
+  <div class="m" id="meta"></div>
+  <div class="n" id="credit"></div>
+</div>
+<div id="fps"><b id="fpsN">–</b> fps<span id="fpsD"></span></div>
+<div id="scale"><div class="bar" id="scaleBar"></div><span id="scaleText"></span></div>
+<div id="missing"></div>
+<script type="module" src="../src/app/campaign/main.ts"></script>
+</body>
+</html>

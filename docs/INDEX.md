@@ -39,7 +39,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 - [`systems/sides.md`](systems/sides.md): your side, the scenario's plan for the other, and the end of a battle (S1e-2).
 - [`systems/map.md`](systems/map.md): the map engine: the kinds catalogue, the validator, resolution, the 2 m layers and water, the draft page, the sim compiler, the map CLI (Track M, M1, M2).
 - [`systems/campaign.md`](systems/campaign.md): the campaign's models (march, contact, couriers, roads, timeline), exact and tested (K0).
-- [`systems/campaign-map.md`](systems/campaign-map.md): the campaign map's bake (the shape, the lakes, the light, the forests) and its binary tiles with a manifest (K2a).
+- [`systems/campaign-map.md`](systems/campaign-map.md): the campaign map: its bake (the shape, the lakes, the light, the forests), its binary tiles and fields with a manifest (K2a, K2b1), the page that draws them (K2b2).
 - More appear as systems are built; see [`systems/README.md`](systems/README.md).
 
 ## Proposals (designs before building)

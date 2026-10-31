@@ -84,6 +84,19 @@ The fields and the tiles unchanged.
   frame time panning and zooming over a scripted path, at 1080p and at 4K with FSR 1.
 - Nothing baked at load: the time to the first frame measured, against the prototype's.
 
+**Results** (K2b2), on test machine A (Windows Chrome on its RTX 3080, headless over CDP, 1920 × 1080):
+- The page against the prototype (its ink hidden: names and towns are K2d) at four views (the whole theatre at
+  1,150 km, the Danube at 250 km, the Alps at 60 km, Lake Constance at 90 km): a mean difference of 2.1, 1.1, 1.4 and
+  2.0 levels a channel; 0.7 to 1.1% of the pixels off by more than 48. Where they differ: the lakes' steps (the
+  page's lakes' distance is K2a's, which its sunk lakes follow; K2b1's results), and the light slightly, the page's far
+  light baked at 250 m where the prototype's is at 500 m.
+- The frame (`bench(60)`, each frame waited for on the GPU): 3.7, 3.0, 2.7 and 3.1 ms at the four views at 1080p;
+  3.5, 3.2, 3.0 and 2.7 ms at 4K (device pixel ratio 2, FSR 1 at ×1.87). Panning up close over 120 steps: a mean of
+  3.3 ms, the 95th centile 3.0 ms, the worst 98 ms (1080p) and 88 ms (4K): the detail area's refill and upload, K2c's.
+- The load (three runs each): the far level's tiles and the fields fetched and inflated in 0.6 s, the page ready in
+  2.4 s; the prototype ready in 6.5 s, 5.5 s of it its bake.
+- `tools/shot.mjs` gains `SHOT_DPR` (the device pixel ratio, for the 4K runs).
+
 ## Decisions
 
 - The page's renderer is its own (`src/render/campaign/`), not the battle map's lit view (`src/render/lit/`): its
