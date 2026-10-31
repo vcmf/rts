@@ -1,4 +1,4 @@
-// The campaign map's labels (src/render/campaign/labels.ts, docs/plans/active/k2d-ink.md) and the test that hides
+// The campaign map's labels (src/render/campaign/labels.ts, docs/plans/done/k2d-ink.md) and the test that hides
 // one behind the relief (src/render/campaign/camera.ts seenFrom).
 import { describe, it, expect } from 'vitest'
 import {

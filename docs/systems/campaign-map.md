@@ -117,7 +117,7 @@ comments avoid both.
 
 ## The names
 
-K2d (`docs/plans/active/k2d-ink.md`). The tool writes `labels.json` into each build (the manifest's `labels`): the
+K2d (`docs/plans/done/k2d-ink.md`). The tool writes `labels.json` into each build (the manifest's `labels`): the
 1805 data file's towns (names, sizes, fortresses) and regions (names, angles), placed through the theatre's projection, and the
 theatre's named rivers the page draws (rank 6 or larger), their points thinned to every other one (`tools/campaign-data.ts` reads the data file for both
 tools). The page draws them on a 2D canvas over the map (`src/render/campaign/ink.ts`), redrawn when the view changes:
