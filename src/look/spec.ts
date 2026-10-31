@@ -8,6 +8,8 @@ export interface Spec {
   far: number // the far ring's side, m: the backdrop out to the edge of any view
   farSub: number // far grid cells per side
   play: number // the camera focus stays within ±play in x and z
+  // a map world's tile is centred on this grid about the origin (G3b): every grid of the tile and the far ring lines up
+  tileStep: number
   // detail ⊇ play ⊕ margin: views near the play edge see the far ring only toward the top (checked against the camera)
   margin: number
   // the heightfield extends this far beyond the tile, so the occlusion bake reads real ground at the edge
@@ -72,6 +74,7 @@ export const SPEC: Spec = {
   far: 2600,
   farSub: 182,
   play: 235,
+  tileStep: 200,
   margin: 165,
   aoMargin: 40,
   aoRing: 40,
@@ -326,6 +329,10 @@ export function derive(s: Spec = SPEC): Derived {
     } catch (e) {
       bad.push((e as Error).message.replace(/^world spec \([^)]*\): /, ''))
     }
+  }
+  // a moved tile (G3b): its edges on the far grid (the apron), its nodes on the first tile's (a swap moves no ground)
+  if (!(s.tileStep > 0 && isInt(s.tileStep / farCell) && isInt(s.tileStep / cell))) {
+    bad.push(`grid: the tile step ${s.tileStep} m is not a whole number of far cells and of tile cells`)
   }
   if (s.aoMargin < s.aoRing) {
     bad.push(`bake: the heightfield's margin ${s.aoMargin} m < the occlusion ring ${s.aoRing} m`)
@@ -820,8 +827,11 @@ export function groundOf(
       }
     }
   }
-  // the far ring's nodes past the tile (inside it the heightfield is the ground)
+  // the far ring's nodes past the tile (inside it the heightfield is the ground; the tile's centre is the
+  // heightfield's: a moved tile's, G3b)
   const e = s.tile / 2
+  const tx = hf.x0 + ((hf.n - 1) * hf.cell) / 2
+  const tz = hf.z0 + ((hf.n - 1) * hf.cell) / 2
   let farLo = Infinity
   for (let j = 0; j < far.n; j++) {
     const z = far.z0 + j * far.cell
@@ -829,7 +839,7 @@ export function groundOf(
       const v = far.h[j * far.n + i]
       if (v < farLo) farLo = v
       const x = far.x0 + i * far.cell
-      if (Math.max(Math.abs(x), Math.abs(z)) > e && inPlay(x, z)) {
+      if (Math.max(Math.abs(x - tx), Math.abs(z - tz)) > e && inPlay(x, z)) {
         if (v < lo) lo = v
         if (v > hi) hi = v
         if (v < pLo) pLo = v

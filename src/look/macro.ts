@@ -3,6 +3,7 @@
 // The bake draws bakeTile² texels at a time into one render target (no single large draw: SwiftShader lost the
 // context on those, docs/proposals/engine-design.md §6), then makes its mips. It holds colour only; the light, the
 // banks and the seasons stay at runtime. It reads the grain, so a new grain rebakes it.
+import { TILE_O } from './tile.ts'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import type { AbstractEngine } from '@babylonjs/core/Engines/abstractEngine.js'
 import { EffectRenderer, EffectWrapper } from '@babylonjs/core/Materials/effectRenderer.js'
@@ -271,6 +272,7 @@ export function buildMacro(
     'uRoadSegN',
     'uRoadFar',
     'uCoverBox',
+    'uTileO',
     'uPaveA',
     'uPaveB',
     'uPaveN',
@@ -409,6 +411,7 @@ export function buildMacro(
         e.setTexture('uGrain', mats.grain)
         e.setTexture('uCover', covTex)
         e.setFloat4('uCoverBox', ...coverBoxOf(cov))
+        e.setVector2('uTileO', TILE_O)
         if (relief) {
           e.setTexture('uRelief', relief.tex)
           e.setFloat('uReliefK', relief.k)
@@ -483,7 +486,8 @@ export function buildMacro(
   const bakeNow = async (): Promise<BakeStats> => {
     const w = wanted()
     baked = ''
-    const a = await draw(tile, D.macroN, D.spec.tile, w.kuw)
+    const t = D.spec.tile
+    const a = await draw(tile, D.macroN, t, w.kuw, false, TILE_O.x - t / 2, TILE_O.y - t / 2)
     const b = await draw(far, farN, farSide, w.kuw, false, farRect.x0, farRect.z0, farCover, farCoverTex)
     baked = w.key
     return {
@@ -552,7 +556,7 @@ export function buildMacro(
       vertexShader: BAKE_VS,
       fragmentShader: withPainter(NEAR_FS),
       attributeNames: ['position'],
-      uniformNames: ['uRect', 'uTexel', 'uCoverBox'],
+      uniformNames: ['uRect', 'uTexel', 'uCoverBox', 'uTileO'],
       samplerNames: SAMPLERS,
       defines: DEFINES,
     })
@@ -590,6 +594,7 @@ export function buildMacro(
       e.setTexture('uGrain', mats.grain)
       e.setTexture('uCover', bakeCoverTex)
       e.setFloat4('uCoverBox', ...coverBoxOf(bakeCover))
+      e.setVector2('uTileO', TILE_O)
       if (brush) e.setTexture('uMeadowBrush', brush)
       e.setTexture('uFlow', flowTex.flow)
       e.setTexture('uComb', flowTex.comb)

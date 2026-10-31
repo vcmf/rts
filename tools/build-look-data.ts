@@ -7,6 +7,7 @@
 // 12 MB each; Vitest builds a missing one, test/look-data-setup.ts).
 //   node tools/build-look-data.ts                   writes the demo's and every window's (src/look/world/windows.ts)
 //   node tools/build-look-data.ts --window <name>   writes that window's alone
+//   node tools/build-look-data.ts --window <name> --tileat <x>,<z>   that window's with its tile there (G3b-1)
 //   node tools/build-look-data.ts --missing         writes each window's that is missing or older than its sources
 //   node tools/build-look-data.ts --check           rebuilds the demo's in memory and fails if it differs from the
 //                                                   committed file (the windows' are not committed)
@@ -15,12 +16,15 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { D, ROAD_SLOTS, footprintOf, macroFarNOf, ringFor, type WorldGround } from '../src/look/spec.ts'
+import { D, ROAD_SLOTS, footprintOf, macroFarNOf, ringFor, type Rect, type WorldGround } from '../src/look/spec.ts'
 import { bakeLight, SUN } from '../src/render/lit/bake.ts'
 import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
 import {
+  checkTileAt,
   decodeLook,
   encodeLook,
+  moveLook,
+  type TileAt,
   ROAD_SEG,
   type LightGrid,
   type LookData,
@@ -225,6 +229,7 @@ export function buildLookData(): Uint8Array {
     trees: new Float32Array(0),
     farCover: null,
     light: null,
+    tileAt: [0, 0],
   }
   return encodeLook(data)
 }
@@ -247,24 +252,28 @@ const emptySpans = (n: number, cell: number, ch: number): SpanGrid => ({
  * whole range of heights, a bound), its own cover at the far bake's texels, and the map's coarse light (bakeLight on
  * its true heights, the look's sun). `map`: the expanded map; `L`: its layers.
  */
-export function buildWindowData(win: LookWindow, map: MapFile, L: Layers, mapLight = coarseLight(L)): Uint8Array {
+export function buildWindowData(
+  win: LookWindow,
+  map: MapFile,
+  L: Layers,
+  mapLight = coarseLight(L),
+  tileAt: TileAt = [0, 0],
+): Uint8Array {
   const s = D.spec
-  checkWindowInside(L, win, s.tile)
-  const { play, edge } = mapRects(L, map.play, win)
-  let lo = Infinity
-  let hi = -Infinity
-  for (const v of L.height) {
-    if (v < lo) lo = v
-    if (v > hi) hi = v
-  }
-  const g: WorldGround = { lo, hi, farLo: lo, focus: [lo, hi], play, ring: play }
-  const ring = ringFor(D, play, Math.ceil(footprintOf(s, g)) + D.farCell)
-  const { hf, far, base } = windowHeights((x, z) => heightOf(L, x, z), win, D, ring)
+  checkTileAt(tileAt)
+  // the tile's centre in map metres: the window is built about it, in its frame, then moved into the window's (G3b)
+  const at = { ...win, x: win.x + tileAt[0], z: win.z + tileAt[1] }
+  checkWindowInside(L, at, s.tile)
+  const { play, edge } = mapRects(L, map.play, at)
+  const ring = ringFor(D, play, Math.ceil(footprintOf(s, groundBound(L, play))) + D.farCell)
+  const heightAt = (x: number, z: number) => heightOf(L, x, z)
+  // the window's height base (its own tile's and ring's lowest node): every tile of the window keeps it
+  const winBase = tileAt[0] || tileAt[1] ? windowBase(win, map, L, s) : undefined
+  const { hf, far, base } = windowHeights(heightAt, at, D, ring, winBase)
   const side = (ring.n - 1) * ring.cell
-  const farCover = boxCover(L, map.features, win, { x0: ring.x0, z0: ring.z0, side }, side / macroFarNOf(D, side))
-  const light = { ...mapLight, x0: L.x0 - win.x, z0: L.z0 - win.z }
-  const lines = wayLines(map.features, L.table, win, s.far)
-  const areas = fineAreas(L, map.features, win, s.far, MAP_COVER_CELL)
+  const farCover = boxCover(L, map.features, at, { x0: ring.x0, z0: ring.z0, side }, side / macroFarNOf(D, side))
+  const lines = wayLines(map.features, L.table, at, s.far)
+  const areas = fineAreas(L, map.features, at, s.far, MAP_COVER_CELL)
   const data: LookData = {
     hf,
     far,
@@ -272,13 +281,32 @@ export function buildWindowData(win: LookWindow, map: MapFile, L: Layers, mapLig
     bank: emptySpans(D.bankN, s.bank.texel, 3),
     water: emptySpans(D.waterN, s.water.texel, 4),
     roads: roadGrid(lines),
-    cover: mapCover(areas, L.table, win, lines),
+    cover: mapCover(areas, L.table, at, lines),
     world: { kind: 'map', map: win.map, window: win.name, x: win.x, z: win.z, base, play, edge },
-    trees: packTrees(mapTrees(L, areas, win)),
+    trees: packTrees(mapTrees(L, areas, at)),
     farCover,
-    light,
+    light: { ...mapLight, x0: L.x0 - at.x, z0: L.z0 - at.z },
+    tileAt: [0, 0],
   }
-  return encodeLook(data)
+  return encodeLook(moveLook(data, tileAt))
+}
+
+/** The height base of a window's own build (windowHeights at its centre, over its ring): the lowest node. */
+function windowBase(win: LookWindow, map: MapFile, L: Layers, s: typeof D.spec): number {
+  const { play } = mapRects(L, map.play, win)
+  const ring = ringFor(D, play, Math.ceil(footprintOf(s, groundBound(L, play))) + D.farCell)
+  return windowHeights((x, z) => heightOf(L, x, z), win, D, ring).base
+}
+
+/** The camera's ground on a map, bounded: its whole range of heights, the focus anywhere in it (footprintOf) */
+function groundBound(L: Layers, play: Rect): WorldGround {
+  let lo = Infinity
+  let hi = -Infinity
+  for (const v of L.height) {
+    if (v < lo) lo = v
+    if (v > hi) hi = v
+  }
+  return { lo, hi, farLo: lo, focus: [lo, hi], play, ring: play }
 }
 
 /** A map's coarse light (G3a, decision 0092): bakeLight on its true heights under the staff map's sun, at its nodes,
@@ -383,6 +411,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (args.includes('--missing')) {
     const built = buildMissingWindows()
     console.log(`look data: ${built.length ? `built ${built.join(', ')}` : "every window's is up to date"}`)
+    process.exit(0)
+  }
+  // --tileat x,z: one window's data with its tile at that centre (G3b-1's check: as the window built there)
+  const ta = args.indexOf('--tileat')
+  if (ta >= 0) {
+    const w = WINDOWS.find(v => v.name === args[args.indexOf('--window') + 1])
+    const at = (args[ta + 1] ?? '').split(',').map(Number) as unknown as TileAt
+    if (!w || at.length !== 2) throw new Error('--tileat x,z needs --window <name>')
+    const { map, layers } = layersOf(mapFile(w))
+    const file = path.join(ROOT, windowFile(w, at))
+    fs.writeFileSync(file, buildWindowData(w, map, layers, coarseLight(layers), at))
+    console.log(`look data: wrote ${path.relative(ROOT, file)}`)
     process.exit(0)
   }
   const wi = args.indexOf('--window')

@@ -1,6 +1,7 @@
 // The look page (app/look.html): the painted world in the game's toolchain, ported from
 // prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
+import { TILE_O, tileEdge } from './tile.ts'
 import type { SimPlay } from './sim-armies.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
@@ -31,7 +32,15 @@ import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
 import { D, FocusFollow, TUNED_R, checkView, farDefines, groundOf, maxGrid, rectOf } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
-import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS, type LookWorld } from './world/data.ts'
+import {
+  checkLookData,
+  checkTileAt,
+  decodeLook,
+  unpackSpans,
+  ROAD_SEG,
+  ROAD_SLOTS,
+  type LookWorld,
+} from './world/data.ts'
 import { windowFile, windowOf, type LookWindow } from './world/windows.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
@@ -95,8 +104,13 @@ if (!window.NATURE) {
 // the world's data, built offline (tools/build-look-data.ts, decision 0012): the heightfield, the far ring, the river;
 // the demo's, or a map's window by ?map=<map>&window=<name> (docs/plans/active/look-austerlitz-a1.md)
 const lookWindow = windowOf(new URLSearchParams(location.search))
-const lookUrl = lookWindow ? WINDOW_DATA[`../../${windowFile(lookWindow)}`] : LOOK_URL
-if (!lookUrl) throw new Error(`look data: no ${windowFile(lookWindow!)}: run node tools/build-look-data.ts`)
+// ?tileat=<x>,<z>: the window's data with its tile there (G3b-1's check; built by tools/build-look-data.ts --tileat)
+const tileAtParam = new URLSearchParams(location.search).get('tileat')
+const tileAt = tileAtParam === null ? undefined : (tileAtParam.split(',').map(Number) as [number, number])
+if (tileAt && (!lookWindow || tileAt.length !== 2)) throw new Error('?tileat=<x>,<z> needs ?map and ?window')
+if (tileAt) checkTileAt(tileAt, D.spec.tileStep)
+const lookUrl = lookWindow ? WINDOW_DATA[`../../${windowFile(lookWindow, tileAt)}`] : LOOK_URL
+if (!lookUrl) throw new Error(`look data: no ${windowFile(lookWindow!, tileAt)}: run node tools/build-look-data.ts`)
 const res = await fetch(lookUrl)
 if (!res.ok) throw new Error(`look data: ${res.status} ${res.statusText} for ${lookUrl}`)
 const look = decodeLook(await res.arrayBuffer())
@@ -109,6 +123,8 @@ const worldBuildings: readonly Building[] = onMap ? [] : BUILDINGS
 // world's coarsened to the spec's cells (src/look/world/cover.ts, coarsenCover); the macro colour's bakes read the fine
 const frameCover = coarsenCover(look.cover, D.spec.macro.cover)
 setRiver(look.river)
+// the tile's centre (G3b: a moved tile's data, `?tileat`), before anything reads the tile's place
+TILE_O.set(look.tileAt[0], look.tileAt[1])
 setHeightfield(look.hf, look.far, D.spec.tile / 2)
 // the world's ground range, from the heights themselves (not the header): the camera's checks take it (checkView), and
 // the focus keeps to its range (the demo's focus stays on its 8 m plane, SPEC.camera.focusY; a map world's follows its
@@ -849,7 +865,7 @@ if (armiesParam !== null) {
     return false
   }
   const blocked = (x: number, z: number) => {
-    if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - 30) return true
+    if (tileEdge(x, z) > D.spec.tile / 2 - 30) return true
     const q = riverQuery(x, z)
     return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z)
   }

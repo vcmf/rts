@@ -11,6 +11,7 @@
 // the shade by main.ts, the figures' shadow map and its receivers by the one arm that owns it (ownsMap: the
 // infantry's; the others draw their simple shadows at every zoom, none under ?ushadowfar=map). A figure whose ground
 // contacts spread past its root (contactReach) measures its shadow's look from each contact (SH_SPREAD)
+import { TILE_O } from './tile.ts'
 import type { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
@@ -2037,7 +2038,9 @@ export class Units {
     const w = D.spec.tile
     const hd = new Float32Array(n * n)
     for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) hd[j * n + i] = groundAt(((i + 0.5) / n) * w - w / 2, ((j + 0.5) / n) * w - w / 2)
+      for (let i = 0; i < n; i++) {
+        hd[j * n + i] = groundAt(TILE_O.x + ((i + 0.5) / n) * w - w / 2, TILE_O.y + ((j + 0.5) / n) * w - w / 2)
+      }
     }
     const ht = new RawTexture(
       hd,

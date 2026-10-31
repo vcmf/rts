@@ -1,5 +1,8 @@
 precision highp float;attribute vec3 position;
 #include<instancesDeclaration>
+// the tile's place (G3b: painter.glsl's tileUV, tileEdge; src/look/tile.ts)
+uniform vec2 uTileO;
+vec2 tileUV(vec2 xz){return (xz-uTileO+TILE_HALF)/TILE_W;}
 // THE SIMPLE SHADOWS (decision 0049; src/look/units.ts): each soldier draws his own shadow in the main pass, a grid lying
 // on the ground from his feet along the sun's shadow (uShDir; position: 0 to 1 across it in x, along it in z), on the
 // battalion's own instances: his place moves with him every frame (the step's place and the share of the next step's
@@ -95,7 +98,7 @@ void main(){
   vec2 P=C*l0.x+uShDir*vAlong;
   vCt=(vec2(dot(P,normalize(finalWorld[0].xz)),dot(P,normalize(finalWorld[2].xz)))-ov.xy)/max(ov.zw+uShContact.x,1.0e-3);
   #endif
-  float gy=textureLod(uMeadow,(xz+TILE_HALF)/TILE_W,0.0).r;
+  float gy=textureLod(uMeadow,tileUV(xz),0.0).r;
   vec3 g=vec3(xz.x,gy,xz.y),toCam=normalize(uCamPos-g);
   #ifdef SH_SPREAD
   // (at least SPREAD_FLOOR m over its footprint: there it lies at the ground's sampled height, which the terrain can

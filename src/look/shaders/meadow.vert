@@ -9,6 +9,10 @@ varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;
 uniform vec3 uCamPos,uFocus;   // (the zoom: how far the camera stands from the focus)
 varying vec3 vFlow;   // the combed meadow: the clump hue (a hash), the growth at its root, how far it is from winter (1 to 0)
 #endif
+// the tile's place (G3b: painter.glsl's tileUV, tileEdge; src/look/tile.ts)
+uniform vec2 uTileO;
+vec2 tileUV(vec2 xz){return (xz-uTileO+TILE_HALF)/TILE_W;}
+float tileEdge(vec2 xz){vec2 d=abs(xz-uTileO);return max(d.x,d.y);}
 #include<meadow>
 #ifdef TRAMPLE
 // the grass trodden under the formations (batch C, src/look/units.ts trample): shorter and pressed where they stand and
@@ -35,7 +39,7 @@ float unitShadowRoot(vec3 wp){
 #endif
 // the meadow map at a point: one bilinear read (half floats filter), its growing area shrunk a texel on the CPU so
 // the blend never crosses a rule (src/look/meadow.ts)
-vec4 meadowAt(vec2 xz){return texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);}
+vec4 meadowAt(vec2 xz){return texture2D(uMeadow,tileUV(xz));}
 vec2 coverCell(vec2 xz){vec4 t=texture2D(uCover,(xz-uCoverBox.xy)/uCoverBox.z);return floor(t.rg*255.0+0.5);}   // its class and field id
 // the stubble tip colour, a pale straw, browning by late autumn: its red no higher than the standing wheat (no
 // clipping in the sun), its contrast with the coats measured by the guard (tools/guard.mjs --view crops)
@@ -67,7 +71,7 @@ void main(){
   float d=length(root-uCentre);
   float band=(uBand.y>0.0?smoothstep(uBand.x,uBand.y,d):1.0)*(1.0-smoothstep(uBand.z,uBand.w,d));   // the inner ring has no fade in
   // the meadow map is the tile's: the grass fades out over its last 20 m (a map world's focus goes past it: G3a)
-  band*=1.0-smoothstep(TILE_HALF-20.0,TILE_HALF,max(abs(root.x),abs(root.y)));
+  band*=1.0-smoothstep(TILE_HALF-20.0,TILE_HALF,tileEdge(root));
   // the cheap tests first, before any read of the meadow map: outside the band, or outside the view: the root at
   // 20 m under and over the focus height (the ground on the tile spans less), culled only when both lie past the
   // same edge of the frame, with a margin of a clump

@@ -148,7 +148,7 @@ vec3 dirtOn(vec3 c,vec2 xz,float px){
   vec4 cv=coverAt(coverWarp(xz));float k=cv.x,b=classBare(k);
   if(k>4.5&&k<5.5)b*=smoothstep(0.42,0.6,blot(xz+0.7,13.0));   // the village: its trodden patches, not the grass between (cellColour)
   #ifdef WEBGL2
-  if(k>2.5&&k<4.5)b*=smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y)));   // on the tile the roads are painted (roadPaint, live or baked: shore.glsl), their own grit
+  if(k>2.5&&k<4.5)b*=smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,tileEdge(xz));   // on the tile the roads are painted (roadPaint, live or baked: shore.glsl), their own grit
   #endif
   b=max(b,wearOf(cv))*fade*(1.0-earthWeight(c,px));if(b<=0.0)return c;   // (where the cracks lie, not the dirt too)
   // two reads at unrelated scales and offsets, so the texture's own marks (a dark smear) do not repeat in rows, about
@@ -166,18 +166,18 @@ uniform sampler2D uMeadow;
 #define HAS_MEADOW_MAP
 // the meadow map's texel at a point, read once a pixel (the bare earth, the under-layer and the strokes share it)
 vec2 pMeadowXZ=vec2(1e9);vec4 pMeadow;
-vec4 meadowTexel(vec2 xz){if(xz!=pMeadowXZ){pMeadowXZ=xz;pMeadow=texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);}return pMeadow;}
+vec4 meadowTexel(vec2 xz){if(xz!=pMeadowXZ){pMeadowXZ=xz;pMeadow=texture2D(uMeadow,tileUV(xz));}return pMeadow;}
 #endif
 #ifdef HAS_MEADOW_MAP
 // how much grass grows at a point, 0..1 (the meadow map: none in the formation zones and on the banks); beyond the tile
 // it counts as growing, faded in over its last 10 m, so a zone or a bank meeting the edge leaves no seam
 float meadowGrowth(vec2 xz){
-  float edge=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(xz.x),abs(xz.y)));
+  float edge=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,tileEdge(xz));
   return mix(edge<1.0?smoothstep(0.15,0.7,meadowTexel(xz).g):1.0,1.0,edge);}
 // the same, read apart from the pixel's one cached texel (the bake's several taps round a point: bareOf)
 float growthAt(vec2 xz){
-  float edge=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(xz.x),abs(xz.y)));
-  return mix(edge<1.0?smoothstep(0.15,0.7,texture2D(uMeadow,(xz+TILE_HALF)/TILE_W).g):1.0,1.0,edge);}
+  float edge=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,tileEdge(xz));
+  return mix(edge<1.0?smoothstep(0.15,0.7,texture2D(uMeadow,tileUV(xz)).g):1.0,1.0,edge);}
 // the bareness at a point of class k: a grassy class (meadow, pasture, a copse's floor) by the grass that does not
 // grow there, its edge wandering by the grain (no line along the map's texels), the bare class whole
 // (the growth at the cover's warped point, four taps a metre apart: the map's 2 m cells would step along a diagonal
@@ -190,7 +190,7 @@ float bareOf(float k,vec2 xz,vec2 w){if(k>9.5)return 1.0;if(k>2.5)return 0.0;
   float gr=0.25*(growthAt(w+vec2(1.0))+growthAt(w-vec2(1.0))+growthAt(w+vec2(1.0,-1.0))+growthAt(w+vec2(-1.0,1.0)));
   // (the far bake's texel is 4 m: a 2.5 m margin covers part of one, so it paints as part soil, by the share of the
   // ring round it that is another class)
-  float te=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(w.x),abs(w.y)));
+  float te=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,tileEdge(w));
   if(te>0.0){float n=0.0;for(int i=0;i<8;i++){float a=float(i)*0.7853982;n+=step(coverAt(w+vec2(cos(a),sin(a))*2.5).x,2.5);}
     gr=min(gr,mix(1.0,1.0-0.7*(1.0-smoothstep(4.0,8.0,n)),te));}
   if(gr>=1.0)return 0.0;
@@ -369,12 +369,12 @@ vec4 macroOnce(vec2 xz,float px){if(xz!=pMacroXZ){pMacroXZ=xz;pMacro=macro(xz,0.
 // the tile's bake, handing over to the far ring's over the tile's last 60 m: each read only where it has weight (texM
 // takes its own gradients under WebGL2: safe in a branch), the same colour with one read fewer nearly everywhere
 vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
-  float w=smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y)));
+  float w=smoothstep(TILE_HALF-60.0,TILE_HALF,tileEdge(xz));
   #ifdef WEBGL2
-  vec4 a=w<1.0?texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W):vec4(0.0),b=w>0.0?texM(uMacroFar,(xz-FAR_O)/FAR_W,FAR_W):vec4(0.0);
+  vec4 a=w<1.0?texM(uMacro,tileUV(xz),TILE_W):vec4(0.0),b=w>0.0?texM(uMacroFar,(xz-FAR_O)/FAR_W,FAR_W):vec4(0.0);
   pMacro=mix(a,b,w);   // the side not read has no weight
   #else
-  pMacro=mix(texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W),texM(uMacroFar,(xz-FAR_O)/FAR_W,FAR_W),w);   // WebGL1: texture2D takes its gradients from the quad, so both read always
+  pMacro=mix(texM(uMacro,tileUV(xz),TILE_W),texM(uMacroFar,(xz-FAR_O)/FAR_W,FAR_W),w);   // WebGL1: texture2D takes its gradients from the quad, so both read always
   #endif
   }
   return pMacro;}

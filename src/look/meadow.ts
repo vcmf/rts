@@ -5,6 +5,7 @@
 // (the ground's height and the growth, baked here once) and the clump field (shaders/meadow.glsl), and fades each clump
 // out across its ring's band of distance, so the rings hand over without an edge. Where nothing grows, or beyond the
 // outer ring, the ground's own pattern (groundAt, MEADOW) carries the meadow.
+import { TILE_O, tileEdge } from './tile.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { FromHalfFloat, ToHalfFloat } from '@babylonjs/core/Misc/textureTools.js'
 import type { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
@@ -169,6 +170,9 @@ export function buildMeadowMap(
   allowedCrop = allowed,
 ): MeadowMap {
   const t0 = performance.now()
+  // the map's corner: the tile's (src/look/tile.ts)
+  const X0 = TILE_O.x - TILE_W / 2
+  const Z0 = TILE_O.y - TILE_W / 2
   // the meadow map: R the ground's height, G the growth, B the height factor (half floats, filtered by the GPU). The
   // cover's growth on its 2 m grid, each texel interpolating the cells round it (the edge follows no grid); then the
   // rules at the texel itself (the cover's edge, the formation zones, the banks) zero it; then the growing area
@@ -179,7 +183,7 @@ export function buildMeadowMap(
   const cellGrid = (f: (x: number, z: number) => number) => {
     const a = new Float32Array(G * G)
     for (let j = 0; j < G; j++) {
-      for (let i = 0; i < G; i++) a[j * G + i] = f((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2)
+      for (let i = 0; i < G; i++) a[j * G + i] = f(X0 + (i + 0.5) * 2, Z0 + (j + 0.5) * 2)
     }
     return a
   }
@@ -195,7 +199,7 @@ export function buildMeadowMap(
   const hCell = new Float32Array(G * G)
   for (let j = 0; j < G; j++) {
     for (let i = 0; i < G; i++) {
-      ;[gCell[j * G + i], hCell[j * G + i]] = growth((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2)
+      ;[gCell[j * G + i], hCell[j * G + i]] = growth(X0 + (i + 0.5) * 2, Z0 + (j + 0.5) * 2)
     }
   }
   const cCell = cellGrid((x, z) => crop(x, z))
@@ -211,8 +215,8 @@ export function buildMeadowMap(
     const at = sampler(cell)
     for (let j = 0; j < MAP_N; j++) {
       for (let i = 0; i < MAP_N; i++) {
-        const x = i + 0.5 - TILE_W / 2
-        const z = j + 0.5 - TILE_W / 2
+        const x = X0 + i + 0.5
+        const z = Z0 + j + 0.5
         const k = j * MAP_N + i
         const gu = (i + 0.5) / 2 - 0.5
         const gv = (j + 0.5) / 2 - 0.5
@@ -268,7 +272,7 @@ export function buildMeadowMap(
     for (let i = 0; i < MAP_N; i++) {
       const k = j * MAP_N + i
       const hf = bilerp(hAtCell, (i + 0.5) / 2 - 0.5, (j + 0.5) / 2 - 0.5)
-      data[k * 4] = ToHalfFloat(heightAt(i + 0.5 - TILE_W / 2, j + 0.5 - TILE_W / 2))
+      data[k * 4] = ToHalfFloat(heightAt(X0 + i + 0.5, Z0 + j + 0.5))
       data[k * 4 + 1] = ToHalfFloat(g[k])
       data[k * 4 + 2] = ToHalfFloat(hf)
       data[k * 4 + 3] = ToHalfFloat(crops.g[k])
@@ -293,18 +297,15 @@ export function buildMeadowMap(
   // grass, or a crop, the shader may grow
   const bilinear = (a: Float32Array) => (x: number, z: number) => {
     const at = (i: number, j: number) => (i < 0 || j < 0 || i >= MAP_N || j >= MAP_N ? 0 : a[j * MAP_N + i])
-    return bilerp(at, x + TILE_W / 2 - 0.5, z + TILE_W / 2 - 0.5)
+    return bilerp(at, x - X0 - 0.5, z - Z0 - 0.5)
   }
   const growthAt = bilinear(g)
   const cropAt = bilinear(crops.g)
   const hAt = (i: number, j: number) =>
-    heightAt(
-      Math.min(MAP_N - 1, Math.max(0, i)) + 0.5 - TILE_W / 2,
-      Math.min(MAP_N - 1, Math.max(0, j)) + 0.5 - TILE_W / 2,
-    )
+    heightAt(X0 + Math.min(MAP_N - 1, Math.max(0, i)) + 0.5, Z0 + Math.min(MAP_N - 1, Math.max(0, j)) + 0.5)
   // the half floats' rounding included
   const groundAtMap = (x: number, z: number) =>
-    bilerp((a, b) => FromHalfFloat(ToHalfFloat(hAt(a, b))), x + TILE_W / 2 - 0.5, z + TILE_W / 2 - 0.5)
+    bilerp((a, b) => FromHalfFloat(ToHalfFloat(hAt(a, b))), x - X0 - 0.5, z - Z0 - 0.5)
   return {
     map,
     growingCells,
@@ -473,7 +474,7 @@ export function buildMeadow(
     under.z = underOn && meadowOn ? k : 0
     const f = camera.target
     // (a map world's focus goes past the tile, G3a: a ring whose band misses it draws nothing, its map the tile's)
-    const off = Math.max(Math.abs(f.x), Math.abs(f.z)) - D.spec.tile / 2
+    const off = tileEdge(f.x, f.z) - D.spec.tile / 2
     RINGS.forEach((r, ri) => {
       const outer = ri === RINGS.length - 1
       const b = bands[ri]

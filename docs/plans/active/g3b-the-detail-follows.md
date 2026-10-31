@@ -39,15 +39,17 @@ A moved tile's data (its heightfield, fine cover, roads, trees) is the look comp
 Not prebuilt: 64 centres over Austerlitz would be about 130 MB and two minutes a build (estimates). The map is
 compiled once in a worker (the map page's worker already compiles a map with its DEM in the browser:
 `src/app/map/worker.ts`), and each new tile's data is built there from the layers (`src/look/world/from-map.ts`, pure
-TypeScript), off the page's thread, sent as transferable arrays. The world takes **one frame for the whole map**: the
-origin at the map's centre and one height base (the map's lowest node), so a tile's data is an offset window, not a
-world of its own (today each window is compiled about its own centre and lowest node).
+TypeScript), off the page's thread, sent as transferable arrays. The page keeps **one frame: the first window's** (its centre the origin, its lowest node the height base, as today),
+and a tile's data is built in it, at an offset: the tile's centre on a **200 m grid** about the origin. 200 m is 14 far
+cells (14.29 m), 112 tile cells (1.79 m), 25 road cells, 384 light-map texels and a whole number of every other grid's
+cells, so a moved tile's grids meet the far ring's and the apron joins them as today. The look tools keep their views
+(they look about the origin, the first tile).
 
 ## Sub-phases (each a PR)
 
 | | What | Acceptance |
 |---|---|---|
-| **G3b-1** | **The tile off the origin.** One frame for the map (the origin at the map's centre, one height base); the tile's centre `uTileO` in every shader that reads the tile (about 25 reads); the CPU's tile-bound code takes the centre (the heightfield, the ground mesh, the apron, the far ring's hole, the bakes' cameras, the meadow map, the flow, the roads' grid, the water data, the units' ground). The tile stays fixed, at the window's centre in the map's frame. | The windows look as before: golden shots against #291's at the same views (a pixel tolerance for the moved float origin); the tests pass with the tile off the origin |
+| **G3b-1** | **The tile off the origin.** The tile's centre in the data (`tileAt`, on the 200 m grid; the compiler's `--tileat`), `uTileO` in every shader that reads the tile (about 25 reads), and the CPU's tile-bound code taking the centre (the heightfield, the ground mesh, the apron, the far ring's hole, the bakes' cameras, the meadow map, the flow, the roads' grid, the water data, the units' ground, the trees' tile and far split). The tile is still fixed for a page's life. | At the origin the windows draw as on #291 (golden shots, identical); Kobelnitz's data with its tile 400 m east (`--tileat 400,0`) draws as Kobelnitz's own where the two tiles overlap (the same frame: the painted grain lies in world metres, so two frames cannot match pixel for pixel), within the golden's limits |
 | **G3b-2** | **The tile rebuilt.** The nature (the trees, the canopy, the trunks, the casters, the growth the meadow reads: one 870-line closure today) disposed and rebuilt for a tile; the tile's textures written in place; the bakes rerun; the shadow map's casters from the new nature. A test hook moves the tile (`__look.moveTile(x, z)`). | A tile moved to three places (Kobelnitz, the Pratzen, Sokolnitz) looks as a window built there; no leak over ten moves (the GPU's memory, the meshes counted) |
 | **G3b-3** | **The tile follows the camera.** The map compiled in a worker on load; a new tile's data built there when the focus nears the edge, swapped in when ready (the old tile drawn until then); the re-centring's rule and its hysteresis. | Pan across Austerlitz: the detail under the focus everywhere; the swap's frame measured (G3c spreads the bakes) |
 

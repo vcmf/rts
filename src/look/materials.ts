@@ -1,6 +1,7 @@
 // The shared painter and the material factory (prototypes/painted-cinematic.html, docs/art-bible.md §4): one paint
 // function for everything (hue-shifted light, banded values broken by a world-anchored grain, graphic rim, cloud
 // shadows), inlined into every fragment shader where it says #include<painter>.
+import { bindTile } from './tile.ts'
 import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 import { Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
@@ -178,6 +179,7 @@ const COMMON = [
   'uEarthOn',
   'uCombNearRect',
   'uCoverBox',
+  'uTileO',
   'uFocusZ',
   'uCamFwd',
 ]
@@ -256,6 +258,7 @@ export class Materials {
     // moves; a perFrame:false material keeps the values it was made with: copies, not SEASON's own objects)
     setSeasonUniforms(m)
     m.setVector3('uSunDir', SUN)
+    bindTile(m)
     m.setTexture('uGrain', this.grain)
     m.setVector2('uGrainMean', new Vector2(...this.grainMean))
     this.every.push(m)

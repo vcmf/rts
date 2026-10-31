@@ -24,8 +24,8 @@ vec3 flowAt(vec2 xz){
 // fetch; the field itself beyond the tile (the far ring's bake)
 uniform sampler2D uFlow;
 vec3 flowTex(vec2 xz){
-  float e=max(abs(xz.x),abs(xz.y));if(e>TILE_HALF-2.0)return flowAt(xz);
-  vec4 t=texture2D(uFlow,(xz+TILE_HALF)/TILE_W);vec2 d=t.rg*2.0-1.0;vec3 f=vec3(d/max(length(d),1e-4),t.b);
+  float e=tileEdge(xz);if(e>TILE_HALF-2.0)return flowAt(xz);
+  vec4 t=texture2D(uFlow,tileUV(xz));vec2 d=t.rg*2.0-1.0;vec3 f=vec3(d/max(length(d),1e-4),t.b);
   // (blended into the field over the last 10 m of the tile: the quantised texture meets the field without a step)
   float w=smoothstep(TILE_HALF-12.0,TILE_HALF-2.0,e);if(w>0.0){vec3 g=flowAt(xz);f=vec3(normalize(mix(f.xy,g.xy,w)+1e-5),mix(f.z,g.z,w));}
   return f;}

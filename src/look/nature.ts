@@ -2,6 +2,7 @@
 // scatter, whose composition follows the north star (docs/art-bible.md §11). Role ids (tools/obj-to-js.mjs):
 // 0 foliage 1 dark foliage 2 wood 3 rock 4 birch bark 5 bark mark 6 warm flower 7 white flower 8 wheat 9 berry.
 // The pack's colours are never used: each material maps to a role and our palette paints it.
+import { tileEdge } from './tile.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Color3 } from '@babylonjs/core/Maths/math.color.js'
@@ -568,7 +569,7 @@ export function buildNature(
   const far: Item[] = []
   const farSp: string[] = []
   const inBand = (x: number, z: number) => {
-    const m = Math.max(Math.abs(x), Math.abs(z))
+    const m = tileEdge(x, z)
     return m > D.spec.tile / 2 && m < D.band
   }
   for (let k = -8; k <= 8 && !mapTrees; k++) {
@@ -628,7 +629,7 @@ export function buildNature(
       const sp = TREE_SPECIES[si]
       const mdl = oneTree ? 'CommonTree_1' : genModels ? genModels.species(sp, x, z) : PACK_OF[sp](x, z)
       const sc = oneTree || !genModels ? s * (PACK_SCALED.has(sp) ? 1 : PACK_METRE) : s
-      if (Math.max(Math.abs(x), Math.abs(z)) < D.spec.tile / 2) {
+      if (tileEdge(x, z) < D.spec.tile / 2) {
         // (onFields: placed on purpose, by the map; a rim's or a row's tree beside a field is not hidden)
         if (addPlaced(mdl, [x, z, sc, hash(x, z) * 6.28, hash(z, x)], '', mdl, true) !== 'drawn') continue
         const M = NATURE[mdl]
@@ -955,7 +956,7 @@ export function buildNature(
   // trees, not stumps
   const TRUNK = /^(CommonTree|BirchTree|PineTree|Willow|Gen)_/
   // (the far trees' only where the light map reaches: the tile)
-  const onTile = ([x, z]: Item) => Math.max(Math.abs(x), Math.abs(z)) < D.spec.tile / 2
+  const onTile = ([x, z]: Item) => tileEdge(x, z) < D.spec.tile / 2
   for (const [k, items] of [
     ...Object.entries(groups),
     ...Object.entries(farTrees).map(([k, v]) => [k, v.filter(onTile)] as const),

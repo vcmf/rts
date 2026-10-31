@@ -19,8 +19,9 @@ export const WINDOWS: readonly LookWindow[] = [
   { map: 'austerlitz', name: 'pratzen', x: 350, z: 126 },
 ]
 
-/** The look data file of a window, from the repo's root. */
-export const windowFile = (w: LookWindow): string => `data/${w.map}-${w.name}.lookdata`
+/** The look data file of a window, from the repo's root; with `tileAt`, its tile moved there (G3b-1's check) */
+export const windowFile = (w: LookWindow, tileAt?: readonly [number, number]): string =>
+  `data/${w.map}-${w.name}${tileAt && (tileAt[0] || tileAt[1]) ? `-at${tileAt[0]}_${tileAt[1]}` : ''}.lookdata`
 
 /** The map file a window is cut from, from the repo's root. */
 export const mapFile = (w: LookWindow): string => `maps/${w.map}.map.json`
