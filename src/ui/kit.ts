@@ -1,7 +1,8 @@
 // The specimen sheet (app/ui-kit.html): fills the samples that come from data (the army colours, cards, meters) and
 // makes the settings controls and the dialog live. docs/systems/front-menu.md ("The specimen sheet").
 import { find, h, paintArmy } from './dom.ts'
-import { bar, barShare, barState, card } from './elements.ts'
+import { bar, barShare, barState, card, unitCard, type UnitCardData } from './elements.ts'
+import { ACTION_ICONS, ARM_ICONS, METRIC_ICONS, SHAPE_ICONS, icon, type IconName } from './icons.ts'
 import { levelMarker } from './levels.ts'
 import { historyImage } from './images.ts'
 import { loadRoster } from './load.ts'
@@ -74,12 +75,85 @@ function levelCells(names: readonly string[]): HTMLElement[] {
   })
 }
 
-/** Each `data-level="<1–6>"` becomes its marker, named from the roster's levels. */
-function fillLevelMarks(names: readonly string[]): void {
-  for (const node of document.querySelectorAll<HTMLElement>('[data-level]')) {
-    const level = Number(node.dataset.level)
-    node.replaceWith(levelMarker(level, names[level - 1] ?? ''))
+/** A sample unit as the page's data gives it (#sample-units): a unit card's data, its painting named by roster id. */
+interface SampleUnit extends Omit<UnitCardData, 'image' | 'levelLabel'> {
+  regiment: string
+  army: number
+}
+
+/** The page's sample units, made into card data with the roster's paintings and level names. */
+function sampleUnits(roster: Roster): { unit: UnitCardData; army: number }[] {
+  const samples: SampleUnit[] = JSON.parse(find('#sample-units').textContent ?? '[]')
+  return samples.flatMap(({ regiment, army, ...rest }) => {
+    const entry = entryById(roster, 'regiments', regiment)
+    if (!entry) return []
+    const levelLabel = roster.levels[rest.level - 1] ?? ''
+    return [{ unit: { ...rest, image: historyImage(entry.image), levelLabel }, army }]
+  })
+}
+
+/** Section 11: the unit bar's battle cards (click one to select it), the selected unit's panel and its orders, and
+ *  the same units as portrait cards. */
+function battleSections(roster: Roster): void {
+  const units = sampleUnits(roster)
+  const colour = (army: number) => roster.nations[army]?.colour ?? ''
+  const panel = find('[data-slot=panel]')
+  const cards = units.map(({ unit, army }) => paintArmy(unitCard(unit, 'battle'), colour(army)))
+  const select = (i: number) => {
+    cards.forEach((c, j) => c.classList.toggle('sel', i === j))
+    const card = paintArmy(unitCard(units[i].unit, 'panel'), colour(units[i].army))
+    find('.ucard-text', card).append(h('div', { class: 'orders' }, ...orderButtons()))
+    panel.replaceChildren(card)
   }
+  cards.forEach((c, i) => c.addEventListener('click', () => select(i)))
+  find('[data-slot=battle-cards]').replaceChildren(...cards)
+  select(0)
+  const portraits = units.slice(0, 3).map(({ unit, army }) => paintArmy(unitCard(unit, 'portrait'), colour(army)))
+  find('[data-slot=portraits]').replaceChildren(...portraits)
+}
+
+/** The orders as icon buttons: the icon leads, its word and key are the tooltip. */
+function orderButtons(): HTMLElement[] {
+  const orders: [IconName, string, string][] = [
+    ['line', 'Line', 'L'],
+    ['column', 'Column', 'C'],
+    ['square', 'Square', 'Q'],
+    ['skirmish', 'Skirmish', 'K'],
+    ['fire', 'Fire', 'F'],
+    ['melee', 'Charge', 'G'],
+  ]
+  return orders.map(([name, word, key]) => {
+    const button = h('button', { class: 'btn order', 'data-tip': `${word} · ${key}`, 'aria-label': word })
+    button.append(icon(name, word, 'm'), h('span', { class: 'key' }, key))
+    return button
+  })
+}
+
+/** Section 13: every icon by group, at 36 px, its name under it in small type. */
+function iconGroups(): HTMLElement[] {
+  const groups: [string, readonly IconName[]][] = [
+    ['Arms', ARM_ICONS],
+    ['Actions', ACTION_ICONS],
+    ['Shapes', SHAPE_ICONS],
+    ['Metrics', METRIC_ICONS],
+  ]
+  return groups.map(([title, names]) => {
+    const cells = names.map(name =>
+      h(
+        'figure',
+        { class: 'icon-cap' },
+        icon(name, name, 'l'),
+        icon(name, name, 's'),
+        h('figcaption', { class: 'mono' }, name),
+      ),
+    )
+    return h(
+      'div',
+      { class: 'icon-group' },
+      h('div', { class: 'mono pencil' }, title),
+      h('div', { class: 'icon-row' }, ...cells),
+    )
+  })
 }
 
 function liveSwitches(): void {
@@ -136,12 +210,11 @@ async function main(): Promise<void> {
   const cards = find('[data-slot=cards]')
   paintArmy(cards, roster.nations[0].colour)
   cards.replaceChildren(...sampleCards(roster))
-  const regiment = entryById(roster, 'regiments', roster.featured.regiments)
-  if (regiment) find<HTMLImageElement>('[data-slot=unit-image]').src = historyImage(regiment.image)
   fillBars()
   find('[data-slot=bars]').replaceChildren(...barSamples())
   find('[data-slot=levels]').replaceChildren(...levelCells(roster.levels))
-  fillLevelMarks(roster.levels)
+  battleSections(roster)
+  find('[data-slot=icons]').replaceChildren(...iconGroups())
   liveSwitches()
   liveRanges()
   liveSegments()

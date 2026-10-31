@@ -324,10 +324,65 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .status .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-fill); margin-right: 8px; vertical-align: 1px; }
 .status .right { margin-left: auto; }
 
-/* Unit panel: the selected formation. Its army's colour edges it; meters for strength, order, ammunition. */
-.unit-panel { display: grid; grid-template-columns: 84px 1fr; gap: 16px; padding: 14px; width: min(440px, 100%); --tick: 60px; --frame-tick: var(--army, var(--accent)); border-color: var(--army, var(--accent)); }
-.unit-panel img { width: 84px; aspect-ratio: 2 / 3; object-fit: cover; display: block; background: var(--paint); }
-.unit-panel h4 { margin: 0; font-size: 24px; }
-.unit-panel .stats { display: grid; grid-template-columns: 82px 1fr 34px; gap: 6px 10px; align-items: center; margin-top: 10px; }
-.unit-panel .stats .mono { color: var(--pencil); }
-.unit-panel .orders { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid var(--rule); padding-top: 12px; }
+/* ---------- Icons, tooltips, unit cards ---------- */
+
+/* An icon (src/ui/icons.ts): an ink glyph at 16, 24 or 36 px. Its word is a tooltip, not a label beside it. */
+.icon { position: relative; display: inline-grid; place-items: center; color: var(--ink); flex: none; }
+.icon svg { display: block; }
+.icon-s svg { width: 16px; height: 16px; }
+.icon-m svg { width: 24px; height: 24px; }
+.icon-l svg { width: 36px; height: 36px; }
+.icon .cut, .level .cut { stroke: var(--paper-hi); }
+
+/* The tooltip: any element with data-tip shows it on hover or keyboard focus, in a small ruled label above it. */
+[data-tip] { position: relative; }
+[data-tip]:is(:hover, :focus-visible)::after {
+  content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
+  z-index: 30; pointer-events: none; white-space: nowrap; padding: 4px 8px;
+  background: var(--paper-hi); border: 1px solid var(--ink); color: var(--ink);
+  font: 500 10px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
+}
+/* a tip inside a tipped element: only the innermost one shows */
+[data-tip]:has([data-tip]:hover)::after { content: none; }
+
+/* Vertical bars: the unit card's three bars standing beside its painting, each under its metric's icon. */
+.bar.vertical { width: 9px; height: auto; align-self: stretch; }
+.bar.vertical > i { inset: auto 0 0 0; width: auto; height: var(--share, 0%); transition: height 0.3s var(--ease); }
+.vbars { display: grid; grid-auto-flow: column; gap: 8px; align-self: stretch; }
+.vbar { display: grid; grid-template-rows: auto minmax(0, 1fr); justify-items: center; gap: 6px; }
+
+/* The unit card (src/ui/elements.ts unitCard): portrait, battle and panel. */
+.ucard { display: grid; gap: 10px; width: fit-content; text-align: left; }
+.ucard img { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: var(--paint); }
+.ucard-body { display: grid; grid-template-columns: auto auto; gap: 10px; }
+.ucard-pic { position: relative; border: 1px solid var(--ink); padding: 5px; background: var(--paper-hi); }
+.ucard-name { font-size: 20px; }
+.ucard-sub { color: var(--pencil); }
+.unit-icons { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.icon-cap { margin: 0; display: grid; justify-items: center; gap: 4px; }
+.icon-cap figcaption { color: var(--pencil); font-size: 9px; }
+
+.ucard.portrait .ucard-pic { width: 176px; }
+.ucard.portrait .ucard-name { margin-top: 2px; }
+
+/* Battle: compact, the painting edge to edge with its icons on paper chips, the bars on its right; words on hover. */
+.ucard.battle { --tick: 30px; grid-template-columns: auto auto; gap: 6px; padding: 5px; }
+.ucard.battle::before { inset: -10px; background-position: left 0 top 5px, left 5px top 0, right 0 bottom 5px, right 5px bottom 0; }
+.ucard.battle .ucard-pic { width: 86px; padding: 0; border: 0; }
+.ucard.battle .vbars { gap: 4px; }
+.ucard.battle .bar.vertical { width: 6px; }
+.ucard.battle .vbar .icon svg { width: 12px; height: 12px; }
+.ucard.battle :is(.chip-tl, .chip-tr, .chip-bl) {
+  position: absolute; display: grid; place-items: center; padding: 2px; background: var(--paper-hi); border: 1px solid var(--ink);
+}
+.ucard.battle .chip-tl { top: 4px; left: 4px; }
+.ucard.battle .chip-tr { top: 4px; right: 4px; }
+.ucard.battle .chip-bl { bottom: 4px; left: 4px; }
+.ucard.battle:is(:hover, :focus-visible, .sel) { --tick: 60px; --frame-tick: var(--army, var(--accent)); border-color: var(--army, var(--ink)); background: var(--accent-wash); outline: none; }
+
+/* Panel: the selected unit, painting and bars, then its name and its icons, each with its word under it. */
+.ucard.panel { grid-template-columns: auto minmax(0, 1fr); gap: 22px; padding: 14px; --tick: 70px; --frame-tick: var(--army); border-color: var(--army, var(--ink)); }
+.ucard.panel .ucard-pic { width: 150px; }
+.ucard-text { display: grid; align-content: start; gap: 6px; }
+.ucard.panel .ucard-name { font-size: 28px; }
+.ucard.panel .unit-icons { margin-top: 14px; gap: 18px; }

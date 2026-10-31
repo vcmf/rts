@@ -78,10 +78,21 @@
 .levels { grid-template-columns: repeat(6, minmax(0, 1fr)); max-width: 760px; }
 .levels figure { margin: 0; display: grid; justify-items: center; gap: 10px; }
 .level.big { width: 40px; height: 40px; }
-.unit-panel .stats { grid-template-columns: 82px minmax(0, 1fr) 36px; }
-.unit-panel h4 { display: flex; align-items: center; gap: 8px; }
 @media (max-width: 860px) {
   .gauges { grid-template-columns: 70px repeat(3, minmax(0, 1fr)); gap: 12px; }
   .bar-cell { grid-template-columns: minmax(0, 1fr); }
   .levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* Section 11's cards and orders, section 13's icons. */
+.unit-bar { display: flex; flex-wrap: wrap; gap: 26px; padding: 18px 12px 6px; }
+.orders { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.panel-slot { padding-top: 22px; }
+.btn.order { padding: 6px 8px; gap: 6px; }
+.btn.order .key { font-size: 9px; padding: 0 4px; }
+.portrait-row { gap: 34px; align-items: start; padding: 8px 4px; }
+.icon-groups { display: grid; gap: 28px; }
+.icon-group { display: grid; gap: 12px; }
+.icon-row { display: flex; flex-wrap: wrap; gap: 26px; }
+.icon-row .icon-cap { min-width: 64px; }
+

@@ -4,17 +4,10 @@
 // ruleset's, not this file's (decision 0015). The line's levels are counted marks (a bar, one and two chevrons) and
 // the Guard's one family of a star, so the step into the Guard reads as a change of kind. A 16 × 16 box.
 
-/** One stroke of a glyph: an ink line or an ink fill. */
-export interface Stroke {
-  d: string
-  mode: 'line' | 'fill'
-}
+import { fill, glyph, line, type Stroke } from './glyph.ts'
 
 /** The unit model's levels: 1 to LEVELS. */
 export const LEVELS = 6
-
-const line = (d: string): Stroke => ({ d, mode: 'line' })
-const fill = (d: string): Stroke => ({ d, mode: 'fill' })
 
 /** A filled chevron 12 wide, `t` thick, its apex at (8, `y`). */
 const chevron = (y: number, t = 2.4) =>
@@ -49,25 +42,7 @@ export function levelGlyph(level: number): Stroke[] {
   return GLYPHS[at - 1]
 }
 
-const SVG = 'http://www.w3.org/2000/svg'
-
 /** The marker of `level` as an inline SVG (class `level`; its ink is the element's `color`), labelled `name`. */
 export function levelMarker(level: number, name: string): SVGSVGElement {
-  const svg = document.createElementNS(SVG, 'svg')
-  svg.setAttribute('class', 'level')
-  svg.setAttribute('viewBox', '0 0 16 16')
-  svg.setAttribute('role', 'img')
-  svg.setAttribute('aria-label', name)
-  for (const stroke of levelGlyph(level)) svg.append(strokeElement(stroke))
-  return svg
-}
-
-function strokeElement(stroke: Stroke): SVGPathElement {
-  const path = document.createElementNS(SVG, 'path')
-  path.setAttribute('d', stroke.d)
-  path.setAttribute('fill', stroke.mode === 'fill' ? 'currentColor' : 'none')
-  path.setAttribute('stroke', stroke.mode === 'fill' ? 'none' : 'currentColor')
-  path.setAttribute('stroke-width', '1.6')
-  path.setAttribute('stroke-linecap', 'round')
-  return path
+  return glyph(levelGlyph(level), 16, 'level', name)
 }

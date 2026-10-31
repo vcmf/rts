@@ -59,8 +59,13 @@ Out: the background art (the home stays empty paper), Campaign, Battles and Sett
 
 - **Unit bars**: continuous, one colour each (the owner asked for it, 2026-10-31): bistre toughness, verdigris
   morale, violet fatigue; low hatched under a dotted frame, critical an empty outline, never a new hue.
+- **Icons over words, cards with big paintings** (the owner, 2026-10-31): icons for melee, musket and rifle fire,
+  the shapes (ranks as lines, like Total War), and the three arms (the gun reused from the staff map); words as
+  tooltips or subtitles; unit cards in three layouts with the three bars standing beside the painting.
 
 ## Open questions
+
+- The horse and shako icons are drawn here; the owner offered SVGs of a horse and a gun if better ones are wanted.
 
 - The game's title ("Empires" is a placeholder).
 - Prussia's and Poland's army colours (`#23324a`, `#9c2440`) are provisional: the art bible names only France,

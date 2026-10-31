@@ -30,6 +30,7 @@
     <a href="#cards">10 Cards</a>
     <a href="#battle">11 In battle</a>
     <a href="#levels">12 Experience levels</a>
+    <a href="#icons">13 Icons</a>
   </nav>
 
   <main>
@@ -248,31 +249,24 @@
     <!-- 11 -->
     <section id="battle">
       <h2 class="display"><span class="mono">11</span> In battle</h2>
-      <p class="lede">The battle screen's pieces: the cartouche at the top left, the selected formation's panel, the status bar at the bottom edge.</p>
+      <p class="lede">The battle screen's pieces: the cartouche, the unit bar's cards, the selected unit's panel and its orders, the status bar. Icons lead, words follow: names and values are tooltips (hover), or a small subtitle. The unit card comes in three layouts, each with its painting large and its three bars standing beside it.</p>
       <div class="battle">
         <div class="cartouche">
           <div class="display name">Austerlitz</div>
           <div class="data">2 déc 1805 · 07:40 · −4 °C · mist in the valleys</div>
           <div class="double-rule"></div>
         </div>
-        <div class="frame unit-panel" data-army="0">
-          <img data-slot="unit-image" alt="">
-          <div>
-            <div class="mono" style="color: var(--army)">France · IV Corps · Saint-Hilaire</div>
-            <h4 class="display"><span data-level="3"></span> 10e léger, 1er bataillon</h4>
-            <div class="mono pencil">Column of divisions · advancing · Veterans</div>
-            <div class="stats">
-              <span class="mono">Toughness</span><span data-bar="toughness 812/900"></span>
-              <span class="mono">Morale</span><span data-bar="morale 64/100"></span>
-              <span class="mono">Fatigue</span><span data-bar="fatigue 71/100 high"></span>
-            </div>
-          </div>
-          <div class="orders">
-            <button class="btn"><span class="key">L</span> Line</button>
-            <button class="btn"><span class="key">C</span> Column</button>
-            <button class="btn"><span class="key">Q</span> Square</button>
-            <button class="btn solid"><span class="key">F</span> Fire</button>
-          </div>
+        <div>
+          <div class="mono pencil">Unit bar · battle cards (hover for names)</div>
+          <div class="unit-bar" data-slot="battle-cards"></div>
+        </div>
+        <div>
+          <div class="mono pencil">Selected unit · panel</div>
+          <div class="panel-slot" data-slot="panel"></div>
+        </div>
+        <div>
+          <div class="mono pencil">Roster · portrait cards</div>
+          <div class="row portrait-row" data-slot="portraits"></div>
         </div>
         <div class="status battle-status">
           <span><span class="dot"></span>Live</span><span>07:40:12</span><span>1:25 000</span><span>Winter</span><span>14 battalions engaged</span><span class="right">60 fps</span>
@@ -286,6 +280,13 @@
       <p class="lede">The unit model's six levels (docs/proposals/unit-model.md): Recruits, Line, Veterans, then the Young, Middle and Old Guard. Ink glyphs that read as a scale at 16 px without colour: the line's levels are counted marks, the Guard's one family of a star, so the step into the Guard reads as a change of kind (as the period kept service chevrons and the Guard apart). Every mark is filled: a bar, one and two chevrons; then a star, a star over a bar, a star in a laurel.</p>
       <div class="levels" data-slot="levels"></div>
     </section>
+
+    <!-- 13 -->
+    <section id="icons">
+      <h2 class="display"><span class="mono">13</span> Icons</h2>
+      <p class="lede">Ink glyphs at 16, 24 and 36 px; hover one for its name. Arms: a shako, a horse, the gun of the staff map. Actions: crossed sabres for melee, a musket with its bayonet for volley fire, a slung rifle for aimed fire. Shapes are drawn as Total War draws formations, each rank a line. Metrics head the unit bars.</p>
+      <div class="icon-groups" data-slot="icons"></div>
+    </section>
   </main>
 </div>
 
@@ -298,6 +299,23 @@
   </div>
 </div>
 
+<!-- The sample units of the battle sections: a scenario's words (the ruleset's labels), not the interface code's. -->
+<script type="application/json" id="sample-units">
+[
+  { "regiment": "french/04-light-chasseur", "army": 0, "name": "10e léger", "detail": "1er bataillon · IV Corps", "arm": "foot", "armLabel": "Light infantry", "level": 3, "shape": "column", "shapeLabel": "Column of attack",
+    "actions": [{ "icon": "fire", "label": "Volley fire" }, { "icon": "melee", "label": "Bayonet charge" }],
+    "metrics": [{ "metric": "toughness", "label": "Toughness", "value": 812, "max": 900 }, { "metric": "morale", "label": "Morale", "value": 64, "max": 100 }, { "metric": "fatigue", "label": "Fatigue", "value": 71, "max": 100, "highIsBad": true }] },
+  { "regiment": "french/13-cuirassier", "army": 0, "name": "5e cuirassiers", "detail": "Brigade d'Hautpoul", "arm": "horse", "armLabel": "Heavy cavalry", "level": 4, "shape": "line", "shapeLabel": "Line",
+    "actions": [{ "icon": "melee", "label": "Charge" }],
+    "metrics": [{ "metric": "toughness", "label": "Toughness", "value": 410, "max": 480 }, { "metric": "morale", "label": "Morale", "value": 88, "max": 120 }, { "metric": "fatigue", "label": "Fatigue", "value": 22, "max": 100, "highIsBad": true }] },
+  { "regiment": "french/26-eight-pounder", "army": 0, "name": "Batterie à pied", "detail": "6/1er régiment d'artillerie", "arm": "guns", "armLabel": "Foot artillery", "level": 2, "shape": "unlimbered", "shapeLabel": "Unlimbered",
+    "actions": [{ "icon": "fire", "label": "Roundshot" }],
+    "metrics": [{ "metric": "toughness", "label": "Toughness", "value": 96, "max": 120 }, { "metric": "morale", "label": "Morale", "value": 22, "max": 100 }, { "metric": "fatigue", "label": "Fatigue", "value": 40, "max": 100, "highIsBad": true }] },
+  { "regiment": "british/04-95th-rifles", "army": 1, "name": "1/95th Rifles", "detail": "Light Division", "arm": "foot", "armLabel": "Riflemen", "level": 5, "shape": "skirmish", "shapeLabel": "Skirmish order",
+    "actions": [{ "icon": "aimed-fire", "label": "Aimed fire" }],
+    "metrics": [{ "metric": "toughness", "label": "Toughness", "value": 120, "max": 600 }, { "metric": "morale", "label": "Morale", "value": 9, "max": 140 }, { "metric": "fatigue", "label": "Fatigue", "value": 90, "max": 100, "highIsBad": true }] }
+]
+</script>
 <script type="module" src="../src/ui/kit.ts"></script>
 </body>
 </html>

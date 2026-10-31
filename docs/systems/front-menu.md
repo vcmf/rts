@@ -75,6 +75,15 @@ keydown ──keyAction(route, key)──▶ go(route) | step | activate
   Guard's a star family: the Honours series), tooltip, dialog, dispatch, cards, and the
   battle's cartouche, unit panel and status bar. Each interactive element also takes `.is-hover`, `.is-focus` and
   `.is-active`, so the sheet can show its states side by side.
+- **Icons** (`src/ui/icons.ts`, drawn by `src/ui/glyph.ts` like the level markers): the arms by the unit model's tags
+  (foot: a shako; horse: a horse's head; guns: the staff map's gun), the actions (melee: crossed sabres; fire: a
+  musket and bayonet; aimed fire: a slung rifle), the shapes drawn as Total War draws formations, each rank a line, and
+  the metrics (toughness, morale, fatigue). Icons lead and words follow: each carries its word as a tooltip
+  (`data-tip`, on hover and keyboard focus) and an accessible name; screens show words as small subtitles at most.
+- **Unit cards** (`unitCard`, `src/ui/elements.ts`), three layouts, each with the painting large and the three bars
+  standing beside it (`verticalBars`, each under its metric's icon): `portrait` (rosters: icons under the painting),
+  `battle` (the battle's unit bar: arm, level and shape on paper chips over the painting, the name a tooltip),
+  `panel` (the selected unit: name, its icons with their words as subtitles, the orders as icon buttons).
 - **The specimen sheet** (`app/ui-kit.html`, `src/ui/kit.ts`, layout `src/ui/kit.css`): every element in every state,
   with the rule behind it. A new element joins the theme and the sheet in the same change.
 
