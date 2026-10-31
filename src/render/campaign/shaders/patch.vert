@@ -1,5 +1,5 @@
 precision highp float;
-// The campaign map's patch near the camera (src/render/campaign/patch.ts, docs/plans/active/k2c-stream.md): vertices
+// The campaign map's patch near the camera (src/render/campaign/patch.ts, docs/plans/done/k2c-stream.md): vertices
 // 100 m apart, on the close level's nodes, raised by its 100 m shape where its tiles are drawn (./detail.glsl), by the
 // far mesh's own height elsewhere. The detail eases out from uPatchInner to uPatchOuter km from the camera's target
 // (a square, moving with the target, so the heights there change smoothly as the camera pans); within uPatchBand of

@@ -1,4 +1,4 @@
-// The close zoom's ring of tiles (docs/plans/active/k2c-stream.md, K2c1): the detail area holds `area` × `area` tile
+// The close zoom's ring of tiles (docs/plans/done/k2c-stream.md, K2c1): the detail area holds `area` × `area` tile
 // slots, and the tile at (i, j) of the close level always lives in slot (i mod area, j mod area), so when the camera
 // moves only the tiles that come into the area are loaded, into the slots of those that left. The area's textures
 // wrap; a small table says which tile each slot holds, so the shader never draws a slot's old tile in a new place.
