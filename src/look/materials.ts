@@ -350,4 +350,21 @@ export class Materials {
     this.binders.push(b)
     for (const m of this.all) b(m)
   }
+  /** What the materials hold now (src/look/owned.ts): called again once a builder is done, it gives a function that
+   *  forgets exactly the materials and bindings that builder made (a rebuilt part of the tile's, G3b-2: its materials
+   *  disposed, its bindings never applied to later materials), whatever another part added or forgot since */
+  mark(): () => () => void {
+    const lists = () => [this.all, this.every, this.binders, this.grainUsers] as unknown[][]
+    const before = lists().map(l => new Set(l))
+    return () => {
+      const added = lists().map((l, k) => new Set(l.filter(x => !before[k].has(x))))
+      return () => {
+        for (const [k, l] of lists().entries()) {
+          const keep = l.filter(x => !added[k].has(x))
+          l.length = 0
+          l.push(...keep)
+        }
+      }
+    }
+  }
 }

@@ -50,7 +50,7 @@ cells, so a moved tile's grids meet the far ring's and the apron joins them as t
 | | What | Acceptance |
 |---|---|---|
 | **G3b-1** | **The tile off the origin.** The tile's centre in the data (`tileAt`, on the 200 m grid; the compiler's `--tileat`), `uTileO` in every shader that reads the tile (about 25 reads), and the CPU's tile-bound code taking the centre (the heightfield, the ground mesh, the apron, the far ring's hole, the bakes' cameras, the meadow map, the flow, the roads' grid, the water data, the units' ground, the trees' tile and far split). The tile is still fixed for a page's life. | At the origin the windows draw as on #291 (golden shots, identical); Kobelnitz's data with its tile 400 m east (`--tileat 400,0`) draws as Kobelnitz's own where the two tiles overlap (the same frame: the painted grain lies in world metres, so two frames cannot match pixel for pixel), within the golden's limits |
-| **G3b-2** | **The tile rebuilt.** The nature (the trees, the canopy, the trunks, the casters, the growth the meadow reads: one 870-line closure today) disposed and rebuilt for a tile; the tile's textures written in place; the bakes rerun; the shadow map's casters from the new nature. A test hook moves the tile (`__look.moveTile(x, z)`). | A tile moved to three places (Kobelnitz, the Pratzen, Sokolnitz) looks as a window built there; no leak over ten moves (the GPU's memory, the meshes counted) |
+| **G3b-2** | **The tile rebuilt.** The nature (the trees, the canopy, the trunks, the casters, the growth the meadow reads: one 870-line closure today) disposed and rebuilt for a tile; the tile's textures written in place; the bakes rerun; the shadow map's casters from the new nature. A test hook moves the tile (`__look.retile(x, z)`, from `--tileat` data). | A page whose tile moved draws as a page loaded with its tile there (the same views, the same frame); no leak over ten moves (the scene's meshes, materials, textures, cameras, render targets, observers and the GPU's textures counted) |
 | **G3b-3** | **The tile follows the camera.** The map compiled in a worker on load; a new tile's data built there when the focus nears the edge, swapped in when ready (the old tile drawn until then); the re-centring's rule and its hysteresis. | Pan across Austerlitz: the detail under the focus everywhere; the swap's frame measured (G3c spreads the bakes) |
 
 ## Out of scope
@@ -80,3 +80,16 @@ G3b-1, round 1 (`/code-review high`, 10 findings, none severe; fixed or answered
   command that builds it; a `--tileat` file written whole then moved; a dead fallback; the tile module's comment;
 - answered: a `--tileat` file is a check's, built only when asked (not rebuilt by `--missing`: G3b-3 builds tiles on
   the page); `windowBase` samples the window's heights a second time, only for a `--tileat` build.
+
+## G3b-2: measured
+
+- **A moved tile against one loaded there** (Kobelnitz, its tile moved to (400, 0) by `__look.retile`, against a page
+  loaded with `?tileat=400,0`, four views, SwiftShader): with the relief's tone off, the frames identical (largest
+  difference 1/255, mean 0); with it on, within 13/255 (mean 0.5–1.1). The relief reads the far ring's heights, which
+  the two files hold to within 0.00006 m (each window's far ring is sampled at float32 places in its own frame), and
+  the far macro bake's hash follows it; with the relief off the far bake's hash is the same.
+- **No leak:** ten moves (to (400, 0) and back, five times), the scene's meshes (90), materials (33), textures (26),
+  cameras (3), render targets (3), per-frame observers (13), the painted materials (28) and the GPU's textures (28)
+  as before; the home view after them as on a fresh page (the frame readout and a few isolated pixels apart).
+- **A move's time:** 594–766 ms on the dev Mac's GPU (Metal, four moves), 6–9 s on SwiftShader: one long frame, until
+  G3c spreads the bakes.

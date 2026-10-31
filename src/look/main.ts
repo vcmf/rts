@@ -1,6 +1,7 @@
 // The look page (app/look.html): the painted world in the game's toolchain, ported from
 // prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
+import { owned } from './owned.ts'
 import { TILE_O, tileEdge } from './tile.ts'
 import type { SimPlay } from './sim-armies.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
@@ -39,6 +40,7 @@ import {
   unpackSpans,
   ROAD_SEG,
   ROAD_SLOTS,
+  type LookData,
   type LookWorld,
 } from './world/data.ts'
 import { windowFile, windowOf, type LookWindow } from './world/windows.ts'
@@ -306,35 +308,47 @@ const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }
 // loaded: uRoadOn), on the tile's terrain (live from mid zoom in: below) and the water's
 // land side, and in the macro bake
 let roadTex: RoadTextures | undefined
+// the roads' segments and grid, on every painted material: a part of the tile's (G3b-2: a moved tile's own, retile)
+// (float textures: the roads' shader is WebGL2's)
+// the segments (three RGBA floats each, in a row) and the grid of their indices (ROAD_SLOTS / 4 texels a cell, in a
+// row), read texel by texel (nearest): the shader finds the nearest segment exactly
+const tileRoads = (R: LookData['roads']) =>
+  owned(scene, mats, () => {
+    const sn = R.segs.length / ROAD_SEG
+    const segs = RawTexture.CreateRGBATexture(
+      R.segs,
+      (sn * ROAD_SEG) / 4,
+      1,
+      scene,
+      false,
+      false,
+      Texture.NEAREST_SAMPLINGMODE,
+      Constants.TEXTURETYPE_FLOAT,
+    )
+    const grid = RawTexture.CreateRGBATexture(
+      R.ids,
+      (R.n * ROAD_SLOTS) / 4,
+      R.n,
+      scene,
+      false,
+      false,
+      Texture.NEAREST_SAMPLINGMODE,
+      Constants.TEXTURETYPE_FLOAT,
+    )
+    for (const t of [segs, grid]) t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
+    segs.name = 'roadSegs'
+    grid.name = 'roadGrid'
+    mats.bindAll(m => {
+      m.setTexture('uRoadSegs', segs)
+      m.setTexture('uRoadGrid', grid)
+      m.setFloat('uRoadSegN', sn)
+    })
+    return { segs, grid, sn }
+  })
+let roadsOwned: ReturnType<typeof tileRoads> | null = null
 if (!mats.webgl1) {
-  // (float textures: the roads' shader is WebGL2's)
-  // the segments (three RGBA floats each, in a row) and the grid of their indices (ROAD_SLOTS / 4 texels a cell, in a
-  // row), read texel by texel (nearest): the shader finds the nearest segment exactly
-  const R = look.roads
-  const sn = R.segs.length / ROAD_SEG
-  const segs = RawTexture.CreateRGBATexture(
-    R.segs,
-    (sn * ROAD_SEG) / 4,
-    1,
-    scene,
-    false,
-    false,
-    Texture.NEAREST_SAMPLINGMODE,
-    Constants.TEXTURETYPE_FLOAT,
-  )
-  const grid = RawTexture.CreateRGBATexture(
-    R.ids,
-    (R.n * ROAD_SLOTS) / 4,
-    R.n,
-    scene,
-    false,
-    false,
-    Texture.NEAREST_SAMPLINGMODE,
-    Constants.TEXTURETYPE_FLOAT,
-  )
-  for (const t of [segs, grid]) t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
-  segs.name = 'roadSegs'
-  grid.name = 'roadGrid'
+  roadsOwned = tileRoads(look.roads)
+  const { segs, grid, sn } = roadsOwned.value
   mats.bindAll(m => m.setFloat('uRoadOn', 0)) // (before the grit, whose load turns it on: every material, as the dirt)
   const grit = new Texture(
     ROAD_GRIT_URL,
@@ -347,12 +361,7 @@ if (!mats.webgl1) {
   )
   grit.wrapU = grit.wrapV = Texture.WRAP_ADDRESSMODE
   grit.anisotropicFilteringLevel = 4
-  mats.bindAll(m => {
-    m.setTexture('uRoadSegs', segs)
-    m.setTexture('uRoadGrid', grid)
-    m.setFloat('uRoadSegN', sn)
-    m.setTexture('uRoadGrit', grit)
-  })
+  mats.bindAll(m => m.setTexture('uRoadGrit', grit))
   // the buildings' paving (docs/plans/done/buildings.md; shore.glsl, pavePaint): the buildings' shapes, on every
   // material that paints the roads; the cobbles ride in the grit (its G and B), their mean until it has loaded
   const shapes = worldBuildings.map(paveShape)
@@ -465,18 +474,26 @@ const woodParam = params.get('wood')
 if (woodParam !== null && woodParam !== '' && woodParam !== 'big') {
   throw new Error(`?wood takes no value or big, not ${woodParam}`)
 }
-const nature = buildNature(
-  scene,
-  mats,
-  water.reflAdd,
-  look.cover,
-  leafTex ? { leaf: leafTex, opts: cardOpts } : undefined,
-  woodParam === null ? 'off' : woodParam === 'big' ? 'big' : 'small',
-  meadowOn,
-  treeSet.has('one'),
-  treeSet.has('gen') ? { season: season0, clumpVolume: params.get('clumpvol') !== 'off' } : null,
-  onMap ? look.trees : null,
-)
+// the tile's parts (G3b-2): each built again for a moved tile (retile, below) and the last disposed (src/look/owned.ts)
+const tileNature = (d: LookData) =>
+  owned(scene, mats, () =>
+    buildNature(
+      scene,
+      mats,
+      water.reflAdd,
+      d.cover,
+      leafTex ? { leaf: leafTex, opts: cardOpts } : undefined,
+      woodParam === null ? 'off' : woodParam === 'big' ? 'big' : 'small',
+      meadowOn,
+      treeSet.has('one'),
+      treeSet.has('gen')
+        ? { season: d === look ? season0 : S.season, clumpVolume: params.get('clumpvol') !== 'off' }
+        : null,
+      onMap ? d.trees : null,
+    ),
+  )
+let natureOwned = tileNature(look)
+let nature = natureOwned.value
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 {
   const a = new Array(D.spec.water.stones * 4).fill(0)
@@ -501,18 +518,25 @@ const buildings = buildBuildings(
   { baked: bldBaked, bounce: bldBaked && bldbounceParam === null },
   worldBuildings,
 )
-const bakes = buildBakes(
-  scene,
-  mats,
-  waterData,
-  terrain.tileGround,
-  nature.canopy,
-  nature.cardCasters,
-  soft,
-  nature.trunks,
-  nature.farCull,
-  look.light ? { side: ring.x1 - ring.x0, light: look.light.nx * look.light.nz } : null,
-)
+const tileBakes = () =>
+  owned(scene, mats, () =>
+    buildBakes(
+      scene,
+      mats,
+      waterData,
+      terrain.tileGround,
+      nature.canopy,
+      nature.cardCasters,
+      soft,
+      nature.trunks,
+      nature.farCull,
+      look.light ? { side: ring.x1 - ring.x0, light: look.light.nx * look.light.nz } : null,
+    ),
+  )
+let bakesOwned = tileBakes()
+let bakes = bakesOwned.value
+// what hooks the bakes' targets (the season's rebakes, below): hooked again on a moved tile's (retile)
+const bakeHooks: (() => void)[] = []
 // the buildings' static light, baked after the light map (src/look/building-light.ts)
 // (each bake timed, by reading it back, on the bench only)
 const bldLight =
@@ -537,23 +561,32 @@ if (params.has('far')) {
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm
 // (bake by default), set once every material is made; the bake runs before the first frame
 // the flow's textures (?grass=flow, src/look/flow.ts), on every painted material and the bake
-const flowTex = grassMode === 'flow' ? buildFlow(scene) : null
-if (flowTex) {
-  mats.bindAll(m => {
-    m.setTexture('uFlow', flowTex.flow)
-    m.setTexture('uComb', flowTex.comb)
+const tileFlow = () =>
+  owned(scene, mats, () => {
+    const f = buildFlow(scene)
+    mats.bindAll(m => {
+      m.setTexture('uFlow', f.flow)
+      m.setTexture('uComb', f.comb)
+    })
+    return f
   })
-}
+let flowOwned = grassMode === 'flow' ? tileFlow() : null
+const flowTex = flowOwned?.value ?? null
 // the meadow map (src/look/meadow.ts), before the ground's bake: the combed meadow bakes the default pattern where no
 // grass grows and the combed one where it does (the combed clumps reach farther: their roots keep farther from the
 // zones and the banks; the crops keep the default's rule)
 const grassReach = grassMode === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
-// (the same rule as the crops' on the default: one pass)
-const grassAllowed =
-  grassReach === CLUMP_REACH ? nature.growthAllowed : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)
-const meadowMap = meadowOn
-  ? buildMeadowMap(scene, mats, nature.growth, grassAllowed, nature.crop, nature.growthAllowed)
-  : null
+const tileMeadowMap = () =>
+  owned(scene, mats, () => {
+    // (the same rule as the crops' on the default: one pass)
+    const allowed =
+      grassReach === CLUMP_REACH
+        ? nature.growthAllowed
+        : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)
+    return buildMeadowMap(scene, mats, nature.growth, allowed, nature.crop, nature.growthAllowed)
+  })
+let meadowMapOwned = meadowOn ? tileMeadowMap() : null
+const meadowMap = meadowMapOwned?.value ?? null
 // the combed meadow's near bake runs only where its strokes show: out to the strokes' ring, at the zooms where a pixel
 // can be under the strokes' largest footprint (STROKE_FOOT; at the focus, the ground the screen's centre shows, under
 // twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
@@ -592,8 +625,10 @@ const armBake = await macro.setArm(macroArm)
 const macroBake = armBake.texels ? armBake : await macro.bake()
 // the camera's hold reads the highest ground near the focus from blocks of the heightfield (8 nodes, 14.3 m) and of
 // the far ring (2 nodes, 28.6 m: past the heightfield the eye's ground is the far ring's)
+// (the tile's blocks again for a moved tile: retile)
+let nearTile = maxGrid(look.hf, 8)
+const follow = new FocusFollow(worldGround.focus)
 const camera = (() => {
-  const nearTile = maxGrid(look.hf, 8)
   const nearFar = maxGrid(look.far, 2)
   return buildCamera(
     scene,
@@ -601,7 +636,7 @@ const camera = (() => {
     {
       ground: groundAt,
       highest: (x, z, reach) => Math.max(nearTile(x, z, reach), nearFar(x, z, reach)),
-      follow: new FocusFollow(worldGround.focus),
+      follow,
       play: worldGround.play,
     },
     new URLSearchParams(location.search).has('frozen'),
@@ -1174,9 +1209,13 @@ const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']
   window.addEventListener('pointerup', () => {
     held = false
   })
-  bakes.groundBounce.onAfterRenderObservable.add(() => {
-    baked = key()
-  })
+  // (hooked again on a moved tile's bakes: hookBakes)
+  const hook = () =>
+    bakes.groundBounce.onAfterRenderObservable.add(() => {
+      baked = key()
+    })
+  hook()
+  bakeHooks.push(hook)
   scene.onBeforeRenderObservable.add(() => {
     const k = key()
     if (k !== baked && k === last && !held) bakes.groundBounce.resetRefreshCounter()
@@ -1191,16 +1230,18 @@ input('season').oninput = () => {
 // shadows are baked again when what casts them changed. A judging aid of this page, as the grain's drop is: in the
 // game the season is set per map (docs/art-bible.md §4b) and the static light baked once for it. The sky's occlusion
 // stays the one baked for the season the page opened in
+// (the trees and the bakes now: a moved tile's, retile)
 if (nature.setSeason && nature.shadowState) {
-  const setSeason = nature.setSeason
-  const shadowState = nature.shadowState
   let baked = ''
-  bakes.shadowRT.onAfterRenderObservable.add(() => {
-    baked = shadowState()
-  })
-  input('season').addEventListener('input', () => setSeason(S.season))
+  const hook = () =>
+    bakes.shadowRT.onAfterRenderObservable.add(() => {
+      baked = nature.shadowState?.() ?? ''
+    })
+  hook()
+  bakeHooks.push(hook)
+  input('season').addEventListener('input', () => nature.setSeason?.(S.season))
   input('season').addEventListener('change', () => {
-    if (shadowState() !== baked) bakes.shadowRT.resetRefreshCounter()
+    if ((nature.shadowState?.() ?? '') !== baked) bakes.shadowRT.resetRefreshCounter()
   })
 }
 // the settings panel hides (its × or H) behind a small Settings button, and comes back from it (or H)
@@ -1456,6 +1497,57 @@ Object.assign(window, {
   __macro: { bake: macroBake, macro },
   __buildMs: performance.now() - T0,
 })
+/**
+ * The tile moved (G3b-2, docs/plans/active/g3b-the-detail-follows.md): a tile's data in the page's frame (the first
+ * window's; tools/build-look-data.ts --tileat, the page's worker from G3b-3) takes the tile's place: its centre
+ * (src/look/tile.ts) and heightfield, the ground's meshes about it (terrain.retile), its covers and roads, the ground's
+ * split, the relief's tone (it reads the drawn ground), and, built again with the last disposed (src/look/owned.ts),
+ * its trees, the bakes (the shadow map, the light map, the occlusion, the bounce), the flow and the meadow map;
+ * then the camera's ground and the macro colour's bake. The far ring is the whole map's and stays. Not on the demo (its
+ * river is the tile's). Its time, ms (until G3c spreads it over frames, one hitch)
+ */
+async function retile(next: LookData): Promise<number> {
+  const t0 = performance.now()
+  if (look.world.kind !== 'map') throw new Error("retile: a map world only (the demo's river is its tile's)")
+  checkLookData(D, next)
+  checkWorld(next.world, lookWindow)
+  TILE_O.set(next.tileAt[0], next.tileAt[1])
+  setHeightfield(next.hf, look.far, D.spec.tile / 2)
+  terrain.retile()
+  const frame = coarsenCover(next.cover, D.spec.macro.cover)
+  macro.setCovers(frame, next.cover)
+  if (roadsOwned && roadTex) {
+    roadsOwned.dispose()
+    roadsOwned = tileRoads(next.roads)
+    Object.assign(roadTex, { segs: roadsOwned.value.segs, grid: roadsOwned.value.grid, n: roadsOwned.value.sn })
+    if (splitParam !== '0') groundShare = splitGround(terrain, frame).share
+  }
+  bakesOwned.dispose()
+  meadowMapOwned?.dispose()
+  natureOwned.dispose()
+  natureOwned = tileNature(next)
+  nature = natureOwned.value
+  if (params.get('far') === 'off') nature.farCull?.off()
+  bakesOwned = tileBakes()
+  bakes = bakesOwned.value
+  for (const h of bakeHooks) h()
+  if (flowOwned) {
+    flowOwned.dispose()
+    flowOwned = tileFlow()
+    macro.setFlow(flowOwned.value)
+  }
+  if (meadowMapOwned) {
+    meadowMapOwned = tileMeadowMap()
+    macro.setMeadowMap(meadowMapOwned.value.map)
+  }
+  // the relief's tone reads the drawn ground, the tile's heights on it (written in place: its size is the ring's)
+  if (relief) relief.tex.update(reliefField(groundAt, ring.x1 - ring.x0, [SUN.x, SUN.y, SUN.z], ring.x0, ring.z0).tex)
+  nearTile = maxGrid(next.hf, 8)
+  follow.range = groundOf(D.spec, next.hf, look.far, null, worldGround.play, next.tileAt).focus
+  await macro.bake()
+  return performance.now() - t0
+}
+
 // the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
 // and the detail layer's switches
 const lab = new Lab(scene, mats)
@@ -1544,6 +1636,17 @@ let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | n
 const hidden: Mesh[] = []
 Object.assign(window, {
   __look: {
+    // the tile moved to (x, z) on the tile grid (G3b-2's check): its data from the built files (--tileat), its time, ms
+    retile: async (x: number, z: number) => {
+      const at: [number, number] = [x, z]
+      const url = lookWindow && WINDOW_DATA[`../../${windowFile(lookWindow, at)}`]
+      if (!url) {
+        throw new Error(`retile: no ${lookWindow ? windowFile(lookWindow, at) : 'map window'}: build it with --tileat`)
+      }
+      const r = await fetch(url)
+      if (!r.ok) throw new Error(`retile: ${r.status} for ${url}`)
+      return retile(decodeLook(await r.arrayBuffer()))
+    },
     splitShare: () => groundShare, // the tile's triangles paved, by the roads, neither (terrain.ts, splitGround)
     // the buildings' light bake: its atlas and raw bake (the checks), its time once baked (on the bench), its bakes so
     // far, its memory
@@ -1559,7 +1662,9 @@ Object.assign(window, {
     dofPaint: DOF_PAINT, // the blur's painted look (the same)
     dofNear: DOF_NEAR, // the near blur's (docs/plans/done/dof-v2.md), the same
     // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
-    sky: bakes.sky,
+    get sky() {
+      return bakes.sky // (the tile's now: a moved tile's, retile)
+    },
     meadowBakeMs: meadow?.bakeMs ?? null,
     // (the combed meadow's flow textures, on load)
     flowBuildMs: flowTex?.ms ?? null,
@@ -1576,10 +1681,16 @@ Object.assign(window, {
     hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
     // the bounce map (LC5): its target, and the time of one bake: the median of n frames with it and of n without,
     // each waited on by reading the map back (ms; gl.finish does not wait under ANGLE's Metal)
-    groundBounce: bakes.groundBounce,
+    get groundBounce() {
+      return bakes.groundBounce
+    },
     // the trunks' baked shadows (their check)
-    trunks: nature.trunks,
-    lightMap: bakes.lightMap,
+    get trunks() {
+      return nature.trunks
+    },
+    get lightMap() {
+      return bakes.lightMap
+    },
     gbBakeMs: async (n = 11) => {
       const t: Record<'bake' | 'none', number[]> = { bake: [], none: [] }
       const gb = bakes.groundBounce

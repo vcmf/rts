@@ -44,6 +44,7 @@ export interface Terrain {
   tileGround: GroundMesh
   farGround: GroundMesh
   apron: Mesh
+  retile(): void // the tile moved (G3b-2): its mesh, the far ring's hole and the apron where it is now
 }
 
 const TILE_W = D.spec.tile
@@ -198,14 +199,28 @@ export function buildTerrain(
     farTerrainMat.setTexture('uCoarse', t)
   }
 
+  // the grounds' meshes: the tile's (about its centre, src/look/tile.ts) and the far ring's; shape() gives a ground its
+  // heights, bank values, normals and (the far ring's) the hole the tile and the apron fill, for the tile where it is
+  // (G3b-2: again when it moves)
   function ground(size: number, sub: number, cx = 0, cz = 0): GroundMesh {
     const g = CreateGround('t', { width: size, height: size, subdivisions: sub, updatable: true }, scene)
     g.position.set(cx, 0, cz)
+    g.material = size > TILE_W ? farTerrainMat : terrainMat
+    return g
+  }
+  const tileGround = ground(TILE_W, TILE_SUB, TILE_O.x, TILE_O.y)
+  const farGround = ground(FAR_W, FAR_SUB, fcx, fcz)
+  // (every far triangle, the hole cut from them for the tile where it is)
+  const farAll = Array.from(farGround.getIndices()!)
+  function shape(g: GroundMesh, coarse: boolean): void {
+    const sub = coarse ? FAR_SUB : TILE_SUB
+    const cx = g.position.x
+    const cz = g.position.z
     const p = g.getVerticesData(VertexBuffer.PositionKind)!
-    const coarse = size > TILE_W
     const rv = new Float32Array(p.length / 3)
-    // far ring: valley trough only, no channel and no water; the river is a painted line there (FARRING). rv=8 (no bank
-    // colours): on a 14 m grid they would bead along the line. Vertex (row, col) is node (col, sub − row) of its grid.
+    // far ring: valley trough only, no channel and no water; the river is a painted line there (FARRING). rv=8 (no
+    // bank colours): on a 14 m grid they would bead along the line. Vertex (row, col) is node (col, sub − row) of its
+    // grid.
     const m = D.hfMargin
     for (let row = 0, k = 0; row <= sub; row++) {
       for (let col = 0; col <= sub; col++, k++) {
@@ -221,27 +236,21 @@ export function buildTerrain(
     g.updateVerticesData(VertexBuffer.PositionKind, p)
     g.updateCoordinateHeights()
     if (coarse) {
-      const ix = g.getIndices()!
       const keep: number[] = []
-      for (let t = 0; t < ix.length; t += 3) {
-        const tx = cx + (p[ix[t] * 3] + p[ix[t + 1] * 3] + p[ix[t + 2] * 3]) / 3
-        const tz = cz + (p[ix[t] * 3 + 2] + p[ix[t + 1] * 3 + 2] + p[ix[t + 2] * 3 + 2]) / 3
-        if (tileEdge(tx, tz) > BAND) keep.push(ix[t], ix[t + 1], ix[t + 2])
+      for (let t = 0; t < farAll.length; t += 3) {
+        const [a, b, c] = [farAll[t], farAll[t + 1], farAll[t + 2]]
+        const tx = cx + (p[a * 3] + p[b * 3] + p[c * 3]) / 3
+        const tz = cz + (p[a * 3 + 2] + p[b * 3 + 2] + p[c * 3 + 2]) / 3
+        if (tileEdge(tx, tz) > BAND) keep.push(a, b, c)
       }
       g.setIndices(keep)
     }
     const n: number[] = []
     VertexData.ComputeNormals(p, g.getIndices(), n)
     g.updateVerticesData(VertexBuffer.NormalKind, n)
-    g.setVerticesData('aRiver', rv, false, 1)
-    g.material = coarse ? farTerrainMat : terrainMat
-    return g
+    if (g.isVerticesDataPresent('aRiver')) g.updateVerticesData('aRiver', rv)
+    else g.setVerticesData('aRiver', rv, true, 1)
   }
-  // (the tile about its centre, src/look/tile.ts; the apron below built about it)
-  const tcx = TILE_O.x
-  const tcz = TILE_O.y
-  const tileGround = ground(TILE_W, TILE_SUB, tcx, tcz)
-  const farGround = ground(FAR_W, FAR_SUB, fcx, fcz)
 
   // vertex index of grid point (x,z) in a CreateGround mesh (rows run from +z to -z)
   const gridV = (size: number, sub: number, x: number, z: number) => {
@@ -250,97 +259,118 @@ export function buildTerrain(
     const row = sub - Math.round((z + size / 2) / c)
     return row * (sub + 1) + col
   }
-  const tp = tileGround.getVerticesData(VertexBuffer.PositionKind)!
-  const tn = tileGround.getVerticesData(VertexBuffer.NormalKind)!
-  const tr = tileGround.getVerticesData('aRiver')!
-  const fp = farGround.getVerticesData(VertexBuffer.PositionKind)!
-  const fn = farGround.getVerticesData(VertexBuffer.NormalKind)!
-  const pos: number[] = []
-  const nor: number[] = []
-  const rv: number[] = []
-  const idx: number[] = []
-  const E2 = TILE_W / 2
-  // 8 tile cells per far cell
-  const R = Math.round((TILE_SUB * FAR_CELL) / TILE_W)
-  // each apron vertex is a copy of a tile or far vertex (position, normal, bank value; a far vertex moved by its mesh's
-  // place, ox, oz), so the seams are exact
-  const add = (
-    src: ArrayLike<number>,
-    sn: ArrayLike<number>,
-    k: number,
-    r: number,
-    x: number,
-    z: number,
-    ox = 0,
-    oz = 0,
-  ) => {
-    if (Math.abs(src[k * 3] + ox - x) > 1e-3 || Math.abs(src[k * 3 + 2] + oz - z) > 1e-3) {
-      throw Error(`apron: no grid vertex at ${x},${z}`)
+  // the apron: joins the tile's edge vertices to the far ring's one far cell out, around the tile where it is
+  function apronData(): { vd: VertexData; rv: Float32Array } {
+    const tcx = TILE_O.x
+    const tcz = TILE_O.y
+    const tp = tileGround.getVerticesData(VertexBuffer.PositionKind)!
+    const tn = tileGround.getVerticesData(VertexBuffer.NormalKind)!
+    const tr = tileGround.getVerticesData('aRiver')!
+    const fp = farGround.getVerticesData(VertexBuffer.PositionKind)!
+    const fn = farGround.getVerticesData(VertexBuffer.NormalKind)!
+    const pos: number[] = []
+    const nor: number[] = []
+    const rv: number[] = []
+    const idx: number[] = []
+    const E2 = TILE_W / 2
+    // 8 tile cells per far cell
+    const R = Math.round((TILE_SUB * FAR_CELL) / TILE_W)
+    // each apron vertex is a copy of a tile or far vertex (position, normal, bank value; moved by its mesh's place,
+    // ox, oz), so the seams are exact
+    const add = (
+      src: ArrayLike<number>,
+      sn: ArrayLike<number>,
+      k: number,
+      r: number,
+      x: number,
+      z: number,
+      ox: number,
+      oz: number,
+    ) => {
+      if (Math.abs(src[k * 3] + ox - x) > 1e-3 || Math.abs(src[k * 3 + 2] + oz - z) > 1e-3) {
+        throw Error(`apron: no grid vertex at ${x},${z}`)
+      }
+      pos.push(src[k * 3] + ox, src[k * 3 + 1], src[k * 3 + 2] + oz)
+      nor.push(sn[k * 3], sn[k * 3 + 1], sn[k * 3 + 2])
+      rv.push(r)
+      return pos.length / 3 - 1
     }
-    pos.push(src[k * 3] + ox, src[k * 3 + 1], src[k * 3 + 2] + oz)
-    nor.push(sn[k * 3], sn[k * 3 + 1], sn[k * 3 + 2])
-    rv.push(r)
-    return pos.length / 3 - 1
-  }
-  // (x, z: from the tile's centre)
-  const T = (x: number, z: number) => {
-    const k = gridV(TILE_W, TILE_SUB, x, z)
-    return add(tp, tn, k, tr[k], x + tcx, z + tcz, tcx, tcz)
-  }
-  const Fv = (x: number, z: number) =>
-    add(fp, fn, gridV(FAR_W, FAR_SUB, x + tcx - fcx, z + tcz - fcz), 8, x + tcx, z + tcz, fcx, fcz)
-  // same winding as the ground meshes (their face normals point up)
-  const ti = tileGround.getIndices()!
-  const up = (a: number, b: number, c: number, P: ArrayLike<number>) => {
-    const ax = P[b * 3] - P[a * 3]
-    const az = P[b * 3 + 2] - P[a * 3 + 2]
-    const bx = P[c * 3] - P[a * 3]
-    const bz = P[c * 3 + 2] - P[a * 3 + 2]
-    return az * bx - ax * bz
-  }
-  const sgn = Math.sign(up(ti[0], ti[1], ti[2], tp))
-  const tri = (a: number, b: number, c: number) => {
-    if (Math.sign(up(a, b, c, pos)) === sgn) idx.push(a, b, c)
-    else idx.push(a, c, b)
-  }
-  for (const [ux, uz, ox, oz] of [
-    [1, 0, 0, -1],
-    [0, 1, 1, 0],
-    [-1, 0, 0, 1],
-    [0, -1, -1, 0],
-  ]) {
-    // edge direction, outward normal
-    for (let s = 0; s < Math.round(TILE_W / FAR_CELL); s++) {
-      // one far cell along the edge
-      const at = (t: number, o: number): [number, number] => [
-        -ux * E2 + ox * E2 + ux * t + ox * o,
-        -uz * E2 + oz * E2 + uz * t + oz * o,
-      ]
-      const cell = TILE_W / TILE_SUB
-      const I: number[] = []
-      for (let k = 0; k <= R; k++) I.push(T(...at((s * R + k) * cell, 0)))
-      const O0 = Fv(...at(s * FAR_CELL, FAR_CELL))
-      const O1 = Fv(...at((s + 1) * FAR_CELL, FAR_CELL))
-      for (let k = 0; k < R; k++) tri(I[k], I[k + 1], k < R / 2 ? O0 : O1)
-      tri(I[R / 2], O1, O0)
+    // (x, z: from the tile's centre)
+    const T = (x: number, z: number) => {
+      const k = gridV(TILE_W, TILE_SUB, x, z)
+      return add(tp, tn, k, tr[k], x + tcx, z + tcz, tcx, tcz)
     }
-    // corner square beyond the end of this edge: tile corner + three far vertices
-    const c = [ux * E2 + ox * E2, uz * E2 + oz * E2]
-    const a = T(c[0], c[1])
-    const b = Fv(c[0] + ox * FAR_CELL, c[1] + oz * FAR_CELL)
-    const d = Fv(c[0] + ox * FAR_CELL + ux * FAR_CELL, c[1] + oz * FAR_CELL + uz * FAR_CELL)
-    const e = Fv(c[0] + ux * FAR_CELL, c[1] + uz * FAR_CELL)
-    tri(a, b, d)
-    tri(a, d, e)
+    const Fv = (x: number, z: number) =>
+      add(fp, fn, gridV(FAR_W, FAR_SUB, x + tcx - fcx, z + tcz - fcz), 8, x + tcx, z + tcz, fcx, fcz)
+    // same winding as the ground meshes (their face normals point up)
+    const ti = tileGround.getIndices()!
+    const up = (a: number, b: number, c: number, P: ArrayLike<number>) => {
+      const ax = P[b * 3] - P[a * 3]
+      const az = P[b * 3 + 2] - P[a * 3 + 2]
+      const bx = P[c * 3] - P[a * 3]
+      const bz = P[c * 3 + 2] - P[a * 3 + 2]
+      return az * bx - ax * bz
+    }
+    const sgn = Math.sign(up(ti[0], ti[1], ti[2], tp))
+    const tri = (a: number, b: number, c: number) => {
+      if (Math.sign(up(a, b, c, pos)) === sgn) idx.push(a, b, c)
+      else idx.push(a, c, b)
+    }
+    for (const [ux, uz, ox, oz] of [
+      [1, 0, 0, -1],
+      [0, 1, 1, 0],
+      [-1, 0, 0, 1],
+      [0, -1, -1, 0],
+    ]) {
+      // edge direction, outward normal
+      for (let s = 0; s < Math.round(TILE_W / FAR_CELL); s++) {
+        // one far cell along the edge
+        const at = (t: number, o: number): [number, number] => [
+          -ux * E2 + ox * E2 + ux * t + ox * o,
+          -uz * E2 + oz * E2 + uz * t + oz * o,
+        ]
+        const cell = TILE_W / TILE_SUB
+        const I: number[] = []
+        for (let k = 0; k <= R; k++) I.push(T(...at((s * R + k) * cell, 0)))
+        const O0 = Fv(...at(s * FAR_CELL, FAR_CELL))
+        const O1 = Fv(...at((s + 1) * FAR_CELL, FAR_CELL))
+        for (let k = 0; k < R; k++) tri(I[k], I[k + 1], k < R / 2 ? O0 : O1)
+        tri(I[R / 2], O1, O0)
+      }
+      // corner square beyond the end of this edge: tile corner + three far vertices
+      const c = [ux * E2 + ox * E2, uz * E2 + oz * E2]
+      const a = T(c[0], c[1])
+      const b = Fv(c[0] + ox * FAR_CELL, c[1] + oz * FAR_CELL)
+      const d = Fv(c[0] + ox * FAR_CELL + ux * FAR_CELL, c[1] + oz * FAR_CELL + uz * FAR_CELL)
+      const e = Fv(c[0] + ux * FAR_CELL, c[1] + uz * FAR_CELL)
+      tri(a, b, d)
+      tri(a, d, e)
+    }
+    const vd = new VertexData()
+    vd.positions = pos
+    vd.normals = nor
+    vd.indices = idx
+    return { vd, rv: new Float32Array(rv) }
   }
+  shape(tileGround, false)
+  shape(farGround, true)
   const apron = new Mesh('apron', scene)
-  const vd = new VertexData()
-  vd.positions = pos
-  vd.normals = nor
-  vd.indices = idx
-  vd.applyToMesh(apron)
-  apron.setVerticesData('aRiver', new Float32Array(rv), false, 1)
+  const putApron = () => {
+    const { vd, rv } = apronData()
+    vd.applyToMesh(apron, true)
+    apron.setVerticesData('aRiver', rv, true, 1)
+  }
+  putApron()
   apron.material = farTerrainMat
+  /** The tile moved (G3b-2): TILE_O and the heightfield already set (src/look/tile.ts, setHeightfield): the tile's
+   *  mesh there with its heights, the far ring's hole round it, the apron between them */
+  const retile = () => {
+    tileGround.position.set(TILE_O.x, 0, TILE_O.y)
+    tileGround.computeWorldMatrix(true)
+    shape(tileGround, false)
+    shape(farGround, true)
+    putApron()
+  }
   return {
     terrainMat,
     terrainRoadsMat,
@@ -355,6 +385,7 @@ export function buildTerrain(
     tileGround,
     farGround,
     apron,
+    retile,
   }
 }
 
