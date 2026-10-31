@@ -171,8 +171,11 @@ async function main() {
     fetchBytes(new URL(manifest.fields.path, url)).then(inflate).then(unpackFields),
     pool(tilesOf(far), FETCHES, ([column, row]) => loadTile(url, farIndex, far, column, row)),
     fetchBytes(new URL(manifest.labels, url)).then(b => JSON.parse(new TextDecoder().decode(b)) as LabelsFile),
-    // the names' fonts (both faces: the rivers' are italic), before the ink is first drawn
-    document.fonts.load(`16px "Instrument Serif"`).then(() => document.fonts.load(`italic 16px "Instrument Serif"`)),
+    // the names' fonts (both faces: the rivers' are italic), before the ink is first drawn; without them, Georgia
+    Promise.all([
+      document.fonts.load(`16px "Instrument Serif"`),
+      document.fonts.load(`italic 16px "Instrument Serif"`),
+    ]).catch((e: unknown) => console.warn('campaign map: the names fall back to Georgia:', e)),
   ])
   const loadedMs = Math.round(performance.now() - t0)
   const view = new CampaignMapView(canvas)

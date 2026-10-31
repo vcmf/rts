@@ -259,13 +259,20 @@ export class CampaignMapView {
   private sun: [number, number, number] = [0, 1, 0]
   private viewNow: CampaignView = { x: 0, z: 0, dist: 1150 }
   private dirty = true
+  // the zoom, screen pixels a km, as the last dirty frame measured it
+  private ppk = 1
+  // whether the view or the surface as drawn changed since onViewChanged last ran
+  private surfaceMoved = false
   private running = false
   private lastFrame = performance.now()
   // the render loop's one function, so stop can name it
   private readonly frameLoop = () => this.frame()
   /** Called after each frame with its CPU time in ms (the page's fps meter). */
   onFrame: ((cpuMs: number) => void) | null = null
-  /** Called in the frame after the view changed, with the screen pixels a km at the screen's centre. */
+  /**
+   * Called in a frame where the view or the surface as drawn changed (the close tiles written or fading in), after
+   * both are set, with the screen pixels a km at the screen's centre.
+   */
   onViewChanged: ((pxPerKm: number) => void) | null = null
 
   /** Throws when the browser has no WebGL2. */
@@ -787,9 +794,10 @@ export class CampaignMapView {
    * Writes up to UPLOADS waiting tiles to the GPU, each into its slot's own rectangle of the two textures, and enters
    * them in the slots' table (sent when it changed).
    */
-  private uploadDetail() {
+  private uploadDetail(): boolean {
     const d = this.detail
-    if (!d) return
+    if (!d) return false
+    let written = false
     const { size } = d.level
     for (const [s, tile] of d.uploads.take(UPLOADS)) {
       // the scratch arrays are reused: each GL call has copied them when it returns
@@ -808,26 +816,29 @@ export class CampaignMapView {
       d.tableChanged = true
       d.written[s] = tile
       d.fade[s] = 0
+      written = true
     }
     if (d.tableChanged) {
       d.texT.update(d.table.bytes)
       d.tableChanged = false
     }
+    return written
   }
 
   /** Advances the slots' fade-in by `ms` and sends it to the GPU while a slot is still fading. */
-  private fadeDetail(ms: number) {
+  private fadeDetail(ms: number): boolean {
     const d = this.detail
-    if (!d) return
+    if (!d) return false
     let changed = false
     for (let s = 0; s < d.fade.length; s++) {
       if (d.fade[s] >= 1) continue
       d.fade[s] = Math.min(1, d.fade[s] + ms / FADE_MS)
       changed = true
     }
-    if (!changed) return
+    if (!changed) return false
     for (let s = 0; s < d.fade.length; s++) d.fadeBytes[s] = Math.round(d.fade[s] * 255)
     d.texF.update(d.fadeBytes)
+    return true
   }
 
   /** The view: where the camera looks. */
@@ -924,7 +935,20 @@ export class CampaignMapView {
     return rayGround(o, d, (x, z) => this.riseAt(x, z), this.highest, bottom) ?? groundHit(o, d)
   }
 
-  /** A map point (km), at the height of the ground there as drawn, in clip space: [x, y, w] (w the depth, km). */
+  /** The camera's view and projection as a column-major array (Babylon's), as refreshTransform last set it. */
+  transform(): ArrayLike<number> {
+    return this.scene.getTransformMatrix().m
+  }
+
+  /** Brings the camera's view and projection up to date (clipOf reads them as they are, for speed). */
+  refreshTransform() {
+    this.scene.updateTransformMatrix(true)
+  }
+
+  /**
+   * A map point (km), at the height of the ground there as drawn, in clip space: [x, y, w] (w the depth, km), through
+   * the camera as refreshTransform (or a frame) last set it.
+   */
   clipOf(x: number, z: number): [number, number, number] {
     // read off the matrix (column vectors, Babylon's row-major array): no vectors made a point, the ink projects many
     const m = this.scene.getTransformMatrix().m
@@ -1024,12 +1048,20 @@ export class CampaignMapView {
       this.detailShare = detailK
       this.placePatch(detailK > 0)
       this.wantDetail(ppk)
-      this.onViewChanged?.(ppk)
+      this.ppk = ppk
+      this.surfaceMoved = true
     }
-    this.uploadDetail()
+    // the close tiles written and faded in change the surface as drawn where the patch is
+    const written = this.uploadDetail()
     // the fade by the time since the last frame, at most a tenth of a second (a frame after a pause fades no faster)
-    this.fadeDetail(Math.min(100, t - this.lastFrame))
+    const faded = this.fadeDetail(Math.min(100, t - this.lastFrame))
     this.lastFrame = t
+    if ((written || faded) && this.detailShare > 0) this.surfaceMoved = true
+    // what is drawn over the map (the ink, the scale) follows the view and the surface, once they are set this frame
+    if (this.surfaceMoved) {
+      this.surfaceMoved = false
+      this.onViewChanged?.(this.ppk)
+    }
     this.scene.render()
     this.onFrame?.(performance.now() - t)
   }

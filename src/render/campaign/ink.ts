@@ -13,6 +13,7 @@ import {
   townFont,
   townMark,
   townsShown,
+  turnedBox,
   type Box,
   type LabelsFile,
 } from './labels.ts'
@@ -52,7 +53,9 @@ export class Ink {
   private readonly view: CampaignMapView
   private readonly labels: LabelsFile
   private readonly half: { x: number; z: number }
-  private readonly dpr = Math.min(2, devicePixelRatio || 1)
+  private dpr = 1
+  // each river's bounding box, metres (x0, z0, x1, z1)
+  private readonly bounds: [number, number, number, number][]
   /** The last redraw's boxes and towns. */
   last: InkDraw = { ms: { regions: 0, towns: 0, rivers: 0 }, names: [], marks: [], towns: [] }
   // the screen's size in CSS pixels, read once a redraw (reading it takes the page's layout)
@@ -65,13 +68,46 @@ export class Ink {
     this.view = view
     this.labels = labels
     this.half = half
+    this.bounds = labels.rivers.map(r => {
+      const xs = r.p.filter((_, i) => i % 2 === 0)
+      const zs = r.p.filter((_, i) => i % 2 === 1)
+      return [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)]
+    })
     this.resize()
   }
 
-  /** The canvas sized to the screen. */
+  /** The canvas sized to the screen, at the screen's pixel ratio now (2 at most). Cleared: draw again after. */
   resize() {
+    this.dpr = Math.min(2, devicePixelRatio || 1)
     this.canvas.width = Math.round(innerWidth * this.dpr)
     this.canvas.height = Math.round(innerHeight * this.dpr)
+  }
+
+  /**
+   * Whether a box on the map (metres), on the ground or as high as the relief goes (10 km), lies wholly off the
+   * screen: its eight corners all past one edge of the view, or all behind the camera.
+   */
+  private offScreen([x0, z0, x1, z1]: [number, number, number, number]): boolean {
+    const m = this.view.transform()
+    const corners: Clip[] = []
+    for (const x of [x0 / 1000, x1 / 1000]) {
+      for (const z of [z0 / 1000, z1 / 1000]) {
+        for (const y of [0, 10]) {
+          corners.push([
+            x * m[0] + y * m[4] + z * m[8] + m[12],
+            x * m[1] + y * m[5] + z * m[9] + m[13],
+            x * m[3] + y * m[7] + z * m[11] + m[15],
+          ])
+        }
+      }
+    }
+    return (
+      corners.every(c => c[2] < W_NEAR) ||
+      corners.every(c => c[0] < -c[2]) ||
+      corners.every(c => c[0] > c[2]) ||
+      corners.every(c => c[1] < -c[2]) ||
+      corners.every(c => c[1] > c[2])
+    )
   }
 
   /** A map point (metres) in clip space, on the raised map. */
@@ -172,6 +208,7 @@ export class Ink {
   /** Redraws the ink for the view's camera at `ppk` screen pixels a km; returns what it drew. */
   draw(ppk: number): InkDraw {
     const g = this.g
+    this.view.refreshTransform()
     this.size = this.view.screenSize()
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
     g.clearRect(0, 0, innerWidth, innerHeight)
@@ -215,10 +252,14 @@ export class Ink {
     g.globalAlpha = alpha
     g.fillStyle = REGION_INK
     g.textAlign = 'center'
+    const [w, h] = this.size
     for (const r of this.labels.regions) {
       const c = this.clip(r.x, r.z)
-      if (c[2] < W_NEAR || !this.seen(r.x, r.z)) continue
+      if (c[2] < W_NEAR) continue
       const [sx, sy] = this.toScreen(c)
+      // off the screen (its letters' reach beyond its edges): neither drawn nor tested
+      const reach = px * r.name.length
+      if (sx < -reach || sy < -reach || sx > w + reach || sy > h + reach || !this.seen(r.x, r.z)) continue
       g.save()
       g.translate(sx, sy)
       g.rotate((-r.angle * Math.PI) / 180)
@@ -297,8 +338,8 @@ export class Ink {
     g.letterSpacing = '0.08em'
     // a name once, on the longest run of all the river's lines that carry it
     const best = new Map<string, { at: [number, number]; angle: number; length: number; map: [number, number] }>()
-    for (const r of this.labels.rivers) {
-      if (!riverShown(r.rank, ppk) || !riverNamed(r.rank, ppk)) continue
+    for (const [k, r] of this.labels.rivers.entries()) {
+      if (!riverShown(r.rank, ppk) || !riverNamed(r.rank, ppk) || this.offScreen(this.bounds[k])) continue
       const runs = this.screenLine(r.p)
       const place = riverNamePlace(
         runs.map(run => run.pts),
@@ -310,7 +351,8 @@ export class Ink {
     for (const [name, { at, angle, map }] of best) {
       if (!this.seen(map[0], map[1])) continue
       const w = g.measureText(name).width
-      if (placement.take([[at[0] - w / 2, at[1] - 14, w, 16]]) < 0) continue
+      // the text as drawn: its baseline 5 px above the course, the glyphs and halo from 18 px above it to 1 px below
+      if (placement.take([turnedBox(at, angle, w + 4, -18, 1)]) < 0) continue
       g.save()
       g.translate(at[0], at[1])
       g.rotate(angle)

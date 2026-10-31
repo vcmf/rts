@@ -62,6 +62,22 @@ frame):
   ink); 3.9 and 7.1 ms at 4K; at 250 km a mean of 5.2 ms and the 95th centile 6.9 ms at 1080p. The 4K run's 95th
   centile is over the 6.7 ms line: the labels on the GPU (below) are the way past it if it holds on other machines.
 
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe: the ink was drawn only when the view moved, before the close tiles of the
+  frame were written: tiles that came or faded in after the camera stopped changed the surface under the names and
+  their rays, and the names stayed where they were (now redrawn in every frame where the view or the surface changed,
+  after both are set); a river's name took a level box while drawn turned along its course (a steep river's name could
+  cross a town's: its box now the one round the turned text, `turnedBox`). With: the labels placed from the data file
+  through the theatre's projection (a region renamed or moved there was lettered at another's place); a font that
+  fails no longer stops the page, both faces loaded at once; the ink brings the camera's matrix up to date itself; a
+  resize takes the pixel ratio again; the rivers whose box is wholly off the screen not projected, a region tested on
+  the screen before its ray; a river's name where half its visible length is reached; an unused method gone. The
+  regions' lettering lies under the names, as the period's maps letter it, and is not in the placement. Measured
+  after, at eight views: no name over a name or a mark, every town drawn and hidden as its ray finds; a redraw
+  0.25 to 1.9 ms; panning up close a mean of 2.8 ms, the 95th centile 3.8 ms, the worst 5.0 ms; at 250 km 3.6, 5.1
+  and 6.2 ms (1080p): the culled rivers took the ink back under the 6.7 ms line.
+
 ## Open questions
 
 - Labels in the GPU (signed-distance text drawn into the scene, hidden by the depth buffer) instead of a 2D canvas

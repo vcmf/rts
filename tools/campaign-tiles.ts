@@ -136,9 +136,6 @@ interface Theatre {
   lakes: number[][]
   roads: { kind: string; p: number[] }[]
   rivers: { name: string; rank: number; p: number[] }[]
-  // the data file's places projected, metres: the towns by id, the regions in the data file's order
-  towns: Record<string, [number, number]>
-  regions: [number, number][]
   credit: string
 }
 
@@ -273,23 +270,23 @@ function fieldsOf(src: Sources, grid: Grid, heights: Float32Array, lakeD: Float3
 }
 
 /**
- * The labels the page draws: the data file's towns (names, sizes, fortresses) and regions (names, angles) at the
- * theatre's places for them, and the theatre's named rivers, their points thinned to every other one (the last kept),
- * as the prototype projects them for their names. Throws on a town or region the theatre has no place for (a theatre
- * older than the data file).
+ * The labels the page draws: the data file's towns (names, sizes, fortresses) and regions (names, angles), placed
+ * through the theatre's projection (as tools/campaign-theatre.ts placed them for the roads: from the data file itself,
+ * so a town moved or a region renamed there is lettered where it now is), and the theatre's named rivers, their points
+ * thinned to every other one (the last kept), as the prototype projects them for their names. Throws when the data
+ * file's frame is not the theatre's.
  */
-function labelsOf(t: Theatre, data: Data): LabelsFile {
-  if (data.regions.length !== t.regions.length) {
-    throw new Error(
-      `${data.regions.length} regions in the data file, ${t.regions.length} placed: run tools/campaign-theatre.ts`,
-    )
-  }
+function labelsOf(t: Theatre, data: Data, proj: ReturnType<typeof projection>): LabelsFile {
+  const same = (['lat0', 'lon0', 'halfX', 'halfZ'] as const).every(k => data.frame[k] === t.frame[k])
+  if (!same) throw new Error("the data file's frame is not the theatre's: run tools/campaign-theatre.ts")
   const towns = data.towns.map(town => {
-    const at = t.towns[town.id]
-    if (!at) throw new Error(`the theatre has no place for ${town.id}: run tools/campaign-theatre.ts`)
-    return { id: town.id, name: town.name, size: town.size, fort: town.fort ?? false, x: at[0], z: at[1] }
+    const [x, z] = proj.forward(town.lat, town.lon)
+    return { id: town.id, name: town.name, size: town.size, fort: town.fort ?? false, x, z }
   })
-  const regions = data.regions.map((r, k) => ({ name: r.name, angle: r.angle, x: t.regions[k][0], z: t.regions[k][1] }))
+  const regions = data.regions.map(r => {
+    const [x, z] = proj.forward(r.lat, r.lon)
+    return { name: r.name, angle: r.angle, x, z }
+  })
   const rivers = t.rivers
     .filter(r => r.name)
     .map(r => {
@@ -443,7 +440,7 @@ async function main() {
       prototypeMeta = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams(), build: prototypeBuild }
     }
   }
-  const labels = labelsOf(t, loadData())
+  const labels = labelsOf(t, loadData(), proj)
   await writeFlushed(path.join(out, build, LABELS_FILE), JSON.stringify(labels))
   console.log(`labels: ${labels.towns.length} towns, ${labels.regions.length} regions, ${labels.rivers.length} rivers`)
   const manifest: Manifest = {

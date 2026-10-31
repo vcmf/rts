@@ -82,11 +82,6 @@ export class Placement {
     this.marks.push(box)
   }
 
-  /** Whether a name may take `box` (it overlaps no name and no mark). */
-  free(box: Box): boolean {
-    return !this.names.some(b => overlaps(b, box)) && !this.marks.some(b => overlaps(b, box))
-  }
-
   /** Takes the first of `boxes` free for a name, or none: its index (-1 for none). */
   take(boxes: Box[], own: Box | null = null): number {
     // a town's name may touch its own mark
@@ -110,9 +105,9 @@ export function riverNamed(rank: number, ppk: number): boolean {
 
 /**
  * Where a river's name goes: on the longest of its runs on screen (each a list of screen points), counting only the
- * points inside the screen's `inside` test, if that is longer than `least` px: the point nearest the middle of its
- * visible length (and its run and index there), and the course's angle there (radians, turned to read upright). Null
- * when no run is long enough.
+ * points inside the screen's `inside` test, if that is longer than `least` px: the point where half its visible length
+ * is reached (and its run and index there), and the course's angle there (radians, turned to read upright). Null when
+ * no run is long enough.
  */
 export function riverNamePlace(
   runs: [number, number][][],
@@ -128,15 +123,45 @@ export function riverNamePlace(
     if (length > least && length > (best?.length ?? 0)) best = { pts, length, run }
   }
   if (!best) return null
-  const on = best.pts.filter(inside)
-  const at = on[Math.floor(on.length / 2)]
-  const k = best.pts.indexOf(at)
+  // the point where half the visible length is reached
+  let k = 0
+  let walked = 0
+  for (let i = 1; i < best.pts.length && walked < best.length / 2; i++) {
+    if (inside(best.pts[i])) {
+      walked += Math.hypot(best.pts[i][0] - best.pts[i - 1][0], best.pts[i][1] - best.pts[i - 1][1])
+    }
+    k = i
+  }
+  const at = best.pts[k]
   const a = best.pts[Math.max(0, k - 2)]
   const b = best.pts[Math.min(best.pts.length - 1, k + 2)]
   let angle = Math.atan2(b[1] - a[1], b[0] - a[0])
   if (angle > Math.PI / 2) angle -= Math.PI
   if (angle < -Math.PI / 2) angle += Math.PI
   return { at, angle, length: best.length, run: best.run, index: k }
+}
+
+/**
+ * The box a text takes on screen when drawn rotated by `angle` (radians) about `at`: in its own frame from -w/2 to w/2
+ * along it and from `top` to `bottom` across it (CSS pixels, y down), the box round the four corners turned.
+ */
+export function turnedBox(at: [number, number], angle: number, w: number, top: number, bottom: number): Box {
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  const xs: number[] = []
+  const ys: number[] = []
+  for (const [u, v] of [
+    [-w / 2, top],
+    [w / 2, top],
+    [w / 2, bottom],
+    [-w / 2, bottom],
+  ]) {
+    xs.push(at[0] + u * c - v * s)
+    ys.push(at[1] + u * s + v * c)
+  }
+  const x0 = Math.min(...xs)
+  const y0 = Math.min(...ys)
+  return [x0, y0, Math.max(...xs) - x0, Math.max(...ys) - y0]
 }
 
 /** The regions' names at a zoom: their opacity (fading out as the camera closes in) and font size in CSS pixels. */

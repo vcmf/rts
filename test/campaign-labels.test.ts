@@ -12,6 +12,7 @@ import {
   townFont,
   townMark,
   townsShown,
+  turnedBox,
   type Box,
 } from '../src/render/campaign/labels.ts'
 import { seenFrom } from '../src/render/campaign/camera.ts'
@@ -126,6 +127,23 @@ describe('the rivers', () => {
     expect(place.at).toEqual(long[5])
     expect(place.angle).toBeCloseTo(Math.atan2(-10, 80), 9)
     expect(riverNamePlace([short], inside)).toBeNull()
+  })
+})
+
+describe('a turned name', () => {
+  it('takes the box round its text as turned: as wide as long when level, as tall as long when upright', () => {
+    const level = turnedBox([100, 100], 0, 60, -18, 1)
+    expect(level).toEqual([70, 82, 60, 19])
+    const upright = turnedBox([100, 100], Math.PI / 2, 60, -18, 1)
+    expect(upright[2]).toBeCloseTo(19, 9)
+    expect(upright[3]).toBeCloseTo(60, 9)
+  })
+
+  it('keeps a town name clear of a steep river name it would have overlapped as a level box', () => {
+    const river = turnedBox([100, 100], 1.2, 80, -18, 1)
+    const town: Box = [96, 60, 30, 12]
+    expect(overlaps([60, 82, 80, 19], town)).toBe(false)
+    expect(overlaps(river, town)).toBe(true)
   })
 })
 

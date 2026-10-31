@@ -118,17 +118,17 @@ comments avoid both.
 ## The names
 
 K2d (`docs/plans/active/k2d-ink.md`). The tool writes `labels.json` into each build (the manifest's `labels`): the
-1805 data file's towns (names, sizes, fortresses) and regions (names, angles) at the theatre's places for them, and the
+1805 data file's towns (names, sizes, fortresses) and regions (names, angles), placed through the theatre's projection, and the
 theatre's named rivers, their points thinned to every other one (`tools/campaign-data.ts` reads the data file for both
 tools). The page draws them on a 2D canvas over the map (`src/render/campaign/ink.ts`), redrawn when the view changes:
 
 | Module | What |
 |---|---|
-| `labels.ts` | pure: the towns shown at a zoom (capitals always, small towns from 2.2 px a km), a town's mark and its name's font, the four places a name is tried (right, left, above, below), the placement (every mark first, then the names, the largest towns first, then the rivers': a name never over a name or a mark), a river's name on the middle of its longest run on screen, upright, the regions' fade |
-| `ink.ts` | the canvas: the regions lettered across the land, the towns as dark blocks (a fortress ringed) with their names, the rivers' names in italic blue, the prototype's fonts (Instrument Serif), halo and colours, clipped to the frame; a label is drawn only where the ray from the camera to it passes over the ground as drawn (`seenFrom` in `camera.ts`, at most 96 samples a ray); the towns off the screen skipped |
+| `labels.ts` | pure: the towns shown at a zoom (capitals always, small towns from 2.2 px a km), a town's mark and its name's font, the four places a name is tried (right, left, above, below), the placement (every mark first, then the names, the largest towns first, then the rivers' in the box round their turned text, `turnedBox`: a name never over a name or a mark; the regions' lettering lies under them), a river's name where half its longest visible run is reached, upright, the regions' fade |
+| `ink.ts` | the canvas: the regions lettered across the land, the towns as dark blocks (a fortress ringed) with their names, the rivers' names in italic blue, the prototype's fonts (Instrument Serif), halo and colours, clipped to the frame; a label is drawn only where the ray from the camera to it passes over the ground as drawn (`seenFrom` in `camera.ts`, at most 96 samples a ray); the towns and regions off the screen skipped, the rivers whose box is off it not projected; redrawn in every frame where the view or the surface as drawn changed (the close tiles written or fading in) |
 
 The view gives the ink the projection of a map point at its height as drawn (`clipOf`), the camera's place and the
-map's height. Tested in `test/campaign-labels.test.ts`. A redraw takes 0.7 to 3.6 ms on test machine A.
+map's height. Tested in `test/campaign-labels.test.ts`. A redraw takes 0.25 to 1.9 ms on test machine A.
 
 ## Open questions
 
