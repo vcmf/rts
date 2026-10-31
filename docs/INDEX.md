@@ -69,6 +69,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/water-paper.md`](plans/active/water-paper.md) (water as a paper wash, sunk below the land, in the staff map prototype),
   [`plans/active/relief-shading.md`](plans/active/relief-shading.md) (shaded relief from real heights: cast shadows and occlusion, baked once, in the staff map prototype),
   [`plans/active/slabs.md`](plans/active/slabs.md) (a slightly tilted map view, armies as low slabs, in the staff map prototype),
+  [`plans/active/natural-woods.md`](plans/active/natural-woods.md) (the map windows' woods scattered as forests),
   [`plans/active/woods-canopy.md`](plans/active/woods-canopy.md) (woods in warm grey, in the staff map prototype),
   [`plans/active/perf-150.md`](plans/active/perf-150.md) (150 fps in the staff map prototype: the ink canvas made cheap),
   [`plans/active/real-terrain-proto.md`](plans/active/real-terrain-proto.md) (real terrain in the staff map prototype: ČÚZK's DMR 4G at Austerlitz, an experiment),

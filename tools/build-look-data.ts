@@ -243,7 +243,7 @@ export function buildWindowData(win: LookWindow, map: MapFile, L: Layers): Uint8
     roads: roadGrid(lines),
     cover: mapCover(areas, L.table, win, lines),
     world: { kind: 'map', map: win.map, window: win.name, x: win.x, z: win.z, base },
-    trees: packTrees(mapTrees(L, areas, win)),
+    trees: packTrees(mapTrees(L, areas, win, map.seed)),
   }
   return encodeLook(data)
 }

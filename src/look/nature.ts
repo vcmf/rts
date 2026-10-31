@@ -1113,7 +1113,8 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
     },
     // an orchard on the valley side, a hedgerow along a field, a row of poplars along the road's line, a forest in
     // the open south-west, a smaller wood in the north-east and lone trees in the fields; [model, x, z, scale]: the
-    // extras stand in metres, the classes' species at the pack's scale (3.4 to 4.8, as the scatter places them)
+    // extras stand in metres, the classes' species at the pack's scale (3.4 to 4.8, as the scatter places them; a map
+    // window's woods spread theirs by a stand's age: woodScale, src/look/world/from-map.ts)
     extras(): [string, number, number, number, boolean?][] {
       // the fifth: a lone field tree (stands in a field)
       const R = mulberry(93)
