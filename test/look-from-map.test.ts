@@ -20,6 +20,7 @@ import {
   mapCover,
   mapTrees,
   packTrees,
+  type MapTree,
   runsInside,
   wayLines,
   windowHeights,
@@ -363,6 +364,151 @@ describe('the trees', () => {
     expect(a.length).toBe(2 * TREE_FLOATS)
     expect(TREE_SPECIES[a[2]]).toBe(trees[0].sp)
     expect(a[3]).toBeCloseTo(trees[0].s, 5)
+  })
+})
+
+// a large mixed wood, to judge its scatter as a forest: a square of FOREST_HALF m a side's half at full density in
+// layers of 2 m cells over 440 m
+const FOREST_HALF = 180
+const FOREST_N = 220
+const FOREST: Resolved = {
+  id: 'forest',
+  kind: 'veg.wood',
+  priority: 40,
+  attrs: { leaf: 'mixed', density: 1, height: 20, growth: 'stand' },
+}
+
+/** The trees of the large wood (window metres = map metres: the window at the origin). */
+function forestTrees(): MapTree[] {
+  const n = FOREST_N * FOREST_N
+  const U = () => new Uint16Array(n)
+  const L: Layers = {
+    ...layers(),
+    nx: FOREST_N,
+    nz: FOREST_N,
+    x0: -FOREST_N,
+    z0: -FOREST_N,
+    height: new Float64Array((FOREST_N + 1) * (FOREST_N + 1)),
+    table: [FOREST],
+    ground: U(),
+    veg: U(),
+    water: U(),
+    way: U(),
+    barrier: U(),
+    built: U(),
+    zone: U(),
+    edit: U(),
+    density: new Uint8Array(n),
+    depth: U(),
+  }
+  for (let j = 0; j < FOREST_N; j++) {
+    for (let i = 0; i < FOREST_N; i++) {
+      const x = L.x0 + (i + 0.5) * 2
+      const z = L.z0 + (j + 0.5) * 2
+      if (Math.max(Math.abs(x), Math.abs(z)) < FOREST_HALF) {
+        ;[L.veg[j * FOREST_N + i], L.density[j * FOREST_N + i]] = [1, 255]
+      }
+    }
+  }
+  const h = FOREST_HALF
+  const features = [{ id: 'forest', area: square(-h, -h, h, h) }]
+  return mapTrees(L, fineAreas(L, features, WIN, 2 * FOREST_N, 1), WIN)
+}
+
+/** Each tree's nearest neighbour among `trees`: its distance (m) and its direction (radians). */
+function nearest(trees: readonly MapTree[]): { d: number; dir: number }[] {
+  return trees.map(t => {
+    let best = Infinity
+    let dir = 0
+    for (const u of trees) {
+      const d = Math.hypot(u.x - t.x, u.z - t.z)
+      if (u !== t && d < best) [best, dir] = [d, Math.atan2(u.z - t.z, u.x - t.x)]
+    }
+    return { d: best, dir }
+  })
+}
+
+describe('a large wood', () => {
+  const trees = forestTrees()
+  // well inside the wood, off its rim
+  const inner = trees.filter(t => Math.max(Math.abs(t.x), Math.abs(t.z)) < 150)
+  const nn = nearest(inner)
+
+  it('shows no lattice: no period along the map axes', () => {
+    // the power of the trees' positions at a period of P m along x or along z: about 1 for a random scatter, of the
+    // order of the trees' count for a lattice of that period (the old placement's 6 m: some 140)
+    const power = (P: number, along: (t: MapTree) => number) => {
+      let c = 0
+      let s = 0
+      for (const t of inner) {
+        c += Math.cos((2 * Math.PI * along(t)) / P)
+        s += Math.sin((2 * Math.PI * along(t)) / P)
+      }
+      return (c * c + s * s) / inner.length
+    }
+    let peak = 0
+    for (let P = 2; P <= 12; P += 0.125) {
+      peak = Math.max(
+        peak,
+        power(P, t => t.x),
+        power(P, t => t.z),
+      )
+    }
+    expect(peak).toBeLessThan(12)
+  })
+
+  it('spaces its trees unevenly: close pairs, open ground, no two trunks in one place', () => {
+    const d = nn.map(v => v.d)
+    const mean = d.reduce((a, b) => a + b, 0) / d.length
+    const sd = Math.sqrt(d.reduce((a, b) => a + (b - mean) ** 2, 0) / d.length)
+    expect(sd / mean).toBeGreaterThan(0.3)
+    expect(d.filter(v => v < 2.8).length / d.length).toBeGreaterThan(0.05)
+    expect(Math.min(...d)).toBeGreaterThan(1.2)
+    // clearings: 12 m squares of the inside (24 a side) with no tree
+    const held = new Set(
+      inner
+        .filter(t => Math.max(Math.abs(t.x), Math.abs(t.z)) < 144)
+        .map(t => `${Math.floor(t.x / 12)},${Math.floor(t.z / 12)}`),
+    )
+    expect(576 - held.size).toBeGreaterThan(10)
+  })
+
+  it('keeps the trees per hectare of a wood at its density (one a 36 m², within 10 %)', () => {
+    const area = (2 * FOREST_HALF) ** 2
+    expect(trees.length / (area / 36)).toBeGreaterThan(0.9)
+    expect(trees.length / (area / 36)).toBeLessThan(1.1)
+    expect(inner.length / (300 ** 2 / 36)).toBeGreaterThan(0.9)
+    expect(inner.length / (300 ** 2 / 36)).toBeLessThan(1.1)
+  })
+
+  it('stands the conifers closer and the oaks wider than their shares', () => {
+    const share = (sp: string) => inner.filter(t => t.sp === sp).length / inner.length
+    // the mixed leaf's shares: oak 0.3, spruce 0.2, pine 0.1
+    expect(share('oak')).toBeLessThan(0.27)
+    expect(share('spruce') + share('pine')).toBeGreaterThan(0.33)
+  })
+
+  it('spreads their scales', () => {
+    const s = inner.filter(t => t.sp === 'beech').map(t => t.s)
+    expect(Math.max(...s) / Math.min(...s)).toBeGreaterThan(1.8)
+  })
+
+  it('stands a ragged rim: its depth and its trees vary along the edge', () => {
+    // along the south edge, in 20 m stretches: the deepest hawthorn (a rim's alone) and the trees within 8 m
+    const deepest: number[] = []
+    const edge: number[] = []
+    for (let x0 = -160; x0 < 160; x0 += 20) {
+      const stretch = trees.filter(t => t.x >= x0 && t.x < x0 + 20 && Math.abs(t.x) < 160)
+      const thorns = stretch.filter(t => t.sp === 'hawthorn' && t.z < -FOREST_HALF + 20)
+      deepest.push(Math.max(0, ...thorns.map(t => t.z + FOREST_HALF)))
+      edge.push(stretch.filter(t => t.z < -FOREST_HALF + 8).length)
+    }
+    expect(Math.max(...deepest) - Math.min(...deepest)).toBeGreaterThan(3)
+    expect(Math.max(...edge)).toBeGreaterThan(2 * Math.min(...edge))
+  })
+
+  it('stands the same trees each time', () => {
+    expect(forestTrees()).toEqual(trees)
   })
 })
 

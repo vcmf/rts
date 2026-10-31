@@ -106,8 +106,15 @@ Kobelnitz on Austerlitz, (−450, 350); the Pratzen, (700, 250)). `tools/build-l
   summer's dust over their earth and they read as ways against the ploughed land (`roadPaint`,
   `src/look/shaders/shore.glsl`; the demo's roads set no flag); a grass verge (4 m past a road's edge, 2.5 m past a
   track's: `VERGE`) where the arable reached them;
-- the trees: a wood's on a 6 m lattice jittered 2.4 m, kept by its density, its species by its `leaf` (birches and
-  hawthorns within 5 m of its edge), its size by its `height`; an orchard's apples in its rows (both against the 1 m
+- the trees: a wood's scattered as a forest grows, not planted (`woodTree`, docs/plans/active/natural-woods.md): a
+  candidate anywhere in each cell of a 3 m lattice, kept by a chance that gives a tree per 36 m² at full density
+  (near a random scatter, so no row shows and trees clump by chance), that chance scaled by the density, by a slow
+  noise into thickets and small clearings, by the species (conifers closer, oaks wider, normalised over the `leaf`'s
+  shares) and in the 10 m edge band by a noise into bays; half the trees take their stand's species (patches about
+  36 m across); a tree keeps off a kept neighbour by its species' gap (1.2–2.3 m); the rim's birches and hawthorns
+  within a width that wanders from 3 to 8 m, probed in six directions off the map's axes; its size by its `height`,
+  a stand's age and the odd veteran. Everything by `ihash` of the map position, so the same map gives the same trees
+  and the far ring's count stays that of the earlier 6 m lattice (Kobelnitz −3.7 %, Pratzen −1 %); an orchard's apples in its rows (both against the 1 m
   areas); the free-standing trees. On the page the tile's are placed by the placement rule as the demo's scatter, but
   as placed on purpose (`onFields`: one beside a field stays drawn), the far ring's are far trees (none in the apron
   band).
