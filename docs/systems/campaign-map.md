@@ -57,7 +57,11 @@ grid repeat its edge. `packTile` refuses a place past the header's range; `unpac
 for and refuses a tile of another; `inflate` uses the platform's `DecompressionStream`; `cutTile` takes a tile from a
 level's bake, `levelLayout` says how a level is cut. Tested in `test/campaign-tiles.test.ts`.
 
-`tools/campaign-tiles.ts` bakes and writes them under `scratch/campaign/` (git-ignored):
+`tools/campaign-tiles.ts` bakes and writes them under `scratch/campaign/` (git-ignored), each level by blocks of
+4 × 4 tiles with a margin of 24 km (`levelBlocks`; EU1, `docs/plans/active/europe.md`): every step exact on a block's
+own nodes, the sun's rays past the margin reading a coarse 1 km shape of the whole map (the frame's extents whole
+kilometres), the light on every core (`tools/campaign-light.ts`, workers kept for the run), so its memory does not
+grow with the map's size (but for the forests' field, still whole, and the fields' level, at most 20 M nodes):
 
 | Level | Cell | Nodes (1805 theatre) | Tiles | On disk |
 |---|---|---|---|---|
@@ -117,7 +121,7 @@ comments avoid both.
 
 ## The names
 
-K2d (`docs/plans/active/k2d-ink.md`). The tool writes `labels.json` into each build (the manifest's `labels`): the
+K2d (`docs/plans/done/k2d-ink.md`). The tool writes `labels.json` into each build (the manifest's `labels`): the
 1805 data file's towns (names, sizes, fortresses) and regions (names, angles), placed through the theatre's projection, and the
 theatre's named rivers the page draws (rank 6 or larger), their points thinned to every other one (`tools/campaign-data.ts` reads the data file for both
 tools). The page draws them on a 2D canvas over the map (`src/render/campaign/ink.ts`), redrawn when the view changes:

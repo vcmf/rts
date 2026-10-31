@@ -1,4 +1,4 @@
-// The campaign map's labels (docs/plans/active/k2d-ink.md, K2d): what the ink (./ink.ts) draws and where, the
+// The campaign map's labels (docs/plans/done/k2d-ink.md, K2d): what the ink (./ink.ts) draws and where, the
 // prototype's rules (prototypes/campaign-map.html, drawInk) as pure functions: the towns shown at a zoom, their marks
 // and names, a placement that never lets two labels overlap, a river name's place on its course, the regions' fade.
 // The labels' data is baked with the tiles (tools/campaign-tiles.ts, `labels.json`).

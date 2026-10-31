@@ -11,7 +11,7 @@
 //      numbers are small and deflate well
 //   then the planes, size × size bytes each: the sun (0 shadow to 255 lit), the sky (its open share), the forest
 // Rows run south to north, nodes west to east; nodes past the level's grid repeat its edge.
-import type { Grid } from './bake.ts'
+import { wholeOf, type Grid, type Place } from './bake.ts'
 import { rowDeltas, rowSums } from './rows.ts'
 
 export const TILE_MAGIC = 'CMPT'
@@ -158,11 +158,48 @@ export interface LevelBake {
   shape: Float32Array
   light: Uint8Array
   forest: Uint8Array
+  // a block of the level (baked by blocks): where its node (0, 0) lies in the level, and the level's size in nodes;
+  // without it, the grid is the whole level
+  place?: Place
 }
 
 /** How a level's grid is cut: `size` nodes a tile, tilesX × tilesZ tiles (the last ones padded with the edge). */
 export function levelLayout(nx: number, nz: number, size: number) {
   return { size, tilesX: Math.ceil(nx / size), tilesZ: Math.ceil(nz / size) }
+}
+
+/** A block of a level, baked as one (tools/campaign-tiles.ts): its tiles, its own nodes, and those it is baked on. */
+export interface Block {
+  // its tiles' columns [c0, c1) and rows [r0, r1)
+  tiles: { c0: number; c1: number; r0: number; r1: number }
+  // its own nodes [i0, i1) × [j0, j1) (its tiles', up to the level's edge), and those of its margin round them
+  own: { i0: number; i1: number; j0: number; j1: number }
+  baked: { i0: number; i1: number; j0: number; j1: number }
+}
+
+/**
+ * The blocks a level of nx × nz nodes is baked in: `blockTiles` × `blockTiles` tiles of `size` nodes each (the last
+ * ones fewer), their own nodes (the last ones up to the level's edge) and those within `margin` nodes of them, clipped
+ * to the level. Every tile is in exactly one block.
+ */
+export function levelBlocks(nx: number, nz: number, size: number, blockTiles: number, margin: number): Block[] {
+  const { tilesX, tilesZ } = levelLayout(nx, nz, size)
+  const out: Block[] = []
+  for (let r0 = 0; r0 < tilesZ; r0 += blockTiles) {
+    for (let c0 = 0; c0 < tilesX; c0 += blockTiles) {
+      const c1 = Math.min(tilesX, c0 + blockTiles)
+      const r1 = Math.min(tilesZ, r0 + blockTiles)
+      const own = { i0: c0 * size, i1: Math.min(nx, c1 * size), j0: r0 * size, j1: Math.min(nz, r1 * size) }
+      const baked = {
+        i0: Math.max(0, own.i0 - margin),
+        i1: Math.min(nx, own.i1 + margin),
+        j0: Math.max(0, own.j0 - margin),
+        j1: Math.min(nz, own.j1 + margin),
+      }
+      out.push({ tiles: { c0, c1, r0, r1 }, own, baked })
+    }
+  }
+  return out
 }
 
 /**
@@ -172,7 +209,16 @@ export function levelLayout(nx: number, nz: number, size: number) {
  */
 export function cutTile(bake: LevelBake, place: TilePlace, size: number, scale: number, base: number): Tile {
   const { level, column, row } = place
-  const { nx, nz } = bake.grid
+  // the level's size, and where the bake's arrays start in it
+  const at = bake.place ?? wholeOf(bake.grid)
+  const { nx, nz } = at
+  const gx = bake.grid.nx
+  // a tile wholly inside the bake's nodes (a block's), or its reads would wrap into the rows beside it
+  const first = [column * size - at.i0, row * size - at.j0]
+  const last = [Math.min(nx - 1, (column + 1) * size - 1) - at.i0, Math.min(nz - 1, (row + 1) * size - 1) - at.j0]
+  if (first[0] < 0 || first[1] < 0 || last[0] >= gx || last[1] >= bake.grid.nz) {
+    throw new RangeError(`cutTile: the tile at ${column}, ${row} is not wholly in the bake's nodes`)
+  }
   const n = size * size
   const tile: Tile = {
     level,
@@ -185,9 +231,9 @@ export function cutTile(bake: LevelBake, place: TilePlace, size: number, scale: 
     forest: new Uint8Array(n),
   }
   for (let j = 0; j < size; j++) {
-    const gj = Math.min(nz - 1, row * size + j)
+    const gj = Math.min(nz - 1, row * size + j) - at.j0
     for (let i = 0; i < size; i++) {
-      const g = gj * nx + Math.min(nx - 1, column * size + i)
+      const g = gj * gx + Math.min(nx - 1, column * size + i) - at.i0
       const k = j * size + i
       const height = bake.shape[g]
       if (!Number.isFinite(height)) throw new RangeError(`cutTile: a shape of ${height} m at node ${g}`)

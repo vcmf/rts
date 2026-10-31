@@ -1,4 +1,4 @@
-// The campaign map's ink (docs/plans/active/k2d-ink.md, K2d): the names over the map on a 2D canvas, the prototype's
+// The campaign map's ink (docs/plans/done/k2d-ink.md, K2d): the names over the map on a 2D canvas, the prototype's
 // (prototypes/campaign-map.html, drawInk): the regions lettered across the land, the towns as dark blocks with their
 // names, the rivers' names in italic along their courses; none overlapping (./labels.ts), none drawn where the relief
 // hides it from the camera (./camera.ts seenFrom), all clipped to the map's frame. Redrawn when the view changes.
