@@ -128,3 +128,15 @@ untouched; else the last parts go. One move at a time (a queue); neither tile ma
 trees' builder. Checked on the page: a move made to fail (`__look.moveFault`) leaves the page as a fresh one (the
 frame identical, every count the same); a move draws as a page loaded there (relief off: identical); ten moves leak
 nothing. The round count restarts.
+
+After the redesign, round 1 (8 findings, 2 taken as severe):
+- fixed, severe: the new bakes took their shadow casters from the scene while the last tile's trees still stood in it
+  (they cast in the new shadow map until disposed, and stayed in its list): a part going away now casts nothing
+  (`buildBakes`' `leaving`, from the last parts' owners: `Owned.has`; after a move no caster is disposed); the swap
+  could still throw after the last parts were gone (the ground's split, the relief's tone): both now in the build's
+  guarded half, the swap left with assignments, disposals and hooks;
+- fixed: the tools' `retile` hook checks the place asked for and that the file holds it; the focus range's comment;
+- answered: owners that find their parts by the scene's lists (the reviewer's explicit disposables: a larger change
+  to every builder; the lists cover what the tile's builders make, the bakes' casters now leave the last parts out);
+  the relief's tone over the whole ring, the far macro bake on every move, the first tile's data kept: a move's cost
+  and memory, G3c's.

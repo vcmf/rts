@@ -12,6 +12,8 @@ export interface Owned<T> {
   dispose(): void
   // its bindings run again on every painted material (a part built beside it taken away: src/look/main.ts, move)
   rebind(): void
+  // whether it added this (a mesh, a material, a texture: a part built beside it leaves it out)
+  has(x: unknown): boolean
 }
 
 /** The scene's lists a builder may add to, and the observables a builder hooks a frame on */
@@ -75,5 +77,6 @@ export function owned<T>(scene: Scene, mats: Materials, build: () => T): Owned<T
   }
   const { added, hooks } = diff()
   const { forget, bind } = done()
-  return { value, dispose: () => takeAway(scene, added, hooks, forget), rebind: bind }
+  const mine = new Set(added.flat())
+  return { value, dispose: () => takeAway(scene, added, hooks, forget), rebind: bind, has: x => mine.has(x) }
 }

@@ -1,6 +1,7 @@
 // The look page (app/look.html): the painted world in the game's toolchain, ported from
 // prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js'
 import { owned } from './owned.ts'
 import { TILE_O, tileEdge } from './tile.ts'
 import type { SimPlay } from './sim-armies.ts'
@@ -523,7 +524,7 @@ const buildings = buildBuildings(
   { baked: bldBaked, bounce: bldBaked && bldbounceParam === null },
   worldBuildings,
 )
-const tileBakes = (n: Nature) =>
+const tileBakes = (n: Nature, leaving?: (m: AbstractMesh) => boolean) =>
   owned(scene, mats, () =>
     buildBakes(
       scene,
@@ -536,6 +537,7 @@ const tileBakes = (n: Nature) =>
       n.trunks,
       n.farCull,
       look.light ? { side: ring.x1 - ring.x0, light: look.light.nx * look.light.nz } : null,
+      leaving,
     ),
   )
 let bakesOwned = tileBakes(nature)
@@ -1584,28 +1586,32 @@ async function move(next: LookData): Promise<number> {
     built.push(o)
     return o
   }
+  // (what the last parts made: the new bakes cast none of it, the scene still holds it while they are built)
+  const last = [roadsOwned, natureOwned, bakesOwned, flowOwned, meadowMapOwned]
+  const leaving = (m: AbstractMesh) => last.some(o => o?.has(m))
   let parts
   try {
     at(next, frame)
     const roads = roadsOwned && build(tileRoads(next.roads))
     const n = build(tileNature(next))
     if (moveFault) throw new Error(`a move made to fail (__look.moveFault: ${moveFault})`)
-    const bk = build(tileBakes(n.value))
+    const bk = build(tileBakes(n.value, leaving))
     const fl = flowOwned && build(tileFlow())
     const mm = meadowMapOwned && build(tileMeadowMap(n.value))
-    parts = { roads, n, bk, fl, mm }
+    // the ground's split and the relief's tone, on the new ground (still undone if they throw)
+    const share = roads && roadTex && splitParam !== '0' ? splitGround(terrain, frame).share : null
+    const tone = relief && reliefField(groundAt, ring.x1 - ring.x0, [SUN.x, SUN.y, SUN.z], ring.x0, ring.z0).tex
+    parts = { roads, n, bk, fl, mm, share, tone }
   } catch (err) {
     for (const o of built.reverse()) o.dispose()
     at(tileNow, frameNow)
+    if (roadsOwned && roadTex && splitParam !== '0') splitGround(terrain, frameNow)
     // the last parts' bindings, which the new parts' had overwritten, in the order they were built
-    for (const o of [roadsOwned, natureOwned, bakesOwned, flowOwned, meadowMapOwned]) o?.rebind()
+    for (const o of last) o?.rebind()
     throw err
   }
-  roadsOwned?.dispose()
-  natureOwned.dispose()
-  bakesOwned.dispose()
-  flowOwned?.dispose()
-  meadowMapOwned?.dispose()
+  // the swap: nothing past here throws (the last parts' disposal, assignments, the hooks, a texture's write)
+  for (const o of last) o?.dispose()
   natureOwned = parts.n
   nature = natureOwned.value
   bakesOwned = parts.bk
@@ -1614,7 +1620,7 @@ async function move(next: LookData): Promise<number> {
   if (parts.roads && roadTex) {
     roadsOwned = parts.roads
     Object.assign(roadTex, { segs: roadsOwned.value.segs, grid: roadsOwned.value.grid, n: roadsOwned.value.sn })
-    if (splitParam !== '0') groundShare = splitGround(terrain, frame).share
+    if (parts.share) groundShare = parts.share
   }
   if (parts.fl) {
     flowOwned = parts.fl
@@ -1625,7 +1631,7 @@ async function move(next: LookData): Promise<number> {
     macro.setMeadowMap(meadowMapOwned.value.map)
   }
   // the relief's tone reads the drawn ground, the tile's heights on it (written in place: its size is the ring's)
-  if (relief) relief.tex.update(reliefField(groundAt, ring.x1 - ring.x0, [SUN.x, SUN.y, SUN.z], ring.x0, ring.z0).tex)
+  if (relief && parts.tone) relief.tex.update(parts.tone)
   nearTile = maxGrid(next.hf, 8)
   follow.range = ground.focus
   worldGround = ground
@@ -1738,9 +1744,15 @@ Object.assign(window, {
       if (!url) {
         throw new Error(`retile: no ${lookWindow ? windowFile(lookWindow, at) : 'map window'}: build it with --tileat`)
       }
+      checkTileAt(at, D.spec.tileStep)
       const r = await fetch(url)
       if (!r.ok) throw new Error(`retile: ${r.status} for ${url}`)
-      return retile(decodeLook(await r.arrayBuffer()))
+      const d = decodeLook(await r.arrayBuffer())
+      // (a file holding another tile than its name says: a stale build)
+      if (d.tileAt[0] !== x || d.tileAt[1] !== z) {
+        throw new Error(`retile: ${url} holds the tile at ${d.tileAt.join(', ')}`)
+      }
+      return retile(d)
     },
     splitShare: () => groundShare, // the tile's triangles paved, by the roads, neither (terrain.ts, splitGround)
     // the buildings' light bake: its atlas and raw bake (the checks), its time once baked (on the bench), its bakes so
