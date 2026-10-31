@@ -18,7 +18,7 @@ import '@babylonjs/core/Shaders/postprocess.vertex.js'
 import '@babylonjs/core/Shaders/fsr1Upscale.fragment.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
-import { D, TUNED_R, ZoomHold, holdView, type HoldGround } from './spec.ts'
+import { D, TUNED_R, ZoomHold, frameStep, holdView, type HoldGround } from './spec.ts'
 import DOFCOC from './shaders/dofcoc.glsl?raw'
 import DOF_FS from './shaders/dof.frag?raw'
 import DOFDOWN_FS from './shaders/dofdown.frag?raw'
@@ -96,7 +96,7 @@ export function buildCamera(
   // TUNED_R out
   camera.mapPanning = true
   scene.onBeforeRenderObservable.add(() =>
-    holdView(D.spec, zoom, camera, world, frozen ? Infinity : Math.min(0.1, scene.getEngine().getDeltaTime() / 1000)),
+    holdView(D.spec, zoom, camera, world, frameStep(frozen, scene.getEngine().getDeltaTime())),
   )
   camera.upperRadiusLimit = c.rMax
   camera.lowerBetaLimit = c.betaMin
@@ -160,7 +160,7 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
   const on = (...codes: string[]) => (codes.some(c => held.has(c)) ? 1 : 0)
   scene.onBeforeRenderObservable.add(() => {
     if (!held.size) return
-    const dt = Math.min(0.1, scene.getEngine().getDeltaTime() / 1000)
+    const dt = frameStep(false, scene.getEngine().getDeltaTime())
     const step = camera.radius * PAN_PER_S * dt
     pan(
       (on('ArrowRight', 'KeyD') - on('ArrowLeft', 'KeyA')) * step,
