@@ -51,7 +51,7 @@ import {
   type CampaignView,
 } from './camera.ts'
 import { cloudCanvas, paperCanvas } from './paper.ts'
-import { patchRamp, patchStart } from './patch.ts'
+import { farMeshHeight, patchRamp, patchStart } from './patch.ts'
 import PRINT_VS from './shaders/print.vert?raw'
 import PRINT_FS from './shaders/print.frag?raw'
 import PATCH_VS from './shaders/patch.vert?raw'
@@ -245,6 +245,8 @@ export class CampaignMapView {
   private detailShare = 0
   // where the patch lies, km (x0, z0, x1, z1), or null when it is off
   private patchRect: [number, number, number, number] | null = null
+  // the detail area's first and last nodes, km (x0, z0, x1, z1)
+  private detailRect: [number, number, number, number] = [1e6, 1e6, 1e6 + 1, 1e6 + 1]
   private readonly sideMaterial: ShaderMaterial
   private readonly full: boolean
   private fsr: FSR1RenderingPipeline | null = null
@@ -596,6 +598,9 @@ export class CampaignMapView {
     m.setFloat('uDetailArea', AREA)
     this.patch?.dispose()
     this.patch = this.patchMesh(level.cell / 1000)
+    // no patch yet (or none fits): the far mesh whole
+    this.patchRect = null
+    this.print.setVector4('uPatchRect', OFF_MAP())
     this.dirty = true
   }
 
@@ -685,7 +690,8 @@ export class CampaignMapView {
     const x0 = -this.half.x + origin.ox * spanKm
     const z0 = -this.half.z + origin.oz * spanKm
     const lastKm = ((d.n - 1) * level.cell) / 1000
-    this.print.setVector4('uDetailRect', new Vector4(x0, z0, x0 + lastKm, z0 + lastKm))
+    this.detailRect = [x0, z0, x0 + lastKm, z0 + lastKm]
+    this.print.setVector4('uDetailRect', Vector4.FromArray(this.detailRect))
     const tiles = areaTiles(level, AREA, origin)
     const { given, changed } = assignSlots(d.given, tiles, AREA)
     d.given = given
@@ -745,7 +751,8 @@ export class CampaignMapView {
       d.load(...tile)
         .then(loaded => {
           d.failed.delete(key)
-          this.tileLoaded(key, loaded)
+          // a load of a close level since replaced (setDetail again) is dropped
+          if (this.detail === d) this.tileLoaded(key, loaded)
         })
         .catch((e: unknown) => {
           const tries = (d.failed.get(key)?.tries ?? 0) + 1
@@ -830,42 +837,62 @@ export class CampaignMapView {
   }
 
   /**
-   * How high the map stands at a point (km), as it is drawn: the far mesh's shape, and where the patch is drawn the
-   * close level's from its cached tile, by the patch's share there (`patchRamp`) and the zoom's; bilinear. (The tiles'
-   * fade-in is left out: it lasts 0.4 s.)
+   * How high the map stands at a point (km), as it is drawn: the far mesh's triangles (`farMeshHeight`), and where the
+   * patch is drawn the close level's 100 m shape by the patch's share there (`patchRamp`), the zoom's, the detail
+   * area's fade at its edge and the point's tile's fade-in, from the tiles written in their slots; bilinear. (The 1 km
+   * fade toward a neighbour not yet drawn is left out: it lasts until that tile comes, a frame or a few.)
    */
   private riseAt(xKm: number, zKm: number): number {
     const far = this.farRiseAt(xKm, zKm)
     const rect = this.patchRect
-    if (!rect || this.detailShare <= 0) return far
+    const d = this.detail
+    if (!rect || !d || this.detailShare <= 0) return far
     const centre: [number, number] = [this.viewNow.x, this.viewNow.z]
     const ramp = patchRamp(xKm, zKm, centre, rect, PATCH_INNER_KM, PATCH_OUTER_KM, this.farStep)
-    const k = this.detailShare * ramp
-    const near = k > 0 ? this.closeRiseAt(xKm, zKm) : null
-    return near === null ? far : far + (near - far) * k
+    const [x0, z0, x1, z1] = this.detailRect
+    const edge = Math.min(xKm - x0, x1 - xKm, zKm - z0, z1 - zKm)
+    const k = this.detailShare * ramp * sstep(0, 8, edge)
+    const near = k > 0 ? this.closeRiseAt(d, xKm, zKm) : null
+    return near === null ? far : far + (near.height - far) * k * near.fade
   }
 
-  /** The close level's height at a point (km) from its cached tile, bilinear inside the tile, or null. */
-  private closeRiseAt(xKm: number, zKm: number): number | null {
-    const d = this.detail
-    if (!d) return null
+  /**
+   * The close level's height at a point (km), bilinear between its nodes (across a tile's edge into its neighbour),
+   * and the fade-in of the point's tile, or null where a node's tile is not written in its slot.
+   */
+  private closeRiseAt(d: Detail, xKm: number, zKm: number): { height: number; fade: number } | null {
     const { level } = d
     const n = level.size
     const fx = (xKm + this.half.x) / (level.cell / 1000)
     const fz = (zKm + this.half.z) / (level.cell / 1000)
-    const tile = d.cache.get(tileKey([Math.floor(fx / n), Math.floor(fz / n)]))
-    if (!tile) return null
-    const at = (i: number, j: number) => level.base + tile.shape[j * n + i] * level.scale
-    return bilinear(at, fx - tile.column * n, fz - tile.row * n, n, n) / 1000
+    // the tiles written in their slots, by key, for the four nodes
+    const written = (i: number, j: number): Tile | null => {
+      const t: TileAt = [Math.floor(i / n), Math.floor(j / n)]
+      const held = d.table.get(slotOf(t[0], t[1], AREA))
+      if (!held || held[0] !== t[0] || held[1] !== t[1]) return null
+      return d.cache.get(tileKey(t)) ?? null
+    }
+    let missing = false
+    const at = (i: number, j: number) => {
+      const tile = written(i, j)
+      if (!tile) {
+        missing = true
+        return 0
+      }
+      return level.base + tile.shape[(j - tile.row * n) * n + (i - tile.column * n)] * level.scale
+    }
+    const height = bilinear(at, fx, fz, level.nx, level.nz) / 1000
+    if (missing) return null
+    const tile: TileAt = [Math.floor(fx / n), Math.floor(fz / n)]
+    return { height, fade: d.fade[slotOf(tile[0], tile[1], AREA)] }
   }
 
-  /** The far level's height at a point (km), bilinear. */
+  /** The far mesh's height at a point (km), as drawn: its triangles (`farMeshHeight`). */
   private farRiseAt(xKm: number, zKm: number): number {
     if (!this.far) return 0
     const { nx, nz, shape } = this.far.data
     const cellKm = this.far.level.cell / 1000
-    const at = (i: number, j: number) => shape[j * nx + i]
-    return bilinear(at, (xKm + this.half.x) / cellKm, (zKm + this.half.z) / cellKm, nx, nz) / 1000
+    return farMeshHeight(shape, nx, nz, cellKm, MESH_STEP, xKm + this.half.x, zKm + this.half.z) / 1000
   }
 
   /** Places the camera from the view, and the haze by its tilt. */

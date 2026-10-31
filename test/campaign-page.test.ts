@@ -186,7 +186,8 @@ describe('the ground under a ray', () => {
     expect(over[0]).toBeCloseTo(10, 2)
   })
 
-  it('is none for a ray that does not go down', () => {
+  it('is none for a ray that does not go down, or that starts under the ground', () => {
     expect(rayGround([0, 5, 0], [1, 0, 0], () => 0, 2, -0.1)).toBeNull()
+    expect(rayGround([0, 0.5, 0], [Math.SQRT1_2, -Math.SQRT1_2, 0], () => 1, 2, -0.1)).toBeNull()
   })
 })

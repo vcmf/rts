@@ -130,9 +130,19 @@ detail reads and the far mesh's height through two GLSL files put in by the view
   twice, in TypeScript (tested) and in GLSL (`shaders/farmesh.glsl`), kept the same by hand. Measured after: the image
   the same (a mean under 0.01 level), the patch's edge whole at the frame's east edge; panning a mean of 2.9 and
   3.2 ms at 1080p and 4K, the 95th centile 4.1 and 4.3 ms, the worst single frames 6.4 and 7.7 ms.
+- **Round 3** (the last): no severe finding; fixed: the map's height on the CPU now as drawn in more of its parts
+  (the far mesh's triangles, `farMeshHeight`, used at last; a tile counted only once written in its slot, by its
+  fade-in; the detail area's edge fade; a tile's last cells read across into its neighbour); the ray walked in steps
+  of 50 m at most along it, none from under the ground; a close level set again clears the last patch's place and
+  drops the last level's loads under way; the system doc's ring row. Left: the CPU's height leaves out the 1 km fade
+  toward a neighbour not yet drawn, and lags the drawn one by a frame where the zoom crosses the detail's range
+  (`pxPerKm` reads it before the frame sets the zoom's share); the far shape scanned once at load for its highest.
 
 ## Open questions
 
 - A denser mesh far out too (a mesh in rings around the camera) if Europe's far views need it.
-- Up close, a lake's shore in the light shows a saw-tooth (the 100 m tiles' sunk beds against the water's steps from
-  the far level), from K2b on, with or without the patch (seen at the frame's east edge, 40 km).
+- Up close, a lake's shore in the light shows a saw-tooth, from K2b on, with or without the patch (seen at the
+  frame's east edge, 30 to 40 km): the bake sinks a lake 70 m below its shore across one cell of the level, so at
+  100 m the drop is a staircase along the shore, which the 100 m slope draws (checked: the 100 m slope left out by
+  the water, the teeth go). The fix is the bake's: the sinking eased over a fixed width in metres, as wide as the far
+  level's cell or more, then the tiles baked again.
