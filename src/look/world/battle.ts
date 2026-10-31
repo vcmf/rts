@@ -69,6 +69,13 @@ function checkComposition(c: Composition, sizes: Readonly<Record<string, number>
   if (!(figures > 0)) throw new Error(`battle: a corps of no figures (${JSON.stringify(c)})`)
 }
 
+/** A battle with only the unit types on the page (`types`) in its corps, the others taken out before its budget is
+ *  filled (so a battle fields its budget whatever arms are left out); a `once` corps left empty is dropped */
+export function onlyTypes(spec: BattleSpec, types: readonly string[]): BattleSpec {
+  const keep = (c: Composition) => c.filter(u => types.includes(u.type))
+  return { figures: spec.figures, once: spec.once.map(keep).filter(c => c.length > 0), repeat: keep(spec.repeat) }
+}
+
 /** a side's figures: its units' sizes summed */
 export const figuresOf = (order: readonly Fielded[], sizes: Readonly<Record<string, number>>): number =>
   order.reduce((a, u) => a + sizes[u.type], 0)
@@ -90,13 +97,11 @@ export interface Deploy {
   gap: number
   posts: readonly Post[]
 }
-/** a unit type's ground on the field: its footprints at work and at rest (its frame, m), its script's cycle (s) and
- *  whether it fires (a drill's volleys, a service's guns: nothing of its side may stand before it) */
+/** a unit type's ground on the field: its footprints at work and at rest (its frame, m) and its script's cycle (s) */
 export interface FieldKind {
   work: Foot
   rest: Foot
   cycle: number
-  fires: boolean
 }
 
 /** the demo field: the centre between the two fronts and the gap between them, m (about a volley's range) */
@@ -145,61 +150,73 @@ function corpsWants(
   return { row, width, left }
 }
 
-/** The battle's units by type, and how many engaged units a side found no legal spot and stand in reserve */
+/** The battle's units by type; by side, how many engaged units found no legal spot and stand in reserve, and how many
+ *  engaged units stand past the camera's play area (their origin beyond ±play m: where the player cannot pan) */
 export interface Layout {
   units: Record<string, Battalion[]>
   fellBack: number[]
+  outsidePlay: number[]
+}
+/** the battle's ground: the camera's play area (±play m) the engaged units keep to where they fit, and the area every
+ *  unit keeps to (±extent m: the tile's) */
+export interface Area {
+  play: number
+  extent: number
 }
 
-/** Every unit of both sides' orders of battle (`orders[side]`) placed on the field, under two friendly-line rules: no
- *  unit stands before a firing unit of its side it overlaps across, and no engaged unit stands behind another of its
- *  side it overlaps across (along the front, an engaged unit's ground is its own). Each side's first `deploy.engaged`
- *  repeated corps stand along the front by the template (placeArm: the legal spot nearest its post's, never ahead of
- *  it, clear of the others and of the blocked ground; a unit with none joins the reserve, with a warning), then the
- *  rest at rest in column behind (RESERVE_BACK m behind the front and behind every engaged footprint they overlap
- *  across: a pass over the grid's spots, the nearest the front and the middle first). Within ±extent m (past the
- *  camera's play area: the tile's), each side on its own half. Its units by type, each wearing its type's uniform of
- *  its side (`uniforms[type][side]`), the engaged ones' cycles staggered. A side with no room for its order of
- *  battle: a loud failure */
+/** Every unit of both sides' orders of battle (`orders[side]`) placed on the field, under the friendly-line rule:
+ *  along the front an engaged unit's ground is its own (no other unit of its side overlaps it across, but reserves
+ *  RESERVE_BACK m behind it), so no unit stands before or behind an engaged unit of its side, whether that one fires
+ *  or rides. Each side's first `deploy.engaged` repeated corps stand along the front by the template (placeArm: the
+ *  legal spot nearest its post's, never ahead of it, clear of the others and of the blocked ground, within the
+ *  camera's play area where one is, else on the rest of the area; a unit with none joins the reserve, with a warning),
+ *  then the rest at rest in column behind (RESERVE_BACK m behind the front and behind every engaged footprint they
+ *  overlap across: a pass over the grid's spots, the nearest the front and the middle first). Within ±area.extent m,
+ *  each side on its own half. Its units by type, each wearing its type's uniform of its side (`uniforms[type][side]`),
+ *  the engaged ones' cycles staggered. A side with no room for its reserves: a loud failure */
 export function battleLayout(
   orders: readonly (readonly Fielded[])[],
   kinds: Readonly<Record<string, FieldKind>>,
   deploy: Deploy,
   blocked: Blocked,
   uniforms: Readonly<Record<string, readonly [string, string]>>,
-  extent: number,
+  area: Area,
   field = FIELD,
 ): Layout {
   const units: Record<string, Battalion[]> = {}
   const taken: Box[] = []
   const fellBack: number[] = []
+  const outsidePlay: number[] = []
   for (const [side, order] of orders.entries()) {
     for (const u of order) {
       if (!kinds[u.type]) throw new Error(`battle: no field kind for the unit type ${u.type}`)
       if (!uniforms[u.type]) throw new Error(`battle: no uniforms for the unit type ${u.type}`)
     }
     const add = (type: string, b: Placed) => (units[type] ??= []).push({ side, uniform: uniforms[type][side], ...b })
-    const at: SideField = { side, kinds, blocked, taken, engaged: [], extent, field, add }
+    const at: SideField = { side, kinds, blocked, taken, engaged: [], area, extent: area.extent, field, add }
     const { reserves, fell } = placeEngaged(at, order, deploy)
     if (fell > 0) {
       console.warn(`armies: ${fell} engaged units of side ${side} found no legal spot and stand in reserve (battle.ts)`)
     }
     fellBack.push(fell)
+    const out = (b: Battalion) => b.side === side && !b.reserve && Math.max(Math.abs(b.x), Math.abs(b.z)) > area.play
+    outsidePlay.push(Object.values(units).reduce((a, bs) => a + bs.filter(out).length, 0))
     placeReserves(at, reserves)
   }
-  return { units, fellBack }
+  return { units, fellBack, outsidePlay }
 }
 
 /** a unit placed, before its side and uniform */
 type Placed = Omit<Battalion, 'side' | 'uniform'>
 /** what placing a side's units reads and fills: its side, the types' ground, the blocked ground, the boxes taken (both
- *  sides'), its engaged units' boxes, the area (±extent m) and the field, and where a unit placed goes */
+ *  sides'), its engaged units' boxes, the area (and its ±extent m) and the field, and where a unit placed goes */
 interface SideField {
   side: number
   kinds: Readonly<Record<string, FieldKind>>
   blocked: Blocked
   taken: Box[]
   engaged: Box[]
+  area: Area
   extent: number
   field: typeof FIELD
   add: (type: string, b: Placed) => void
@@ -242,8 +259,8 @@ function placeEngaged(at: SideField, order: readonly Fielded[], deploy: Deploy):
 
 /** an engaged corps' row placed along the front from `start` m (its left edge), its units `gap` m apart, each at the
  *  legal spot nearest its own and never ahead of it (placeArm with back and allows: no engaged box of its side across
- *  it), its cycle staggered after the last of its type's (staggered: each type's count so far); returns the types of
- *  those with no legal spot */
+ *  it), within the camera's play area where one is, else within the whole area; its cycle staggered after the last of
+ *  its type's (staggered: each type's count so far); returns the types of those with no legal spot */
 function placeRow(
   at: SideField,
   row: readonly { want: Want; width: number }[],
@@ -259,12 +276,14 @@ function placeRow(
     x += width + gap
     const kind = at.kinds[want.type]
     const front = at.field.gap / 2
-    const p = placeArm(kind.work, at.side, wanted, at.field.centre, front, at.blocked, at.taken, at.extent)
+    const place = (area: number) =>
+      placeArm(kind.work, at.side, wanted, at.field.centre, front, at.blocked, at.taken, area)
+    const p = place(at.area.play) ?? place(at.area.extent)
     if (!p) {
       left.push(want.type)
       continue
     }
-    at.engaged.push(at.taken[at.taken.length - 1])
+    at.engaged.push(p.box)
     const k = (staggered[want.type] = (staggered[want.type] ?? -1) + 1)
     at.add(want.type, { x: p.x, z: p.z, heading: p.heading, offset: (k * STAGGER) % kind.cycle })
   }

@@ -49,7 +49,7 @@ import { buildBuildingLight } from './building-light.ts'
 import type { Units } from './units.ts'
 import type { UnitData } from './units-data.ts'
 import { BATTLE_BUDGETS, BATTLE_FIGURES, DEFAULT_BATTLE, LEGACY_BATTALION } from '../scenarios/battles.ts'
-import { armOn, battleChoice, battleHref, battleOptions } from './world/battle-url.ts'
+import { armOn, battleChoice, battleHref, battleLabel, battleOptions } from './world/battle-url.ts'
 import { bit as bitOf } from './switch.ts'
 // the figures' unit data by file (data/figures/<figure>.unitdata): a scenario names its figure, the page finds it here
 const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', {
@@ -650,7 +650,8 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dar
 // switches (with ?battle): ?uniforms=all, each side's line infantry wearing the scenario's reviewSides in turn;
 // ?uniforms=all-greatcoats, the same with every man in his greatcoat; ?dye=<dye>:<rrggbb>[;…] (bare, or '#' as
 // %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride). The other arms (the
-// scenario's ARMS_DEMO after the line infantry): ?light=0, ?artillery=0, ?cavalry=0, ?cuirassiers=0 leave them out
+// scenario's ARMS_DEMO after the first): ?light=0, ?artillery=0, ?lightcav=0, ?cuirassiers=0 leave one out, ?cavalry=0
+// both cavalry arms (an arm's own switch wins over its group's: battle-url.ts armOn)
 const battleName = battleChoice(params, BATTLE_BUDGETS, DEFAULT_BATTLE, LEGACY_BATTALION)
 const unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
@@ -755,6 +756,17 @@ let armiesFocus: [number, number] | null = null
 if (battleName === null && params.get('lookat') !== null) {
   throw new Error(`?lookat=${params.get('lookat')} needs ?battle: it looks at the armies' arms`)
 }
+// the battle (a player's option, docs/plans/active/division-armies.md): none or one of the scenario's, by its figures;
+// choosing one reloads the page with it (?battle), every other switch kept; wired before the armies load, so it works
+// while they load and if they fail (none on a map window: hidden)
+const battleSel = document.getElementById('battle') as HTMLSelectElement | null
+if (!battleSel) throw new Error('look.html has no #battle')
+const battleChoices = battleOptions(onMap, BATTLE_FIGURES)
+if (battleChoices) {
+  battleSel.replaceChildren(...battleChoices.map(o => new Option(o.label, o.value)))
+  battleSel.value = battleName ?? ''
+  battleSel.onchange = () => location.assign(battleHref(location.href, battleSel.value || null))
+} else (battleSel.closest('.row') as HTMLElement | null)?.style.setProperty('display', 'none')
 if (battleName !== null) {
   if (mats.webgl1) {
     throw new Error('?battle needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
@@ -766,8 +778,8 @@ if (battleName !== null) {
     { FIGURE_PARTS, dressAll, dyeOverride, wearInTurn },
     { RULESETS },
     { ARMIES_DEMO, ARMS_DEMO },
-    { armFires, armScript, lookAtSpot },
-    { FIELD, battleLayout, figuresOf, orderOfBattle },
+    { armScript, lookAtSpot, lookAtUnit },
+    { FIELD, battleLayout, figuresOf, onlyTypes, orderOfBattle },
     { Trodden, ViewRays },
   ] = await Promise.all([
     import('./units.ts'),
@@ -842,7 +854,7 @@ if (battleName !== null) {
   const dyes = dyeOverride(params.get('dye'), era.dyes)
   // the arms on the page (the line infantry always; the others by their switch, none under ?sim), each its unit type,
   // figure and script (src/look/world/arms.ts armScript)
-  const armSpecs = ARMS_DEMO.filter((spec, i) => armOn(params, spec.name, simParam, i === 0, spec.group))
+  const armSpecs = ARMS_DEMO.filter(spec => armOn(params, spec, { sim: simParam, first: ARMS_DEMO[0].name }))
   const datas = await Promise.all(armSpecs.map(a => figureData(a.figure)))
   const built = armSpecs.map((spec, i) => {
     const t = era.ruleset.types[spec.unitType]
@@ -851,22 +863,33 @@ if (battleName !== null) {
     const speeds = Object.fromEntries(Object.entries(datas[i].ranges).map(([k, r]) => [k, r.speed]))
     return { spec, data: datas[i], ...armScript(spec, t.geometry, g => f.place(g), speeds) }
   })
-  // the battle: each side's order of battle (the ruleset's corps up to the budget, the arms on the page), laid out
-  // past the camera's play area to the tile's edge (src/look/world/battle.ts; the bigger map is the next step)
+  // the battle: each side's order of battle (the ruleset's corps of the arms on the page, up to the budget), laid
+  // out within the camera's play area where it fits, else to the tile's edge (src/look/world/battle.ts; the bigger map
+  // is the next step)
   const sizes = Object.fromEntries(
     Object.entries(era.ruleset.types).map(([k, t]) => [k, t.geometry.companies * t.geometry.files * t.geometry.ranks]),
   )
   const spec = ARMIES_DEMO.battles[battleName]
   if (!spec) throw new Error(`armies: the scenario has no battle ${battleName} (src/scenarios/armies-demo.ts)`)
-  const order = orderOfBattle(spec, sizes).filter(u => armSpecs.some(a => a.unitType === u.type))
-  const kinds = built.map(b => [b.spec.unitType, { ...b, cycle: b.script.cycle, fires: armFires(b.spec) }] as const)
-  const { units: placed, fellBack } = battleLayout(
+  const order = orderOfBattle(
+    onlyTypes(
+      spec,
+      armSpecs.map(a => a.unitType),
+    ),
+    sizes,
+  )
+  const kinds = built.map(b => [b.spec.unitType, { work: b.work, rest: b.rest, cycle: b.script.cycle }] as const)
+  const {
+    units: placed,
+    fellBack,
+    outsidePlay,
+  } = battleLayout(
     [order, order],
     Object.fromEntries(kinds),
     ARMIES_DEMO.deploy,
     blocked,
     Object.fromEntries(built.map(b => [b.spec.unitType, b.spec.sides])),
-    D.spec.tile / 2 - EDGE,
+    { play: D.spec.play, extent: D.spec.tile / 2 - EDGE },
   )
   const tinyPx = tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined
   // the ground and the grass: the figures' shadow map (with its switches) and the trodden mask fall on them
@@ -990,7 +1013,7 @@ if (battleName !== null) {
   // alone, against its coats: like for like with main); __armies' show and setMask every arm's, arms the other arms'
   // renderers by name (the review's cameras), battle the battle's name and figures its figures, both sides (the
   // ruleset's: a battery's 48, drawn as its 4 pieces), fellBack each side's engaged units with no legal spot (in
-  // reserve: uneven sides for the bench to see)
+  // reserve: uneven sides for the bench to see), outsidePlay its engaged units past the camera's play area
   const show = (on: boolean) => all.forEach(u => u.show(on))
   const setMask = (m: Parameters<Units['setMask']>[0]) => all.forEach(u => u.setMask(m))
   const hooks = {
@@ -1003,12 +1026,22 @@ if (battleName !== null) {
     sim: sim?.link,
     battle: battleName,
     fellBack,
+    outsidePlay,
     figures: 2 * figuresOf(order, sizes),
   }
+  // (the panel's battle labelled by what the page fields: the arms on it, ?sim)
+  const chosen = battleSel.selectedOptions[0]
+  if (chosen) chosen.label = battleLabel(battleName, hooks.figures)
   Object.assign(window, { __units: foot, __armies: hooks })
   // ?lookat=<arm>[,<radius m>]: the camera starts on that arm's first unit or the fight's middle (lookAtSpot), its
   // target on the ground there: to judge the arms by eye without panning to them
-  const firsts = Object.fromEntries(Object.entries(arms).map(([k, a]) => [k, a.battalions[0]]))
+  // (each arm's unit nearest the fight's middle inside the camera's play area: the camera reaches it)
+  const firsts = Object.fromEntries(
+    Object.entries(arms).flatMap(([k, a]) => {
+      const u = lookAtUnit(a.battalions, armiesFocus ?? [0, 0], D.spec.play)
+      return u ? [[k, u]] : []
+    }),
+  )
   const at = lookAtSpot(params.get('lookat'), firsts, armiesFocus)
   if (at) {
     camera.target.set(at.x, groundAt(at.x, at.z), at.z)
@@ -1108,16 +1141,6 @@ const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => {
   S.res = +resSel.value
 }
-// the battle (a player's option, docs/plans/active/division-armies.md): none or one of the scenario's, by its figures;
-// choosing one reloads the page with it (?battle), every other switch kept
-// (none on a map window: hidden)
-const battleSel = byId<HTMLSelectElement>('battle')
-const battleChoices = battleOptions(onMap, BATTLE_FIGURES)
-if (battleChoices) {
-  battleSel.replaceChildren(...battleChoices.map(o => new Option(o.label, o.value)))
-  battleSel.value = battleName ?? ''
-  battleSel.onchange = () => location.assign(battleHref(location.href, battleSel.value || null))
-} else (battleSel.closest('.row') as HTMLElement | null)?.style.setProperty('display', 'none')
 const scaleTick = () => {
   if (+resSel.value !== S.res) resSel.value = String(S.res) // the panel follows a scale set elsewhere (the tools)
   if (S.res) applyScale(S.res)

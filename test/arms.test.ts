@@ -17,6 +17,7 @@ import {
   drillScript,
   formationSlots,
   lookAtSpot,
+  lookAtUnit,
   placeArm,
   rideDistance,
   rideLength,
@@ -143,8 +144,11 @@ describe('a ride (rideScript)', () => {
     expect(new Set(since).size).toBe(3)
     expect(since[2]).toBeCloseTo(0.4, 12)
   })
-  it('refuses a ride with no halted leg (its reserve would have no role)', () => {
-    expect(() => rideScript(places, [{ role: 'walk', seconds: 2 }], speeds, 1)).toThrow(/halted leg/)
+  // (review round 3: every ride needed a halted leg, a reserve or none)
+  it('needs a halted leg only for a unit in reserve (its role)', () => {
+    const r = rideScript(places, [{ role: 'walk', seconds: 2 }], speeds, 1)
+    expect(r.phase(1, false).phase).toBe('0:walk')
+    expect(() => r.phase(1, true)).toThrow(/halted leg/)
   })
 })
 
@@ -213,6 +217,20 @@ describe("the arms' footprints (armScript)", () => {
   })
 })
 
+describe('the unit ?lookat looks at (lookAtUnit)', () => {
+  // (review round 3: the arm's first unit stood past the play area; the camera, held within it, looked 86 m away)
+  it("takes the arm's unit nearest the focus within the play area, else the nearest of all", () => {
+    const us = [
+      { x: -321, z: -173 },
+      { x: 200, z: -60 },
+      { x: 30, z: -250 },
+    ]
+    expect(lookAtUnit(us, [0, 0], 235)).toBe(us[1])
+    expect(lookAtUnit(us.slice(0, 1), [0, 0], 235)).toBe(us[0])
+    expect(lookAtUnit([], [0, 0], 235)).toBeNull()
+  })
+})
+
 describe("the arms' places (placeArm, formationSlots)", () => {
   it("stands a regiment's squadrons as the ruleset's column, files across, ranks behind", () => {
     const t = rs.types.cavalry
@@ -227,7 +245,10 @@ describe("the arms' places (placeArm, formationSlots)", () => {
     const foot = { a0: -5, a1: 5, z0: -2, z1: 2 }
     const taken: Box[] = []
     const a = placeArm(foot, 0, { turn: 0, ahead: 10, across: 20 }, [0, 0], 55, open, taken)
-    expect(a).toEqual({ x: 20, z: -45, heading: 0 })
+    expect(a).toMatchObject({ x: 20, z: -45, heading: 0 })
+    // (review round 3: the box it took returned, not read back off taken)
+    expect(a?.box).toEqual({ x0: 15, z0: -47, x1: 25, z1: -43 })
+    expect(taken[0]).toBe(a?.box)
     const b = placeArm(foot, 1, { turn: 0, ahead: 10, across: 20 }, [0, 0], 55, open, taken)
     expect(b).toMatchObject({ x: 20, z: 45 })
     expect(b?.heading).toBeCloseTo(Math.PI, 12)

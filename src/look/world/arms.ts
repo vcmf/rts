@@ -109,7 +109,8 @@ export interface Leg {
  *  each leg at its role's root speed (m/s, the figure's: its feet planted; 0: halted), then the cycle starts again
  *  where it began (the stand-in's loop, as the infantry's). A leg's phase is its index and role; a man's clip starts
  *  at the leg's start, offset by his own lag (jitter × lag s: no two in step). A reserve stands halted in its slots
- *  (the role of the first leg with no speed: a ride needs one). fileSpacing: the slots' file spacing */
+ *  (the role of the first leg with no speed: a ride with a unit in reserve needs one). fileSpacing: the slots' file
+ *  spacing */
 export function rideScript(
   places: readonly [number, number][],
   legs: readonly Leg[],
@@ -129,8 +130,8 @@ export function rideScript(
     while (k + 1 < legs.length && t >= starts[k + 1]) k++
     return k
   }
+  // (a reserve stands in its first halted leg's role: asked of a ride with none, a loud failure then, not before)
   const halted = legs.findIndex(l => speeds[l.role] === 0)
-  if (halted < 0) throw new Error('arms: a ride needs a halted leg (its reserve stands in it)')
   const reserve: RidePhase = { phase: 'reserve', start: 0, leg: halted, reserve: true }
   return {
     men: places.length,
@@ -139,7 +140,10 @@ export function rideScript(
     fileSpacing,
     roles: [...new Set(legs.map(l => l.role))],
     phase: (t, inReserve) => {
-      if (inReserve) return reserve
+      if (inReserve) {
+        if (halted < 0) throw new Error('arms: a ride in reserve needs a halted leg (it stands in its role)')
+        return reserve
+      }
       const k = legAt(t)
       return { phase: `${k}:${legs[k].role}`, start: starts[k], leg: k, reserve: false }
     },
@@ -261,9 +265,10 @@ export const overlaps = (p: Box, q: Box): boolean => p.x0 < q.x1 && q.x0 < p.x1 
  *  `reach` m of it (a move ahead or back counting three times one along the front: it keeps its distance from the
  *  lines) whose footprint lies within the play area (±play m), on the side's own half of the field (its side of the
  *  line through `at` between the fronts), off the blocked ground (sampled every 2.5 m) and clear of the boxes taken
- *  (taken: pushed onto); with `back`, never ahead of the spot wanted (along the front or back from it: the battle's
- *  posts keep the gap between the lines); with `allows`, only where it allows the footprint's world box (the battle's
- *  friendly-line rules). The sides face +z (side 0) and −z, as the infantry's layout. null: no room */
+ *  (taken: pushed onto; returned with the place); with `back`, never ahead of the spot wanted (along the front or
+ *  back from it: the battle's posts keep the gap between the lines); with `allows`, only where it allows the
+ *  footprint's world box (the battle's friendly-line rule). The sides face +z (side 0) and −z, as the infantry's
+ *  layout. null: no room */
 export function placeArm(
   foot: { a0: number; a1: number; z0: number; z1: number },
   side: number,
@@ -275,7 +280,7 @@ export function placeArm(
   play = 235,
   grid = 5,
   reach = 120,
-): { x: number; z: number; heading: number } | null {
+): { x: number; z: number; heading: number; box: Box } | null {
   const sh = side === 0 ? 0 : Math.PI
   const heading = sh + want.turn
   // the footprint's centre wanted: the side's front (front m from the centre) and ahead of it
@@ -296,7 +301,7 @@ export function placeArm(
     if (want.allows && !want.allows(box)) continue
     if (!clearIn(box, blocked)) continue
     taken.push(box)
-    return { x: ux, z: uz, heading }
+    return { x: ux, z: uz, heading, box }
   }
   return null
 }
@@ -351,10 +356,6 @@ export interface ArmSpec {
    *  cuirass, its metal role, painted as its coat) */
   parts?: Readonly<Record<string, FigurePart>>
 }
-
-/** whether an arm's units fire (a drill's volleys, a service's guns; a ride does not): nothing of their side may stand
- *  before them (src/look/world/battle.ts) */
-export const armFires = (spec: ArmSpec): boolean => spec.script.kind !== 'ride'
 
 /** a unit's footprint in its own frame (across a0..a1, ahead z0..z1, m) */
 export interface Foot {
@@ -414,10 +415,32 @@ export function armScript(
   }
 }
 
-/** Where ?lookat=<arm>[,<radius m>] starts the camera (src/look/main.ts): on that arm's first side's unit (arms: each
- *  arm on the page by name, its first unit's place), or on the fight's middle (fight), at that zoom (30 m by default);
- *  null without ?lookat. A clear error for a radius that is not a positive number, or an arm not on the page, naming
- *  those that are (none under ?sim, nor with ?cavalry=0 and ?artillery=0). (?lookat without ?armies: main.ts's) */
+/** The unit ?lookat=<arm> looks at: of an arm's units, the one nearest `focus` (the fight's middle) whose place is
+ *  within the camera's play area (±play m: the camera reaches it), else the nearest of all; null with none */
+export function lookAtUnit(
+  units: readonly { x: number; z: number }[],
+  focus: readonly [number, number],
+  play: number,
+): { x: number; z: number } | null {
+  const inPlay = units.filter(u => Math.abs(u.x) <= play && Math.abs(u.z) <= play)
+  const from = inPlay.length > 0 ? inPlay : units
+  let best: { x: number; z: number } | null = null
+  let d = Infinity
+  for (const u of from) {
+    const e = Math.hypot(u.x - focus[0], u.z - focus[1])
+    if (e < d) {
+      d = e
+      best = u
+    }
+  }
+  return best
+}
+
+/** Where ?lookat=<arm>[,<radius m>] starts the camera (src/look/main.ts): on that arm's unit (arms: each arm on the
+ *  page by name, the place of its unit to look at: lookAtUnit), or on the fight's middle (fight), at that zoom (30 m by
+ *  default); null without ?lookat. A clear error for a radius that is not a positive number, or an arm not on the page,
+ *  naming those that are (none under ?sim, nor with ?cavalry=0 and ?artillery=0). (?lookat without ?battle: main.ts's)
+ */
 export function lookAtSpot(
   want: string | null,
   arms: Readonly<Record<string, { x: number; z: number }>>,

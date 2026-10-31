@@ -74,8 +74,10 @@ Decision 0099 (proposed) records the choices below.
    - then the rest stand in column, 40 m behind the front at least and 40 m behind every engaged footprint of their
      side they overlap across (`RESERVE_BACK`), the nearest the front and the middle first, a kind at a time (one
      pass over the grid's spots, which only fill).
-   - The area: the tile less its last 30 m (±370 m), past the camera's ±235 m: the next PR's bigger map takes them
+   - The area: engaged units within the camera's ±235 m play area where they fit, else on the tile less its last
+     30 m (±370 m), counted (`__armies.outsidePlay`); reserves on the whole tile. The next PR's bigger map takes them
      back into the play area. Fails loudly when a side cannot field its reserves.
+   - The budget is filled with the arms on the page alone (`onlyTypes`): 16k is 16,000 under any switch or `?sim`.
    The old `layout` (lines, reserves and close reserves of one drill) and its fixture hashes go
    (~~`test/fixtures/armies-layout-20.json`~~): nothing else uses them.
 5. **The arms** (`ARMS_DEMO`): one list, each a renderer (`Units`): line infantry (the shadow map's owner, `__units`),

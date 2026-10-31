@@ -1,6 +1,7 @@
 // The look page's battle switches (docs/plans/active/division-armies.md): which battle ?battle (or the old ?armies)
-// asks for, and the panel's Battle select (its choices, the address it reloads). No imports: the page reads it at load,
-// the battle itself (src/look/world/battle.ts) only with the armies.
+// asks for, the panel's Battle select (its choices, their labels, the address it reloads) and which arms are on the
+// page. It imports only the switches' reading (src/look/switch.ts): the page reads it at load, the battle itself
+// (src/look/world/battle.ts) only with the armies.
 import { bit } from '../switch.ts'
 
 /** The battle the page asks for (src/look/main.ts): ?battle=<name> (bare: the default), or the old ?armies=<n>
@@ -53,18 +54,23 @@ export function battleOptions(
   if (onMap) return null
   return [
     { value: '', label: 'None' },
-    ...Object.entries(figures).map(([name, n]) => ({ value: name, label: `${name} (${n.toLocaleString('en')})` })),
+    ...Object.entries(figures).map(([name, n]) => ({ value: name, label: battleLabel(name, n) })),
   ]
 }
 
 /** Whether an arm is on the page by its switch (?<name>=0|1, or its group's, ?<group>=0|1, when its own is absent;
- *  another value: an error): by default on, but under ?sim (the sim drives the line infantry alone; another arm asked
- *  for there, an error: its script is a stand-in the sim neither drives nor places against its armies). The first arm
- *  (always) is on the page whatever, ?<name>=0 an error (it owns the figures' shadow map) */
-export function armOn(q: URLSearchParams, name: string, sim: boolean, always = false, group?: string): boolean {
+ *  another value: an error): by default on, but under ?sim (the sim drives the first arm alone; another arm asked for
+ *  there, an error: its script is a stand-in the sim neither drives nor places against its armies). The first arm is
+ *  on the page whatever, ?<first>=0 an error (it owns the figures' shadow map) */
+export function armOn(
+  q: URLSearchParams,
+  arm: { name: string; group?: string },
+  { sim, first }: { sim: boolean; first: string },
+): boolean {
+  const { name, group } = arm
   const own = bit(q, name)
   const of = group === undefined ? null : bit(q, group)
-  if (always) {
+  if (name === first) {
     if (own === false) {
       throw new Error(`?${name}=0: the ${name} is always on the page (it owns the figures' shadow map)`)
     }
@@ -73,7 +79,10 @@ export function armOn(q: URLSearchParams, name: string, sim: boolean, always = f
   const on = own ?? of
   if (on && sim) {
     const k = own === null ? group : name
-    throw new Error(`?${k}=1 with ?sim: the sim drives the line infantry alone; the ${name} is scripted`)
+    throw new Error(`?${k}=1 with ?sim: the sim drives the ${first} alone; the ${name} is scripted`)
   }
   return on ?? !sim
 }
+
+/** The panel's label for a battle: its name and the figures it fields */
+export const battleLabel = (name: string, figures: number): string => `${name} (${figures.toLocaleString('en')})`

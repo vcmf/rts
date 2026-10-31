@@ -12,12 +12,13 @@ import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
 import { ARMIES_DEMO, ARMS_DEMO } from '../src/scenarios/armies-demo.ts'
 import { facingAt, type Battalion } from '../src/look/world/armies.ts'
-import { armFires, armScript, boxOf, type Box } from '../src/look/world/arms.ts'
+import { armScript, boxOf, type Box } from '../src/look/world/arms.ts'
 import {
   FIELD,
   RESERVE_BACK,
   battleLayout,
   figuresOf,
+  onlyTypes,
   orderOfBattle,
   reserveSpots,
   type FieldKind,
@@ -41,10 +42,11 @@ const built = ARMS_DEMO.map(a => {
   return { spec: a, ...armScript(a, t.geometry, t.formations[a.formation].place, speeds) }
 })
 const KINDS: Record<string, FieldKind> = Object.fromEntries(
-  built.map(b => [b.spec.unitType, { work: b.work, rest: b.rest, cycle: b.script.cycle, fires: armFires(b.spec) }]),
+  built.map(b => [b.spec.unitType, { work: b.work, rest: b.rest, cycle: b.script.cycle }]),
 )
 const SIDES = Object.fromEntries(ARMS_DEMO.map(a => [a.unitType, a.sides]))
 const EXTENT = 370
+const AREA = { play: 235, extent: EXTENT }
 
 // the demo map's blocked ground: a bit a sample every 0.5 m over ±370 m, row by row from (−370, −370), read
 // conservatively (blocked when any of the four samples round a point is)
@@ -104,6 +106,21 @@ describe('the order of battle (orderOfBattle)', () => {
       expect(count(o, 'cuirassiers')).toBe(4)
     }
   })
+  // (review round 3: the budget was spent on every type, then the arms left out dropped: ?sim fielded about 12,000
+  // at 16k)
+  it('fills the budget with the arms on the page alone (onlyTypes), whatever is left out', () => {
+    for (const [name, spec] of Object.entries(ARMIES_DEMO.battles)) {
+      for (const types of [['infantry'], ['infantry', 'light', 'battery']]) {
+        const o = orderOfBattle(onlyTypes(spec, types), sizes)
+        expect(
+          o.every(u => types.includes(u.type)),
+          name,
+        ).toBe(true)
+        expect(spec.figures / 2 - figuresOf(o, sizes), `${name} ${types.join()}`).toBeLessThan(240)
+      }
+    }
+    expect(onlyTypes(ARMIES_DEMO.battles['16k'], ['infantry']).once).toEqual([])
+  })
   it('cuts a corps at its first unit that does not fit, and ends the side there', () => {
     const spec = { figures: 2 * (240 + 240 + 100), once: [], repeat: CORPS.infantry }
     const o = orderOfBattle(spec, sizes)
@@ -131,13 +148,16 @@ const boxOfUnit = (type: string, b: Battalion): Box => {
   const f = b.reserve ? KINDS[type].rest : KINDS[type].work
   return boxOf(b.x, b.z, b.heading, f.a0, f.a1, f.z0, f.z1)
 }
-const layouts = new Map<string, { o: Fielded[]; placed: Record<string, Battalion[]>; fellBack: number[] }>()
+const layouts = new Map<
+  string,
+  { o: Fielded[]; placed: Record<string, Battalion[]>; fellBack: number[]; outsidePlay: number[] }
+>()
 const layoutOf = (name: string) => {
   let l = layouts.get(name)
   if (!l) {
     const o = orderOfBattle(ARMIES_DEMO.battles[name], sizes)
-    const { units, fellBack } = battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, demo, SIDES, EXTENT)
-    l = { o, placed: units, fellBack }
+    const { units, fellBack, outsidePlay } = battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, demo, SIDES, AREA)
+    l = { o, placed: units, fellBack, outsidePlay }
     layouts.set(name, l)
   }
   return l
@@ -234,7 +254,7 @@ describe('the layout on the demo map (battleLayout)', () => {
     const o = orderOfBattle(ARMIES_DEMO.battles.typical, sizes)
     // (a field blocked but for a band far back: the template's rows find no spot, all go to reserve)
     const band = (x: number, z: number) => Math.abs(z) < 200 || Math.abs(z) > 360 || Math.abs(x) > 360
-    const { fellBack } = battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, band, SIDES, EXTENT)
+    const { fellBack } = battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, band, SIDES, AREA)
     expect(fellBack[0]).toBeGreaterThan(0)
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/engaged units of side 0 found no legal spot/))
   })
@@ -248,9 +268,24 @@ describe('the layout on the demo map (battleLayout)', () => {
     expect(s[0]).toEqual([0, RESERVE_BACK])
     expect(reserveSpots(EXTENT, FIELD)).toBe(s)
   })
+  // (review round 3: engaged units stood past the camera's play area, where the player cannot pan, though they fit in)
+  it("keeps the engaged units within the camera's play area where they fit, and counts those past it", () => {
+    const { o, placed, outsidePlay } = layoutOf('16k')
+    const past = (side: number) =>
+      Object.values(placed)
+        .flat()
+        .filter(b => b.side === side && !b.reserve && Math.max(Math.abs(b.x), Math.abs(b.z)) > AREA.play).length
+    expect(outsidePlay).toEqual([past(0), past(1)])
+    const tileOnly = battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, demo, SIDES, { play: EXTENT, extent: EXTENT })
+    const wide = (side: number) =>
+      Object.values(tileOnly.units)
+        .flat()
+        .filter(b => b.side === side && !b.reserve && Math.max(Math.abs(b.x), Math.abs(b.z)) > AREA.play).length
+    expect(past(0) + past(1)).toBeLessThan(wide(0) + wide(1))
+  })
   it('fails loudly when a side has no room', () => {
     const o = orderOfBattle(ARMIES_DEMO.battles.typical, sizes)
-    expect(() => battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, (_x, z) => z < 0, SIDES, EXTENT)).toThrow(
+    expect(() => battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, (_x, z) => z < 0, SIDES, AREA)).toThrow(
       /room for only 0 of \d+ reserves for side 0/,
     )
   })
@@ -342,29 +377,34 @@ describe('the page switches (battleChoice, battleHref)', () => {
   // (review round 1: ?infantry=x was silently ignored, every other arm's switch refusing it)
   it("reads each arm's switch, 0 or 1, the first arm always on, the others off under ?sim but asked for", () => {
     const q = (s: string) => new URLSearchParams(s)
-    expect([armOn(q(''), 'cavalry', false), armOn(q('cavalry=0'), 'cavalry', false)]).toEqual([true, false])
-    expect([armOn(q(''), 'cavalry', true), armOn(q('infantry=1'), 'infantry', true, true)]).toEqual([false, true])
-    expect(() => armOn(q('cavalry=1'), 'cavalry', true)).toThrow(/with \?sim/)
-    for (const [s, always] of [
-      ['infantry=x', true],
-      ['cavalry=yes', false],
-    ] as const) {
-      expect(() => armOn(q(s), s.split('=')[0], false, always)).toThrow(/must be 0 or 1/)
-    }
-    expect(() => armOn(q('infantry=0'), 'infantry', false, true)).toThrow(/always on the page/)
+    const on = (s: string, name: string, sim = false) => armOn(q(s), { name }, { sim, first: 'infantry' })
+    expect([on('', 'cavalry'), on('cavalry=0', 'cavalry')]).toEqual([true, false])
+    expect([on('', 'cavalry', true), on('infantry=1', 'infantry', true)]).toEqual([false, true])
+    // (the error names the first arm by its data name, never an era's unit: decision 0015)
+    expect(() => armOn(q('cavalry=1'), { name: 'cavalry' }, { sim: true, first: 'phalanx' })).toThrow(
+      /\?cavalry=1 with \?sim: the sim drives the phalanx alone/,
+    )
+    for (const s of ['infantry=x', 'cavalry=yes']) expect(() => on(s, s.split('=')[0])).toThrow(/must be 0 or 1/)
+    expect(() => on('infantry=0', 'infantry')).toThrow(/always on the page/)
   })
   // (review round 2: ?cavalry=0 had come to mean the light cavalry alone; saved infantry-only addresses drew horses)
   it('leaves every cavalry arm out at ?cavalry=0, each by its own switch, its own winning', () => {
     const on = (s: string) =>
-      ARMS_DEMO.filter((a, i) => armOn(new URLSearchParams(s), a.name, false, i === 0, a.group)).map(a => a.name)
+      ARMS_DEMO.filter(a => armOn(new URLSearchParams(s), a, { sim: false, first: ARMS_DEMO[0].name })).map(a => a.name)
     expect(on('cavalry=0&artillery=0')).toEqual(['infantry', 'light'])
     expect(on('lightcav=0')).toEqual(['infantry', 'light', 'artillery', 'cuirassiers'])
     expect(on('cuirassiers=0')).toEqual(['infantry', 'light', 'artillery', 'lightcav'])
     expect(on('cavalry=0&cuirassiers=1')).toEqual(['infantry', 'light', 'artillery', 'cuirassiers'])
-    expect(() => armOn(new URLSearchParams('cavalry=1'), 'lightcav', true, false, 'cavalry')).toThrow(
-      /\?cavalry=1 with/,
-    )
-    expect(() => armOn(new URLSearchParams('cavalry=2'), 'lightcav', false, false, 'cavalry')).toThrow(/must be 0 or 1/)
+    expect(() =>
+      armOn(new URLSearchParams('cavalry=1'), { name: 'lightcav', group: 'cavalry' }, { sim: true, first: 'infantry' }),
+    ).toThrow(/\?cavalry=1 with/)
+    expect(() =>
+      armOn(
+        new URLSearchParams('cavalry=2'),
+        { name: 'lightcav', group: 'cavalry' },
+        { sim: false, first: 'infantry' },
+      ),
+    ).toThrow(/must be 0 or 1/)
   })
   it('names ?battle, not ?armies, in the WebGL2 error (the page, src/look/main.ts)', () => {
     const main = readFileSync(new URL('../src/look/main.ts', import.meta.url), 'utf8')

@@ -782,16 +782,18 @@ its uniforms by name) and the figures' unit data by file (`data/figures/<figure>
   corps, then its `repeat` corps again and again, each unit taken while it fits in half the budget; a corps is cut at
   its first unit that does not fit and the side ends there; a corps of no figures refused), laid out (`battleLayout`)
   on the tile less its last 30 m (±370 m: past the camera's ±235 m play area until the bigger map), each side on its
-  own half, 110 m between the fronts (`FIELD`), under two **friendly-line rules**: no unit stands before a firing unit
-  of its side (a drill's, a battery's) it overlaps across, and no engaged unit stands behind another of its side it
-  overlaps across ("before" and "behind" by each side's own way; along the front an engaged unit's ground is its
-  own). The first two repeated corps a side stand side by side along the front, each one row from its outer flank to
+  own half, 110 m between the fronts (`FIELD`), under the **friendly-line rule**: along the front an engaged unit's
+  ground is its own (no unit of its side overlaps it across but reserves, behind it), so no unit stands before a
+  firing unit of its side, and no engaged unit behind another ("before" and "behind" by each side's own way). The
+  budget is filled with the arms on the page alone (`onlyTypes`), so a battle fields its size under any arm switch
+  or `?sim`. The first two repeated corps a side stand side by side along the front, each one row from its outer flank to
   the middle (`Deploy`: its posts left to right, a corps right of the middle mirrored): a light cavalry regiment
   riding up to the front (its ride ending there), its light infantry, its battery in the line, two line units
   deploying and firing, so the line infantry of both corps meet at the middle. Each takes the legal spot nearest its
-  post's (`placeArm` with `back`, never ahead of it, and `allows`, no engaged box of its side across it); one with
-  none joins the reserve, with a warning, and is counted (`fellBack`, `__armies.fellBack`: uneven sides for the bench
-  to see). Then the rest stand at rest in column, 40 m behind the front at least and 40 m behind every engaged
+  post's (`placeArm` with `back`, never ahead of it, and `allows`, no engaged box of its side across it), within the
+  camera's ±235 m play area where one is, else on the rest of the tile (counted, `outsidePlay`,
+  `__armies.outsidePlay`: where the player cannot pan); one with none joins the reserve, with a warning, and is
+  counted (`fellBack`, `__armies.fellBack`: uneven sides for the bench to see). Then the rest stand at rest in column, 40 m behind the front at least and 40 m behind every engaged
   footprint of their side they overlap across (`RESERVE_BACK`), the nearest the front and the middle first on a 5 m
   grid (`reserveSpots`, only spots on the field), each type's pass resuming where its last unit stood (a spot refused
   stays refused: the engaged boxes are fixed, the ground only fills). Water, trees (bushes are walked through), the
@@ -837,7 +839,9 @@ its uniforms by name) and the figures' unit data by file (`data/figures/<figure>
   `__armies.arms` holds them by name; `__armies.coats` stays the line infantry's (the guard measures them);
   `__armies.battle` and `__armies.figures` name the battle and its figures (the ruleset's: a battery's 48, drawn as
   its 4 pieces), `__armies.fellBack` each side's engaged units with no legal spot. The panel labels each battle by the
-  figures it fields (`BATTLE_FIGURES`, checked against `orderOfBattle`). Two arms drawn with one figure (the light
+  figures it fields (`BATTLE_FIGURES`, checked against `orderOfBattle`; the chosen one relabelled with what the page
+  fields once the armies are up), and is wired before they load (it works while they load or if they fail).
+  `?lookat=<arm>` looks at the arm's unit nearest the fight's middle within the play area (`lookAtUnit`). Two arms drawn with one figure (the light
   infantry, the light cavalry) each build that figure's GPU resources again (#313). Under `?sim` (the sim plays the line infantry) the other arms are left out (their scripts are
   stand-ins the sim neither drives nor places against its armies); `?<arm>=1` with `?sim` is an error.
 - **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
