@@ -26,6 +26,7 @@ import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 import { cardMaterial, cardMesh, leafLoss, placeCards, type CardOptions } from './canopy.ts'
 import { CLUMP_REACH, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
+import { fading, firstSide, stepFade, treeSide } from './tree-fade.ts'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 
 // a generated tree (prototypes/tree-core.js) adds: per crown vertex its clump, the clumps' ellipsoids (centre,
@@ -1207,12 +1208,13 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
 // surrounds the tile). Just before the game camera draws, when its view or the season has changed, each instance is
 // tested against the view's frustum (a sphere at its crown, SPHERE_K of its size and SPHERE_PAD m its radius: it
 // holds the crown and its cards); those in view nearer than CARDS_M go to the cards' meshes, the farther ones to the
-// crown mesh (no alpha test; lit as the cards are), and over FADE_M either side of it to both, the cards giving way to
-// the crown mesh pixel by pixel (a dither, aFade: no pop as a tree crosses it); each packed to the front of its
-// buffers, whose count is set to them, a mesh with none hidden (a count of 0 is drawn as one model at the origin).
-// Without cards the crown mesh takes every distance; a deciduous model past BARE_FROM's leaf loss keeps its cards at
-// every distance (cardsAll). all(true) draws every one with its cards (the shadow pass, which can also call it from a
-// readiness check that never draws: the game camera's next draw undoes it)
+// crown mesh (no alpha test; lit as the cards are), and a tree that has just crossed it (src/look/tree-fade.ts) to
+// both for FADE_S seconds, the cards giving way to the crown mesh pixel by pixel (a dither, aFade: no pop as a tree
+// crosses it, and none left half dithered at rest, re-packed every frame until each has run); each packed to the
+// front of its buffers, whose count is set to them, a mesh with none hidden (a count of 0 is drawn as one model at
+// the origin). Without cards the crown mesh takes every distance; a deciduous model past BARE_FROM's leaf loss keeps
+// its cards at every distance (cardsAll). all(true) draws every one with its cards (the shadow pass, which can also
+// call it from a readiness check that never draws: the game camera's next draw undoes it)
 interface FarGroup {
   meshes: Mesh[]
   buf: Float32Array
@@ -1223,8 +1225,6 @@ interface FarGroup {
 }
 const SPHERE_K = 1.6
 const SPHERE_PAD = 3
-const CARDS_M = 220
-const FADE_M = 30
 // frames
 const WARM_MAX = 600
 // a mesh whose material reads the fade (the far cards and crown meshes)
@@ -1264,6 +1264,8 @@ function farCuller(
       fade: new Float32Array(n).fill(1),
       meshes: carded ? g.meshes.slice(0, 1) : [],
     }
+    // each tree's side (src/look/tree-fade.ts: 0 its cards, 1 its crown mesh) and its fade toward it, frame to frame
+    const state = { side: new Uint8Array(n), fade: new Float32Array(n) }
     for (const side of [near, far]) {
       for (const m of side.meshes) {
         m.thinInstanceSetBuffer('matrix', side.buf, 16, false)
@@ -1284,7 +1286,7 @@ function farCuller(
         i * 4,
       ),
     )
-    return { g, near, far, c, carded }
+    return { g, near, far, c, carded, state }
   })
   // the crown mesh: no cards' swap for the far trees (drawGroup's far)
   for (const w of work) w.g.meshes[0].setEnabled(true)
@@ -1313,12 +1315,23 @@ function farCuller(
   let full = false
   let last = ''
   let dead = false
-  const pack = (all: boolean) => {
+  // the first pack snaps every tree to its side (stepFade's Infinity); a fade still running re-packs the next frame
+  let snap = true
+  let running = false
+  /** Each tree's side and fade a frame of dt seconds on (out of view, or dt Infinity: snapped), from its squared
+   *  distance to the camera (m²); returns the fade it is drawn at */
+  const advance = (st: { side: Uint8Array; fade: Float32Array }, i: number, d2: number, dt: number) => {
+    const side = dt === Infinity ? firstSide(d2) : treeSide(d2, st.side[i])
+    st.side[i] = side
+    st.fade[i] = stepFade(st.fade[i], side, dt)
+    return st.fade[i]
+  }
+  // all: every tree with its cards, no tree's state changed (the shadow pass); dt: the frame's seconds
+  const pack = (all: boolean, dt: number) => {
     const cam = scene.activeCamera!
     const planes = all ? [] : Frustum.GetPlanes(cam.getTransformationMatrix())
     const P = cam.position
-    const A2 = (CARDS_M - FADE_M) ** 2
-    const B2 = (CARDS_M + FADE_M) ** 2
+    if (!all) running = false
     for (const w of work) {
       let nn = 0
       let nf = 0
@@ -1328,6 +1341,10 @@ function farCuller(
         const y = w.c[i * 4 + 1]
         const z = w.c[i * 4 + 2]
         const r = w.c[i * 4 + 3]
+        const dx = x - P.x
+        const dy = y - P.y
+        const dz = z - P.z
+        const d2 = dx * dx + dy * dy + dz * dz
         let out = false
         for (let j = 0; j < planes.length; j++) {
           const p = planes[j]
@@ -1336,19 +1353,10 @@ function farCuller(
             break
           }
         }
+        // the fade: 0 its cards only, 1 its crown mesh only, between them both, each drawing the dither's share
+        const f = every ? 0 : advance(w.state, i, d2, out ? Infinity : dt)
         if (out) continue
-        // the fade: 0 nearer than CARDS_M - FADE_M (cards only), 1 past CARDS_M + FADE_M (crown mesh only), between
-        // them both, each drawing the dither's share
-        const dx = x - P.x
-        const dy = y - P.y
-        const dz = z - P.z
-        const d2 = dx * dx + dy * dy + dz * dz
-        const f =
-          every || d2 <= A2
-            ? 0
-            : d2 >= B2
-              ? 1
-              : (t => t * t * (3 - 2 * t))((Math.sqrt(d2) - CARDS_M + FADE_M) / (2 * FADE_M))
+        if (fading(f)) running = true
         if (f < 1) {
           put(w.near, nn, w.g, i, f)
           nn++
@@ -1385,6 +1393,7 @@ function farCuller(
       if (warm >= WARM_MAX) console.warn('far trees: a material was not ready after the warm-up: culling without it')
       warm = -1
       last = ''
+      snap = true
     }
     if (full) {
       full = false
@@ -1393,9 +1402,10 @@ function farCuller(
     cam.getViewMatrix()
     cam.getProjectionMatrix()
     const key = `${season()} ${cam.getTransformationMatrix().asArray().join(',')}`
-    if (key !== last) {
+    if (key !== last || running) {
       last = key
-      pack(false)
+      pack(false, snap ? Infinity : scene.getEngine().getDeltaTime() / 1000)
+      snap = false
     }
   })
   // off: no far tree at all, its shadows included (the ?far=off A/B): every count 0, never packed again
@@ -1403,7 +1413,7 @@ function farCuller(
     all(on: boolean) {
       if (on && !dead) {
         full = true
-        pack(true)
+        pack(true, 0)
       }
     },
     off() {
