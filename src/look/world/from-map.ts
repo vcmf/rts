@@ -104,7 +104,7 @@ const maxOf = (a: Float32Array): number => a.reduce((v, x) => Math.max(v, x), -I
 
 /**
  * Throws unless the window's tile (side `tile` m) lies inside the layers. Its far ring runs past the map's edge
- * (docs/plans/active/g3a-the-whole-map-far.md): there the edge's heights are held (`heightOf` clamps) and the cover is
+ * (docs/plans/done/g3a-the-whole-map-far.md): there the edge's heights are held (`heightOf` clamps) and the cover is
  * the default (meadow: `groundClass` of no cell), with no ways, water or trees (`cellAt` is −1 off the layers); the
  * page paints it paper (the world's edge: mapRects).
  */

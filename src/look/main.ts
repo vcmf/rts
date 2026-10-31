@@ -117,7 +117,7 @@ const worldGround =
   look.world.kind === 'map'
     ? groundOf(D.spec, look.hf, look.far, null, look.world.play)
     : groundOf(D.spec, look.hf, look.far, D.spec.camera.focusY)
-// the far ring's rectangle (a map world's the whole map: G3a, docs/plans/active/g3a-the-whole-map-far.md)
+// the far ring's rectangle (a map world's the whole map: G3a, docs/plans/done/g3a-the-whole-map-far.md)
 const ring = rectOf(look.far)
 checkView(D.spec, worldGround)
 const canvas = document.getElementById('c') as HTMLCanvasElement

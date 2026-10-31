@@ -8,7 +8,7 @@ precision highp float;varying vec3 vW,vN;varying float vRiver;
 uniform sampler2D uRiverMask;
 #endif
 #ifdef COARSE_LIGHT
-// a map world's coarse light off the tile (G3a, docs/plans/active/g3a-the-whole-map-far.md): the map's soft sun shadow
+// a map world's coarse light off the tile (G3a, docs/plans/done/g3a-the-whole-map-far.md): the map's soft sun shadow
 // and open sky (src/render/lit/bake.ts, bakeLight) in the light map's place, no mist, no contact
 uniform sampler2D uCoarse;
 vec4 coarseLM(vec3 wp,vec4 lm){

@@ -121,7 +121,7 @@ the colour (`RELIEF`, `reliefTone` in `src/look/shaders/macro.glsl`; static ligh
 arm's colour and on the live roads' and yards' paint (`shore.glsl`), so they match the ground beside them. 1 on a map world by
 default, 2 stronger; off on the demo unless asked (`?relief=1` to judge it there).
 
-**The whole map far (G3a, `docs/plans/active/g3a-the-whole-map-far.md`).** A map world's far ring is its whole map:
+**The whole map far (G3a, `docs/plans/done/g3a-the-whole-map-far.md`).** A map world's far ring is its whole map:
 `ringFor` (`src/look/spec.ts`) lays it on the demo's far grid (14.3 m cells, the tile's edges on its lines, so the
 apron joins them), holding the map's play area (`map.play` about the map's centre, not the window's) and the camera's
 widest footprint past it, on the map's whole range of heights (Austerlitz: 291² nodes, 4.1 km). Its rectangle is the

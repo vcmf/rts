@@ -1,5 +1,5 @@
 // Vitest's global setup: the map windows' look data is built, not committed (G3a,
-// docs/plans/active/g3a-the-whole-map-far.md), so a missing or out-of-version one is built before the tests read it.
+// docs/plans/done/g3a-the-whole-map-far.md), so a missing or out-of-version one is built before the tests read it.
 import { buildMissingWindows } from '../tools/build-look-data.ts'
 
 export default function setup(): void {

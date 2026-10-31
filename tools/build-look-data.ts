@@ -243,7 +243,7 @@ const emptySpans = (n: number, cell: number, ch: number): SpanGrid => ({
 /**
  * A map's window as look data (src/look/world/from-map.ts): its heights, cover, roads and trees from the map's layers;
  * no river, water or bank normals yet (the plan's PR c). Its far ring is the whole map (G3a,
- * docs/plans/active/g3a-the-whole-map-far.md): the play area and the camera's widest footprint past it (on the map's
+ * docs/plans/done/g3a-the-whole-map-far.md): the play area and the camera's widest footprint past it (on the map's
  * whole range of heights, a bound), its own cover at the far bake's texels, and the map's coarse light (bakeLight on
  * its true heights, the look's sun). `map`: the expanded map; `L`: its layers.
  */

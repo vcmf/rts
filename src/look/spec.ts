@@ -152,7 +152,7 @@ export interface WorldGround {
 }
 
 /**
- * A map world's far ring (G3a, docs/plans/active/g3a-the-whole-map-far.md): its nodes on the demo's far grid (far
+ * A map world's far ring (G3a, docs/plans/done/g3a-the-whole-map-far.md): its nodes on the demo's far grid (far
  * cells of `farCell` m, the tile's edges on grid lines, so the apron joins them), holding the play area and `reach` m
  * past it each way, at least a far cell past the tile; square, its extra cells on the far side. The demo's ring is
  * SPEC.far about the origin.

@@ -11,7 +11,7 @@ import { packCover, unpackCover, type CoverGrid } from './cover.ts'
 
 // 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/done/roads.md); 9: the world it holds
 // (the demo, or a map's window) and a map world's trees (docs/plans/active/look-austerlitz-a1.md); 10: a map world's
-// far ring the whole map, its cover and its coarse light (docs/plans/active/g3a-the-whole-map-far.md)
+// far ring the whole map, its cover and its coarse light (docs/plans/done/g3a-the-whole-map-far.md)
 export const LOOK_VERSION = 10
 
 // the trees' species a map world's data names by index (src/look/world/from-map.ts; the page draws each as its

@@ -57,7 +57,7 @@ const PAPER = [1, 3, 5].map(k => parseInt(STAFF_PAPER[0].slice(k, k + 2), 16) / 
 const glsl = (v: number) => v.toFixed(3)
 
 /**
- * The far ring's own defines on a map world (G3a, docs/plans/active/g3a-the-whole-map-far.md): the map's coarse light
+ * The far ring's own defines on a map world (G3a, docs/plans/done/g3a-the-whole-map-far.md): the map's coarse light
  * off the tile (COARSE_LIGHT: its texture's corner and size, a node at a texel's centre) and the paper past the map's
  * edge (MAP_EDGE); none on the demo.
  */
