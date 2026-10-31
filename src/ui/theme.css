@@ -1,0 +1,312 @@
+/*
+  The game's interface language (decision 0100): tokens and elements, shared by every interface page.
+  Specimen sheet: app/ui-kit.html. As built: docs/systems/front-menu.md; origin: docs/proposals/staff-map/design.md §8.
+
+  Paper and ink; colour belongs to the armies, plus one accent for what the player selects.
+  Hairline frames with crosshair ticks at two corners; the ticks grow when an element has attention.
+  Pencil (grey, dashed) marks what is not available yet. Flat: no shadows, no rounded corners.
+  Each interactive element also takes .is-hover / .is-focus / .is-active, so the kit can show its states side by side.
+  Needs the fonts: Instrument Sans (condensed titles), Hanken Grotesk (text), JetBrains Mono (labels and data).
+*/
+
+@property --tick { syntax: '<length>'; inherits: true; initial-value: 72px; }
+
+/* ---------- Tokens ---------- */
+
+:root {
+  --paper: #ece3d2;
+  --paper-hi: #f6efe3;          /* raised paper: inside frames */
+  --paper-lo: #e2d7c3;          /* sunk paper: wells, tracks */
+  --ink: #2b2824;               /* warm graphite, never pure black */
+  --ink-soft: #5d564c;          /* body text */
+  --pencil: #8a847a;            /* labels, and everything not available yet */
+  --rule: rgba(43, 40, 36, 0.22);
+  --accent: #a4532b;            /* the one selection accent */
+  --paint: #2f2a23;             /* behind paintings while they load */
+
+  --sans: 'Hanken Grotesk', system-ui, sans-serif;
+  --display: 'Instrument Sans', 'Arial Narrow', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --ease: cubic-bezier(.2, .7, .2, 1);
+
+  /* Paper: fibre grain, faint foxing and a soft vignette. */
+  --paper-texture:
+    radial-gradient(ellipse at 18% 12%, rgba(160, 120, 60, 0.07), transparent 45%),
+    radial-gradient(ellipse at 85% 90%, rgba(140, 100, 50, 0.08), transparent 50%),
+    radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(90, 70, 40, 0.12) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .28 0 0 0 0 .2 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* --army: an army's colour, set on an element from data (src/ui/dom.ts paintArmy); ink where none is set. */
+
+/* ---------- Base ---------- */
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body {
+  color: var(--ink);
+  font: 15px/1.5 var(--sans);
+  background: var(--paper-texture), var(--paper);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+::selection { background: var(--ink); color: var(--paper); }
+:focus-visible { outline: 1px dashed var(--accent); outline-offset: 4px; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---------- Type ---------- */
+
+.display { font-family: var(--display); font-stretch: 75%; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; line-height: 0.95; }
+.mono { font: 500 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.data { font: 400 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
+.lede { color: var(--ink-soft); max-width: 62ch; }
+
+/* ---------- Lines ---------- */
+
+.double-rule { height: 4px; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
+.hairline { height: 1px; background: var(--rule); }
+
+/* The plate: a fine double neatline around the whole screen, as on an atlas page. */
+.plate {
+  position: fixed; inset: 14px; pointer-events: none; z-index: 1;
+  border: 1px solid var(--rule);
+  outline: 1px solid var(--rule); outline-offset: -5px;
+}
+
+/* ---------- The frame: hairline box with crosshair ticks at two corners ---------- */
+
+.frame {
+  --tick: 72px;
+  position: relative;
+  border: 1px solid var(--ink);
+  background: var(--paper-hi);
+  transition: --tick 0.35s var(--ease), background-color 0.2s, border-color 0.2s;
+}
+.frame::before {
+  content: ''; position: absolute; inset: -16px; pointer-events: none;
+  --c: var(--frame-tick, var(--ink));
+  background:
+    linear-gradient(var(--c), var(--c)) left 0 top 8px / var(--tick) 1px no-repeat,
+    linear-gradient(var(--c), var(--c)) left 8px top 0 / 1px calc(var(--tick) * 0.75) no-repeat,
+    linear-gradient(var(--c), var(--c)) right 0 bottom 8px / var(--tick) 1px no-repeat,
+    linear-gradient(var(--c), var(--c)) right 8px bottom 0 / 1px calc(var(--tick) * 0.75) no-repeat;
+}
+.frame.small { --tick: 36px; }
+.frame.small::before { inset: -10px; background-position: left 0 top 5px, left 5px top 0, right 0 bottom 5px, right 5px bottom 0; }
+.frame.army { --frame-tick: var(--army, var(--accent)); border-color: var(--army, var(--accent)); }
+.frame.pencil { border: 1px dashed var(--pencil); background: transparent; --frame-tick: rgba(138, 132, 122, 0.55); --tick: 40px; }
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 9px 14px; border: 1px solid var(--ink); background: var(--paper-hi);
+  font: 500 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+.btn:is(:hover, .is-hover), .btn:is(:focus-visible, .is-focus) { border-color: var(--accent); color: var(--accent); }
+.btn:is(:active, .is-active) { transform: translateY(1px); background: var(--paper-lo); }
+
+.btn.solid { background: var(--ink); color: var(--paper-hi); border-color: var(--ink); }
+.btn.solid:is(:hover, .is-hover, :focus-visible, .is-focus) { background: var(--accent); border-color: var(--accent); color: var(--paper-hi); }
+
+.btn.link { border-color: transparent; background: none; padding-inline: 2px; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--rule); }
+.btn.link:is(:hover, .is-hover) { text-decoration-color: currentColor; }
+
+.btn:is(:disabled, .muted) { border: 1px dashed var(--pencil); color: var(--pencil); background: transparent; cursor: not-allowed; transform: none; }
+
+/* The large call to action ("Begin the battle"): a framed display-type button whose ticks grow. */
+.btn-big { --tick: 54px; padding: 14px 26px; font: 600 26px/1 var(--display); font-stretch: 75%; text-transform: uppercase; letter-spacing: 0.03em; }
+.btn-big:is(:hover, .is-hover, :focus-visible, .is-focus) { --tick: 110px; --frame-tick: var(--accent); border-color: var(--accent); color: var(--accent); outline: none; }
+
+/* A key the player presses, shown in text; on an inked button it is drawn in the button's own colour. */
+.key { display: inline-block; min-width: 20px; padding: 1px 6px; text-align: center; border: 1px solid var(--ink); border-bottom-width: 2px; background: var(--paper-hi); font: 500 11px/1.5 var(--mono); }
+.btn.solid .key { background: transparent; color: inherit; border-color: currentColor; }
+
+/* ---------- Menu items ---------- */
+
+.menu { display: grid; gap: 22px; padding: 0 18px; }
+.menu-item {
+  display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 14px;
+  padding: 16px 22px; text-align: left;
+}
+.menu-item .no { color: var(--pencil); }
+.menu-item .label { font-size: 30px; }
+.menu-item .hint { display: block; color: var(--ink-soft); font: 400 13px/1.5 var(--sans); margin-top: 4px; letter-spacing: 0; text-transform: none; }
+.menu-item .go { opacity: 0; transform: translateX(-6px); transition: 0.25s; }
+.menu-item:not(.muted):is(:hover, :focus-visible, .sel, .is-hover) { --tick: 116px; --frame-tick: var(--accent); border-color: var(--accent); outline: none; }
+.menu-item:not(.muted):is(:hover, :focus-visible, .sel, .is-hover) :is(.go, .no) { opacity: 1; transform: none; color: var(--accent); }
+
+/* Muted: drawn in pencil, like an order not yet carried out. */
+.menu-item.muted { cursor: not-allowed; border-color: var(--pencil); border-style: dashed; background: transparent; --frame-tick: rgba(138, 132, 122, 0.55); --tick: 40px; }
+.menu-item.muted .label, .menu-item.muted .hint { color: var(--pencil); }
+.menu-item.muted:hover .tag { color: var(--ink-soft); }
+
+/* ---------- Labels: tags and crumbs ---------- */
+
+.tag { display: inline-block; padding: 3px 7px; border: 1px solid currentColor; color: var(--pencil); white-space: nowrap; font: 500 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.tag.ink { color: var(--ink); }
+.tag.new { color: var(--paper-hi); background: var(--accent); border-color: var(--accent); }
+.tag.army { color: var(--army); }
+/* A stamp: rotated, for verdicts written across something (Intercepted, Victory). */
+.tag.stamp { color: var(--accent); border-width: 2px; padding: 4px 10px; transform: rotate(-4deg); font-weight: 600; }
+
+.crumbs { display: flex; gap: 10px; align-items: center; color: var(--ink-soft); }
+.crumbs button { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--rule); }
+.crumbs button:hover { color: var(--accent); text-decoration-color: currentColor; }
+
+/* ---------- Tabs and chips ---------- */
+
+.tabs { display: flex; flex-wrap: wrap; gap: 8px 26px; align-items: flex-end; border-bottom: 1px solid var(--ink); }
+.tab { padding: 0 0 10px; font-size: 26px; color: var(--pencil); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.tab:is(:hover, .is-hover) { color: var(--ink); }
+.tab[aria-selected='true'] { color: var(--ink); border-color: var(--ink); }
+
+.chip { display: inline-flex; align-items: center; gap: 9px; padding: 7px 12px; border: 1px solid var(--rule); color: var(--ink-soft); font: 500 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.chip:is(:hover, .is-hover) { border-color: var(--ink); color: var(--ink); }
+.chip[aria-pressed='true'] { border-color: var(--ink); color: var(--ink); background: var(--paper-hi); }
+.chip:disabled { opacity: 0.4; cursor: not-allowed; }
+.chip .sw { width: 10px; height: 10px; background: var(--army, var(--ink)); }
+.chip .n { color: var(--pencil); }
+.chip.dashed { border-style: dashed; }
+.chip.dashed[aria-pressed='true'] { border-style: solid; }
+
+/* An army's mark: a flat square of its colour, as its blocks are on the staff map. */
+.sw { display: inline-block; width: 12px; height: 12px; background: var(--army, var(--ink)); flex: none; }
+
+/* ---------- Settings controls ---------- */
+
+.field { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(0, 1.4fr); align-items: center; gap: 18px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.field > label, .field > .label { color: var(--ink); }
+.field .help { display: block; color: var(--pencil); font-size: 13px; }
+@media (max-width: 560px) { .field { grid-template-columns: minmax(0, 1fr); gap: 10px; } }
+
+/* Switch: an ink square that slides along a hairline track; on fills the track. */
+.switch { display: inline-flex; align-items: center; gap: 12px; font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--pencil); }
+.switch .track { position: relative; width: 40px; height: 18px; border: 1px solid var(--ink); background: var(--paper-hi); transition: background-color 0.2s; }
+.switch .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: var(--ink); transition: transform 0.25s var(--ease), background-color 0.2s; }
+.switch[aria-checked='true'] { color: var(--ink); }
+.switch[aria-checked='true'] .track { background: var(--ink); }
+.switch[aria-checked='true'] .track::after { transform: translateX(22px); background: var(--paper-hi); }
+.switch:is(:hover, .is-hover) .track { border-color: var(--accent); }
+
+/* Range: the staff map's scale bar, alternating ink and paper segments, with a needle. */
+.range { display: flex; align-items: center; gap: 14px; }
+.range output { min-width: 4ch; text-align: right; font: 400 13px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.range input { -webkit-appearance: none; appearance: none; flex: 1; height: 22px; background: none; margin: 0; cursor: pointer; }
+.range input::-webkit-slider-runnable-track {
+  height: 6px; border: 1px solid var(--ink);
+  background:
+    linear-gradient(var(--ink), var(--ink)) 0 0 / var(--fill, 50%) 100% no-repeat,
+    repeating-linear-gradient(90deg, var(--paper-lo) 0 10%, var(--paper-hi) 10% 20%);
+}
+.range input::-moz-range-track { height: 6px; border: 1px solid var(--ink); background: repeating-linear-gradient(90deg, var(--paper-lo) 0 10%, var(--paper-hi) 10% 20%); }
+.range input::-moz-range-progress { height: 6px; background: var(--ink); }
+.range input::-webkit-slider-thumb { -webkit-appearance: none; width: 3px; height: 20px; margin-top: -8px; background: var(--ink); border: 0; }
+.range input::-moz-range-thumb { width: 3px; height: 20px; background: var(--ink); border: 0; border-radius: 0; }
+.range input:is(:hover, :focus-visible)::-webkit-slider-thumb { background: var(--accent); }
+.range input:focus-visible { outline: none; }
+
+/* Segmented choice: joined hairline cells, the chosen one inked. */
+.seg { display: inline-flex; justify-self: start; width: fit-content; border: 1px solid var(--ink); }
+.seg button { padding: 7px 12px; font: 500 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+.seg button + button { border-left: 1px solid var(--ink); }
+.seg button:hover { color: var(--accent); }
+.seg button[aria-pressed='true'] { background: var(--ink); color: var(--paper-hi); }
+.seg button:disabled { color: var(--pencil); text-decoration: line-through; cursor: not-allowed; }
+
+/* Check: a hairline box; checked is an inked square inside it, like a filled-in form. */
+.check { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+.check input { -webkit-appearance: none; appearance: none; margin: 0; width: 16px; height: 16px; border: 1px solid var(--ink); background: var(--paper-hi); display: grid; place-items: center; cursor: pointer; }
+.check input::after { content: ''; width: 8px; height: 8px; background: var(--ink); transform: scale(0); transition: transform 0.15s var(--ease); }
+.check input:checked::after { transform: scale(1); }
+.check input:disabled { border-style: dashed; border-color: var(--pencil); }
+.check input:disabled + span { color: var(--pencil); }
+
+/* Select and text input: writing on a ruled line. */
+.select, .input {
+  -webkit-appearance: none; appearance: none; width: 100%;
+  padding: 7px 26px 7px 0; border: 0; border-bottom: 1px solid var(--ink); background: transparent;
+  font: 15px/1.4 var(--sans); color: var(--ink); border-radius: 0;
+}
+.select {
+  cursor: pointer;
+  background: linear-gradient(45deg, transparent 50%, var(--ink) 50%) right 8px center / 5px 5px no-repeat,
+              linear-gradient(-45deg, transparent 50%, var(--ink) 50%) right 3px center / 5px 5px no-repeat;
+}
+.input::placeholder { color: var(--pencil); }
+.select:focus-visible, .input:focus-visible { outline: none; border-bottom-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+
+/* ---------- Gauges ---------- */
+
+/* Meter: ten cells; filled cells in the army's colour (or ink), the rest empty. Low turns the accent. */
+.meter { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; height: 8px; }
+.meter i { border: 1px solid var(--ink); }
+.meter i.on { background: var(--army, var(--ink)); border-color: var(--army, var(--ink)); }
+.meter.low i.on { background: var(--accent); border-color: var(--accent); }
+
+/* Progress: a scale-bar track filled with ink from the left. */
+.progress { height: 8px; border: 1px solid var(--ink); background: repeating-linear-gradient(90deg, var(--paper-lo) 0 5%, var(--paper-hi) 5% 10%); }
+.progress > i { display: block; height: 100%; width: var(--p, 0%); background: var(--ink); transition: width 0.3s; }
+
+/* ---------- Overlays ---------- */
+
+/* Tooltip: a callout on a leader line, as a map annotates a place. */
+.tip { position: relative; display: inline-block; max-width: 240px; padding: 9px 12px; background: var(--paper-hi); border: 1px solid var(--ink); font-size: 13px; color: var(--ink-soft); }
+.tip .mono { display: block; color: var(--ink); margin-bottom: 3px; }
+.tip::before { content: ''; position: absolute; left: 18px; top: -22px; width: 1px; height: 22px; background: var(--ink); }
+.tip::after { content: ''; position: absolute; left: 15px; top: -26px; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
+
+/* Dialog: a framed sheet on a veil of paper. */
+.veil { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: rgba(236, 227, 210, 0.86); animation: rise 0.25s ease both; }
+.dialog { width: min(460px, 100%); padding: 26px 28px 22px; display: grid; gap: 14px; --tick: 96px; }
+.dialog h3 { margin: 0; font-size: 34px; }
+.dialog p { margin: 0; color: var(--ink-soft); }
+.dialog .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
+/* Dispatch: a message that arrives (campaign letters, battle reports). Army edge on the left; an intercepted one is pencil with a stamp. */
+.dispatch { position: relative; display: grid; gap: 6px; width: min(360px, 100%); padding: 12px 16px 14px 18px; background: var(--paper-hi); border: 1px solid var(--ink); border-left: 4px solid var(--army, var(--ink)); animation: rise 0.3s ease both; }
+.dispatch .from { display: flex; justify-content: space-between; color: var(--pencil); }
+.dispatch .body { font-size: 14px; color: var(--ink); }
+.dispatch.intercepted { border-style: dashed; border-left-style: solid; background: transparent; }
+.dispatch.intercepted .body { color: var(--ink-soft); }
+.dispatch .tag.stamp { position: absolute; right: 12px; bottom: 10px; }
+
+/* ---------- Cards ---------- */
+
+.card { --tick: 46px; display: grid; align-content: start; gap: 12px; text-align: left; background: none; border: 0; }
+.card .frame { padding: 8px; }
+.card img { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: var(--paint); }
+.card .cap { display: grid; gap: 3px; padding: 0 2px; }
+.card .fig { color: var(--pencil); display: flex; justify-content: space-between; }
+.card .name { font-size: 22px; }
+.card .detail { color: var(--ink-soft); font-size: 13px; line-height: 1.35; }
+.card:is(:hover, :focus-visible, .is-hover) { outline: none; }
+.card:is(:hover, :focus-visible, .is-hover) .frame { --tick: 92px; --frame-tick: var(--army, var(--accent)); border-color: var(--army, var(--accent)); }
+.card:is(:hover, :focus-visible, .is-hover) .name { color: var(--army, var(--accent)); }
+
+/* ---------- In battle ---------- */
+
+/* Cartouche (top left): the battle's name, a mono line of time and weather, a double rule. */
+.cartouche { display: grid; gap: 6px; width: fit-content; }
+.cartouche .name { font-size: 40px; }
+.cartouche .data { color: var(--ink-soft); }
+
+/* Status bar (bottom edge): mono, live dot, clock, scale, season. */
+.status { display: flex; gap: 22px; color: var(--ink-soft); font: 500 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.status .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 8px; vertical-align: 1px; }
+.status .right { margin-left: auto; }
+
+/* Unit panel: the selected formation. Its army's colour edges it; meters for strength, order, ammunition. */
+.unit-panel { display: grid; grid-template-columns: 84px 1fr; gap: 16px; padding: 14px; width: min(440px, 100%); --tick: 60px; --frame-tick: var(--army, var(--accent)); border-color: var(--army, var(--accent)); }
+.unit-panel img { width: 84px; aspect-ratio: 2 / 3; object-fit: cover; display: block; background: var(--paint); }
+.unit-panel h4 { margin: 0; font-size: 24px; }
+.unit-panel .stats { display: grid; grid-template-columns: 82px 1fr 34px; gap: 6px 10px; align-items: center; margin-top: 10px; }
+.unit-panel .stats .mono { color: var(--pencil); }
+.unit-panel .orders { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid var(--rule); padding-top: 12px; }

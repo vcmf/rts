@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interface language</title>
+<!-- The specimen sheet of the interface language (decision 0100): every element of src/ui/theme.css and its states.
+     Code: src/ui/kit.ts; as built: docs/systems/front-menu.md. A new element joins the theme and this sheet together. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=Instrument+Sans:wdth,wght@75..100,400..700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../src/ui/theme.css">
+<link rel="stylesheet" href="../src/ui/kit.css">
+</head>
+<body>
+<div class="plate"></div>
+
+<div class="kit">
+  <nav class="index mono" aria-label="Sections">
+    <a href="#principles">00 Principles</a>
+    <a href="#colour">01 Colour</a>
+    <a href="#type">02 Type</a>
+    <a href="#lines">03 Lines and frames</a>
+    <a href="#buttons">04 Buttons</a>
+    <a href="#menu">05 Menu items</a>
+    <a href="#labels">06 Tags, tabs, chips</a>
+    <a href="#settings">07 Settings controls</a>
+    <a href="#gauges">08 Gauges</a>
+    <a href="#overlays">09 Tooltip, dialog, dispatch</a>
+    <a href="#cards">10 Cards</a>
+    <a href="#battle">11 In battle</a>
+  </nav>
+
+  <main>
+    <header class="kit-head">
+      <div class="mono pencil">Decision 0100 · src/ui/theme.css</div>
+      <h1 class="display">Interface language</h1>
+      <div class="double-rule"></div>
+      <p class="lede">Ink on warm paper, as a staff officer would draw it, set in modern type. Every element of the game's interface and its states. New elements are added to the theme and to this sheet together.</p>
+    </header>
+
+    <!-- 00 -->
+    <section id="principles">
+      <h2 class="display"><span class="mono">00</span> Principles</h2>
+      <ol class="principles">
+        <li><b>Paper and ink.</b> Warm paper, warm graphite. Nothing on the interface is coloured except the armies, and one accent for what the player has chosen.</li>
+        <li><b>The ticked frame.</b> A hairline box with crosshair ticks at two corners, as on a surveyor's plate. The ticks grow when the element has attention.</li>
+        <li><b>Pencil means not yet.</b> What cannot be used yet is drawn in pencil: grey and dashed. It stays visible but cannot be chosen.</li>
+        <li><b>Flat.</b> No shadows, bevels, glows or rounded corners. Weight comes from line and fill.</li>
+        <li><b>Modern type.</b> Condensed grotesk for titles, a grotesk for text, mono for labels and numbers. No imitation of period type.</li>
+        <li><b>Quiet motion.</b> Ticks grow in 350 ms; screens rise 6 px as they appear. Reduced motion turns both off.</li>
+      </ol>
+    </section>
+
+    <!-- 01 -->
+    <section id="colour">
+      <h2 class="display"><span class="mono">01</span> Colour</h2>
+      <p class="lede">Neutrals do all the work. The accent appears only on selection and focus. Army colours come from data; nothing in the code names an army.</p>
+      <div class="swatches">
+        <figure><i style="background: var(--paper)"></i><figcaption class="mono">Paper<br><span>#ece3d2 · ground</span></figcaption></figure>
+        <figure><i style="background: var(--paper-hi)"></i><figcaption class="mono">Paper, raised<br><span>#f6efe3 · inside frames</span></figcaption></figure>
+        <figure><i style="background: var(--paper-lo)"></i><figcaption class="mono">Paper, sunk<br><span>#e2d7c3 · tracks, wells</span></figcaption></figure>
+        <figure><i style="background: var(--ink)"></i><figcaption class="mono">Ink<br><span>#2b2824 · lines, titles</span></figcaption></figure>
+        <figure><i style="background: var(--ink-soft)"></i><figcaption class="mono">Ink, soft<br><span>#5d564c · body text</span></figcaption></figure>
+        <figure><i style="background: var(--pencil)"></i><figcaption class="mono">Pencil<br><span>#8a847a · labels, not yet</span></figcaption></figure>
+        <figure><i style="background: var(--accent)"></i><figcaption class="mono">Accent<br><span>#a4532b · selection only</span></figcaption></figure>
+      </div>
+      <div class="swatches armies" data-slot="armies"></div>
+    </section>
+
+    <!-- 02 -->
+    <section id="type">
+      <h2 class="display"><span class="mono">02</span> Type</h2>
+      <div class="type-row"><span class="mono pencil">Display XL · Instrument Sans 75 % · 600</span><span class="display" style="font-size: 96px">Austerlitz</span></div>
+      <div class="type-row"><span class="mono pencil">Display L · 64</span><span class="display" style="font-size: 64px">History</span></div>
+      <div class="type-row"><span class="mono pencil">Display M · 34</span><span class="display" style="font-size: 34px">Commanders</span></div>
+      <div class="type-row"><span class="mono pencil">Display S · 22</span><span class="display" style="font-size: 22px">Grenadier à pied</span></div>
+      <div class="type-row"><span class="mono pencil">Text · Hanken Grotesk 15</span><span>The Guard advanced up the slope in column, drums beating the pas de charge.</span></div>
+      <div class="type-row"><span class="mono pencil">Text small · 13</span><span style="font-size: 13px; color: var(--ink-soft)">Retrospective portrait after Gérard.</span></div>
+      <div class="type-row"><span class="mono pencil">Label · JetBrains Mono 11 caps</span><span class="mono">Plate II · No. 13 · Cavalry</span></div>
+      <div class="type-row"><span class="mono pencil">Data · mono 13 tabular</span><span class="data">2 déc 1805 · 07:40 · −4 °C · 1:25 000</span></div>
+    </section>
+
+    <!-- 03 -->
+    <section id="lines">
+      <h2 class="display"><span class="mono">03</span> Lines and frames</h2>
+      <p class="lede">Three weights: the hairline rule, the ink line, the bold underline of a chosen tab. The double rule closes a title. The frame is the container for everything that can be chosen.</p>
+      <div class="row lines">
+        <div><div class="hairline"></div><span class="mono pencil">Rule · 1 px, ink 22 %</span></div>
+        <div><div style="height: 1px; background: var(--ink)"></div><span class="mono pencil">Ink line · 1 px</span></div>
+        <div><div style="height: 3px; background: var(--ink)"></div><span class="mono pencil">Bold · 3 px</span></div>
+        <div><div class="double-rule"></div><span class="mono pencil">Double rule</span></div>
+        <div><div style="border-top: 1px dashed var(--pencil)"></div><span class="mono pencil">Pencil · dashed</span></div>
+      </div>
+      <div class="row frames">
+        <figure><div class="frame specimen"></div><figcaption class="mono">Frame · rest<br><span>ticks 72 px, 8 px out</span></figcaption></figure>
+        <figure><div class="frame specimen attn"></div><figcaption class="mono">Frame · attention<br><span>ticks grow, accent</span></figcaption></figure>
+        <figure><div class="frame specimen army" data-army="0"></div><figcaption class="mono">Frame · army<br><span>an army's own element</span></figcaption></figure>
+        <figure><div class="frame specimen pencil"></div><figcaption class="mono">Frame · pencil<br><span>not available yet</span></figcaption></figure>
+        <figure><div class="frame small specimen"></div><figcaption class="mono">Frame · small<br><span>ticks 36 px</span></figcaption></figure>
+      </div>
+    </section>
+
+    <!-- 04 -->
+    <section id="buttons">
+      <h2 class="display"><span class="mono">04</span> Buttons</h2>
+      <p class="lede">Ink fill for the one main action on a screen; a frame for the others; a link for small moves. A focused button gets a dashed accent outline.</p>
+      <table class="states">
+        <thead><tr><th></th><th class="mono">Rest</th><th class="mono">Hover</th><th class="mono">Focus</th><th class="mono">Pressed</th><th class="mono">Disabled</th></tr></thead>
+        <tbody>
+          <tr><th class="mono">Solid</th><td><button class="btn solid">Begin</button></td><td><button class="btn solid is-hover">Begin</button></td><td><button class="btn solid is-focus kit-focus">Begin</button></td><td><button class="btn solid is-active">Begin</button></td><td><button class="btn solid" disabled>Begin</button></td></tr>
+          <tr><th class="mono">Framed</th><td><button class="btn">Next →</button></td><td><button class="btn is-hover">Next →</button></td><td><button class="btn is-focus kit-focus">Next →</button></td><td><button class="btn is-active">Next →</button></td><td><button class="btn" disabled>Next →</button></td></tr>
+          <tr><th class="mono">Link</th><td><button class="btn link">History</button></td><td><button class="btn link is-hover">History</button></td><td><button class="btn link kit-focus">History</button></td><td><button class="btn link is-active">History</button></td><td><button class="btn link" disabled>History</button></td></tr>
+        </tbody>
+      </table>
+      <div class="row" style="gap: 56px; margin-top: 36px">
+        <button class="btn-big frame">Begin the battle</button>
+        <button class="btn-big frame is-hover">Begin the battle</button>
+        <span>Press <span class="key">Space</span> to pause, <span class="key">Esc</span> to go back.</span>
+      </div>
+    </section>
+
+    <!-- 05 -->
+    <section id="menu">
+      <h2 class="display"><span class="mono">05</span> Menu items</h2>
+      <p class="lede">The home screen's choices: a number, a title, one line on what it holds. The chosen one is in the accent; muted ones are drawn in pencil and cannot be chosen by pointer, Tab or arrows.</p>
+      <div class="menu kit-menu">
+        <button class="menu-item frame"><span class="mono no">01</span><span class="display label">Rest<span class="hint">A live item, not chosen</span></span><span class="mono go">Open →</span></button>
+        <button class="menu-item frame sel"><span class="mono no">02</span><span class="display label">Chosen<span class="hint">Hover, focus, or the arrows' selection</span></span><span class="mono go">Open →</span></button>
+        <button class="menu-item frame muted" aria-disabled="true" tabindex="-1"><span class="mono no">03</span><span class="display label">Muted<span class="hint">Not available yet</span></span><span class="tag">In preparation</span></button>
+      </div>
+    </section>
+
+    <!-- 06 -->
+    <section id="labels">
+      <h2 class="display"><span class="mono">06</span> Tags, tabs, chips, crumbs</h2>
+      <div class="row">
+        <span class="tag">In preparation</span>
+        <span class="tag ink">Saved</span>
+        <span class="tag new">New</span>
+        <span class="tag army" data-army="1">Britain</span>
+        <span class="tag stamp">Intercepted</span>
+        <span class="tag stamp" style="color: var(--ink)">Victory</span>
+      </div>
+      <div class="tabs" role="tablist" style="margin-top: 32px">
+        <button class="tab display" role="tab" aria-selected="true">Commanders</button>
+        <button class="tab display is-hover" role="tab" aria-selected="false">Regiments</button>
+        <button class="tab display" role="tab" aria-selected="false">Battles</button>
+      </div>
+      <div class="row" style="margin-top: 22px" data-slot="chips">
+        <button class="chip dashed" aria-pressed="true">all <span class="n">34</span></button>
+        <button class="chip dashed">infantry <span class="n">15</span></button>
+        <button class="chip dashed is-hover">cavalry <span class="n">6</span></button>
+        <button class="chip dashed" disabled>engineers <span class="n">0</span></button>
+      </div>
+      <div class="crumbs mono" style="margin-top: 22px"><button>Home</button><span>/</span><button>History</button><span>/</span><span>Regiments</span></div>
+    </section>
+
+    <!-- 07 -->
+    <section id="settings">
+      <h2 class="display"><span class="mono">07</span> Settings controls</h2>
+      <p class="lede">For the Settings screen. Each setting is one row: what it is on the left, the control on the right, a line of help when it needs one. These are live.</p>
+      <div class="frame settings">
+        <div class="field">
+          <span class="label">Depth of field<span class="help">Blur away from the focus. Formations at the edges stay readable.</span></span>
+          <button class="switch" role="switch" aria-checked="true"><span class="track"></span><span data-label>On</span></button>
+        </div>
+        <div class="field">
+          <span class="label">Music</span>
+          <div class="range"><input type="range" min="0" max="100" value="70" aria-label="Music"><output>70</output></div>
+        </div>
+        <div class="field">
+          <span class="label">Effects</span>
+          <div class="range"><input type="range" min="0" max="100" value="45" aria-label="Effects"><output>45</output></div>
+        </div>
+        <div class="field">
+          <span class="label">Battle speed</span>
+          <div class="seg" role="group" aria-label="Battle speed">
+            <button aria-pressed="false">½×</button><button aria-pressed="true">1×</button><button aria-pressed="false">2×</button><button aria-pressed="false">4×</button><button disabled>8×</button>
+          </div>
+        </div>
+        <div class="field">
+          <span class="label">Language</span>
+          <select class="select" aria-label="Language"><option>English</option><option disabled>Français (later)</option><option disabled>Deutsch (later)</option></select>
+        </div>
+        <div class="field">
+          <span class="label">Commander's name</span>
+          <input class="input" placeholder="Write a name" aria-label="Commander's name">
+        </div>
+        <div class="field">
+          <span class="label">Show</span>
+          <div class="checks">
+            <label class="check"><input type="checkbox" checked><span>Unit names on the map</span></label>
+            <label class="check"><input type="checkbox"><span>Orders as arrows</span></label>
+            <label class="check"><input type="checkbox" disabled><span>Fog of war (later)</span></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 08 -->
+    <section id="gauges">
+      <h2 class="display"><span class="mono">08</span> Gauges</h2>
+      <p class="lede">Ten cells per meter, so a value reads at a glance and in tenths. Low values turn the accent. Progress uses the scale-bar track.</p>
+      <div class="gauges" data-army="0">
+        <span class="mono pencil">Strength</span><div class="meter" data-meter="8"></div><span class="data">812</span>
+        <span class="mono pencil">Order</span><div class="meter" data-meter="6"></div><span class="data">60 %</span>
+        <span class="mono pencil">Ammunition</span><div class="meter low" data-meter="2"></div><span class="data">18 %</span>
+      </div>
+      <div class="loading">
+        <div class="mono" style="display: flex; justify-content: space-between"><span>Drawing the map</span><span data-slot="progress-text">64 %</span></div>
+        <div class="progress" data-slot="progress" style="--p: 64%"><i></i></div>
+      </div>
+    </section>
+
+    <!-- 09 -->
+    <section id="overlays">
+      <h2 class="display"><span class="mono">09</span> Tooltip, dialog, dispatch</h2>
+      <div class="row overlays">
+        <div style="padding-top: 30px">
+          <div class="tip"><span class="mono">Pratzen heights</span>High ground. Infantry here see the whole valley; artillery fires further.</div>
+        </div>
+        <div class="frame dialog" role="dialog" aria-label="Sample dialog">
+          <div class="mono pencil">Confirm</div>
+          <h3 class="display">Leave the battle?</h3>
+          <p>The battle is not saved. Your army will be counted as having withdrawn.</p>
+          <div class="actions"><button class="btn">Stay</button><button class="btn solid">Leave</button></div>
+        </div>
+        <div class="dispatches">
+          <div class="dispatch" data-army="0">
+            <div class="from mono"><span>Dispatch · from Soult</span><span>07:42</span></div>
+            <div class="body">The heights are clear. I am advancing on Pratzen with Saint-Hilaire and Vandamme.</div>
+          </div>
+          <div class="dispatch intercepted" data-army="4">
+            <div class="from mono"><span>Dispatch · from Kutuzov</span><span>07:10</span></div>
+            <div class="body">Take the IV Column down to the Goldbach and join Buxhöwden on the left.</div>
+            <span class="tag stamp">Intercepted</span>
+          </div>
+        </div>
+      </div>
+      <button class="btn" data-open="dialog" style="margin-top: 26px">Open a live dialog</button>
+    </section>
+
+    <!-- 10 -->
+    <section id="cards">
+      <h2 class="display"><span class="mono">10</span> Cards</h2>
+      <p class="lede">A framed painting with a caption. On hover the frame and the name take the army's colour.</p>
+      <div class="row cards" data-slot="cards"></div>
+    </section>
+
+    <!-- 11 -->
+    <section id="battle">
+      <h2 class="display"><span class="mono">11</span> In battle</h2>
+      <p class="lede">The battle screen's pieces: the cartouche at the top left, the selected formation's panel, the status bar at the bottom edge.</p>
+      <div class="battle">
+        <div class="cartouche">
+          <div class="display name">Austerlitz</div>
+          <div class="data">2 déc 1805 · 07:40 · −4 °C · mist in the valleys</div>
+          <div class="double-rule"></div>
+        </div>
+        <div class="frame unit-panel" data-army="0">
+          <img data-slot="unit-image" alt="">
+          <div>
+            <div class="mono" style="color: var(--army)">France · IV Corps · Saint-Hilaire</div>
+            <h4 class="display">10e léger, 1er bataillon</h4>
+            <div class="mono pencil">Column of divisions · advancing</div>
+            <div class="stats">
+              <span class="mono">Strength</span><div class="meter" data-meter="9"></div><span class="data">812</span>
+              <span class="mono">Order</span><div class="meter" data-meter="7"></div><span class="data">72</span>
+              <span class="mono">Ammunition</span><div class="meter low" data-meter="2"></div><span class="data">18</span>
+            </div>
+          </div>
+          <div class="orders">
+            <button class="btn"><span class="key">L</span> Line</button>
+            <button class="btn"><span class="key">C</span> Column</button>
+            <button class="btn"><span class="key">Q</span> Square</button>
+            <button class="btn solid"><span class="key">F</span> Fire</button>
+          </div>
+        </div>
+        <div class="status battle-status">
+          <span><span class="dot"></span>Live</span><span>07:40:12</span><span>1:25 000</span><span>Winter</span><span>14 battalions engaged</span><span class="right">60 fps</span>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="veil" data-slot="veil" hidden>
+  <div class="frame dialog" role="dialog" aria-modal="true" aria-label="Leave the battle">
+    <div class="mono pencil">Confirm</div>
+    <h3 class="display">Leave the battle?</h3>
+    <p>The battle is not saved. Your army will be counted as having withdrawn.</p>
+    <div class="actions"><button class="btn" data-close>Stay</button><button class="btn solid" data-close>Leave</button></div>
+  </div>
+</div>
+
+<script type="module" src="../src/ui/kit.ts"></script>
+</body>
+</html>

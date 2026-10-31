@@ -3,7 +3,8 @@ import path from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import { mayWrite, saveMapFile, type SaveRequest } from './tools/map-save.ts'
 // the S1b page: app/index.html; `npm run dev` serves it at /app/. The look page (Track E): app/look.html; the map
-// draft (Track M): app/map.html
+// draft (Track M): app/map.html; the front menu: app/menu.html, and its interface language's specimen sheet:
+// app/ui-kit.html (docs/systems/front-menu.md)
 // __BUILD__: the commit a page was built from (the look bench records it), "-dirty" with uncommitted changes to
 // tracked files or new files in src/, app/, tools/
 const build = (() => {
@@ -73,7 +74,10 @@ const mapsSave: Plugin = {
 export default defineConfig({
   define: { __BUILD__: JSON.stringify(build) },
   plugins: [mapsHot, mapsSave],
-  build: { outDir: 'dist', rollupOptions: { input: ['app/index.html', 'app/look.html', 'app/map.html'] } },
+  build: {
+    outDir: 'dist',
+    rollupOptions: { input: ['app/index.html', 'app/look.html', 'app/map.html', 'app/menu.html', 'app/ui-kit.html'] },
+  },
   server: { headers: isolated },
   preview: { headers: isolated },
   worker: { format: 'es' },

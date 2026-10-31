@@ -1,0 +1,2369 @@
+{
+ "version": 1,
+ "nations": [
+  {
+   "id": "french",
+   "name": "France",
+   "native": "Empire français",
+   "colour": "#2c4fa8"
+  },
+  {
+   "id": "british",
+   "name": "Britain",
+   "native": "United Kingdom",
+   "colour": "#b3302a"
+  },
+  {
+   "id": "austrian",
+   "name": "Austria",
+   "native": "Kaisertum Österreich",
+   "colour": "#4f6279"
+  },
+  {
+   "id": "prussian",
+   "name": "Prussia",
+   "native": "Königreich Preußen",
+   "colour": "#23324a"
+  },
+  {
+   "id": "russian",
+   "name": "Russia",
+   "native": "Rossiyskaya Imperiya",
+   "colour": "#2f6b3c"
+  },
+  {
+   "id": "polish",
+   "name": "Poland",
+   "native": "Księstwo Warszawskie",
+   "colour": "#9c2440"
+  }
+ ],
+ "arms": [
+  "infantry",
+  "cavalry",
+  "artillery",
+  "command",
+  "mounts"
+ ],
+ "featured": {
+  "commanders": "french/napoleon",
+  "regiments": "french/07-old-guard-grenadier"
+ },
+ "commanders": [
+  {
+   "id": "french/napoleon",
+   "nation": "french",
+   "name": "Napoleon Bonaparte",
+   "role": "Emperor",
+   "life": "Emperor of the French (1804–1814; 1815)",
+   "likeness": "David, The Emperor Napoleon in His Study, 1812.",
+   "image": "french/napoleon.jpg"
+  },
+  {
+   "id": "french/louis-nicolas_davout",
+   "nation": "french",
+   "name": "Louis-Nicolas Davout",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal (1770–1823)",
+   "likeness": "Belluchi portrait is retrospective.",
+   "image": "french/louis-nicolas_davout.jpg"
+  },
+  {
+   "id": "french/jean_lannes",
+   "nation": "french",
+   "name": "Jean Lannes",
+   "role": "Marshal of the Empire",
+   "life": "Marshal of The First French Empire (1769–1809)",
+   "likeness": "Perrin portrait, 1805/Salon 1810; documented by Fondation Napoleon.",
+   "image": "french/jean_lannes.jpg"
+  },
+  {
+   "id": "french/michel_ney",
+   "nation": "french",
+   "name": "Michel Ney",
+   "role": "Marshal of the Empire",
+   "life": "French military commander (1769–1815)",
+   "likeness": "Retrospective portrait after Gerard.",
+   "image": "french/michel_ney.jpg"
+  },
+  {
+   "id": "french/jean-de-dieu_soult",
+   "nation": "french",
+   "name": "Jean-de-Dieu Soult",
+   "role": "Marshal of the Empire",
+   "life": "Prime Minister of France and French Marshal (1769–1851)",
+   "likeness": "Louis-Henri de Rudder, 1856, after Broc original commissioned in 1805; period likeness preserved in later copy.",
+   "image": "french/jean-de-dieu_soult.jpg"
+  },
+  {
+   "id": "british/arthur_wellesley_1st_duke_of_wellington",
+   "nation": "british",
+   "name": "Arthur Wellesley, Duke of Wellington",
+   "role": "Commander",
+   "life": "British Army officer and statesman (1769–1852)",
+   "likeness": "Lawrence portrait source.",
+   "image": "british/arthur_wellesley_1st_duke_of_wellington.jpg"
+  },
+  {
+   "id": "british/john_moore_british_army_officer",
+   "nation": "british",
+   "name": "Sir John Moore",
+   "role": "General",
+   "life": "British Army officer and politician (1761–1809)",
+   "likeness": "Thomas Lawrence portrait.",
+   "image": "british/john_moore_british_army_officer.jpg"
+  },
+  {
+   "id": "british/rowland_hill_1st_viscount_hill",
+   "nation": "british",
+   "name": "Rowland Hill",
+   "role": "General",
+   "life": "British Army officer and politician (1772–1842)",
+   "likeness": "George Dawe, 1819, National Army Museum; near-postwar likeness, interpret as 1815 without radical age changes.",
+   "image": "british/rowland_hill_1st_viscount_hill.jpg"
+  },
+  {
+   "id": "austrian/klemens_von_metternich",
+   "nation": "austrian",
+   "name": "Klemens von Metternich",
+   "role": "Statesman and diplomat",
+   "life": "Austrian statesman (1773–1859)",
+   "likeness": "Thomas Lawrence, c.1815 portrait.",
+   "image": "austrian/klemens_von_metternich.jpg"
+  },
+  {
+   "id": "austrian/archduke_charles_duke_of_teschen",
+   "nation": "austrian",
+   "name": "Archduke Charles of Austria",
+   "role": "Commander",
+   "life": "Austrian archduke and general (1771–1847)",
+   "likeness": "Johann Baptist Seele,1800, Heeresgeschichtliches Museum; early likeness rather than later elderly portrait.",
+   "image": "austrian/archduke_charles_duke_of_teschen.jpg"
+  },
+  {
+   "id": "austrian/karl_philipp_prince_of_schwarzenberg",
+   "nation": "austrian",
+   "name": "Karl Philipp zu Schwarzenberg",
+   "role": "Field marshal",
+   "life": "Austrian nobleman and field marshal",
+   "likeness": "Historical portrait source, artist/date to verify.",
+   "image": "austrian/karl_philipp_prince_of_schwarzenberg.jpg"
+  },
+  {
+   "id": "russian/alexander_i_of_russia",
+   "nation": "russian",
+   "name": "Alexander I of Russia",
+   "role": "Emperor",
+   "life": "Emperor of Russia from 1801 to 1825",
+   "likeness": "George Dawe,1826, posthumous; not claimed a dated1812 likeness.",
+   "image": "russian/alexander_i_of_russia.jpg"
+  },
+  {
+   "id": "russian/mikhail_kutuzov",
+   "nation": "russian",
+   "name": "Mikhail Kutuzov",
+   "role": "Field marshal",
+   "life": "Field Marshal of the Russian Empire (1745–1813)",
+   "likeness": "Roman Volkov,1813; Borodino Museum documents no eyepatch.",
+   "image": "russian/mikhail_kutuzov.jpg"
+  },
+  {
+   "id": "russian/michael_andreas_barclay_de_tolly",
+   "nation": "russian",
+   "name": "Michael Andreas Barclay de Tolly",
+   "role": "Field marshal",
+   "life": "Russian general (1761–1818)",
+   "likeness": "George Dawe, retrospective portrait; later awards not treated as1812 evidence.",
+   "image": "russian/michael_andreas_barclay_de_tolly.jpg"
+  },
+  {
+   "id": "prussian/gebhard_leberecht_von_blucher",
+   "nation": "prussian",
+   "name": "Gebhard Leberecht von Blücher",
+   "role": "Field marshal",
+   "life": "Prussian field marshal (1742–1819)",
+   "likeness": "Historical portrait source with black fur-lined cloak.",
+   "image": "prussian/gebhard_leberecht_von_blucher.jpg"
+  },
+  {
+   "id": "prussian/gerhard_von_scharnhorst",
+   "nation": "prussian",
+   "name": "Gerhard von Scharnhorst",
+   "role": "General and reformer",
+   "life": "Hanoverian-born general (1755–1813)",
+   "likeness": "Friedrich Bury, before1813.",
+   "image": "prussian/gerhard_von_scharnhorst.jpg"
+  },
+  {
+   "id": "prussian/august_neidhardt_von_gneisenau",
+   "nation": "prussian",
+   "name": "August Neidhardt von Gneisenau",
+   "role": "General and staff commander",
+   "life": "Generalfeldmarschall of Prussian Army (1760–1831)",
+   "likeness": "George Dawe,1818, postwar.",
+   "image": "prussian/august_neidhardt_von_gneisenau.jpg"
+  },
+  {
+   "id": "polish/jozef_poniatowski",
+   "nation": "polish",
+   "name": "Józef Poniatowski",
+   "role": "Marshal of the Empire",
+   "life": "Polish military officer (1763–1813)",
+   "likeness": "Josef Grassi portrait, historical likeness.",
+   "image": "polish/jozef_poniatowski.jpg"
+  },
+  {
+   "id": "polish/jan_henryk_dabrowski",
+   "nation": "polish",
+   "name": "Jan Henryk Dąbrowski",
+   "role": "General",
+   "life": "Polish general (1755–1818)",
+   "likeness": "Historical portrait source; date/artist unverified.",
+   "image": "polish/jan_henryk_dabrowski.jpg"
+  },
+  {
+   "id": "polish/karol_kniaziewicz",
+   "nation": "polish",
+   "name": "Karol Kniaziewicz",
+   "role": "General",
+   "life": "",
+   "likeness": "Historical portrait source; date/artist unverified.",
+   "image": "polish/karol_kniaziewicz.jpg"
+  },
+  {
+   "id": "french/louis_alexandre_berthier",
+   "nation": "french",
+   "name": "Louis-Alexandre Berthier",
+   "role": "Marshal of the Empire",
+   "life": "French general and politician (1753–1815)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/louis_alexandre_berthier.jpg"
+  },
+  {
+   "id": "french/joachim_murat",
+   "nation": "french",
+   "name": "Joachim Murat",
+   "role": "Marshal of the Empire",
+   "life": "French military officer and statesman (1767–1815)",
+   "likeness": "Gérard likeness circa 1808, source metadata rechecked on Commons.",
+   "image": "french/joachim_murat.jpg"
+  },
+  {
+   "id": "french/bon_adrien_jeannot_de_moncey",
+   "nation": "french",
+   "name": "Bon-Adrien Jeannot de Moncey",
+   "role": "Marshal of the Empire",
+   "life": "French marshal (1754–1842)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/bon_adrien_jeannot_de_moncey.jpg"
+  },
+  {
+   "id": "french/jean_baptiste_jourdan",
+   "nation": "french",
+   "name": "Jean-Baptiste Jourdan",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal (1762–1833)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/jean_baptiste_jourdan.jpg"
+  },
+  {
+   "id": "french/andre_massena",
+   "nation": "french",
+   "name": "André Masséna",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal (1758–1817)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/andre_massena.jpg"
+  },
+  {
+   "id": "french/pierre_augereau",
+   "nation": "french",
+   "name": "Pierre Augereau",
+   "role": "Marshal of the Empire",
+   "life": "French military officer (1757–1816)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/pierre_augereau.jpg"
+  },
+  {
+   "id": "french/jean_baptiste_bernadotte",
+   "nation": "french",
+   "name": "Jean-Baptiste Bernadotte",
+   "role": "Marshal of the Empire",
+   "life": "King of Sweden and Norway from 1818 to 1844",
+   "likeness": "Joseph Nicolas Jouy, 1852 copy after Kinson original of 1804. Campaign-period likeness, not the elderly Swedish king.",
+   "image": "french/jean_baptiste_bernadotte.jpg"
+  },
+  {
+   "id": "french/guillaume_brune",
+   "nation": "french",
+   "name": "Guillaume Brune",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1808, about 45. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "french/guillaume_brune.jpg"
+  },
+  {
+   "id": "french/jean_baptiste_bessieres",
+   "nation": "french",
+   "name": "Jean-Baptiste Bessières",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal (1768–1813)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/jean_baptiste_bessieres.jpg"
+  },
+  {
+   "id": "french/francois_christophe_de_kellermann",
+   "nation": "french",
+   "name": "François Christophe de Kellermann",
+   "role": "Marshal of the Empire",
+   "life": "French Army officer",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/francois_christophe_de_kellermann.jpg"
+  },
+  {
+   "id": "french/francois_joseph_lefebvre",
+   "nation": "french",
+   "name": "François Joseph Lefebvre",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal (1755–1820)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/francois_joseph_lefebvre.jpg"
+  },
+  {
+   "id": "french/catherine_dominique_de_perignon",
+   "nation": "french",
+   "name": "Catherine-Dominique de Pérignon",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1808, about 54. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "french/catherine_dominique_de_perignon.jpg"
+  },
+  {
+   "id": "french/jean_mathieu_philibert_serurier",
+   "nation": "french",
+   "name": "Jean-Mathieu-Philibert Sérurier",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal (1742–1819)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/jean_mathieu_philibert_serurier.jpg"
+  },
+  {
+   "id": "french/claude_victor_perrin",
+   "nation": "french",
+   "name": "Claude Victor-Perrin",
+   "role": "Marshal of the Empire",
+   "life": "French military commander (1764–1841)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/claude_victor_perrin.jpg"
+  },
+  {
+   "id": "french/jacques_macdonald",
+   "nation": "french",
+   "name": "Jacques MacDonald",
+   "role": "Marshal of the Empire",
+   "life": "French military leader (1765–1840)",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1810, about 45. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "french/jacques_macdonald.jpg"
+  },
+  {
+   "id": "french/nicolas_oudinot",
+   "nation": "french",
+   "name": "Nicolas Oudinot",
+   "role": "Marshal of the Empire",
+   "life": "French Army marshal (1767–1847)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/nicolas_oudinot.jpg"
+  },
+  {
+   "id": "french/auguste_de_marmont",
+   "nation": "french",
+   "name": "Auguste de Marmont",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal (1774–1852)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/auguste_de_marmont.jpg"
+  },
+  {
+   "id": "french/louis_gabriel_suchet",
+   "nation": "french",
+   "name": "Louis-Gabriel Suchet",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal (1770–1826)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/louis_gabriel_suchet.jpg"
+  },
+  {
+   "id": "french/laurent_de_gouvion_saint_cyr",
+   "nation": "french",
+   "name": "Laurent de Gouvion Saint-Cyr",
+   "role": "Marshal of the Empire",
+   "life": "French marshal (1764–1830)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/laurent_de_gouvion_saint_cyr.jpg"
+  },
+  {
+   "id": "french/emmanuel_de_grouchy",
+   "nation": "french",
+   "name": "Emmanuel de Grouchy",
+   "role": "Marshal of the Empire",
+   "life": "French Marshal",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/emmanuel_de_grouchy.jpg"
+  },
+  {
+   "id": "french/edouard_mortier",
+   "nation": "french",
+   "name": "Édouard Mortier",
+   "role": "Marshal of the Empire",
+   "life": "French military officer and diplomat (1768–1835)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/edouard_mortier.jpg"
+  },
+  {
+   "id": "french/louis_desaix",
+   "nation": "french",
+   "name": "Louis Desaix",
+   "role": "General",
+   "life": "French general (1768–1800)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/louis_desaix.jpg"
+  },
+  {
+   "id": "french/barthelemy_catherine_joubert",
+   "nation": "french",
+   "name": "Barthélemy Catherine Joubert",
+   "role": "General",
+   "life": "French general (1769–1799)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "french/barthelemy_catherine_joubert.jpg"
+  },
+  {
+   "id": "british/henry_paget_1st_marquess_of_anglesey",
+   "nation": "british",
+   "name": "Henry Paget, 1st Marquess of Anglesey",
+   "role": "General",
+   "life": "British peer, Lord lieutenant and politician",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "british/henry_paget_1st_marquess_of_anglesey.jpg"
+  },
+  {
+   "id": "british/thomas_picton",
+   "nation": "british",
+   "name": "Thomas Picton",
+   "role": "General",
+   "life": "British Army officer (1758–1815)",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1815, about 56. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "british/thomas_picton.jpg"
+  },
+  {
+   "id": "british/william_beresford_1st_viscount_beresford",
+   "nation": "british",
+   "name": "William Beresford, 1st Viscount Beresford",
+   "role": "General",
+   "life": "Anglo-Portuguese General (1768–1854)",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1812, about 44. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "british/william_beresford_1st_viscount_beresford.jpg"
+  },
+  {
+   "id": "british/stapleton_cotton_1st_viscount_combermere",
+   "nation": "british",
+   "name": "Stapleton Cotton, 1st Viscount Combermere",
+   "role": "General",
+   "life": "British Army officer, politician and colonial administrator",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "british/stapleton_cotton_1st_viscount_combermere.jpg"
+  },
+  {
+   "id": "british/robert_craufurd",
+   "nation": "british",
+   "name": "Robert Craufurd",
+   "role": "General",
+   "life": "British Army officer (1764–1812)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "british/robert_craufurd.jpg"
+  },
+  {
+   "id": "austrian/heinrich_von_bellegarde",
+   "nation": "austrian",
+   "name": "Heinrich von Bellegarde",
+   "role": "General",
+   "life": "Savoyard Nobleman and Habsburg Military Commander",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1809, about 53. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "austrian/heinrich_von_bellegarde.jpg"
+  },
+  {
+   "id": "austrian/joseph_radetzky_von_radetz",
+   "nation": "austrian",
+   "name": "Joseph Radetzky von Radetz",
+   "role": "General",
+   "life": "Austrian field marshal (1766–1858)",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1809, about 43. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "austrian/joseph_radetzky_von_radetz.jpg"
+  },
+  {
+   "id": "russian/levin_august_von_bennigsen",
+   "nation": "russian",
+   "name": "Levin August von Bennigsen",
+   "role": "General",
+   "life": "German general serving Russia (1745–1826)",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1812, about 67. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "russian/levin_august_von_bennigsen.jpg"
+  },
+  {
+   "id": "prussian/friedrich_wilhelm_freiherr_von_bulow",
+   "nation": "prussian",
+   "name": "Friedrich Wilhelm Freiherr von Bülow",
+   "role": "General",
+   "life": "Prussian general (1755–1816)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "prussian/friedrich_wilhelm_freiherr_von_bulow.jpg"
+  },
+  {
+   "id": "prussian/ludwig_yorck_von_wartenburg",
+   "nation": "prussian",
+   "name": "Ludwig Yorck von Wartenburg",
+   "role": "General",
+   "life": "Prussian soldier (1759–1830)",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1813, about 54. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "prussian/ludwig_yorck_von_wartenburg.jpg"
+  },
+  {
+   "id": "prussian/bogislav_friedrich_emanuel_von_tauentzien",
+   "nation": "prussian",
+   "name": "Bogislav Friedrich Emanuel von Tauentzien",
+   "role": "General",
+   "life": "Prussian general (1760–1824)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "prussian/bogislav_friedrich_emanuel_von_tauentzien.jpg"
+  },
+  {
+   "id": "prussian/hans_ernst_karl_graf_von_zieten",
+   "nation": "prussian",
+   "name": "Hans Ernst Karl, Graf von Zieten",
+   "role": "General",
+   "life": "Field Marshal of Prussia (1770–1848)",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1815, about 45. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "prussian/hans_ernst_karl_graf_von_zieten.jpg"
+  },
+  {
+   "id": "polish/micha_sokolnicki",
+   "nation": "polish",
+   "name": "Michał Sokolnicki",
+   "role": "General",
+   "life": "Polish nobleman, general, and politician (1760–1816)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "polish/micha_sokolnicki.jpg"
+  },
+  {
+   "id": "polish/jozef_zajaczek",
+   "nation": "polish",
+   "name": "Józef Zajączek",
+   "role": "General",
+   "life": "Polish general and politician (1752–1826)",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1812, about 60. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "polish/jozef_zajaczek.jpg"
+  },
+  {
+   "id": "polish/stanisaw_fiszer",
+   "nation": "polish",
+   "name": "Stanisław Fiszer",
+   "role": "General",
+   "life": "Polish military officer (1769–1812)",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "polish/stanisaw_fiszer.jpg"
+  },
+  {
+   "id": "polish/antoni_pawe_sukowski",
+   "nation": "polish",
+   "name": "Antoni Paweł Sułkowski",
+   "role": "General",
+   "life": "Polish division general and commander",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "polish/antoni_pawe_sukowski.jpg"
+  },
+  {
+   "id": "austrian/johann_von_hiller",
+   "nation": "austrian",
+   "name": "Johann von Hiller",
+   "role": "General",
+   "life": "Historical military leader",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1809, about 61. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "austrian/johann_von_hiller.jpg"
+  },
+  {
+   "id": "austrian/johann_von_klenau",
+   "nation": "austrian",
+   "name": "Johann von Klenau",
+   "role": "General",
+   "life": "Historical military leader",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "austrian/johann_von_klenau.jpg"
+  },
+  {
+   "id": "austrian/johann_i_joseph_prince_of_liechtenstein",
+   "nation": "austrian",
+   "name": "Johann I Joseph, Prince of Liechtenstein",
+   "role": "General",
+   "life": "Historical military leader",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "austrian/johann_i_joseph_prince_of_liechtenstein.jpg"
+  },
+  {
+   "id": "russian/pyotr_bagration",
+   "nation": "russian",
+   "name": "Pyotr Bagration",
+   "role": "General",
+   "life": "Historical military leader",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1812, about 47. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "russian/pyotr_bagration.jpg"
+  },
+  {
+   "id": "russian/peter_wittgenstein",
+   "nation": "russian",
+   "name": "Peter Wittgenstein",
+   "role": "General",
+   "life": "Historical military leader",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "russian/peter_wittgenstein.jpg"
+  },
+  {
+   "id": "russian/alexander_tormasov",
+   "nation": "russian",
+   "name": "Alexander Tormasov",
+   "role": "General",
+   "life": "Historical military leader",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "russian/alexander_tormasov.jpg"
+  },
+  {
+   "id": "russian/nikolay_rayevsky",
+   "nation": "russian",
+   "name": "Nikolay Rayevsky",
+   "role": "General",
+   "life": "Historical military leader",
+   "likeness": "Downloaded historical likeness visually examined. Some sources are retrospective or later-life portraits; face age and dress adapted in words to 1812, about 41. Fine orders are abbreviated, not authenticated insignia diagrams.",
+   "image": "russian/nikolay_rayevsky.jpg"
+  },
+  {
+   "id": "prussian/friedrich_von_kleist",
+   "nation": "prussian",
+   "name": "Friedrich von Kleist",
+   "role": "General",
+   "life": "Historical military leader",
+   "likeness": "Karl Traugott Riedel, 1816, Hessen Kassel Heritage, GS 17931: near-contemporary print; colours supplied by period Prussian dress, not inferred from monochrome.",
+   "image": "prussian/friedrich_von_kleist.jpg"
+  },
+  {
+   "id": "polish/aleksander_rozniecki",
+   "nation": "polish",
+   "name": "Aleksander Rożniecki",
+   "role": "General",
+   "life": "Historical military leader",
+   "likeness": "Historical portrait reproduction: source dating/attribution not fully verified; several are retrospective. Facial structure used as evidence, fine orders abbreviated. No claim of exact campaign-year appearance.",
+   "image": "polish/aleksander_rozniecki.jpg"
+  },
+  {
+   "id": "russian/alexander_suvorov",
+   "nation": "russian",
+   "name": "Alexander Suvorov",
+   "role": "Field marshal in Italy, 1799; Generalissimo from October 1799",
+   "life": "Russian military commander (1729/30–1800)",
+   "likeness": "1799 Kreutzinger likeness; near-contemporary painted portrait.",
+   "image": "russian/alexander_suvorov.jpg"
+  },
+  {
+   "id": "austrian/michael_von_melas",
+   "nation": "austrian",
+   "name": "Michael von Melas",
+   "role": "General der Kavallerie; Marengo, 1800",
+   "life": "Austrian General of the cavalry (1729–1806)",
+   "likeness": "Historical engraving, artist and date unverified.",
+   "image": "austrian/michael_von_melas.jpg"
+  },
+  {
+   "id": "austrian/dagobert_sigmund_von_wurmser",
+   "nation": "austrian",
+   "name": "Dagobert Sigmund von Wurmser",
+   "role": "Feldmarschall; Mantua campaign, 1796–97",
+   "life": "Austrian marshall",
+   "likeness": "Historical named print, earlier rank in caption; exact date unverified.",
+   "image": "austrian/dagobert_sigmund_von_wurmser.jpg"
+  },
+  {
+   "id": "austrian/jozsef_alvinczi",
+   "nation": "austrian",
+   "name": "József Alvinczi",
+   "role": "Feldzeugmeister in Italy, 1796–97; Feldmarschall from 1808",
+   "life": "Austrian field marshal in Habsburg Monarchy",
+   "likeness": "Historical portrait reproduction, artist and date unverified.",
+   "image": "austrian/jozsef_alvinczi.jpg"
+  },
+  {
+   "id": "austrian/paul_kray",
+   "nation": "austrian",
+   "name": "Paul Kray",
+   "role": "Feldzeugmeister; Italy, 1799",
+   "life": "Soldier, and general in Habsburg service",
+   "likeness": "Historical engraving, artist and date unverified.",
+   "image": "austrian/paul_kray.jpg"
+  },
+  {
+   "id": "austrian/johann_peter_beaulieu",
+   "nation": "austrian",
+   "name": "Johann Peter Beaulieu",
+   "role": "Feldzeugmeister; Italian army commander, 1796",
+   "life": "Walloon military officer (1725–1819)",
+   "likeness": "Historical engraving, artist and date unverified.",
+   "image": "austrian/johann_peter_beaulieu.jpg"
+  },
+  {
+   "id": "french/eugene_de_beauharnais",
+   "nation": "french",
+   "name": "Eugène de Beauharnais",
+   "role": "Viceroy of Italy",
+   "life": "",
+   "likeness": "Andrea Appiani, 1810, Malmaison, M.M.81.2.1; contemporary portrait of Eugène as Viceroy of Italy.",
+   "image": "french/eugene_de_beauharnais.jpg"
+  }
+ ],
+ "regiments": [
+  {
+   "id": "french/01-fusilier",
+   "nation": "french",
+   "no": "01",
+   "name": "Fusilier de ligne",
+   "detail": "",
+   "arm": "infantry",
+   "image": "french/01-fusilier.jpg"
+  },
+  {
+   "id": "french/02-line-grenadier",
+   "nation": "french",
+   "no": "02",
+   "name": "Grenadier de ligne",
+   "detail": "",
+   "arm": "infantry",
+   "image": "french/02-line-grenadier.jpg"
+  },
+  {
+   "id": "french/03-line-voltigeur",
+   "nation": "french",
+   "no": "03",
+   "name": "Voltigeur de ligne",
+   "detail": "",
+   "arm": "infantry",
+   "image": "french/03-line-voltigeur.jpg"
+  },
+  {
+   "id": "french/04-light-chasseur",
+   "nation": "french",
+   "no": "04",
+   "name": "Chasseur à pied",
+   "detail": "légère",
+   "arm": "infantry",
+   "image": "french/04-light-chasseur.jpg"
+  },
+  {
+   "id": "french/05-light-carabinier",
+   "nation": "french",
+   "no": "05",
+   "name": "Carabinier à pied",
+   "detail": "légère",
+   "arm": "infantry",
+   "image": "french/05-light-carabinier.jpg"
+  },
+  {
+   "id": "french/06-sapper",
+   "nation": "french",
+   "no": "06",
+   "name": "Sapeur d’infanterie",
+   "detail": "",
+   "arm": "infantry",
+   "image": "french/06-sapper.jpg"
+  },
+  {
+   "id": "french/07-old-guard-grenadier",
+   "nation": "french",
+   "no": "07",
+   "name": "Grenadier à pied",
+   "detail": "Vieille Garde",
+   "arm": "infantry",
+   "image": "french/07-old-guard-grenadier.jpg"
+  },
+  {
+   "id": "french/08-old-guard-chasseur",
+   "nation": "french",
+   "no": "08",
+   "name": "Chasseur à pied",
+   "detail": "Vieille Garde",
+   "arm": "infantry",
+   "image": "french/08-old-guard-chasseur.jpg"
+  },
+  {
+   "id": "french/09-young-guard-tirailleur",
+   "nation": "french",
+   "no": "09",
+   "name": "Tirailleur",
+   "detail": "Jeune Garde",
+   "arm": "infantry",
+   "image": "french/09-young-guard-tirailleur.jpg"
+  },
+  {
+   "id": "french/10-young-guard-voltigeur",
+   "nation": "french",
+   "no": "10",
+   "name": "Voltigeur",
+   "detail": "Jeune Garde",
+   "arm": "infantry",
+   "image": "french/10-young-guard-voltigeur.jpg"
+  },
+  {
+   "id": "french/11-dragoon",
+   "nation": "french",
+   "no": "11",
+   "name": "Dragon",
+   "detail": "1er régiment",
+   "arm": "cavalry",
+   "image": "french/11-dragoon.jpg"
+  },
+  {
+   "id": "french/12-hussar",
+   "nation": "french",
+   "no": "12",
+   "name": "Hussard",
+   "detail": "5e régiment",
+   "arm": "cavalry",
+   "image": "french/12-hussar.jpg"
+  },
+  {
+   "id": "french/13-cuirassier",
+   "nation": "french",
+   "no": "13",
+   "name": "Cuirassier",
+   "detail": "1er régiment",
+   "arm": "cavalry",
+   "image": "french/13-cuirassier.jpg"
+  },
+  {
+   "id": "french/14-mounted-chasseur",
+   "nation": "french",
+   "no": "14",
+   "name": "Chasseur à cheval",
+   "detail": "1er régiment",
+   "arm": "cavalry",
+   "image": "french/14-mounted-chasseur.jpg"
+  },
+  {
+   "id": "french/15-lancer",
+   "nation": "french",
+   "no": "15",
+   "name": "Chevau-léger lancier",
+   "detail": "1er régiment",
+   "arm": "cavalry",
+   "image": "french/15-lancer.jpg"
+  },
+  {
+   "id": "french/16-mounted-carabinier",
+   "nation": "french",
+   "no": "16",
+   "name": "Carabinier à cheval",
+   "detail": "1er régiment",
+   "arm": "cavalry",
+   "image": "french/16-mounted-carabinier.jpg"
+  },
+  {
+   "id": "french/17-foot-gunner",
+   "nation": "french",
+   "no": "17",
+   "name": "Artilleur à pied",
+   "detail": "ligne",
+   "arm": "artillery",
+   "image": "french/17-foot-gunner.jpg"
+  },
+  {
+   "id": "french/18-horse-gunner",
+   "nation": "french",
+   "no": "18",
+   "name": "Artilleur à cheval",
+   "detail": "ligne",
+   "arm": "artillery",
+   "image": "french/18-horse-gunner.jpg"
+  },
+  {
+   "id": "french/19-line-officer",
+   "nation": "french",
+   "no": "19",
+   "name": "Officier supérieur de ligne",
+   "detail": "",
+   "arm": "command",
+   "image": "french/19-line-officer.jpg"
+  },
+  {
+   "id": "french/20-general",
+   "nation": "french",
+   "no": "20",
+   "name": "Général de division",
+   "detail": "",
+   "arm": "command",
+   "image": "french/20-general.jpg"
+  },
+  {
+   "id": "french/21-drummer",
+   "nation": "french",
+   "no": "21",
+   "name": "Tambour de ligne",
+   "detail": "",
+   "arm": "command",
+   "image": "french/21-drummer.jpg"
+  },
+  {
+   "id": "french/22-cornet",
+   "nation": "french",
+   "no": "22",
+   "name": "Cornet de voltigeurs",
+   "detail": "",
+   "arm": "command",
+   "image": "french/22-cornet.jpg"
+  },
+  {
+   "id": "french/23-eagle-bearer",
+   "nation": "french",
+   "no": "23",
+   "name": "Porte-aigle de ligne",
+   "detail": "",
+   "arm": "command",
+   "image": "french/23-eagle-bearer.jpg"
+  },
+  {
+   "id": "french/24-light-horse",
+   "nation": "french",
+   "no": "24",
+   "name": "Cheval de cavalerie légère",
+   "detail": "",
+   "arm": "mounts",
+   "image": "french/24-light-horse.jpg"
+  },
+  {
+   "id": "french/25-heavy-horse",
+   "nation": "french",
+   "no": "25",
+   "name": "Cheval de cavalerie lourde",
+   "detail": "",
+   "arm": "mounts",
+   "image": "french/25-heavy-horse.jpg"
+  },
+  {
+   "id": "french/26-eight-pounder",
+   "nation": "french",
+   "no": "26",
+   "name": "Canon de 8",
+   "detail": "Gribeauval",
+   "arm": "artillery",
+   "image": "french/26-eight-pounder.jpg"
+  },
+  {
+   "id": "french/27-howitzer",
+   "nation": "french",
+   "no": "27",
+   "name": "Obusier de 6 pouces",
+   "detail": "Gribeauval",
+   "arm": "artillery",
+   "image": "french/27-howitzer.jpg"
+  },
+  {
+   "id": "french/28-line-fusilier-greatcoat",
+   "nation": "french",
+   "no": "28",
+   "name": "Line fusilier",
+   "detail": "campaign greatcoat",
+   "arm": "infantry",
+   "image": "french/28-line-fusilier-greatcoat.jpg"
+  },
+  {
+   "id": "french/29-old-guard-greatcoat",
+   "nation": "french",
+   "no": "29",
+   "name": "Old Guard grenadier",
+   "detail": "campaign greatcoat",
+   "arm": "infantry",
+   "image": "french/29-old-guard-greatcoat.jpg"
+  },
+  {
+   "id": "french/30-guard-fusilier-blue-shako",
+   "nation": "french",
+   "no": "30",
+   "name": "Guard fusilier",
+   "detail": "blue shako visual variant",
+   "arm": "infantry",
+   "image": "french/30-guard-fusilier-blue-shako.jpg"
+  },
+  {
+   "id": "french/31-guard-voltigeur-red-shako",
+   "nation": "french",
+   "no": "31",
+   "name": "4th Guard voltigeur",
+   "detail": "red shako visual variant",
+   "arm": "infantry",
+   "image": "french/31-guard-voltigeur-red-shako.jpg"
+  },
+  {
+   "id": "french/32-marshal",
+   "nation": "french",
+   "no": "32",
+   "name": "Maréchal d’Empire",
+   "detail": "cloaked command",
+   "arm": "command",
+   "image": "french/32-marshal.jpg"
+  },
+  {
+   "id": "french/33-staff-officer",
+   "nation": "french",
+   "no": "33",
+   "name": "Officier d’état-major",
+   "detail": "staff officer",
+   "arm": "command",
+   "image": "french/33-staff-officer.jpg"
+  },
+  {
+   "id": "french/34-national-guard",
+   "nation": "french",
+   "no": "34",
+   "name": "Garde nationale",
+   "detail": "older-pattern bicorne",
+   "arm": "infantry",
+   "image": "french/34-national-guard.jpg"
+  },
+  {
+   "id": "british/01-line-infantry",
+   "nation": "british",
+   "no": "01",
+   "name": "27th Inniskilling",
+   "detail": "centre-company redcoat",
+   "arm": "infantry",
+   "image": "british/01-line-infantry.jpg"
+  },
+  {
+   "id": "british/02-grenadier-company",
+   "nation": "british",
+   "no": "02",
+   "name": "33rd Foot",
+   "detail": "grenadier-company private",
+   "arm": "infantry",
+   "image": "british/02-grenadier-company.jpg"
+  },
+  {
+   "id": "british/03-light-infantry",
+   "nation": "british",
+   "no": "03",
+   "name": "52nd Oxfordshire",
+   "detail": "light infantry",
+   "arm": "infantry",
+   "image": "british/03-light-infantry.jpg"
+  },
+  {
+   "id": "british/04-95th-rifles",
+   "nation": "british",
+   "no": "04",
+   "name": "95th Foot",
+   "detail": "rifleman",
+   "arm": "infantry",
+   "image": "british/04-95th-rifles.jpg"
+  },
+  {
+   "id": "british/05-60th-rifles",
+   "nation": "british",
+   "no": "05",
+   "name": "5th Battalion, 60th Foot",
+   "detail": "rifleman",
+   "arm": "infantry",
+   "image": "british/05-60th-rifles.jpg"
+  },
+  {
+   "id": "british/06-black-watch",
+   "nation": "british",
+   "no": "06",
+   "name": "42nd Black Watch",
+   "detail": "Highland private",
+   "arm": "infantry",
+   "image": "british/06-black-watch.jpg"
+  },
+  {
+   "id": "british/07-gordon-highlander",
+   "nation": "british",
+   "no": "07",
+   "name": "92nd Gordon Highlanders",
+   "detail": "grenadier private",
+   "arm": "infantry",
+   "image": "british/07-gordon-highlander.jpg"
+  },
+  {
+   "id": "british/08-first-foot-guards",
+   "nation": "british",
+   "no": "08",
+   "name": "1st Foot Guards",
+   "detail": "centre-company private",
+   "arm": "infantry",
+   "image": "british/08-first-foot-guards.jpg"
+  },
+  {
+   "id": "british/09-coldstream-guards",
+   "nation": "british",
+   "no": "09",
+   "name": "Coldstream Guards",
+   "detail": "light-company private",
+   "arm": "infantry",
+   "image": "british/09-coldstream-guards.jpg"
+  },
+  {
+   "id": "british/10-kgl-light",
+   "nation": "british",
+   "no": "10",
+   "name": "King’s German Legion",
+   "detail": "1st Light Battalion rifleman",
+   "arm": "infantry",
+   "image": "british/10-kgl-light.jpg"
+  },
+  {
+   "id": "british/11-greatcoat-infantry",
+   "nation": "british",
+   "no": "11",
+   "name": "Redcoat",
+   "detail": "campaign greatcoat variant",
+   "arm": "infantry",
+   "image": "british/11-greatcoat-infantry.jpg"
+  },
+  {
+   "id": "british/12-royal-sapper",
+   "nation": "british",
+   "no": "12",
+   "name": "Royal Sappers and Miners",
+   "detail": "working dress",
+   "arm": "infantry",
+   "image": "british/12-royal-sapper.jpg"
+  },
+  {
+   "id": "british/13-royal-dragoon",
+   "nation": "british",
+   "no": "13",
+   "name": "1st Royal Dragoons",
+   "detail": "heavy trooper",
+   "arm": "cavalry",
+   "image": "british/13-royal-dragoon.jpg"
+  },
+  {
+   "id": "british/14-scots-greys",
+   "nation": "british",
+   "no": "14",
+   "name": "Royal Scots Greys",
+   "detail": "heavy trooper",
+   "arm": "cavalry",
+   "image": "british/14-scots-greys.jpg"
+  },
+  {
+   "id": "british/15-life-guards",
+   "nation": "british",
+   "no": "15",
+   "name": "1st Life Guards",
+   "detail": "Household trooper",
+   "arm": "cavalry",
+   "image": "british/15-life-guards.jpg"
+  },
+  {
+   "id": "british/16-royal-horse-guards",
+   "nation": "british",
+   "no": "16",
+   "name": "Royal Horse Guards",
+   "detail": "The Blues trooper",
+   "arm": "cavalry",
+   "image": "british/16-royal-horse-guards.jpg"
+  },
+  {
+   "id": "british/17-light-dragoon",
+   "nation": "british",
+   "no": "17",
+   "name": "14th Light Dragoons",
+   "detail": "light trooper",
+   "arm": "cavalry",
+   "image": "british/17-light-dragoon.jpg"
+  },
+  {
+   "id": "british/18-10th-hussar",
+   "nation": "british",
+   "no": "18",
+   "name": "10th Hussars",
+   "detail": "light trooper",
+   "arm": "cavalry",
+   "image": "british/18-10th-hussar.jpg"
+  },
+  {
+   "id": "british/19-foot-gunner",
+   "nation": "british",
+   "no": "19",
+   "name": "Royal Artillery",
+   "detail": "foot gunner",
+   "arm": "artillery",
+   "image": "british/19-foot-gunner.jpg"
+  },
+  {
+   "id": "british/20-horse-gunner",
+   "nation": "british",
+   "no": "20",
+   "name": "Royal Horse Artillery",
+   "detail": "gunner",
+   "arm": "artillery",
+   "image": "british/20-horse-gunner.jpg"
+  },
+  {
+   "id": "british/21-line-officer",
+   "nation": "british",
+   "no": "21",
+   "name": "27th Foot",
+   "detail": "infantry captain",
+   "arm": "command",
+   "image": "british/21-line-officer.jpg"
+  },
+  {
+   "id": "british/22-general",
+   "nation": "british",
+   "no": "22",
+   "name": "British general",
+   "detail": "campaign staff dress",
+   "arm": "command",
+   "image": "british/22-general.jpg"
+  },
+  {
+   "id": "british/23-drummer",
+   "nation": "british",
+   "no": "23",
+   "name": "27th Foot",
+   "detail": "battalion drummer",
+   "arm": "command",
+   "image": "british/23-drummer.jpg"
+  },
+  {
+   "id": "british/24-colour-bearer",
+   "nation": "british",
+   "no": "24",
+   "name": "27th Foot",
+   "detail": "ensign with King’s Colour",
+   "arm": "command",
+   "image": "british/24-colour-bearer.jpg"
+  },
+  {
+   "id": "british/25-light-horse",
+   "nation": "british",
+   "no": "25",
+   "name": "Light cavalry horse",
+   "detail": "shared bare mount",
+   "arm": "mounts",
+   "image": "british/25-light-horse.jpg"
+  },
+  {
+   "id": "british/26-heavy-horse",
+   "nation": "british",
+   "no": "26",
+   "name": "Heavy cavalry horse",
+   "detail": "shared bare mount",
+   "arm": "mounts",
+   "image": "british/26-heavy-horse.jpg"
+  },
+  {
+   "id": "british/27-six-pounder",
+   "nation": "british",
+   "no": "27",
+   "name": "British 6-pounder field gun",
+   "detail": "",
+   "arm": "artillery",
+   "image": "british/27-six-pounder.jpg"
+  },
+  {
+   "id": "british/28-nine-pounder",
+   "nation": "british",
+   "no": "28",
+   "name": "British 9-pounder field gun",
+   "detail": "",
+   "arm": "artillery",
+   "image": "british/28-nine-pounder.jpg"
+  },
+  {
+   "id": "british/29-howitzer",
+   "nation": "british",
+   "no": "29",
+   "name": "British 5½-inch field howitzer",
+   "detail": "",
+   "arm": "artillery",
+   "image": "british/29-howitzer.jpg"
+  },
+  {
+   "id": "british/30-congreve-rockets",
+   "nation": "british",
+   "no": "30",
+   "name": "Congreve rocket launching frame",
+   "detail": "",
+   "arm": "artillery",
+   "image": "british/30-congreve-rockets.jpg"
+  },
+  {
+   "id": "austrian/01-fusilier-helmet",
+   "nation": "austrian",
+   "no": "01",
+   "name": "German fusilier",
+   "detail": "IR49 helmet",
+   "arm": "infantry",
+   "image": "austrian/01-fusilier-helmet.jpg"
+  },
+  {
+   "id": "austrian/02-fusilier-shako",
+   "nation": "austrian",
+   "no": "02",
+   "name": "German fusilier",
+   "detail": "IR4 shako",
+   "arm": "infantry",
+   "image": "austrian/02-fusilier-shako.jpg"
+  },
+  {
+   "id": "austrian/03-hungarian-fusilier",
+   "nation": "austrian",
+   "no": "03",
+   "name": "Hungarian fusilier",
+   "detail": "IR33",
+   "arm": "infantry",
+   "image": "austrian/03-hungarian-fusilier.jpg"
+  },
+  {
+   "id": "austrian/04-german-grenadier",
+   "nation": "austrian",
+   "no": "04",
+   "name": "German grenadier",
+   "detail": "IR4 company",
+   "arm": "infantry",
+   "image": "austrian/04-german-grenadier.jpg"
+  },
+  {
+   "id": "austrian/05-hungarian-grenadier",
+   "nation": "austrian",
+   "no": "05",
+   "name": "Hungarian grenadier",
+   "detail": "IR33 company",
+   "arm": "infantry",
+   "image": "austrian/05-hungarian-grenadier.jpg"
+  },
+  {
+   "id": "austrian/06-jager",
+   "nation": "austrian",
+   "no": "06",
+   "name": "Feldjäger",
+   "detail": "",
+   "arm": "infantry",
+   "image": "austrian/06-jager.jpg"
+  },
+  {
+   "id": "austrian/07-grenzer-white",
+   "nation": "austrian",
+   "no": "07",
+   "name": "Grenzer",
+   "detail": "older white uniform",
+   "arm": "infantry",
+   "image": "austrian/07-grenzer-white.jpg"
+  },
+  {
+   "id": "austrian/08-grenzer-brown",
+   "nation": "austrian",
+   "no": "08",
+   "name": "Grenzer",
+   "detail": "brown campaign uniform",
+   "arm": "infantry",
+   "image": "austrian/08-grenzer-brown.jpg"
+  },
+  {
+   "id": "austrian/09-landwehr",
+   "nation": "austrian",
+   "no": "09",
+   "name": "Lower Austrian Landwehr",
+   "detail": "",
+   "arm": "infantry",
+   "image": "austrian/09-landwehr.jpg"
+  },
+  {
+   "id": "austrian/10-fusilier-greatcoat",
+   "nation": "austrian",
+   "no": "10",
+   "name": "German fusilier",
+   "detail": "greatcoat",
+   "arm": "infantry",
+   "image": "austrian/10-fusilier-greatcoat.jpg"
+  },
+  {
+   "id": "austrian/11-grenadier-greatcoat",
+   "nation": "austrian",
+   "no": "11",
+   "name": "Grenadier",
+   "detail": "greatcoat",
+   "arm": "infantry",
+   "image": "austrian/11-grenadier-greatcoat.jpg"
+  },
+  {
+   "id": "austrian/12-zimmermann",
+   "nation": "austrian",
+   "no": "12",
+   "name": "Infantry Zimmermann",
+   "detail": "",
+   "arm": "infantry",
+   "image": "austrian/12-zimmermann.jpg"
+  },
+  {
+   "id": "austrian/13-sapper",
+   "nation": "austrian",
+   "no": "13",
+   "name": "Technical sapper",
+   "detail": "",
+   "arm": "infantry",
+   "image": "austrian/13-sapper.jpg"
+  },
+  {
+   "id": "austrian/14-cuirassier",
+   "nation": "austrian",
+   "no": "14",
+   "name": "Cuirassier",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "austrian/14-cuirassier.jpg"
+  },
+  {
+   "id": "austrian/15-dragoon",
+   "nation": "austrian",
+   "no": "15",
+   "name": "Dragoon",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "austrian/15-dragoon.jpg"
+  },
+  {
+   "id": "austrian/16-chevauleger",
+   "nation": "austrian",
+   "no": "16",
+   "name": "Chevauleger",
+   "detail": "green coat",
+   "arm": "cavalry",
+   "image": "austrian/16-chevauleger.jpg"
+  },
+  {
+   "id": "austrian/17-hussar",
+   "nation": "austrian",
+   "no": "17",
+   "name": "Hungarian hussar",
+   "detail": "light-blue variant",
+   "arm": "cavalry",
+   "image": "austrian/17-hussar.jpg"
+  },
+  {
+   "id": "austrian/18-uhlan-yellow",
+   "nation": "austrian",
+   "no": "18",
+   "name": "Uhlan",
+   "detail": "1st Regiment",
+   "arm": "cavalry",
+   "image": "austrian/18-uhlan-yellow.jpg"
+  },
+  {
+   "id": "austrian/19-uhlan-red",
+   "nation": "austrian",
+   "no": "19",
+   "name": "Uhlan",
+   "detail": "3rd Regiment",
+   "arm": "cavalry",
+   "image": "austrian/19-uhlan-red.jpg"
+  },
+  {
+   "id": "austrian/20-gunner",
+   "nation": "austrian",
+   "no": "20",
+   "name": "Artillery gunner",
+   "detail": "",
+   "arm": "artillery",
+   "image": "austrian/20-gunner.jpg"
+  },
+  {
+   "id": "austrian/21-officer",
+   "nation": "austrian",
+   "no": "21",
+   "name": "Infantry officer",
+   "detail": "",
+   "arm": "command",
+   "image": "austrian/21-officer.jpg"
+  },
+  {
+   "id": "austrian/22-drummer",
+   "nation": "austrian",
+   "no": "22",
+   "name": "Infantry drummer",
+   "detail": "IR4",
+   "arm": "command",
+   "image": "austrian/22-drummer.jpg"
+  },
+  {
+   "id": "austrian/23-colour-bearer",
+   "nation": "austrian",
+   "no": "23",
+   "name": "Infantry colour bearer",
+   "detail": "",
+   "arm": "command",
+   "image": "austrian/23-colour-bearer.jpg"
+  },
+  {
+   "id": "austrian/24-light-horse",
+   "nation": "austrian",
+   "no": "24",
+   "name": "Shared light cavalry horse",
+   "detail": "",
+   "arm": "mounts",
+   "image": "austrian/24-light-horse.jpg"
+  },
+  {
+   "id": "austrian/25-heavy-horse",
+   "nation": "austrian",
+   "no": "25",
+   "name": "Shared heavy cavalry horse",
+   "detail": "",
+   "arm": "mounts",
+   "image": "austrian/25-heavy-horse.jpg"
+  },
+  {
+   "id": "austrian/26-six-pounder",
+   "nation": "austrian",
+   "no": "26",
+   "name": "Austrian 6-pounder",
+   "detail": "",
+   "arm": "artillery",
+   "image": "austrian/26-six-pounder.jpg"
+  },
+  {
+   "id": "austrian/27-twelve-pounder",
+   "nation": "austrian",
+   "no": "27",
+   "name": "Austrian 12-pounder",
+   "detail": "",
+   "arm": "artillery",
+   "image": "austrian/27-twelve-pounder.jpg"
+  },
+  {
+   "id": "austrian/28-howitzer",
+   "nation": "austrian",
+   "no": "28",
+   "name": "Austrian 7-pounder howitzer",
+   "detail": "",
+   "arm": "artillery",
+   "image": "austrian/28-howitzer.jpg"
+  },
+  {
+   "id": "austrian/29-general",
+   "nation": "austrian",
+   "no": "29",
+   "name": "Austrian general",
+   "detail": "dress variant",
+   "arm": "command",
+   "image": "austrian/29-general.jpg"
+  },
+  {
+   "id": "prussian/01-musketeer",
+   "nation": "prussian",
+   "no": "01",
+   "name": "Musketeer",
+   "detail": "1st Silesian",
+   "arm": "infantry",
+   "image": "prussian/01-musketeer.jpg"
+  },
+  {
+   "id": "prussian/02-fusilier",
+   "nation": "prussian",
+   "no": "02",
+   "name": "Fusilier",
+   "detail": "1st Silesian",
+   "arm": "infantry",
+   "image": "prussian/02-fusilier.jpg"
+  },
+  {
+   "id": "prussian/03-grenadier",
+   "nation": "prussian",
+   "no": "03",
+   "name": "Grenadier",
+   "detail": "West Prussian battalion",
+   "arm": "infantry",
+   "image": "prussian/03-grenadier.jpg"
+  },
+  {
+   "id": "prussian/04-jager",
+   "nation": "prussian",
+   "no": "04",
+   "name": "Jäger",
+   "detail": "East Prussian rifleman",
+   "arm": "infantry",
+   "image": "prussian/04-jager.jpg"
+  },
+  {
+   "id": "prussian/05-schutzen",
+   "nation": "prussian",
+   "no": "05",
+   "name": "Schützen",
+   "detail": "Silesian rifle battalion",
+   "arm": "infantry",
+   "image": "prussian/05-schutzen.jpg"
+  },
+  {
+   "id": "prussian/06-landwehr",
+   "nation": "prussian",
+   "no": "06",
+   "name": "Landwehr infantry",
+   "detail": "Silesian",
+   "arm": "infantry",
+   "image": "prussian/06-landwehr.jpg"
+  },
+  {
+   "id": "prussian/07-reserve",
+   "nation": "prussian",
+   "no": "07",
+   "name": "Reserve infantry",
+   "detail": "I/1st Reserve Regiment",
+   "arm": "infantry",
+   "image": "prussian/07-reserve.jpg"
+  },
+  {
+   "id": "prussian/08-lutzow",
+   "nation": "prussian",
+   "no": "08",
+   "name": "Lützow Freikorps",
+   "detail": "infantry volunteer",
+   "arm": "infantry",
+   "image": "prussian/08-lutzow.jpg"
+  },
+  {
+   "id": "prussian/09-foot-guard",
+   "nation": "prussian",
+   "no": "09",
+   "name": "Foot Guard",
+   "detail": "1st Garde-Regiment zu Fuß",
+   "arm": "infantry",
+   "image": "prussian/09-foot-guard.jpg"
+  },
+  {
+   "id": "prussian/10-guard-jager",
+   "nation": "prussian",
+   "no": "10",
+   "name": "Guard Jäger",
+   "detail": "Garde-Jäger-Bataillon",
+   "arm": "infantry",
+   "image": "prussian/10-guard-jager.jpg"
+  },
+  {
+   "id": "prussian/11-dragoon",
+   "nation": "prussian",
+   "no": "11",
+   "name": "Dragoon",
+   "detail": "Queen’s Own Regiment",
+   "arm": "cavalry",
+   "image": "prussian/11-dragoon.jpg"
+  },
+  {
+   "id": "prussian/12-life-hussar",
+   "nation": "prussian",
+   "no": "12",
+   "name": "Life Hussar",
+   "detail": "1st Leib-Husaren",
+   "arm": "cavalry",
+   "image": "prussian/12-life-hussar.jpg"
+  },
+  {
+   "id": "prussian/13-uhlan",
+   "nation": "prussian",
+   "no": "13",
+   "name": "Uhlan",
+   "detail": "Brandenburg Regiment",
+   "arm": "cavalry",
+   "image": "prussian/13-uhlan.jpg"
+  },
+  {
+   "id": "prussian/14-cuirassier",
+   "nation": "prussian",
+   "no": "14",
+   "name": "Cuirassier",
+   "detail": "East Prussian Regiment",
+   "arm": "cavalry",
+   "image": "prussian/14-cuirassier.jpg"
+  },
+  {
+   "id": "prussian/15-garde-du-corps",
+   "nation": "prussian",
+   "no": "15",
+   "name": "Garde du Corps",
+   "detail": "late-war armour",
+   "arm": "cavalry",
+   "image": "prussian/15-garde-du-corps.jpg"
+  },
+  {
+   "id": "prussian/16-landwehr-cavalry",
+   "nation": "prussian",
+   "no": "16",
+   "name": "Landwehr cavalry",
+   "detail": "Kurmark",
+   "arm": "cavalry",
+   "image": "prussian/16-landwehr-cavalry.jpg"
+  },
+  {
+   "id": "prussian/17-foot-gunner",
+   "nation": "prussian",
+   "no": "17",
+   "name": "Foot artillery gunner",
+   "detail": "",
+   "arm": "artillery",
+   "image": "prussian/17-foot-gunner.jpg"
+  },
+  {
+   "id": "prussian/18-horse-gunner",
+   "nation": "prussian",
+   "no": "18",
+   "name": "Horse artillery gunner",
+   "detail": "",
+   "arm": "artillery",
+   "image": "prussian/18-horse-gunner.jpg"
+  },
+  {
+   "id": "prussian/19-line-officer",
+   "nation": "prussian",
+   "no": "19",
+   "name": "Line infantry officer",
+   "detail": "1st Silesian",
+   "arm": "command",
+   "image": "prussian/19-line-officer.jpg"
+  },
+  {
+   "id": "prussian/20-general",
+   "nation": "prussian",
+   "no": "20",
+   "name": "Prussian general",
+   "detail": "large cocked-hat command variant",
+   "arm": "command",
+   "image": "prussian/20-general.jpg"
+  },
+  {
+   "id": "prussian/21-drummer",
+   "nation": "prussian",
+   "no": "21",
+   "name": "Line infantry drummer",
+   "detail": "1st Silesian",
+   "arm": "command",
+   "image": "prussian/21-drummer.jpg"
+  },
+  {
+   "id": "prussian/22-bugler",
+   "nation": "prussian",
+   "no": "22",
+   "name": "Fusilier bugler",
+   "detail": "1st Silesian",
+   "arm": "command",
+   "image": "prussian/22-bugler.jpg"
+  },
+  {
+   "id": "prussian/23-colour-bearer",
+   "nation": "prussian",
+   "no": "23",
+   "name": "Infantry colour-bearer",
+   "detail": "Guard NCO",
+   "arm": "command",
+   "image": "prussian/23-colour-bearer.jpg"
+  },
+  {
+   "id": "prussian/24-light-horse",
+   "nation": "prussian",
+   "no": "24",
+   "name": "Light cavalry horse",
+   "detail": "shared asset",
+   "arm": "mounts",
+   "image": "prussian/24-light-horse.jpg"
+  },
+  {
+   "id": "prussian/25-heavy-horse",
+   "nation": "prussian",
+   "no": "25",
+   "name": "Heavy cavalry horse",
+   "detail": "shared asset",
+   "arm": "mounts",
+   "image": "prussian/25-heavy-horse.jpg"
+  },
+  {
+   "id": "prussian/26-six-pounder",
+   "nation": "prussian",
+   "no": "26",
+   "name": "Prussian 6-pounder field gun",
+   "detail": "",
+   "arm": "artillery",
+   "image": "prussian/26-six-pounder.jpg"
+  },
+  {
+   "id": "prussian/27-twelve-pounder",
+   "nation": "prussian",
+   "no": "27",
+   "name": "Prussian 12-pounder heavy field gun",
+   "detail": "",
+   "arm": "artillery",
+   "image": "prussian/27-twelve-pounder.jpg"
+  },
+  {
+   "id": "prussian/28-howitzer",
+   "nation": "prussian",
+   "no": "28",
+   "name": "Prussian 7-pounder howitzer",
+   "detail": "",
+   "arm": "artillery",
+   "image": "prussian/28-howitzer.jpg"
+  },
+  {
+   "id": "prussian/29-musketeer-1806",
+   "nation": "prussian",
+   "no": "29",
+   "name": "1806 Musketeer",
+   "detail": "von Alvensleben, IR 33",
+   "arm": "infantry",
+   "image": "prussian/29-musketeer-1806.jpg"
+  },
+  {
+   "id": "prussian/30-infantry-officer-1806",
+   "nation": "prussian",
+   "no": "30",
+   "name": "1806 Infantry officer",
+   "detail": "von Alvensleben, campaign dress",
+   "arm": "command",
+   "image": "prussian/30-infantry-officer-1806.jpg"
+  },
+  {
+   "id": "prussian/31-dragoon-1806",
+   "nation": "prussian",
+   "no": "31",
+   "name": "1806 Dragoon",
+   "detail": "Königin, former DR 5",
+   "arm": "cavalry",
+   "image": "prussian/31-dragoon-1806.jpg"
+  },
+  {
+   "id": "prussian/32-foot-gunner-1806",
+   "nation": "prussian",
+   "no": "32",
+   "name": "1806 Foot artillery gunner",
+   "detail": "service dress",
+   "arm": "artillery",
+   "image": "prussian/32-foot-gunner-1806.jpg"
+  },
+  {
+   "id": "prussian/33-grenadier-1806",
+   "nation": "prussian",
+   "no": "33",
+   "name": "1806 Grenadier",
+   "detail": "IR 33, 1799-pattern cap",
+   "arm": "infantry",
+   "image": "prussian/33-grenadier-1806.jpg"
+  },
+  {
+   "id": "prussian/34-staff-officer",
+   "nation": "prussian",
+   "no": "34",
+   "name": "Staff officer",
+   "detail": "headquarters, cocked-hat service variant",
+   "arm": "command",
+   "image": "prussian/34-staff-officer.jpg"
+  },
+  {
+   "id": "russian/01-line-infantry",
+   "nation": "russian",
+   "no": "01",
+   "name": "Line infantryman",
+   "detail": "",
+   "arm": "infantry",
+   "image": "russian/01-line-infantry.jpg"
+  },
+  {
+   "id": "russian/02-grenadier",
+   "nation": "russian",
+   "no": "02",
+   "name": "Grenadier",
+   "detail": "grenadier platoon",
+   "arm": "infantry",
+   "image": "russian/02-grenadier.jpg"
+  },
+  {
+   "id": "russian/03-pavlov-grenadier",
+   "nation": "russian",
+   "no": "03",
+   "name": "Pavlov grenadier",
+   "detail": "",
+   "arm": "infantry",
+   "image": "russian/03-pavlov-grenadier.jpg"
+  },
+  {
+   "id": "russian/04-jager",
+   "nation": "russian",
+   "no": "04",
+   "name": "Jäger",
+   "detail": "ordinary light infantry",
+   "arm": "infantry",
+   "image": "russian/04-jager.jpg"
+  },
+  {
+   "id": "russian/05-jager-marksman",
+   "nation": "russian",
+   "no": "05",
+   "name": "Jäger rifle marksman",
+   "detail": "",
+   "arm": "infantry",
+   "image": "russian/05-jager-marksman.jpg"
+  },
+  {
+   "id": "russian/06-preobrazhensky-guard",
+   "nation": "russian",
+   "no": "06",
+   "name": "Preobrazhensky Guard grenadier",
+   "detail": "",
+   "arm": "infantry",
+   "image": "russian/06-preobrazhensky-guard.jpg"
+  },
+  {
+   "id": "russian/07-guard-jager",
+   "nation": "russian",
+   "no": "07",
+   "name": "Lifeguard Jäger",
+   "detail": "grenadier company",
+   "arm": "infantry",
+   "image": "russian/07-guard-jager.jpg"
+  },
+  {
+   "id": "russian/08-opolchenie",
+   "nation": "russian",
+   "no": "08",
+   "name": "Opolchenie militia pikeman",
+   "detail": "",
+   "arm": "infantry",
+   "image": "russian/08-opolchenie.jpg"
+  },
+  {
+   "id": "russian/09-greatcoat-infantry",
+   "nation": "russian",
+   "no": "09",
+   "name": "Infantryman in shinel greatcoat",
+   "detail": "",
+   "arm": "infantry",
+   "image": "russian/09-greatcoat-infantry.jpg"
+  },
+  {
+   "id": "russian/10-pioneer",
+   "nation": "russian",
+   "no": "10",
+   "name": "Pioneer / combat engineer",
+   "detail": "",
+   "arm": "infantry",
+   "image": "russian/10-pioneer.jpg"
+  },
+  {
+   "id": "russian/11-dragoon",
+   "nation": "russian",
+   "no": "11",
+   "name": "Kiev dragoon",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "russian/11-dragoon.jpg"
+  },
+  {
+   "id": "russian/12-pavlograd-hussar",
+   "nation": "russian",
+   "no": "12",
+   "name": "Pavlograd hussar",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "russian/12-pavlograd-hussar.jpg"
+  },
+  {
+   "id": "russian/13-uhlan",
+   "nation": "russian",
+   "no": "13",
+   "name": "Lithuanian uhlan",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "russian/13-uhlan.jpg"
+  },
+  {
+   "id": "russian/14-cuirassier",
+   "nation": "russian",
+   "no": "14",
+   "name": "Army cuirassier",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "russian/14-cuirassier.jpg"
+  },
+  {
+   "id": "russian/15-chevalier-garde",
+   "nation": "russian",
+   "no": "15",
+   "name": "Chevalier Guard",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "russian/15-chevalier-garde.jpg"
+  },
+  {
+   "id": "russian/16-don-cossack",
+   "nation": "russian",
+   "no": "16",
+   "name": "Don Cossack",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "russian/16-don-cossack.jpg"
+  },
+  {
+   "id": "russian/17-guard-cossack",
+   "nation": "russian",
+   "no": "17",
+   "name": "Lifeguard Cossack",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "russian/17-guard-cossack.jpg"
+  },
+  {
+   "id": "russian/18-mounted-jager",
+   "nation": "russian",
+   "no": "18",
+   "name": "Livonia mounted Jäger",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "russian/18-mounted-jager.jpg"
+  },
+  {
+   "id": "russian/19-foot-gunner",
+   "nation": "russian",
+   "no": "19",
+   "name": "Foot artillery gunner",
+   "detail": "",
+   "arm": "artillery",
+   "image": "russian/19-foot-gunner.jpg"
+  },
+  {
+   "id": "russian/20-horse-gunner",
+   "nation": "russian",
+   "no": "20",
+   "name": "Horse artillery gunner",
+   "detail": "",
+   "arm": "artillery",
+   "image": "russian/20-horse-gunner.jpg"
+  },
+  {
+   "id": "russian/21-line-officer",
+   "nation": "russian",
+   "no": "21",
+   "name": "Infantry company officer",
+   "detail": "",
+   "arm": "command",
+   "image": "russian/21-line-officer.jpg"
+  },
+  {
+   "id": "russian/22-general",
+   "nation": "russian",
+   "no": "22",
+   "name": "Russian general",
+   "detail": "",
+   "arm": "command",
+   "image": "russian/22-general.jpg"
+  },
+  {
+   "id": "russian/23-drummer",
+   "nation": "russian",
+   "no": "23",
+   "name": "Line infantry drummer",
+   "detail": "",
+   "arm": "command",
+   "image": "russian/23-drummer.jpg"
+  },
+  {
+   "id": "russian/24-colour-bearer",
+   "nation": "russian",
+   "no": "24",
+   "name": "Infantry colour bearer",
+   "detail": "",
+   "arm": "command",
+   "image": "russian/24-colour-bearer.jpg"
+  },
+  {
+   "id": "russian/25-light-horse",
+   "nation": "russian",
+   "no": "25",
+   "name": "Light cavalry horse",
+   "detail": "shared asset",
+   "arm": "mounts",
+   "image": "russian/25-light-horse.jpg"
+  },
+  {
+   "id": "russian/26-heavy-horse",
+   "nation": "russian",
+   "no": "26",
+   "name": "Heavy cavalry horse",
+   "detail": "shared asset",
+   "arm": "mounts",
+   "image": "russian/26-heavy-horse.jpg"
+  },
+  {
+   "id": "russian/27-six-pounder",
+   "nation": "russian",
+   "no": "27",
+   "name": "Six-pounder field gun",
+   "detail": "",
+   "arm": "artillery",
+   "image": "russian/27-six-pounder.jpg"
+  },
+  {
+   "id": "russian/28-twelve-pounder",
+   "nation": "russian",
+   "no": "28",
+   "name": "Twelve-pounder field gun",
+   "detail": "",
+   "arm": "artillery",
+   "image": "russian/28-twelve-pounder.jpg"
+  },
+  {
+   "id": "russian/29-unicorn",
+   "nation": "russian",
+   "no": "29",
+   "name": "Half-pood unicorn / licorne",
+   "detail": "",
+   "arm": "artillery",
+   "image": "russian/29-unicorn.jpg"
+  },
+  {
+   "id": "russian/30-pages-staff-officer-1802",
+   "nation": "russian",
+   "no": "30",
+   "name": "Corps of Pages staff officer",
+   "detail": "early bicorne",
+   "arm": "command",
+   "image": "russian/30-pages-staff-officer-1802.jpg"
+  },
+  {
+   "id": "polish/01-line-fusilier",
+   "nation": "polish",
+   "no": "01",
+   "name": "2nd Infantry",
+   "detail": "fusilier",
+   "arm": "infantry",
+   "image": "polish/01-line-fusilier.jpg"
+  },
+  {
+   "id": "polish/02-line-grenadier",
+   "nation": "polish",
+   "no": "02",
+   "name": "2nd Infantry",
+   "detail": "grenadier",
+   "arm": "infantry",
+   "image": "polish/02-line-grenadier.jpg"
+  },
+  {
+   "id": "polish/03-line-voltigeur",
+   "nation": "polish",
+   "no": "03",
+   "name": "2nd Infantry",
+   "detail": "voltigeur",
+   "arm": "infantry",
+   "image": "polish/03-line-voltigeur.jpg"
+  },
+  {
+   "id": "polish/04-vistula-infantry",
+   "nation": "polish",
+   "no": "04",
+   "name": "Vistula Legion",
+   "detail": "fusilier",
+   "arm": "infantry",
+   "image": "polish/04-vistula-infantry.jpg"
+  },
+  {
+   "id": "polish/05-campaign-infantry",
+   "nation": "polish",
+   "no": "05",
+   "name": "Line infantry",
+   "detail": "campaign greatcoat",
+   "arm": "infantry",
+   "image": "polish/05-campaign-infantry.jpg"
+  },
+  {
+   "id": "polish/06-sapper",
+   "nation": "polish",
+   "no": "06",
+   "name": "Regimental sapper",
+   "detail": "",
+   "arm": "infantry",
+   "image": "polish/06-sapper.jpg"
+  },
+  {
+   "id": "polish/07-foot-artillery",
+   "nation": "polish",
+   "no": "07",
+   "name": "Foot artillery gunner",
+   "detail": "",
+   "arm": "artillery",
+   "image": "polish/07-foot-artillery.jpg"
+  },
+  {
+   "id": "polish/08-horse-artillery",
+   "nation": "polish",
+   "no": "08",
+   "name": "Horse artillery gunner",
+   "detail": "",
+   "arm": "artillery",
+   "image": "polish/08-horse-artillery.jpg"
+  },
+  {
+   "id": "polish/09-line-officer",
+   "nation": "polish",
+   "no": "09",
+   "name": "Line infantry officer",
+   "detail": "",
+   "arm": "command",
+   "image": "polish/09-line-officer.jpg"
+  },
+  {
+   "id": "polish/10-general",
+   "nation": "polish",
+   "no": "10",
+   "name": "Polish general",
+   "detail": "field dress",
+   "arm": "command",
+   "image": "polish/10-general.jpg"
+  },
+  {
+   "id": "polish/11-drummer",
+   "nation": "polish",
+   "no": "11",
+   "name": "Line infantry drummer",
+   "detail": "",
+   "arm": "command",
+   "image": "polish/11-drummer.jpg"
+  },
+  {
+   "id": "polish/12-colour-bearer",
+   "nation": "polish",
+   "no": "12",
+   "name": "Line infantry colour bearer",
+   "detail": "",
+   "arm": "command",
+   "image": "polish/12-colour-bearer.jpg"
+  },
+  {
+   "id": "polish/13-duchy-uhlan",
+   "nation": "polish",
+   "no": "13",
+   "name": "3rd Uhlans",
+   "detail": "centre company",
+   "arm": "cavalry",
+   "image": "polish/13-duchy-uhlan.jpg"
+  },
+  {
+   "id": "polish/14-guard-lancer",
+   "nation": "polish",
+   "no": "14",
+   "name": "1st Polish Guard Lancers",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "polish/14-guard-lancer.jpg"
+  },
+  {
+   "id": "polish/15-vistula-lancer",
+   "nation": "polish",
+   "no": "15",
+   "name": "Vistula Lancers",
+   "detail": "later 7th Lancers",
+   "arm": "cavalry",
+   "image": "polish/15-vistula-lancer.jpg"
+  },
+  {
+   "id": "polish/16-chasseur-a-cheval",
+   "nation": "polish",
+   "no": "16",
+   "name": "5th Chasseurs à cheval",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "polish/16-chasseur-a-cheval.jpg"
+  },
+  {
+   "id": "polish/17-hussar",
+   "nation": "polish",
+   "no": "17",
+   "name": "13th Hussars",
+   "detail": "Silver Hussars",
+   "arm": "cavalry",
+   "image": "polish/17-hussar.jpg"
+  },
+  {
+   "id": "polish/18-cuirassier",
+   "nation": "polish",
+   "no": "18",
+   "name": "14th Cuirassiers",
+   "detail": "",
+   "arm": "cavalry",
+   "image": "polish/18-cuirassier.jpg"
+  },
+  {
+   "id": "polish/19-krakus",
+   "nation": "polish",
+   "no": "19",
+   "name": "Krakus cavalry",
+   "detail": "early levy",
+   "arm": "cavalry",
+   "image": "polish/19-krakus.jpg"
+  },
+  {
+   "id": "polish/20-light-horse",
+   "nation": "polish",
+   "no": "20",
+   "name": "Shared light cavalry horse",
+   "detail": "",
+   "arm": "mounts",
+   "image": "polish/20-light-horse.jpg"
+  },
+  {
+   "id": "polish/21-heavy-horse",
+   "nation": "polish",
+   "no": "21",
+   "name": "Shared heavy cavalry horse",
+   "detail": "",
+   "arm": "mounts",
+   "image": "polish/21-heavy-horse.jpg"
+  },
+  {
+   "id": "polish/22-krakus-pony",
+   "nation": "polish",
+   "no": "22",
+   "name": "Small Krakus mount",
+   "detail": "",
+   "arm": "mounts",
+   "image": "polish/22-krakus-pony.jpg"
+  },
+  {
+   "id": "polish/23-six-pounder",
+   "nation": "polish",
+   "no": "23",
+   "name": "French-system 6-pounder field gun",
+   "detail": "",
+   "arm": "artillery",
+   "image": "polish/23-six-pounder.jpg"
+  },
+  {
+   "id": "polish/24-twelve-pounder",
+   "nation": "polish",
+   "no": "24",
+   "name": "French-system 12-pounder field gun",
+   "detail": "",
+   "arm": "artillery",
+   "image": "polish/24-twelve-pounder.jpg"
+  },
+  {
+   "id": "polish/25-howitzer",
+   "nation": "polish",
+   "no": "25",
+   "name": "French-system field howitzer",
+   "detail": "",
+   "arm": "artillery",
+   "image": "polish/25-howitzer.jpg"
+  }
+ ]
+}

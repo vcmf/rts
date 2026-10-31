@@ -42,6 +42,7 @@ export const formatted = [
   'src/look/',
   'src/render/',
   'src/app/',
+  'src/ui/',
   'tools/',
   'test/',
   'eslint.config.js',

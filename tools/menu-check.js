@@ -1,0 +1,158 @@
+// The front menu's page check, evaluated inside app/menu.html by tools/menu-check.ts (a script: it reads the page's
+// window.MENU and its DOM). `menuCheck(expected)` walks every screen and returns { failures, checked }; `expected` is
+// the roster as loaded, copied before any sabotage, so a page that drops what the roster holds is caught.
+// docs/systems/front-menu.md ("Checks").
+
+/** The next two frames: the hashchange has fired and the screen is drawn. */
+function settle() {
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+}
+
+async function visit(hash) {
+  location.hash = hash
+  await settle()
+}
+
+function press(key) {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+}
+
+/** Every check: each returns a list of failures (empty when it passes). */
+const MENU_CHECKS = {
+  /** The page is no wider than the window on every screen it shows. */
+  async overflow() {
+    const failures = []
+    for (const hash of ['#home', '#history', '#roster/regiments', '#roster/commanders/x/all/0']) {
+      await visit(hash)
+      const over = document.documentElement.scrollWidth - innerWidth
+      if (over > 0) failures.push(`overflow: ${hash} is ${over} px wider than the window`)
+    }
+    return failures
+  },
+
+  /** Muted items cannot be focused or chosen; the live one opens History; the arrows skip the muted. */
+  async home() {
+    const failures = []
+    await visit('#home')
+    const items = [...document.querySelectorAll('.menu-item')]
+    const muted = items.filter(i => i.getAttribute('aria-disabled') === 'true')
+    if (!muted.length || muted.length === items.length) failures.push('home: expected muted and live items')
+    for (const item of muted) {
+      if (item.tabIndex !== -1) failures.push(`muted: ${item.textContent.trim().slice(0, 20)} is focusable`)
+      item.click()
+      await settle()
+      if (location.hash !== '#home') failures.push(`muted: a click on a muted item went to ${location.hash}`)
+      await visit('#home')
+    }
+    press('ArrowDown')
+    press('ArrowUp')
+    const selected = document.querySelector('.menu-item.sel')
+    if (!selected || selected.getAttribute('aria-disabled') === 'true') failures.push('home: a muted item is selected')
+    press('Enter')
+    await settle()
+    if (location.hash !== '#history') failures.push(`home: Enter went to ${location.hash || 'nowhere'}, not History`)
+    return failures
+  },
+
+  /** History's plates show the roster's counts and each opens its roster. */
+  async history(expected) {
+    const failures = []
+    for (const kind of ['commanders', 'regiments']) {
+      await visit('#history')
+      const plate = document.querySelector(`#history [data-kind=${kind}]`)
+      const count = plate.querySelector('.count').textContent
+      if (!count.startsWith(`${expected[kind].length} `)) failures.push(`history: ${kind} count reads "${count}"`)
+      plate.click()
+      await settle()
+      if (!location.hash.startsWith(`#roster/${kind}/`)) {
+        failures.push(`history: ${kind} plate went to ${location.hash}`)
+      }
+    }
+    return failures
+  },
+
+  /** Every army's roster of each kind (and each arm) shows exactly the roster's entries, in order. */
+  async rosters(expected) {
+    const failures = []
+    for (const kind of ['commanders', 'regiments']) {
+      for (const nation of expected.nations) {
+        const arms = kind === 'regiments' ? ['all', ...expected.arms] : ['all']
+        for (const arm of arms) {
+          await visit(`#roster/${kind}/${nation.id}/${arm}`)
+          const want = expected[kind].filter(e => e.nation === nation.id && (arm === 'all' || e.arm === arm))
+          const got = [...document.querySelectorAll('#roster .card')].map(c => c.dataset.id)
+          if (got.join() !== want.map(e => e.id).join()) {
+            failures.push(`cards: ${kind}/${nation.id}/${arm} shows ${got.length}, the roster has ${want.length}`)
+          }
+        }
+      }
+    }
+    return failures
+  },
+
+  /** A plate shows its entry, the arrows turn it, Esc walks back to home one level at a time. */
+  async plateAndEscape(expected) {
+    const failures = []
+    const nation = expected.nations[0].id
+    const first = expected.regiments.filter(e => e.nation === nation)
+    await visit(`#roster/regiments/${nation}/all/0`)
+    const name = () => document.querySelector('#plate [data-slot=name]').textContent
+    if (document.querySelector('#plate').hidden || name() !== first[0].name) {
+      failures.push('plate: the first plate is not shown')
+    }
+    press('ArrowRight')
+    await settle()
+    if (first.length > 1 && name() !== first[1].name) failures.push('plate: ArrowRight did not turn to the next entry')
+    const back = []
+    for (let i = 0; i < 3; i++) {
+      press('Escape')
+      await settle()
+      back.push(location.hash.split('/')[0] + (document.querySelector('#plate').hidden ? '' : '+plate'))
+    }
+    if (back.join() !== '#roster,#history,#home') failures.push(`Esc: walked back ${back.join(' → ')}`)
+    return failures
+  },
+
+  /** Every card shows a thumbnail, and each loads. Identical paintings (a mount shared by armies) share one URL. */
+  async images(expected) {
+    const sources = new Set()
+    let shown = 0
+    for (const kind of ['commanders', 'regiments']) {
+      for (const nation of expected.nations) {
+        await visit(`#roster/${kind}/${nation.id}/all`)
+        for (const img of document.querySelectorAll('#roster .card img')) {
+          sources.add(img.src)
+          shown += 1
+        }
+      }
+    }
+    const loads = [...sources].map(
+      src =>
+        new Promise(resolve => {
+          const img = new Image()
+          img.onload = () => resolve(img.naturalWidth > 0 ? null : src)
+          img.onerror = () => resolve(src)
+          img.src = src
+        }),
+    )
+    const broken = (await Promise.all(loads)).filter(Boolean)
+    const total = expected.commanders.length + expected.regiments.length
+    const failures = broken.map(src => `images: ${src} does not load`)
+    if (shown !== total) failures.push(`images: ${shown} cards with a thumbnail, ${total} in the roster`)
+    return failures
+  },
+}
+
+/** Runs every check against `expected`; ends back at home. The page's entry point (a script: set on window). */
+window.menuCheck = async function menuCheck(expected) {
+  const failures = []
+  for (const [name, check] of Object.entries(MENU_CHECKS)) {
+    try {
+      failures.push(...(await check(expected)))
+    } catch (error) {
+      failures.push(`${name}: threw ${error && error.message}`)
+    }
+  }
+  await visit('#home')
+  return { failures, checked: Object.keys(MENU_CHECKS).length }
+}

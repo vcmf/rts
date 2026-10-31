@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Empires</title>
+<!-- The front menu: home, History, the rosters, the full plate. Code: src/ui/main.ts; as built: docs/systems/front-menu.md.
+     The words of the screens are here; what comes from the roster (data/history/roster.json) the code fills in. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=Instrument+Sans:wdth,wght@75..100,400..700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../src/ui/theme.css">
+<link rel="stylesheet" href="../src/ui/menu.css">
+</head>
+<body>
+<div class="plate"></div>
+
+<main>
+  <section class="screen" id="home" aria-label="Home">
+    <div class="home-inner">
+      <header class="title-block">
+        <div class="mono sub">1796 — 1815 · Battles of the Napoleonic Wars</div>
+        <h1 class="display">Empires</h1>
+        <div class="double-rule"></div>
+        <div class="mono sub">Prototype · interface study</div>
+      </header>
+      <nav class="menu" aria-label="Main menu">
+        <button class="menu-item frame muted" aria-disabled="true">
+          <span class="mono no">01</span>
+          <span class="display label">Campaign<span class="hint">March, supply and intercepted dispatches across Europe</span></span>
+          <span class="tag">In preparation</span>
+        </button>
+        <button class="menu-item frame muted" aria-disabled="true">
+          <span class="mono no">02</span>
+          <span class="display label">Battles<span class="hint">The great battles, fought as they were</span></span>
+          <span class="tag">In preparation</span>
+        </button>
+        <button class="menu-item frame" data-route="#history">
+          <span class="mono no">03</span>
+          <span class="display label">History<span class="hint">The commanders and the regiments</span></span>
+          <span class="mono go">Open →</span>
+        </button>
+        <button class="menu-item frame muted" aria-disabled="true">
+          <span class="mono no">04</span>
+          <span class="display label">Settings<span class="hint">Picture, sound, controls, language</span></span>
+          <span class="tag">In preparation</span>
+        </button>
+      </nav>
+    </div>
+  </section>
+
+  <section class="screen" id="history" aria-label="History" hidden>
+    <header class="head">
+      <div class="crumbs mono"><button data-route="#home">Home</button><span>/</span><span>History</span></div>
+      <h2 class="display">History</h2>
+      <div class="double-rule" style="max-width: 1100px"></div>
+      <p class="lede">The men who led the armies of 1796–1815, and the soldiers who filled them. Portraits and uniforms are painted for the game from period sources.</p>
+    </header>
+    <div class="hub">
+      <button class="hub-card frame" data-kind="commanders">
+        <div class="pic"><img alt=""></div>
+        <div class="txt">
+          <div class="mono plate-no">Plate I</div>
+          <h3 class="display">Commanders</h3>
+          <p>Emperors, marshals and generals of six nations.</p>
+          <div class="foot mono"><span class="count"></span><span class="open">Open →</span></div>
+        </div>
+      </button>
+      <button class="hub-card frame" data-kind="regiments">
+        <div class="pic"><img alt=""></div>
+        <div class="txt">
+          <div class="mono plate-no">Plate II</div>
+          <h3 class="display">Regiments</h3>
+          <p>Infantry, cavalry and artillery: their dress, colours and guns.</p>
+          <div class="foot mono"><span class="count"></span><span class="open">Open →</span></div>
+        </div>
+      </button>
+    </div>
+  </section>
+
+  <section class="screen" id="roster" aria-label="Roster" hidden>
+    <header class="head">
+      <div class="crumbs mono">
+        <button data-route="#home">Home</button><span>/</span><button data-route="#history">History</button><span>/</span><span data-slot="crumb"></span>
+      </div>
+    </header>
+    <div class="tabs" role="tablist">
+      <button class="tab display" role="tab" data-kind="commanders">Commanders</button>
+      <button class="tab display" role="tab" data-kind="regiments">Regiments</button>
+      <span class="total mono" data-slot="total"></span>
+    </div>
+    <div class="filters" data-slot="nations"></div>
+    <div class="filters arms" data-slot="arms"></div>
+    <div data-slot="heading"></div>
+    <div class="grid" data-slot="grid"></div>
+  </section>
+</main>
+
+<div id="plate" role="dialog" aria-modal="true" aria-label="Plate" hidden>
+  <button class="btn close" data-turn="close">Close · Esc</button>
+  <div class="plate-inner">
+    <figure>
+      <div class="frame"><img data-slot="image" alt=""></div>
+      <figcaption class="mono"><span data-slot="figure"></span><span data-slot="position"></span></figcaption>
+    </figure>
+    <div class="plate-text">
+      <div class="nat mono"><span class="sw"></span><span data-slot="nation"></span></div>
+      <h2 class="display" data-slot="name"></h2>
+      <p class="subtitle" data-slot="subtitle"></p>
+      <dl data-slot="facts"></dl>
+      <div class="turns">
+        <button class="btn" data-turn="prev">← Previous</button>
+        <button class="btn" data-turn="next">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="status">
+  <span><span class="dot"></span>Interface study 0.1</span>
+  <span class="hide-sm" data-slot="where"></span>
+  <span class="right hide-sm"><span class="key">↑</span> <span class="key">↓</span> choose · <span class="key">Enter</span> open · <span class="key">Esc</span> back</span>
+</footer>
+
+<script type="module" src="../src/ui/main.ts"></script>
+</body>
+</html>

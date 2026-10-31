@@ -1,0 +1,72 @@
+/* The specimen sheet's layout (app/ui-kit.html): an index on the left, numbered sections on the right. */
+
+.kit { position: relative; z-index: 2; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 56px; max-width: 1320px; margin: 0 auto; padding: 56px 56px 120px; }
+.index { position: sticky; top: 56px; align-self: start; display: grid; gap: 10px; }
+.index a { color: var(--ink-soft); text-decoration: none; }
+.index a:hover { color: var(--accent); }
+.pencil { color: var(--pencil); }
+
+.kit-head { display: grid; gap: 14px; margin-bottom: 64px; }
+.kit-head h1 { margin: 0; font-size: clamp(56px, 8vw, 96px); }
+.kit-head .lede { margin: 0; }
+
+.kit section { padding: 28px 0 64px; border-top: 1px solid var(--rule); scroll-margin-top: 24px; }
+.kit section > h2 { display: flex; align-items: baseline; gap: 14px; margin: 0 0 14px; font-size: 40px; }
+.kit section > h2 .mono { color: var(--pencil); }
+.kit section > .lede { margin: 0 0 30px; }
+
+.principles { margin: 0; padding-left: 22px; display: grid; gap: 12px; max-width: 70ch; color: var(--ink-soft); }
+.principles b { color: var(--ink); font-weight: 600; }
+
+.row { display: flex; flex-wrap: wrap; gap: 22px; align-items: center; }
+
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 18px; margin-bottom: 22px; }
+.swatches figure { margin: 0; display: grid; gap: 8px; }
+.swatches i { display: block; height: 64px; border: 1px solid var(--rule); }
+.swatches figcaption span { color: var(--pencil); text-transform: none; letter-spacing: 0.02em; }
+
+.type-row { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--rule); }
+
+.lines { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 24px; margin-bottom: 48px; }
+.lines > div { display: grid; gap: 10px; }
+.frames { gap: 52px; padding: 0 16px; align-items: start; }
+.frames figure { margin: 0; display: grid; gap: 22px; }
+.frames figcaption span { color: var(--pencil); text-transform: none; }
+.specimen { width: 150px; height: 96px; }
+.specimen.attn { --tick: 120px; --frame-tick: var(--accent); border-color: var(--accent); }
+
+.states { border-collapse: collapse; }
+.states th, .states td { padding: 12px 22px 12px 0; text-align: left; }
+.states thead th { color: var(--pencil); font-weight: 500; }
+.states tbody th { color: var(--pencil); font-weight: 500; padding-right: 30px; }
+.kit-focus { outline: 1px dashed var(--accent); outline-offset: 4px; }
+
+.kit-menu { max-width: 560px; padding: 0 16px; }
+
+.settings { max-width: 640px; padding: 8px 26px; margin: 0 16px; }
+.settings .field:last-child { border-bottom: 0; }
+.checks { display: grid; gap: 10px; }
+
+.gauges { display: grid; grid-template-columns: 110px 220px 60px; gap: 12px 16px; align-items: center; margin-bottom: 34px; }
+.loading { display: grid; gap: 8px; max-width: 420px; }
+
+.overlays { align-items: start; gap: 48px; padding: 0 16px; }
+.dispatches { display: grid; gap: 16px; }
+
+.cards { gap: 40px; padding: 0 16px; align-items: start; }
+.cards .card { width: 200px; }
+
+.battle { display: grid; gap: 36px; padding: 0 16px; }
+.battle-status { padding-top: 12px; border-top: 1px solid var(--rule); }
+
+@media (max-width: 860px) {
+  .kit { grid-template-columns: minmax(0, 1fr); padding: 40px 22px 80px; gap: 24px; }
+  .index { position: static; grid-template-columns: 1fr 1fr; }
+  .type-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .type-row .display { font-size: min(1em, 15vw) !important; }
+  .states { display: block; overflow-x: auto; }
+  .gauges { grid-template-columns: 90px minmax(0, 1fr) 50px; }
+  .battle-status { flex-wrap: wrap; }
+  .settings { margin: 0; padding: 8px 18px; }
+  .frames, .overlays, .cards, .battle, .kit-menu { padding: 0 8px; }
+}

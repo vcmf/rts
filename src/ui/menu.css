@@ -1,0 +1,96 @@
+/*
+  The front menu page's layout (app/menu.html): the screens, the History plates, the roster grid, the full plate.
+  The elements themselves are src/ui/theme.css.
+*/
+
+main { position: relative; z-index: 2; min-height: 100%; }
+.screen { min-height: 100vh; padding: 56px 64px 96px; animation: rise 0.45s ease both; }
+
+/* ---------- Home ---------- */
+
+#home:not([hidden]) { display: grid; place-items: center; grid-template-columns: minmax(0, 1fr); }
+.home-inner { width: min(560px, 100%); display: grid; gap: 44px; }
+.title-block { text-align: center; display: grid; gap: 14px; }
+.title-block h1 { margin: 0; font-size: clamp(64px, 11vw, 132px); letter-spacing: 0.06em; }
+.title-block .double-rule { width: 64%; margin: 0 auto; }
+.title-block .sub { color: var(--ink-soft); }
+
+/* ---------- Page heading ---------- */
+
+.head { display: grid; gap: 14px; margin-bottom: 40px; }
+.head h2 { margin: 0; font-size: clamp(48px, 7vw, 84px); }
+.head .lede { margin: 0; }
+
+/* ---------- History: the two plates ---------- */
+
+.hub { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 48px; max-width: 1100px; }
+.hub-card { display: grid; grid-template-columns: 0.9fr 1fr; text-align: left; min-height: 340px; }
+.hub-card .pic { border-right: 1px solid var(--ink); overflow: hidden; background: var(--paint); }
+.hub-card .pic img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.6s ease; }
+.hub-card .txt { padding: 26px 24px; display: flex; flex-direction: column; gap: 10px; }
+.hub-card .plate-no { color: var(--pencil); }
+.hub-card h3 { margin: 0; font-size: 44px; }
+.hub-card p { margin: 0; color: var(--ink-soft); }
+.hub-card .foot { margin-top: auto; display: flex; justify-content: space-between; }
+.hub-card:is(:hover, :focus-visible) { --tick: 150px; --frame-tick: var(--accent); border-color: var(--accent); outline: none; }
+.hub-card:is(:hover, :focus-visible) img { transform: scale(1.03); }
+.hub-card:is(:hover, :focus-visible) .open { color: var(--accent); }
+
+/* ---------- Roster ---------- */
+
+#roster .head { margin-bottom: 26px; }
+#roster .tabs { margin-bottom: 18px; }
+#roster .total { margin-left: auto; padding-bottom: 12px; color: var(--ink-soft); }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.filters.arms { margin-bottom: 40px; }
+
+.nation-head { display: flex; align-items: baseline; gap: 16px; margin: 6px 0 34px; color: var(--ink-soft); }
+.nation-head .rule { flex: 1; height: 1px; background: var(--rule); }
+.nation-head h3 { margin: 0; font-size: 34px; color: var(--ink); }
+.nation-head .native { color: var(--pencil); }
+.nation-head .sw { width: 14px; height: 14px; align-self: center; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 52px 40px; padding: 0 12px; }
+.empty { color: var(--pencil); padding: 40px 0; }
+
+/* ---------- The full plate ---------- */
+
+#plate { position: fixed; inset: 0; z-index: 10; overflow-y: auto; background: var(--paper-texture), var(--paper); background-attachment: fixed; animation: rise 0.35s ease both; }
+#plate .close { position: fixed; top: 34px; right: 40px; z-index: 11; }
+.plate-inner { min-height: 100%; display: grid; grid-template-columns: minmax(280px, 520px) minmax(280px, 460px); gap: 72px; justify-content: center; align-items: center; padding: 72px 64px; }
+.plate-inner figure { margin: 0; justify-self: end; width: fit-content; }
+.plate-inner .frame { padding: 12px; --tick: 130px; --frame-tick: var(--army); }
+.plate-inner img { display: block; width: auto; max-width: 100%; max-height: 74vh; background: var(--paint); }
+.plate-inner figcaption { margin-top: 12px; color: var(--pencil); display: flex; justify-content: space-between; }
+.plate-text { display: grid; gap: 18px; align-content: center; }
+.plate-text .nat { display: flex; align-items: center; gap: 10px; color: var(--army); }
+.plate-text h2 { margin: 0; font-size: clamp(48px, 6vw, 76px); }
+.plate-text .subtitle { font-size: 20px; margin: 0; }
+.plate-text dl { margin: 6px 0 0; display: grid; grid-template-columns: 110px 1fr; gap: 10px 18px; border-top: 1px solid var(--rule); padding-top: 18px; }
+.plate-text dt { color: var(--pencil); padding-top: 2px; }
+.plate-text dd { margin: 0; color: var(--ink-soft); }
+.plate-text .turns { display: flex; gap: 12px; margin-top: 14px; }
+
+/* ---------- The status bar, on its own band of paper ---------- */
+
+body > .status {
+  position: fixed; left: 15px; right: 15px; bottom: 15px; z-index: 3; pointer-events: none;
+  padding: 26px 19px 11px; background: linear-gradient(to bottom, transparent, var(--paper) 45%);
+}
+
+/* ---------- Phone width ---------- */
+
+@media (max-width: 760px) {
+  .screen { padding: 40px 22px 80px; }
+  .menu { padding: 0 8px; }
+  .menu-item { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; padding: 14px; }
+  .menu-item .label { font-size: 26px; }
+  .menu-item .tag { font-size: 9px; padding: 2px 5px; }
+  .hub-card { grid-template-columns: 1fr; }
+  .hub-card .pic { border-right: 0; border-bottom: 1px solid var(--ink); height: 280px; }
+  .plate-inner { grid-template-columns: 1fr; gap: 40px; padding: 80px 24px 40px; }
+  .plate-inner figure { justify-self: center; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 40px 28px; }
+  .nation-head { flex-wrap: wrap; }
+  .hide-sm { display: none; }
+}

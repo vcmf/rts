@@ -33,6 +33,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 - [`systems/formations.md`](systems/formations.md): the formation layer in the sim: shapes, changes, the lag model, the footprint gate (S1a).
 - [`systems/sim-page.md`](systems/sim-page.md): the page that draws and drives the sim: soldier layer, staff map, input, replays (S1b).
 - [`systems/look.md`](systems/look.md): the look page: the painted world in TypeScript (Track E L0c).
+- [`systems/front-menu.md`](systems/front-menu.md): the front menu, the History screens and the interface language (decision 0100).
 - [`systems/fire-morale.md`](systems/fire-morale.md): fire by company, keyed casualties, loss-driven morale and rout (S1c-1).
 - [`systems/melee.md`](systems/melee.md): cavalry charges, melee, and the square against cavalry (S1d-2).
 - [`systems/artillery.md`](systems/artillery.md): the battery's roundshot over the ground and canister (S1d-3).
@@ -60,6 +61,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 ## Plans
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
+  [`plans/active/front-menu.md`](plans/active/front-menu.md) (the front menu, the History screens and the interface language),
   [`plans/active/track-s.md`](plans/active/track-s.md) (Track S: the sim engine's remaining phases before the playtest, the `epic/sim-engine` branch),
   [`plans/active/c0-bench.md`](plans/active/c0-bench.md) (C0: the visual bench, its overlay, time controls and cases),
   [`plans/active/ci-faster-tests.md`](plans/active/ci-faster-tests.md) (CI's tests and coverage in three shards each, the bench split in five files),
