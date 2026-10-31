@@ -114,3 +114,18 @@ Round 1 (`/code-review high`, 10 findings, none severe; fixed or answered, then 
   map now); the macro bake's demo fallback without `FAR_O`; the paper's colour copied (the staff map's `PAPER`
   shared); the meadow's rings drawn off the tile (skipped on the CPU when their band misses it);
 - answered: the near comb bake past the window (open question 1); the paper by season (open question 2).
+
+## Measured
+
+The bench (`tools/bench-look.mjs --gpu metal`, the preview build, under the bench lock; the dev Mac, load 4.9 at the
+start, 7.2 at the end; the Kobelnitz window, the frame's p50 averaged over the three yaws, the arm l2):
+
+| Camera | The epic before (53a91bfc) | G3a on the window | G3a 1 km off the tile (`?benchat=-900,-200`) |
+|---|---|---|---|
+| close | 6.12 ms | 6.01 ms | 2.74 ms |
+| default | 6.54 ms | 6.66 ms | 2.88 ms |
+| wide | 5.20 ms | 5.34 ms | 2.71 ms |
+
+On the window within the runs' noise (about ±0.15 ms), 100,000 more triangles (the larger ring: 769,288 against
+667,336); off the tile cheaper (the ring alone). Textures 261.8 MB against 243.3 MB. The look checks (the guard, the
+detail and water checks) fail in the same places as on the epic before (the same 24 guard blocks; #295, #78, #120).
