@@ -1485,15 +1485,33 @@ Object.assign(window, {
   farTerrainMat: terrain.farTerrainMat,
   riverMask: terrain.riverMask,
   riverMaskCanvas: terrain.riverMaskCanvas,
-  groups: nature.groups,
-  FAR: nature.far,
-  STONES: nature.stones,
-  KEEP_CLEAR: nature.KEEP_CLEAR,
-  touchesZone: nature.touchesZone,
-  placeable: nature.placeable,
-  footprint: nature.footprint,
-  lightCam: bakes.lightCam,
-  shadowRT: bakes.shadowRT,
+  get groups() {
+    return nature.groups // (the tile's now: a moved tile's, retile)
+  },
+  get FAR() {
+    return nature.far // (the tile's now: a moved tile's, retile)
+  },
+  get STONES() {
+    return nature.stones // (the tile's now: a moved tile's, retile)
+  },
+  get KEEP_CLEAR() {
+    return nature.KEEP_CLEAR // (the tile's now: a moved tile's, retile)
+  },
+  get touchesZone() {
+    return nature.touchesZone // (the tile's now: a moved tile's, retile)
+  },
+  get placeable() {
+    return nature.placeable // (the tile's now: a moved tile's, retile)
+  },
+  get footprint() {
+    return nature.footprint // (the tile's now: a moved tile's, retile)
+  },
+  get lightCam() {
+    return bakes.lightCam // (the tile's now: a moved tile's, retile)
+  },
+  get shadowRT() {
+    return bakes.shadowRT // (the tile's now: a moved tile's, retile)
+  },
   __macro: { bake: macroBake, macro },
   __buildMs: performance.now() - T0,
 })
@@ -1508,9 +1526,20 @@ Object.assign(window, {
  */
 async function retile(next: LookData): Promise<number> {
   const t0 = performance.now()
+  // every check before the first change: a tile refused leaves the page as it was
   if (look.world.kind !== 'map') throw new Error("retile: a map world only (the demo's river is its tile's)")
+  // (what is not rebuilt yet: the buildings' light and the units' shade hang on the bakes; a map world has neither)
+  if (bldLight || armiesParam !== null) throw new Error('retile: not with buildings or armies (not on a map world yet)')
   checkLookData(D, next)
   checkWorld(next.world, lookWindow)
+  const same = (a: { n: number; cell: number }, b: { n: number; cell: number }) => a.n === b.n && a.cell === b.cell
+  if (!same(next.cover, look.cover) || !same(next.far, look.far) || next.far.h.length !== look.far.h.length) {
+    throw new Error("retile: the tile's cover or far ring is not the page's size")
+  }
+  // (the water, the banks and the river stay the first tile's: a moved tile has none yet, G3d)
+  if (next.river.n || next.water.spans.length || next.bank.spans.length) {
+    throw new Error('retile: a tile with water or banks (G3d)')
+  }
   TILE_O.set(next.tileAt[0], next.tileAt[1])
   setHeightfield(next.hf, look.far, D.spec.tile / 2)
   terrain.retile()
@@ -1667,17 +1696,23 @@ Object.assign(window, {
     },
     meadowBakeMs: meadow?.bakeMs ?? null,
     // (the combed meadow's flow textures, on load)
-    flowBuildMs: flowTex?.ms ?? null,
-    meadow: meadow
-      ? {
-          reach: meadow.reach,
-          growingCells: meadow.growingCells,
-          growthAt: meadow.growthAt,
-          groundAt: meadow.groundAt,
-          cropAt: meadow.cropAt,
-          croppingCells: meadow.croppingCells,
-        }
-      : null,
+    get flowBuildMs() {
+      return flowOwned?.value.ms ?? null
+    },
+    // (the meadow map's now: a moved tile's, retile)
+    get meadow() {
+      const mm = meadowMapOwned?.value
+      return meadow && mm
+        ? {
+            reach: meadow.reach,
+            growingCells: mm.growingCells,
+            growthAt: mm.growthAt,
+            groundAt: mm.groundAt,
+            cropAt: mm.cropAt,
+            croppingCells: mm.croppingCells,
+          }
+        : null
+    },
     hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
     // the bounce map (LC5): its target, and the time of one bake: the median of n frames with it and of n without,
     // each waited on by reading the map back (ms; gl.finish does not wait under ANGLE's Metal)

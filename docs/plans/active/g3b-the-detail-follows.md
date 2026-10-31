@@ -93,3 +93,13 @@ G3b-1, round 1 (`/code-review high`, 10 findings, none severe; fixed or answered
   as before; the home view after them as on a fresh page (the frame readout and a few isolated pixels apart).
 - **A move's time:** 594–766 ms on the dev Mac's GPU (Metal, four moves), 6–9 s on SwiftShader: one long frame, until
   G3c spreads the bakes.
+
+G3b-2, round 1 (`/code-review high`, 8 findings, 1 taken as severe):
+- fixed, severe: a refused tile could leave the page half moved (the covers' size checked after the ground had moved):
+  every check now before the first change (the data, the world, the covers' and far ring's sizes, no water or banks);
+- fixed: the page's hooks for the tools (`window`'s trees, shadow map and light camera, `__look`'s meadow and flow)
+  read the tile's parts now, not the first tile's; the macro colour's checks bound on materials made later (a moved
+  tile's trees); a page with buildings or armies refuses a move (their light and shade hang on the bakes: not on a map
+  world yet);
+- answered: the relief's tone over the whole ring and the trees' generated models built again on each move: a move's
+  cost, G3c's (it spreads and trims the move).

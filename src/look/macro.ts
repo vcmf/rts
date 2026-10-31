@@ -474,6 +474,10 @@ export function buildMacro(
     for (const d of MATERIAL_DEFINES) m.setDefine(`#define ${d}`, ARM_DEFINE[arm] === d)
   }
   mats.bindAll(applyArm) // a painted material made later (the meadow's) gets the arm too
+  // and the checks set now (setCheck): a material made later (a moved tile's trees, G3b-2) takes them too
+  mats.bindAll(m => {
+    for (const d of MACRO_CHECK_DEFINES) m.setDefine(`#define ${d}`, checks.includes(d))
+  })
   // The bakes run one at a time, in the order asked (a new grain, a restored context, an arm, a check, a rebake): each
   // takes the arm and the checks wanted when it starts. The bake's shader's defines are the checks' (all but the class
   // view, which the bake ignores) and arm 4's strokes; `baked` is what the targets hold, set once a bake finishes
