@@ -48,8 +48,8 @@ import { buildBuildings } from './buildings.ts'
 import { buildBuildingLight } from './building-light.ts'
 import type { Units } from './units.ts'
 import type { UnitData } from './units-data.ts'
-import { ARMIES_DEMO } from '../scenarios/armies-demo.ts'
-import { battleChoice, battleHref } from './world/battle.ts'
+import { BATTLE_BUDGETS, DEFAULT_BATTLE, LEGACY_BATTALION } from '../scenarios/battles.ts'
+import { armOn, battleChoice, battleHref, battleOptions } from './world/battle-url.ts'
 // the figures' unit data by file (data/figures/<figure>.unitdata): a scenario names its figure, the page finds it here
 const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', {
   query: '?url',
@@ -640,31 +640,17 @@ const meadow = meadowMap
   : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dark ground under its clumps (shore.glsl)
 // ?battle[=typical|16k|32k]: the demo's two armies at the division scale (docs/plans/active/division-armies.md,
-// decision 0076): a stress-test battle of corps filled up to a figure budget (bare: the scenario's default, 16,000;
+// decision 0099): a stress-test battle of corps filled up to a figure budget (bare: the scenario's default, 16,000;
 // the panel's Battle select reloads with another), whose first corps march up in column, deploy and fire on a
 // scripted loop and the rest stand in column behind, drawn as figures (src/look/units.ts); the old ?armies=<n> maps
-// onto the battle nearest its figures (src/look/world/battle.ts battleChoice). ?unitshadow=0: without their cast
+// onto the battle nearest its figures (src/look/world/battle-url.ts battleChoice). ?unitshadow=0: without their cast
 // shadows (decision 0047's A/B). Not on the page by default: the goldens and the look checks never see them
 // The uniforms are the era's, named by dye and resolved onto the figure's roles (world/dyes.ts, decision 0068). Test
 // switches (with ?battle): ?uniforms=all, each side's line infantry wearing the scenario's reviewSides in turn;
 // ?uniforms=all-greatcoats, the same with every man in his greatcoat; ?dye=<dye>:<rrggbb>[;…] (bare, or '#' as
 // %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride). The other arms (the
 // scenario's ARMS_DEMO after the line infantry): ?light=0, ?artillery=0, ?cavalry=0, ?cuirassiers=0 leave them out
-const battleName = battleChoice(
-  params,
-  Object.fromEntries(Object.entries(ARMIES_DEMO.battles).map(([k, b]) => [k, b.figures])),
-  ARMIES_DEMO.battle,
-  ARMIES_DEMO.legacyBattalion,
-)
-// (under ?sim the other arms are left out: their scripts are stand-ins the sim does not drive, nor place against its
-// armies; asked for there, a clear error)
-const armSwitch = (name: string) => {
-  const on = bit(name)
-  if (on && simParam) {
-    throw new Error(`?${name}=1 with ?sim: the sim drives the infantry alone; the ${name} is scripted`)
-  }
-  return on ?? !simParam
-}
+const battleName = battleChoice(params, BATTLE_BUDGETS, DEFAULT_BATTLE, LEGACY_BATTALION)
 const unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
 // frame (else only when it would change); ?ushadowlod=1 casts from the LOD the view draws (else the far LOD always);
@@ -774,7 +760,7 @@ if (battleName === null && params.get('lookat') !== null) {
 }
 if (battleName !== null) {
   if (mats.webgl1) {
-    throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
+    throw new Error('?battle needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
   }
   const [
     { Units: UnitsC },
@@ -782,7 +768,7 @@ if (battleName !== null) {
     { facingAt },
     { FIGURE_PARTS, dressAll, dyeOverride, wearInTurn },
     { RULESETS },
-    { ARMS_DEMO },
+    { ARMIES_DEMO, ARMS_DEMO },
     { armScript, lookAtSpot },
     { battleLayout, figuresOf, orderOfBattle },
     { Trodden, ViewRays },
@@ -859,7 +845,7 @@ if (battleName !== null) {
   const dyes = dyeOverride(params.get('dye'), era.dyes)
   // the arms on the page (the line infantry always; the others by their switch, none under ?sim), each its unit type,
   // figure and script (src/look/world/arms.ts armScript)
-  const armSpecs = ARMS_DEMO.filter((spec, i) => i === 0 || armSwitch(spec.name))
+  const armSpecs = ARMS_DEMO.filter((spec, i) => armOn(params, spec.name, simParam, i === 0))
   const datas = await Promise.all(armSpecs.map(a => figureData(a.figure)))
   const built = armSpecs.map((spec, i) => {
     const t = era.ruleset.types[spec.unitType]
@@ -980,7 +966,7 @@ if (battleName !== null) {
   trodden.setOn(trample ?? true)
   armiesFocus = facingAt(foot.battalions)
   // ?sim: the sim plays the line infantry (src/look/sim-armies.ts, battle threads PR 4b) in place of its script (the
-  // other arms are left out under it: armSwitch)
+  // other arms are left out under it: armOn)
   let sim: SimPlay | null = null
   if (simParam) {
     const { playSim } = await import('./sim-armies.ts')
@@ -1123,12 +1109,14 @@ resSel.onchange = () => {
 }
 // the battle (a player's option, docs/plans/active/division-armies.md): none or one of the scenario's, by its figures;
 // choosing one reloads the page with it (?battle), every other switch kept
+// (none on a map window: hidden)
 const battleSel = byId<HTMLSelectElement>('battle')
-for (const [name, b] of Object.entries(ARMIES_DEMO.battles)) {
-  battleSel.add(new Option(`${name} (${b.figures.toLocaleString('en')})`, name))
-}
-battleSel.value = battleName ?? ''
-battleSel.onchange = () => location.assign(battleHref(location.href, battleSel.value || null))
+const battleChoices = battleOptions(onMap, BATTLE_BUDGETS)
+if (battleChoices) {
+  battleSel.replaceChildren(...battleChoices.map(o => new Option(o.label, o.value)))
+  battleSel.value = battleName ?? ''
+  battleSel.onchange = () => location.assign(battleHref(location.href, battleSel.value || null))
+} else (battleSel.closest('.row') as HTMLElement | null)?.style.setProperty('display', 'none')
 const scaleTick = () => {
   if (+resSel.value !== S.res) resSel.value = String(S.res) // the panel follows a scale set elsewhere (the tools)
   if (S.res) applyScale(S.res)

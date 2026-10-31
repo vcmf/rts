@@ -1,6 +1,6 @@
 // The demo map's armies (src/look/world/armies.ts) and their figure (data/figures/fr-line-infantry.unitdata, written by
 // tools/bake-figure.py; src/look/units-data.ts): a unit's slots by the ruleset's drill at the division scale (decision
-// 0076: 4 sections of 20 files × 3 ranks, the sim's blocks since #280), the script's phases in order, the scenario
+// 0099: 4 sections of 20 files × 3 ranks, the sim's blocks since #280), the script's phases in order, the scenario
 // resolved as the page resolves it, and the baked figure whole. The battle's layout: test/battle.test.ts
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'

@@ -5,7 +5,7 @@ last_reviewed: 2026-10-31
 
 # Plan: the look page's armies at the division scale
 
-Asked by the owner on 2026-10-31. The sim's division scale (decision 0076, on the campaign branch: a unit is a
+Asked by the owner on 2026-10-31. The sim's division scale (the campaign track's proposed scale, PR #234: a unit is a
 division, a figure 25 men) changes the blocks the look page builds its armies on: line infantry 240 figures (4 sections
 of 20 files × 3 ranks), light cavalry 80 (2 squadrons of 20 × 2), a battery 4 guns of 12 (48). The sim's PR #280 (the
 blocks, the ranges) and #283 (the formations) are held until the look has moved its armies, because the look's
@@ -51,7 +51,7 @@ Decision 0099 (proposed) records the choices below.
    `cuirassiers` (120: 3 squadrons of 20 × 2; the owner gave no size, the docs none: a heavier unit than the light
    cavalry, an open question below), `battery` (4 guns, 48). The corps' compositions: an **infantry corps** of 5 line,
    1 light, 2 light cavalry, 1 battery (9 units, 1,568 figures), a **reserve cavalry corps** of 4 cuirassiers and a
-   battery (5 units, 528), the main army's only (decision 0076).
+   battery (5 units, 528), the main army's only (PR #234's scale).
 2. **The battles** (`src/scenarios/armies-demo.ts`): `typical` (6,400 a budget: 2 infantry corps a side, 6,272
    figures), `16k` and `32k` (the reserve cavalry corps a side, then infantry corps until the budget; the last corps
    cut at the first unit that does not fit: 16,000 and 32,000 figures). The order of battle is a pure function

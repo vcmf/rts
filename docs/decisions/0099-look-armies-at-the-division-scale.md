@@ -10,7 +10,7 @@ Proposed with `docs/plans/active/division-armies.md`, from the owner's choices o
 
 ## Context
 
-Decision 0076 (on the campaign branch) makes a unit a division and a figure 25 men: line infantry 240 figures, light
+The campaign track's proposed scale (PR #234) makes a unit a division and a figure 25 men: line infantry 240 figures, light
 infantry 160, light cavalry 80, a battery of 4 guns (48), corps of 8–10 units. The sim's PRs for it (#280, the blocks
 and ranges; #283, the formations) were held until the look page moved its armies, whose tests expected the old
 blocks (a battalion of 414, a cavalry regiment of 256, a battery of 8 guns). The look page's demo laid out `?armies=n`

@@ -327,6 +327,10 @@ export const MAX_COMPANIES = 32
 export const TRAIL_MIN = 256
 export const TRAIL_MAX = 4096
 
+/** a corps' units: so many of each unit type, in the order they are fielded (an era's corps, ruleset data; the look
+ *  page's battle fields them up to a budget: src/look/world/battle.ts orderOfBattle) */
+export type Composition = readonly { readonly type: string; readonly count: number }[]
+
 // the ruleset with one type's block changed (tests and tools: the S1a block, the ceiling)
 export const withBlock = (rs: Ruleset, type: string, g: Partial<Geometry>): Ruleset => ({
   ...rs,

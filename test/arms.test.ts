@@ -1,6 +1,6 @@
 // The armies demo's arms (docs/plans/done/cavalry-artillery-demo.md, docs/plans/active/division-armies.md): their
 // scripts (src/look/world/arms.ts: the infantry's behind the same interface; a ride; a service; each with its
-// reserve) and footprints at the division scale's blocks (decision 0076, the sim's since #280), placeArm, their
+// reserve) and footprints at the division scale's blocks (decision 0099, the sim's since #280), placeArm, their
 // figures (data/figures/fr-cuirassier.unitdata, fr-foot-artillery.unitdata, written by tools/bake-figure.py) whole,
 // dressed from the dyes, and their shadows' pure parts: the contacts' spread, the shape's heights (their mean, a
 // regression), the texel fitted to a big figure. The battle's layout: test/battle.test.ts
@@ -11,6 +11,7 @@ import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
 import { APPROACH, CYCLE, extents, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
 import {
+  armCandidates,
   armScript,
   boxOf,
   drillScript,
@@ -132,8 +133,15 @@ describe('a ride (rideScript)', () => {
       const p = s.phase(t, true)
       expect(p).toMatchObject({ phase: 'reserve', start: 0, reserve: true })
       expect(s.moving(p)).toBe(false)
-      expect(s.man(1, t, p, 0.5, man())).toEqual({ x: 1, z: 0, face: 0, role: 'halt', since: 0, moving: false })
+      expect(s.man(1, t, p, 0.5, man())).toEqual({ x: 1, z: 0, face: 0, role: 'halt', since: 0.2, moving: false })
     }
+  })
+  // (review round 1: a reserve's horses all started their halt clip at 0, in lockstep)
+  it("keeps each reserve man's own lag in his halt clip", () => {
+    const p = s.phase(3, true)
+    const since = [0, 0.5, 1].map(j => s.man(0, 3, p, j, man()).since)
+    expect(new Set(since).size).toBe(3)
+    expect(since[2]).toBeCloseTo(0.4, 12)
   })
   it('refuses a ride with no halted leg (its reserve would have no role)', () => {
     expect(() => rideScript(places, [{ role: 'walk', seconds: 2 }], speeds, 1)).toThrow(/halted leg/)
@@ -228,6 +236,18 @@ describe("the arms' places (placeArm, formationSlots)", () => {
     expect(c?.z).toBe(-45)
     expect(Math.abs((c?.x ?? 0) - 20)).toBeGreaterThanOrEqual(10)
     expect(taken.length).toBe(3)
+  })
+  // (review round 1: placeArm built and sorted its 2,401 moves on every call)
+  it('builds its moves once a reach and grid, the nearest first, a move ahead costing three along the front', () => {
+    const c = armCandidates(120, 5)
+    expect(armCandidates(120, 5)).toBe(c)
+    expect(c.length).toBe(49 * 49)
+    expect(c.slice(0, 3)).toEqual([
+      [0, 0],
+      [-5, 0],
+      [5, 0],
+    ])
+    expect(armCandidates(60, 5).length).toBe(25 * 25)
   })
   it("never crosses into the other side's half, and is null with no room", () => {
     const foot = { a0: -5, a1: 5, z0: -2, z1: 60 }

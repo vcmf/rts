@@ -149,7 +149,8 @@ export function rideScript(
       out.z = places[i][1] + (p.reserve ? 0 : rideDistance(legs, starts, speeds, t))
       out.face = 0
       out.role = legs[p.leg].role
-      out.since = p.reserve ? 0 : p.start + jitter * lag
+      // (a reserve's men in their halt clip each from his own lag: never in lockstep)
+      out.since = (p.reserve ? 0 : p.start) + jitter * lag
       out.moving = speeds[out.role] > 0
       return out
     },
@@ -235,6 +236,21 @@ export function boxOf(x: number, z: number, h: number, a0: number, a1: number, z
   }
   return { x0: Math.min(...xs), z0: Math.min(...zs), x1: Math.max(...xs), z1: Math.max(...zs) }
 }
+/** placeArm's moves from the spot wanted (m: along the front, ahead), on a `grid` m grid within `reach` m, the
+ *  nearest first (a move ahead or back counting three times one along the front): built once a reach and grid */
+const candidates = new Map<string, [number, number][]>()
+export function armCandidates(reach: number, grid: number): readonly [number, number][] {
+  const key = `${reach},${grid}`
+  let cands = candidates.get(key)
+  if (!cands) {
+    cands = []
+    for (let i = -reach; i <= reach; i += grid) for (let j = -reach; j <= reach; j += grid) cands.push([i, j])
+    const cost = (p: [number, number]) => Math.hypot(p[0], 3 * p[1])
+    cands.sort((p, q) => cost(p) - cost(q) || p[0] - q[0] || p[1] - q[1])
+    candidates.set(key, cands)
+  }
+  return cands
+}
 /** whether two boxes overlap (touching edges do not) */
 export const overlaps = (p: Box, q: Box): boolean => p.x0 < q.x1 && q.x0 < p.x1 && p.z0 < q.z1 && q.z0 < p.z1
 
@@ -267,11 +283,7 @@ export function placeArm(
   const mid = [(foot.a0 + foot.a1) / 2, (foot.z0 + foot.z1) / 2]
   const c = Math.cos(heading)
   const s = Math.sin(heading)
-  const cands: [number, number][] = []
-  for (let i = -reach; i <= reach; i += grid) for (let j = -reach; j <= reach; j += grid) cands.push([i, j])
-  const cost = (p: [number, number]) => Math.hypot(p[0], 3 * p[1])
-  cands.sort((p, q) => cost(p) - cost(q) || p[0] - q[0] || p[1] - q[1])
-  for (const [di, dj] of cands) {
+  for (const [di, dj] of armCandidates(reach, grid)) {
     if (want.back && (side === 0 ? dj > 0 : dj < 0)) continue
     // (the unit's origin: the footprint's centre at the candidate)
     const ux = cx + di - (c * mid[0] + s * mid[1])

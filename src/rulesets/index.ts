@@ -11,7 +11,7 @@ export const RULESETS: Readonly<
   Record<string, { ruleset: Ruleset; uniforms: Readonly<Record<string, Dress>>; dyes: DyeSet }>
 > = {
   napoleonic: { ruleset: napoleonic, uniforms: NAPOLEONIC_UNIFORMS, dyes: NAPOLEONIC_DYES },
-  // the same era at the division scale (decision 0076): the look page's armies
+  // the same era at the division scale (decision 0099): the look page's armies
   'napoleonic-division': { ruleset: napoleonicDivision, uniforms: NAPOLEONIC_UNIFORMS, dyes: NAPOLEONIC_DYES },
 }
 

@@ -16,14 +16,15 @@ import { armScript, boxOf, type Box } from '../src/look/world/arms.ts'
 import {
   FIELD,
   RESERVE_BACK,
-  battleChoice,
-  battleHref,
   battleLayout,
   figuresOf,
   orderOfBattle,
+  reserveSpots,
   type FieldKind,
   type Fielded,
 } from '../src/look/world/battle.ts'
+import { armOn, battleChoice, battleHref, battleOptions } from '../src/look/world/battle-url.ts'
+import { BATTLE_BUDGETS, DEFAULT_BATTLE, LEGACY_BATTALION } from '../src/scenarios/battles.ts'
 import { dressed, FIGURE_PARTS } from '../src/look/world/dyes.ts'
 import { decodeUnits, type UnitData } from '../src/look/units-data.ts'
 
@@ -59,7 +60,7 @@ const demo = (x: number, z: number) => {
 }
 
 describe('the ruleset at the division scale', () => {
-  it('fields the blocks of decision 0076 (and #280): line 240, light 160, light cavalry 80, a battery of 4 guns, 48', () => {
+  it("fields the division scale's blocks (decision 0099, #280's): line 240, light 160, light cavalry 80, 4 guns, 48", () => {
     expect(sizes).toEqual({ infantry: 240, light: 160, cavalry: 80, cuirassiers: 120, battery: 48 })
     expect(rs.types.battery.geometry.companies).toBe(4)
     expect([rs.types.cavalry.geometry.companies, rs.types.cavalry.geometry.files]).toEqual([2, 20])
@@ -68,7 +69,7 @@ describe('the ruleset at the division scale', () => {
     const cr = compileRuleset(rulesetOf(ARMIES_DEMO.ruleset))
     for (const [k, n] of Object.entries(sizes)) expect(cr.types[cr.typeIndex(k)].slots, k).toBe(n)
   })
-  it('makes an infantry corps of 8 to 10 units and 1,300 to 1,700 figures (decision 0076)', () => {
+  it('makes an infantry corps of 8 to 10 units and 1,300 to 1,700 figures (decision 0099)', () => {
     const units = CORPS.infantry.reduce((a, u) => a + u.count, 0)
     const figures = CORPS.infantry.reduce((a, u) => a + u.count * sizes[u.type], 0)
     expect(units).toBeGreaterThanOrEqual(8)
@@ -109,8 +110,16 @@ describe('the order of battle (orderOfBattle)', () => {
     // (a third line unit does not fit: the battery's 48 would, but the corps ends at the line)
     expect(o.map(u => u.type)).toEqual(['infantry', 'infantry'])
   })
-  it('fields the once corps alone without a repeated one, and fails loudly on a type with no size', () => {
-    expect(orderOfBattle({ figures: 99999, once: [CORPS.cavalryReserve], repeat: [] }, sizes).length).toBe(5)
+  // (review round 1: a repeated corps of no figures was fielded forever, the page hung)
+  it('refuses a corps of no figures, the repeated one included, rather than fielding it forever', () => {
+    for (const c of [[], [{ type: 'infantry', count: 0 }]]) {
+      expect(() => orderOfBattle({ figures: 99999, once: [], repeat: c }, sizes)).toThrow(/no figures/)
+      expect(() => orderOfBattle({ figures: 99999, once: [c], repeat: CORPS.infantry }, sizes)).toThrow(/no figures/)
+    }
+  })
+  it('fields the once corps alone when its repeated one does not fit, and fails loudly on a type with no size', () => {
+    const big = [{ type: 'infantry', count: 100 }]
+    expect(orderOfBattle({ figures: 2 * 600, once: [CORPS.cavalryReserve], repeat: big }, sizes).length).toBe(5)
     expect(() => orderOfBattle({ figures: 1000, once: [[{ type: 'hussars', count: 1 }]], repeat: [] }, sizes)).toThrow(
       /hussars/,
     )
@@ -180,6 +189,16 @@ describe('the layout on the demo map (battleLayout)', () => {
     // (the engaged cycles staggered: no two of a type in step)
     expect(new Set(lines.filter(b => b.side === 0).map(b => b.offset)).size).toBe(6)
   })
+  // (review round 1: rows past the field, every spot of them refused, were scanned for each reserve)
+  it("keeps the reserves' spots on the field, 40 m back at least, the nearest the front and the middle first", () => {
+    const front = FIELD.gap / 2
+    const s = reserveSpots(EXTENT, FIELD)
+    expect(Math.max(...s.map(p => p[1]))).toBeLessThanOrEqual(EXTENT - front)
+    expect(Math.min(...s.map(p => p[1]))).toBeGreaterThanOrEqual(RESERVE_BACK)
+    expect(Math.max(...s.map(p => Math.abs(p[0])))).toBeLessThanOrEqual(EXTENT)
+    expect(s[0]).toEqual([0, RESERVE_BACK])
+    expect(reserveSpots(EXTENT, FIELD)).toBe(s)
+  })
   it('fails loudly when a side has no room', () => {
     const o = orderOfBattle(ARMIES_DEMO.battles.typical, sizes)
     expect(() => battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, (_x, z) => z < 0, SIDES, EXTENT)).toThrow(
@@ -216,9 +235,11 @@ describe('the stand-ins (docs/plans/active/division-armies.md)', () => {
 })
 
 describe('the page switches (battleChoice, battleHref)', () => {
-  const budgets = Object.fromEntries(Object.entries(ARMIES_DEMO.battles).map(([k, b]) => [k, b.figures]))
-  const choose = (s: string) =>
-    battleChoice(new URLSearchParams(s), budgets, ARMIES_DEMO.battle, ARMIES_DEMO.legacyBattalion)
+  const budgets = BATTLE_BUDGETS
+  const choose = (s: string) => battleChoice(new URLSearchParams(s), budgets, DEFAULT_BATTLE, LEGACY_BATTALION)
+  it("names the scenario's battles by the page's budgets", () => {
+    expect(Object.fromEntries(Object.entries(ARMIES_DEMO.battles).map(([k, b]) => [k, b.figures]))).toEqual(budgets)
+  })
   it('gives no battle without ?battle or ?armies, the default bare, and a named one', () => {
     expect([choose(''), choose('battle'), choose('battle=typical'), choose('battle=32k')]).toEqual([
       null,
@@ -244,5 +265,42 @@ describe('the page switches (battleChoice, battleHref)', () => {
     const at = 'http://x/app/look.html?armies=20&frozen&benchat=1,2'
     expect(battleHref(at, '32k')).toBe('http://x/app/look.html?frozen=&benchat=1%2C2&battle=32k')
     expect(battleHref('http://x/a?battle=16k&frozen', null)).toBe('http://x/a?frozen=')
+  })
+  // (review round 1: None kept ?sim and ?lookat, which the page refuses without armies: an error page)
+  it('drops the switches that need armies with None, and ?lookat with any change; the page takes every address', () => {
+    const at = 'http://x/a?battle=16k&sim&lookat=cuirassiers,40&thread=main'
+    expect(battleHref(at, null)).toBe('http://x/a?thread=main')
+    expect(battleHref(at, 'typical')).toBe('http://x/a?battle=typical&sim=&thread=main')
+    for (const name of [null, ...Object.keys(budgets)]) {
+      const q = new URL(battleHref(at, name)).searchParams
+      const chosen = choose(q.toString())
+      expect(chosen).toBe(name)
+      if (chosen === null) for (const k of ['sim', 'lookat']) expect(q.has(k), k).toBe(false)
+    }
+  })
+  // (review round 1: on a map window every choice reloaded into the page's error, ?battle being the demo world's)
+  it('offers no battle on a map window, and None then each battle on the demo world', () => {
+    expect(battleOptions(true, budgets)).toBeNull()
+    expect(battleOptions(false, budgets)?.map(o => o.value)).toEqual(['', 'typical', '16k', '32k'])
+    expect(battleOptions(false, budgets)?.[2].label).toBe('16k (16,000)')
+  })
+  // (review round 1: ?infantry=x was silently ignored, every other arm's switch refusing it)
+  it("reads each arm's switch, 0 or 1, the first arm always on, the others off under ?sim but asked for", () => {
+    const q = (s: string) => new URLSearchParams(s)
+    expect([armOn(q(''), 'cavalry', false), armOn(q('cavalry=0'), 'cavalry', false)]).toEqual([true, false])
+    expect([armOn(q(''), 'cavalry', true), armOn(q('infantry=1'), 'infantry', true, true)]).toEqual([false, true])
+    expect(() => armOn(q('cavalry=1'), 'cavalry', true)).toThrow(/with \?sim/)
+    for (const [s, always] of [
+      ['infantry=x', true],
+      ['cavalry=yes', false],
+    ] as const) {
+      expect(() => armOn(q(s), s.split('=')[0], false, always)).toThrow(/must be 0 or 1/)
+    }
+    expect(() => armOn(q('infantry=0'), 'infantry', false, true)).toThrow(/always on the page/)
+  })
+  it('names ?battle, not ?armies, in the WebGL2 error (the page, src/look/main.ts)', () => {
+    const main = readFileSync(new URL('../src/look/main.ts', import.meta.url), 'utf8')
+    expect(main).toContain("'?battle needs WebGL2")
+    expect(main).not.toContain('?armies needs WebGL2')
   })
 })

@@ -1,5 +1,5 @@
 // The look page's armies demo (?battle, docs/plans/active/division-armies.md): a stress-test battle at the division
-// scale (decision 0076), not a historical one. The era's ruleset (src/rulesets/index.ts) and its corps, the battles'
+// scale (decision 0099), not a historical one. The era's ruleset (src/rulesets/index.ts) and its corps, the battles'
 // figure budgets, the template the first corps deploy by, and the arms: each a unit type of the ruleset, the figure
 // it is drawn with (data/figures/<figure>.unitdata), each side's uniform and its script (src/look/world/arms.ts):
 // - the line infantry marches up in column, deploys into line and fires by ranks (the drill);
@@ -12,6 +12,7 @@
 import type { ArmSpec, Leg } from '../look/world/arms.ts'
 import type { BattleSpec, Deploy } from '../look/world/battle.ts'
 import { CORPS } from '../rulesets/napoleonic-division.ts'
+import { BATTLE_BUDGETS } from './battles.ts'
 
 // the horse's ride along the front (the old cavalry demo's)
 const RIDE: readonly Leg[] = [
@@ -65,7 +66,11 @@ export const ARMS_DEMO: readonly ArmSpec[] = [
     script: { kind: 'ride', legs: RIDE },
     tread: 3,
     flags: false,
-    // (no cuirass: its metal, the cuirass and the helmet, in the coat's colour)
+    // (no cuirass: the figure's one metal role, in the coat's colour. The bake gives the cuirass no role of its own;
+    // the role is also the sabre, the stirrups, the buttons, but 81 % of its area is the rider's torso and head, the
+    // cuirass and the helmet (its near LOD at rest, by height), so a light cavalryman loses his armour and his sabre
+    // turns his coat's colour, too small to read at the page's zooms; the other way, a cuirass on every hussar, reads
+    // as cuirassiers: #309)
     parts: { metal: 'coat' },
   },
   {
@@ -83,9 +88,9 @@ export const ARMS_DEMO: readonly ArmSpec[] = [
 // the battles (the owner, 2026-10-31): a typical one for the look, about 6,000 figures (two infantry corps a side),
 // and the stress tests at 16,000 (the default) and 32,000, the main army's with its reserve cavalry corps
 const BATTLES: Readonly<Record<string, BattleSpec>> = {
-  typical: { figures: 6400, once: [], repeat: CORPS.infantry },
-  '16k': { figures: 16000, once: [CORPS.cavalryReserve], repeat: CORPS.infantry },
-  '32k': { figures: 32000, once: [CORPS.cavalryReserve], repeat: CORPS.infantry },
+  typical: { figures: BATTLE_BUDGETS.typical, once: [], repeat: CORPS.infantry },
+  '16k': { figures: BATTLE_BUDGETS['16k'], once: [CORPS.cavalryReserve], repeat: CORPS.infantry },
+  '32k': { figures: BATTLE_BUDGETS['32k'], once: [CORPS.cavalryReserve], repeat: CORPS.infantry },
 }
 
 // the first two infantry corps a side in line along the front: each its first line of three line units and its light
@@ -105,11 +110,7 @@ const DEPLOY: Deploy = {
 export const ARMIES_DEMO = {
   ruleset: 'napoleonic-division',
   battles: BATTLES,
-  battle: '16k',
   deploy: DEPLOY,
-  // the old page's battalion (decision 0018's 414 figures), by which ?armies=<n> maps onto the battle nearest its
-  // figures
-  legacyBattalion: 414,
   // ?uniforms=all (the dye palette's review, docs/plans/active/dye-palette.md): each side's line infantry wear these
   // in turn
   reviewSides: [

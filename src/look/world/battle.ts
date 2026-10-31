@@ -1,4 +1,4 @@
-// The demo map's battle at the division scale (docs/plans/active/division-armies.md, decision 0076): each side's order
+// The demo map's battle at the division scale (docs/plans/active/division-armies.md, decision 0099): each side's order
 // of battle (corps of the ruleset's compositions, filled up to a figure budget), and where each unit stands: the first
 // corps in line along the front, each by the scenario's template (its first line deploying and firing, its guns
 // before it, its horse riding along the front), the rest in column behind. Era-generic (decision 0015): the unit types,
@@ -7,11 +7,9 @@
 //
 // Frames as src/look/world/armies.ts: side 0 faces +z (heading 0), side 1 −z (heading π); a unit's frame has x across
 // and z ahead
+import type { Composition } from '../../sim/ruleset.ts'
 import type { Battalion, Blocked } from './armies.ts'
 import { boxOf, clearIn, overlaps, placeArm, type Box, type Foot } from './arms.ts'
-
-/** a corps' units: so many of each unit type, in the order they are fielded */
-export type Composition = readonly { readonly type: string; readonly count: number }[]
 
 /** A battle's size: each side fields the `once` corps (in order: the reserve cavalry corps, for one), then the
  *  `repeat` corps again and again, up to half the `figures` budget */
@@ -31,15 +29,16 @@ export interface Fielded {
 
 /** One side's order of battle: the battle's `once` corps, then its `repeat` corps, each unit taken in order while
  *  it fits in half the budget (figures by unit type: sizes); a corps is cut at its first unit that does not fit, and
- *  the side ends there. A type without a size or of no figures: a loud failure */
+ *  the side ends there (or when a corps adds no unit). A type without a size or of no figures, or a corps of no
+ *  figures: a loud failure */
 export function orderOfBattle(spec: BattleSpec, sizes: Readonly<Record<string, number>>): Fielded[] {
+  for (const c of [...spec.once, spec.repeat]) checkComposition(c, sizes)
   const out: Fielded[] = []
   let left = Math.floor(spec.figures / 2)
   let corps = 0
   const take = (c: Composition, repeat: boolean): boolean => {
     for (const { type, count } of c) {
       const n = sizes[type]
-      if (!(n > 0)) throw new Error(`battle: the unit type ${type} has no size (${Object.keys(sizes).join(', ')})`)
       for (let k = 0; k < count; k++) {
         if (n > left) return false
         left -= n
@@ -50,9 +49,24 @@ export function orderOfBattle(spec: BattleSpec, sizes: Readonly<Record<string, n
     return true
   }
   for (const c of spec.once) if (!take(c, false)) return out
-  if (spec.repeat.length === 0) return out
-  while (take(spec.repeat, true));
+  // (until a corps does not fit, or adds no unit)
+  for (let n = -1; n < out.length;) {
+    n = out.length
+    if (!take(spec.repeat, true)) break
+  }
   return out
+}
+
+/** a corps' types all sized (above 0 figures) and its units some figures in all (an empty repeated corps would be
+ *  fielded forever), or a loud failure */
+function checkComposition(c: Composition, sizes: Readonly<Record<string, number>>): void {
+  for (const { type } of c) {
+    if (!(sizes[type] > 0)) {
+      throw new Error(`battle: the unit type ${type} has no size (${Object.keys(sizes).join(', ')})`)
+    }
+  }
+  const figures = c.reduce((a, u) => a + u.count * sizes[u.type], 0)
+  if (!(figures > 0)) throw new Error(`battle: a corps of no figures (${JSON.stringify(c)})`)
 }
 
 /** a side's figures: its units' sizes summed */
@@ -240,7 +254,7 @@ function placeReserves(at: SideField, reserves: readonly string[]): void {
   const h = side === 0 ? 0 : Math.PI
   const ahead = side === 0 ? 1 : -1
   const front = field.gap / 2
-  const spots = reserveSpots(extent, front)
+  const spots = reserveSpots(extent, field)
   const cursor: Record<string, number> = {}
   for (const [placed, type] of reserves.entries()) {
     const f = at.kinds[type].rest
@@ -266,55 +280,23 @@ function placeReserves(at: SideField, reserves: readonly string[]): void {
   }
 }
 
-// the reserves' spots (m: across the front, behind it), RESERVE_BACK m back at least, the nearest the front and the
-// middle first: the same for either side, built once an extent
-const spotsByExtent = new Map<string, [number, number][]>()
-function reserveSpots(extent: number, front: number): [number, number][] {
-  const key = `${extent},${front}`
-  let s = spotsByExtent.get(key)
+/** The reserves' spots (m: across the front from the field's centre, behind the front), RESERVE_BACK m back at least,
+ *  every row and column one whose unit's origin is on the field (±extent m) for either side, the nearest the front
+ *  and the middle first: built once a field and extent */
+const spotsByField = new Map<string, [number, number][]>()
+export function reserveSpots(extent: number, field: typeof FIELD): [number, number][] {
+  const key = `${extent},${field.centre.join()},${field.gap}`
+  let s = spotsByField.get(key)
   if (!s) {
     s = []
-    for (let bi = Math.ceil(RESERVE_BACK / GRID); bi * GRID <= extent + front; bi++) {
-      for (let ai = -Math.floor(extent / GRID); ai * GRID <= extent; ai++) s.push([ai * GRID, bi * GRID])
+    // (side 0's origin at z = cz − front − bh, side 1's at cz + front + bh: within ±extent for the side farther in)
+    const back = extent + Math.abs(field.centre[1]) - field.gap / 2
+    const across = extent + Math.abs(field.centre[0])
+    for (let bi = Math.ceil(RESERVE_BACK / GRID); bi * GRID <= back; bi++) {
+      for (let ai = -Math.floor(across / GRID); ai * GRID <= across; ai++) s.push([ai * GRID, bi * GRID])
     }
     s.sort((p, q) => 0.5 * Math.abs(p[0]) + p[1] - (0.5 * Math.abs(q[0]) + q[1]) || p[0] - q[0] || p[1] - q[1])
-    spotsByExtent.set(key, s)
+    spotsByField.set(key, s)
   }
   return s
-}
-
-/** The battle the page asks for (src/look/main.ts): ?battle=<name> (bare: the default), or the old ?armies=<n>
- *  (n battalions a side of `legacy` figures) as the battle whose budget is nearest its figures; null: no armies. A
- *  name not among `names`, a count not 1 to 40, or both switches: a clear error */
-export function battleChoice(
-  q: URLSearchParams,
-  budgets: Readonly<Record<string, number>>,
-  def: string,
-  legacy: number,
-): string | null {
-  const battle = q.get('battle')
-  const armies = q.get('armies')
-  const names = Object.keys(budgets)
-  if (battle !== null && armies !== null) throw new Error('?battle and ?armies both given: ?battle alone (or ?armies)')
-  if (battle !== null) {
-    const name = battle === '' ? def : battle
-    if (!Object.hasOwn(budgets, name)) throw new Error(`?battle must be one of ${names.join(', ')}, not ${battle}`)
-    return name
-  }
-  if (armies === null) return null
-  if (!(/^\d+$/.test(armies) && +armies >= 1 && +armies <= 40)) {
-    throw new Error(`?armies must be 1 to 40 (old battalions a side, mapped onto ?battle), not ${armies}`)
-  }
-  const figures = +armies * legacy * 2
-  return names.reduce((a, n) => (Math.abs(budgets[n] - figures) < Math.abs(budgets[a] - figures) ? n : a))
-}
-
-/** The page's address with the battle chosen in its panel: ?battle=<name>, or no armies (null), the old ?armies
- *  dropped, every other switch kept */
-export function battleHref(href: string, name: string | null): string {
-  const u = new URL(href)
-  u.searchParams.delete('armies')
-  if (name === null) u.searchParams.delete('battle')
-  else u.searchParams.set('battle', name)
-  return u.href
 }
