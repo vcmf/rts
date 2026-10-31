@@ -70,20 +70,24 @@ keydown ──keyAction(route, key)──▶ go(route) | step | activate
 - **The interface language** (`src/ui/theme.css`, decision 0100): tokens (paper, raised and sunk paper, ink, soft
   ink, pencil, rule, the one accent: a gamboge wash under ink lines; the unit bars' colours), type (condensed display, text, mono labels, mono data), the ticked frame and the
   elements: buttons, menu items, tags and stamps, tabs, chips, crumbs, settings controls (switch, scale-bar range,
-  segmented choice, check, select, ruled input), continuous unit bars (low hatched, critical outlined) and progress,
+  segmented choice, check, select, ruled input), continuous unit bars (one plain style, `current/max` always written) and progress,
   experience markers for the unit model's six levels (`src/ui/levels.ts`: the line's levels counted marks, the
   Guard's a star family: the Honours series), tooltip, dialog, dispatch, cards, and the
   battle's cartouche, unit panel and status bar. Each interactive element also takes `.is-hover`, `.is-focus` and
   `.is-active`, so the sheet can show its states side by side.
-- **Icons** (`src/ui/icons.ts`, drawn by `src/ui/glyph.ts` like the level markers): the arms by the unit model's tags
-  (foot: a shako; horse: a horse's head; guns: the staff map's gun), the actions (melee: crossed sabres; fire: a
-  musket and bayonet; aimed fire: a slung rifle), the shapes drawn as Total War draws formations, each rank a line, and
-  the metrics (toughness, morale, fatigue). Icons lead and words follow: each carries its word as a tooltip
+- **Icons** (`src/ui/icons.ts`, drawn by `src/ui/glyph.ts` like the level markers): six categories from the unit
+  model's tags (`categoryIcon`: line infantry a shako, light infantry a hunting horn, heavy cavalry a helmet, light
+  cavalry a horse, heavy artillery the staff map's gun with its shot, light (horse) artillery the gun under a
+  horseshoe), the weapon modes (melee: crossed sabres; fire: a musket; aimed fire: a rifle), the fight modes (fire at
+  will: a range ring; hold fire: the ring crossed through), the shapes drawn as Total War draws formations, each rank
+  a line, and the metrics (toughness, morale, fatigue). Icons lead and words follow: each carries its word as a tooltip
   (`data-tip`, on hover and keyboard focus) and an accessible name; screens show words as small subtitles at most.
 - **Unit cards** (`unitCard`, `src/ui/elements.ts`), three layouts, each with the painting large and the three bars
-  standing beside it (`verticalBars`, each under its metric's icon): `portrait` (rosters: icons under the painting),
-  `battle` (the battle's unit bar: arm, level and shape on paper chips over the painting, the name a tooltip),
-  `panel` (the selected unit: name, its icons with their words as subtitles, the orders as icon buttons).
+  standing beside it (`verticalBars`, each under its metric's icon, its `current/max` under it, `barText`):
+  `portrait` (rosters: icons under the painting), `battle` (the battle's unit bar: bare and large, category and level
+  on paper chips over the painting, the modes set along its bottom, the name a tooltip), `panel` (the selected unit:
+  name, category and level, then its mode groups as icon toggles). A unit's modes are groups of options
+  (`ModeGroup`: formation, weapon, fight; `currentMode`), the ruleset's to define.
 - **The specimen sheet** (`app/ui-kit.html`, `src/ui/kit.ts`, layout `src/ui/kit.css`): every element in every state,
   with the rule behind it. A new element joins the theme and the sheet in the same change.
 

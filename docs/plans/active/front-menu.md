@@ -58,7 +58,11 @@ Out: the background art (the home stays empty paper), Campaign, Battles and Sett
   as a brand orange; verdigris and violet were the other candidates.
 
 - **Unit bars**: continuous, one colour each (the owner asked for it, 2026-10-31): bistre toughness, verdigris
-  morale, violet fatigue; low hatched under a dotted frame, critical an empty outline, never a new hue.
+  morale, violet fatigue; one plain style for every unit and value (the owner, 2026-10-31: no styles of their own for
+  low or critical), the numbers always written: current / max (men left, morale, fatigue).
+- **Six categories, three mode groups** (the owner, 2026-10-31): line and light infantry, heavy and light cavalry,
+  heavy and light artillery, each its icon; a unit's formation, weapon mode (melee or firearm) and fight mode (fire
+  at will or hold fire) set on its panel as icon toggles. The battle card bigger, without a frame, less padding.
 - **Icons over words, cards with big paintings** (the owner, 2026-10-31): icons for melee, musket and rifle fire,
   the shapes (ranks as lines, like Total War), and the three arms (the gun reused from the staff map); words as
   tooltips or subtitles; unit cards in three layouts with the three bars standing beside the painting.

@@ -256,18 +256,14 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* ---------- Gauges ---------- */
 
-/* Bar: a continuous gauge, one colour a metric (data-metric). Low is hatched in ink under a dotted frame, critical
-   an empty outline with the value in bold: the state is drawn, never a new hue (src/ui/elements.ts barState). */
+/* Bar: a continuous gauge, one colour a metric (data-metric), one plain style for every unit and value, its numbers
+   (current / max) always written beside it (src/ui/elements.ts barText). */
 .bar { position: relative; height: 8px; border: 1px solid var(--ink); background: var(--paper-hi); --metric: var(--ink); }
 .bar[data-metric='toughness'] { --metric: var(--metric-toughness); }
 .bar[data-metric='morale'] { --metric: var(--metric-morale); }
 .bar[data-metric='fatigue'] { --metric: var(--metric-fatigue); }
 .bar > i { position: absolute; inset: 0 auto 0 0; width: var(--share, 0%); background: var(--metric); transition: width 0.3s var(--ease); }
-.bar.low { border-style: dotted; }
-.bar.low > i { background-image: repeating-linear-gradient(-45deg, transparent 0 3px, rgba(43, 40, 36, 0.6) 3px 4px); }
-.bar.critical > i { background: none; box-shadow: inset 0 0 0 1.5px var(--metric); }
 .bar-value { font: 400 13px/1 var(--mono); font-variant-numeric: tabular-nums; }
-.bar-value.critical { font-weight: 700; }
 
 /* Level: a unit's experience marker, an ink glyph (src/ui/levels.ts) that grows in weight with the level. */
 .level { display: inline-block; width: 16px; height: 16px; color: var(--ink); vertical-align: -3px; }
@@ -355,34 +351,58 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .ucard { display: grid; gap: 10px; width: fit-content; text-align: left; }
 .ucard img { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: var(--paint); }
 .ucard-body { display: grid; grid-template-columns: auto auto; gap: 10px; }
-.ucard-pic { position: relative; border: 1px solid var(--ink); padding: 5px; background: var(--paper-hi); }
 .ucard-name { font-size: 20px; }
 .ucard-sub { color: var(--pencil); }
 .unit-icons { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .icon-cap { margin: 0; display: grid; justify-items: center; gap: 4px; }
 .icon-cap figcaption { color: var(--pencil); font-size: 9px; }
 
-.ucard.portrait .ucard-pic { width: 176px; }
 .ucard.portrait .ucard-name { margin-top: 2px; }
 
-/* Battle: compact, the painting edge to edge with its icons on paper chips, the bars on its right; words on hover. */
-.ucard.battle { --tick: 30px; grid-template-columns: auto auto; gap: 6px; padding: 5px; }
-.ucard.battle::before { inset: -10px; background-position: left 0 top 5px, left 5px top 0, right 0 bottom 5px, right 5px bottom 0; }
-.ucard.battle .ucard-pic { width: 86px; padding: 0; border: 0; }
-.ucard.battle .vbars { gap: 4px; }
-.ucard.battle .bar.vertical { width: 6px; }
+/* The painting, edge to edge: no frame of its own. */
+.ucard-pic { position: relative; }
+.ucard.portrait .ucard-pic { width: 190px; }
+
+/* The value under each vertical bar: current over max, small. */
+.vbar-value { font-size: 9px; line-height: 1.15; text-align: center; color: var(--ink); letter-spacing: 0.02em; }
+.vbar-value span { display: block; }
+.vbar-value .max { color: var(--pencil); }
+
+/* Battle: the unit bar's card. The painting large and bare, its category and level on paper chips at the top and the
+   modes set along the bottom; the bars on its right, numbers under them; the name on hover. Chosen: a wash behind
+   it and its army's rule under it. */
+.ucard.battle { grid-template-columns: auto auto; gap: 5px; padding: 3px; border-bottom: 3px solid transparent; }
+.ucard.battle .ucard-pic { width: 112px; }
+.ucard.battle .vbars { gap: 3px; }
+.ucard.battle .bar.vertical { width: 7px; }
 .ucard.battle .vbar .icon svg { width: 12px; height: 12px; }
-.ucard.battle :is(.chip-tl, .chip-tr, .chip-bl) {
-  position: absolute; display: grid; place-items: center; padding: 2px; background: var(--paper-hi); border: 1px solid var(--ink);
-}
-.ucard.battle .chip-tl { top: 4px; left: 4px; }
-.ucard.battle .chip-tr { top: 4px; right: 4px; }
-.ucard.battle .chip-bl { bottom: 4px; left: 4px; }
-.ucard.battle:is(:hover, :focus-visible, .sel) { --tick: 60px; --frame-tick: var(--army, var(--accent)); border-color: var(--army, var(--ink)); background: var(--accent-wash); outline: none; }
+.ucard .chip { position: absolute; display: flex; gap: 3px; align-items: center; padding: 2px; background: var(--paper-hi); border: 1px solid var(--ink); }
+.ucard .chip-tl { top: 4px; left: 4px; }
+.ucard .chip-tr { top: 4px; right: 4px; }
+.ucard .chip-bottom { bottom: 4px; left: 4px; }
+.ucard.battle:is(:hover, :focus-visible, .sel) { background: var(--accent-wash); border-bottom-color: var(--army, var(--ink)); outline: none; }
 
 /* Panel: the selected unit, painting and bars, then its name and its icons, each with its word under it. */
-.ucard.panel { grid-template-columns: auto minmax(0, 1fr); gap: 22px; padding: 14px; --tick: 70px; --frame-tick: var(--army); border-color: var(--army, var(--ink)); }
-.ucard.panel .ucard-pic { width: 150px; }
+.ucard.panel { grid-template-columns: auto minmax(0, 1fr); gap: 20px; padding: 10px; --tick: 70px; --frame-tick: var(--army); border-color: var(--army, var(--ink)); }
 .ucard-text { display: grid; align-content: start; gap: 6px; }
 .ucard.panel .ucard-name { font-size: 28px; }
+.ucard.panel .ucard-pic { width: 180px; }
 .ucard.panel .unit-icons { margin-top: 14px; gap: 18px; }
+/* The panel's modes: each group a row of icon toggles, the set one inked. */
+.mode-groups { display: grid; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.mode-group { display: grid; grid-template-columns: 74px auto; align-items: center; gap: 10px; }
+.mode-group > .mono { color: var(--pencil); }
+.modes { display: flex; flex-wrap: wrap; gap: 6px; }
+.mode { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border: 1px solid var(--ink); background: var(--paper-hi); }
+.mode .key { font-size: 9px; padding: 0 4px; }
+.mode:is(:hover, :focus-visible) { background: var(--accent-wash); outline: none; }
+.mode[aria-pressed='true'] { background: var(--ink); color: var(--paper-hi); }
+.mode[aria-pressed='true'] .icon { color: var(--paper-hi); }
+.mode[aria-pressed='true'] .key { background: transparent; color: inherit; border-color: currentColor; }
+
+/* Phone width: the panel stacks its painting over its words and modes. */
+@media (max-width: 600px) {
+  .ucard.panel { grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .ucard.panel .ucard-pic { width: 140px; }
+  .mode-group { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}

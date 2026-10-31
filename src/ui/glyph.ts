@@ -7,6 +7,8 @@ export interface Stroke {
   mode: 'line' | 'fill' | 'cut'
   /** this line's width in the box's units, when not the glyph's */
   width?: number
+  /** an SVG transform placing it in the box (a drawing made on another box, scaled in) */
+  transform?: string
 }
 
 export const line = (d: string, width?: number): Stroke => ({ d, mode: 'line', width })
@@ -30,6 +32,7 @@ export function glyph(strokes: readonly Stroke[], box: number, className: string
 function strokeElement(stroke: Stroke, width: number): SVGPathElement {
   const path = document.createElementNS(SVG, 'path')
   path.setAttribute('d', stroke.d)
+  if (stroke.transform) path.setAttribute('transform', stroke.transform)
   path.setAttribute('fill', stroke.mode === 'fill' ? 'currentColor' : 'none')
   path.setAttribute('stroke', stroke.mode === 'fill' ? 'none' : 'currentColor')
   // a cut is paper: the theme colours it (`.cut`), which an SVG attribute cannot read

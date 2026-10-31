@@ -38,8 +38,8 @@ grotesk, a mono for data, one accent per army), but only for that map, and nothi
 
 - New screens (Settings, Campaign, the battle's panels) take their elements from the theme rather than restyling;
   the sheet already shows the settings controls, gauges, dialog, dispatch and battle panel they will need.
-- Unit bars take their colours from the same washes (bistre toughness, verdigris morale, violet fatigue), their low
-  and critical states drawn, not hued.
+- Unit bars take their colours from the same washes (bistre toughness, verdigris morale, violet fatigue), one plain
+  style for every unit and value, their numbers (current / max) always written beside them.
 - Experience is drawn as six filled ink glyphs (`src/ui/levels.ts`, the owner's pick of three series): the line's
   levels counted marks, the Guard's a star family, for the unit model's levels.
 - The army colours of Prussia and Poland, not yet set by the art bible, are provisional in the content

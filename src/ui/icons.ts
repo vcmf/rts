@@ -1,19 +1,31 @@
-// The interface's icons: ink glyphs (src/ui/glyph.ts) for a unit's arm, its actions, its shapes and its metrics.
-// Icons lead and words follow: an icon carries its name as a tooltip (`data-tip`) and an accessible label, and a
-// screen shows text only as a subtitle. Named by role, not by an era's unit or weapon (decision 0015): the arms by
-// the unit model's tags (foot, horse, guns), the shapes by its shapes (docs/proposals/unit-model.md); the drawings
-// are the Napoleonic ruleset's look. Shapes are drawn as Total War draws formations: each rank a line.
+// The interface's icons: ink glyphs (src/ui/glyph.ts) for a unit's category, its modes (weapon, fight), its shapes
+// and its metrics. Icons lead and words follow: an icon carries its name as a tooltip (`data-tip`) and an accessible
+// label, and a screen shows text only as a subtitle. Named by role, not by an era's unit or weapon (decision 0015):
+// the categories by the unit model's tags (foot, horse, guns; light, heavy), the shapes by its shapes
+// (docs/proposals/unit-model.md); the drawings are the Napoleonic ruleset's look. Shapes are drawn as Total War draws
+// formations: each rank a line.
 import { h } from './dom.ts'
 import { cut, fill, glyph, line, type Stroke } from './glyph.ts'
 
-export type ArmIcon = 'foot' | 'horse' | 'guns'
-export type ActionIcon = 'melee' | 'fire' | 'aimed-fire'
+export type CategoryIcon = 'foot' | 'foot-light' | 'horse-heavy' | 'horse-light' | 'guns-heavy' | 'guns-light'
+/** The weapon mode: hand to hand, or the firearm (volley or aimed). */
+export type WeaponIcon = 'melee' | 'fire' | 'aimed-fire'
+/** The fight mode: fire on its own at any enemy in range, or only when ordered. */
+export type FightIcon = 'fire-at-will' | 'hold-fire'
 export type ShapeIcon = 'line' | 'column' | 'march' | 'square' | 'skirmish' | 'unlimbered' | 'limbered'
 export type MetricIcon = 'toughness' | 'morale' | 'fatigue'
-export type IconName = ArmIcon | ActionIcon | ShapeIcon | MetricIcon
+export type IconName = CategoryIcon | WeaponIcon | FightIcon | ShapeIcon | MetricIcon
 
-export const ARM_ICONS: readonly ArmIcon[] = ['foot', 'horse', 'guns']
-export const ACTION_ICONS: readonly ActionIcon[] = ['melee', 'fire', 'aimed-fire']
+export const CATEGORY_ICONS: readonly CategoryIcon[] = [
+  'foot',
+  'foot-light',
+  'horse-heavy',
+  'horse-light',
+  'guns-heavy',
+  'guns-light',
+]
+export const WEAPON_ICONS: readonly WeaponIcon[] = ['melee', 'fire', 'aimed-fire']
+export const FIGHT_ICONS: readonly FightIcon[] = ['fire-at-will', 'hold-fire']
 export const SHAPE_ICONS: readonly ShapeIcon[] = [
   'line',
   'column',
@@ -55,19 +67,40 @@ const sabre = (side: 1 | -1) => {
 const STOCK = fill('M1.2 18.4 L7 13.8 L9.2 16.2 L3.6 21.4 Z')
 
 const DRAWINGS: Record<IconName, Drawing> = {
-  // a shako, its peak and plume: the foot soldier
+  // the line infantry's shako: its body, a short peak, the plume, band and plate
   foot: {
     box: 24,
     strokes: [
-      fill('M5.6 6.4 H18.4 L17.4 18.2 H6.6 Z'),
-      fill('M5 18.2 H19 L20.8 20.8 Q12 23.4 3.2 20.8 Z'),
-      fill('M10.4 1.6 Q12 0 13.6 1.6 L13 6.4 H11 Z'),
-      cut('M6.2 9.4 H17.8', 1.4),
-      cut('M12 11.4 L14.2 13.8 L12 16.2 L9.8 13.8 Z', 1.4),
+      fill('M6.4 5.6 H17.6 L16.8 17.6 H7.2 Z'),
+      fill('M7 17.6 H17 L17.9 19.4 Q12 21 6.1 19.4 Z'),
+      fill('M10.6 1.4 Q12 0 13.4 1.4 L12.9 5.6 H11.1 Z'),
+      cut('M6.9 8.6 H17.1', 1.3),
+      cut('M12 10.6 L14 12.9 L12 15.2 L10 12.9 Z', 1.3),
     ],
   },
-  // a horse's head and neck, facing left: ears, a long face, the crest of the neck
-  horse: {
+  // the light infantry's hunting horn (the badge of light infantry): the coiled tube, its bell, its cord
+  'foot-light': {
+    box: 24,
+    strokes: [
+      line('M4.4 12.6 A6.2 6.2 0 1 0 16.8 12.6 A6.2 6.2 0 1 0 4.4 12.6', 2.4),
+      fill('M16.2 8.4 L22.6 4.6 V20.6 L16.2 16.8 Z'),
+      line('M4.4 12.6 H1.4', 2.4),
+      line('M10.6 18.8 Q9.6 22 12.4 23', 1.4),
+    ],
+  },
+  // the heavy cavalry's helmet: the dome, its peak, the comb and the horsehair mane
+  'horse-heavy': {
+    box: 24,
+    strokes: [
+      fill('M4.6 16 C4.6 9.6 8 6.8 12 6.8 C16 6.8 19.4 9.6 19.4 16 Z'),
+      fill('M3 16 H21 L20 18.4 H4 Z'),
+      fill('M7.6 7.6 C8.6 3.4 15.4 3.4 16.4 7.6 Z'),
+      line('M15.4 4.6 C20.6 5 22.6 10 22 16.4', 2.2),
+      cut('M12 9 V15', 1.2),
+    ],
+  },
+  // the light cavalry's horse: its head and neck, facing left
+  'horse-light': {
     box: 24,
     strokes: [
       fill(
@@ -78,7 +111,24 @@ const DRAWINGS: Record<IconName, Drawing> = {
       cut('M16.4 6 C18.6 10 19.6 15.4 19.8 21.4', 1.2),
     ],
   },
-  guns: { box: 15, strokes: [fill(GUN)] },
+  // the heavy artillery: the staff map's gun, large, with its shot piled by it
+  'guns-heavy': {
+    box: 24,
+    strokes: [
+      { ...fill(GUN), transform: 'translate(0 1.5) scale(1.3)' },
+      fill('M17.6 21.4 a1.6 1.6 0 1 0 3.2 0 a1.6 1.6 0 1 0 -3.2 0'),
+      fill('M20.8 21.4 a1.6 1.6 0 1 0 3.2 0 a1.6 1.6 0 1 0 -3.2 0'),
+      fill('M19.2 18.6 a1.6 1.6 0 1 0 3.2 0 a1.6 1.6 0 1 0 -3.2 0'),
+    ],
+  },
+  // the light (horse) artillery: the gun, lighter, under a horseshoe
+  'guns-light': {
+    box: 24,
+    strokes: [
+      { ...fill(GUN), transform: 'translate(5 7.4) scale(1.12)' },
+      line('M2.6 1.6 V5.6 A3.6 3.6 0 0 0 9.8 5.6 V1.6', 2.2),
+    ],
+  },
   // crossed sabres: the charge and the melee
   melee: { box: 24, strokes: [...sabre(1), ...sabre(-1)] },
   // a musket with its bayonet: fire by volley
@@ -94,6 +144,23 @@ const DRAWINGS: Record<IconName, Drawing> = {
       line('M7.6 15.2 L18.4 6.6', 2.4),
       fill('M16.4 6.4 L18 4.6 L18.8 6.4 Z'),
       line('M5.6 18.2 Q12.6 19.6 16.2 9.2', 1.2),
+    ],
+  },
+  // fight modes: the range ring with its target; crossed through when holding fire
+  'fire-at-will': {
+    box: 24,
+    strokes: [
+      line('M3.5 12 A8.5 8.5 0 1 0 20.5 12 A8.5 8.5 0 1 0 3.5 12', 2),
+      fill('M9.6 12 a2.4 2.4 0 1 0 4.8 0 a2.4 2.4 0 1 0 -4.8 0'),
+      line('M12 1 V4.4 M12 19.6 V23 M1 12 H4.4 M19.6 12 H23', 2),
+    ],
+  },
+  'hold-fire': {
+    box: 24,
+    strokes: [
+      line('M3.5 12 A8.5 8.5 0 1 0 20.5 12 A8.5 8.5 0 1 0 3.5 12', 2),
+      fill('M9.6 12 a2.4 2.4 0 1 0 4.8 0 a2.4 2.4 0 1 0 -4.8 0'),
+      line('M4 20 L20 4', 2.4),
     ],
   },
   // shapes: each rank a line
@@ -134,10 +201,13 @@ export function iconDrawing(name: IconName): Drawing {
   return DRAWINGS[name]
 }
 
-/** The arm icon of a unit with `tags` (the unit model's: foot, horse, guns): guns first, so horse artillery is guns. */
-export function armIcon(tags: readonly string[]): ArmIcon {
-  if (tags.includes('guns')) return 'guns'
-  return tags.includes('horse') ? 'horse' : 'foot'
+/** The category icon of a unit with `tags` (the unit model's: foot, horse, guns; light, heavy). Guns come first, so
+ *  horse artillery is light artillery; cavalry is heavy unless tagged light. */
+export function categoryIcon(tags: readonly string[]): CategoryIcon {
+  const light = tags.includes('light')
+  if (tags.includes('guns')) return light || tags.includes('horse') ? 'guns-light' : 'guns-heavy'
+  if (tags.includes('horse')) return light ? 'horse-light' : 'horse-heavy'
+  return light ? 'foot-light' : 'foot'
 }
 
 /** Icon `name` as an element: the glyph, its `label` as tooltip and accessible name; `size` picks the theme's size

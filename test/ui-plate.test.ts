@@ -1,7 +1,8 @@
-// What cards and full plates say (src/ui/plate.ts), and how bars fill and show their state (src/ui/elements.ts).
+// What cards and full plates say (src/ui/plate.ts), how bars fill and write their numbers, and which mode a unit
+// has set (src/ui/elements.ts).
 // docs/systems/front-menu.md.
 import { describe, it, expect } from 'vitest'
-import { BAR_CRITICAL, BAR_LOW, barShare, barState } from '../src/ui/elements.ts'
+import { barShare, barText, currentMode } from '../src/ui/elements.ts'
 import { captionOf, plateOf } from '../src/ui/plate.ts'
 import type { RosterRoute } from '../src/ui/route.ts'
 import { fixtureRoster } from './ui-fixture.ts'
@@ -85,17 +86,33 @@ describe('barShare', () => {
   })
 })
 
-describe('barState', () => {
-  it('is low and critical as a good-when-full metric empties', () => {
-    expect(barState(0.9)).toBe('ok')
-    expect(barState(1 - BAR_LOW)).toBe('low')
-    expect(barState(1 - BAR_CRITICAL)).toBe('critical')
-    expect(barState(0)).toBe('critical')
+describe('barText', () => {
+  it('writes current over max, in whole numbers', () => {
+    expect(barText(512, 640)).toBe('512/640')
+    expect(barText(63.6, 100)).toBe('64/100')
   })
 
-  it('is low and critical as a bad-when-full metric (fatigue) fills', () => {
-    expect(barState(0.2, true)).toBe('ok')
-    expect(barState(BAR_LOW, true)).toBe('low')
-    expect(barState(BAR_CRITICAL, true)).toBe('critical')
+  it('writes a current below zero, or not a number, as 0', () => {
+    expect(barText(-3, 100)).toBe('0/100')
+    expect(barText(Number.NaN, 100)).toBe('0/100')
+  })
+})
+
+describe('currentMode', () => {
+  const group = {
+    name: 'Fight',
+    options: [
+      { icon: 'fire-at-will' as const, label: 'At will' },
+      { icon: 'hold-fire' as const, label: 'Hold' },
+    ],
+    current: 1,
+  }
+
+  it('is the option the group has set', () => {
+    expect(currentMode(group).label).toBe('Hold')
+  })
+
+  it('is the first option when the set one is out of range', () => {
+    expect(currentMode({ ...group, current: 7 }).label).toBe('At will')
   })
 })

@@ -2,18 +2,11 @@
 // card.
 // The screens and the specimen sheet (app/ui-kit.html) share them, so the sheet shows what the game draws.
 import { h } from './dom.ts'
-import { icon, type ActionIcon, type ArmIcon, type MetricIcon, type ShapeIcon } from './icons.ts'
+import { icon, type CategoryIcon, type IconName, type MetricIcon } from './icons.ts'
 import { levelMarker } from './levels.ts'
 import { historyImage } from './images.ts'
 import { captionOf } from './plate.ts'
 import type { Entry } from './roster.ts'
-
-/** A bar's state: low and critical when the metric is that far toward its bad end (low strength, high fatigue). */
-export type BarState = 'ok' | 'low' | 'critical'
-
-/** Where low and critical begin, as the share of the way toward the bad end. */
-export const BAR_LOW = 0.65
-export const BAR_CRITICAL = 0.85
 
 /** The share of `max` that `value` fills, clamped to 0–1 (0 for a value or max that is not a positive number). */
 export function barShare(value: number, max: number): number {
@@ -21,22 +14,19 @@ export function barShare(value: number, max: number): number {
   return Math.min(1, value / max)
 }
 
-/** The state of a bar at `share`; `highIsBad` for a metric that is worse when full (fatigue). */
-export function barState(share: number, highIsBad = false): BarState {
-  const badness = highIsBad ? share : 1 - share
-  if (badness >= BAR_CRITICAL) return 'critical'
-  return badness >= BAR_LOW ? 'low' : 'ok'
+/** What a bar writes beside itself, always: "<current>/<max>" in whole numbers (men left of the battalion's, the
+ *  morale bar's points, fatigue). A current value below zero is written 0. */
+export function barText(value: number, max: number): string {
+  const current = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0
+  return `${current}/${Number.isFinite(max) ? Math.round(max) : 0}`
 }
 
 /** A continuous bar of `metric` (toughness, morale, fatigue: its colour in src/ui/theme.css) showing `value` of
- *  `max`, drawn in its state; `vertical` fills it from the bottom (the unit cards' bars). */
-export function bar(metric: string, value: number, max: number, highIsBad = false, vertical = false): HTMLElement {
-  const share = barShare(value, max)
-  const state = barState(share, highIsBad)
+ *  `max`, one plain style for every unit and value; `vertical` fills it from the bottom (the unit cards' bars). */
+export function bar(metric: string, value: number, max: number, vertical = false): HTMLElement {
   const aria = { role: 'meter', 'aria-valuenow': String(value), 'aria-valuemin': '0', 'aria-valuemax': String(max) }
-  const classes = ['bar', vertical ? 'vertical' : '', state === 'ok' ? '' : state].filter(Boolean).join(' ')
-  const node = h('div', { class: classes, 'data-metric': metric, ...aria }, h('i'))
-  node.style.setProperty('--share', `${share * 100}%`)
+  const node = h('div', { class: vertical ? 'bar vertical' : 'bar', 'data-metric': metric, ...aria }, h('i'))
+  node.style.setProperty('--share', `${barShare(value, max) * 100}%`)
   return node
 }
 
@@ -67,53 +57,76 @@ export interface UnitMetric {
   label: string
   value: number
   max: number
-  /** worse when full (fatigue) */
-  highIsBad?: boolean
 }
 
-/** What a unit card shows; every label is the ruleset's or the scenario's words (decision 0015). */
+/** One choice of a mode: its icon, its word (the tooltip) and its key. */
+export interface ModeOption {
+  icon: IconName
+  label: string
+  key?: string
+}
+
+/** A group of choices the player sets on a unit (its formation, weapon mode, fight mode), and the one set now. */
+export interface ModeGroup {
+  name: string
+  options: ModeOption[]
+  current: number
+}
+
+/** The option `group` has set (its first when `current` is out of range). */
+export function currentMode(group: ModeGroup): ModeOption {
+  return group.options[group.current] ?? group.options[0]
+}
+
+/** What a unit card shows; every word is the ruleset's or the scenario's (decision 0015). */
 export interface UnitCardData {
   image: string
   name: string
   detail: string
-  arm: ArmIcon
-  armLabel: string
+  category: CategoryIcon
+  categoryLabel: string
   level: number
   levelLabel: string
-  shape: ShapeIcon
-  shapeLabel: string
-  actions: { icon: ActionIcon; label: string }[]
+  modes: ModeGroup[]
   metrics: UnitMetric[]
 }
 
 /** The unit card's layouts: `portrait` (a large painting, its bars beside it, icons under it), `battle` (the
  *  compact card of the battle's unit bar: icons over the painting, the name only as a tooltip), `panel` (the selected
- *  unit: the painting, its bars, then icons with their words as subtitles). */
+ *  unit: the painting, its bars, then its icons and its modes to set). */
 export type UnitCardVariant = 'portrait' | 'battle' | 'panel'
 
-/** The three bars standing side by side, each under its metric's icon, filled from the bottom. */
+/** The three bars standing side by side, each under its metric's icon, filled from the bottom, its value under it
+ *  as current over max. */
 export function verticalBars(metrics: readonly UnitMetric[], iconSize: 's' | 'm' = 's'): HTMLElement {
   const columns = metrics.map(m => {
-    const tip = `${m.label} · ${m.value} / ${m.max}`
-    const column = h('div', { class: 'vbar', 'data-tip': tip }, icon(m.metric, m.label, iconSize))
-    column.append(bar(m.metric, m.value, m.max, m.highIsBad, true))
+    const [current, max] = barText(m.value, m.max).split('/')
+    const value = h(
+      'span',
+      { class: 'vbar-value mono' },
+      h('span', {}, current),
+      h('span', { class: 'max' }, `/${max}`),
+    )
+    const column = h('div', { class: 'vbar', 'data-tip': `${m.label} · ${current}/${max}` })
+    column.append(icon(m.metric, m.label, iconSize), bar(m.metric, m.value, m.max, true), value)
     return column
   })
   return h('div', { class: 'vbars' }, ...columns)
 }
 
-/** The unit's icons: arm, level, shape, then its actions; `captioned` writes each one's word under it. */
-function unitIcons(unit: UnitCardData, size: 's' | 'm' | 'l', captioned: boolean): HTMLElement {
+/** The unit's icons: category, level, then (`withModes`) the option each mode group has set; `captioned` writes each
+ *  one's word under it. */
+function unitIcons(unit: UnitCardData, size: 's' | 'm' | 'l', captioned: boolean, withModes = true): HTMLElement {
   const marker = h(
     'span',
     { class: `icon icon-${size}`, 'data-tip': unit.levelLabel },
     levelMarker(unit.level, unit.levelLabel),
   )
+  const set = withModes ? unit.modes.map(currentMode) : []
   const items: [HTMLElement, string][] = [
-    [icon(unit.arm, unit.armLabel, size), unit.armLabel],
+    [icon(unit.category, unit.categoryLabel, size), unit.categoryLabel],
     [marker, unit.levelLabel],
-    [icon(unit.shape, unit.shapeLabel, size), unit.shapeLabel],
-    ...unit.actions.map((a): [HTMLElement, string] => [icon(a.icon, a.label, size), a.label]),
+    ...set.map((o): [HTMLElement, string] => [icon(o.icon, o.label, size), o.label]),
   ]
   const cells = items.map(([el, word]) =>
     captioned ? h('figure', { class: 'icon-cap' }, el, h('figcaption', { class: 'mono' }, word)) : el,
@@ -121,20 +134,48 @@ function unitIcons(unit: UnitCardData, size: 's' | 'm' | 'l', captioned: boolean
   return h('div', { class: 'unit-icons' }, ...cells)
 }
 
-/** A unit card in `variant`. */
-export function unitCard(unit: UnitCardData, variant: UnitCardVariant): HTMLElement {
+/** A mode group as icon toggles: its options side by side, the set one pressed; `choose` runs with the option's
+ *  index when the player picks one. */
+function modeToggles(group: ModeGroup, choose: (index: number) => void): HTMLElement {
+  const buttons = group.options.map((option, i) => {
+    const tip = option.key ? `${option.label} · ${option.key}` : option.label
+    const button = h('button', { class: 'mode', 'aria-pressed': String(i === group.current), 'data-tip': tip })
+    button.append(icon(option.icon, option.label, 'm'))
+    if (option.key) button.append(h('span', { class: 'key' }, option.key))
+    button.addEventListener('click', () => choose(i))
+    return button
+  })
+  return h(
+    'div',
+    { class: 'mode-group' },
+    h('span', { class: 'mono' }, group.name),
+    h('div', { class: 'modes' }, ...buttons),
+  )
+}
+
+/** The battle card's painting: the category and level on paper chips at the top, the modes set along the bottom. */
+function battlePicture(unit: UnitCardData, img: HTMLElement): HTMLElement {
+  const modes = unit.modes.map(currentMode).map(o => icon(o.icon, o.label, 's'))
+  return h(
+    'div',
+    { class: 'ucard-pic' },
+    img,
+    h('span', { class: 'chip chip-tl' }, icon(unit.category, unit.categoryLabel, 's')),
+    h('span', { class: 'chip chip-tr', 'data-tip': unit.levelLabel }, levelMarker(unit.level, unit.levelLabel)),
+    h('span', { class: 'chip chip-bottom' }, ...modes),
+  )
+}
+
+/** A unit card in `variant`; on the panel, `onMode(group, option)` runs when the player sets a mode. */
+export function unitCard(
+  unit: UnitCardData,
+  variant: UnitCardVariant,
+  onMode?: (group: number, option: number) => void,
+): HTMLElement {
   const img = h('img', { src: unit.image, alt: unit.name })
   if (variant === 'battle') {
-    const pic = h(
-      'div',
-      { class: 'ucard-pic' },
-      img,
-      h('span', { class: 'chip-tl' }, icon(unit.arm, unit.armLabel, 's')),
-      h('span', { class: 'chip-tr', 'data-tip': unit.levelLabel }, levelMarker(unit.level, unit.levelLabel)),
-      h('span', { class: 'chip-bl' }, icon(unit.shape, unit.shapeLabel, 's')),
-    )
     const tip = `${unit.name} · ${unit.detail}`
-    return h('button', { class: 'ucard battle frame', 'data-tip': tip }, pic, verticalBars(unit.metrics))
+    return h('button', { class: 'ucard battle', 'data-tip': tip }, battlePicture(unit, img), verticalBars(unit.metrics))
   }
   const pic = h('div', { class: 'ucard-pic' }, img)
   const body = h('div', { class: 'ucard-body' }, pic, verticalBars(unit.metrics, variant === 'panel' ? 'm' : 's'))
@@ -143,6 +184,8 @@ export function unitCard(unit: UnitCardData, variant: UnitCardVariant): HTMLElem
   if (variant === 'portrait') {
     return h('article', { class: 'ucard portrait' }, body, unitIcons(unit, 'm', false), name, sub)
   }
-  const text = h('div', { class: 'ucard-text' }, name, sub, unitIcons(unit, 'l', true))
+  const head = unitIcons(unit, 'l', true, false)
+  const toggles = unit.modes.map((group, g) => modeToggles(group, option => onMode?.(g, option)))
+  const text = h('div', { class: 'ucard-text' }, name, sub, head, h('div', { class: 'mode-groups' }, ...toggles))
   return h('article', { class: 'ucard panel frame' }, body, text)
 }

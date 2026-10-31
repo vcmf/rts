@@ -72,24 +72,19 @@
 }
 
 /* The bars' states and the experience markers. */
-.gauges { grid-template-columns: 110px repeat(3, minmax(0, 1fr)); gap: 14px 22px; max-width: 760px; }
-.bar-cell { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 10px; align-items: center; }
+.gauges { grid-template-columns: 100px minmax(0, 1fr) 70px; gap: 14px 18px; max-width: 560px; align-items: center; }
 .levels { display: grid; gap: 28px; }
 .levels { grid-template-columns: repeat(6, minmax(0, 1fr)); max-width: 760px; }
 .levels figure { margin: 0; display: grid; justify-items: center; gap: 10px; }
 .level.big { width: 40px; height: 40px; }
 @media (max-width: 860px) {
-  .gauges { grid-template-columns: 70px repeat(3, minmax(0, 1fr)); gap: 12px; }
-  .bar-cell { grid-template-columns: minmax(0, 1fr); }
+  .gauges { grid-template-columns: 80px minmax(0, 1fr) 64px; gap: 12px; }
   .levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* Section 11's cards and orders, section 13's icons. */
-.unit-bar { display: flex; flex-wrap: wrap; gap: 26px; padding: 18px 12px 6px; }
-.orders { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.unit-bar { display: flex; flex-wrap: wrap; gap: 14px; padding: 12px 0 6px; }
 .panel-slot { padding-top: 22px; }
-.btn.order { padding: 6px 8px; gap: 6px; }
-.btn.order .key { font-size: 9px; padding: 0 4px; }
 .portrait-row { gap: 34px; align-items: start; padding: 8px 4px; }
 .icon-groups { display: grid; gap: 28px; }
 .icon-group { display: grid; gap: 12px; }

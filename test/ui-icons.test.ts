@@ -1,17 +1,18 @@
-// The interface's icons (src/ui/icons.ts): one drawing for every arm, action, shape and metric, all different, and
-// a unit's arm icon from its tags. docs/systems/front-menu.md.
+// The interface's icons (src/ui/icons.ts): one drawing for every category, mode, shape and metric, all different,
+// and a unit's category icon from its tags. docs/systems/front-menu.md.
 import { describe, it, expect } from 'vitest'
 import {
-  ACTION_ICONS,
-  ARM_ICONS,
+  CATEGORY_ICONS,
+  FIGHT_ICONS,
   METRIC_ICONS,
   SHAPE_ICONS,
-  armIcon,
+  WEAPON_ICONS,
+  categoryIcon,
   iconDrawing,
   type IconName,
 } from '../src/ui/icons.ts'
 
-const ALL: IconName[] = [...ARM_ICONS, ...ACTION_ICONS, ...SHAPE_ICONS, ...METRIC_ICONS]
+const ALL: IconName[] = [...CATEGORY_ICONS, ...WEAPON_ICONS, ...FIGHT_ICONS, ...SHAPE_ICONS, ...METRIC_ICONS]
 
 describe('the icon set', () => {
   it('draws every icon, each on a square box, with at least one stroke', () => {
@@ -43,19 +44,21 @@ describe('the icon set', () => {
   })
 })
 
-describe('armIcon', () => {
-  it("reads a unit's arm from its tags", () => {
-    expect(armIcon(['foot'])).toBe('foot')
-    expect(armIcon(['foot', 'light'])).toBe('foot')
-    expect(armIcon(['horse', 'heavy'])).toBe('horse')
-    expect(armIcon(['guns'])).toBe('guns')
+describe('categoryIcon', () => {
+  it("reads a unit's category from its tags (the unit model's categories)", () => {
+    expect(categoryIcon(['foot'])).toBe('foot')
+    expect(categoryIcon(['foot', 'light'])).toBe('foot-light')
+    expect(categoryIcon(['horse', 'heavy'])).toBe('horse-heavy')
+    expect(categoryIcon(['horse', 'light', 'lancer'])).toBe('horse-light')
+    expect(categoryIcon(['guns'])).toBe('guns-heavy')
   })
 
-  it('makes horse artillery guns, not cavalry', () => {
-    expect(armIcon(['guns', 'horse'])).toBe('guns')
+  it('makes horse artillery light artillery, not cavalry', () => {
+    expect(categoryIcon(['guns', 'horse'])).toBe('guns-light')
   })
 
-  it('is foot for a unit with no arm tag', () => {
-    expect(armIcon([])).toBe('foot')
+  it('makes cavalry heavy unless tagged light, and a unit with no arm tag line infantry', () => {
+    expect(categoryIcon(['horse'])).toBe('horse-heavy')
+    expect(categoryIcon([])).toBe('foot')
   })
 })

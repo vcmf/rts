@@ -203,7 +203,7 @@
     <!-- 08 -->
     <section id="gauges">
       <h2 class="display"><span class="mono">08</span> Bars and gauges</h2>
-      <p class="lede">A unit's metrics are continuous bars, one colour each, from the period's washes: bistre for toughness, verdigris for morale, a carmine-and-indigo violet for fatigue. Their state is drawn, never a new hue: low is hatched under a dotted frame, critical an empty outline with the value in bold. Fatigue is bad when full.</p>
+      <p class="lede">A unit's metrics are continuous bars, one colour each, from the period's washes: bistre for toughness (the men left of the battalion's), verdigris for morale, a carmine-and-indigo violet for fatigue. One plain style for every unit and value, and the numbers always written beside them: current / max.</p>
       <div class="gauges" data-slot="bars"></div>
       <div class="loading">
         <div class="mono" style="display: flex; justify-content: space-between"><span>Drawing the map</span><span data-slot="progress-text">64 %</span></div>
@@ -284,7 +284,7 @@
     <!-- 13 -->
     <section id="icons">
       <h2 class="display"><span class="mono">13</span> Icons</h2>
-      <p class="lede">Ink glyphs at 16, 24 and 36 px; hover one for its name. Arms: a shako, a horse, the gun of the staff map. Actions: crossed sabres for melee, a musket with its bayonet for volley fire, a slung rifle for aimed fire. Shapes are drawn as Total War draws formations, each rank a line. Metrics head the unit bars.</p>
+      <p class="lede">Ink glyphs at 16, 24 and 36 px; hover one for its name. Six categories: line infantry (a shako), light infantry (the light infantry's hunting horn), heavy cavalry (a helmet with its mane), light cavalry (a horse), heavy artillery (the staff map's gun with its shot), light artillery (the gun under a horseshoe). Weapon mode: crossed sabres for melee, a musket for volley fire, a rifle for aimed fire. Fight mode: fire at will (the range ring), hold fire (crossed through). Shapes are drawn as Total War draws formations, each rank a line. Metrics head the unit bars.</p>
       <div class="icon-groups" data-slot="icons"></div>
     </section>
   </main>
@@ -301,20 +301,44 @@
 
 <!-- The sample units of the battle sections: a scenario's words (the ruleset's labels), not the interface code's. -->
 <script type="application/json" id="sample-units">
-[
-  { "regiment": "french/04-light-chasseur", "army": 0, "name": "10e léger", "detail": "1er bataillon · IV Corps", "arm": "foot", "armLabel": "Light infantry", "level": 3, "shape": "column", "shapeLabel": "Column of attack",
-    "actions": [{ "icon": "fire", "label": "Volley fire" }, { "icon": "melee", "label": "Bayonet charge" }],
-    "metrics": [{ "metric": "toughness", "label": "Toughness", "value": 812, "max": 900 }, { "metric": "morale", "label": "Morale", "value": 64, "max": 100 }, { "metric": "fatigue", "label": "Fatigue", "value": 71, "max": 100, "highIsBad": true }] },
-  { "regiment": "french/13-cuirassier", "army": 0, "name": "5e cuirassiers", "detail": "Brigade d'Hautpoul", "arm": "horse", "armLabel": "Heavy cavalry", "level": 4, "shape": "line", "shapeLabel": "Line",
-    "actions": [{ "icon": "melee", "label": "Charge" }],
-    "metrics": [{ "metric": "toughness", "label": "Toughness", "value": 410, "max": 480 }, { "metric": "morale", "label": "Morale", "value": 88, "max": 120 }, { "metric": "fatigue", "label": "Fatigue", "value": 22, "max": 100, "highIsBad": true }] },
-  { "regiment": "french/26-eight-pounder", "army": 0, "name": "Batterie à pied", "detail": "6/1er régiment d'artillerie", "arm": "guns", "armLabel": "Foot artillery", "level": 2, "shape": "unlimbered", "shapeLabel": "Unlimbered",
-    "actions": [{ "icon": "fire", "label": "Roundshot" }],
-    "metrics": [{ "metric": "toughness", "label": "Toughness", "value": 96, "max": 120 }, { "metric": "morale", "label": "Morale", "value": 22, "max": 100 }, { "metric": "fatigue", "label": "Fatigue", "value": 40, "max": 100, "highIsBad": true }] },
-  { "regiment": "british/04-95th-rifles", "army": 1, "name": "1/95th Rifles", "detail": "Light Division", "arm": "foot", "armLabel": "Riflemen", "level": 5, "shape": "skirmish", "shapeLabel": "Skirmish order",
-    "actions": [{ "icon": "aimed-fire", "label": "Aimed fire" }],
-    "metrics": [{ "metric": "toughness", "label": "Toughness", "value": 120, "max": 600 }, { "metric": "morale", "label": "Morale", "value": 9, "max": 140 }, { "metric": "fatigue", "label": "Fatigue", "value": 90, "max": 100, "highIsBad": true }] }
-]
+{
+  "modeSets": {
+    "infantry": [
+      { "name": "Formation", "options": [{ "icon": "line", "label": "Line", "key": "L" }, { "icon": "column", "label": "Column of attack", "key": "C" }, { "icon": "march", "label": "March column", "key": "M" }, { "icon": "square", "label": "Square", "key": "Q" }] },
+      { "name": "Weapon", "options": [{ "icon": "fire", "label": "Musket", "key": "F" }, { "icon": "melee", "label": "Bayonet", "key": "B" }] },
+      { "name": "Fight", "options": [{ "icon": "fire-at-will", "label": "Fire at will", "key": "A" }, { "icon": "hold-fire", "label": "Hold fire", "key": "H" }] }
+    ],
+    "light-infantry": [
+      { "name": "Formation", "options": [{ "icon": "line", "label": "Line", "key": "L" }, { "icon": "column", "label": "Column of attack", "key": "C" }, { "icon": "skirmish", "label": "Skirmish order", "key": "K" }, { "icon": "square", "label": "Square", "key": "Q" }] },
+      { "name": "Weapon", "options": [{ "icon": "aimed-fire", "label": "Rifle", "key": "F" }, { "icon": "melee", "label": "Sword bayonet", "key": "B" }] },
+      { "name": "Fight", "options": [{ "icon": "fire-at-will", "label": "Fire at will", "key": "A" }, { "icon": "hold-fire", "label": "Hold fire", "key": "H" }] }
+    ],
+    "cavalry": [
+      { "name": "Formation", "options": [{ "icon": "line", "label": "Line", "key": "L" }, { "icon": "column", "label": "Column of squadrons", "key": "C" }, { "icon": "march", "label": "March column", "key": "M" }] },
+      { "name": "Weapon", "options": [{ "icon": "melee", "label": "Sabre", "key": "B" }] }
+    ],
+    "guns": [
+      { "name": "Formation", "options": [{ "icon": "unlimbered", "label": "Unlimbered", "key": "U" }, { "icon": "limbered", "label": "Limbered", "key": "M" }] },
+      { "name": "Fight", "options": [{ "icon": "fire-at-will", "label": "Fire at will", "key": "A" }, { "icon": "hold-fire", "label": "Hold fire", "key": "H" }] }
+    ]
+  },
+  "units": [
+    { "regiment": "french/02-line-grenadier", "army": 0, "name": "46e de ligne", "detail": "1er bataillon · IV Corps", "category": "foot", "categoryLabel": "Line infantry", "level": 3, "modes": "infantry", "set": [1, 0, 0],
+      "metrics": [{ "metric": "toughness", "label": "Men", "value": 512, "max": 640 }, { "metric": "morale", "label": "Morale", "value": 64, "max": 100 }, { "metric": "fatigue", "label": "Fatigue", "value": 38, "max": 100 }] },
+    { "regiment": "french/04-light-chasseur", "army": 0, "name": "10e léger", "detail": "2e bataillon · IV Corps", "category": "foot-light", "categoryLabel": "Light infantry", "level": 4, "modes": "light-infantry", "set": [2, 0, 0],
+      "metrics": [{ "metric": "toughness", "label": "Men", "value": 430, "max": 560 }, { "metric": "morale", "label": "Morale", "value": 81, "max": 110 }, { "metric": "fatigue", "label": "Fatigue", "value": 52, "max": 100 }] },
+    { "regiment": "french/13-cuirassier", "army": 0, "name": "5e cuirassiers", "detail": "Brigade d'Hautpoul", "category": "horse-heavy", "categoryLabel": "Heavy cavalry", "level": 5, "modes": "cavalry", "set": [0, 0],
+      "metrics": [{ "metric": "toughness", "label": "Men", "value": 410, "max": 480 }, { "metric": "morale", "label": "Morale", "value": 108, "max": 140 }, { "metric": "fatigue", "label": "Fatigue", "value": 22, "max": 100 }] },
+    { "regiment": "french/12-hussar", "army": 0, "name": "10e hussards", "detail": "Brigade Treillard", "category": "horse-light", "categoryLabel": "Light cavalry", "level": 2, "modes": "cavalry", "set": [1, 0],
+      "metrics": [{ "metric": "toughness", "label": "Men", "value": 290, "max": 420 }, { "metric": "morale", "label": "Morale", "value": 40, "max": 100 }, { "metric": "fatigue", "label": "Fatigue", "value": 77, "max": 100 }] },
+    { "regiment": "french/26-eight-pounder", "army": 0, "name": "Batterie à pied", "detail": "6/1er régiment d'artillerie · 12-pounders", "category": "guns-heavy", "categoryLabel": "Heavy artillery", "level": 2, "modes": "guns", "set": [0, 0],
+      "metrics": [{ "metric": "toughness", "label": "Men", "value": 96, "max": 120 }, { "metric": "morale", "label": "Morale", "value": 22, "max": 100 }, { "metric": "fatigue", "label": "Fatigue", "value": 40, "max": 100 }] },
+    { "regiment": "french/18-horse-gunner", "army": 0, "name": "Batterie à cheval", "detail": "2/6e régiment d'artillerie à cheval · 6-pounders", "category": "guns-light", "categoryLabel": "Light artillery", "level": 3, "modes": "guns", "set": [1, 1],
+      "metrics": [{ "metric": "toughness", "label": "Men", "value": 88, "max": 100 }, { "metric": "morale", "label": "Morale", "value": 70, "max": 100 }, { "metric": "fatigue", "label": "Fatigue", "value": 15, "max": 100 }] },
+    { "regiment": "british/04-95th-rifles", "army": 1, "name": "1/95th Rifles", "detail": "Light Division", "category": "foot-light", "categoryLabel": "Light infantry", "level": 5, "modes": "light-infantry", "set": [2, 0, 0],
+      "metrics": [{ "metric": "toughness", "label": "Men", "value": 120, "max": 600 }, { "metric": "morale", "label": "Morale", "value": 9, "max": 140 }, { "metric": "fatigue", "label": "Fatigue", "value": 90, "max": 100 }] }
+  ]
+}
 </script>
 <script type="module" src="../src/ui/kit.ts"></script>
 </body>
