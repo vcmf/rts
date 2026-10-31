@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-30
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, data/leaf-clumps-simple-v1.png, test/leaves.test.ts, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/trodden.ts, src/look/world/arms.ts, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/arms.test.ts, src/look/meadow-look.ts, test/meadow-look.test.ts, test/meadow-spec.test.ts]
-decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline, 0084-a-soft-mid-tone-on-figures-and-buildings]
+last_reviewed: 2026-10-31
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, data/leaf-clumps-simple-v1.png, test/leaves.test.ts, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/trodden.ts, src/look/world/arms.ts, src/look/world/battle.ts, src/rulesets/napoleonic-division.ts, test/battle.test.ts, tools/sample-blocked.mjs, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/arms.test.ts, src/look/meadow-look.ts, test/meadow-look.test.ts, test/meadow-spec.test.ts]
+decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline, 0084-a-soft-mid-tone-on-figures-and-buildings, 0097-look-armies-at-the-division-scale]
 ---
 
 # The look page (Track E, L0)
@@ -124,7 +124,7 @@ The page loads that window's data (`windowOf`; an unknown name throws, and so do
 On a map world the demo's hand-placed copses, woods, hedgerows, extras, wheat lattice and formation zones are off;
 the bushes, stones and grass of the scatter stay (the look's own rule of what grows on which class). Not yet drawn
 (the plan's PRs b and c): the buildings (the village's ground only), the water (the streams' channels and the ponds'
-beds show dry), and the river's own features; `?armies` is the demo's only (A4).
+beds show dry), and the river's own features; `?battle` is the demo's only (A4).
 
 ### The camera on a world's ground (A1b)
 
@@ -725,41 +725,73 @@ cross-fade's bench, `docs/plans/done/lod-fade.md`).
 - `node tools/bench-look.mjs <url> [out.json] [--hold s] [--gpu metal]` runs it headless (SwiftShader by
   default: slow, and its timer times software rendering), with vsync and the frame-rate limit off. The laptop run is the owner's (`docs/plans/active/track-e-look.md`, "Measuring").
 
-### The armies (`?armies=<n>`, scripted; `docs/plans/active/armies-demo.md`)
+### The armies (`?battle`, scripted; `docs/plans/active/armies-demo.md`, `docs/plans/active/division-armies.md`)
 
-`?armies=<1..40>` puts n battalions a side on the demo map (414 men each, the ruleset's drill: 5 about 4,000
-figures, 10 about 8,000, 20 about 16,500, 40 about 33,000: `docs/plans/active/armies-32k.md`); not on the page by default, so the goldens and the look checks never see
-them. WebGL2 only (decision 0046). Each switch below names the A/B it restores; the defaults are the measured best.
-The page names no era (decision 0015): the demo's scenario (`src/scenarios/armies-demo.ts`) names its ruleset, unit
-type, figure and uniforms, resolved through `src/rulesets/index.ts` (`RULESETS`: a ruleset and its uniforms by name)
-and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glob in `src/look/main.ts`).
+`?battle[=typical|16k|32k]` puts a stress-test battle at the division scale (decision 0097; decision 0076: a unit is
+a division, a figure 25 men) on the demo map: corps of the ruleset's compositions filled up to a figure budget, about
+6,300 figures (`typical`, two infantry corps a side), 16,000 (bare `?battle`, the default) or 32,000 (the main army's,
+with its reserve cavalry corps). The panel's **Battle** select reloads the page with another (or none). The old
+`?armies=<1..40>` maps onto the battle nearest its figures (n × 414 a side: up to 13 typical, 14 to 28 16k, 29 on
+32k); both at once is an error. Not on the page by default, so the goldens and the look checks never see them. WebGL2
+only (decision 0046). Each switch below names the A/B it restores; the defaults are the measured best. The page names
+no era (decision 0015): the demo's scenario (`src/scenarios/armies-demo.ts`) names its ruleset (`napoleonic-division`,
+`src/rulesets/napoleonic-division.ts`: main's ruleset with the division scale's blocks, as the sim's #280 sets them,
+and the light infantry and cuirassier types it does not ship yet; the corps, `CORPS`), its battles, its deployment and
+its arms, each a unit type, figure and uniforms, resolved through `src/rulesets/index.ts` (`RULESETS`: a ruleset and
+its uniforms by name) and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glob in
+`src/look/main.ts`, each fetched and decoded once for every arm drawn with it).
 
-- **The other arms** (decision 0075, `docs/plans/done/cavalry-artillery-demo.md`; `?cavalry=0`, `?artillery=0`: left
-  out, both: the page before them; `?lookat=<arm>|fight[,<radius m>]`: the camera starts on that arm's first unit or
-  the fight's middle, on the ground there, at 30 m or that zoom, `lookAtSpot`; a clear error without `?armies`, or
-  naming the arms on the page, none under `?sim`): the scenario's `ARMS_DEMO` (`src/scenarios/armies-demo.ts`), each a unit type and
-  formation of the ruleset, a figure, a script, each side's uniform and a man's weight in the trodden mask (`tread`):
-  a foot battery a side (the ruleset's 8 pieces 16 m apart, unlimbered 12 m before the lines, a piece one figure:
-  the gun and four of its detachment; `serveScript`: at rest 8 s, then each piece's firing cycle, Load, Ready, Fire
-  looped, 2.5 s after the one before, a 110 s cycle) and a cuirassier regiment a side (the ruleset's 4 squadrons of
-  32 × 2 in column of squadrons, riding along the front between the lines, the two passing each other; `rideScript`:
-  halt 4 s, walk 6, trot 20, gallop 6, halt 24, each at its role's root speed, then where it began). Placed after the
-  infantry's layout, which they leave as it was (`placeArm`: the nearest spot to the one wanted, a move ahead or back
-  counting three times one along the front, on the side's own half, off the blocked ground, clear of the battalions'
-  and the other arms' boxes; a side with no room is left out with a warning; the field's centre and gap layout's,
-  `FIELD`). Each arm is its own renderer (`Units`); the page-wide parts are owned once: the trodden mask
+- **The battle** (`src/look/world/battle.ts`): each side's order of battle (`orderOfBattle`: the battle's `once`
+  corps, then its `repeat` corps again and again, each unit taken while it fits in half the budget; a corps is cut at
+  its first unit that does not fit and the side ends there), laid out (`battleLayout`) on the tile less its last 30 m
+  (±370 m: past the camera's ±235 m play area until the bigger map), each side on its own half, 110 m between the
+  fronts (`FIELD`): the first two repeated corps a side side by side along the front, each by the scenario's template
+  (`Deploy`: rows of posts, its first line of three line units and its light infantry deploying and firing on the
+  script, its battery 12 m before it, its light cavalry riding along the front 36 m before it; each unit at the spot
+  nearest its post's, `placeArm` with `back`: along the front or back from it, never ahead), the rest at rest in
+  column 40 m behind the front at least (`RESERVE_BACK`), the nearest the front and the middle first on a 5 m grid,
+  each type's pass resuming where its last unit stood (a spot refused stays refused: the ground only fills); a unit
+  its post had no room for joins them. Water, trees (bushes are walked through), the buildings' yards are kept clear,
+  every unit's box clear of every other's, and it throws when a side has no room. The engaged units' cycles are
+  staggered (9.7 s a unit of a type). On the demo map the river splits the front, so some units stand behind it
+  (`test/battle.test.ts` lays out all three battles on the page's blocked ground,
+  `test/fixtures/demo-map-blocked.bin.gz`, sampled over ±370 m by `tools/sample-blocked.mjs`).
+- **The stand-ins** (the owner, 2026-10-31): the light infantry is the line infantryman in open order (160 figures, 4
+  sections of 20 × 2, 1 m files, 1.5 m ranks) in its own dye (`fr-light`; the Austrians the Grenzer's), no colours;
+  the light cavalry the cuirassier figure with its metal role (cuirass and helmet) painted in its coat (an arm's
+  `parts` override), in light cavalry dyes (`fr-chasseur`, `at-hussar`), 80 figures against the cuirassiers' 120.
+  Their own figures: #308, #309.
+- **The arms** (decision 0075, `docs/plans/done/cavalry-artillery-demo.md`; `?light=0`, `?artillery=0`, `?cavalry=0`,
+  `?cuirassiers=0`: left out; `?lookat=<arm>|fight[,<radius m>]`: the camera starts on that arm's first unit or
+  the fight's middle, on the ground there, at 30 m or that zoom, `lookAtSpot`; a clear error without `?battle`, or
+  naming the arms on the page, none under `?sim`): the scenario's `ARMS_DEMO` (`src/scenarios/armies-demo.ts`), the
+  line infantry first (always on the page), each a unit type and formation of the ruleset, a figure, a script
+  (`armScript`: its script and its footprints at work and at rest), each side's uniform, a man's weight in the trodden
+  mask (`tread`), whether it carries colours and its figure's parts overridden: the line and light infantry
+  (`drillScript`, below), a corps' foot battery (the ruleset's 4 pieces 16 m apart, a piece one figure: the gun and
+  four of its detachment; `serveScript`: at rest 8 s, then each piece's firing cycle, Load, Ready, Fire looped, 2.5 s
+  after the one before, a 110 s cycle), the light cavalry (2 squadrons of 20 × 2) and the cuirassiers (3 squadrons)
+  in column of squadrons riding along the front (`rideScript`: halt 4 s, walk 6, trot 20, gallop 6, halt 24, each at
+  its role's root speed, then where it began). A reserve stands at rest: a drill's column halted, a ride halted in its
+  slots (its first halted leg's role), a service's pieces resting. `placeArm`: the nearest spot to the one wanted, a
+  move ahead or back counting three times one along the front, on the side's own half, off the blocked ground, clear
+  of the other units' boxes. An arm with no unit in the battle is not made (the cuirassiers in the typical one). Each
+  arm is its own renderer (`Units`); the page-wide parts are owned once: the trodden mask
   (`src/look/trodden.ts`, `Trodden`: every arm's men by its `tread`, drawn after they are placed each frame, an arm's
   moved flag kept until a draw takes it, `takeSteps`), the ground heights without the meadow map (one a scene), the
   shade and the stencil (the page's); the figures' shadow map behind its switches and its receivers belong to the
   infantry's arm (`ownsMap`), the others draw their simple shadows at every zoom (none under `?ushadowfar=map`) and no
-  flag; the frame's corner rays are cast once for both (`ViewRays`). `__units` is the infantry's renderer, as before
+  flag; the frame's corner rays are cast once for all (`ViewRays`). `__units` is the line infantry's renderer, as before
   (the guard masks and scores it alone, like for like with main), `__armies.show` and `__armies.setMask` every arm's.
   Under `?ushadowclose=map` an arm without the map takes the close look by zoom (its simple shadows draw up close);
   a figure on more than its root draws no contact oval under `?ushcontact` (`contactFor`: one oval would carpet a
   whole horse or gun; its heights darken each contact); a figure's view sphere for the nearest LOD reaches its top and
   its farthest point (`manRadius`: the infantryman's 1.95 m, 1.6 before); the renderer asks the arm's script (`Script`, `src/look/world/arms.ts`; the
   infantry's `drillScript` wraps `phaseAt` and `manAt` as before) for a unit's phase and each man's place and role.
-  `__armies.arms` holds them by name; `__armies.coats` stays the infantry's (the guard measures them). Under `?sim` (the sim plays the infantry) the other arms are left out (their scripts are stand-ins the sim neither drives nor places against its armies); `?cavalry=1` or `?artillery=1` with `?sim` is an error.
+  `__armies.arms` holds them by name; `__armies.coats` stays the line infantry's (the guard measures them);
+  `__armies.battle` and `__armies.figures` name the battle and its figures (the ruleset's: a battery's 48, drawn as
+  its 4 pieces). Under `?sim` (the sim plays the line infantry) the other arms are left out (their scripts are
+  stand-ins the sim neither drives nor places against its armies); `?<arm>=1` with `?sim` is an error.
 - **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
   `data/figures/<figure>.unitdata` (`src/look/units-data.ts` reads and checks it): its LODs nearest first (here
   three: the full figure, 9,274 triangles, then 1,197 and 243; the page reads two or three), each vertex's colour role (the reds told from the skin by hue, the face's shaded side kept skin, the coat's violet shade kept coat: #133's review, `texel_role`, `tri_role`) (coat, facings, white, dark, skin, leather, pack, wood, metal: from the
@@ -1019,21 +1051,12 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
 - **Flags** (`?flags=0`: none): one a battalion, its uniform's flag on a 3 m staff with the colour bearer (the line's
   centre file, second rank), the cloth downwind and waving at 12 fps, never under 12 px tall (up to 5 times its size);
   one thin-instanced mesh, hidden with the figures (`show`).
-- **The script** (`src/look/world/armies.ts`, deterministic, the sim's stand-in): each battalion in line marches 36 m
-  in column of companies, halts 4 s, deploys into line at the run, pauses 3 s, then fires by ranks (1.4 s apart) until
-  its 110 s cycle starts again; battalions are 9.7 s apart in the cycle. **The layout** keeps every battalion's whole
-  footprint within the camera's play area (±235 m): the lines, up to two footprints deep behind each side's front
-  (110 m apart), the front row and the middle first, each with its approach behind it clear; the rest are reserves in
-  column of companies at least 40 m behind the front, clear of the lines' footprints, the nearest first (5 m grid).
-  Water, trees (bushes are walked through), the buildings' yards are kept clear, and it throws when a side has no room.
-  On the demo map 20 a side is 4 and 3 battalions in line, the rest in column. When the reserves leave a side short
-  (40 a side; never at 20 or fewer on the demo map, whose layout is unchanged: a test hashes it), **close reserves**
-  fill in: more columns on a 2.5 m grid, 6 m apart men to men, taking each line's footprint as its T (its ranks' full
-  width, its approach only as wide as its column) and the trapezoid its companies cross as they deploy (as wide as
-  the line at the ranks' depth, as the column at its rear: four boxes), so they may stand behind a line's flanks,
-  never ahead of a line nor in a deploying company's way (the test checks every man's path at 40 a side).
-- **The sim** (`?armies=<n>&sim`, battle threads PR 4b, `docs/plans/done/battle-threads.md`): the same layout, the
-  battle played by the sim in its workers (`src/look/sim-armies.ts`, on the look world's sim map
+- **The script** (`src/look/world/armies.ts`, deterministic, the sim's stand-in): each engaged infantry unit marches
+  36 m in column of sections (one section wide, its sections one behind the other: 20 files × 12 ranks for the line,
+  #283's attack column), halts 4 s, deploys into line at the run, pauses 3 s, then fires by ranks (1.4 s apart) until
+  its 110 s cycle starts again; the layout is the battle's (above).
+- **The sim** (`?battle&sim`, battle threads PR 4b, `docs/plans/done/battle-threads.md`): the same layout (its line
+  infantry), on the division ruleset (`napoleonic-division`: a unit the drawn unit's 240), the battle played by the sim in its workers (`src/look/sim-armies.ts`, on the look world's sim map
   `maps/painted-world.ts`; on the page when it cannot share memory with them): each battalion spawned where it is laid
   out by a command (so the session replays), in column, firing at will; it marches to 90 m short of the fight's middle,
   then deploys into line. The renderer takes each man from the sim's men (`src/look/sim-men.ts`) in place of the
@@ -1058,10 +1081,10 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `Matrix.RotationY`; a man under −HIDDEN/2 m at no size), so the meshes stay at the identity. The moves (`aNext`) are sent only when a placing changes them: the
   sim's men have none between steps, so theirs are sent once, as zeros. The page's checks read the men by `poses()`
   (`tools/look-check.js`).
-- **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
+- **Measured**: `node tools/guard.mjs <url?battle> --figures`: per side, the figures' luma against the ground's at
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
-- **The bench**: `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions in
-  line, `facingAt`). `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?benchtrace=1`
+- **The bench**: `?bench&battle=<name>` with no `?benchat` orbits the fight's middle (the two sides' nearest line
+  infantry units in line, `facingAt`). `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?benchtrace=1`
   records every measured frame (version 9): its interval and what happened in it (`src/look/trace.ts`: the figures'
   shadow map drawn and its casters and triangles, the sun's box refit, the trodden mask drawn and its CPU ms,
   battalions placed and place()'s and frame()'s CPU ms, thin-instance uploads and their KB and ms, the flags' update,

@@ -93,6 +93,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
   [`plans/active/l5-macro.md`](plans/active/l5-macro.md) (Track E L5: the ground's cover and macro colour, baked and in the shader, and the ablation),
   [`plans/active/armies-demo.md`](plans/active/armies-demo.md) (the first armies on the demo map, scripted),
   [`plans/active/armies-32k.md`](plans/active/armies-32k.md) (32,000 soldiers at 120 fps: the 40-a-side baseline and four measured steps, decision 0050, experimental),
+  [`plans/active/division-armies.md`](plans/active/division-armies.md) (the look page's armies at the division scale: corps up to a figure budget, `?battle`, stand-ins for the light arms; decision 0097),
   [`plans/active/close-zoom.md`](plans/active/close-zoom.md) (a closer zoom to show the soldiers, the full figure nearest, #133),
   [`plans/active/close-figures.md`](plans/active/close-figures.md) (the close-zoom figures: drawn inside out, a face on the back of the head, #164; shadows off the feet, #165),
   [`plans/active/simple-soldier-shadows.md`](plans/active/simple-soldier-shadows.md) (the shadow map only up close, a simple shadow per soldier beyond, #131),
