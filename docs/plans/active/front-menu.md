@@ -51,6 +51,16 @@ Out: the background art (the home stays empty paper), Campaign, Battles and Sett
 
 ## Open questions
 
+- **The selection accent** (the owner, 2026-10-31: terracotta reads as a brand orange; wants one of the period).
+  Candidates from period pigments, switchable on `app/ui-kit.html` and by `?accent=` on both pages: gamboge (a
+  yellow wash under ink lines, after Vauban's wash for projected works: recommended, the default for now),
+  verdigris, violet. Research: the Clements Library's bulletin 4 (French wash manuals, swatches measured from it),
+  contrast and colour-blind distance computed (Machado 2009).
+- **Experience markers** for five levels: three series on the sheet (Sleeve: a ring, one to three service chevrons,
+  a star; Shield; Honours). Recommended: Sleeve (French service chevrons counted to three; the Guard a distinction).
+- **Unit bars**: continuous, bistre toughness, verdigris morale, violet fatigue; low hatched, critical outlined.
+  Verdigris and violet as accents would clash with the morale and fatigue bars: the bars assume the gamboge accent.
+
 - The game's title ("Empires" is a placeholder).
 - Prussia's and Poland's army colours (`#23324a`, `#9c2440`) are provisional: the art bible names only France,
   Russia, Britain (and the staff map Austria).

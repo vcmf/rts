@@ -33,6 +33,7 @@ main { position: relative; z-index: 2; min-height: 100%; }
 .hub-card p { margin: 0; color: var(--ink-soft); }
 .hub-card .foot { margin-top: auto; display: flex; justify-content: space-between; }
 .hub-card:is(:hover, :focus-visible) { --tick: 150px; --frame-tick: var(--accent); border-color: var(--accent); outline: none; }
+.hub-card:is(:hover, :focus-visible) .txt { background: var(--accent-wash); }
 .hub-card:is(:hover, :focus-visible) img { transform: scale(1.03); }
 .hub-card:is(:hover, :focus-visible) .open { color: var(--accent); }
 

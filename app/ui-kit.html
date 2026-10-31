@@ -25,10 +25,11 @@
     <a href="#menu">05 Menu items</a>
     <a href="#labels">06 Tags, tabs, chips</a>
     <a href="#settings">07 Settings controls</a>
-    <a href="#gauges">08 Gauges</a>
+    <a href="#gauges">08 Bars and gauges</a>
     <a href="#overlays">09 Tooltip, dialog, dispatch</a>
     <a href="#cards">10 Cards</a>
     <a href="#battle">11 In battle</a>
+    <a href="#levels">12 Experience levels</a>
   </nav>
 
   <main>
@@ -37,6 +38,11 @@
       <h1 class="display">Interface language</h1>
       <div class="double-rule"></div>
       <p class="lede">Ink on warm paper, as a staff officer would draw it, set in modern type. Every element of the game's interface and its states. New elements are added to the theme and to this sheet together.</p>
+      <div class="accent-pick">
+        <span class="mono pencil">Selection accent · under review</span>
+        <div class="seg" role="group" aria-label="Selection accent" data-slot="accents"></div>
+        <p class="accent-note" data-slot="accent-note"></p>
+      </div>
     </header>
 
     <!-- 00 -->
@@ -200,13 +206,9 @@
 
     <!-- 08 -->
     <section id="gauges">
-      <h2 class="display"><span class="mono">08</span> Gauges</h2>
-      <p class="lede">Ten cells per meter, so a value reads at a glance and in tenths. Low values turn the accent. Progress uses the scale-bar track.</p>
-      <div class="gauges" data-army="0">
-        <span class="mono pencil">Strength</span><div class="meter" data-meter="812/1000"></div><span class="data">812</span>
-        <span class="mono pencil">Order</span><div class="meter" data-meter="60/100"></div><span class="data">60 %</span>
-        <span class="mono pencil">Ammunition</span><div class="meter low" data-meter="18/100"></div><span class="data">18 %</span>
-      </div>
+      <h2 class="display"><span class="mono">08</span> Bars and gauges</h2>
+      <p class="lede">A unit's metrics are continuous bars, one colour each, from the period's washes: bistre for toughness, verdigris for morale, a carmine-and-indigo violet for fatigue. Their state is drawn, never a new hue: low is hatched under a dotted frame, critical an empty outline with the value in bold. Fatigue is bad when full.</p>
+      <div class="gauges" data-slot="bars"></div>
       <div class="loading">
         <div class="mono" style="display: flex; justify-content: space-between"><span>Drawing the map</span><span data-slot="progress-text">64 %</span></div>
         <div class="progress" data-slot="progress" style="--p: 64%"><i></i></div>
@@ -262,12 +264,12 @@
           <img data-slot="unit-image" alt="">
           <div>
             <div class="mono" style="color: var(--army)">France · IV Corps · Saint-Hilaire</div>
-            <h4 class="display">10e léger, 1er bataillon</h4>
-            <div class="mono pencil">Column of divisions · advancing</div>
+            <h4 class="display"><span data-level="3"></span> 10e léger, 1er bataillon</h4>
+            <div class="mono pencil">Column of divisions · advancing · Veteran</div>
             <div class="stats">
-              <span class="mono">Strength</span><div class="meter" data-meter="812/900"></div><span class="data">812</span>
-              <span class="mono">Order</span><div class="meter" data-meter="72/100"></div><span class="data">72</span>
-              <span class="mono">Ammunition</span><div class="meter low" data-meter="18/100"></div><span class="data">18</span>
+              <span class="mono">Toughness</span><span data-bar="toughness 812/900"></span>
+              <span class="mono">Morale</span><span data-bar="morale 64/100"></span>
+              <span class="mono">Fatigue</span><span data-bar="fatigue 71/100 high"></span>
             </div>
           </div>
           <div class="orders">
@@ -281,6 +283,13 @@
           <span><span class="dot"></span>Live</span><span>07:40:12</span><span>1:25 000</span><span>Winter</span><span>14 battalions engaged</span><span class="right">60 fps</span>
         </div>
       </div>
+    </section>
+
+    <!-- 12 -->
+    <section id="levels">
+      <h2 class="display"><span class="mono">12</span> Experience levels</h2>
+      <p class="lede">Five levels as ink glyphs that read as a scale at 16 px without colour. Three candidate series, from the period's insignia (French service chevrons, one to three; the Guard as a distinction of its own) and from how strategy games show veterancy. Under review: the recommendation is Sleeve.</p>
+      <div class="levels" data-slot="levels"></div>
     </section>
   </main>
 </div>

@@ -1,7 +1,7 @@
-// What cards and full plates say (src/ui/plate.ts) and how meters fill (src/ui/elements.ts).
+// What cards and full plates say (src/ui/plate.ts), and how bars fill and show their state (src/ui/elements.ts).
 // docs/systems/front-menu.md.
 import { describe, it, expect } from 'vitest'
-import { meterCells } from '../src/ui/elements.ts'
+import { BAR_CRITICAL, BAR_LOW, barShare, barState } from '../src/ui/elements.ts'
 import { captionOf, plateOf } from '../src/ui/plate.ts'
 import type { RosterRoute } from '../src/ui/route.ts'
 import { fixtureRoster } from './ui-fixture.ts'
@@ -71,25 +71,31 @@ describe('plateOf', () => {
   })
 })
 
-describe('meterCells', () => {
-  it('fills to the nearest tenth', () => {
-    expect(meterCells(812, 1000)).toBe(8)
-    expect(meterCells(860, 1000)).toBe(9)
-    expect(meterCells(1000, 1000)).toBe(10)
+describe('barShare', () => {
+  it('is the share of max, clamped to 0–1', () => {
+    expect(barShare(450, 900)).toBe(0.5)
+    expect(barShare(1300, 1000)).toBe(1)
   })
 
-  it('shows one cell for any value above zero, so the last men still show', () => {
-    expect(meterCells(1, 1000)).toBe(1)
+  it('is empty at zero, below it, or for a value or max that is not a positive number', () => {
+    expect(barShare(0, 1000)).toBe(0)
+    expect(barShare(-5, 1000)).toBe(0)
+    expect(barShare(Number.NaN, 1000)).toBe(0)
+    expect(barShare(5, 0)).toBe(0)
+  })
+})
+
+describe('barState', () => {
+  it('is low and critical as a good-when-full metric empties', () => {
+    expect(barState(0.9)).toBe('ok')
+    expect(barState(1 - BAR_LOW)).toBe('low')
+    expect(barState(1 - BAR_CRITICAL)).toBe('critical')
+    expect(barState(0)).toBe('critical')
   })
 
-  it('is empty at zero, below it, or for a value that is not a number', () => {
-    expect(meterCells(0, 1000)).toBe(0)
-    expect(meterCells(-5, 1000)).toBe(0)
-    expect(meterCells(Number.NaN, 1000)).toBe(0)
-    expect(meterCells(5, 0)).toBe(0)
-  })
-
-  it('never overfills', () => {
-    expect(meterCells(1300, 1000)).toBe(10)
+  it('is low and critical as a bad-when-full metric (fatigue) fills', () => {
+    expect(barState(0.2, true)).toBe('ok')
+    expect(barState(BAR_LOW, true)).toBe('low')
+    expect(barState(BAR_CRITICAL, true)).toBe('critical')
   })
 })

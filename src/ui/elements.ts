@@ -1,27 +1,39 @@
-// Builders for the theme's elements that are made in code (src/ui/theme.css): the roster card and the meter.
+// Builders for the theme's elements that are made in code (src/ui/theme.css): the roster card and the bar.
 // The screens and the specimen sheet (app/ui-kit.html) share them, so the sheet shows what the game draws.
 import { h } from './dom.ts'
 import { historyImage } from './images.ts'
 import { captionOf } from './plate.ts'
 import type { Entry } from './roster.ts'
 
-/** A meter's cells (the theme's `.meter` grid, src/ui/theme.css). */
-export const METER_CELLS = 10
+/** A bar's state: low and critical when the metric is that far toward its bad end (low strength, high fatigue). */
+export type BarState = 'ok' | 'low' | 'critical'
 
-/** How many of a meter's cells a `value` of `max` fills: rounded to the nearest, at least one for any value above
- *  zero (a unit with a few men left still shows them), never more than all. */
-export function meterCells(value: number, max: number): number {
+/** Where low and critical begin, as the share of the way toward the bad end. */
+export const BAR_LOW = 0.65
+export const BAR_CRITICAL = 0.85
+
+/** The share of `max` that `value` fills, clamped to 0–1 (0 for a value or max that is not a positive number). */
+export function barShare(value: number, max: number): number {
   if (!(value > 0) || !(max > 0)) return 0
-  const filled = Math.round((value / max) * METER_CELLS)
-  return Math.min(METER_CELLS, Math.max(1, filled))
+  return Math.min(1, value / max)
 }
 
-/** A meter showing `value` of `max`; `low` draws its filled cells in the accent. */
-export function meter(value: number, max: number, low = false): HTMLElement {
-  const filled = meterCells(value, max)
-  const cells = Array.from({ length: METER_CELLS }, (_, i) => h('i', { class: i < filled ? 'on' : undefined }))
+/** The state of a bar at `share`; `highIsBad` for a metric that is worse when full (fatigue). */
+export function barState(share: number, highIsBad = false): BarState {
+  const badness = highIsBad ? share : 1 - share
+  if (badness >= BAR_CRITICAL) return 'critical'
+  return badness >= BAR_LOW ? 'low' : 'ok'
+}
+
+/** A continuous bar of `metric` (toughness, morale, fatigue: its colour in src/ui/theme.css) showing `value` of
+ *  `max`, drawn in its state. */
+export function bar(metric: string, value: number, max: number, highIsBad = false): HTMLElement {
+  const share = barShare(value, max)
+  const state = barState(share, highIsBad)
   const aria = { role: 'meter', 'aria-valuenow': String(value), 'aria-valuemin': '0', 'aria-valuemax': String(max) }
-  return h('div', { class: low ? 'meter low' : 'meter', ...aria }, ...cells)
+  const node = h('div', { class: state === 'ok' ? 'bar' : `bar ${state}`, 'data-metric': metric, ...aria }, h('i'))
+  node.style.setProperty('--share', `${share * 100}%`)
+  return node
 }
 
 /** A roster card: the framed painting and its caption, the `index`-th of its roster; `open` runs on a click. The

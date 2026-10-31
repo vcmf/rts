@@ -1,7 +1,9 @@
 // The specimen sheet (app/ui-kit.html): fills the samples that come from data (the army colours, cards, meters) and
 // makes the settings controls and the dialog live. docs/systems/front-menu.md ("The specimen sheet").
 import { find, h, paintArmy } from './dom.ts'
-import { card, meter } from './elements.ts'
+import { ACCENTS, accentOf, applyAccent, type Accent } from './accent.ts'
+import { bar, barShare, barState, card } from './elements.ts'
+import { LEVEL_SERIES, LEVELS, levelMarker, type LevelSeries } from './levels.ts'
 import { historyImage } from './images.ts'
 import { loadRoster } from './load.ts'
 import { entryById, isRegiment, type Roster } from './roster.ts'
@@ -34,12 +36,99 @@ function sampleCards(roster: Roster): HTMLElement[] {
   return samples
 }
 
-function fillMeters(): void {
-  for (const node of document.querySelectorAll<HTMLElement>('[data-meter]')) {
-    // data-meter="<value>/<max>"
-    const [value, max] = (node.dataset.meter ?? '0/1').split('/').map(Number)
-    node.replaceWith(meter(value, max, node.classList.contains('low')))
+/** A bar and its value, from `data-bar="<metric> <value>/<max>[ high]"` (high: worse when full). */
+function barRow(spec: string): HTMLElement[] {
+  const [metric, amount, high] = spec.split(' ')
+  const [value, max] = amount.split('/').map(Number)
+  const state = barState(barShare(value, max), high === 'high')
+  const label = h('span', { class: state === 'critical' ? 'bar-value critical' : 'bar-value' }, String(value))
+  return [bar(metric, value, max, high === 'high'), label]
+}
+
+function fillBars(): void {
+  for (const node of document.querySelectorAll<HTMLElement>('[data-bar]')) {
+    node.replaceWith(...barRow(node.dataset.bar ?? ''))
   }
+}
+
+/** Each metric at rest, low and critical: the bars section's grid. */
+function barSamples(): HTMLElement[] {
+  const samples: [string, string, string[]][] = [
+    ['Toughness', 'toughness', ['812/900', '260/900', '90/900']],
+    ['Morale', 'morale', ['72/100', '30/100', '10/100']],
+    ['Fatigue', 'fatigue', ['20/100 high', '70/100 high', '92/100 high']],
+  ]
+  const head = ['', 'Rest', 'Low', 'Critical'].map(t => h('span', { class: 'mono pencil' }, t))
+  const rows = samples.flatMap(([name, metric, amounts]) => [
+    h('span', { class: 'mono' }, name),
+    ...amounts.map(a => h('span', { class: 'bar-cell' }, ...barRow(`${metric} ${a}`))),
+  ])
+  return [...head, ...rows]
+}
+
+/** The levels' names (a ruleset's, in the game; the research's period-grounded ones here) by series. */
+const LEVEL_NAMES: Record<LevelSeries, string[]> = {
+  sleeve: ['Conscript', 'Soldier', 'Seasoned', 'Veteran', 'Guard'],
+  shield: ['Recruit', 'Trained', 'Seasoned', 'Veteran', 'Élite'],
+  honours: ['Conscript', 'Fusilier', 'Grenadier', 'Grognard', 'Vieille Garde'],
+}
+const SERIES_NOTES: Record<LevelSeries, string> = {
+  sleeve: 'Recommended. A ring, one to three service chevrons (as French sleeves counted service), then a star.',
+  shield: 'One outline at every level that fills: bars, solid, then a cross cut out.',
+  honours: 'All marks filled; the most flavour, the closest steps (3 and 4) at small size.',
+}
+
+/** One row a series: its name and note, then each level at 16 and 32 px with its name. */
+function levelRows(): HTMLElement[] {
+  return LEVEL_SERIES.map(series => {
+    const cells = Array.from({ length: LEVELS }, (_, level) => {
+      const name = LEVEL_NAMES[series][level]
+      const big = levelMarker(series, level, name)
+      big.classList.add('big')
+      return h('figure', {}, big, levelMarker(series, level, name), h('figcaption', { class: 'mono' }, name))
+    })
+    const title = h('div', {}, h('div', { class: 'display' }, series), h('p', {}, SERIES_NOTES[series]))
+    return h('div', { class: 'level-row' }, title, ...cells)
+  })
+}
+
+function fillLevelMarks(): void {
+  for (const node of document.querySelectorAll<HTMLElement>('[data-level]')) {
+    const level = Number(node.dataset.level)
+    node.replaceWith(levelMarker('sleeve', level, LEVEL_NAMES.sleeve[level]))
+  }
+}
+
+const ACCENT_NOTES: Record<Accent, string> = {
+  terracotta: "Today's accent: read as a brand orange; to be replaced.",
+  gamboge:
+    "Recommended. Vauban's yellow wash for projected works: a wash under ink lines, as a plan marks what is to be done. Too light for a line of its own, so lines stay ink.",
+  verdigris:
+    "The draughtsman's fluid verdigris: strong enough for lines and text, but close to Russia's green and to the morale bar.",
+  violet:
+    "Carmine and indigo mixed: the most distinct from the armies for most eyes, but it is the fatigue bar's colour and nears Austria for deuteranopes.",
+}
+
+/** The accent switcher: sets the page's accent and its address (?accent=), so the menu can be opened with it too. */
+function accentPicker(): void {
+  const group = find('[data-slot=accents]')
+  const note = find('[data-slot=accent-note]')
+  const show = (accent: Accent) => {
+    applyAccent(accent)
+    for (const b of group.querySelectorAll('button')) {
+      b.setAttribute('aria-pressed', String(b.dataset.accent === accent))
+    }
+    note.textContent = ACCENT_NOTES[accent]
+    const url = new URL(location.href)
+    url.searchParams.set('accent', accent)
+    history.replaceState(null, '', url)
+  }
+  for (const accent of ACCENTS) {
+    const button = h('button', { 'data-accent': accent }, accent)
+    button.addEventListener('click', () => show(accent))
+    group.append(button)
+  }
+  show(accentOf(location.search))
 }
 
 function liveSwitches(): void {
@@ -98,7 +187,11 @@ async function main(): Promise<void> {
   cards.replaceChildren(...sampleCards(roster))
   const regiment = entryById(roster, 'regiments', roster.featured.regiments)
   if (regiment) find<HTMLImageElement>('[data-slot=unit-image]').src = historyImage(regiment.image)
-  fillMeters()
+  fillBars()
+  find('[data-slot=bars]').replaceChildren(...barSamples())
+  find('[data-slot=levels]').replaceChildren(...levelRows())
+  fillLevelMarks()
+  accentPicker()
   liveSwitches()
   liveRanges()
   liveSegments()

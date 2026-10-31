@@ -1,5 +1,6 @@
 // The front menu page (app/menu.html): home, History, the rosters and the full plate. Loads the roster, follows the
 // route in the hash, and turns keys into actions. docs/systems/front-menu.md.
+import { accentOf, applyAccent } from './accent.ts'
 import { find } from './dom.ts'
 import { keyAction, type KeyAction } from './keys.ts'
 import { loadRoster } from './load.ts'
@@ -113,6 +114,7 @@ class FrontMenu {
 }
 
 async function main(): Promise<void> {
+  applyAccent(accentOf(location.search))
   const roster = await loadRoster()
   const menu = new FrontMenu(roster)
   window.MENU = { roster, route: () => menu.route() }

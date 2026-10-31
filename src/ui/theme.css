@@ -21,7 +21,17 @@
   --ink-soft: #5d564c;          /* body text */
   --pencil: #8a847a;            /* labels, and everything not available yet */
   --rule: rgba(43, 40, 36, 0.22);
-  --accent: #a4532b;            /* the one selection accent */
+  /* The selection accent: --accent draws lines and text (3:1 or more on paper), --accent-wash fills behind what is
+     chosen, --accent-fill / --on-accent-fill a solid chosen button. Candidates under review below (data-accent). */
+  --accent: #a4532b;
+  --accent-wash: var(--paper-hi);
+  --accent-fill: #a4532b;
+  --on-accent-fill: var(--paper-hi);
+
+  /* Unit bars: one colour a metric, from the period's washes (bistre, verdigris, a carmine-indigo violet). */
+  --metric-toughness: #5a4632;
+  --metric-morale: #3a8a7c;
+  --metric-fatigue: #7b3f78;
   --paint: #2f2a23;             /* behind paintings while they load */
 
   --sans: 'Hanken Grotesk', system-ui, sans-serif;
@@ -36,6 +46,25 @@
     radial-gradient(ellipse at 85% 90%, rgba(140, 100, 50, 0.08), transparent 50%),
     radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(90, 70, 40, 0.12) 100%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .28 0 0 0 0 .2 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Accent candidates (docs/plans/active/front-menu.md, open questions; app/ui-kit.html switches them, ?accent=). Gamboge:
+   Vauban's yellow wash for projected works, a wash under ink lines (it is too light for a line or text of its own). */
+:root[data-accent='gamboge'] {
+  --accent: var(--ink);
+  --accent-wash: rgba(228, 180, 18, 0.4);
+  --accent-fill: #e4b412;
+  --on-accent-fill: var(--ink);
+}
+:root[data-accent='verdigris'] {
+  --accent: #1f6b62;
+  --accent-wash: rgba(47, 127, 116, 0.1);
+  --accent-fill: #1f6b62;
+}
+:root[data-accent='violet'] {
+  --accent: #7b3f78;
+  --accent-wash: rgba(123, 63, 120, 0.09);
+  --accent-fill: #7b3f78;
 }
 
 /* --army: an army's colour, set on an element from data (src/ui/dom.ts paintArmy); ink where none is set. */
@@ -110,11 +139,11 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   font: 500 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
   transition: color 0.15s, border-color 0.15s, background-color 0.15s;
 }
-.btn:is(:hover, .is-hover), .btn:is(:focus-visible, .is-focus) { border-color: var(--accent); color: var(--accent); }
+.btn:is(:hover, .is-hover), .btn:is(:focus-visible, .is-focus) { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
 .btn:is(:active, .is-active) { transform: translateY(1px); background: var(--paper-lo); }
 
 .btn.solid { background: var(--ink); color: var(--paper-hi); border-color: var(--ink); }
-.btn.solid:is(:hover, .is-hover, :focus-visible, .is-focus) { background: var(--accent); border-color: var(--accent); color: var(--paper-hi); }
+.btn.solid:is(:hover, .is-hover, :focus-visible, .is-focus) { background: var(--accent-fill); border-color: var(--accent); color: var(--on-accent-fill); }
 
 .btn.link { border-color: transparent; background: none; padding-inline: 2px; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--rule); }
 .btn.link:is(:hover, .is-hover) { text-decoration-color: currentColor; }
@@ -123,7 +152,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* The large call to action ("Begin the battle"): a framed display-type button whose ticks grow. */
 .btn-big { --tick: 54px; padding: 14px 26px; font: 600 26px/1 var(--display); font-stretch: 75%; text-transform: uppercase; letter-spacing: 0.03em; }
-.btn-big:is(:hover, .is-hover, :focus-visible, .is-focus) { --tick: 110px; --frame-tick: var(--accent); border-color: var(--accent); color: var(--accent); outline: none; }
+.btn-big:is(:hover, .is-hover, :focus-visible, .is-focus) { --tick: 110px; --frame-tick: var(--accent); border-color: var(--accent); color: var(--accent); background: var(--accent-wash); outline: none; }
 
 /* A key the player presses, shown in text; on an inked button it is drawn in the button's own colour. */
 .key { display: inline-block; min-width: 20px; padding: 1px 6px; text-align: center; border: 1px solid var(--ink); border-bottom-width: 2px; background: var(--paper-hi); font: 500 11px/1.5 var(--mono); }
@@ -140,7 +169,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .menu-item .label { font-size: 30px; }
 .menu-item .hint { display: block; color: var(--ink-soft); font: 400 13px/1.5 var(--sans); margin-top: 4px; letter-spacing: 0; text-transform: none; }
 .menu-item .go { opacity: 0; transform: translateX(-6px); transition: 0.25s; }
-.menu-item:not(.muted):is(:hover, :focus-visible, .sel, .is-hover) { --tick: 116px; --frame-tick: var(--accent); border-color: var(--accent); outline: none; }
+.menu-item:not(.muted):is(:hover, :focus-visible, .sel, .is-hover) { --tick: 116px; --frame-tick: var(--accent); border-color: var(--accent); background: var(--accent-wash); outline: none; }
 .menu-item:not(.muted):is(:hover, :focus-visible, .sel, .is-hover) :is(.go, .no) { opacity: 1; transform: none; color: var(--accent); }
 
 /* Muted: drawn in pencil, like an order not yet carried out. */
@@ -152,7 +181,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 .tag { display: inline-block; padding: 3px 7px; border: 1px solid currentColor; color: var(--pencil); white-space: nowrap; font: 500 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
 .tag.ink { color: var(--ink); }
-.tag.new { color: var(--paper-hi); background: var(--accent); border-color: var(--accent); }
+.tag.new { color: var(--on-accent-fill); background: var(--accent-fill); border-color: var(--accent-fill); }
 .tag.army { color: var(--army); }
 /* A stamp: rotated, for verdicts written across something (Intercepted, Victory). */
 .tag.stamp { color: var(--accent); border-width: 2px; padding: 4px 10px; transform: rotate(-4deg); font-weight: 600; }
@@ -169,7 +198,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .tab[aria-selected='true'] { color: var(--ink); border-color: var(--ink); }
 
 .chip { display: inline-flex; align-items: center; gap: 9px; padding: 7px 12px; border: 1px solid var(--rule); color: var(--ink-soft); font: 500 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
-.chip:is(:hover, .is-hover) { border-color: var(--ink); color: var(--ink); }
+.chip:is(:hover, .is-hover) { border-color: var(--ink); color: var(--ink); background: var(--accent-wash); }
 .chip[aria-pressed='true'] { border-color: var(--ink); color: var(--ink); background: var(--paper-hi); }
 .chip:disabled { opacity: 0.4; cursor: not-allowed; }
 .chip .sw { width: 10px; height: 10px; background: var(--army, var(--ink)); }
@@ -245,11 +274,22 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* ---------- Gauges ---------- */
 
-/* Meter: ten cells; filled cells in the army's colour (or ink), the rest empty. Low turns the accent. */
-.meter { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; height: 8px; }
-.meter i { border: 1px solid var(--ink); }
-.meter i.on { background: var(--army, var(--ink)); border-color: var(--army, var(--ink)); }
-.meter.low i.on { background: var(--accent); border-color: var(--accent); }
+/* Bar: a continuous gauge, one colour a metric (data-metric). Low is hatched in ink under a dotted frame, critical
+   an empty outline with the value in bold: the state is drawn, never a new hue (src/ui/elements.ts barState). */
+.bar { position: relative; height: 8px; border: 1px solid var(--ink); background: var(--paper-hi); --metric: var(--ink); }
+.bar[data-metric='toughness'] { --metric: var(--metric-toughness); }
+.bar[data-metric='morale'] { --metric: var(--metric-morale); }
+.bar[data-metric='fatigue'] { --metric: var(--metric-fatigue); }
+.bar > i { position: absolute; inset: 0 auto 0 0; width: var(--share, 0%); background: var(--metric); transition: width 0.3s var(--ease); }
+.bar.low { border-style: dotted; }
+.bar.low > i { background-image: repeating-linear-gradient(-45deg, transparent 0 3px, rgba(43, 40, 36, 0.6) 3px 4px); }
+.bar.critical > i { background: none; box-shadow: inset 0 0 0 1.5px var(--metric); }
+.bar-value { font: 400 13px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.bar-value.critical { font-weight: 700; }
+
+/* Level: a unit's experience marker, an ink glyph (src/ui/levels.ts) that grows in weight with the level. */
+.level { display: inline-block; width: 16px; height: 16px; color: var(--ink); vertical-align: -3px; }
+.level .cut { stroke: var(--paper-hi); }
 
 /* Progress: a scale-bar track filled with ink from the left. */
 .progress { height: 8px; border: 1px solid var(--ink); background: repeating-linear-gradient(90deg, var(--paper-lo) 0 5%, var(--paper-hi) 5% 10%); }
@@ -300,7 +340,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* Status bar (bottom edge): mono, live dot, clock, scale, season. */
 .status { display: flex; gap: 22px; color: var(--ink-soft); font: 500 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
-.status .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 8px; vertical-align: 1px; }
+.status .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-fill); margin-right: 8px; vertical-align: 1px; }
 .status .right { margin-left: auto; }
 
 /* Unit panel: the selected formation. Its army's colour edges it; meters for strength, order, ammunition. */
