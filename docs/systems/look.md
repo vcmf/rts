@@ -659,8 +659,9 @@ shader); `?meadow=off` puts back the old scatter.
     `TRAMPLE`):
     - a share of the near ring's *grass* clumps shrinks away, picked by a hash of their own (not `h2`, so the kept
       clumps grow as at Full);
-    - the share is none inside 8 m and half from 12 m, then back to none across the near ring's own band out
-      (18–25 m), where the middle ring fades in, so the density never steps (`THIN_RAMP`, `dropShare`; `uThinRamp`);
+    - the share is none inside 8 m; from 12 m half the clumps are culled (`BALANCED_DROP`) and a fifth more shrunk
+      (`THIN_SOFT`); back to none across the near ring's own band out (18–25 m), where the middle ring fades in, so
+      the density never steps (`THIN_RAMP`, `dropShare`; `uThinRamp`);
     - a clump below the share shrinks away across `THIN_SOFT` of the hash rather than vanishing (`thinKeep`, `uThin`;
       `grow` times it), so panning and zooming never pop one;
     - the crops are untouched (the thinning is on the grass branch), as are the outer rings;
@@ -668,7 +669,9 @@ shader); `?meadow=off` puts back the old scatter.
       the share falls to none, and from 110 m out, the default zoom included, the ring draws Full's program itself
       (`thinOn`).
 
-    The program is compiled ahead as soon as Balanced is chosen (`warmDefine`). A switch happens in the near ring's own
+    The program is compiled ahead while Balanced is chosen (`warmDefine`, from a scene hook, again when the material's
+    other defines change). The look tools wait until it is in force (`__look.meadowSettled`, `tools/look-page.mjs`); on
+    their frozen page the share snaps on the frame it lands. A switch happens in the near ring's own
     render, once the new program is ready (`switchDefineWhenReady`, `src/look/define-switch.ts`; the old defines kept
     meanwhile), so the ring never blinks. The share eases from none after a switch on and to none before a switch off
     (`ThinEase`, `THIN_EASE_S`; snapped on the tools' frozen page), so no clump pops. Past 10 m the close carpet is sparser, with

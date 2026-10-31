@@ -55,7 +55,8 @@ Not in scope:
 keeps its large clump, its cells and its crops. Up close, its material turns on `GRASS_THIN` (`setDefine`). Its grass
 clumps (never its crops) then shrink away by a share, each picked by a hash of its own (not the growth's `h2`, so the
 kept clumps grow as at Full):
-- **The share by distance:** none inside 8 m and half from 12 m, back to none across the near ring's own band out
+- **The share by distance:** none inside 8 m; from 12 m half the clumps culled (`BALANCED_DROP`) and `THIN_SOFT`
+  (a fifth) more shrunk; back to none across the near ring's own band out
   (18–25 m), so it meets the middle ring's full density without a step.
 - **No pop:** below the share a clump shrinks away across `THIN_SOFT` of the hash rather than vanishing, so panning
   and zooming never pop one.
@@ -158,8 +159,12 @@ of vertex work and binning. A blade cut is mostly a fragment saving.
   snaps it.
 - **The switch.** It happens in the near ring's own render, after every other define of the frame, and only once
   the mesh is ready with the new program (`switchDefineWhenReady`, `src/look/define-switch.ts`).
-- **Compiling ahead.** The program is compiled as soon as Balanced is chosen, at load or in the panel, even zoomed
-  out (`warmDefine`).
+- **Compiling ahead.** While Balanced is chosen and the program is off (zoomed out, the ring maybe hidden), it is
+  compiled from a scene hook, again whenever the material's other defines change (`warmDefine`). It is skipped while
+  a switch is already asking for it.
+- **The look tools.** They wait until the program asked for is in force and the share at its target
+  (`__look.meadowSettled`, in `tools/look-page.mjs`'s `viewStep`). On their frozen page the share snaps on the frame the
+  program lands, so a still is deterministic.
 - **The default zoom.** From 110 m out the define is off: Full's program.
 
 **How the crops stay identical to Full.** The thinning is only on the grass branch (`!crop`), after the crop
@@ -177,8 +182,8 @@ decision. Crop clumps take the same code, the same hashes and the same clump as 
 - **The goldens** decide the pixels in the final pass.
 
 **Work at Balanced, up close.** Over 12–18 m, and tapering across 8–12 and 18–25 m:
-- **Fragments:** about half the grass clumps' fragments are gone (the clumps below the share minus `THIN_SOFT`, and
-  shrunken ones in the soft band).
+- **Fragments:** half the grass clumps' fragments are gone (`BALANCED_DROP`, the clumps culled), and a fifth more
+  are smaller (the soft band above it).
 - **Vertices:** dropped clumps **still run their vertices**. Each is instanced, so all 58–108 of its vertices go
   through the band test, the view cull, the meadow map's read and the extra hash before the cull. Balanced therefore
   saves mostly fragments and the per-clump logic after the read, little of the vertex work itself: on Kobelnitz about

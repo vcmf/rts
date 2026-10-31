@@ -27,7 +27,8 @@ look page's settings panel):
 
 - **Full**: decision 0085's meadow, the default everywhere, map windows included.
 - **Balanced**: up close, the near ring's own program with one define (`GRASS_THIN`) shrinks away a share of its
-  grass clumps, each picked by a hash of its own. The share is none at 8 m from the focus and half from 12 m, back to
+  grass clumps, each picked by a hash of its own. The share is none at 8 m from the focus; from 12 m half the clumps
+  are culled and a fifth more shrunk. It goes back to
   none across the near ring's band out (18–25 m), where the middle ring fades in. Across 70–110 m of zoom the share
   falls to none, and from 110 m out, the default zoom included, the ring draws Full's program.
 
@@ -39,7 +40,8 @@ unchanged). Full's material and program are main's. The setting applies live.
 - **Balanced** is meant to spare GPU time at the close camera, toward Kobelnitz's 8.3 ms budget, and to be even with
   Full at the default and wide zooms. **Pending measurement** (an estimate, not measured on the current design): the
   plan's final pass benches it.
-- **What Balanced loses.** From about 10 to 20 m the carpet is sparser: about half the grass tufts, with more of the
+- **What Balanced loses.** From about 10 to 20 m the carpet is sparser: half the grass tufts gone and a fifth more
+  smaller, with more of the
   ground showing between them. Inside 8 m, the crops and the outer rings are unchanged.
 - **Full** draws main's program: the shader without the `GRASS_THIN` blocks is main's, and the near ring keeps its
   material. Full now differs from main on the CPU only:
@@ -49,7 +51,8 @@ unchanged). Full's material and program are main's. The setting applies live.
 
   **Pending**: the goldens decide the pixels in the plan's final pass.
 - **Applying a change.** It toggles the define live, without a reload:
-  - the new program is compiled ahead as soon as Balanced is chosen;
+  - the new program is compiled ahead while Balanced is chosen (and again when the material's other defines change);
+  - the look tools wait for it to be in force before a still (`__look.meadowSettled`);
   - the switch waits until it is ready, so the ring never blinks;
   - the share eases up from none after the switch on and down to none before the switch off, so no clump pops.
 
