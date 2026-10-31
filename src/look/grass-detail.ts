@@ -45,14 +45,18 @@ export function searchWithGrassDetail(search: string, level: GrassDetail): strin
 /** Where Balanced thins, m from the focus: its share ramps in across [0..1] and back out across [2..3], the near
  * ring's own band out, where the middle ring fades in at full density (so no step in density where they meet) */
 export const THIN_RAMP: [number, number, number, number] = [8, 12, RINGS[0].band[2], RINGS[0].band[3]]
-/** The share of the near ring's grass clumps Balanced drops between the ramps, up close */
+/** The share of the near ring's grass clumps Balanced culls between the ramps, up close (another THIN_SOFT of them
+ * shrunk, above it) */
 export const BALANCED_DROP = 0.5
-/** How far below the share (in the clumps' own hash) a clump shrinks from whole to nothing: no clump pops */
+/** How far (in the clumps' own hash) a clump shrinks from whole to nothing below the share: no clump pops */
 export const THIN_SOFT = 0.2
 
-/** The share Balanced drops at the camera's radius (m): BALANCED_DROP up close, none from the end of CLOSE_ZOOM out
- * (the combed clumps' zoom, src/look/meadow-spec.ts), so the default zoom (125 m) is Full's (meadow.vert's uThin.x) */
-export const dropAtZoom = (radius: number): number => BALANCED_DROP * (1 - sstep(CLOSE_ZOOM[0], CLOSE_ZOOM[1], radius))
+/** Balanced's share at the camera's radius (m), the hash under which a clump starts to shrink (meadow.vert's
+ * uThin.x): BALANCED_DROP + THIN_SOFT up close, so BALANCED_DROP of the clumps are culled and THIN_SOFT more shrunk;
+ * none from the end of CLOSE_ZOOM out (the combed clumps' zoom, src/look/meadow-spec.ts), so the default zoom (125 m)
+ * is Full's */
+export const dropAtZoom = (radius: number): number =>
+  (BALANCED_DROP + THIN_SOFT) * (1 - sstep(CLOSE_ZOOM[0], CLOSE_ZOOM[1], radius))
 /** Whether the near ring draws with Balanced's program at a level and the camera's radius: Full's from CLOSE_ZOOM's
  * end out, where nothing drops */
 export const thinOn = (level: GrassDetail, radius: number): boolean => level === 'balanced' && dropAtZoom(radius) > 0
@@ -66,8 +70,9 @@ export const dropShare = (d: number, s: number): number =>
  * (meadow.vert: grow times this); whole at a share of none (the hash is never negative). A crop is never thinned */
 export const thinKeep = (hd: number, share: number): number => sstep(share - THIN_SOFT, share, hd)
 
-/** How long Balanced's share takes to ease from none to BALANCED_DROP or back, s, after its program switches on or
- * before it switches off: a switch never pops the clumps (the program with a share of none draws Full's clumps) */
+/** How long Balanced's share takes to ease from none to its whole (BALANCED_DROP + THIN_SOFT) or back, s, after its
+ * program switches on or before it switches off: a switch never pops the clumps (the program with a share of none
+ * draws Full's clumps) */
 export const THIN_EASE_S = 0.3
 
 /** Balanced on the near ring from frame to frame (src/look/meadow.ts): the program in force (GRASS_THIN on or off),
@@ -87,9 +92,19 @@ export class ThinEase {
    * while the program is off or Balanced does not want it) and returns the program to ask for */
   step(level: GrassDetail, radius: number, dt: number): boolean {
     const want = thinOn(level, radius)
-    const target = this.program && want ? dropAtZoom(radius) : 0
-    const most = this.easeS > 0 ? (BALANCED_DROP / this.easeS) * Math.max(0, dt) : Infinity
+    const target = this.target(level, radius)
+    const most = this.easeS > 0 ? ((BALANCED_DROP + THIN_SOFT) / this.easeS) * Math.max(0, dt) : Infinity
     this.share += Math.max(-most, Math.min(most, target - this.share))
     return want || this.share > 0
+  }
+  /** The share this frame eases toward: the zoom's while the program is in force and Balanced wants it, else none */
+  target(level: GrassDetail, radius: number): number {
+    return this.program && thinOn(level, radius) ? dropAtZoom(radius) : 0
+  }
+  /** Whether Balanced has come to rest at a level and radius: the program asked for in force and the share at its
+   * target (the look tools wait on it before a still: src/look/main.ts, __look.meadowSettled) */
+  settled(level: GrassDetail, radius: number): boolean {
+    const asks = thinOn(level, radius) || this.share > 0
+    return asks === this.program && this.share === this.target(level, radius)
   }
 }

@@ -619,18 +619,14 @@ else if (params.has('bench') || params.has('water') || params.get('river') === '
 if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowMap
-  ? buildMeadow(
-      scene,
-      mats,
-      camera,
-      meadowMap,
-      !flag('nowide'),
-      grassReach,
-      meadowLook,
-      grassDetail,
+  ? buildMeadow(scene, mats, camera, meadowMap, {
+      wide: !flag('nowide'),
+      reach: grassReach,
+      look: meadowLook,
+      detail: grassDetail,
       // (the look tools' frozen page renders a view in a few frames: Balanced's share snaps, not eased)
-      params.has('frozen') ? 0 : THIN_EASE_S,
-    )
+      thinEaseS: params.has('frozen') ? 0 : THIN_EASE_S,
+    })
   : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dark ground under its clumps (shore.glsl)
 // ?armies=<battalions a side>: the demo's two armies (docs/plans/active/armies-demo.md): battalions of the ruleset's
@@ -1550,6 +1546,8 @@ Object.assign(window, {
     // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
     sky: bakes.sky,
     meadowBakeMs: meadow?.bakeMs ?? null,
+    // the grass detail at rest (its program in force, its share at its target): the look tools wait on it
+    meadowSettled: () => meadow?.thinSettled() ?? true,
     // (the combed meadow's flow textures, on load)
     flowBuildMs: flowTex?.ms ?? null,
     meadow: meadow

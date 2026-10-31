@@ -23,6 +23,8 @@ import { type DefineHost, switchDefineWhenReady, warmDefine } from '../src/look/
 import { CLOSE_ZOOM, RINGS } from '../src/look/meadow-spec.ts'
 
 const q = (s: string) => new URLSearchParams(s)
+// Balanced's whole share up close: the hash under which a clump starts to shrink
+const WHOLE = BALANCED_DROP + THIN_SOFT
 const VERT = readFileSync(new URL('../src/look/shaders/meadow.vert', import.meta.url), 'utf8')
 // the shader as Full compiles it: every #ifdef GRASS_THIN block gone (none of them has an #else)
 const fullOf = (src: string) => src.replace(/[ \t]*#ifdef GRASS_THIN\n[\s\S]*?#endif\n/g, '')
@@ -65,15 +67,26 @@ describe('the grass detail', () => {
     expect(searchWithGrassDetail('?grassdetail=full&bench', 'balanced')).toBe('?grassdetail=balanced&bench')
     expect(searchWithGrassDetail('?grassdetail=balanced', 'full')).toBe('')
   })
-  it('drops BALANCED_DROP between its ramps up close, none inside 8 m nor from the near ring edge out', () => {
+  it('culls BALANCED_DROP of the grass clumps between its ramps up close, shrinks THIN_SOFT more, none outside', () => {
+    // (the regression: the share was 0.5 with the soft band under it, so only 0.3 of the clumps were culled)
+    let culled = 0
+    let shrunk = 0
+    const N = 10000
+    for (let i = 0; i < N; i++) {
+      const k = thinKeep((i + 0.5) / N, dropAtZoom(45))
+      if (k === 0) culled++
+      else if (k < 1) shrunk++
+    }
+    expect(culled / N).toBeCloseTo(BALANCED_DROP, 3)
+    expect(shrunk / N).toBeCloseTo(THIN_SOFT, 3)
     // (the ramp out: the near ring's own band out, where the middle ring fades in at full density)
     expect(THIN_RAMP.slice(2)).toEqual(RINGS[0].band.slice(2))
-    for (let d = 0; d <= THIN_RAMP[0]; d += 0.5) expect(dropShare(d, BALANCED_DROP)).toBe(0)
-    for (let d = THIN_RAMP[1]; d <= THIN_RAMP[2]; d += 0.5) expect(dropShare(d, BALANCED_DROP)).toBe(BALANCED_DROP)
-    for (let d = THIN_RAMP[3]; d <= 110; d += 0.5) expect(dropShare(d, BALANCED_DROP)).toBe(0)
+    for (let d = 0; d <= THIN_RAMP[0]; d += 0.5) expect(dropShare(d, WHOLE)).toBe(0)
+    for (let d = THIN_RAMP[1]; d <= THIN_RAMP[2]; d += 0.5) expect(dropShare(d, WHOLE)).toBe(WHOLE)
+    for (let d = THIN_RAMP[3]; d <= 110; d += 0.5) expect(dropShare(d, WHOLE)).toBe(0)
   })
   it('falls to none across CLOSE_ZOOM, so from its end out (the default zoom too) Balanced is Full', () => {
-    expect(dropAtZoom(CLOSE_ZOOM[0])).toBe(BALANCED_DROP)
+    expect(dropAtZoom(CLOSE_ZOOM[0])).toBe(WHOLE)
     for (const radius of [CLOSE_ZOOM[1], 125, 260]) {
       expect(dropAtZoom(radius)).toBe(0)
       // (Full's own program there: no GRASS_THIN)
@@ -87,7 +100,7 @@ describe('the grass detail', () => {
     for (let hd = 0.005; hd < 1; hd += 0.01) {
       for (const radius of [15, 45, 80, 100]) {
         for (let d = 0; d <= 30; d += 0.05) {
-          expect(Math.abs(sizeAt(hd, d + 0.05, radius) - sizeAt(hd, d, radius))).toBeLessThan(0.08)
+          expect(Math.abs(sizeAt(hd, d + 0.05, radius) - sizeAt(hd, d, radius))).toBeLessThan(0.1)
         }
       }
       for (const d of [10, 15, 21]) {
@@ -97,8 +110,8 @@ describe('the grass detail', () => {
       }
     }
     // whole above the share, nothing THIN_SOFT under it, whole at a share of none
-    expect(thinKeep(0.6, 0.5)).toBe(1)
-    expect(thinKeep(0.5 - THIN_SOFT, 0.5)).toBe(0)
+    expect(thinKeep(WHOLE, WHOLE)).toBe(1)
+    expect(thinKeep(BALANCED_DROP, WHOLE)).toBeCloseTo(0, 12)
     expect(thinKeep(0, 0)).toBe(1)
   })
   it('switches the program on at a share of none and eases it up, and down to none before it switches off', () => {
@@ -112,30 +125,47 @@ describe('the grass detail', () => {
     let last = 0
     for (let t = 0; t < THIN_EASE_S + 0.1; t += dt) {
       e.step('balanced', 45, dt)
-      expect(e.share - last).toBeLessThanOrEqual((BALANCED_DROP / THIN_EASE_S) * dt + 1e-12)
+      expect(e.share - last).toBeLessThanOrEqual((WHOLE / THIN_EASE_S) * dt + 1e-12)
       last = e.share
     }
-    expect(e.share).toBe(BALANCED_DROP)
+    expect(e.share).toBe(WHOLE)
     // back to Full: the program kept while the share eases down, given up at none
     let steps = 0
     while (e.step('full', 45, dt)) {
-      expect(e.share).toBeLessThan(BALANCED_DROP)
+      expect(e.share).toBeLessThan(WHOLE)
       steps++
     }
     expect(e.share).toBe(0)
     expect(steps).toBeGreaterThanOrEqual(Math.floor(THIN_EASE_S / dt) - 1)
     // zoomed out past CLOSE_ZOOM: the same, Full's program from 110 m
     e.program = true
-    e.share = BALANCED_DROP
+    e.share = WHOLE
     for (let i = 0; i < 40; i++) e.step('balanced', 125, dt)
     expect(e.share).toBe(0)
     expect(e.step('balanced', 125, dt)).toBe(false)
+  })
+  it('is settled only with the program asked for in force and the share at its target (the tools wait on it)', () => {
+    const e = new ThinEase(0)
+    expect(e.settled('full', 45)).toBe(true)
+    expect(e.settled('balanced', 125)).toBe(true)
+    // Balanced up close: unsettled until the program lands; then, snapped on that frame, settled
+    e.step('balanced', 45, 0)
+    expect(e.settled('balanced', 45)).toBe(false)
+    e.program = true
+    e.step('balanced', 45, 0)
+    expect(e.share).toBe(WHOLE)
+    expect(e.settled('balanced', 45)).toBe(true)
+    // eased: unsettled while the share moves
+    const f = new ThinEase()
+    f.program = true
+    f.step('balanced', 45, 0.1)
+    expect(f.settled('balanced', 45)).toBe(false)
   })
   it('snaps the share at once with no ease (the frozen page of the look tools)', () => {
     const e = new ThinEase(0)
     e.program = true
     e.step('balanced', 45, 0)
-    expect(e.share).toBe(BALANCED_DROP)
+    expect(e.share).toBe(WHOLE)
   })
   it('switches a define only once its program is ready, the old defines kept meanwhile; warms one without switching', () => {
     // (the regression: the ring drew nothing the frames its new program compiled)

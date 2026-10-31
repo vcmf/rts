@@ -141,6 +141,9 @@ export interface Meadow {
   /** the player's grass detail (src/look/grass-detail.ts): at Balanced, up close, the near ring's program thins its
    * grass (GRASS_THIN); the switch waits until both programs are compiled, so the ring never blinks */
   setDetail(level: GrassDetail): void
+  /** whether the grass detail has come to rest (its program in force, its share at its target): the look tools wait on
+   * it before a still */
+  thinSettled(): boolean
   bakeMs: number
   // the ground's dark under-layer (shore.glsl, MEADOW_UNDER) on these materials: the meadow map, and each frame its
   // reach and strength (off while the meadow is off or hidden: underOn)
@@ -324,18 +327,32 @@ export function buildMeadowMap(
   }
 }
 
-// mm: the meadow map (buildMeadowMap); reach: the grass clumps' (CLUMP_REACH, or the combed
-// meadow's), for the chunks' cull
+/** buildMeadow's choices */
+export interface MeadowOptions {
+  /** zoomed out the inner rings give way to the outer one (WIDE); false (?nowide) keeps them as before: the A/B */
+  wide?: boolean
+  /** the grass clumps' reach, m (CLUMP_REACH, or the combed meadow's), for the chunks' cull */
+  reach?: number
+  /** the combed clumps' look (decision 0085) */
+  look?: MeadowLook
+  /** the player's grass detail to start at (decision 0095) */
+  detail?: GrassDetail
+  /** how long Balanced's share eases, s (THIN_EASE_S; 0 snaps it: the look tools' frozen page) */
+  thinEaseS?: number
+}
+// mm: the meadow map (buildMeadowMap)
 export function buildMeadow(
   scene: Scene,
   mats: Materials,
   camera: ArcRotateCamera,
   mm: MeadowMap,
-  wide = true,
-  reach = CLUMP_REACH,
-  look: MeadowLook = MEADOW_LOOK,
-  detail: GrassDetail = 'full',
-  thinEaseS = THIN_EASE_S,
+  {
+    wide = true,
+    reach = CLUMP_REACH,
+    look = MEADOW_LOOK,
+    detail = 'full',
+    thinEaseS = THIN_EASE_S,
+  }: MeadowOptions = {},
 ): Meadow {
   const t0 = performance.now()
   const { map, growingCells, growthAt, cropAt, groundAt: groundAtMap } = mm
@@ -497,19 +514,32 @@ export function buildMeadow(
   const thinV = new Vector2(0, THIN_SOFT)
   near.setVector2('uThin', thinV)
   let askProgram = false
-  // GRASS_THIN's program compiled (warmed as soon as Balanced is chosen, even zoomed out)
-  let thinCompiled = false
-  meshes[0].onBeforeRenderObservable.add(m => applyThin(m))
-  /** The near ring's program for this frame, as it is drawn (mesh: the near ring): GRASS_THIN compiled ahead while
-   * Balanced is chosen, then switched on or off when the ease asks and the new program is ready */
-  function applyThin(mesh: Mesh): void {
-    const ready = () => mesh.isReady(true)
-    if (level === 'balanced' && !thinCompiled && !ease.program) thinCompiled = warmDefine(near, THIN, true, ready)
-    if (askProgram !== ease.program && switchDefineWhenReady(near, THIN, askProgram, ready)) ease.program = askProgram
+  const ready = () => meshes[0].isReady(true)
+  // the defines GRASS_THIN's program was last compiled with (warmed): a change of the others (the trodden mask's,
+  // the figures' shadows') warms it again
+  let warmedFor = ''
+  meshes[0].onBeforeRenderObservable.add(() => switchThin())
+  /** Warms GRASS_THIN's program while Balanced is chosen and the program is off and not being asked for (zoomed out,
+   * the ring maybe hidden): the switch then finds it compiled. Once a frame from the scene, before the render; a
+   * cached lookup once compiled, and only when the ring's defines changed since */
+  function warmThin(): void {
+    if (level !== 'balanced' || ease.program || askProgram) return
+    const key = near.options.defines.join('\n')
+    if (key !== warmedFor && warmDefine(near, THIN, true, ready)) warmedFor = key
+  }
+  /** Switches the near ring's program as it is drawn, after every other define of the frame is set, when the ease asks
+   * and the new program is ready (else it is compiling: asked again next frame); then the share of this same frame
+   * (snapped on the frozen page, so a still shows the program it waited for) */
+  function switchThin(): void {
+    if (askProgram === ease.program || !switchDefineWhenReady(near, THIN, askProgram, ready)) return
+    ease.program = askProgram
+    ease.step(level, camera.radius, 0)
+    thinV.x = ease.share
   }
   scene.onBeforeRenderObservable.add(() => {
     askProgram = ease.step(level, camera.radius, scene.getEngine().getDeltaTime() / 1000)
     thinV.x = ease.share
+    warmThin()
     const t = wide ? Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))) : 0
     const k = 1 - t * t * (3 - 2 * t)
     under.z = underOn && meadowOn ? k : 0
@@ -566,6 +596,7 @@ export function buildMeadow(
     setDetail: l => {
       level = l
     },
+    thinSettled: () => ease.settled(level, camera.radius),
     setOn: on => {
       meadowOn = on
       for (const m of meshes) m.setEnabled(on)
