@@ -10,7 +10,7 @@ date: 2026-10-30
 Decision 0093 bakes the campaign map offline in tiles: a coarse level for the far zoom and a 100 m level for the
 close one. The K1 prototype stored them as base64 inside script files, so a page opened from `file://` could load
 them: 280 MB for the 1805 theatre's 100 m level, and a page that parses JavaScript to read data. K2a moves the bake
-into the game's code (`docs/plans/active/k2a-bake.md`); the game is served, so it can fetch binary.
+into the game's code (`docs/plans/done/k2a-bake.md`); the game is served, so it can fetch binary.
 
 ## Decision
 
@@ -27,10 +27,15 @@ We will store each tile as one small binary file (`src/render/campaign/tiles.ts`
   parameter the bake depends on and the levels' grids; the page uses tiles only when their parameters match its own.
   Each build has a directory of its own and the manifest, written last and whole, makes it live, so the page never
   reads a manifest of one build with the tiles of another.
+- the far level's **fields** (K2b1, `src/render/campaign/fields.ts`): what the page needs besides the tiles (the
+  lakes' mask and distance, the offsets to the roads and rivers, the contours' heights), in one file a build of named
+  planes, bytes or Uint16 at a scale and offset (rows as differences, as the shape's), deflated; the manifest names
+  it. The page bakes nothing at load.
 
 ## Consequences
 
-Good: the 1805 theatre's 100 m level is 91 MB on disk (280 MB as the prototype's base64), its far level 18 MB; no
+Good: the 1805 theatre's 100 m level is 91 MB on disk (280 MB as the prototype's base64), its far level 18 MB and
+its fields 7.6 MB; no
 library to decode; the format is versioned and checked; packing is pure and tested, compression stays the caller's.
 
 Bad: deflate is not the smallest choice (a predictor for the light planes, or a codec such as Brotli or WebP's

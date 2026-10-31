@@ -1,10 +1,10 @@
-// The campaign map's bake (docs/systems/campaign-map.md, docs/plans/active/k2a-bake.md): the one shape the 3D map is
+// The campaign map's bake (docs/systems/campaign-map.md, docs/plans/done/k2a-bake.md): the one shape the 3D map is
 // raised by and lit from, the lakes sunk into it, the light that does not change (the sun's soft shadow and the sky's
 // occlusion) and the forests printed under it, on any grid. Pure functions, no DOM and no Node:
 // tools/campaign-tiles.ts runs them offline for each level of tiles (src/render/campaign/tiles.ts). The prototype
 // (prototypes/campaign-map.html) holds its own copy of the same steps, baked at load. Renderer data, not the
 // campaign's rules: plain float, not the sim's exact numbers. Tested in test/campaign-bake.test.ts.
-import { inRing } from '../../map/geometry.ts'
+import { inRing, ringRow } from '../../map/geometry.ts'
 import type { Pt } from '../../map/schema.ts'
 
 // the forests' smoothing (three box means this many metres either side) and the forest field's cell, in metres
@@ -293,6 +293,126 @@ export function resampleField(field: ForestField, cell: number, nx: number, nz: 
       const north = at(i0, j0 + 1) * (1 - u) + at(i0 + 1, j0 + 1) * u
       out[j * nx + i] = Math.round(south * (1 - v) + north * v)
     }
+  }
+  return out
+}
+
+/** A coverage mask: `w` × `h` texels of one byte, the south row first. */
+export interface Mask {
+  data: Uint8Array
+  w: number
+  h: number
+}
+
+// the mask's samples a texel, a side (4 × 4)
+const MASK_SAMPLES = 4
+
+/**
+ * The lakes as a coverage mask over the frame the grid spans: `res` texels a cell (its texels tile the frame from edge
+ * to edge, (nx - 1)·res × (nz - 1)·res), 255 in the water, each texel's share from 4 × 4 samples inside any ring, so
+ * the page finds the shore between texels. A sample in two rings counts once: Natural Earth splits some lakes into
+ * pieces that share an edge, which must not show as a seam.
+ */
+export function lakeMask(rings: Pt[][], g: Grid, res: number): Mask {
+  const w = (g.nx - 1) * res
+  const h = (g.nz - 1) * res
+  const data = new Uint8Array(w * h)
+  const texel = g.cell / res
+  const n = MASK_SAMPLES
+  // each ring's texel range, clamped to the frame (rings off it dropped)
+  const boxes = rings
+    .map(ring => {
+      const at = (v: number, o: number, max: number) => Math.min(max, Math.max(0, Math.floor((v - o) / texel)))
+      const xs = ring.map(p => p[0])
+      const zs = ring.map(p => p[1])
+      const box = {
+        ring,
+        i0: at(Math.min(...xs), g.x0, w - 1),
+        i1: at(Math.max(...xs), g.x0, w - 1),
+        j0: at(Math.min(...zs), g.z0, h - 1),
+        j1: at(Math.max(...zs), g.z0, h - 1),
+      }
+      const off =
+        Math.max(...xs) < g.x0 ||
+        Math.min(...xs) > g.x0 + w * texel ||
+        Math.max(...zs) < g.z0 ||
+        Math.min(...zs) > g.z0 + h * texel
+      return off ? null : box
+    })
+    .filter(box => box !== null)
+  // a row of samples, west to east, and whether each is in the water
+  const sx = Float64Array.from({ length: w * n }, (_, s) => g.x0 + ((s + 0.5) / n) * texel)
+  const wet = new Uint8Array(w * n)
+  const count = new Uint16Array(w)
+  for (let j = 0; j < h; j++) {
+    const here = boxes.filter(b => b.j0 <= j && j <= b.j1)
+    if (!here.length) continue
+    count.fill(0)
+    for (let t = 0; t < n; t++) {
+      wet.fill(0)
+      const z = g.z0 + (j + (t + 0.5) / n) * texel
+      for (const b of here) {
+        const inside = ringRow(b.ring, z, sx.subarray(b.i0 * n, (b.i1 + 1) * n))
+        for (let s = 0; s < inside.length; s++) wet[b.i0 * n + s] |= inside[s]
+      }
+      for (let s = 0; s < wet.length; s++) count[Math.floor(s / n)] += wet[s]
+    }
+    for (let i = 0; i < w; i++) data[j * w + i] = Math.round((count[i] * 255) / (n * n))
+  }
+  return { data, w, h }
+}
+
+/**
+ * Lines (each a flat list of x, z in metres) as an offset field over the frame the grid spans, one texel a cell
+ * ((nx - 1) × (nz - 1), texel (i, j) centred at (i + ½, j + ½) cells from the grid's corner): two bytes a texel, the
+ * vector from its centre to the nearest point of a line, in cells, each axis mapped from -reach..reach to 0..255 (no
+ * line within reach: the corner, reach both ways). The vector to a straight line is linear in the position, so a
+ * bilinear read gives the exact distance between texels (a distance, V-shaped across the line, does not: the line
+ * broke into dots). The prototype's bakeLines, for one kind of line.
+ */
+export function lineOffsets(lines: ArrayLike<number>[], g: Grid, reach: number): Uint8Array {
+  const w = g.nx - 1
+  const h = g.nz - 1
+  const d = new Float32Array(w * h).fill(Infinity)
+  const ox = new Float32Array(w * h).fill(reach)
+  const oz = new Float32Array(w * h).fill(reach)
+  /** Updates the nearest offsets around one segment (in cells), in the texels within reach of it. */
+  const segment = (ax: number, az: number, bx: number, bz: number) => {
+    const i0 = Math.max(0, Math.floor(Math.min(ax, bx) - reach))
+    const i1 = Math.min(w - 1, Math.ceil(Math.max(ax, bx) + reach))
+    const j0 = Math.max(0, Math.floor(Math.min(az, bz) - reach))
+    const j1 = Math.min(h - 1, Math.ceil(Math.max(az, bz) + reach))
+    const dx = bx - ax
+    const dz = bz - az
+    const l2 = dx * dx + dz * dz || 1e-9
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const px = i + 0.5
+        const pz = j + 0.5
+        const t = clamp(((px - ax) * dx + (pz - az) * dz) / l2, 0, 1)
+        const vx = ax + t * dx - px
+        const vz = az + t * dz - pz
+        const dist = Math.hypot(vx, vz)
+        const k = j * w + i
+        if (dist < d[k]) {
+          d[k] = dist
+          ox[k] = vx
+          oz[k] = vz
+        }
+      }
+    }
+  }
+  for (const p of lines) {
+    for (let k = 2; k < p.length; k += 2) {
+      const cell = (v: number, o: number) => (v - o) / g.cell
+      segment(cell(p[k - 2], g.x0), cell(p[k - 1], g.z0), cell(p[k], g.x0), cell(p[k + 1], g.z0))
+    }
+  }
+  const byte = (v: number) => Math.round(clamp((v / reach) * 0.5 + 0.5, 0, 1) * 255)
+  const out = new Uint8Array(w * h * 2)
+  for (let k = 0; k < w * h; k++) {
+    out[k * 2] = byte(ox[k])
+    out[k * 2 + 1] = byte(oz[k])
   }
   return out
 }

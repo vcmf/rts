@@ -16,7 +16,7 @@ import type { Grid } from './bake.ts'
 export const TILE_MAGIC = 'CMPT'
 export const TILE_VERSION = 1
 // the manifest's own format, apart from the tiles' (a field added to one need not refuse the other)
-export const MANIFEST_FORMAT = 2
+export const MANIFEST_FORMAT = 3
 const HEADER = 16
 const PLANES = 3
 
@@ -58,6 +58,8 @@ export interface Manifest {
   // the bake's parameters (the shape's, the sun's, the forests'): tiles of other parameters are not used
   params: Record<string, number>
   levels: Level[]
+  // the far level's fields (src/render/campaign/fields.ts): the level they lie on, their file relative to the manifest
+  fields: { level: number; path: string }
   credit: string
 }
 
