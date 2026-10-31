@@ -7,7 +7,7 @@ date: 2026-10-31
 
 ## Context
 
-G3b (`docs/plans/active/g3b-the-detail-follows.md`) moves the look page's one detailed tile with the camera: its trees,
+G3b (`docs/plans/done/g3b-the-detail-follows.md`) moves the look page's one detailed tile with the camera: its trees,
 bakes, flow, meadow map and roads are built again for the new place (G3b-2), from data a worker compiles (G3b-3). The
 first design disposed each last part, then built its successor; a failure midway needed a rollback that rebuilt the
 last tile, and three review rounds found bugs in that rollback (the wrong ground range restored, parts disposed twice).

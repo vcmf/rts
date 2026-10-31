@@ -1,4 +1,4 @@
-// A rebuilt part of the tile (G3b-2, docs/plans/active/g3b-the-detail-follows.md): src/look/owned.ts takes away what a
+// A rebuilt part of the tile (G3b-2, docs/plans/done/g3b-the-detail-follows.md): src/look/owned.ts takes away what a
 // builder added to the scene, and Materials.mark (src/look/materials.ts) what it added to the painted materials, each
 // part exactly its own whichever is disposed first (the bug before: the lists cut back to a length, so disposing the
 // first-built part took a later part's bindings with it and left holes).

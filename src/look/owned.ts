@@ -1,4 +1,4 @@
-// A part of the scene that can be built again (G3b-2, docs/plans/active/g3b-the-detail-follows.md): what a builder
+// A part of the scene that can be built again (G3b-2, docs/plans/done/g3b-the-detail-follows.md): what a builder
 // adds to the scene (meshes, materials, textures, cameras, render targets, the scene's per-frame observers) and to
 // the painted materials (src/look/materials.ts: their list and bindings) is recorded, so a moved tile disposes
 // exactly that and builds its own. Assumes nothing else is added to the scene while the builder runs (it is
