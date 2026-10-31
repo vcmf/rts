@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   assembleLevel,
+  bilinear,
   blitTile,
   halved,
   interleave,
@@ -16,6 +17,7 @@ import {
   DIST_MAX,
   DIST_MIN,
   groundHit,
+  rayGround,
   tiltFor,
   TILT_FAR,
   TILT_NEAR,
@@ -162,5 +164,30 @@ describe('the camera', () => {
     expect(hit[0]).toBeCloseTo(10, 9)
     expect(hit[1]).toBeCloseTo(20, 9)
     expect(groundHit(p, [0, 0.1, 1])).toBeNull()
+  })
+})
+
+describe('the ground under a ray', () => {
+  it('reads a grid bilinearly, held at its edge', () => {
+    const at = (i: number, j: number) => i * 10 + j
+    expect(bilinear(at, 1.5, 2.25, 4, 4)).toBeCloseTo(17.25, 9)
+    expect(bilinear(at, -3, 0, 4, 4)).toBe(0)
+    expect(bilinear(at, 9, 0, 4, 4)).toBeCloseTo(29.99, 9)
+  })
+
+  it('finds the first crossing of a steep wall, where a fixed point oscillates', () => {
+    // a ray down at 45° along x; the ground a step of 1 km up at x = 10 (steeper than the ray)
+    const rise = (x: number) => (x >= 10 ? 1 : 0)
+    const hit = rayGround([0, 5, 0], [Math.SQRT1_2, -Math.SQRT1_2, 0], rise, 2, -0.1)!
+    // from 5 km up it reaches the flat ground (0) at x = 5, before the wall
+    expect(hit[0]).toBeCloseTo(5, 3)
+    // a ray that is still 1 km up when it comes to the wall meets the wall's face there, not the ground behind it
+    const over = rayGround([5, 5.5, 0], [Math.SQRT1_2, -Math.SQRT1_2, 0], rise, 2, -0.1)!
+    expect(over[0]).toBeCloseTo(10, 2)
+  })
+
+  it('is none for a ray that does not go down, or that starts under the ground', () => {
+    expect(rayGround([0, 5, 0], [1, 0, 0], () => 0, 2, -0.1)).toBeNull()
+    expect(rayGround([0, 0.5, 0], [Math.SQRT1_2, -Math.SQRT1_2, 0], () => 1, 2, -0.1)).toBeNull()
   })
 })

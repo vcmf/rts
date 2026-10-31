@@ -133,3 +133,19 @@ export function interleave(a: Plane, b: Plane | null): Uint8Array {
   }
   return out
 }
+
+/**
+ * A grid's value at a fractional node (fx, fz), bilinear between the four nodes round it, `get(i, j)` reading node
+ * (i, j) of a grid of nx × nz nodes; a point past the grid is held at its edge.
+ */
+export function bilinear(get: (i: number, j: number) => number, fx: number, fz: number, nx: number, nz: number) {
+  const x = Math.min(nx - 1.001, Math.max(0, fx))
+  const z = Math.min(nz - 1.001, Math.max(0, fz))
+  const i = Math.floor(x)
+  const j = Math.floor(z)
+  const u = x - i
+  const v = z - j
+  const top = get(i, j) * (1 - u) + get(i + 1, j) * u
+  const bottom = get(i, j + 1) * (1 - u) + get(i + 1, j + 1) * u
+  return top * (1 - v) + bottom * v
+}

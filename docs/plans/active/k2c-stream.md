@@ -89,6 +89,60 @@ same image as before at the four views of K2b2 once the tiles have loaded (a mea
 or overlap at the patch's edge (a check of the heights along it, in Vitest on the edge's formula, and screenshots
 along the edge); still no frame over 6.7 ms panning up close on test machine A.
 
+The patch is 501 × 501 vertices (50 km, a multiple of the far mesh's 500 m), its triangles cut as the far mesh's so
+its diagonals lie on the far mesh's; the band where both are drawn is one far quad wide. The shaders share their
+detail reads and the far mesh's height through two GLSL files put in by the view (`shaders/detail.glsl`,
+`shaders/farmesh.glsl`).
+
+**Results** (K2c2), on test machine A:
+- Up close, the Alps' silhouettes from the 100 m relief (screenshots at 30 and 60 km); the patch's edge unseen: the
+  view at Lake Constance from 90 km with and without the patch differs only inside the patch's trapezoid, by its
+  finer relief (a mean of 0.5 level a channel, 0.4% of the pixels by more than 16), with no line along its border;
+  from 100 km and further, where the detail is not used, the same image as without it.
+- Panning up close, the patch drawn: a mean of 2.9 to 3.0 ms and the 95th centile 4.4 to 4.5 ms at 1080p over two runs,
+  3.5 and 5.1 ms at 4K; the worst single frames 7.7 to 12.9 ms, as without the patch in the same hour (K2c1's
+  results: the GPU shared with another page).
+- Learnt: Babylon's shader preprocessor reads a `#include<…>` in a comment as an include and waits for its file, the
+  material never ready and no error logged.
+
+**Review rounds** (K2c2):
+- **Round 1** (`/code-review high`): severe: the patch took the far height at the edge of a tile not yet drawn and the
+  detail beside it (a cliff along the tile's edge, the geometry jumping when the tile came): a tile now fades in over
+  0.4 s as it is first drawn, and toward a neighbour not yet drawn over 10 nodes (1 km) from their edge, in the light
+  and the geometry alike (`shaders/detail.glsl`); the band where the patch eased into the far mesh moved with the
+  patch in steps of 500 m (heights jumping there while panning): the detail now eases out from 19 to 22.5 km from the
+  camera's target, moving with it, the band beyond; the shader took the far level's nodes as one over a float
+  (3200.0002 for 3201, a crack at the edge): passed exact; the includes registered with Babylon
+  (`ShaderStore.IncludesShadersStore`, as `src/look/units.ts` does) instead of put in by hand. With: the patch drawn
+  first, the far mesh under it then hidden by the depth test, not shaded; the pointer's map point up close from the
+  100 m shape; the patch's size checked against the far mesh and the close cells, none on a frame too small for it,
+  the old one disposed on a new close level; one setter for both materials, one off-map rectangle. Measured after:
+  the same image (a mean of 0.2 to 0.8 level against round 0's), panning a mean of 2.8 to 3.0 ms and the 95th
+  centile 4.0 to 4.5 ms at 1080p and 4K, the worst single frames 5.0 to 8.4 ms.
+- **Round 2**: severe: near the frame's edges the patch, pushed in off its target, could take the detail at its own
+  edge (a crack beside the far mesh): the detail now eases in over 2 km from the patch's band wherever the patch lies
+  (`patchRamp`, tested, and the same in `shaders/patch.vert`). With: the map's height on the CPU (the pointer, the
+  scale, the camera's clearance) follows the drawn surface's shares, not the 100 m shape whole; the pointer's point
+  found by walking the ray down and halving (`rayGround`, tested), the fixed point not converging on the 100 m
+  relief's steep slopes; a level the patch does not fit leaves it off (a warning) instead of stopping the page; the
+  patch skips its detail reads where its share is none; one bilinear read for both levels' heights; the far mesh's
+  quad kept once; a close level set again lets the last one's textures go. Left: the far mesh's height is written
+  twice, in TypeScript (tested) and in GLSL (`shaders/farmesh.glsl`), kept the same by hand. Measured after: the image
+  the same (a mean under 0.01 level), the patch's edge whole at the frame's east edge; panning a mean of 2.9 and
+  3.2 ms at 1080p and 4K, the 95th centile 4.1 and 4.3 ms, the worst single frames 6.4 and 7.7 ms.
+- **Round 3** (the last): no severe finding; fixed: the map's height on the CPU now as drawn in more of its parts
+  (the far mesh's triangles, `farMeshHeight`, used at last; a tile counted only once written in its slot, by its
+  fade-in; the detail area's edge fade; a tile's last cells read across into its neighbour); the ray walked in steps
+  of 50 m at most along it, none from under the ground; a close level set again clears the last patch's place and
+  drops the last level's loads under way; the system doc's ring row. Left: the CPU's height leaves out the 1 km fade
+  toward a neighbour not yet drawn, and lags the drawn one by a frame where the zoom crosses the detail's range
+  (`pxPerKm` reads it before the frame sets the zoom's share); the far shape scanned once at load for its highest.
+
 ## Open questions
 
 - A denser mesh far out too (a mesh in rings around the camera) if Europe's far views need it.
+- Up close, a lake's shore in the light shows a saw-tooth, from K2b on, with or without the patch (seen at the
+  frame's east edge, 30 to 40 km): the bake sinks a lake 70 m below its shore across one cell of the level, so at
+  100 m the drop is a staircase along the shore, which the 100 m slope draws (checked: the 100 m slope left out by
+  the water, the teeth go). The fix is the bake's: the sinking eased over a fixed width in metres, as wide as the far
+  level's cell or more, then the tiles baked again.

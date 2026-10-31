@@ -22,7 +22,7 @@ import '@babylonjs/core/PostProcesses/RenderPipeline/postProcessRenderPipelineMa
 // the scene's createPickingRay (groundAt)
 import '@babylonjs/core/Culling/ray.js'
 import { FSR1RenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/fsr1RenderingPipeline.js'
-import { blitTile, halved, interleave, type LevelData } from './level.ts'
+import { bilinear, blitTile, halved, interleave, type LevelData } from './level.ts'
 import {
   areaOrigin,
   areaTiles,
@@ -43,6 +43,7 @@ import {
   cameraPosition,
   clampView,
   groundHit,
+  rayGround,
   sstep,
   TILT_FAR,
   TILT_NEAR,
@@ -50,8 +51,13 @@ import {
   type CampaignView,
 } from './camera.ts'
 import { cloudCanvas, paperCanvas } from './paper.ts'
+import { farMeshHeight, patchRamp, patchStart } from './patch.ts'
 import PRINT_VS from './shaders/print.vert?raw'
 import PRINT_FS from './shaders/print.frag?raw'
+import PATCH_VS from './shaders/patch.vert?raw'
+import { ShaderStore } from '@babylonjs/core/Engines/shaderStore.js'
+import DETAIL_GLSL from './shaders/detail.glsl?raw'
+import FARMESH_GLSL from './shaders/farmesh.glsl?raw'
 import SIDE_VS from './shaders/side.vert?raw'
 import SIDE_FS from './shaders/side.frag?raw'
 
@@ -107,8 +113,14 @@ const RETRY_MOST_MS = 60000
 // brings it back to about that many, 1.3 to 2
 const UPSCALE_FROM = 1920 * 1080 * 1.15
 const FOV = 0.5
-// the rounds groundAt takes to meet the raised surface
-const GROUND_ROUNDS = 4
+// the patch near the camera (K2c2, ./patch.ts): PATCH_KM a side, a vertex on every node of the close level
+const PATCH_KM = 50
+// the detail eases out of the patch from PATCH_INNER_KM to PATCH_OUTER_KM from the target (a square), before its band
+const PATCH_INNER_KM = 19
+const PATCH_OUTER_KM = 22.5
+// a tile fades in over FADE_MS as it is first drawn, and toward a neighbour not yet drawn over DETAIL_FADE nodes
+const FADE_MS = 400
+const DETAIL_FADE = 10
 
 /** How the page asked to upscale: by the screen ('auto'), never ('off'), or by a factor. */
 export type Upscale = 'auto' | 'off' | number
@@ -133,6 +145,53 @@ function toHalf(v: number): number {
   return sign | ((exp << 10) + ((mant + 0x1000) >> 13))
 }
 
+// the shaders' shared parts, which Babylon puts in where a shader names them as includes
+ShaderStore.IncludesShadersStore.campaignDetail = DETAIL_GLSL
+ShaderStore.IncludesShadersStore.campaignFarMesh = FARMESH_GLSL
+// a rectangle off the map: no patch (the far mesh whole), or no detail area
+const OFF_MAP = () => new Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1)
+
+/**
+ * The print's uniforms and textures, set alike on the map's material and the patch's: they draw with the same fragment
+ * shader, so the band where both lie draws the same.
+ */
+class Print {
+  readonly materials: ShaderMaterial[]
+
+  constructor(materials: ShaderMaterial[]) {
+    this.materials = materials
+  }
+
+  /** Does `set` on each material. */
+  private each(set: (m: ShaderMaterial) => void) {
+    for (const m of this.materials) set(m)
+  }
+
+  setFloat(name: string, v: number) {
+    this.each(m => m.setFloat(name, v))
+  }
+
+  setVector2(name: string, v: Vector2) {
+    this.each(m => m.setVector2(name, v))
+  }
+
+  setVector3(name: string, v: Vector3) {
+    this.each(m => m.setVector3(name, v))
+  }
+
+  setVector4(name: string, v: Vector4) {
+    this.each(m => m.setVector4(name, v))
+  }
+
+  setColor3(name: string, v: Color3) {
+    this.each(m => m.setColor3(name, v))
+  }
+
+  setTexture(name: string, t: Texture) {
+    this.each(m => m.setTexture(name, t))
+  }
+}
+
 /** '#rrggbb' as a Color3. */
 const colour = (hex: string) => Color3.FromHexString(hex)
 
@@ -148,6 +207,10 @@ interface Detail {
   table: SlotTable
   texT: RawTexture
   tableChanged: boolean
+  // each slot's fade-in, 0 to 1 as its tile is first drawn, and as bytes for the GPU
+  fade: Float32Array
+  fadeBytes: Uint8Array
+  texF: RawTexture
   // a slot's worth of shape and light, reused for every upload
   scratch: { shape: Float32Array; half: Uint16Array; light: Uint8Array }
   // the tile each slot is given to (loaded or not), by slot
@@ -171,6 +234,19 @@ export class CampaignMapView {
   private readonly scene: Scene
   private readonly camera: FreeCamera
   private readonly material: ShaderMaterial
+  private readonly patchMaterial: ShaderMaterial
+  private readonly print: Print
+  private patch: Mesh | null = null
+  // the far mesh's quad, km (a vertex every MESH_STEP nodes of the far level)
+  private farStep = 0
+  // a height above all the ground, km (where groundAt starts its walk)
+  private highest = 10
+  // the detail's share by the zoom (uDetailK), as the last frame set it
+  private detailShare = 0
+  // where the patch lies, km (x0, z0, x1, z1), or null when it is off
+  private patchRect: [number, number, number, number] | null = null
+  // the detail area's first and last nodes, km (x0, z0, x1, z1)
+  private detailRect: [number, number, number, number] = [1e6, 1e6, 1e6 + 1, 1e6 + 1]
   private readonly sideMaterial: ShaderMaterial
   private readonly full: boolean
   private fsr: FSR1RenderingPipeline | null = null
@@ -182,6 +258,7 @@ export class CampaignMapView {
   private viewNow: CampaignView = { x: 0, z: 0, dist: 1150 }
   private dirty = true
   private running = false
+  private lastFrame = performance.now()
   // the render loop's one function, so stop can name it
   private readonly frameLoop = () => this.frame()
   /** Called after each frame with its CPU time in ms (the page's fps meter). */
@@ -206,7 +283,10 @@ export class CampaignMapView {
     this.camera.fov = FOV
     this.camera.minZ = 1
     this.camera.maxZ = 20000
-    this.material = this.printMaterial()
+    this.material = this.printMaterial(PRINT_VS)
+    this.patchMaterial = this.printMaterial(PATCH_VS)
+    this.print = new Print([this.material, this.patchMaterial])
+    this.setPrintDefaults()
     this.sideMaterial = new ShaderMaterial(
       'side',
       this.scene,
@@ -215,12 +295,12 @@ export class CampaignMapView {
     )
   }
 
-  /** The print material, its textures blank until setMap. */
-  private printMaterial(): ShaderMaterial {
-    const m = new ShaderMaterial(
+  /** A material drawing the print (./shaders/print.frag) from a vertex shader: the map's mesh or the patch's. */
+  private printMaterial(vertexSource: string): ShaderMaterial {
+    return new ShaderMaterial(
       'print',
       this.scene,
-      { vertexSource: PRINT_VS, fragmentSource: PRINT_FS },
+      { vertexSource, fragmentSource: PRINT_FS },
       {
         attributes: ['position'],
         uniforms: [
@@ -240,14 +320,20 @@ export class CampaignMapView {
             'uContourK',
           ],
           ...['uTime', 'uCloudK', 'uHaze', 'uScreenH', 'uWoodK', 'uWoodFrom', 'uStepKm', 'uStep', 'uBands'],
-          'uLineReachKm',
+          ...['uLineReachKm', 'uPatchRect', 'uPatchBand', 'uMeshStep', 'uNodes', 'uDetailFade'],
+          ...['uPatchCentre', 'uPatchInner', 'uPatchOuter'],
         ],
         samplers: [
           ...['uShape', 'uShapeL', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uLakeD', 'uContourH'],
-          ...['uDetailS', 'uDetailL', 'uDetailT', 'uPaperT', 'uClouds'],
+          ...['uDetailS', 'uDetailL', 'uDetailT', 'uDetailF', 'uPaperT', 'uClouds'],
         ],
       },
     )
+  }
+
+  /** The print's settings, its textures blank until setMap. */
+  private setPrintDefaults() {
+    const m = this.print
     for (const [name, hex] of Object.entries(COLOURS)) m.setColor3(name, colour(hex))
     m.setColor3('uPaper', colour(PAPER))
     m.setColor3('uTable', colour(TABLE_COLOUR))
@@ -273,13 +359,21 @@ export class CampaignMapView {
     // the detail area blank, its rectangle off the map, until setDetail
     m.setTexture('uDetailS', this.floatTexture(new Float32Array(1), 1, 1))
     m.setTexture('uDetailL', this.byteTexture(new Uint8Array(4), 1, 1, Constants.TEXTUREFORMAT_RGBA))
-    m.setVector4('uDetailRect', new Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1))
+    m.setVector4('uDetailRect', OFF_MAP())
+    m.setTexture('uDetailF', this.byteTexture(new Uint8Array(1), 1, 1, Constants.TEXTUREFORMAT_LUMINANCE))
+    m.setFloat('uDetailFade', DETAIL_FADE)
     m.setTexture('uDetailT', this.byteTexture(new SlotTable(1).bytes, 1, 1, Constants.TEXTUREFORMAT_RGBA))
     m.setVector2('uDetailTexel', new Vector2(1, 1))
     m.setFloat('uDetailCellKm', 0.1)
     m.setFloat('uDetailSize', 1)
     m.setFloat('uDetailArea', 1)
-    return m
+    // no patch until the detail is used: its rectangle off the map
+    m.setVector4('uPatchRect', OFF_MAP())
+    m.setVector2('uPatchCentre', new Vector2(0, 0))
+    m.setFloat('uPatchInner', PATCH_INNER_KM)
+    m.setFloat('uPatchOuter', PATCH_OUTER_KM)
+    m.setFloat('uPatchBand', 0)
+    m.setFloat('uMeshStep', MESH_STEP)
   }
 
   /** A tileable noise canvas as a wrapping texture. */
@@ -323,7 +417,7 @@ export class CampaignMapView {
     const el = (manifest.params.sunEl * Math.PI) / 180
     const az = (manifest.params.sunAz * Math.PI) / 180
     this.sun = [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)]
-    const m = this.material
+    const m = this.print
     const { nx, nz } = far
     const nearest = this.floatTexture(far.shape, nx, nz)
     // read only at its texel centres (by the Catmull-Rom pass): the GPU's bilinear filter rounds the coordinates and
@@ -335,8 +429,16 @@ export class CampaignMapView {
     this.setFields(fields, level, manifest.params.lineReach)
     m.setVector2('uHalf', new Vector2(this.half.x, this.half.z))
     m.setVector2('uTexel', new Vector2(1 / nx, 1 / nz))
+    m.setVector2('uNodes', new Vector2(nx, nz))
     m.setVector2('uLightTexel', new Vector2(1 / nx, 1 / nz))
     m.setFloat('uCellKm', level.cell / 1000)
+    // the band at the patch's edge where it lies on the far mesh's surface: one quad of the far mesh
+    this.farStep = (MESH_STEP * level.cell) / 1000
+    // the highest ground, km, with room for the 100 m relief above the far level's
+    let top = 0
+    for (const v of far.shape) top = Math.max(top, v)
+    this.highest = (top + 500) / 1000
+    m.setFloat('uPatchBand', this.farStep)
     m.setVector3('uSun', new Vector3(...this.sun))
     this.buildMeshes(far)
     this.placeCamera()
@@ -344,7 +446,7 @@ export class CampaignMapView {
 
   /** The fields' textures: the lakes (halved where the GPU's textures are smaller), their distance, lines, contours. */
   private setFields(fields: Map<string, Plane>, level: Level, lineReach: number) {
-    const m = this.material
+    const m = this.print
     const plane = (name: string) => {
       const p = fields.get(name)
       if (!p) throw new Error(`the fields have no ${name}`)
@@ -381,10 +483,14 @@ export class CampaignMapView {
    * fragments under the map are then hidden by the depth test, not shaded and drawn over.
    */
   private buildMeshes(far: LevelData) {
+    // the patch (rendering group 0) is drawn before the map, the plate and the table (group 1), the depth kept between
+    // them: the far mesh's triangles under the patch are then hidden by the depth test, not shaded
+    this.scene.setRenderingAutoClearDepthStencil(1, false)
     const w = this.half.x * 2
     const h = this.half.z * 2
     const plane = this.mapMesh(far)
     plane.material = this.material
+    plane.renderingGroupId = 1
     this.sideMaterial.setColor3('uPaper', colour(SIDE_PAPER))
     this.sideMaterial.setVector2('uLightXZ', new Vector2(this.sun[0], this.sun[2]).normalize())
     this.sideMaterial.setFloat('uThick', THICK)
@@ -393,9 +499,11 @@ export class CampaignMapView {
     const sides = CreateBox('sides', { width: w, height: THICK + top, depth: h }, this.scene)
     sides.position.y = (top - THICK) / 2
     sides.material = this.sideMaterial
+    sides.renderingGroupId = 1
     const table = CreateGround('table', { width: w + 2 * TABLE, height: h + 2 * TABLE }, this.scene)
     table.position.y = -THICK
     table.material = this.material
+    table.renderingGroupId = 1
   }
 
   /**
@@ -437,6 +545,10 @@ export class CampaignMapView {
 
   /** The close zoom's level and how to load its tiles: from then on, the detail area follows the camera. */
   setDetail(level: Level, load: TileLoader) {
+    if (!this.far) throw new Error('setDetail: the map first (setMap)')
+    // a close level set again: the last one's textures let go
+    const old = this.detail
+    if (old) for (const t of [old.texS, old.texL, old.texT, old.texF]) t.dispose()
     const n = AREA * level.size
     const texS = this.floatTexture(new Float32Array(n * n), n, n)
     texS.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
@@ -446,6 +558,9 @@ export class CampaignMapView {
     const table = new SlotTable(AREA)
     const texT = this.byteTexture(table.bytes, AREA, AREA, Constants.TEXTUREFORMAT_RGBA)
     texT.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
+    const fadeBytes = new Uint8Array(AREA * AREA)
+    const texF = this.byteTexture(fadeBytes, AREA, AREA, Constants.TEXTUREFORMAT_LUMINANCE)
+    texF.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
     this.detail = {
       level,
       load,
@@ -456,6 +571,9 @@ export class CampaignMapView {
       table,
       texT,
       tableChanged: false,
+      fade: new Float32Array(AREA * AREA).fill(1),
+      fadeBytes,
+      texF,
       scratch: {
         shape: new Float32Array(level.size * level.size),
         half: new Uint16Array(level.size * level.size),
@@ -469,15 +587,80 @@ export class CampaignMapView {
       uploads: new Uploads<Tile>(),
       target: [0, 0],
     }
-    const m = this.material
+    const m = this.print
     m.setTexture('uDetailS', texS)
     m.setTexture('uDetailL', texL)
     m.setTexture('uDetailT', texT)
+    m.setTexture('uDetailF', texF)
     m.setVector2('uDetailTexel', new Vector2(1 / n, 1 / n))
     m.setFloat('uDetailCellKm', level.cell / 1000)
     m.setFloat('uDetailSize', level.size)
     m.setFloat('uDetailArea', AREA)
+    this.patch?.dispose()
+    this.patch = this.patchMesh(level.cell / 1000)
+    // no patch yet (or none fits): the far mesh whole
+    this.patchRect = null
+    this.print.setVector4('uPatchRect', OFF_MAP())
     this.dirty = true
+  }
+
+  /**
+   * The patch's mesh: a vertex every `cellKm` over PATCH_KM a side, from its south-west corner (the vertex shader
+   * places and raises it), off until the detail is used; none (the far mesh alone up close, with a warning) where the
+   * levels do not fit it: its edge on the far mesh's grid lines and its vertices on the close level's nodes need its
+   * size a whole number of far quads and a far quad a whole number of close cells.
+   */
+  private patchMesh(cellKm: number): Mesh | null {
+    const step = this.farStep
+    const whole = (a: number, b: number) => Math.abs(a / b - Math.round(a / b)) < 1e-9
+    if (!step || !whole(PATCH_KM, step) || !whole(step, cellKm)) {
+      console.warn(`campaign map: no patch: ${PATCH_KM} km does not fit far quads of ${step} km, cells of ${cellKm} km`)
+      return null
+    }
+    const n = Math.round(PATCH_KM / cellKm) + 1
+    const positions = new Float32Array(n * n * 3)
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        positions[(j * n + i) * 3] = i * cellKm
+        positions[(j * n + i) * 3 + 2] = j * cellKm
+      }
+    }
+    const indices = new Uint32Array((n - 1) * (n - 1) * 6)
+    let o = 0
+    for (let j = 0; j < n - 1; j++) {
+      for (let i = 0; i < n - 1; i++) {
+        const a = j * n + i
+        // the far mesh's winding and cut (south-east to north-west), so its diagonals lie on the patch's
+        indices.set([a, a + 1, a + n, a + 1, a + n + 1, a + n], o)
+        o += 6
+      }
+    }
+    const mesh = new Mesh('patch', this.scene)
+    const vd = new VertexData()
+    vd.positions = positions
+    vd.indices = indices
+    vd.applyToMesh(mesh, false)
+    mesh.alwaysSelectAsActiveMesh = true
+    mesh.material = this.patchMaterial
+    mesh.renderingGroupId = 0
+    mesh.setEnabled(false)
+    return mesh
+  }
+
+  /**
+   * Puts the patch under the camera's target while the detail is used (`on`), on the far mesh's grid, and takes it
+   * away (its rectangle off the map, so the far mesh is whole) when it is not.
+   */
+  private placePatch(on: boolean) {
+    if (!this.patch || !this.far) return
+    const x0 = patchStart(this.viewNow.x, this.half.x, this.farStep, PATCH_KM)
+    const z0 = patchStart(this.viewNow.z, this.half.z, this.farStep, PATCH_KM)
+    // none on a map too small to hold it
+    const place = on && x0 !== null && z0 !== null
+    this.patch.setEnabled(place)
+    this.patchRect = place ? [x0, z0, x0 + PATCH_KM, z0 + PATCH_KM] : null
+    this.print.setVector4('uPatchRect', this.patchRect ? Vector4.FromArray(this.patchRect) : OFF_MAP())
+    this.print.setVector2('uPatchCentre', new Vector2(this.viewNow.x, this.viewNow.z))
   }
 
   /** The detail area's state, for the fps meter and the checks. */
@@ -507,7 +690,8 @@ export class CampaignMapView {
     const x0 = -this.half.x + origin.ox * spanKm
     const z0 = -this.half.z + origin.oz * spanKm
     const lastKm = ((d.n - 1) * level.cell) / 1000
-    this.material.setVector4('uDetailRect', new Vector4(x0, z0, x0 + lastKm, z0 + lastKm))
+    this.detailRect = [x0, z0, x0 + lastKm, z0 + lastKm]
+    this.print.setVector4('uDetailRect', Vector4.FromArray(this.detailRect))
     const tiles = areaTiles(level, AREA, origin)
     const { given, changed } = assignSlots(d.given, tiles, AREA)
     d.given = given
@@ -567,7 +751,8 @@ export class CampaignMapView {
       d.load(...tile)
         .then(loaded => {
           d.failed.delete(key)
-          this.tileLoaded(key, loaded)
+          // a load of a close level since replaced (setDetail again) is dropped
+          if (this.detail === d) this.tileLoaded(key, loaded)
         })
         .catch((e: unknown) => {
           const tries = (d.failed.get(key)?.tries ?? 0) + 1
@@ -617,11 +802,27 @@ export class CampaignMapView {
       this.engine.updateTextureData(d.texL.getInternalTexture()!, light, x, z, size, size)
       d.table.set(s, [tile.column, tile.row])
       d.tableChanged = true
+      d.fade[s] = 0
     }
     if (d.tableChanged) {
       d.texT.update(d.table.bytes)
       d.tableChanged = false
     }
+  }
+
+  /** Advances the slots' fade-in by `ms` and sends it to the GPU while a slot is still fading. */
+  private fadeDetail(ms: number) {
+    const d = this.detail
+    if (!d) return
+    let changed = false
+    for (let s = 0; s < d.fade.length; s++) {
+      if (d.fade[s] >= 1) continue
+      d.fade[s] = Math.min(1, d.fade[s] + ms / FADE_MS)
+      changed = true
+    }
+    if (!changed) return
+    for (let s = 0; s < d.fade.length; s++) d.fadeBytes[s] = Math.round(d.fade[s] * 255)
+    d.texF.update(d.fadeBytes)
   }
 
   /** The view: where the camera looks. */
@@ -635,21 +836,63 @@ export class CampaignMapView {
     this.placeCamera()
   }
 
-  /** How high the map stands at a point (km), from the far level's shape, bilinear. */
+  /**
+   * How high the map stands at a point (km), as it is drawn: the far mesh's triangles (`farMeshHeight`), and where the
+   * patch is drawn the close level's 100 m shape by the patch's share there (`patchRamp`), the zoom's, the detail
+   * area's fade at its edge and the point's tile's fade-in, from the tiles written in their slots; bilinear. (The 1 km
+   * fade toward a neighbour not yet drawn is left out: it lasts until that tile comes, a frame or a few.)
+   */
   private riseAt(xKm: number, zKm: number): number {
+    const far = this.farRiseAt(xKm, zKm)
+    const rect = this.patchRect
+    const d = this.detail
+    if (!rect || !d || this.detailShare <= 0) return far
+    const centre: [number, number] = [this.viewNow.x, this.viewNow.z]
+    const ramp = patchRamp(xKm, zKm, centre, rect, PATCH_INNER_KM, PATCH_OUTER_KM, this.farStep)
+    const [x0, z0, x1, z1] = this.detailRect
+    const edge = Math.min(xKm - x0, x1 - xKm, zKm - z0, z1 - zKm)
+    const k = this.detailShare * ramp * sstep(0, 8, edge)
+    const near = k > 0 ? this.closeRiseAt(d, xKm, zKm) : null
+    return near === null ? far : far + (near.height - far) * k * near.fade
+  }
+
+  /**
+   * The close level's height at a point (km), bilinear between its nodes (across a tile's edge into its neighbour),
+   * and the fade-in of the point's tile, or null where a node's tile is not written in its slot.
+   */
+  private closeRiseAt(d: Detail, xKm: number, zKm: number): { height: number; fade: number } | null {
+    const { level } = d
+    const n = level.size
+    const fx = (xKm + this.half.x) / (level.cell / 1000)
+    const fz = (zKm + this.half.z) / (level.cell / 1000)
+    // the tiles written in their slots, by key, for the four nodes
+    const written = (i: number, j: number): Tile | null => {
+      const t: TileAt = [Math.floor(i / n), Math.floor(j / n)]
+      const held = d.table.get(slotOf(t[0], t[1], AREA))
+      if (!held || held[0] !== t[0] || held[1] !== t[1]) return null
+      return d.cache.get(tileKey(t)) ?? null
+    }
+    let missing = false
+    const at = (i: number, j: number) => {
+      const tile = written(i, j)
+      if (!tile) {
+        missing = true
+        return 0
+      }
+      return level.base + tile.shape[(j - tile.row * n) * n + (i - tile.column * n)] * level.scale
+    }
+    const height = bilinear(at, fx, fz, level.nx, level.nz) / 1000
+    if (missing) return null
+    const tile: TileAt = [Math.floor(fx / n), Math.floor(fz / n)]
+    return { height, fade: d.fade[slotOf(tile[0], tile[1], AREA)] }
+  }
+
+  /** The far mesh's height at a point (km), as drawn: its triangles (`farMeshHeight`). */
+  private farRiseAt(xKm: number, zKm: number): number {
     if (!this.far) return 0
     const { nx, nz, shape } = this.far.data
     const cellKm = this.far.level.cell / 1000
-    const fx = Math.min(nx - 1.001, Math.max(0, (xKm + this.half.x) / cellKm))
-    const fz = Math.min(nz - 1.001, Math.max(0, (zKm + this.half.z) / cellKm))
-    const i = Math.floor(fx)
-    const j = Math.floor(fz)
-    const u = fx - i
-    const v = fz - j
-    const k = j * nx + i
-    const top = shape[k] * (1 - u) + shape[k + 1] * u
-    const bottom = shape[k + nx] * (1 - u) + shape[k + nx + 1] * u
-    return (top * (1 - v) + bottom * v) / 1000
+    return farMeshHeight(shape, nx, nz, cellKm, MESH_STEP, xKm + this.half.x, zKm + this.half.z) / 1000
   }
 
   /** Places the camera from the view, and the haze by its tilt. */
@@ -659,25 +902,22 @@ export class CampaignMapView {
     this.camera.position.set(x, y, z)
     this.camera.setTarget(new Vector3(this.viewNow.x, 0, this.viewNow.z))
     const tilt = (tiltFor(this.viewNow.dist) * 180) / Math.PI
-    this.material.setFloat('uHaze', 0.35 * sstep(TILT_FAR, Math.max(TILT_NEAR, TILT_FAR + 1), tilt))
+    this.print.setFloat('uHaze', 0.35 * sstep(TILT_FAR, Math.max(TILT_NEAR, TILT_FAR + 1), tilt))
     this.dirty = true
   }
 
   /**
-   * The point of the map (km) under a screen position (CSS pixels), or null above the horizon: where the ray meets
-   * the raised surface, found by meeting the level of the ground under the last guess (a few rounds converge: the
-   * camera looks down at 30° or more and the shape's slopes, at the far level, are gentle against it).
+   * The point of the map (km) under a screen position (CSS pixels), or null above the horizon: where the ray first
+   * meets the surface as drawn (`rayGround`: walked down from above the highest ground, then halved; on the 100 m
+   * relief's steep slopes a fixed point would not converge). A ray that misses the raised map meets the plane under it.
    */
   groundAt(sx: number, sy: number): [number, number] | null {
     this.scene.updateTransformMatrix(true)
     const ray = this.scene.createPickingRay(sx, sy, Matrix.Identity(), this.camera)
+    const o: [number, number, number] = [ray.origin.x, ray.origin.y, ray.origin.z]
     const d: [number, number, number] = [ray.direction.x, ray.direction.y, ray.direction.z]
-    let hit = groundHit([ray.origin.x, ray.origin.y, ray.origin.z], d)
-    for (let k = 0; k < GROUND_ROUNDS && hit; k++) {
-      const rise = this.riseAt(hit[0], hit[1])
-      hit = groundHit([ray.origin.x, ray.origin.y - rise, ray.origin.z], d)
-    }
-    return hit
+    const bottom = this.far ? this.far.level.base / 1000 : 0
+    return rayGround(o, d, (x, z) => this.riseAt(x, z), this.highest, bottom) ?? groundHit(o, d)
   }
 
   /** A map point (km) on the screen, at the height of the ground there, in CSS pixels, or null behind the camera. */
@@ -728,7 +968,7 @@ export class CampaignMapView {
     }
     if (this.fsr) this.fsr.scaleFactor = factor
     // the scene is drawn at the screen's height over the factor, and gl_FragCoord counts its pixels
-    this.material.setFloat('uScreenH', this.engine.getRenderHeight() / this.upscaleFactor())
+    this.print.setFloat('uScreenH', this.engine.getRenderHeight() / this.upscaleFactor())
   }
 
   /** The canvas resized: the engine, the upscale and the haze's screen height follow. */
@@ -741,18 +981,24 @@ export class CampaignMapView {
   /** One frame: the clouds' time, the zoom's settings when the view changed, the detail area's upload, the render. */
   private frame() {
     const t = performance.now()
-    this.material.setFloat('uTime', t / 1000)
+    this.print.setFloat('uTime', t / 1000)
     if (this.dirty) {
       this.dirty = false
       const ppk = this.pxPerKm()
       // by the zoom (screen pixels per km): the ordinary contours from about 1.2, the 100 m tiles from about 4 (a
       // tile node 0.4 px), fully from 9
-      this.material.setFloat('uContourK', sstep(1.2, 3, ppk))
-      this.material.setFloat('uDetailK', this.detail ? sstep(4, 9, ppk) : 0)
+      this.print.setFloat('uContourK', sstep(1.2, 3, ppk))
+      const detailK = this.detail ? sstep(4, 9, ppk) : 0
+      this.print.setFloat('uDetailK', detailK)
+      this.detailShare = detailK
+      this.placePatch(detailK > 0)
       this.wantDetail(ppk)
       this.onViewChanged?.(ppk)
     }
     this.uploadDetail()
+    // the fade by the time since the last frame, at most a tenth of a second (a frame after a pause fades no faster)
+    this.fadeDetail(Math.min(100, t - this.lastFrame))
+    this.lastFrame = t
     this.scene.render()
     this.onFrame?.(performance.now() - t)
   }

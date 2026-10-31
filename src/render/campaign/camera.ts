@@ -58,3 +58,54 @@ export function groundHit(origin: [number, number, number], dir: [number, number
   const t = -origin[1] / dir[1]
   return [origin[0] + dir[0] * t, origin[2] + dir[2] * t]
 }
+
+/**
+ * Where a ray from `origin` along `dir` (going down) first meets a surface whose height at (x, z) is `rise(x, z)`,
+ * as [x, z], or null when it does not (it does not go down, or it starts under the ground): the ray walked in even
+ * steps of at most `stepKm` along it from the height `top` (no ground above it) down to `bottom` (none below it), then
+ * the step it crossed the ground in halved `halvings` times. Robust where a fixed point is not: on slopes steeper than
+ * the ray, it still finds the first crossing, missing only a ridge thinner than a step.
+ */
+export function rayGround(
+  origin: [number, number, number],
+  dir: [number, number, number],
+  rise: (x: number, z: number) => number,
+  top: number,
+  bottom: number,
+  stepKm = 0.05,
+  halvings = 12,
+): [number, number] | null {
+  if (dir[1] >= -1e-6) return null
+  const at = (t: number): [number, number, number] => [
+    origin[0] + dir[0] * t,
+    origin[1] + dir[1] * t,
+    origin[2] + dir[2] * t,
+  ]
+  const above = (t: number) => {
+    const p = at(t)
+    return p[1] > rise(p[0], p[2])
+  }
+  const t0 = Math.max(0, (top - origin[1]) / dir[1])
+  const t1 = (bottom - origin[1]) / dir[1]
+  if (!above(t0)) return null
+  // the direction's length: the steps measured along the ray
+  const length = Math.hypot(dir[0], dir[1], dir[2])
+  const steps = Math.min(4000, Math.max(1, Math.ceil(((t1 - t0) * length) / stepKm)))
+  let a = t0
+  for (let k = 1; k <= steps; k++) {
+    const b = t0 + ((t1 - t0) * k) / steps
+    if (!above(b)) {
+      let lo = a
+      let hi = b
+      for (let h = 0; h < halvings; h++) {
+        const mid = (lo + hi) / 2
+        if (above(mid)) lo = mid
+        else hi = mid
+      }
+      const p = at((lo + hi) / 2)
+      return [p[0], p[2]]
+    }
+    a = b
+  }
+  return null
+}
