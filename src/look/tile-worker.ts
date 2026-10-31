@@ -1,4 +1,4 @@
-// The look page's tile worker (G3b-3, docs/plans/active/g3b-the-detail-follows.md): the window's map compiled once, off
+// The look page's tile worker (G3b-3, docs/plans/done/g3b-the-detail-follows.md): the window's map compiled once, off
 // the page's thread (validate, its files, expand, apply: the map CLI's steps, maps/engine.ts's layersOf, in the
 // browser as the map page's worker runs them), its coarse light baked once, then each tile the page asks for built
 // (src/look/world/window-build.ts: the compiler's own window build, in the window's frame) and sent back as look data.

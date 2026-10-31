@@ -1,4 +1,4 @@
-// The detailed tile's place in the world (G3b, docs/plans/active/g3b-the-detail-follows.md): its centre, m, on
+// The detailed tile's place in the world (G3b, docs/plans/done/g3b-the-detail-follows.md): its centre, m, on
 // SPEC.tileStep's grid (the look data's tileAt). The shaders read it as uTileO (painter.glsl's tileUV and tileEdge);
 // every material Materials.make makes is given this one vector (bindTile), which Babylon keeps by reference, so a moved
 // tile is set here once; a material made apart that reads the tile calls bindTile, and the bakes' effect wrappers set

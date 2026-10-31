@@ -1,4 +1,4 @@
-// THE TILE'S PLACE (G3b, docs/plans/active/g3b-the-detail-follows.md): its centre in the world (src/look/tile.ts); its
+// THE TILE'S PLACE (G3b, docs/plans/done/g3b-the-detail-follows.md): its centre in the world (src/look/tile.ts); its
 // maps (the meadow, the bank normals, the water data, the macro bake, the flow, the occlusion, the reflections) read
 // at tileUV, its edges' fades by tileEdge (the larger axis's distance from its centre)
 uniform vec2 uTileO;

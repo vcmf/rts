@@ -1532,7 +1532,7 @@ Object.defineProperties(
   }),
 )
 /**
- * The tile moved (G3b-2, docs/plans/active/g3b-the-detail-follows.md): a tile's data in the page's frame (the first
+ * The tile moved (G3b-2, docs/plans/done/g3b-the-detail-follows.md): a tile's data in the page's frame (the first
  * window's; tools/build-look-data.ts --tileat, the page's worker from G3b-3) takes the tile's place: its centre
  * (src/look/tile.ts) and heightfield, the ground's meshes about it (terrain.retile), its covers and roads, the ground's
  * split, the relief's tone (it reads the drawn ground), and, built again with the last disposed (src/look/owned.ts),
@@ -1661,7 +1661,7 @@ async function move(next: LookData): Promise<number> {
 }
 
 /**
- * The tile follows the camera (G3b-3, docs/plans/active/g3b-the-detail-follows.md): on a map world a worker compiles
+ * The tile follows the camera (G3b-3, docs/plans/done/g3b-the-detail-follows.md): on a map world a worker compiles
  * its map once (src/look/tile-worker.ts) and builds the tile the focus needs; when the focus comes within FOLLOW_EDGE m
  * of the tile's edge, the tile centred on it (on the tile grid, kept inside the map: the compiler builds no tile past
  * it) is asked for and takes the tile's place when it comes (retile). After a move the focus lies within half a grid

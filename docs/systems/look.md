@@ -141,7 +141,7 @@ their meaning for the tile (`nearFrameOf`). What is the tile's stays on it: the 
 square no trees (G3d). A window's data is about 12 MB (the ring's cover and the light), built in about 6 s, not
 committed.
 
-**The tile off the origin (G3b-1, `docs/plans/active/g3b-the-detail-follows.md`).** The tile's centre is the data's
+**The tile off the origin (G3b-1, `docs/plans/done/g3b-the-detail-follows.md`).** The tile's centre is the data's
 `tileAt` (on `SPEC.tileStep`'s 200 m grid about the window's centre: 14 far cells, 112 tile cells, so every grid of a
 moved tile meets the far ring's and the first tile's), held in one vector, `TILE_O` (`src/look/tile.ts`), that every
 material reads as `uTileO`: the shaders read the tile's maps at `tileUV(xz)` and its edges' fades by `tileEdge(xz)`
