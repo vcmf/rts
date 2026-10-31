@@ -176,3 +176,18 @@ G3b-3, round 1 (`/code-review high`, 10 findings, 1 severe):
 - answered (G3c, a move's cost): the worker builds a tile's whole far ring, its cover and the coarse light the page
   throws away, bakes the light again, and starts on load; a tile-only build, the page's light sent, and a start when
   the focus first nears the edge, there.
+
+G3b-3, round 2 (9 findings, 2 severe):
+- fixed, severe: near the map's edge the tile flipped back and forth (the rule took the farther axis's distance, which
+  the edge held past it, so the other axis moved the tile on every crossing of a grid midpoint): the rule now axis by
+  axis, a held axis keeping its centre (tested: fails at the rule before); a tile come while a pan went on was dropped
+  if the focus wanted another by then (a sustained pan never got its detail): a tile is swapped in if it is the one
+  wanted, or if it holds the focus (tested; the first form also refused a wanted tile near the edge that cannot reach
+  the focus, and asked for it again forever: found on the page, tested);
+- fixed: the centres kept a far cell inside the far ring too (retile's check; `tileBounds`); the map fetched and
+  compiled the first time a tile is wanted (a page looked at where it opened fetches nothing); the rule's no-flip
+  condition checked at start (`followRuleOk`); the tests put the tile back after each; the look checks' comment over
+  their hooks again; `src/map/compile.ts` in the map system doc;
+- answered: the worker's repeated per-window work (the base, the ground's bound, the light): G3c.
+- checked on the page (Metal): the worker not started on load; a pan of 2.4 km in 6 s got its detail twice; held
+  against the north edge, one move, then none over 40 crossings of x = 100.

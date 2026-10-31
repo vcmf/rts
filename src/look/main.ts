@@ -5,7 +5,7 @@ import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js'
 import { demFileNames } from '../map/dem.ts'
 import type { TileReply, TileRequest } from './tile-worker.ts'
 import { owned } from './owned.ts'
-import { TILE_O, TileFollow, tileEdge, tileWanted } from './tile.ts'
+import { TILE_O, TileFollow, followRuleOk, tileBounds, tileEdge, tileWanted } from './tile.ts'
 import type { SimPlay } from './sim-armies.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
@@ -1659,8 +1659,6 @@ async function move(next: LookData): Promise<number> {
   return performance.now() - t0
 }
 
-// the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
-// and the detail layer's switches
 /**
  * The tile follows the camera (G3b-3, docs/plans/active/g3b-the-detail-follows.md): on a map world a worker compiles
  * its map once (src/look/tile-worker.ts) and builds the tile the focus needs; when the focus comes within FOLLOW_EDGE m
@@ -1676,11 +1674,28 @@ const follower = (() => {
     return null
   }
   const win = lookWindow
-  const edge = look.world.edge
+  // the centres a whole tile can have: inside the map (the compiler builds none past it) and a far cell inside the far
+  // ring (the apron: retile's check)
+  const e = look.world.edge
+  const r = rectOf(look.far)
+  const c = look.far.cell
+  const bounds = tileBounds(
+    {
+      x0: Math.max(e.x0, r.x0 + c),
+      z0: Math.max(e.z0, r.z0 + c),
+      x1: Math.min(e.x1, r.x1 - c),
+      z1: Math.min(e.z1, r.z1 - c),
+    },
+    D.spec.tileStep,
+    D.spec.tile / 2,
+  )
+  if (!followRuleOk(D.spec.tileStep, D.spec.tile / 2, FOLLOW_EDGE)) {
+    throw new Error(`the follow rule: half the tile step must lie within ${FOLLOW_EDGE} m of the tile's edge`)
+  }
   const worker = new Worker(new URL('./tile-worker.ts', import.meta.url), { type: 'module' })
   const state = { ready: false, busy: false, moves: 0, lastBuildMs: 0, lastSwapMs: 0, mapMs: 0, error: '' }
   const choose = new TileFollow()
-  const want = () => tileWanted(camera.target.x, camera.target.z, edge, D.spec.tileStep, D.spec.tile / 2, FOLLOW_EDGE)
+  const want = () => tileWanted(camera.target.x, camera.target.z, bounds, D.spec.tileStep, D.spec.tile / 2, FOLLOW_EDGE)
   const fail = (at: readonly [number, number] | null, message: string) => {
     state.error = message
     choose.failedAt(at)
@@ -1703,7 +1718,7 @@ const follower = (() => {
     if (r.seq !== seq) return
     state.lastBuildMs = r.ms
     // (the focus moved on while it was built: it is not swapped in, the next frame asks for the one wanted)
-    if (choose.accept(r.at, want())) {
+    if (choose.accept(r.at, want(), camera.target.x, camera.target.z, D.spec.tile / 2)) {
       try {
         state.lastSwapMs = await retile(decodeLook(r.bytes))
         state.moves++
@@ -1724,7 +1739,13 @@ const follower = (() => {
     state.busy = false
   }
   let lastAsked: [number, number] | null = null
-  void (async () => {
+  // the map fetched and compiled the first time a tile is wanted (a page looked at where it opened costs nothing)
+  let started = false
+  const start = () => {
+    started = true
+    void load().catch((err: unknown) => fail(null, (err as Error).message))
+  }
+  const load = async () => {
     const get = async (name: string) => {
       const u = MAP_FILES[`../../maps/${name}`]
       if (!u) throw new Error(`no maps/${name} in the build`)
@@ -1737,8 +1758,9 @@ const follower = (() => {
     for (const n of demFileNames(JSON.parse(mapText))) files[n] = await (await get(n)).arrayBuffer()
     const req: TileRequest = { type: 'map', win, mapText, kindsText: await (await get('kinds.json')).text(), files }
     worker.postMessage(req, Object.values(files))
-  })().catch((err: unknown) => fail(null, (err as Error).message))
+  }
   scene.onBeforeRenderObservable.add(() => {
+    if (!started && want()) start()
     if (!state.ready || state.busy) return
     const at = want()
     if (!at || !choose.ask(at)) return
@@ -1750,6 +1772,8 @@ const follower = (() => {
   return state
 })()
 
+// the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
+// and the detail layer's switches
 const lab = new Lab(scene, mats)
 const passes = {
   terrain: [terrain.tileGround, terrain.farGround, terrain.apron],
