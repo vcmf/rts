@@ -19,7 +19,7 @@ import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
 import { MEADOW_LOOK, type MeadowLook } from './meadow-look.ts'
-import { BALANCED_CUT, dropAtZoom, type GrassDetail } from './grass-detail.ts'
+import { dropAtZoom, type GrassDetail, THIN_RAMP, THIN_SOFT, thinOn } from './grass-detail.ts'
 import {
   CLUMP_REACH,
   CROP_WIDE,
@@ -62,6 +62,9 @@ interface Chunk {
   hole: Float32Array
 }
 const CHUNKS = 8
+// the grass detail's Balanced (src/look/grass-detail.ts): the near ring's define and the uniforms it reads
+const THIN = '#define GRASS_THIN'
+const THIN_UNIFORMS = ['uThin', 'uThinRamp']
 // the chunks of a ring to draw (index × 2, + 1 for its hole slots): their square on the ground (the slots' cells, the
 // roots' jitter and a clump's reach) against the band (b: in from x to y, out from z to w) and the view (vp, the
 // view-projection's column-major array: this frame's), the ground from 20 m under to 20 m over the focus height y, as
@@ -133,12 +136,9 @@ export interface MeadowMap {
 }
 export interface Meadow {
   meshes: Mesh[]
-  /** the rings' materials and the near ring's Balanced one (the grass detail): every material a clump may be drawn
-   * with, for the receivers of the figures' shadows and the trodden mask */
-  materials: ShaderMaterial[]
   setOn(on: boolean): void
-  /** the player's grass detail (src/look/grass-detail.ts), from the next frame: Full draws main's near ring, Balanced
-   * the same ring with its Balanced material (GRASS_THIN), which drops a share of its grass clumps beyond the cut */
+  /** the player's grass detail (src/look/grass-detail.ts): at Balanced, up close, the near ring's program thins its
+   * grass (GRASS_THIN); the switch waits until both programs are compiled, so the ring never blinks */
   setDetail(level: GrassDetail): void
   bakeMs: number
   // the ground's dark under-layer (shore.glsl, MEADOW_UNDER) on these materials: the meadow map, and each frame its
@@ -373,16 +373,14 @@ export function buildMeadow(
   const slotVBs: VertexBuffer[] = []
   const drawn: number[][] = RINGS.map(() => [-1])
   const keep: number[] = []
-  // the near ring's Balanced material (the grass detail, made with the ring's own: thin, below)
-  let thinMat: ShaderMaterial | null = null
-  // a ring's material: main's, or (thin) the near ring's Balanced one, the same with GRASS_THIN and its uniform
-  const ringMaterial = (name: string, thin: boolean) =>
-    mats.make(
-      name,
+  RINGS.forEach((r, ri) => {
+    const m = mats.make(
+      `meadow${ri}`,
       MEADOW_VS.replace('#include<meadow>', () => MEADOW_GLSL),
       MEADOW_FS,
       {
         attributes: ['position', 'normal', 'aV', 'aSlot'],
+        // (uThin, uThinRamp: read only by the near ring's Balanced program, GRASS_THIN)
         uniforms: [
           'uOrigin',
           'uCentre',
@@ -391,7 +389,7 @@ export function buildMeadow(
           'uSpread',
           'uHeight',
           'uBand',
-          ...(thin ? ['uThin'] : []),
+          ...(ri ? [] : THIN_UNIFORMS),
         ],
         samplers: ['uMeadow', 'uGB'],
         defines: [
@@ -405,29 +403,16 @@ export function buildMeadow(
           `#define CROP_WIDE ${CROP_WIDE.toFixed(2)}`,
           `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`,
           `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`,
-          ...(thin
-            ? [
-                '#define GRASS_THIN',
-                `#define THIN_CUT vec2(${BALANCED_CUT[0].toFixed(1)},${BALANCED_CUT[1].toFixed(1)})`,
-              ]
-            : []),
         ],
       },
     )
-  RINGS.forEach((r, ri) => {
     const c = clumps[r.clump]
-    const setUp = (m: ShaderMaterial) => {
-      m.backFaceCulling = false
-      m.setTexture('uMeadow', map)
-      m.setFloat('uCell', r.cell)
-      // the footprint by the ring (its spread, against the clump's own proportions), the height the same on every ring
-      m.setFloat('uSpread', (r.spread * c.top) / HEIGHT)
-      m.setFloat('uHeight', HEIGHT)
-      return m
-    }
-    const m = setUp(ringMaterial(`meadow${ri}`, false))
-    // (made now, compiled when first drawn: at Full never)
-    if (ri === 0) thinMat = setUp(ringMaterial('meadow0thin', true))
+    m.backFaceCulling = false
+    m.setTexture('uMeadow', map)
+    m.setFloat('uCell', r.cell)
+    // the footprint by the ring (its spread, against the clump's own proportions), the height the same on every ring
+    m.setFloat('uSpread', (r.spread * c.top) / HEIGHT)
+    m.setFloat('uHeight', HEIGHT)
     // the name keeps it out of the sun's shadow pass (src/look/bakes.ts)
     const mesh = new Mesh(`meadowGrass${ri}`, scene)
     mesh.setVerticesData(VertexBuffer.PositionKind, c.pos)
@@ -487,20 +472,10 @@ export function buildMeadow(
   // copy), so the vectors are set once and changed in place
   const origins = RINGS.map(() => new Vector2())
   const centre = new Vector2()
-  // (the near ring's Balanced material reads the near ring's vectors)
-  const ringMatsOf = (ri: number) => (ri === 0 && thinMat ? [ringMats[ri], thinMat] : [ringMats[ri]])
   RINGS.forEach((_, ri) => {
-    for (const m of ringMatsOf(ri)) {
-      m.setVector2('uOrigin', origins[ri])
-      m.setVector2('uCentre', centre)
-    }
+    ringMats[ri].setVector2('uOrigin', origins[ri])
+    ringMats[ri].setVector2('uCentre', centre)
   })
-  // the grass detail: the near ring's material by the level
-  let level = detail
-  const applyDetail = () => {
-    meshes[0].material = level === 'balanced' && thinMat ? thinMat : ringMats[0]
-  }
-  applyDetail()
   // zoomed out (docs/plans/done/wide-perf.md): from WIDE[0] to WIDE[1] m of the camera's radius the inner rings'
   // bands shrink to the focus and the outer ring's grows in to it, so at the widest zoom only the outer ring (2 m
   // cells, larger clumps: a clump is a few pixels there) is drawn; the clumps fade as the bands move (no pop)
@@ -509,10 +484,27 @@ export function buildMeadow(
   let underOn = true
   let meadowOn = true
   const bands = RINGS.map(r => new Vector4(...r.band))
-  RINGS.forEach((_, ri) => {
-    for (const m of ringMatsOf(ri)) m.setVector4('uBand', bands[ri])
-  })
+  RINGS.forEach((_, ri) => ringMats[ri].setVector4('uBand', bands[ri]))
+  // the grass detail: Balanced's program on the near ring up close (thinOn), toggled by its define as the trodden
+  // mask toggles TRAMPLE (src/look/trodden.ts). A toggle asks for the new program at once (isReady starts its
+  // compile) and keeps the old defines until it is compiled, asking again each frame: the ring never blinks
+  let level = detail
+  let thinNow = false
+  const near = ringMats[0]
+  near.setVector4('uThinRamp', new Vector4(...THIN_RAMP))
+  const thinV = new Vector2(0, THIN_SOFT)
+  near.setVector2('uThin', thinV)
+  const applyThin = () => {
+    const want = thinOn(level, camera.radius)
+    thinV.x = dropAtZoom(camera.radius)
+    if (want === thinNow) return
+    const defines = near.options.defines.slice()
+    near.setDefine(THIN, want)
+    if (meshes[0].isReady(true)) thinNow = want
+    else near.options.defines.splice(0, near.options.defines.length, ...defines)
+  }
   scene.onBeforeRenderObservable.add(() => {
+    applyThin()
     const t = wide ? Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))) : 0
     const k = 1 - t * t * (3 - 2 * t)
     under.z = underOn && meadowOn ? k : 0
@@ -529,11 +521,6 @@ export function buildMeadow(
       origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell)
       ringMats[ri].setFloat('uCentreY', y)
     })
-    // (Balanced: the share it drops beyond the cut at this zoom, none from CLOSE_ZOOM's end out)
-    if (level === 'balanced' && thinMat) {
-      thinMat.setFloat('uCentreY', y)
-      thinMat.setFloat('uThin', dropAtZoom(camera.radius))
-    }
     focusY = y
     holes = t > 0
   })
@@ -571,10 +558,8 @@ export function buildMeadow(
   // (under() sets the reach on the given materials; the map itself, uMeadow, is bound on every painted material above)
   return {
     meshes,
-    materials: thinMat ? [...ringMats, thinMat] : ringMats,
     setDetail: l => {
       level = l
-      applyDetail()
     },
     setOn: on => {
       meadowOn = on

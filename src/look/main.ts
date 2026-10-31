@@ -22,7 +22,7 @@ import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './material
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
 import { CLOSE_ZOOM, CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { meadowLookDefines, meadowLookOf } from './meadow-look.ts'
-import { grassDetailOf, isGrassDetail } from './grass-detail.ts'
+import { type GrassDetail, grassDetailOf, isGrassDetail, withGrassDetail } from './grass-detail.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
@@ -848,7 +848,7 @@ if (armiesParam !== null) {
   if (!(speed.march > 0 && speed.run > 0)) throw new Error('units: the march and run roles have no root speed')
   const tinyPx = tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined
   // the ground and the grass: the figures' shadow map (with its switches) and the trodden mask fall on them
-  const receivers = [...terrain.tileMats, ...(meadow?.materials ?? [])]
+  const receivers = [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])]
   // the frame's corner rays, cast once for the sun's box and the trodden mask (made before them: read after it)
   const view = new ViewRays(scene, camera)
   // (the infantry's arm owns the figures' shadow map behind its switches, decision 0075)
@@ -899,7 +899,7 @@ if (armiesParam !== null) {
     // (every arm darkens the ground to the one shade; the map's receivers read it by blade on the meadow)
     if (shade) units.shade = shade
     // (read only by the arm that owns the map)
-    if (uShadowVs ?? true) units.rootReceivers = meadow?.materials ?? []
+    if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
     units.setShadows(unitShadowParam !== '0')
     units.setPosed(uVat ?? true)
     units.setFarScale(farScale ?? true)
@@ -1048,9 +1048,16 @@ const applyScale = (s: number) => {
   post.scale = k
   engine.setHardwareScalingLevel(k / s)
 }
-// the grass detail: applied live (the near ring's material by the level: Meadow.setDetail), and kept in the address
-// (?grassdetail, none for Full, the default) so a reload keeps it; without the meadow there is nothing to choose: the
-// row is hidden
+// the grass detail: applied live (Meadow.setDetail), and the address kept to the level in force (?grassdetail, none
+// for Full, the default: a Balanced the page could not apply, without the meadow, is dropped from it), so a reload or
+// a shared address opens on it; without the meadow there is nothing to choose: the row is hidden
+const showDetail = (level: GrassDetail) => {
+  const q = withGrassDetail(new URLSearchParams(location.search), level).toString()
+  const u = new URL(location.href)
+  u.search = q
+  if (u.href !== location.href) history.replaceState(history.state, '', u.href)
+}
+showDetail(grassDetail)
 const detailSel = byId<HTMLSelectElement>('grassdetail')
 detailSel.value = grassDetail
 const detailRow = detailSel.closest<HTMLElement>('.row')
@@ -1059,10 +1066,7 @@ detailSel.onchange = () => {
   const v = detailSel.value
   if (!meadow || !isGrassDetail(v)) return
   meadow.setDetail(v)
-  const u = new URL(location.href)
-  if (v === 'full') u.searchParams.delete('grassdetail')
-  else u.searchParams.set('grassdetail', v)
-  history.replaceState(history.state, '', u.href)
+  showDetail(v)
 }
 const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => {
