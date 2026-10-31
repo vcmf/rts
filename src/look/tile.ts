@@ -40,3 +40,28 @@ export function tileWanted(
   const at: [number, number] = [on(x, lo(edge.x0), hi(edge.x1)), on(z, lo(edge.z0), hi(edge.z1))]
   return at[0] === TILE_O.x && at[1] === TILE_O.y ? null : at
 }
+
+/**
+ * The follower's choices (G3b-3, src/look/main.ts): a tile is asked for when the focus wants one that has not just
+ * failed (built or moved: asked again only once the focus wants another, not each frame); a tile that comes is swapped
+ * in only if the focus still wants it (else the next frame asks for the one it wants)
+ */
+export class TileFollow {
+  private failed = ''
+  /** whether to ask for the tile the focus wants now (null: none) */
+  ask(wanted: readonly [number, number] | null): boolean {
+    return !!wanted && wanted.join(',') !== this.failed
+  }
+  /** whether a tile come from the worker is the one the focus wants now */
+  accept(came: readonly [number, number], wanted: readonly [number, number] | null): boolean {
+    return !!wanted && wanted[0] === came[0] && wanted[1] === came[1]
+  }
+  /** a tile that failed (null: a failure that names none, the last kept) */
+  failedAt(at: readonly [number, number] | null): void {
+    if (at) this.failed = at.join(',')
+  }
+  /** a tile moved to: any tile may be asked for again */
+  moved(): void {
+    this.failed = ''
+  }
+}

@@ -164,3 +164,15 @@ After the redesign, round 2 (9 findings, none severe; fixed or answered, then st
 - **Measured** (the dev Mac, Kobelnitz, the focus sent 1 km east): the map compiled in the worker in 3.3 s on load;
   the tile built in 1.6–1.7 s, off the page's thread; its swap 0.93 s on Metal (12 s under SwiftShader). Shots in
   `scratch/g3b3/` (the far ring, then the tile come).
+
+G3b-3, round 1 (`/code-review high`, 10 findings, 1 severe):
+- fixed, severe: a tile that failed (its build, or its move) was asked for again every frame, a worker never at rest:
+  a failed tile is asked for again only once the focus wants another (`TileFollow`, tested);
+- fixed: a tile come after the focus moved on is not swapped in (the next frame asks for the one wanted); the worker's
+  own failures (its module, a message it cannot read) reported; no following on the bench (a move would land in a
+  measured hold); the tools' `retile` hook refused on a page that follows (it would take the tile back); the assets'
+  fetches checked; one map compile for the CLI and the worker (`src/map/compile.ts`, `compileMap`; the map page's
+  worker reports its steps' issues to its editor and keeps its own);
+- answered (G3c, a move's cost): the worker builds a tile's whole far ring, its cover and the coarse light the page
+  throws away, bakes the light again, and starts on load; a tile-only build, the page's light sent, and a start when
+  the focus first nears the edge, there.

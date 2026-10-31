@@ -36,7 +36,7 @@ import {
   type LookData,
 } from '../src/look/world/data.ts'
 import { WINDOWS, windowOf, type LookWindow } from '../src/look/world/windows.ts'
-import { TILE_O, tileWanted } from '../src/look/tile.ts'
+import { TILE_O, TileFollow, tileWanted } from '../src/look/tile.ts'
 import { noRiver } from '../src/look/river.ts'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -708,5 +708,26 @@ describe('the tile following the focus (tileWanted, G3b-3)', () => {
     TILE_O.set(1200, 800)
     expect(want(1700, 1300)).toBeNull()
     TILE_O.set(0, 0)
+  })
+})
+
+describe("the follower's choices (TileFollow, G3b-3)", () => {
+  it('asks for a tile that failed only once the focus wants another, and swaps in only the tile still wanted', () => {
+    const f = new TileFollow()
+    expect(f.ask([200, 0])).toBe(true)
+    expect(f.ask(null)).toBe(false)
+    // (the bug: a tile that failed was asked for again every frame)
+    f.failedAt([200, 0])
+    expect(f.ask([200, 0])).toBe(false)
+    expect(f.ask([400, 0])).toBe(true)
+    // a failure that names no tile keeps the last
+    f.failedAt(null)
+    expect(f.ask([200, 0])).toBe(false)
+    f.moved()
+    expect(f.ask([200, 0])).toBe(true)
+    // (the focus moved on while it was built: not swapped in)
+    expect(f.accept([200, 0], [200, 0])).toBe(true)
+    expect(f.accept([200, 0], [0, 0])).toBe(false)
+    expect(f.accept([200, 0], null)).toBe(false)
   })
 })

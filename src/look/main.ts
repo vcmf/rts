@@ -5,7 +5,7 @@ import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js'
 import { demFileNames } from '../map/dem.ts'
 import type { TileReply, TileRequest } from './tile-worker.ts'
 import { owned } from './owned.ts'
-import { TILE_O, tileEdge, tileWanted } from './tile.ts'
+import { TILE_O, TileFollow, tileEdge, tileWanted } from './tile.ts'
 import type { SimPlay } from './sim-armies.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
@@ -1671,18 +1671,28 @@ async function move(next: LookData): Promise<number> {
  */
 const FOLLOW_EDGE = 200
 const follower = (() => {
-  if (look.world.kind !== 'map' || !lookWindow || FROZEN || params.get('follow') === '0') return null
+  // (not on a frozen page, nor on the bench: a move would land in a measured hold)
+  if (look.world.kind !== 'map' || !lookWindow || FROZEN || params.get('follow') === '0' || params.has('bench')) {
+    return null
+  }
   const win = lookWindow
   const edge = look.world.edge
   const worker = new Worker(new URL('./tile-worker.ts', import.meta.url), { type: 'module' })
   const state = { ready: false, busy: false, moves: 0, lastBuildMs: 0, lastSwapMs: 0, mapMs: 0, error: '' }
+  const choose = new TileFollow()
+  const want = () => tileWanted(camera.target.x, camera.target.z, edge, D.spec.tileStep, D.spec.tile / 2, FOLLOW_EDGE)
+  const fail = (at: readonly [number, number] | null, message: string) => {
+    state.error = message
+    choose.failedAt(at)
+    console.error(`the tile follower: ${message}`)
+  }
   let seq = 0
   worker.onmessage = async (e: MessageEvent<TileReply>) => {
     const r = e.data
     if (r.type === 'error') {
-      state.error = r.message
+      // (a tile's build, or the map's: then the follower stays not ready)
+      fail(r.seq === seq ? lastAsked : null, r.message)
       state.busy = false
-      console.error(`the tile worker: ${r.message}`)
       return
     }
     if (r.type === 'map') {
@@ -1692,36 +1702,48 @@ const follower = (() => {
     }
     if (r.seq !== seq) return
     state.lastBuildMs = r.ms
-    try {
-      state.lastSwapMs = await retile(decodeLook(r.bytes))
-      state.moves++
-    } catch (err) {
-      state.error = (err as Error).message
-      console.error(`the tile's move to ${r.at.join(', ')} failed: ${state.error}`)
+    // (the focus moved on while it was built: it is not swapped in, the next frame asks for the one wanted)
+    if (choose.accept(r.at, want())) {
+      try {
+        state.lastSwapMs = await retile(decodeLook(r.bytes))
+        state.moves++
+        choose.moved()
+      } catch (err) {
+        fail(r.at, `the move to ${r.at.join(', ')} failed: ${(err as Error).message}`)
+      }
     }
     state.busy = false
   }
+  // (a failure outside the worker's own handling: its module's load, a message it cannot read)
+  worker.onerror = e => {
+    fail(null, `the tile worker failed: ${e.message}`)
+    state.busy = false
+  }
+  worker.onmessageerror = () => {
+    fail(null, 'the tile worker sent a message the page cannot read')
+    state.busy = false
+  }
+  let lastAsked: [number, number] | null = null
   void (async () => {
-    const url = (name: string) => {
+    const get = async (name: string) => {
       const u = MAP_FILES[`../../maps/${name}`]
-      if (!u) throw new Error(`the tile worker: no maps/${name} in the build`)
-      return u
+      if (!u) throw new Error(`no maps/${name} in the build`)
+      const res = await fetch(u)
+      if (!res.ok) throw new Error(`maps/${name}: ${res.status} ${res.statusText}`)
+      return res
     }
-    const text = async (name: string) => (await fetch(url(name))).text()
-    const mapText = await text(`${win.map}.map.json`)
+    const mapText = await (await get(`${win.map}.map.json`)).text()
     const files: Record<string, ArrayBuffer> = {}
-    for (const n of demFileNames(JSON.parse(mapText))) files[n] = await (await fetch(url(n))).arrayBuffer()
-    const req: TileRequest = { type: 'map', win, mapText, kindsText: await text('kinds.json'), files }
+    for (const n of demFileNames(JSON.parse(mapText))) files[n] = await (await get(n)).arrayBuffer()
+    const req: TileRequest = { type: 'map', win, mapText, kindsText: await (await get('kinds.json')).text(), files }
     worker.postMessage(req, Object.values(files))
-  })().catch((err: unknown) => {
-    state.error = (err as Error).message
-    console.error(state.error)
-  })
+  })().catch((err: unknown) => fail(null, (err as Error).message))
   scene.onBeforeRenderObservable.add(() => {
     if (!state.ready || state.busy) return
-    const at = tileWanted(camera.target.x, camera.target.z, edge, D.spec.tileStep, D.spec.tile / 2, FOLLOW_EDGE)
-    if (!at) return
+    const at = want()
+    if (!at || !choose.ask(at)) return
     state.busy = true
+    lastAsked = at
     const req: TileRequest = { type: 'tile', seq: ++seq, at }
     worker.postMessage(req)
   })
@@ -1825,6 +1847,8 @@ Object.assign(window, {
       moveFault = why
     },
     retile: async (x: number, z: number) => {
+      // (the follower would take the tile back to the focus: the hook's moves on a page that does not follow)
+      if (follower) throw new Error('retile: the tile follows the camera here (load with ?follow=0 or ?frozen)')
       const at: [number, number] = [x, z]
       const url = lookWindow && WINDOW_DATA[`../../${windowFile(lookWindow, at)}`]
       if (!url) {

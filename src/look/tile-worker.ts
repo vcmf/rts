@@ -4,9 +4,7 @@
 // (src/look/world/window-build.ts: the compiler's own window build, in the window's frame) and sent back as look data.
 import type { Catalogue, MapFile } from '../map/schema.ts'
 import type { Layers } from '../map/apply.ts'
-import { apply } from '../map/apply.ts'
-import { checkFiles, validate } from '../map/validate.ts'
-import { expand } from '../map/expand.ts'
+import { compileMap } from '../map/compile.ts'
 import type { LightGrid, TileAt } from './world/data.ts'
 import type { LookWindow } from './world/windows.ts'
 import { buildWindowData, coarseLight } from './world/window-build.ts'
@@ -30,17 +28,9 @@ self.onmessage = (e: MessageEvent<TileRequest>) => {
     if (q.type === 'map') {
       const t0 = performance.now()
       const cat = JSON.parse(q.kindsText) as Catalogue
-      const raw = JSON.parse(q.mapText) as unknown
-      const issues = validate(raw, cat)
-      if (issues.length) throw new Error(`${q.win.map}: ${issues[0].path}: ${issues[0].message}`)
       const files = new Map(Object.entries(q.files).map(([k, b]) => [k, new Uint8Array(b)]))
-      const checked = checkFiles(raw as MapFile, cat, files)
-      if (checked.issues.length)
-        {throw new Error(`${q.win.map}: ${checked.issues[0].path}: ${checked.issues[0].message}`)}
-      const ex = expand(raw as MapFile, cat)
-      if (ex.issues.length) throw new Error(`${q.win.map}: ${ex.issues[0].message}`)
-      const layers = apply(ex.map, cat, checked.dems)
-      world = { win: q.win, map: ex.map, layers, light: coarseLight(layers) }
+      const { map, layers } = compileMap(q.win.map, JSON.parse(q.mapText), cat, files)
+      world = { win: q.win, map, layers, light: coarseLight(layers) }
       post({ type: 'map', ms: performance.now() - t0 })
       return
     }

@@ -11,11 +11,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { MapDef } from './formation-field.ts'
 import type { Catalogue, MapFile } from '../src/map/schema.ts'
-import { checkFiles, validate } from '../src/map/validate.ts'
+import { compileMap } from '../src/map/compile.ts'
 import { readMapFiles } from './map-files.ts'
-import { expand } from '../src/map/expand.ts'
 import type { Layers } from '../src/map/apply.ts'
-import { apply, CELL, heightOf } from '../src/map/apply.ts'
+import { CELL, heightOf } from '../src/map/apply.ts'
 import type { Classify } from '../src/rulesets/ground.ts'
 import { groundCell, simDepth } from './cell.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
@@ -33,24 +32,8 @@ export function layersOf(file: string, seed?: number): { map: MapFile; layers: L
   // another battlefield from the same intent (docs/plans/done/m3-generators.md);
   // a file that is no map fails validation below
   if (seed !== undefined && raw !== null && typeof raw === 'object' && !Array.isArray(raw)) raw.seed = seed
-  const issues = validate(raw, cat)
-  if (issues.length) {
-    throw new Error(
-      `${file}: ${issues
-        .slice(0, 5)
-        .map(i => `${i.id ?? ''} ${i.path}: ${i.message}`)
-        .join('; ')}`,
-    )
-  }
-  const files = checkFiles(
-    raw as unknown as MapFile,
-    cat,
-    readMapFiles(path.resolve(ROOT, file), raw as unknown as MapFile),
-  )
-  if (files.issues.length) throw new Error(`${file}: ${files.issues[0].path}: ${files.issues[0].message}`)
-  const ex = expand(raw as unknown as MapFile, cat)
-  if (ex.issues.length) throw new Error(`${file}: ${ex.issues[0].message}`)
-  return { map: ex.map, layers: apply(ex.map, cat, files.dems) }
+  // (a file that is no map fails validation in compileMap)
+  return compileMap(file, raw, cat, readMapFiles(path.resolve(ROOT, file), raw as unknown as MapFile))
 }
 
 export function engineMap(
