@@ -67,5 +67,5 @@ function heading(roster: Roster, route: RosterRoute, count: number): HTMLElement
 
 function cards(entries: Entry[], route: RosterRoute, go: Go): HTMLElement[] {
   if (!entries.length) return [h('p', { class: 'empty mono' }, 'None painted yet')]
-  return entries.map((entry, index) => card(entry, index, () => go({ ...route, open: index })))
+  return entries.map((entry, index) => card(entry, index, () => go({ ...route, open: entry.id })))
 }

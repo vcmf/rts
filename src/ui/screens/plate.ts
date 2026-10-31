@@ -4,13 +4,15 @@ import { find, h, paintArmy } from '../dom.ts'
 import { historyImage } from '../images.ts'
 import { plateOf } from '../plate.ts'
 import type { Roster } from '../roster.ts'
-import type { Route, RosterRoute } from '../route.ts'
+import type { Move, Route, RosterRoute } from '../route.ts'
 
-/** Shows the plate `route` opens in `root`, or hides `root` when it opens none. */
-export function renderPlate(root: HTMLElement, roster: Roster, route: Route, go: (route: Route) => void): void {
+type Go = (route: Route, move?: Move) => void
+
+/** Shows the plate `route` opens in `root`, or hides `root` when it opens none; returns whether one is shown. */
+export function renderPlate(root: HTMLElement, roster: Roster, route: Route, go: Go): boolean {
   const plate = route.screen === 'roster' ? plateOf(roster, route) : null
   root.hidden = !plate
-  if (!plate || route.screen !== 'roster') return
+  if (!plate || route.screen !== 'roster') return false
   paintArmy(root, plate.nation.colour)
   const img = find<HTMLImageElement>('[data-slot=image]', root)
   img.src = historyImage(plate.entry.image)
@@ -22,13 +24,15 @@ export function renderPlate(root: HTMLElement, roster: Roster, route: Route, go:
   find('[data-slot=position]', root).textContent = `${plate.index + 1} / ${plate.total}`
   const facts = plate.facts.flatMap(([label, value]) => [h('dt', { class: 'mono' }, label), h('dd', {}, value)])
   find('[data-slot=facts]', root).replaceChildren(...facts)
-  wireTurn(find<HTMLButtonElement>('[data-turn=prev]', root), route, plate.index - 1, plate.total, go)
-  wireTurn(find<HTMLButtonElement>('[data-turn=next]', root), route, plate.index + 1, plate.total, go)
-  find<HTMLButtonElement>('[data-turn=close]', root).onclick = () => go({ ...route, open: null })
+  wireTurn(find<HTMLButtonElement>('[data-turn=prev]', root), route, plate.prev, go)
+  wireTurn(find<HTMLButtonElement>('[data-turn=next]', root), route, plate.next, go)
+  find<HTMLButtonElement>('[data-turn=close]', root).onclick = () => go({ ...route, open: null }, 'up')
+  return true
 }
 
-/** A previous / next button: to entry `to`, disabled past either end. */
-function wireTurn(button: HTMLButtonElement, route: RosterRoute, to: number, total: number, go: (r: Route) => void) {
-  button.disabled = to < 0 || to >= total
-  button.onclick = () => go({ ...route, open: to })
+/** A previous / next button: to entry `to` in place of this plate (a turn, not a new history entry); disabled at the
+ *  ends. */
+function wireTurn(button: HTMLButtonElement, route: RosterRoute, to: string | null, go: Go): void {
+  button.disabled = to === null
+  button.onclick = () => go({ ...route, open: to }, 'replace')
 }

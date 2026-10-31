@@ -20,9 +20,10 @@ function press(key) {
 /** Every check: each returns a list of failures (empty when it passes). */
 const MENU_CHECKS = {
   /** The page is no wider than the window on every screen it shows. */
-  async overflow() {
+  async overflow(expected) {
     const failures = []
-    for (const hash of ['#home', '#history', '#roster/regiments', '#roster/commanders/x/all/0']) {
+    const plate = `#roster/commanders/x/all/${encodeURIComponent(expected.commanders[0].id)}`
+    for (const hash of ['#home', '#history', '#roster/regiments', plate]) {
       await visit(hash)
       const over = document.documentElement.scrollWidth - innerWidth
       if (over > 0) failures.push(`overflow: ${hash} is ${over} px wider than the window`)
@@ -90,16 +91,23 @@ const MENU_CHECKS = {
     return failures
   },
 
-  /** A plate shows its entry, the arrows turn it, Esc walks back to home one level at a time. */
+  /** A card opens its plate (modal: focus on Close, the roster inert), the arrows turn it, Esc closes it back onto
+   *  the card last shown, then walks back to home one level at a time. */
   async plateAndEscape(expected) {
     const failures = []
     const nation = expected.nations[0].id
     const first = expected.regiments.filter(e => e.nation === nation)
-    await visit(`#roster/regiments/${nation}/all/0`)
+    await visit(`#roster/regiments/${nation}/all`)
+    document.querySelector('#roster .card').click()
+    await settle()
     const name = () => document.querySelector('#plate [data-slot=name]').textContent
     if (document.querySelector('#plate').hidden || name() !== first[0].name) {
-      failures.push('plate: the first plate is not shown')
+      failures.push('plate: a click on the first card did not open its plate')
     }
+    if (document.activeElement !== document.querySelector('#plate [data-turn=close]')) {
+      failures.push('plate: focus is not on its Close button')
+    }
+    if (!document.querySelector('#roster').inert) failures.push('plate: the roster behind it is not inert')
     press('ArrowRight')
     await settle()
     if (first.length > 1 && name() !== first[1].name) failures.push('plate: ArrowRight did not turn to the next entry')
@@ -107,7 +115,11 @@ const MENU_CHECKS = {
     for (let i = 0; i < 3; i++) {
       press('Escape')
       await settle()
+      await settle()
       back.push(location.hash.split('/')[0] + (document.querySelector('#plate').hidden ? '' : '+plate'))
+      if (i === 0 && document.activeElement?.dataset.id !== first[Math.min(1, first.length - 1)].id) {
+        failures.push('Esc: focus did not return to the card last shown')
+      }
     }
     if (back.join() !== '#roster,#history,#home') failures.push(`Esc: walked back ${back.join(' → ')}`)
     return failures

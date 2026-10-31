@@ -7,6 +7,7 @@
 // design/ is not in git, so this runs locally, not on CI; the committed roster and thumbnails are what ships. From a
 // worktree without design/: HISTORY_DESIGN=<main checkout>/design node tools/build-history-data.ts
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,10 +20,13 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DESIGN = process.env.HISTORY_DESIGN ?? path.join(ROOT, 'design')
 export const HISTORY_DIR = path.join(ROOT, 'data', 'history')
 export const ROSTER_FILE = path.join(HISTORY_DIR, 'roster.json')
+/** What each thumbnail was made from: the settings and each source's hash (its mtime is the checkout's, not the
+ *  painting's). A thumbnail is remade when either differs, and --check compares it. */
+export const THUMBS_FILE = path.join(HISTORY_DIR, 'thumbs.json')
 /** The thumbnails' longest side, px: sharp on the full plate at 1080 p (it shows them about 700 px tall). */
-const THUMB_PX = 720
+export const THUMB_PX = 720
 /** JPEG quality: the paintings' texture keeps 72 indistinguishable from 82 at this size, a fifth smaller. */
-const THUMB_QUALITY = 72
+export const THUMB_QUALITY = 72
 
 /** A source painting (path under design/) and the thumbnail it becomes (path under data/history/). */
 interface ImageJob {
@@ -86,11 +90,41 @@ export function rosterText(roster: Roster): string {
   return JSON.stringify(roster, null, 1) + '\n'
 }
 
-/** Makes the thumbnail of `job` when it is missing or older than its source. Returns true when it made one. */
-function makeThumb(job: ImageJob): boolean {
+/** The thumbnails' record: the settings they are made at, and each image's source hash (sha256). */
+export interface ThumbRecord {
+  px: number
+  quality: number
+  sources: Record<string, string>
+}
+
+/** The record the thumbnails of `jobs` should have, from the sources as they are now. */
+function thumbRecord(jobs: ImageJob[]): ThumbRecord {
+  const sources: Record<string, string> = {}
+  for (const job of jobs) {
+    sources[job.image] = createHash('sha256')
+      .update(fs.readFileSync(path.join(DESIGN, job.source)))
+      .digest('hex')
+  }
+  return { px: THUMB_PX, quality: THUMB_QUALITY, sources }
+}
+
+const recordText = (record: ThumbRecord) => JSON.stringify(record, null, 1) + '\n'
+
+/** The record on disk, or null when there is none. */
+function readRecord(): ThumbRecord | null {
+  return fs.existsSync(THUMBS_FILE) ? JSON.parse(fs.readFileSync(THUMBS_FILE, 'utf8')) : null
+}
+
+/** True when the thumbnail `image` must be (re)made: missing, made at other settings, or from another source. */
+function isStale(image: string, want: ThumbRecord, had: ThumbRecord | null): boolean {
+  if (!fs.existsSync(path.join(HISTORY_DIR, image)) || !had) return true
+  return had.px !== want.px || had.quality !== want.quality || had.sources[image] !== want.sources[image]
+}
+
+/** Makes the thumbnail of `job` (macOS `sips`). */
+function makeThumb(job: ImageJob): void {
   const source = path.join(DESIGN, job.source)
   const out = path.join(HISTORY_DIR, job.image)
-  if (fs.existsSync(out) && fs.statSync(out).mtimeMs >= fs.statSync(source).mtimeMs) return false
   fs.mkdirSync(path.dirname(out), { recursive: true })
   const args = [
     '-Z',
@@ -106,20 +140,29 @@ function makeThumb(job: ImageJob): boolean {
     out,
   ]
   execFileSync('sips', args, { stdio: 'ignore' })
-  return true
 }
+
+/** True when the file at `file` holds `text` exactly. */
+const holds = (file: string, text: string) => fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text
 
 function main(): void {
   const { roster, jobs } = buildRoster()
   const text = rosterText(roster)
+  const record = thumbRecord(jobs)
   if (process.argv.includes('--check')) {
-    const same = fs.existsSync(ROSTER_FILE) && fs.readFileSync(ROSTER_FILE, 'utf8') === text
-    console.log(same ? 'roster.json: up to date' : 'roster.json: differs from the design libraries (rebuild it)')
-    process.exit(same ? 0 : 1)
+    const rosterOk = holds(ROSTER_FILE, text)
+    const thumbsOk = holds(THUMBS_FILE, recordText(record))
+    console.log(rosterOk ? 'roster.json: up to date' : 'roster.json: differs from the design libraries (rebuild it)')
+    console.log(thumbsOk ? 'thumbs.json: up to date' : 'thumbs.json: a thumbnail is stale or missing (rebuild it)')
+    process.exit(rosterOk && thumbsOk ? 0 : 1)
   }
   fs.mkdirSync(HISTORY_DIR, { recursive: true })
   fs.writeFileSync(ROSTER_FILE, text)
-  const made = jobs.filter(makeThumb).length
+  const had = readRecord()
+  const stale = jobs.filter(job => isStale(job.image, record, had))
+  for (const job of stale) makeThumb(job)
+  fs.writeFileSync(THUMBS_FILE, recordText(record))
+  const made = stale.length
   console.log(`${roster.commanders.length} commanders, ${roster.regiments.length} regiments; ${made} thumbnails made`)
 }
 

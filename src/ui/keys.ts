@@ -1,18 +1,27 @@
 // The front menu's keyboard: what a key does on the current route. Pure, so the page only performs the action.
 // docs/systems/front-menu.md ("Keyboard").
-import { parentRoute, type Route, type RosterRoute } from './route.ts'
+import { parentRoute, type Move, type Route, type RosterRoute } from './route.ts'
 
 export type KeyAction =
-  | { type: 'go'; route: Route }
+  | { type: 'go'; route: Route; move: Move }
   /** move the home menu's selection by one live item */
   | { type: 'step'; by: 1 | -1 }
   /** open the home menu's selected item */
   | { type: 'activate' }
 
-/** The action of `key` (a KeyboardEvent.key) on `route`; `entries` is the open roster's length. Null: not ours. */
-export function keyAction(route: Route, key: string, entries: number): KeyAction | null {
-  if (key === 'Escape') return route.screen === 'home' ? null : { type: 'go', route: parentRoute(route) }
-  if (route.screen === 'roster' && route.open !== null) return plateKey(route, route.open, key, entries)
+/** The keys a press carries: its KeyboardEvent.key and whether a modifier was held. */
+export interface Press {
+  key: string
+  modified: boolean
+}
+
+/** The action of `press` on `route`; `ids` are the open roster's entry ids, in order. Null: not ours (a key held
+ *  with Alt, Ctrl or Meta is the browser's: Alt+← is Back). */
+export function keyAction(route: Route, press: Press, ids: readonly string[]): KeyAction | null {
+  if (press.modified) return null
+  const { key } = press
+  if (key === 'Escape') return route.screen === 'home' ? null : { type: 'go', route: parentRoute(route), move: 'up' }
+  if (route.screen === 'roster' && route.open !== null) return plateKey(route, route.open, key, ids)
   if (route.screen !== 'home') return null
   if (key === 'ArrowDown') return { type: 'step', by: 1 }
   if (key === 'ArrowUp') return { type: 'step', by: -1 }
@@ -20,11 +29,13 @@ export function keyAction(route: Route, key: string, entries: number): KeyAction
   return null
 }
 
-/** On an open plate: the arrows turn to the next or previous entry, stopping at the ends. */
-function plateKey(route: RosterRoute, open: number, key: string, entries: number): KeyAction | null {
-  if (key === 'ArrowRight' && open < entries - 1) return { type: 'go', route: { ...route, open: open + 1 } }
-  if (key === 'ArrowLeft' && open > 0) return { type: 'go', route: { ...route, open: open - 1 } }
-  return null
+/** On an open plate: the arrows turn to the next or previous entry, stopping at the ends; a turn replaces the
+ *  history entry, so Back leaves the plates rather than replaying them. */
+function plateKey(route: RosterRoute, open: string, key: string, ids: readonly string[]): KeyAction | null {
+  const at = ids.indexOf(open)
+  const to = key === 'ArrowRight' ? at + 1 : key === 'ArrowLeft' ? at - 1 : -1
+  if (at < 0 || to < 0 || to >= ids.length) return null
+  return { type: 'go', route: { ...route, open: ids[to] }, move: 'replace' }
 }
 
 /** The index of the next live item from `from` by `by`, wrapping; `from` itself when no other item is live. Muted

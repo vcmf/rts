@@ -5,18 +5,23 @@ import { historyImage } from './images.ts'
 import { captionOf } from './plate.ts'
 import type { Entry } from './roster.ts'
 
-/** A meter's cells: how many of `cells` a `value` of `max` fills, rounded to the nearest, at least one for any value
- *  above zero (a unit with a few men left still shows them), never more than `cells`. */
-export function meterCells(value: number, max: number, cells = 10): number {
+/** A meter's cells (the theme's `.meter` grid, src/ui/theme.css). */
+export const METER_CELLS = 10
+
+/** How many of a meter's cells a `value` of `max` fills: rounded to the nearest, at least one for any value above
+ *  zero (a unit with a few men left still shows them), never more than all. */
+export function meterCells(value: number, max: number): number {
   if (!(value > 0) || !(max > 0)) return 0
-  const filled = Math.round((value / max) * cells)
-  return Math.min(cells, Math.max(1, filled))
+  const filled = Math.round((value / max) * METER_CELLS)
+  return Math.min(METER_CELLS, Math.max(1, filled))
 }
 
-/** A ten-cell meter with `filled` cells on; `low` draws them in the accent. */
-export function meter(filled: number, low = false): HTMLElement {
-  const cells = Array.from({ length: 10 }, (_, i) => h('i', { class: i < filled ? 'on' : undefined }))
-  return h('div', { class: low ? 'meter low' : 'meter', role: 'meter', 'aria-valuenow': String(filled) }, ...cells)
+/** A meter showing `value` of `max`; `low` draws its filled cells in the accent. */
+export function meter(value: number, max: number, low = false): HTMLElement {
+  const filled = meterCells(value, max)
+  const cells = Array.from({ length: METER_CELLS }, (_, i) => h('i', { class: i < filled ? 'on' : undefined }))
+  const aria = { role: 'meter', 'aria-valuenow': String(value), 'aria-valuemin': '0', 'aria-valuemax': String(max) }
+  return h('div', { class: low ? 'meter low' : 'meter', ...aria }, ...cells)
 }
 
 /** A roster card: the framed painting and its caption, the `index`-th of its roster; `open` runs on a click. The

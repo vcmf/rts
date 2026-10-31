@@ -1,10 +1,10 @@
 // The specimen sheet (app/ui-kit.html): fills the samples that come from data (the army colours, cards, meters) and
 // makes the settings controls and the dialog live. docs/systems/front-menu.md ("The specimen sheet").
-import ROSTER_URL from '../../data/history/roster.json?url'
 import { find, h, paintArmy } from './dom.ts'
 import { card, meter } from './elements.ts'
 import { historyImage } from './images.ts'
-import { entryById, type Roster } from './roster.ts'
+import { loadRoster } from './load.ts'
+import { entryById, isRegiment, type Roster } from './roster.ts'
 
 /** Paints every `[data-army=<i>]` with the roster's i-th army. */
 function paintArmies(roster: Roster): void {
@@ -25,7 +25,8 @@ function armySwatches(roster: Roster): HTMLElement[] {
 /** The cards: a commander, a regiment, and a regiment drawn as hovered. */
 function sampleCards(roster: Roster): HTMLElement[] {
   const commander = entryById(roster, 'commanders', roster.featured.commanders)
-  const regiment = roster.regiments.find(r => r.id === roster.featured.regiments)
+  const featured = entryById(roster, 'regiments', roster.featured.regiments)
+  const regiment = featured && isRegiment(featured) ? featured : undefined
   // a regiment of another arm from the same army, to show the hover beside the rest
   const hovered = roster.regiments.find(r => r.nation === regiment?.nation && r.arm !== regiment.arm) ?? regiment
   const samples = [commander, regiment, hovered].flatMap((entry, i) => (entry ? [card(entry, i)] : []))
@@ -35,7 +36,9 @@ function sampleCards(roster: Roster): HTMLElement[] {
 
 function fillMeters(): void {
   for (const node of document.querySelectorAll<HTMLElement>('[data-meter]')) {
-    node.replaceWith(meter(Number(node.dataset.meter), node.classList.contains('low')))
+    // data-meter="<value>/<max>"
+    const [value, max] = (node.dataset.meter ?? '0/1').split('/').map(Number)
+    node.replaceWith(meter(value, max, node.classList.contains('low')))
   }
 }
 
@@ -87,7 +90,7 @@ function liveDialog(): void {
 }
 
 async function main(): Promise<void> {
-  const roster: Roster = await (await fetch(ROSTER_URL)).json()
+  const roster = await loadRoster()
   paintArmies(roster)
   find('[data-slot=armies]').replaceChildren(...armySwatches(roster))
   const cards = find('[data-slot=cards]')

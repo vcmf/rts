@@ -7,38 +7,54 @@ import type { Route } from '../src/ui/route.ts'
 const HOME: Route = { screen: 'home' }
 const HISTORY: Route = { screen: 'history' }
 const ROSTER: Route = { screen: 'roster', kind: 'regiments', nation: 'north', arm: 'all', open: null }
-const plate = (open: number): Route => ({ screen: 'roster', kind: 'regiments', nation: 'north', arm: 'all', open })
+const IDS = ['n/1', 'n/2', 'n/3']
+const plate = (open: string): Route => ({ screen: 'roster', kind: 'regiments', nation: 'north', arm: 'all', open })
+const key = (k: string) => ({ key: k, modified: false })
 
 describe('keyAction', () => {
   it('moves and opens the home menu with the arrows and Enter', () => {
-    expect(keyAction(HOME, 'ArrowDown', 0)).toEqual({ type: 'step', by: 1 })
-    expect(keyAction(HOME, 'ArrowUp', 0)).toEqual({ type: 'step', by: -1 })
-    expect(keyAction(HOME, 'Enter', 0)).toEqual({ type: 'activate' })
+    expect(keyAction(HOME, key('ArrowDown'), [])).toEqual({ type: 'step', by: 1 })
+    expect(keyAction(HOME, key('ArrowUp'), [])).toEqual({ type: 'step', by: -1 })
+    expect(keyAction(HOME, key('Enter'), [])).toEqual({ type: 'activate' })
   })
 
-  it('goes one level back on Escape, and does nothing with it at home', () => {
-    expect(keyAction(plate(2), 'Escape', 5)).toEqual({ type: 'go', route: ROSTER })
-    expect(keyAction(ROSTER, 'Escape', 5)).toEqual({ type: 'go', route: HISTORY })
-    expect(keyAction(HISTORY, 'Escape', 0)).toEqual({ type: 'go', route: HOME })
-    expect(keyAction(HOME, 'Escape', 0)).toBeNull()
+  it('goes one level up on Escape, and does nothing with it at home', () => {
+    expect(keyAction(plate('n/2'), key('Escape'), IDS)).toEqual({ type: 'go', route: ROSTER, move: 'up' })
+    expect(keyAction(ROSTER, key('Escape'), IDS)).toEqual({ type: 'go', route: HISTORY, move: 'up' })
+    expect(keyAction(HISTORY, key('Escape'), [])).toEqual({ type: 'go', route: HOME, move: 'up' })
+    expect(keyAction(HOME, key('Escape'), [])).toBeNull()
   })
 
-  it('turns the open plate with the arrows, stopping at either end', () => {
-    expect(keyAction(plate(2), 'ArrowRight', 5)).toEqual({ type: 'go', route: plate(3) })
-    expect(keyAction(plate(2), 'ArrowLeft', 5)).toEqual({ type: 'go', route: plate(1) })
-    expect(keyAction(plate(4), 'ArrowRight', 5)).toBeNull()
-    expect(keyAction(plate(0), 'ArrowLeft', 5)).toBeNull()
+  it('turns the open plate with the arrows, in place of the history entry, stopping at either end', () => {
+    expect(keyAction(plate('n/2'), key('ArrowRight'), IDS)).toEqual({
+      type: 'go',
+      route: plate('n/3'),
+      move: 'replace',
+    })
+    expect(keyAction(plate('n/2'), key('ArrowLeft'), IDS)).toEqual({ type: 'go', route: plate('n/1'), move: 'replace' })
+    expect(keyAction(plate('n/3'), key('ArrowRight'), IDS)).toBeNull()
+    expect(keyAction(plate('n/1'), key('ArrowLeft'), IDS)).toBeNull()
+  })
+
+  it('does not turn a plate the roster does not show', () => {
+    expect(keyAction(plate('s/9'), key('ArrowRight'), IDS)).toBeNull()
+  })
+
+  it('leaves keys held with a modifier to the browser (Alt+← is Back)', () => {
+    expect(keyAction(plate('n/2'), { key: 'ArrowLeft', modified: true }, IDS)).toBeNull()
+    expect(keyAction(HOME, { key: 'ArrowDown', modified: true }, [])).toBeNull()
+    expect(keyAction(ROSTER, { key: 'Escape', modified: true }, IDS)).toBeNull()
   })
 
   it('leaves other keys, and the arrows off home and plates, to the browser', () => {
-    expect(keyAction(HOME, 'a', 0)).toBeNull()
-    expect(keyAction(ROSTER, 'ArrowDown', 5)).toBeNull()
-    expect(keyAction(HISTORY, 'Enter', 0)).toBeNull()
+    expect(keyAction(HOME, key('a'), [])).toBeNull()
+    expect(keyAction(ROSTER, key('ArrowDown'), IDS)).toBeNull()
+    expect(keyAction(HISTORY, key('Enter'), [])).toBeNull()
   })
 })
 
 describe('stepLive', () => {
-  // the home menu: Campaign, Battles muted; History, Settings… as the page has them, plus a second live item
+  // as on the home menu: muted items between live ones
   const live = [false, false, true, false, true]
 
   it('skips muted items both ways', () => {

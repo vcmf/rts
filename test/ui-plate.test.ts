@@ -7,7 +7,7 @@ import type { RosterRoute } from '../src/ui/route.ts'
 import { fixtureRoster } from './ui-fixture.ts'
 
 const roster = fixtureRoster()
-const route = (kind: RosterRoute['kind'], nation: string, arm: string, open: number | null): RosterRoute => ({
+const route = (kind: RosterRoute['kind'], nation: string, arm: string, open: string | null): RosterRoute => ({
   screen: 'roster',
   kind,
   nation,
@@ -36,20 +36,21 @@ describe('captionOf', () => {
 })
 
 describe('plateOf', () => {
-  it('is null when no plate is open, or the index is past the entries', () => {
+  it('is null when no plate is open, or its entry is not among the filtered ones', () => {
     expect(plateOf(roster, route('regiments', 'north', 'all', null))).toBeNull()
-    expect(plateOf(roster, route('regiments', 'north', 'all', 3))).toBeNull()
+    expect(plateOf(roster, route('regiments', 'north', 'all', 'south/01-foot'))).toBeNull()
   })
 
   it("places the entry among the filtered roster's", () => {
-    const plate = plateOf(roster, route('regiments', 'north', 'foot', 1))
+    const plate = plateOf(roster, route('regiments', 'north', 'foot', 'north/02-foot'))
     expect(plate).toMatchObject({ index: 1, total: 2, figure: 'Plate II · No. 02', subtitle: 'foot of north' })
+    expect(plate).toMatchObject({ prev: 'north/01-foot', next: null })
     expect(plate?.entry.id).toBe('north/02-foot')
     expect(plate?.nation.id).toBe('north')
   })
 
   it("gives a commander's life, likeness and army", () => {
-    const plate = plateOf(roster, route('commanders', 'north', 'all', 0))
+    const plate = plateOf(roster, route('commanders', 'north', 'all', 'north/a'))
     expect(plate?.figure).toBe('Plate I · 01')
     expect(plate?.facts).toEqual([
       ['Life', 'a life'],
@@ -59,11 +60,11 @@ describe('plateOf', () => {
   })
 
   it('leaves out the facts the library has no value for', () => {
-    expect(plateOf(roster, route('commanders', 'north', 'all', 1))?.facts).toEqual([['Army', 'North']])
+    expect(plateOf(roster, route('commanders', 'north', 'all', 'north/b'))?.facts).toEqual([['Army', 'North']])
   })
 
   it("gives a regiment's arm and army", () => {
-    expect(plateOf(roster, route('regiments', 'south', 'all', 1))?.facts).toEqual([
+    expect(plateOf(roster, route('regiments', 'south', 'all', 'south/02-guns'))?.facts).toEqual([
       ['Arm', 'guns'],
       ['Army', 'South'],
     ])
@@ -90,6 +91,5 @@ describe('meterCells', () => {
 
   it('never overfills', () => {
     expect(meterCells(1300, 1000)).toBe(10)
-    expect(meterCells(3, 4, 5)).toBe(4)
   })
 })

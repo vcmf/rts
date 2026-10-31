@@ -20,6 +20,7 @@ const SIZES: [number, number][] = [
 /** A sabotage (evaluated in the page after the roster is copied, before the check) and the failure it must cause. */
 export const SABOTAGES: [name: string, js: string, expect: string][] = [
   ['a regiment the page drops', 'MENU.roster.regiments.splice(3, 1)', 'cards:'],
+  ['a plate that leaves focus behind', 'document.querySelector("#plate [data-turn=close]").focus = () => {}', 'plate:'],
   ['a muted item made focusable', 'document.querySelector(".menu-item.muted").tabIndex = 0', 'muted:'],
   [
     'a page wider than the window',

@@ -44,18 +44,25 @@ keydown ──keyAction(route, key)──▶ go(route) | step | activate
   image) and regiments (library number, name, detail, arm, image). `rosterProblems` checks it (unique ids, known
   nations and arms, an image each, the featured entries present); the page refuses an unsound roster, the data tool
   refuses to write one, and a test checks the committed one.
-- **Routes** (`src/ui/route.ts`): `#home`, `#history`, `#roster/<kind>/<nation>/<arm>[/<open>]`. `parseRoute` reads
-  what is written; `normalizeRoute` repairs it against the roster (an unknown army becomes the first, commanders and
-  unknown arms show every arm, a plate index past the entries closes the plate) and the page rewrites the hash in
-  place. `parentRoute` is one level up: plate → roster → History → home.
+- **Routes** (`src/ui/route.ts`): `#home`, `#history`, `#roster/<kind>/<nation>/<arm>[/<entry id>]`. A plate is named
+  by its entry's id, not its place, so a link survives a rebuilt roster. `parseRoute` reads what is written (a hash
+  that does not decode is home); `normalizeRoute` repairs it against the roster (an unknown army becomes the first,
+  commanders and unknown arms show every arm, a plate the filtered roster does not show closes) and the page rewrites
+  the hash in place. `parentRoute` is one level up: plate → roster → History → home.
+- **History moves** (`Move`): opening something pushes a history entry; turning a plate replaces it; going up (Esc,
+  Close) goes back when the page came from there (`upMove`) and replaces otherwise, so Back never reopens what Esc
+  closed and a run of turned plates is one entry.
 - **Keyboard** (`src/ui/keys.ts`): on home, ↑ and ↓ move between live items (muted ones are skipped, `stepLive`) and
   Enter opens the chosen one; on a plate, ← and → turn to the previous and next entry; Esc goes one level up
-  everywhere. A key the screen does not use is left to the browser.
+  everywhere. A key the screen does not use, or held with Alt, Ctrl or Meta (Alt+← is Back), is left to the browser.
+  On home, the selection follows focus and focus follows the selection, so Enter opens what looks chosen.
 - **What a card and a plate say** (`src/ui/plate.ts`): a regiment keeps its library number ("No. 13") and shows its
   arm; a commander is numbered by his place ("Fig. 04"). The plate lists life, likeness note and army (regiment:
   arm and army), leaving out what the library leaves empty.
 - **Screens** (`src/ui/screens/`): each fills the markup `app/menu.html` gives it (`data-slot` holes) from the route
-  and the roster; none keeps state but the home menu's selection. `src/ui/elements.ts` builds the elements made in
+  and the roster; none keeps state but the home menu's selection. The grid is redrawn only when its kind, nation or
+  arm changes (`sameGrid`), not when a plate opens or turns. The plate is modal: the roster behind it is inert, focus
+  goes to Close as it opens and back to the card last shown as it closes. `src/ui/elements.ts` builds the elements made in
   code (the card, the meter), shared by the screens and the specimen sheet.
 - **The interface language** (`src/ui/theme.css`, decision 0100): tokens (paper, raised and sunk paper, ink, soft
   ink, pencil, rule, the one accent), type (condensed display, text, mono labels, mono data), the ticked frame and the
@@ -69,7 +76,9 @@ keydown ──keyAction(route, key)──▶ go(route) | step | activate
 ## Tunables
 
 - The armies and their colours, the arm rules, the featured entries: `tools/history-content.ts` (then rebuild).
-- The thumbnails' size and quality: `THUMB_PX`, `THUMB_QUALITY` in `tools/build-history-data.ts`.
+- The thumbnails' size and quality: `THUMB_PX`, `THUMB_QUALITY` in `tools/build-history-data.ts`. What each thumbnail
+  was made from (the settings, each source's sha256) is recorded in `data/history/thumbs.json`; a thumbnail is remade
+  when either changes.
 - Colours, type, line weights, the frame's ticks and the motion: the tokens at the top of `src/ui/theme.css`.
 
 ## Verification
@@ -80,10 +89,11 @@ keydown ──keyAction(route, key)──▶ go(route) | step | activate
 - `node tools/menu-check.ts <built menu URL>` (after `npm run build` and `npx vite preview`): at 1440 × 900 and
   390 × 844, no screen wider than the window; muted items unfocusable and unclickable; History's counts and plates;
   every army's roster of each kind and arm shows exactly the roster's entries; a plate opens, turns and Esc walks
-  back to home; every card's thumbnail loads. `--selftest` also runs four sabotages (a regiment dropped, a muted item
+  back to home, focus on Close while a plate is open (the roster inert) and back on the card after; every card's
+  thumbnail loads. `--selftest` also runs five sabotages (a regiment dropped, focus left behind, a muted item
   focusable, a page too wide, Esc swallowed) and fails unless each is caught.
-- `node tools/build-history-data.ts --check`: the committed roster matches the design libraries (locally: `design/`
-  is not in git).
+- `node tools/build-history-data.ts --check`: the committed roster and thumbnail record match the design libraries
+  (locally: `design/` is not in git; from a worktree, `HISTORY_DESIGN=<main checkout>/design`).
 
 ## Open questions
 

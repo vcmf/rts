@@ -1,11 +1,19 @@
 // The committed History roster (data/history/roster.json, written by tools/build-history-data.ts): sound, every
-// image it names on disk and no image it does not, and in step with its content (tools/history-content.ts).
+// image it names on disk and no image it does not, in step with its content (tools/history-content.ts), and its
+// thumbnails' record (data/history/thumbs.json) in step with the tool's settings.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { ARM_RULES, ARMS, DEFAULT_ARM, FEATURED, NATIONS } from '../tools/history-content.ts'
 import { armOfSlug } from '../tools/history-sources.ts'
-import { HISTORY_DIR, ROSTER_FILE } from '../tools/build-history-data.ts'
+import {
+  HISTORY_DIR,
+  ROSTER_FILE,
+  THUMBS_FILE,
+  THUMB_PX,
+  THUMB_QUALITY,
+  type ThumbRecord,
+} from '../tools/build-history-data.ts'
 import { KINDS, rosterProblems, type Entry, type Roster } from '../src/ui/roster.ts'
 
 const roster: Roster = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'))
@@ -45,5 +53,17 @@ describe('data/history/roster.json', () => {
   it("gives each regiment the arm today's rules give its slug (rebuild after changing the rules)", () => {
     const stale = roster.regiments.filter(r => armOfSlug(r.id.split('/')[1], ARM_RULES, DEFAULT_ARM) !== r.arm)
     expect(stale.map(r => r.id)).toEqual([])
+  })
+})
+
+describe('data/history/thumbs.json', () => {
+  const record: ThumbRecord = JSON.parse(fs.readFileSync(THUMBS_FILE, 'utf8'))
+
+  it('records a source for every thumbnail the roster names, and no other', () => {
+    expect(Object.keys(record.sources).sort()).toEqual(entries.map(e => e.image).sort())
+  })
+
+  it("was made at the tool's settings (rebuild after changing them)", () => {
+    expect([record.px, record.quality]).toEqual([THUMB_PX, THUMB_QUALITY])
   })
 })

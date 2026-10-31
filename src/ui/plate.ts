@@ -16,6 +16,9 @@ export interface Plate {
   nation: Nation
   index: number
   total: number
+  /** the ids of the entries before and after it, null at either end */
+  prev: string | null
+  next: string | null
   /** the plate's figure line, "Plate II · No. 13" */
   figure: string
   subtitle: string
@@ -36,15 +39,18 @@ export function captionOf(entry: Entry, index: number): Caption {
 export function plateOf(roster: Roster, route: RosterRoute): Plate | null {
   if (route.open === null) return null
   const entries = entriesOf(roster, route)
-  const entry = entries[route.open]
+  const index = entries.findIndex(e => e.id === route.open)
+  const entry = entries[index]
   const nation = entry && nationOf(roster, entry.nation)
   if (!entry || !nation) return null
   return {
     entry,
     nation,
-    index: route.open,
+    index,
     total: entries.length,
-    figure: isRegiment(entry) ? `Plate II · No. ${entry.no}` : `Plate I · ${pad2(route.open + 1)}`,
+    prev: entries[index - 1]?.id ?? null,
+    next: entries[index + 1]?.id ?? null,
+    figure: isRegiment(entry) ? `Plate II · No. ${entry.no}` : `Plate I · ${pad2(index + 1)}`,
     subtitle: isRegiment(entry) ? entry.detail : entry.role,
     facts: factsOf(entry, nation),
   }

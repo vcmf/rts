@@ -1,5 +1,6 @@
 // The home menu: its items are in the page's markup (app/menu.html), each live one naming its route in `data-route`,
-// each muted one `aria-disabled`. This keeps the selection (keyboard and pointer) and opens the chosen item.
+// each muted one `aria-disabled`. This keeps the selection, and keeps it on the focused item: the arrows and the
+// pointer move focus with it and Tab moves it with focus, so Enter always opens the item that looks chosen.
 import { firstLive, stepLive } from '../keys.ts'
 import { parseRoute, type Route } from '../route.ts'
 
@@ -19,11 +20,9 @@ export class HomeMenu {
     this.show()
   }
 
-  /** Moves the selection by one live item. */
+  /** Moves the selection, and focus, by one live item. */
   step(by: 1 | -1): void {
-    if (this.selected < 0) return
-    this.selected = stepLive(this.live, this.selected, by)
-    this.show()
+    if (this.selected >= 0) this.select(stepLive(this.live, this.selected, by), true)
   }
 
   /** Opens the selected item. */
@@ -37,10 +36,14 @@ export class HomeMenu {
       return
     }
     item.addEventListener('click', () => this.open(i))
-    item.addEventListener('pointerenter', () => {
-      this.selected = i
-      this.show()
-    })
+    item.addEventListener('pointerenter', () => this.select(i, true))
+    item.addEventListener('focus', () => this.select(i, false))
+  }
+
+  private select(i: number, focus: boolean): void {
+    this.selected = i
+    this.show()
+    if (focus) this.items[i].focus({ preventScroll: true })
   }
 
   private open(i: number): void {
