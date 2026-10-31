@@ -10,6 +10,8 @@ import type { Materials } from './materials.ts'
 export interface Owned<T> {
   value: T
   dispose(): void
+  // its bindings run again on every painted material (a part built beside it taken away: src/look/main.ts, move)
+  rebind(): void
 }
 
 /** The scene's lists a builder may add to, and the observables a builder hooks a frame on */
@@ -68,10 +70,10 @@ export function owned<T>(scene: Scene, mats: Materials, build: () => T): Owned<T
     value = build()
   } catch (err) {
     const { added, hooks } = diff()
-    takeAway(scene, added, hooks, done())
+    takeAway(scene, added, hooks, done().forget)
     throw err
   }
   const { added, hooks } = diff()
-  const forget = done()
-  return { value, dispose: () => takeAway(scene, added, hooks, forget) }
+  const { forget, bind } = done()
+  return { value, dispose: () => takeAway(scene, added, hooks, forget), rebind: bind }
 }

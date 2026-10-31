@@ -25,13 +25,13 @@ import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
 import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { meadowLookDefines, meadowLookOf } from './meadow-look.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
-import { buildNature } from './nature.ts'
+import { buildNature, type Nature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
 import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn, zoomOf } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
-import { D, FocusFollow, TUNED_R, checkView, farDefines, groundOf, maxGrid, rectOf, type WorldGround } from './spec.ts'
+import { D, FocusFollow, TUNED_R, checkView, farDefines, groundOf, maxGrid, rectOf } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
 import {
   checkLookData,
@@ -69,7 +69,7 @@ import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
 import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
 import { BUILDINGS, YARD_ALL, YARD_BASE, onPaving, paveShape, type Building } from './world/buildings.ts'
-import { COVER, coarsenCover } from './world/cover.ts'
+import { COVER, coarsenCover, type CoverGrid } from './world/cover.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
@@ -475,9 +475,12 @@ if (woodParam !== null && woodParam !== '' && woodParam !== 'big') {
   throw new Error(`?wood takes no value or big, not ${woodParam}`)
 }
 // the tile's parts (G3b-2): each built again for a moved tile (retile, below) and the last disposed (src/look/owned.ts)
+// ?far=off: no far tree, nor its shadows (off before the bakes: the far woods' whole cost; the A/B)
+const farParam = params.get('far')
+if (farParam !== null && farParam !== 'off') throw new Error(`?far must be off, not ${farParam}`)
 const tileNature = (d: LookData) =>
-  owned(scene, mats, () =>
-    buildNature(
+  owned(scene, mats, () => {
+    const n = buildNature(
       scene,
       mats,
       water.reflAdd,
@@ -490,8 +493,10 @@ const tileNature = (d: LookData) =>
         ? { season: d === look ? season0 : S.season, clumpVolume: params.get('clumpvol') !== 'off' }
         : null,
       onMap ? d.trees : null,
-    ),
-  )
+    )
+    if (farParam === 'off') n.farCull?.off()
+    return n
+  })
 let natureOwned = tileNature(look)
 let nature = natureOwned.value
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
@@ -518,22 +523,22 @@ const buildings = buildBuildings(
   { baked: bldBaked, bounce: bldBaked && bldbounceParam === null },
   worldBuildings,
 )
-const tileBakes = () =>
+const tileBakes = (n: Nature) =>
   owned(scene, mats, () =>
     buildBakes(
       scene,
       mats,
       waterData,
       terrain.tileGround,
-      nature.canopy,
-      nature.cardCasters,
+      n.canopy,
+      n.cardCasters,
       soft,
-      nature.trunks,
-      nature.farCull,
+      n.trunks,
+      n.farCull,
       look.light ? { side: ring.x1 - ring.x0, light: look.light.nx * look.light.nz } : null,
     ),
   )
-let bakesOwned = tileBakes()
+let bakesOwned = tileBakes(nature)
 let bakes = bakesOwned.value
 // what hooks the bakes' targets (the season's rebakes, below): hooked again on a moved tile's (retile)
 const bakeHooks: (() => void)[] = []
@@ -553,11 +558,6 @@ if (bldLight) {
     if (bldLight.bounce) mt.setTexture('uBldBounce', bldLight.bounce)
   }
 }
-// ?far=off: no far tree, nor its shadows (built before the bakes: the far woods' whole cost; the A/B)
-if (params.has('far')) {
-  if (params.get('far') !== 'off') throw new Error(`?far must be off, not ${params.get('far')}`)
-  nature.farCull?.off()
-}
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm
 // (bake by default), set once every material is made; the bake runs before the first frame
 // the flow's textures (?grass=flow, src/look/flow.ts), on every painted material and the bake
@@ -576,16 +576,14 @@ const flowTex = flowOwned?.value ?? null
 // grass grows and the combed one where it does (the combed clumps reach farther: their roots keep farther from the
 // zones and the banks; the crops keep the default's rule)
 const grassReach = grassMode === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
-const tileMeadowMap = () =>
+const tileMeadowMap = (n: Nature) =>
   owned(scene, mats, () => {
     // (the same rule as the crops' on the default: one pass)
     const allowed =
-      grassReach === CLUMP_REACH
-        ? nature.growthAllowed
-        : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)
-    return buildMeadowMap(scene, mats, nature.growth, allowed, nature.crop, nature.growthAllowed)
+      grassReach === CLUMP_REACH ? n.growthAllowed : (x: number, z: number) => n.growthAllowed(x, z, grassReach)
+    return buildMeadowMap(scene, mats, n.growth, allowed, n.crop, n.growthAllowed)
   })
-let meadowMapOwned = meadowOn ? tileMeadowMap() : null
+let meadowMapOwned = meadowOn ? tileMeadowMap(nature) : null
 const meadowMap = meadowMapOwned?.value ?? null
 // the combed meadow's near bake runs only where its strokes show: out to the strokes' ring, at the zooms where a pixel
 // can be under the strokes' largest footprint (STROKE_FOOT; at the focus, the ground the screen's centre shows, under
@@ -1530,12 +1528,28 @@ Object.defineProperties(
  * then the camera's ground and the macro colour's bake. The far ring is the whole map's and stays. Not on the demo (its
  * river is the tile's). Its time, ms (until G3c spreads it over frames, one hitch)
  */
-async function retile(next: LookData): Promise<number> {
+function retile(next: LookData): Promise<number> {
+  // one move at a time (the follower and the tools' hook): a move asked for during one waits for it
+  const p = moving.then(() => move(next))
+  moving = p.catch(() => undefined)
+  return p
+}
+let moving: Promise<unknown> = Promise.resolve()
+// the check of a failed move (__look.moveFault): a move throws once its trees are built
+let moveFault: string | null = null
+// the tile's data now (the first's, or a moved tile's) and its per-frame cover
+let tileNow = look
+let frameNow = frameCover
+async function move(next: LookData): Promise<number> {
   const t0 = performance.now()
   // every check before the first change: a tile refused leaves the page as it was
   if (look.world.kind !== 'map') throw new Error("retile: a map world only (the demo's river is its tile's)")
   // (what is not rebuilt yet: the buildings' light and the units' shade hang on the bakes; a map world has neither)
   if (bldLight || armiesParam !== null) throw new Error('retile: not with buildings or armies (not on a map world yet)')
+  // (the water, the banks and the river are the first tile's and stay: neither tile may have any yet, G3d)
+  for (const d of [look, next]) {
+    if (d.river.n || d.water.spans.length || d.bank.spans.length) throw new Error('retile: a tile with water (G3d)')
+  }
   checkLookData(D, next)
   checkWorld(next.world, lookWindow)
   const same = (a: { n: number; cell: number }, b: { n: number; cell: number }) => a.n === b.n && a.cell === b.cell
@@ -1552,54 +1566,62 @@ async function retile(next: LookData): Promise<number> {
       throw new Error(`retile: a tile at ${tx}, ${tz} is off the far ring's grid or not inside it`)
     }
   }
-  // (the water, the banks and the river stay the first tile's: a moved tile has none yet, G3d)
-  if (next.river.n || next.water.spans.length || next.bank.spans.length) {
-    throw new Error('retile: a tile with water or banks (G3d)')
-  }
   // the camera on the new tile's ground (the checks at load: checkView)
   const ground = groundOf(D.spec, next.hf, look.far, null, worldGround.play, next.tileAt)
   checkView(D.spec, ground)
-  const prev = tileNow
+  // Built beside the last, in one task (no frame between): the tile's place (TILE_O, the heightfield, the ground's
+  // meshes, the covers: what the parts read) set to the new tile's, its parts built; if a build throws, the new parts
+  // are taken away and the place and the bindings put back, the last tile untouched; else the last parts go
+  const frame = coarsenCover(next.cover, D.spec.macro.cover)
+  const at = (d: LookData, f: CoverGrid) => {
+    TILE_O.set(d.tileAt[0], d.tileAt[1])
+    setHeightfield(d.hf, look.far, D.spec.tile / 2)
+    terrain.retile()
+    macro.setCovers(f, d.cover)
+  }
+  const built: { dispose(): void }[] = []
+  const build = <T extends { dispose(): void }>(o: T): T => {
+    built.push(o)
+    return o
+  }
+  let parts
   try {
-    await place(next, ground)
+    at(next, frame)
+    const roads = roadsOwned && build(tileRoads(next.roads))
+    const n = build(tileNature(next))
+    if (moveFault) throw new Error(`a move made to fail (__look.moveFault: ${moveFault})`)
+    const bk = build(tileBakes(n.value))
+    const fl = flowOwned && build(tileFlow())
+    const mm = meadowMapOwned && build(tileMeadowMap(n.value))
+    parts = { roads, n, bk, fl, mm }
   } catch (err) {
-    // a move that fails midway puts back the tile it came from (its parts disposed: built again), then reports
-    if (prev !== next) await place(prev, worldGround)
+    for (const o of built.reverse()) o.dispose()
+    at(tileNow, frameNow)
+    // the last parts' bindings, which the new parts' had overwritten, in the order they were built
+    for (const o of [roadsOwned, natureOwned, bakesOwned, flowOwned, meadowMapOwned]) o?.rebind()
     throw err
   }
-  return performance.now() - t0
-}
-// the tile's data now (the first's, or a moved tile's: retile)
-let tileNow = look
-/** The tile's data put in place: its centre, heightfield, meshes, covers, roads, split, parts and bakes (retile) */
-async function place(next: LookData, ground: WorldGround): Promise<void> {
-  TILE_O.set(next.tileAt[0], next.tileAt[1])
-  setHeightfield(next.hf, look.far, D.spec.tile / 2)
-  terrain.retile()
-  const frame = coarsenCover(next.cover, D.spec.macro.cover)
-  macro.setCovers(frame, next.cover)
-  if (roadsOwned && roadTex) {
-    roadsOwned.dispose()
-    roadsOwned = tileRoads(next.roads)
+  roadsOwned?.dispose()
+  natureOwned.dispose()
+  bakesOwned.dispose()
+  flowOwned?.dispose()
+  meadowMapOwned?.dispose()
+  natureOwned = parts.n
+  nature = natureOwned.value
+  bakesOwned = parts.bk
+  bakes = bakesOwned.value
+  for (const h of bakeHooks) h()
+  if (parts.roads && roadTex) {
+    roadsOwned = parts.roads
     Object.assign(roadTex, { segs: roadsOwned.value.segs, grid: roadsOwned.value.grid, n: roadsOwned.value.sn })
     if (splitParam !== '0') groundShare = splitGround(terrain, frame).share
   }
-  bakesOwned.dispose()
-  meadowMapOwned?.dispose()
-  natureOwned.dispose()
-  natureOwned = tileNature(next)
-  nature = natureOwned.value
-  if (params.get('far') === 'off') nature.farCull?.off()
-  bakesOwned = tileBakes()
-  bakes = bakesOwned.value
-  for (const h of bakeHooks) h()
-  if (flowOwned) {
-    flowOwned.dispose()
-    flowOwned = tileFlow()
+  if (parts.fl) {
+    flowOwned = parts.fl
     macro.setFlow(flowOwned.value)
   }
-  if (meadowMapOwned) {
-    meadowMapOwned = tileMeadowMap()
+  if (parts.mm) {
+    meadowMapOwned = parts.mm
     macro.setMeadowMap(meadowMapOwned.value.map)
   }
   // the relief's tone reads the drawn ground, the tile's heights on it (written in place: its size is the ring's)
@@ -1608,7 +1630,10 @@ async function place(next: LookData, ground: WorldGround): Promise<void> {
   follow.range = ground.focus
   worldGround = ground
   tileNow = next
+  frameNow = frame
+  // (on the GPU, after the move: a failure here leaves the new tile with the last colour bake, reported)
   await macro.bake()
+  return performance.now() - t0
 }
 
 // the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
@@ -1703,6 +1728,10 @@ const hidden: Mesh[] = []
 Object.assign(window, {
   __look: {
     // the tile moved to (x, z) on the tile grid (G3b-2's check): its data from the built files (--tileat), its time, ms
+    // a move made to fail once its trees are built (the check of a failed move: the page as it was), or null
+    set moveFault(why: string | null) {
+      moveFault = why
+    },
     retile: async (x: number, z: number) => {
       const at: [number, number] = [x, z]
       const url = lookWindow && WINDOW_DATA[`../../${windowFile(lookWindow, at)}`]
@@ -1731,9 +1760,7 @@ Object.assign(window, {
     get sky() {
       return bakes.sky // (the tile's now: a moved tile's, retile)
     },
-    get meadowBakeMs() {
-      return meadowMapOwned ? meadowMapOwned.value.ms : null
-    },
+    meadowBakeMs: meadow?.bakeMs ?? null, // (the first tile's, as the bench has always read it)
     // (the combed meadow's flow textures, on load)
     get flowBuildMs() {
       return flowOwned?.value.ms ?? null

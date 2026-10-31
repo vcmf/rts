@@ -201,11 +201,12 @@ export interface MatOptions {
 
 // every painted material, so per-frame uniforms and a new grain reach all of them
 export const MAX_SAMPLERS = 16
+type Binder = (m: ShaderMaterial) => void
 export class Materials {
   readonly all: ShaderMaterial[] = []
   private readonly every: ShaderMaterial[] = [] // all, and the ones kept out of it (the bake's)
   private readonly scene: Scene
-  private readonly binders: ((m: ShaderMaterial) => void)[] = []
+  private readonly binders: Binder[] = []
   grain: BaseTexture
   // the means of its R and G channels
   grainMean: [number, number]
@@ -353,17 +354,15 @@ export class Materials {
   /** What the materials hold now (src/look/owned.ts): called again once a builder is done, it gives a function that
    *  forgets exactly the materials and bindings that builder made (a rebuilt part of the tile's, G3b-2: its materials
    *  disposed, its bindings never applied to later materials), whatever another part added or forgot since */
-  mark(): () => () => void {
+  mark(): () => { forget: () => void; bind: () => void } {
     const lists = () => [this.all, this.every, this.binders, this.grainUsers] as unknown[][]
     // (the snapshot dropped once read: an owner keeps no hold on what stood when it was built)
     let before: Set<unknown>[] | null = lists().map(l => new Set(l))
     return () => {
       const b = before!
       before = null
-      return Materials.forgetting(
-        lists,
-        lists().map((l, k) => new Set(l.filter(x => !b[k].has(x)))),
-      )
+      const added = lists().map((l, k) => new Set(l.filter(x => !b[k].has(x))))
+      return { forget: Materials.forgetting(lists, added), bind: this.binding([...added[2]] as Binder[]) }
     }
   }
   private static forgetting(lists: () => unknown[][], added: Set<unknown>[]): () => void {
@@ -373,6 +372,12 @@ export class Materials {
         l.length = 0
         l.push(...keep)
       }
+    }
+  }
+  // a part's own bindings run again on every painted material (a moved tile's parts taken away: the last's again)
+  private binding(bs: Binder[]): () => void {
+    return () => {
+      for (const m of this.all) for (const b of bs) b(m)
     }
   }
 }

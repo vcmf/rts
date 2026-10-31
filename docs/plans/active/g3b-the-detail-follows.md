@@ -115,3 +115,16 @@ G3b-2, round 2 (10 findings, 3 severe):
 - answered: one holder of the tile's parts with a registry of who reads them (the reviewer's suggestion, against
   stale captures): the parts are few and every reader goes through a getter or the live variable now; a registry if
   G3c adds parts; the flow's comb built again on a move: G3c's cost.
+
+G3b-2, round 3 (10 findings, 2 taken as severe): the rollback put the last tile back with the new tile's ground range;
+a build that failed midway left the rollback disposing the last parts a second time; and smaller ones of the same
+root (a first tile with water, overlapping moves). A third round with severe findings: **redesigned** (AGENTS.md).
+Every round had found an edge of one flaw: the move disposed each last part, then built its successor, so a failure
+needed a rollback that rebuilt the last tile, and the rollback was where the bugs lived. Now the move **builds beside,
+then swaps**: every check first; then, in one task (no frame between), the tile's place set to the new tile's, every
+new part built while the last ones stand; a build that throws takes its new parts away, puts the place back and lets
+each last part bind again what the new had overwritten (`Owned.rebind`, its own bindings alone), the last tile
+untouched; else the last parts go. One move at a time (a queue); neither tile may have water (G3d); `?far=off` in the
+trees' builder. Checked on the page: a move made to fail (`__look.moveFault`) leaves the page as a fresh one (the
+frame identical, every count the same); a move draws as a page loaded there (relief off: identical); ten moves leak
+nothing. The round count restarts.
