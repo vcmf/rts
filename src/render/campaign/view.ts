@@ -207,6 +207,8 @@ interface Detail {
   table: SlotTable
   texT: RawTexture
   tableChanged: boolean
+  // the tile written in each slot (the slots' table on the CPU, for the heights), by slot
+  written: (Tile | null)[]
   // each slot's fade-in, 0 to 1 as its tile is first drawn, and as bytes for the GPU
   fade: Float32Array
   fadeBytes: Uint8Array
@@ -571,6 +573,7 @@ export class CampaignMapView {
       table,
       texT,
       tableChanged: false,
+      written: new Array<Tile | null>(AREA * AREA).fill(null),
       fade: new Float32Array(AREA * AREA).fill(1),
       fadeBytes,
       texF,
@@ -705,6 +708,7 @@ export class CampaignMapView {
     )
     changed.sort((a, b) => near.get(tileKey(a[1]))! - near.get(tileKey(b[1]))!)
     for (const [s, tile] of changed) {
+      d.written[s] = null
       d.table.set(s, null)
       d.tableChanged = true
       d.uploads.drop(s)
@@ -802,6 +806,7 @@ export class CampaignMapView {
       this.engine.updateTextureData(d.texL.getInternalTexture()!, light, x, z, size, size)
       d.table.set(s, [tile.column, tile.row])
       d.tableChanged = true
+      d.written[s] = tile
       d.fade[s] = 0
     }
     if (d.tableChanged) {
@@ -865,12 +870,12 @@ export class CampaignMapView {
     const n = level.size
     const fx = (xKm + this.half.x) / (level.cell / 1000)
     const fz = (zKm + this.half.z) / (level.cell / 1000)
-    // the tiles written in their slots, by key, for the four nodes
+    // the tile written in the slot of node (i, j)'s tile, if it is that tile
     const written = (i: number, j: number): Tile | null => {
-      const t: TileAt = [Math.floor(i / n), Math.floor(j / n)]
-      const held = d.table.get(slotOf(t[0], t[1], AREA))
-      if (!held || held[0] !== t[0] || held[1] !== t[1]) return null
-      return d.cache.get(tileKey(t)) ?? null
+      const tx = Math.floor(i / n)
+      const tz = Math.floor(j / n)
+      const tile = d.written[slotOf(tx, tz, AREA)]
+      return tile && tile.column === tx && tile.row === tz ? tile : null
     }
     let missing = false
     const at = (i: number, j: number) => {
@@ -883,8 +888,7 @@ export class CampaignMapView {
     }
     const height = bilinear(at, fx, fz, level.nx, level.nz) / 1000
     if (missing) return null
-    const tile: TileAt = [Math.floor(fx / n), Math.floor(fz / n)]
-    return { height, fade: d.fade[slotOf(tile[0], tile[1], AREA)] }
+    return { height, fade: d.fade[slotOf(Math.floor(fx / n), Math.floor(fz / n), AREA)] }
   }
 
   /** The far mesh's height at a point (km), as drawn: its triangles (`farMeshHeight`). */
@@ -920,14 +924,41 @@ export class CampaignMapView {
     return rayGround(o, d, (x, z) => this.riseAt(x, z), this.highest, bottom) ?? groundHit(o, d)
   }
 
+  /** A map point (km), at the height of the ground there as drawn, in clip space: [x, y, w] (w the depth, km). */
+  clipOf(x: number, z: number): [number, number, number] {
+    // read off the matrix (column vectors, Babylon's row-major array): no vectors made a point, the ink projects many
+    const m = this.scene.getTransformMatrix().m
+    const y = this.riseAt(x, z)
+    return [
+      x * m[0] + y * m[4] + z * m[8] + m[12],
+      x * m[1] + y * m[5] + z * m[9] + m[13],
+      x * m[3] + y * m[7] + z * m[11] + m[15],
+    ]
+  }
+
+  /** The canvas's size in CSS pixels. */
+  screenSize(): [number, number] {
+    const rect = this.engine.getRenderingCanvasClientRect()
+    return rect ? [rect.width, rect.height] : [1, 1]
+  }
+
+  /** The camera's place, km (x east, y up, z north). */
+  eye(): [number, number, number] {
+    const p = this.camera.position
+    return [p.x, p.y, p.z]
+  }
+
+  /** How high the map stands at a point (km), as it is drawn (the far mesh, and the patch up close). */
+  heightAt(xKm: number, zKm: number): number {
+    return this.riseAt(xKm, zKm)
+  }
+
   /** A map point (km) on the screen, at the height of the ground there, in CSS pixels, or null behind the camera. */
   private toScreen(x: number, z: number): [number, number] | null {
-    const m = this.scene.getTransformMatrix()
-    const c = Vector4.TransformCoordinates(new Vector3(x, this.riseAt(x, z), z), m)
-    if (c.w <= 1e-6) return null
-    const canvas = this.engine.getRenderingCanvasClientRect()
-    if (!canvas) return null
-    return [((c.x / c.w + 1) / 2) * canvas.width, ((1 - c.y / c.w) / 2) * canvas.height]
+    const [cx, cy, cw] = this.clipOf(x, z)
+    if (cw <= 1e-6) return null
+    const [w, h] = this.screenSize()
+    return [((cx / cw + 1) / 2) * w, ((1 - cy / cw) / 2) * h]
   }
 
   /** Screen pixels per km at the screen's centre. */

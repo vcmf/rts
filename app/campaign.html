@@ -14,6 +14,7 @@
           --mono: "JetBrains Mono", ui-monospace, Menlo, monospace; --serif: "Instrument Serif", Georgia, serif; }
   html, body { height: 100%; margin: 0; overflow: hidden; background: #cbc9cf; color: var(--ink); }
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #ink { pointer-events: none; }
   #cart { position: fixed; left: 16px; top: 14px; width: 290px; padding: 12px 14px; pointer-events: none;
           background: radial-gradient(130% 120% at 30% 30%, var(--paper) 55%, rgba(241, 242, 244, 0) 100%); }
   #cart h1 { margin: 0; font: 400 26px/1.05 var(--serif); letter-spacing: 0.01em; }
@@ -34,6 +35,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<canvas id="ink"></canvas>
 <div id="cart">
   <h1>The Theatre of 1805</h1>
   <div class="sub">from the Rhine to Austerlitz</div>

@@ -7,6 +7,7 @@
 //   b-<time>-<pid>/l<level>/t-<i>-<j>.bin: one tile of a build (src/render/campaign/tiles.ts, the format)
 //   b-<time>-<pid>/fields.bin: the far level's fields, the lakes, the lines and the contours' heights
 //     (src/render/campaign/fields.ts)
+//   b-<time>-<pid>/labels.json: the towns, regions and named rivers the page letters (src/render/campaign/labels.ts)
 // Until the campaign page replaces the prototype (K2b), the 100 m level is also written as the prototype's tiles
 // (prototypes/campaign-map.html cannot fetch binary from file://), under scratch/campaign-tiles/:
 //   meta.js: window.CAMPAIGN_TILES = { cell, nx, nz, size, tilesX, tilesZ, scale, params, build }
@@ -55,6 +56,8 @@ import {
   type Tile,
 } from '../src/render/campaign/tiles.ts'
 import { packFields, quantise, type Plane } from '../src/render/campaign/fields.ts'
+import type { LabelsFile } from '../src/render/campaign/labels.ts'
+import { loadData, type Data } from './campaign-data.ts'
 import { commitBuild, liveBuild, pruneBuilds, startBuild, writeFlushed } from './campaign-builds.ts'
 import { frameGrid, projection, type Frame, type Pt } from './campaign-theatre-lib.ts'
 import { sampleGrid } from './terrarium.ts'
@@ -90,6 +93,10 @@ const SINK_WIDTH_M = 500
 // the level the fields are baked on (the far one, which spans the whole theatre in one texture), their file
 const FIELDS_LEVEL = 0
 const FIELDS_FILE = 'fields.bin'
+// the labels the page draws (src/render/campaign/labels.ts LabelsFile)
+const LABELS_FILE = 'labels.json'
+// the rivers' names as the map letters them (Natural Earth's are the local ones)
+const RIVER_NAMES: Record<string, string> = { Rhein: 'Rhine', Rhin: 'Rhine', Donau: 'Danube' }
 // the far level's fields (the prototype's): the lakes' mask, texels a cell (a page on a GPU whose textures are smaller
 // than the mask halves it); the lines' reach in cells either way, the rivers drawn (rank 6 or larger: Natural Earth's
 // scalerank, smaller is larger); the contours' heights blurred over cells; the Uint16 steps of the lakes' distance
@@ -128,7 +135,10 @@ interface Theatre {
   h: string
   lakes: number[][]
   roads: { kind: string; p: number[] }[]
-  rivers: { rank: number; p: number[] }[]
+  rivers: { name: string; rank: number; p: number[] }[]
+  // the data file's places projected, metres: the towns by id, the regions in the data file's order
+  towns: Record<string, [number, number]>
+  regions: [number, number][]
   credit: string
 }
 
@@ -260,6 +270,36 @@ function fieldsOf(src: Sources, grid: Grid, heights: Float32Array, lakeD: Float3
     ),
     quantise('contour', nx, nz, contour, CONTOUR_STEP, contourFrom),
   ]
+}
+
+/**
+ * The labels the page draws: the data file's towns (names, sizes, fortresses) and regions (names, angles) at the
+ * theatre's places for them, and the theatre's named rivers, their points thinned to every other one (the last kept),
+ * as the prototype projects them for their names. Throws on a town or region the theatre has no place for (a theatre
+ * older than the data file).
+ */
+function labelsOf(t: Theatre, data: Data): LabelsFile {
+  if (data.regions.length !== t.regions.length) {
+    throw new Error(
+      `${data.regions.length} regions in the data file, ${t.regions.length} placed: run tools/campaign-theatre.ts`,
+    )
+  }
+  const towns = data.towns.map(town => {
+    const at = t.towns[town.id]
+    if (!at) throw new Error(`the theatre has no place for ${town.id}: run tools/campaign-theatre.ts`)
+    return { id: town.id, name: town.name, size: town.size, fort: town.fort ?? false, x: at[0], z: at[1] }
+  })
+  const regions = data.regions.map((r, k) => ({ name: r.name, angle: r.angle, x: t.regions[k][0], z: t.regions[k][1] }))
+  const rivers = t.rivers
+    .filter(r => r.name)
+    .map(r => {
+      const p: number[] = []
+      for (let i = 0; i < r.p.length; i += 4) p.push(r.p[i], r.p[i + 1])
+      const n = r.p.length
+      if (n >= 2 && (n - 2) % 4 !== 0) p.push(r.p[n - 2], r.p[n - 1])
+      return { name: RIVER_NAMES[r.name] ?? r.name, rank: r.rank, p }
+    })
+  return { towns, regions, rivers }
 }
 
 /** The tiles of a level, cut from its bake row by row, their shape above BASE. */
@@ -403,6 +443,9 @@ async function main() {
       prototypeMeta = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams(), build: prototypeBuild }
     }
   }
+  const labels = labelsOf(t, loadData())
+  await writeFlushed(path.join(out, build, LABELS_FILE), JSON.stringify(labels))
+  console.log(`labels: ${labels.towns.length} towns, ${labels.regions.length} regions, ${labels.rivers.length} rivers`)
   const manifest: Manifest = {
     format: MANIFEST_FORMAT,
     build,
@@ -410,6 +453,7 @@ async function main() {
     params: params(src.low),
     levels,
     fields: { level: FIELDS_LEVEL, path: `${build}/${FIELDS_FILE}` },
+    labels: `${build}/${LABELS_FILE}`,
     credit: t.credit,
   }
   // the builds replaced, kept for a page still reading them

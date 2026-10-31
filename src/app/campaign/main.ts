@@ -9,6 +9,8 @@ import { unpackFields } from '../../render/campaign/fields.ts'
 import { assembleLevel, readManifest, tilePath, tilesOf } from '../../render/campaign/level.ts'
 import { inflate, unpackTile, type Level, type Manifest, type Tile } from '../../render/campaign/tiles.ts'
 import { CampaignMapView, type Upscale } from '../../render/campaign/view.ts'
+import { Ink } from '../../render/campaign/ink.ts'
+import type { LabelsFile } from '../../render/campaign/labels.ts'
 
 const DEFAULT_TILES = '/scratch/campaign/manifest.json'
 // the far level's tiles fetched this many at once
@@ -165,9 +167,12 @@ async function main() {
   const manifest = readManifest(await r.json())
   const farIndex = manifest.fields.level
   const far = manifest.levels[farIndex]
-  const [fields, tiles] = await Promise.all([
+  const [fields, tiles, labels] = await Promise.all([
     fetchBytes(new URL(manifest.fields.path, url)).then(inflate).then(unpackFields),
     pool(tilesOf(far), FETCHES, ([column, row]) => loadTile(url, farIndex, far, column, row)),
+    fetchBytes(new URL(manifest.labels, url)).then(b => JSON.parse(new TextDecoder().decode(b)) as LabelsFile),
+    // the names' fonts (both faces: the rivers' are italic), before the ink is first drawn
+    document.fonts.load(`16px "Instrument Serif"`).then(() => document.fonts.load(`italic 16px "Instrument Serif"`)),
   ])
   const loadedMs = Math.round(performance.now() - t0)
   const view = new CampaignMapView(canvas)
@@ -184,7 +189,16 @@ async function main() {
   cartouche(manifest)
   fpsMeter(view)
   bindInput(canvas, view)
-  view.onViewChanged = drawScale
+  const ink = new Ink($('ink') as HTMLCanvasElement, view, labels, { x: manifest.frame.halfX, z: manifest.frame.halfZ })
+  // the ink and the scale follow the view; the ink's time kept for the checks
+  let inkMs = 0
+  view.onViewChanged = ppk => {
+    const t = performance.now()
+    ink.draw(ppk)
+    inkMs = performance.now() - t
+    drawScale(ppk)
+  }
+  addEventListener('resize', () => ink.resize())
   view.start()
   const readyMs = Math.round(performance.now() - t0)
   // for the checks (tools/shot.mjs): the view's controls and when the page was ready
@@ -197,6 +211,8 @@ async function main() {
       detail: () => view.detailState(),
       upscale: () => view.upscaleFactor(),
       bench: (n?: number) => view.bench(n),
+      ink: () => ({ ...ink.last, totalMs: inkMs }),
+      groundAt: (sx: number, sy: number) => view.groundAt(sx, sy),
       start: () => view.start(),
       stop: () => view.stop(),
     },

@@ -7,8 +7,7 @@ last_reviewed: 2026-10-31
 
 What is built of the campaign map in the game's code (Track K, `docs/plans/active/track-k.md`; the look is decision
 0093 and `docs/proposals/campaign-map.md`): the bake that makes the map's one shape and its light, the tiles and
-fields it is stored in, and the page that draws them (`app/campaign.html`, K2b). The page has no names or towns yet
-(K2d); the K1 prototype (`prototypes/campaign-map.html`) keeps them, from its own tiles written by the same bake.
+fields it is stored in, and the page that draws them (`app/campaign.html`, K2b to K2d), with its names.
 
 ## The bake
 
@@ -115,6 +114,21 @@ refilling window of K2b took 80 to 100 ms.
 Babylon's shader preprocessor reads a `#include<…>` even in a comment (it waits for a file that is never there, and
 the material is never ready, with no error), and fails on a semicolon in a comment on a `uniform` line: the shaders'
 comments avoid both.
+
+## The names
+
+K2d (`docs/plans/active/k2d-ink.md`). The tool writes `labels.json` into each build (the manifest's `labels`): the
+1805 data file's towns (names, sizes, fortresses) and regions (names, angles) at the theatre's places for them, and the
+theatre's named rivers, their points thinned to every other one (`tools/campaign-data.ts` reads the data file for both
+tools). The page draws them on a 2D canvas over the map (`src/render/campaign/ink.ts`), redrawn when the view changes:
+
+| Module | What |
+|---|---|
+| `labels.ts` | pure: the towns shown at a zoom (capitals always, small towns from 2.2 px a km), a town's mark and its name's font, the four places a name is tried (right, left, above, below), the placement (every mark first, then the names, the largest towns first, then the rivers': a name never over a name or a mark), a river's name on the middle of its longest run on screen, upright, the regions' fade |
+| `ink.ts` | the canvas: the regions lettered across the land, the towns as dark blocks (a fortress ringed) with their names, the rivers' names in italic blue, the prototype's fonts (Instrument Serif), halo and colours, clipped to the frame; a label is drawn only where the ray from the camera to it passes over the ground as drawn (`seenFrom` in `camera.ts`, at most 96 samples a ray); the towns off the screen skipped |
+
+The view gives the ink the projection of a map point at its height as drawn (`clipOf`), the camera's place and the
+map's height. Tested in `test/campaign-labels.test.ts`. A redraw takes 0.7 to 3.6 ms on test machine A.
 
 ## Open questions
 

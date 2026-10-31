@@ -17,7 +17,7 @@ import { rowDeltas, rowSums } from './rows.ts'
 export const TILE_MAGIC = 'CMPT'
 export const TILE_VERSION = 1
 // the manifest's own format, apart from the tiles' (a field added to one need not refuse the other)
-export const MANIFEST_FORMAT = 4
+export const MANIFEST_FORMAT = 5
 const HEADER = 16
 const PLANES = 3
 
@@ -61,6 +61,8 @@ export interface Manifest {
   levels: Level[]
   // the far level's fields (src/render/campaign/fields.ts): the level they lie on, their file relative to the manifest
   fields: { level: number; path: string }
+  // the labels (src/render/campaign/labels.ts), their file relative to the manifest
+  labels: string
   credit: string
 }
 

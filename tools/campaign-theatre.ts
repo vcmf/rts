@@ -18,7 +18,6 @@
 // Open: prototypes/campaign-map.html (it reads this default output; ?theatre= another path, relative to the page)
 import fs from 'node:fs'
 import path from 'node:path'
-import vm from 'node:vm'
 import {
   frameGrid,
   lineLength,
@@ -31,10 +30,10 @@ import {
   type Pt,
 } from './campaign-theatre-lib.ts'
 import { cached, sampleGrid } from './terrarium.ts'
+import { loadData, type Data } from './campaign-data.ts'
 import { resampleField, WOOD_BOX_M } from '../src/render/campaign/bake.ts'
 import { forestField, WORLDCOVER_CREDIT } from './worldcover.ts'
 
-const DATA_FILE = 'prototypes/campaign-1805.data.js'
 const TILE_ZOOM = 9
 const NE_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson'
 const NE_FILES = ['ne_10m_rivers_lake_centerlines', 'ne_10m_rivers_europe', 'ne_10m_lakes', 'ne_10m_lakes_europe']
@@ -43,13 +42,6 @@ const CACHE = 'scratch'
 const ROUTE_CELL = 1000
 const ROUTE_SLOPE = 0.04
 
-/** The hand-written theatre (prototypes/campaign-1805.data.js). */
-interface Data {
-  frame: Frame
-  towns: { id: string; lat: number; lon: number }[]
-  roads: [string, string, string][]
-  regions: { lat: number; lon: number }[]
-}
 type Projection = ReturnType<typeof projection>
 /** Heights on the frame's grid, in whole metres, the south row first. */
 interface Heights {
@@ -64,17 +56,6 @@ const out = process.argv[3] ?? 'scratch/campaign-1805.js'
 if (!Number.isFinite(cell) || cell < 200 || cell > 2000) {
   console.error('usage: node tools/campaign-theatre.ts [cell out] (a cell of 200 to 2000 metres)')
   process.exit(2)
-}
-
-/** The hand-written theatre: the data file run with a stand-in `window`. */
-function loadData(): Data {
-  const context: { window: { CAMPAIGN_1805?: Data } } = { window: {} }
-  vm.runInNewContext(fs.readFileSync(DATA_FILE, 'utf8'), context, { filename: DATA_FILE })
-  const data = context.window.CAMPAIGN_1805
-  if (!data?.frame || !Array.isArray(data.towns) || !Array.isArray(data.roads) || !Array.isArray(data.regions)) {
-    throw new Error(`${DATA_FILE} does not set window.CAMPAIGN_1805 with a frame, towns, roads and regions`)
-  }
-  return data
 }
 
 /** The heights on the frame's grid, in whole metres, the south row first. */
