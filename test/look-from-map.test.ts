@@ -8,8 +8,10 @@ import type { Pt } from '../src/map/schema.ts'
 import { D } from '../src/look/spec.ts'
 import { COVER, coarsenCover, isField } from '../src/look/world/cover.ts'
 import {
+  boxCover,
   cellAt,
   fillRings,
+  mapRects,
   fineAreas,
   ringsOf,
   checkWindowInside,
@@ -35,7 +37,7 @@ import { validate } from '../src/map/validate.ts'
 import { expand } from '../src/map/expand.ts'
 import { apply, heightOf } from '../src/map/apply.ts'
 import { segD } from '../src/look/world/geom.ts'
-import { D as SPEC_D, ROAD_SLOTS } from '../src/look/spec.ts'
+import { D as SPEC_D, ROAD_SLOTS, ringFor } from '../src/look/spec.ts'
 
 const WIN: LookWindow = { map: 'test', name: 'test', x: 0, z: 0 }
 const N = 60 // cells a side: 120 m, from −60 m
@@ -130,6 +132,54 @@ describe('the window heights', () => {
     expect(hf.h[k]).toBeCloseTo(at(x + w.x, z + w.z) - base, 3)
     expect(hf.n).toBe(D.spec.tileSub + 1 + 2 * D.hfMargin)
     expect(far.n).toBe(D.spec.farSub + 1)
+  })
+
+  it("reads a map world's far ring where ringFor puts it, off the window's centre (G3a)", () => {
+    const at = (x: number, z: number) => 50 + 0.01 * x - 0.02 * z
+    const w = { x: 400, z: -200 }
+    const ring = ringFor(D, { x0: -1300, z0: -1700, x1: 1700, z1: 1300 }, 550)
+    const { far, base } = windowHeights(at, w, D, ring)
+    expect([far.n, far.cell, far.x0, far.z0]).toEqual([ring.n, D.farCell, ring.x0, ring.z0])
+    for (const [i, j] of [
+      [0, 0],
+      [17, 203],
+      [ring.n - 1, ring.n - 1],
+    ]) {
+      const x = Math.fround(ring.x0 + i * D.farCell) + w.x
+      const z = Math.fround(ring.z0 + j * D.farCell) + w.z
+      expect(far.h[j * far.n + i]).toBeCloseTo(at(x, z) - base, 3)
+    }
+  })
+
+  it("puts the map's play area about the map's centre and its edge at the layers', in the window's metres (G3a)", () => {
+    const L = layers() // (120 m from −60)
+    expect(mapRects(L, { w: 100, h: 80 }, { x: 10, z: -20 })).toEqual({
+      play: { x0: -60, z0: -20, x1: 40, z1: 60 },
+      edge: { x0: -70, z0: -40, x1: 50, z1: 80 },
+    })
+  })
+
+  it("covers a square off the window's centre as the window's own cover does, the default past the map (G3a)", () => {
+    const L = layers()
+    const box = { x0: -100, z0: -80, side: 240 }
+    const g = boxCover(L, FEATURES as never, WIN, box, 4)
+    expect([g.n, g.cell, g.x0, g.z0]).toEqual([60, 4, -100, -80])
+    // the window's own cover over 240 m about its centre: its cells are the box's, 5 columns and 10 rows on
+    const own = mapCover(fineAreas(L, FEATURES as never, WIN, 240, 4), L.table, WIN, [])
+    let same = 0
+    for (let j = 0; j < 50; j++) {
+      for (let i = 0; i < 55; i++) {
+        const a = (j * 60 + i) * 4
+        const b = ((j + 10) * 60 + i + 5) * 4
+        expect(Array.from(g.tex.subarray(a, a + 4))).toEqual(Array.from(own.tex.subarray(b, b + 4)))
+        same++
+      }
+    }
+    expect(same).toBe(2750)
+    // past the map's east edge (60 m): the default cover
+    const i = Math.floor((100 - box.x0) / 4)
+    const j = Math.floor((0 - box.z0) / 4)
+    expect(g.tex[(j * 60 + i) * 4]).toBe(COVER.meadow)
   })
 
   it('refuses a window whose tile leaves the map (its far ring may: paper), or whose centre is off even metres', () => {
@@ -399,10 +449,21 @@ describe('the page and the data', () => {
     expect(() => windowOf(new URLSearchParams('map=austerlitz&window=nowhere'))).toThrow(/no such window/)
   })
 
-  it("carries the world it holds and a map's trees through the file", () => {
+  it("carries the world it holds, a map's trees, its far ring's cover and its coarse light through the file", () => {
     const grid = { n: 2, cell: 1, x0: 0, z0: 0, h: new Float32Array(4) }
     const spans = { n: 1, cell: 1, x0: 0, z0: 0, ch: 4, spans: new Float32Array(0), tex: new Uint8Array(0) }
-    const world = { kind: 'map', map: 'test', window: 'test', x: 2, z: 4, base: 1.5 } as const
+    const play = { x0: -1, z0: -2, x1: 3, z1: 4 }
+    const edge = { x0: -5, z0: -6, x1: 7, z1: 8 }
+    const world = { kind: 'map', map: 'test', window: 'test', x: 2, z: 4, base: 1.5, play, edge } as const
+    const farCover = { n: 2, cell: 4, x0: -3, z0: -5, tex: Uint8Array.from({ length: 16 }, (_, k) => k % 5) }
+    const light = {
+      nx: 3,
+      nz: 2,
+      cell: 2,
+      x0: -7,
+      z0: -9,
+      rg: Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+    }
     const c = encodeLook({
       hf: { ...grid, min: 0, max: 0 },
       far: grid,
@@ -413,11 +474,18 @@ describe('the page and the data', () => {
       cover: { n: 1, cell: 1, x0: 0, z0: 0, tex: new Uint8Array(4) },
       world,
       trees: Float32Array.from([1, 2, 3, 4]),
+      farCover,
+      light,
     })
     const back = decodeLook(c.buffer.slice(c.byteOffset, c.byteOffset + c.byteLength) as ArrayBuffer)
     expect(back.world).toEqual(world)
     expect(Array.from(back.trees)).toEqual([1, 2, 3, 4])
     expect(back.river.n).toBe(0)
+    expect({ ...back.farCover!, tex: Array.from(back.farCover!.tex) }).toEqual({
+      ...farCover,
+      tex: Array.from(farCover.tex),
+    })
+    expect({ ...back.light!, rg: Array.from(back.light!.rg) }).toEqual({ ...light, rg: Array.from(light.rg) })
   })
 })
 

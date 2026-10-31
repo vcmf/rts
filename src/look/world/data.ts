@@ -5,13 +5,14 @@
 // arrays in the order the meta lists them (float32, or bytes padded to 4). The cover (docs/plans/active/l5-macro.md):
 // its grid's runs, src/look/world/cover.ts.
 import type { Grid, Heightfield } from '../heightfield.ts'
-import { ROAD_SLOTS, type Derived } from '../spec.ts'
+import { ROAD_SLOTS, macroFarNOf, rectOf, type Derived, type Rect } from '../spec.ts'
 import { SAMPLE_KEYS, type RiverParams, type RiverSamples } from '../river.ts'
 import { packCover, unpackCover, type CoverGrid } from './cover.ts'
 
 // 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/done/roads.md); 9: the world it holds
-// (the demo, or a map's window) and a map world's trees (docs/plans/active/look-austerlitz-a1.md)
-export const LOOK_VERSION = 9
+// (the demo, or a map's window) and a map world's trees (docs/plans/active/look-austerlitz-a1.md); 10: a map world's
+// far ring the whole map, its cover and its coarse light (docs/plans/active/g3a-the-whole-map-far.md)
+export const LOOK_VERSION = 10
 
 // the trees' species a map world's data names by index (src/look/world/from-map.ts; the page draws each as its
 // generated model, src/look/nature.ts)
@@ -33,9 +34,23 @@ export type TreeSpecies = (typeof TREE_SPECIES)[number]
 export const TREE_FLOATS = 4
 
 // The world a look data file holds: the demo (src/look/world/author.ts), or a window of a map
-// (src/look/world/windows.ts), its centre in map metres and the height taken off the map's (base, m)
+// (src/look/world/windows.ts), its centre in map metres, the height taken off the map's (base, m), and in the
+// window's metres the map's play area (where the camera's focus may go) and its edge (past it, paper: G3a)
 export type LookWorld =
-  { kind: 'demo' } | { kind: 'map'; map: string; window: string; x: number; z: number; base: number }
+  | { kind: 'demo' }
+  | { kind: 'map'; map: string; window: string; x: number; z: number; base: number; play: Rect; edge: Rect }
+
+// The light that does not change over a map world's whole map (G3a: src/render/lit/bake.ts, bakeLight, on the map's
+// heights at their true height and the look's sun): nx × nz nodes `cell` m apart from (x0, z0) in the window's metres,
+// two bytes a node, the south row first: the sun's soft shadow (255 lit) and the open sky (255 all of it)
+export interface LightGrid {
+  nx: number
+  nz: number
+  cell: number
+  x0: number
+  z0: number
+  rg: Uint8Array
+}
 
 // A grid of n² texels of `cell` metres from (x0, z0) with ch bytes a texel, stored only where covered: spans are (row,
 // first column, count) triples, tex holds ch bytes per covered texel in span order. The rest take the user's fill.
@@ -64,7 +79,8 @@ export interface RoadGrid {
   z0: number
   ids: Float32Array
 }
-// far: the far ring's nodes
+// far: the far ring's nodes. A map world's far ring is its whole map (G3a): farCover its cover at SPEC.macro.far m
+// cells (the far macro bake's), light the coarse light; the demo has neither (its far bake reads `cover`)
 export interface LookData {
   hf: Heightfield
   far: Grid
@@ -75,6 +91,8 @@ export interface LookData {
   cover: CoverGrid
   world: LookWorld
   trees: Float32Array // a map world's trees, TREE_FLOATS each (none on the demo: its scatter is the page's)
+  farCover: CoverGrid | null
+  light: LightGrid | null
 }
 
 const SPAN_GRIDS = ['bank', 'water'] as const
@@ -88,6 +106,8 @@ interface Meta {
   water: GridMeta
   roads: { n: number; cell: number; x0: number; z0: number }
   cover: { n: number; cell: number; x0: number; z0: number }
+  farCover?: { n: number; cell: number; x0: number; z0: number }
+  light?: { nx: number; nz: number; cell: number; x0: number; z0: number }
   world: LookWorld
   arrays: [string, number, 'f32' | 'u8'][]
 }
@@ -112,6 +132,8 @@ export function encodeLook(d: LookData): Uint8Array {
     ['roadSegs', d.roads.segs],
     ['roadIds', d.roads.ids],
     ['trees', d.trees],
+    ...(d.farCover ? [['farCoverRuns', packCover(d.farCover)] as [string, Uint8Array]] : []),
+    ...(d.light ? [['light', d.light.rg] as [string, Uint8Array]] : []),
   ]
   const type = (a: Float32Array | Uint8Array): 'f32' | 'u8' => (a instanceof Float32Array ? 'f32' : 'u8')
   const meta: Meta = {
@@ -122,6 +144,8 @@ export function encodeLook(d: LookData): Uint8Array {
     water: gridMeta(d.water),
     roads: { n: d.roads.n, cell: d.roads.cell, x0: d.roads.x0, z0: d.roads.z0 },
     cover: { n: d.cover.n, cell: d.cover.cell, x0: d.cover.x0, z0: d.cover.z0 },
+    ...(d.farCover && { farCover: { n: d.farCover.n, cell: d.farCover.cell, x0: d.farCover.x0, z0: d.farCover.z0 } }),
+    ...(d.light && { light: { nx: d.light.nx, nz: d.light.nz, cell: d.light.cell, x0: d.light.x0, z0: d.light.z0 } }),
     world: d.world,
     arrays: arrays.map(([k, a]) => [k, a.length, type(a)]),
   }
@@ -232,6 +256,14 @@ export function decodeLook(buf: ArrayBuffer): LookData {
   if (!meta.cover || !u8.coverRuns) throw new Error('look data: no cover grid')
   const cover: CoverGrid = { ...meta.cover, tex: unpackCover(meta.cover.n, u8.coverRuns) }
   if (!meta.world || !arr.trees || arr.trees.length % TREE_FLOATS) throw new Error('look data: no world, or no trees')
+  if (!meta.farCover !== !u8.farCoverRuns) {
+    throw new Error("look data: the far ring's cover without its grid, or its grid without it")
+  }
+  const farCover = meta.farCover ? { ...meta.farCover, tex: unpackCover(meta.farCover.n, u8.farCoverRuns) } : null
+  if (!meta.light !== !u8.light || (meta.light && u8.light.length !== meta.light.nx * meta.light.nz * 2)) {
+    throw new Error('look data: the coarse light without its bytes, or a short one')
+  }
+  const light = meta.light ? { ...meta.light, rg: u8.light } : null
   return {
     hf: { ...meta.hf, h: arr.hf },
     far: { ...meta.far, h: arr.far },
@@ -242,6 +274,8 @@ export function decodeLook(buf: ArrayBuffer): LookData {
     cover,
     world: meta.world,
     trees: arr.trees,
+    farCover,
+    light,
   }
 }
 
@@ -275,21 +309,41 @@ export function checkLookData(d: Derived, look: LookData): void {
   const fn = s.farSub + 1
   const x0 = (-m * s.tile) / s.tileSub - s.tile / 2
   const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
+  const isWhole = (x: number) => Math.abs(x - Math.round(x)) < 1e-6
   if (look.hf.n !== n || !near(look.hf.cell, d.cell) || !near(look.hf.x0, x0) || !near(look.hf.z0, x0)) {
     bad.push(
       `heightfield ${look.hf.n} nodes of ${look.hf.cell} m from ${look.hf.x0}, the spec wants ${n} of ${d.cell} m from ${x0}`,
     )
   }
   if (look.hf.h.length !== n * n) bad.push(`heightfield has ${look.hf.h.length} heights, not ${n * n}`)
-  if (
-    look.far.n !== fn ||
-    !near(look.far.cell, d.farCell) ||
-    !near(look.far.x0, -s.far / 2) ||
-    !near(look.far.z0, -s.far / 2)
-  ) {
-    bad.push(`far ring ${look.far.n} nodes of ${look.far.cell} m, the spec wants ${fn} of ${d.farCell} m`)
+  if (look.world.kind === 'demo') {
+    if (look.far.n !== fn || !near(look.far.x0, -s.far / 2) || !near(look.far.z0, -s.far / 2)) {
+      bad.push(`far ring ${look.far.n} nodes from ${look.far.x0}, the spec wants ${fn} from ${-s.far / 2}`)
+    }
+  } else {
+    // a map world's (ringFor): its corner on the far grid, a far cell or more past the tile on every side
+    const r = rectOf(look.far)
+    const e = s.tile / 2
+    // (far cells from the tile's edges out to the ring's)
+    const k = [(-e - r.x0) / d.farCell, (-e - r.z0) / d.farCell, (r.x1 - e) / d.farCell, (r.z1 - e) / d.farCell]
+    if (!k.every(isWhole) || Math.min(...k) < 1 - 1e-9 || look.far.n > 8193) {
+      bad.push(`far ring from ${r.x0}, ${r.z0} to ${r.x1}, ${r.z1}: not on the far grid, or not past the tile`)
+    }
   }
-  if (look.far.h.length !== fn * fn) bad.push(`far ring has ${look.far.h.length} heights, not ${fn * fn}`)
+  if (!near(look.far.cell, d.farCell)) bad.push(`far ring cells of ${look.far.cell} m, the spec wants ${d.farCell} m`)
+  if (look.far.h.length !== look.far.n * look.far.n) {
+    bad.push(`far ring has ${look.far.h.length} heights, not ${look.far.n * look.far.n}`)
+  }
+  if (look.world.kind === 'map') {
+    // the far bake's cover over the ring (macroFarNOf's texels), the coarse light
+    const r = rectOf(look.far)
+    const fc = look.farCover
+    const fn2 = macroFarNOf(d, r.x1 - r.x0)
+    if (!fc || fc.n !== fn2 || !near(fc.x0, r.x0) || !near(fc.z0, r.z0) || !near(fc.n * fc.cell, r.x1 - r.x0)) {
+      bad.push(`the far ring's cover: not ${fn2}² cells over the ring from ${r.x0}, ${r.z0}`)
+    }
+    if (!look.light || look.light.nx < 2 || look.light.nz < 2) bad.push('no coarse light')
+  } else if (look.farCover || look.light) bad.push("the demo's far ring takes no cover or light of its own")
   for (const [name, g, gn, texel, ch] of [
     ['bank normals', look.bank, d.bankN, s.bank.texel, 3],
     ['water data', look.water, d.waterN, s.water.texel, 4],

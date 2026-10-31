@@ -20,7 +20,7 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 import { SUN, type Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
-import { D, shadowMapSize } from './spec.ts'
+import { D, shadowMapSize, type RingBakes } from './spec.ts'
 import type { Nature } from './nature.ts'
 import TER_VS from './shaders/terrain.vert?raw'
 import DEPTH_VS from './shaders/depth.vert?raw'
@@ -95,6 +95,7 @@ export function buildBakes(
   soft: SoftOptions,
   trunks: Nature['trunks'] = [],
   farCull: Nature['farCull'] = null,
+  ring: RingBakes | null = null,
 ): Bakes {
   /* ---------- shadow pass: an orthographic camera at the sun, depth of every caster, rendered ONCE ---------- */
   const lightCam = new FreeCamera('lightCam', SUN.scale(700), scene)
@@ -138,7 +139,7 @@ export function buildBakes(
     ex += SM_FADE_M + 8
     ey += SM_FADE_M + 8
     // the spec's texel target, on the ground (docs/proposals/engine-design.md §6)
-    sm = shadowMapSize(D, 2 * ex, 2 * ey, SUN.y)
+    sm = shadowMapSize(D, 2 * ex, 2 * ey, SUN.y, ring)
     smTexel = new Vector2(1 / sm.w, 1 / sm.h)
     // a shadow texel on the ground, m (about square)
     smGround = new Vector2((2 * ex) / sm.w, (2 * ey) / (sm.h * SUN.y))

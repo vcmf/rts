@@ -16,7 +16,7 @@ import { listOf, num } from '../../map/util.ts'
 import type { Resolved } from '../../map/resolve.ts'
 import type { Feature, Pt as MapPt } from '../../map/schema.ts'
 import type { Grid, Heightfield } from '../heightfield.ts'
-import type { Derived } from '../spec.ts'
+import type { Derived, Rect } from '../spec.ts'
 import { COVER, WEAR_STEP, isField, resample, type CoverClass, type CoverGrid } from './cover.ts'
 import { TREE_SPECIES, type TreeSpecies } from './data.ts'
 import { segD } from './geom.ts'
@@ -63,13 +63,15 @@ export function cellAt(L: Layers, x: number, z: number): number {
 
 /**
  * The window's heights: the tile's nodes and their margin (the demo's layout, tools/build-look-data.ts) and the far
- * ring's, read from `heightAt` (map metres to m above the datum), all taken down by the lowest of them, so the window's
- * lowest ground is 0 (its range read at load: groundOf, src/look/spec.ts). `base`: the height taken off, m.
+ * ring's (`ring`: its nodes, ringFor in src/look/spec.ts; by default the demo's, SPEC.far about the centre), read from
+ * `heightAt` (map metres to m above the datum), all taken down by the lowest of them, so the window's lowest ground is
+ * 0 (its range read at load: groundOf, src/look/spec.ts). `base`: the height taken off, m.
  */
 export function windowHeights(
   heightAt: (x: number, z: number) => number,
   win: Pick<LookWindow, 'x' | 'z'>,
   d: Derived,
+  ring: { n: number; x0: number; z0: number } = { n: d.spec.farSub + 1, x0: -d.spec.far / 2, z0: -d.spec.far / 2 },
 ): { hf: Heightfield; far: Grid; base: number } {
   const s = d.spec
   const m = d.hfMargin
@@ -77,10 +79,14 @@ export function windowHeights(
   const tx = (col: number) => Math.fround((col * s.tile) / s.tileSub - s.tile / 2)
   const h = new Float32Array(n * n)
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) h[j * n + i] = heightAt(tx(i - m) + win.x, tx(j - m) + win.z)
-  const fn = s.farSub + 1
-  const fx = (col: number) => Math.fround((col * s.far) / s.farSub - s.far / 2)
+  const fn = ring.n
+  const fc = d.farCell
   const fh = new Float32Array(fn * fn)
-  for (let j = 0; j < fn; j++) for (let i = 0; i < fn; i++) fh[j * fn + i] = heightAt(fx(i) + win.x, fx(j) + win.z)
+  for (let j = 0; j < fn; j++) {
+    for (let i = 0; i < fn; i++) {
+      fh[j * fn + i] = heightAt(Math.fround(ring.x0 + i * fc) + win.x, Math.fround(ring.z0 + j * fc) + win.z)
+    }
+  }
   // (the lowest node lands on 0: a world's ground range comes from its data, groundOf in src/look/spec.ts)
   const base = Math.min(minOf(h), minOf(fh))
   for (let k = 0; k < h.length; k++) h[k] -= base
@@ -88,7 +94,7 @@ export function windowHeights(
   const x0 = (-m * s.tile) / s.tileSub - s.tile / 2
   return {
     hf: { n, cell: s.tile / s.tileSub, x0, z0: x0, h, min: minOf(h), max: maxOf(h) },
-    far: { n: fn, cell: s.far / s.farSub, x0: -s.far / 2, z0: -s.far / 2, h: fh },
+    far: { n: fn, cell: fc, x0: ring.x0, z0: ring.z0, h: fh },
     base,
   }
 }
@@ -97,10 +103,10 @@ const minOf = (a: Float32Array): number => a.reduce((v, x) => Math.min(v, x), In
 const maxOf = (a: Float32Array): number => a.reduce((v, x) => Math.max(v, x), -Infinity)
 
 /**
- * Throws unless the window's tile (side `tile` m) lies inside the layers. Its far ring may run past the map's edge
- * (docs/plans/active/g1-austerlitz-3km.md): there the edge's heights are held (`heightOf` clamps) and the cover is the
- * default (meadow: `groundClass` of no cell), with no ways, water or trees (`cellAt` is −1 off the layers). A stopgap:
- * G3 draws paper past the map's edge (docs/plans/active/track-g.md).
+ * Throws unless the window's tile (side `tile` m) lies inside the layers. Its far ring runs past the map's edge
+ * (docs/plans/active/g3a-the-whole-map-far.md): there the edge's heights are held (`heightOf` clamps) and the cover is
+ * the default (meadow: `groundClass` of no cell), with no ways, water or trees (`cellAt` is −1 off the layers); the
+ * page paints it paper (the world's edge: mapRects).
  */
 export function checkWindowInside(L: Layers, win: LookWindow, tile: number): void {
   const h = tile / 2
@@ -112,6 +118,32 @@ export function checkWindowInside(L: Layers, win: LookWindow, tile: number): voi
     )
   }
   if (win.x % 2 || win.z % 2) throw new Error(`window ${win.name}: its centre must lie on even metres`)
+}
+
+/** The map's play area (`map.play` about the map's centre) and its edge (the layers' extent), in window metres. */
+export function mapRects(L: Layers, play: { w: number; h: number }, win: Pick<LookWindow, 'x' | 'z'>) {
+  const cx = L.x0 + (L.nx * L.cell) / 2 - win.x
+  const cz = L.z0 + (L.nz * L.cell) / 2 - win.z
+  const rect = (w: number, h: number): Rect => ({ x0: cx - w / 2, z0: cz - h / 2, x1: cx + w / 2, z1: cz + h / 2 })
+  return { play: rect(play.w, play.h), edge: rect(L.nx * L.cell, L.nz * L.cell) }
+}
+
+/**
+ * The cover of a square of the window (`box`: its corner in the window's metres and its side) at `cell` m: the
+ * window's cover (fineAreas, mapCover, the ways cut to it) built about the square's centre and moved back. The far
+ * ring's (G3a), at the far macro bake's texels.
+ */
+export function boxCover(
+  L: Layers,
+  features: readonly Feature[],
+  win: LookWindow,
+  box: { x0: number; z0: number; side: number },
+  cell: number,
+): CoverGrid {
+  const c = { x: box.x0 + box.side / 2, z: box.z0 + box.side / 2 }
+  const at = { ...win, x: win.x + c.x, z: win.z + c.z }
+  const g = mapCover(fineAreas(L, features, at, box.side, cell), L.table, at, wayLines(features, L.table, at, box.side))
+  return { ...g, x0: g.x0 + c.x, z0: g.z0 + c.z }
 }
 
 // the way kinds drawn as tracks (a lane's or a path's earth and wheel ruts); every other way is a road

@@ -7,8 +7,9 @@
 //   MACRO_SHADER  macro(xz, 0) per pixel: arm 2
 //   MACRO_BAKE    the bake, read: arm 3, and arms 4 and 5 (L5b), whose bakes differ (MACRO_STROKES below; the
 //                 Kuwahara pass in src/look/macro.ts)
-// the cover grid (nearest): class, field id, furrow direction, wear distance
-uniform sampler2D uCover;
+// the cover grid (nearest): class, field id, furrow direction, wear distance; uCoverBox its place: corner, side, cell
+// (m: the per-frame cover about the window, a map world's far ring and its bake its whole map's: src/look/macro.ts)
+uniform sampler2D uCover;uniform vec4 uCoverBox;
 // the snow's lie's zero, a byte (128/255), and under a byte from it the lie is 0: off the fields the bake's 8 bits
 // then read 0, so snowAt keeps its own edge there, as the water's shore band does (the seam)
 #define LIE0 0.50196078
@@ -26,7 +27,7 @@ vec4 coverTex(vec2 uv){return textureGrad(uCover,uv,vec2(0.0),vec2(0.0));}
 #else
 vec4 coverTex(vec2 uv){return texture2D(uCover,uv);}
 #endif
-vec4 coverAt(vec2 xz){vec4 t=coverTex(xz/FAR_W+0.5);return vec4(floor(t.r*255.0+0.5),floor(t.g*255.0+0.5),t.b*3.14159265,t.a*25.5);}
+vec4 coverAt(vec2 xz){vec4 t=coverTex((xz-uCoverBox.xy)/uCoverBox.z);return vec4(floor(t.r*255.0+0.5),floor(t.g*255.0+0.5),t.b*3.14159265,t.a*25.5);}
 // THE SOIL (docs/plans/done/bare-earth.md): the colour of bare ground, where nothing grows, by its material (the map
 // engine's ground material: loam, clay, sand, gravel, rock, peat, earth). Today's cover has no material: every class
 // is loam (earth, the map engine's yard, paints as loam). v in 0..1 its variation. Its surface up close: earthOn
@@ -97,7 +98,7 @@ vec3 wear(vec3 c,vec4 cv,Grain g){
 // strength. Baked into the macro colour (src/look/macro.ts); the shader arm's colour (groundAt) and the live roads'
 // and yards' paint (shore.glsl) take it too, so they match the ground beside them
 uniform sampler2D uRelief;uniform float uReliefK;
-vec3 reliefTone(vec3 c,vec2 xz){vec2 r=(texture2D(uRelief,xz/FAR_W+0.5).rg-0.5)*2.0;
+vec3 reliefTone(vec3 c,vec2 xz){vec2 r=(texture2D(uRelief,(xz-FAR_O)/FAR_W).rg-0.5)*2.0;
   c*=clamp(1.0+uReliefK*(0.9*r.x+0.25*r.y),0.7,1.3);   // (never so dark a valley turns black)
   return mix(c,c*vec3(0.9,0.96,1.06),uReliefK*0.6*max(0.0,-r.y));}
 #endif
@@ -110,7 +111,7 @@ vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*C
 vec2 coverWarpFine(vec2 xz){
   vec2 w=coverWarp(xz);
   #ifdef WEBGL2
-  if(float(textureSize(uCover,0).x)*COVER_CELL>FAR_W+0.5)w+=(vec2(blot(xz+5.3,2.5),blot(xz+17.9,2.5))-0.5)*COVER_FINE;
+  if(uCoverBox.w<COVER_CELL-0.01)w+=(vec2(blot(xz+5.3,2.5),blot(xz+17.9,2.5))-0.5)*COVER_FINE;
   #endif
   return w;}
 // THE DIRT SURFACE (docs/plans/done/ground-surface.md): where the ground is bare (a track, the village's trodden
@@ -370,10 +371,10 @@ vec4 macroOnce(vec2 xz,float px){if(xz!=pMacroXZ){pMacroXZ=xz;pMacro=macro(xz,0.
 vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
   float w=smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y)));
   #ifdef WEBGL2
-  vec4 a=w<1.0?texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W):vec4(0.0),b=w>0.0?texM(uMacroFar,xz/FAR_W+0.5,FAR_W):vec4(0.0);
+  vec4 a=w<1.0?texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W):vec4(0.0),b=w>0.0?texM(uMacroFar,(xz-FAR_O)/FAR_W,FAR_W):vec4(0.0);
   pMacro=mix(a,b,w);   // the side not read has no weight
   #else
-  pMacro=mix(texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W),texM(uMacroFar,xz/FAR_W+0.5,FAR_W),w);   // WebGL1: texture2D takes its gradients from the quad, so both read always
+  pMacro=mix(texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W),texM(uMacroFar,(xz-FAR_O)/FAR_W,FAR_W),w);   // WebGL1: texture2D takes its gradients from the quad, so both read always
   #endif
   }
   return pMacro;}

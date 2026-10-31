@@ -3,7 +3,7 @@ uniform mat4 viewProjection;uniform float uSeason,uAutumnWarm;   // uAutumnWarm:
 // the ring (src/look/meadow.ts): its snapped origin and its centre (the focus), its cell, the clumps spread and height (one height on every ring), its band of distance from the centre
 // (in from x to y, out from z to w), the meadow map (R the ground height, G the growth, B the height factor, A the
 // crops growth), the cover grid (nearest: its class, src/look/shaders/macro.glsl)
-uniform vec2 uOrigin,uCentre;uniform float uCentreY;uniform float uCell,uSpread,uHeight;uniform vec4 uBand;uniform sampler2D uMeadow,uCover;
+uniform vec2 uOrigin,uCentre;uniform float uCentreY;uniform float uCell,uSpread,uHeight;uniform vec4 uBand;uniform sampler2D uMeadow,uCover;uniform vec4 uCoverBox;
 varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;
 #ifdef GRASS_FLOW
 uniform vec3 uCamPos,uFocus;   // (the zoom: how far the camera stands from the focus)
@@ -36,7 +36,7 @@ float unitShadowRoot(vec3 wp){
 // the meadow map at a point: one bilinear read (half floats filter), its growing area shrunk a texel on the CPU so
 // the blend never crosses a rule (src/look/meadow.ts)
 vec4 meadowAt(vec2 xz){return texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);}
-vec2 coverCell(vec2 xz){vec4 t=texture2D(uCover,xz/FAR_W+0.5);return floor(t.rg*255.0+0.5);}   // its class and field id
+vec2 coverCell(vec2 xz){vec4 t=texture2D(uCover,(xz-uCoverBox.xy)/uCoverBox.z);return floor(t.rg*255.0+0.5);}   // its class and field id
 // the stubble tip colour, a pale straw, browning by late autumn: its red no higher than the standing wheat (no
 // clipping in the sun), its contrast with the coats measured by the guard (tools/guard.mjs --view crops)
 vec3 stubbleTip(float s){return mix(vec3(0.72,0.67,0.49),vec3(0.58,0.49,0.34),smoothstep(0.5,1.8,s));}
@@ -66,6 +66,8 @@ void main(){
   vec2 root=cell+vec2(h0,h1)*uCell;
   float d=length(root-uCentre);
   float band=(uBand.y>0.0?smoothstep(uBand.x,uBand.y,d):1.0)*(1.0-smoothstep(uBand.z,uBand.w,d));   // the inner ring has no fade in
+  // the meadow map is the tile's: the grass fades out over its last 20 m (a map world's focus goes past it: G3a)
+  band*=1.0-smoothstep(TILE_HALF-20.0,TILE_HALF,max(abs(root.x),abs(root.y)));
   // the cheap tests first, before any read of the meadow map: outside the band, or outside the view: the root at
   // 20 m under and over the focus height (the ground on the tile spans less), culled only when both lie past the
   // same edge of the frame, with a margin of a clump

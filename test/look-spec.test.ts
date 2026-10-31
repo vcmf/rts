@@ -23,6 +23,9 @@ import {
   maxGrid,
   nearFrameOf,
   nearReachOf,
+  playOf,
+  rectOf,
+  ringFor,
   shadowMapSize,
   spreadOf,
   type HoldGround,
@@ -33,6 +36,8 @@ import {
 import { groundAt, heightAt, setHeightfield, type Heightfield } from '../src/look/heightfield.ts'
 import { checkLookData, decodeLook, encodeLook } from '../src/look/world/data.ts'
 import { longIt } from './fx.ts'
+import { layersOf } from '../maps/engine.ts'
+import { bakeLight, SUN } from '../src/render/lit/bake.ts'
 import { LOOK_FILE, buildLookData } from '../tools/build-look-data.ts'
 
 const with_ = (f: (s: Spec) => void): Spec => {
@@ -41,8 +46,10 @@ const with_ = (f: (s: Spec) => void): Spec => {
   return s
 }
 
-// the ground SPEC assumed before A1b: the tile 0..25 m, the focus on its 8 m plane
-const OLD: WorldGround = { lo: 0, hi: 25, farLo: 0, focus: [8, 8] }
+// the demo's far ring, SPEC.far about the origin
+const RING = { x0: -SPEC.far / 2, z0: -SPEC.far / 2, x1: SPEC.far / 2, z1: SPEC.far / 2 }
+// the ground SPEC assumed before A1b: the tile 0..25 m, the focus on its 8 m plane, in the demo's play area and ring
+const OLD: WorldGround = { lo: 0, hi: 25, farLo: 0, focus: [8, 8], play: playOf(SPEC), ring: RING }
 
 describe('world spec', () => {
   it('derives the real spec', () => {
@@ -337,6 +344,19 @@ describe('world spec', () => {
       )
     expect(at(3072) - at(1536)).toBeCloseTo(4 * (bakeMB(3072, 3072) - bakeMB(1536, 1536)), 9)
   })
+  it("counts a map world's far ring in place of the demo's: its far bake, cover, relief tone and coarse light (G3a)", () => {
+    const d = derive(SPEC)
+    const demo = bakesMB(d, 1000, 1000)
+    // the demo's own ring counted as a map world's: its far bake as before, plus a cover, a relief tone and a light
+    const same = bakesMB(d, 1000, 1000, { side: SPEC.far, light: 0 })
+    expect(same - demo).toBeCloseTo(bakeMB(650, 650) * 2, 9)
+    // Austerlitz's: 4143 m, 1501² nodes of light
+    const big = bakesMB(d, 1000, 1000, { side: 4142.857, light: 1501 * 1501 })
+    expect(big - demo).toBeCloseTo(
+      (bakeMB(1036, 1036) * 4) / 3 + bakeMB(1036, 1036) * 2 + bakeMB(1501 * 1501, 1) - (bakeMB(650, 650) * 4) / 3,
+      6,
+    )
+  })
   it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {
     const d = derive(SPEC)
     const sin = 0.45
@@ -477,6 +497,50 @@ describe("the camera's reach (footprintOf, nearReachOf, checkView)", () => {
     expect(() => checkView(SPEC, { ...OLD, farLo: -400 })).toThrow(/sees past the world/)
     expect(() => checkView(SPEC, { ...OLD, focus: [9, 8] })).toThrow(/out of order/)
   })
+  it("holds a map world's play area, off the origin, and the footprint past it inside its ring (G3a)", () => {
+    const fp = footprintOf(SPEC, OLD)
+    const play = { x0: -1300, z0: -1700, x1: 1700, z1: 1300 }
+    const ring = { x0: play.x0 - fp - 1, z0: play.z0 - fp - 1, x1: play.x1 + fp + 1, z1: play.z1 + fp + 1 }
+    expect(() => checkView(SPEC, { ...OLD, play, ring })).not.toThrow()
+    // a metre short on any side sees past it
+    for (const k of ['x0', 'z0'] as const) {
+      expect(() => checkView(SPEC, { ...OLD, play, ring: { ...ring, [k]: ring[k] + 2 } })).toThrow(
+        /sees past the world/,
+      )
+    }
+    for (const k of ['x1', 'z1'] as const) {
+      expect(() => checkView(SPEC, { ...OLD, play, ring: { ...ring, [k]: ring[k] - 2 } })).toThrow(
+        /sees past the world/,
+      )
+    }
+  })
+})
+describe("a map world's far ring (ringFor, G3a)", () => {
+  const d = derive(SPEC)
+  it('holds the play area and the reach past it, on the far grid, square, a far cell or more past the tile', () => {
+    for (const play of [
+      { x0: -1274, z0: -1676, x1: 1726, z1: 1324 },
+      { x0: -10, z0: -20, x1: 30, z1: 5 },
+      { x0: -3000, z0: -100, x1: 100, z1: 100 },
+    ]) {
+      const g = ringFor(d, play, 500)
+      const r = rectOf({ ...g, h: [] })
+      const e = SPEC.tile / 2
+      expect(g.cell).toBe(d.farCell)
+      for (const v of [(-e - g.x0) / g.cell, (-e - g.z0) / g.cell]) {
+        expect(v).toBeCloseTo(Math.round(v), 9)
+        expect(v).toBeGreaterThanOrEqual(1)
+      }
+      expect(r.x1 - e).toBeGreaterThanOrEqual(g.cell - 1e-9)
+      expect(r.z1 - e).toBeGreaterThanOrEqual(g.cell - 1e-9)
+      expect(r.x0).toBeLessThanOrEqual(play.x0 - 500)
+      expect(r.z0).toBeLessThanOrEqual(play.z0 - 500)
+      expect(r.x1).toBeGreaterThanOrEqual(play.x1 + 500 - 1e-9)
+      expect(r.z1).toBeGreaterThanOrEqual(play.z1 + 500 - 1e-9)
+      // (no more than a cell to spare on the side that sets its size)
+      expect(Math.min(r.x0 - (play.x0 - 500), r.z0 - (play.z0 - 500))).toBeGreaterThan(-g.cell)
+    }
+  })
 })
 
 describe('the focus on the ground (FocusFollow, groundUnder)', () => {
@@ -559,7 +623,7 @@ describe("the camera's hold a frame (holdView, clearBelow in src/look/spec.ts, r
   const view = (radius: number, x = 0, z = 0) => ({ alpha: -2, beta: c.betaMax, radius, target: { x, y: c.focusY, z } })
   // a world as the hold reads it: the ground, its highest within a reach (here: everywhere), the demo's 8 m plane
   const world = (ground: (x: number, z: number) => number, top: number, focus: [number, number] = [8, 8]) =>
-    ({ ground, highest: () => top, follow: new FocusFollow(focus) }) satisfies HoldGround
+    ({ ground, highest: () => top, follow: new FocusFollow(focus), play: playOf(SPEC) }) satisfies HoldGround
   it('keeps the focus within the play area', () => {
     const v = view(100, 400, -300)
     holdView(
@@ -570,6 +634,18 @@ describe("the camera's hold a frame (holdView, clearBelow in src/look/spec.ts, r
       0,
     )
     expect([v.target.x, v.target.z]).toEqual([SPEC.play, -SPEC.play])
+  })
+  it("keeps the focus within a map world's play area, off the origin (G3a)", () => {
+    const play = { x0: -1274, z0: -1676, x1: 1726, z1: 1324 }
+    for (const [x, z, want] of [
+      [1000, -1000, [1000, -1000]],
+      [3000, -3000, [1726, -1676]],
+      [-2000, 2000, [-1274, 1324]],
+    ] as const) {
+      const v = view(100, x, z)
+      holdView(SPEC, new ZoomHold(), v, { ...world(() => 0, 0), play }, 0)
+      expect([v.target.x, v.target.z]).toEqual(want)
+    }
   })
   it('never reads the ground from clearBelow out (the eye clears the highest ground within its reach there)', () => {
     expect(clearBelow(SPEC, 25 - c.focusY)).toBeLessThan(TUNED_R) // (the demo's zooms, 45 m out, never read it)
@@ -727,8 +803,26 @@ describe("a world's ground from its data (groundOf, maxGrid)", () => {
   const far: NodeGrid = { n: 2, cell: 2000, x0: -1000, z0: -1000, h: new Float32Array([2, 2, 2, 2]) }
   it("takes the tile's range, the far ring's lowest, and the focus's range in play (or the world's plane)", () => {
     const s = with_(v => (v.play = 150))
-    expect(groundOf(s, hf, far, null)).toEqual({ lo: 4, hi: 30, farLo: 2, focus: [5, 30] }) // (x −100 to 100 in play)
+    const play = { x0: -150, z0: -150, x1: 150, z1: 150 }
+    const ring = { x0: -1000, z0: -1000, x1: 1000, z1: 1000 }
+    // (x −100 to 100 in play; the far ring's nodes lie past the tile, out of play)
+    expect(groundOf(s, hf, far, null)).toEqual({ lo: 4, hi: 30, farLo: 2, focus: [5, 30], play, ring })
     expect(groundOf(s, hf, far, 8).focus).toEqual([8, 8])
+  })
+  it("takes a map world's far ring's nodes in play past the tile, not those under it (G3a)", () => {
+    // a far ring of 250 m cells from −1000: its node at (−250, 0) lies under the tile (SPEC.tile, ±400), (1000, 0) past
+    const fh = new Float32Array(81).fill(2)
+    fh[4 * 9 + 3] = 90 // (−250, 0): under the tile
+    fh[4 * 9 + 8] = 50 // (1000, 0): past it
+    const fg: NodeGrid = { n: 9, cell: 250, x0: -1000, z0: -1000, h: fh }
+    const wide = { x0: -1000, z0: -1000, x1: 1000, z1: 1000 }
+    expect(groundOf(SPEC, hf, fg, null, wide)).toMatchObject({ lo: 2, hi: 50, farLo: 2, focus: [2, 50] })
+    // (out of play, the node past the tile counts for the far ring's lowest alone)
+    expect(groundOf(SPEC, hf, fg, null, { x0: -200, z0: -200, x1: 200, z1: 200 })).toMatchObject({
+      lo: 4,
+      hi: 30,
+      focus: [4, 30],
+    })
   })
   it('bounds the ground within a reach: never under a node it holds, never the far side of the grid', () => {
     const top = maxGrid(hf, 2)
@@ -754,7 +848,10 @@ describe("each world's data against the camera (checkView, nearFrameOf)", () => 
       const b = fs.readFileSync(`data/${file}`)
       const d = decodeLook(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer)
       setHeightfield(d.hf, d.far, SPEC.tile / 2)
-      const g = groundOf(SPEC, d.hf, d.far, d.world.kind === 'map' ? null : SPEC.camera.focusY)
+      const g =
+        d.world.kind === 'map'
+          ? groundOf(SPEC, d.hf, d.far, null, d.world.play)
+          : groundOf(SPEC, d.hf, d.far, SPEC.camera.focusY)
       expect(() => checkView(SPEC, g)).not.toThrow()
       // the follow's want (it is never above it)
       const [lo, hi] = g.focus
@@ -763,5 +860,28 @@ describe("each world's data against the camera (checkView, nearFrameOf)", () => 
       // (1 m of headroom: the Pratzen's is 1.6 m, docs/plans/done/look-austerlitz-a1b.md, open questions)
       expect(nearFrameOf(SPEC, groundAt, focusY)).toBeLessThanOrEqual(SPEC.tile / 2 - 1)
     })
+    if (file.startsWith('austerlitz-')) {
+      longIt(`${file}: its far ring on the far grid, its coarse light the map's bakeLight (G3a)`, () => {
+        const b = fs.readFileSync(`data/${file}`)
+        const d = decodeLook(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer)
+        expect(() => checkLookData(derive(SPEC), d)).not.toThrow()
+        expect(() => checkLookData(derive(SPEC), { ...d, far: { ...d.far, x0: d.far.x0 + 1 } })).toThrow(/far ring/)
+        // a ring ending on the tile's +x and +z edges (no far cell past them for the apron)
+        const e = SPEC.tile / 2
+        const n = Math.round((e - d.far.x0) / d.far.cell) + 1
+        const short = { ...d.far, n, z0: d.far.x0, h: new Float32Array(n * n) }
+        expect(() => checkLookData(derive(SPEC), { ...d, far: short })).toThrow(/not past the tile/)
+        expect(() => checkLookData(derive(SPEC), { ...d, light: null })).toThrow(/coarse light/)
+        const { layers: L } = layersOf('maps/austerlitz.map.json')
+        const want = bakeLight(L.height, L.nx + 1, L.nz + 1, L.cell, SUN, 1, 1)
+        const light = d.light!
+        expect([light.nx, light.nz, light.cell]).toEqual([want.nx, want.nz, L.cell])
+        const w = d.world as Extract<typeof d.world, { kind: 'map' }>
+        expect([light.x0, light.z0]).toEqual([L.x0 - w.x, L.z0 - w.z])
+        for (let k = 0; k < want.nx * want.nz; k += 997) {
+          expect([light.rg[k * 2], light.rg[k * 2 + 1]]).toEqual([want.data[k * 4], want.data[k * 4 + 1]])
+        }
+      })
+    }
   }
 })
