@@ -118,11 +118,13 @@ describe('a tile cut from a level', () => {
     expect([...cutTile({ ...bake, shape: new Float32Array(15).fill(10) }, first, 1, 0.5, -70).shape]).toEqual([160])
   })
 
-  it('holds a shape below the base at it, and refuses one past the Uint16 range', () => {
+  it('holds a shape below the base at it, and refuses one past the Uint16 range or not a number', () => {
     const low = { ...bake, shape: new Float32Array(15).fill(-3) }
     expect([...cutTile(low, first, 1, 0.5, 0).shape]).toEqual([0])
     const high = { ...bake, shape: new Float32Array(15).fill(40000) }
     expect(() => cutTile(high, first, 1, 0.5, 0)).toThrow(/past 32767.5 m/)
+    const hole = { ...bake, shape: new Float32Array(15).fill(NaN) }
+    expect(() => cutTile(hole, first, 1, 0.5, 0)).toThrow(/a shape of NaN m at node 0/)
   })
 
   it('lays a level out in tiles, the last ones padded', () => {

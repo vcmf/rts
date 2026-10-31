@@ -2,16 +2,19 @@
 // (the whole theatre, far) and 100 m (close), the heights from the terrain tiles, the one shape, the lakes sunk into
 // it, the light that does not change (on all cores) and the forests (src/render/campaign/bake.ts), cut into tiles of
 // 256 × 256 nodes, deflated, under scratch/campaign/ (git-ignored, never committed):
-//   manifest.json: the format, the frame, the bake's parameters, the levels (src/render/campaign/tiles.ts, Manifest)
-//   l<level>/t-<i>-<j>.bin: one tile (src/render/campaign/tiles.ts, the format)
+//   manifest.json: the format, its build, the frame, the bake's parameters, the levels (src/render/campaign/tiles.ts,
+//     Manifest)
+//   b-<time>-<pid>/l<level>/t-<i>-<j>.bin: one tile of a build (src/render/campaign/tiles.ts, the format)
 // Until the campaign page replaces the prototype (K2b), the 100 m level is also written as the prototype's tiles
 // (prototypes/campaign-map.html cannot fetch binary from file://), under scratch/campaign-tiles/:
 //   meta.js: window.CAMPAIGN_TILES = { cell, nx, nz, size, tilesX, tilesZ, scale, params }
 //   t-<i>-<j>.js: window.__campaignTile(i, j, shape, light): the shape as base64 of little-endian Uint16 in `scale`
 //     metres, the light as base64 of three bytes a node (the sun, the sky, the forest), the south row first.
 // Reads the theatre (tools/campaign-theatre.ts's output) for the frame, its lowest ground and the lakes, and the
-// frame's forest field (tools/worldcover.ts, made by the theatre and cached). Both outputs are built beside the last
-// ones and swapped in when the run succeeds.
+// frame's forest field (tools/worldcover.ts, made by the theatre and cached). Each build goes into a directory of its
+// own and is made live by its manifest, written last (tools/campaign-builds.ts); the prototype's meta file is removed
+// before its tiles are written and written again after them, so a failed run never leaves the last tiles unusable or
+// a mix of two runs in use (the prototype then keeps its 250 m bake).
 // Usage: node tools/campaign-tiles.ts [theatre out prototypeOut]
 //   default: scratch/campaign-1805.js scratch/campaign scratch/campaign-tiles
 import fs from 'node:fs'
@@ -45,6 +48,7 @@ import {
   type Manifest,
   type Tile,
 } from '../src/render/campaign/tiles.ts'
+import { commitBuild, pruneBuilds, startBuild, writeWhole } from './campaign-builds.ts'
 import { frameGrid, projection, type Frame, type Pt } from './campaign-theatre-lib.ts'
 import { sampleGrid } from './terrarium.ts'
 import { forestField, WORLDCOVER_LEVEL_PX } from './worldcover.ts'
@@ -137,6 +141,9 @@ async function bakeLight(shape: Float32Array, grid: Grid): Promise<Uint8Array> {
           new Promise<void>((resolve, reject) => {
             worker.on('message', () => resolve())
             worker.on('error', reject)
+            // a worker gone without its message (killed, out of memory) would leave the build waiting: after the
+            // message, the promise is settled and this does nothing
+            worker.on('exit', code => reject(new Error(`a light worker stopped (exit ${code}) before its band`)))
           }),
       ),
     )
@@ -201,20 +208,29 @@ function prototypeTile(tile: Tile): string {
   return `window.__campaignTile(${tile.column},${tile.row},"${b64(shape)}","${b64(light)}")\n`
 }
 
+// as many deflates at once as libuv's pool has threads (its default 4 when the variable is unset or not a count)
+const WRITERS = Math.max(1, Math.floor(Number(process.env.UV_THREADPOOL_SIZE)) || 4)
+
 /**
- * Writes a level's tiles under `dir`, deflated on libuv's thread pool (as many at once as it has threads), and, given
- * `prototypeDir`, the prototype's tiles and meta file there too, from the same cut. Returns the bytes on disk of each.
+ * Writes a level's tiles under `dir`, deflated on libuv's thread pool, and, given `prototypeDir`, the prototype's
+ * tiles and meta file there too, from the same cut: the meta file removed first and written last, so the prototype
+ * never uses a half-written level. Returns the tiles written and the bytes on disk of each output.
  */
 async function writeLevel(dir: string, bake: LevelBake, level: number, prototypeDir?: string) {
   fs.mkdirSync(dir, { recursive: true })
-  if (prototypeDir) fs.mkdirSync(prototypeDir, { recursive: true })
+  const meta = prototypeDir && path.join(prototypeDir, 'meta.js')
+  if (prototypeDir && meta) {
+    fs.mkdirSync(prototypeDir, { recursive: true })
+    fs.rmSync(meta, { force: true })
+  }
   const tiles = tilesOf(bake, level)
-  const written = { bytes: 0, prototype: 0 }
+  const written = { tiles: 0, bytes: 0, prototype: 0 }
   const worker = async () => {
     for (const tile of tiles) {
       const name = `t-${tile.column}-${tile.row}`
       const packed = await deflate(packTile(tile), { level: 9 })
       await fs.promises.writeFile(path.join(dir, `${name}.bin`), packed)
+      written.tiles++
       written.bytes += packed.length
       if (prototypeDir) {
         const js = prototypeTile(tile)
@@ -223,11 +239,15 @@ async function writeLevel(dir: string, bake: LevelBake, level: number, prototype
       }
     }
   }
-  await Promise.all(Array.from({ length: Number(process.env.UV_THREADPOOL_SIZE ?? 4) }, worker))
-  if (prototypeDir) {
-    const { nx, nz, cell } = bake.grid
-    const meta = { cell, nx, nz, ...levelLayout(nx, nz, SIZE), scale: SCALE, params: prototypeParams() }
-    fs.writeFileSync(path.join(prototypeDir, 'meta.js'), `window.CAMPAIGN_TILES = ${JSON.stringify(meta)}\n`)
+  await Promise.all(Array.from({ length: WRITERS }, worker))
+  const { nx, nz, cell } = bake.grid
+  const layout = levelLayout(nx, nz, SIZE)
+  if (written.tiles !== layout.tilesX * layout.tilesZ) {
+    throw new Error(`level ${level}: ${written.tiles} tiles written of ${layout.tilesX * layout.tilesZ}`)
+  }
+  if (meta) {
+    const content = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams() }
+    writeWhole(meta, `window.CAMPAIGN_TILES = ${JSON.stringify(content)}\n`)
   }
   return written
 }
@@ -262,33 +282,6 @@ function params(low: number): Record<string, number> {
   }
 }
 
-/**
- * Swaps finished builds in for the last ones, as nearly at once as the file system allows: each old directory
- * renamed aside, each new one renamed into its place, and only then the old ones removed. When a rename fails, what
- * was moved goes back (the new builds to their building directories, the old ones to their places), so the last
- * builds stay whole.
- */
-function swapIn(pairs: [building: string, dir: string][]) {
-  const asideDone: string[] = []
-  const inDone: [building: string, dir: string][] = []
-  try {
-    for (const [, dir] of pairs) {
-      if (!fs.existsSync(dir)) continue
-      fs.renameSync(dir, `${dir}.old`)
-      asideDone.push(dir)
-    }
-    for (const [building, dir] of pairs) {
-      fs.renameSync(building, dir)
-      inDone.push([building, dir])
-    }
-  } catch (e) {
-    for (const [building, dir] of inDone) fs.renameSync(dir, building)
-    for (const dir of asideDone) fs.renameSync(`${dir}.old`, dir)
-    throw e
-  }
-  for (const dir of asideDone) fs.rmSync(`${dir}.old`, { recursive: true, force: true })
-}
-
 const mb = (bytes: number) => `${(bytes / 1e6).toFixed(1)} MB`
 
 async function main() {
@@ -300,23 +293,18 @@ async function main() {
   const t = loadTheatre(theatreFile)
   const proj = projection(t.frame.lat0, t.frame.lon0)
   const src: Sources = { t, proj, low: lowest(theatreHeights(t)), forest: await forestField(t.frame, proj) }
-  // built beside the last builds and swapped in at the end: a failed run leaves them as they were
-  const building = `${out}.building`
-  const prototypeBuilding = `${prototypeOut}.building`
-  // and what a crashed run may have left beside them
-  for (const dir of [building, prototypeBuilding, `${out}.old`, `${prototypeOut}.old`]) {
-    fs.rmSync(dir, { recursive: true, force: true })
-  }
+  // a directory of its own, live once its manifest is written: a failed run leaves the last build as it was
+  const build = startBuild(out)
   const levels: Level[] = []
   for (const [level, { cell, zoom }] of LEVELS.entries()) {
     const start = performance.now()
     const bake = await bakeLevel(src, cell, zoom)
     // the close level for the prototype too
-    const forPrototype = level === LEVELS.length - 1 ? prototypeBuilding : undefined
-    const written = await writeLevel(path.join(building, `l${level}`), bake, level, forPrototype)
+    const forPrototype = level === LEVELS.length - 1 ? prototypeOut : undefined
+    const written = await writeLevel(path.join(out, build, `l${level}`), bake, level, forPrototype)
     const { nx, nz } = bake.grid
     const layout = levelLayout(nx, nz, SIZE)
-    levels.push({ cell, nx, nz, ...layout, scale: SCALE, base: BASE, zoom, path: `l${level}/t-{i}-{j}.bin` })
+    levels.push({ cell, nx, nz, ...layout, scale: SCALE, base: BASE, zoom, path: `${build}/l${level}/t-{i}-{j}.bin` })
     const ms = Math.round(performance.now() - start)
     const tiles = layout.tilesX * layout.tilesZ
     console.log(`level ${level}: ${nx} × ${nz} nodes at ${cell} m, ${tiles} tiles, ${mb(written.bytes)}, ${ms} ms`)
@@ -324,17 +312,17 @@ async function main() {
   }
   const manifest: Manifest = {
     format: MANIFEST_FORMAT,
+    build,
     frame: t.frame,
     params: params(src.low),
     levels,
     credit: t.credit,
   }
-  fs.writeFileSync(path.join(building, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
-  swapIn([
-    [building, out],
-    [prototypeBuilding, prototypeOut],
-  ])
-  console.log(`${out}: built on ${os.cpus().length} cores in ${Math.round(performance.now() - t0)} ms`)
+  commitBuild(out, build, manifest)
+  const removed = pruneBuilds(out)
+  console.log(
+    `${out}/${build}: built on ${os.cpus().length} cores in ${Math.round(performance.now() - t0)} ms, ${removed.length} older build(s) removed`,
+  )
 }
 
 if (isMainThread) {

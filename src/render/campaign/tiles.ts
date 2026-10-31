@@ -45,13 +45,15 @@ export interface Level {
   base: number
   // the terrain tiles' zoom the level's heights were sampled at
   zoom: number
-  // a tile's path relative to the manifest, its column and row as {i} and {j}
+  // a tile's path relative to the manifest (in its build's directory), its column and row as {i} and {j}
   path: string
 }
 
 /** The tiles' manifest: what the page checks before it uses them. */
 export interface Manifest {
   format: number
+  // the build directory the levels' paths lie in (tools/campaign-builds.ts): a new one each build
+  build: string
   frame: { lat0: number; lon0: number; halfX: number; halfZ: number }
   // the bake's parameters (the shape's, the sun's, the forests'): tiles of other parameters are not used
   params: Record<string, number>
@@ -171,7 +173,8 @@ export function levelLayout(nx: number, nz: number, size: number) {
 
 /**
  * The tile at (column, row) of a level, `size` nodes a side, cut from its bake: the shape in `scale` metres above
- * `base` (below it held at it, above the Uint16 range refused), nodes past the grid repeating its edge.
+ * `base` (below it held at it; above the Uint16 range, or not a number, refused), nodes past the grid repeating
+ * its edge.
  */
 export function cutTile(bake: LevelBake, place: TilePlace, size: number, scale: number, base: number): Tile {
   const { level, column, row } = place
@@ -192,7 +195,9 @@ export function cutTile(bake: LevelBake, place: TilePlace, size: number, scale: 
     for (let i = 0; i < size; i++) {
       const g = gj * nx + Math.min(nx - 1, column * size + i)
       const k = j * size + i
-      const steps = Math.round(Math.max(0, bake.shape[g] - base) / scale)
+      const height = bake.shape[g]
+      if (!Number.isFinite(height)) throw new RangeError(`cutTile: a shape of ${height} m at node ${g}`)
+      const steps = Math.round(Math.max(0, height - base) / scale)
       if (steps > 0xffff) {
         throw new RangeError(`cutTile: a shape of ${bake.shape[g]} m past ${base + 0xffff * scale} m`)
       }

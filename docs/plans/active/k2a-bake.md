@@ -58,7 +58,7 @@ compressed tile levels with a manifest. The page that draws them is K2b.
   18 MB.
 - The build: 69 s on 8 cores (the owner's WSL machine, an i7-9700K): 10 s for the 250 m level, 58 s for the 100 m
   one, most of it the light.
-- Tests: `test/campaign-tiles.test.ts` (13), `test/campaign-bake.test.ts` (one more: the bands give the bytes of one
+- Tests: `test/campaign-tiles.test.ts` (13), `test/campaign-builds.test.ts` (6, the build's replacing), `test/campaign-bake.test.ts` (one more: the bands give the bytes of one
   pass), `test/worldcover.test.ts` (unchanged, its smoothing and resampling now from the bake module).
 
 ## Review rounds
@@ -81,6 +81,16 @@ compressed tile levels with a manifest. The page that draws them is K2b.
   libuv's pool has threads, written without blocking; the acceptance's claim of the same bytes twice replaced by what
   the test checks (bands against one pass); a stray doc comment. Left: the prototype still holds its lake beds at
   zero, as before K2a (its shader reads its shape from zero; the page that replaces it, K2b, reads the base).
+- **Round 3**: no new defect in the format or the bake, but the third round running with a severe finding in the
+  same place, replacing the last output: a run killed mid-swap left the last build only aside, and the next run's
+  cleanup removed it; a thread pool size of 0 or not a number wrote empty levels and swapped them in. Per the
+  workflow, **redesigned** rather than patched again: each build in a directory of its own, made live by its
+  manifest written last and whole (a file's rename, all or nothing), the other builds removed only after
+  (`tools/campaign-builds.ts`, its own tests); the prototype's tiles written in place, their meta file removed first
+  and written last. With: the writers at least one, and the tiles written counted against the level's; a light
+  worker gone without its band stops the build; a shape not a number refused by `cutTile`. Left: the far level
+  samples its heights again rather than taking the theatre's (4 s a build; round 2 chose a true zoom in the
+  manifest). The prototype's tiles still byte for byte, the binary level still the prototype's; the build 67 s.
 
 ## Open questions
 

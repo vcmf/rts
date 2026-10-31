@@ -23,8 +23,10 @@ We will store each tile as one small binary file (`src/render/campaign/tiles.ts`
 - the shape's rows as **differences from the node before** (modulo 2^16): relief is smooth, so the numbers are small;
 - the whole tile **deflated** (zlib's format): Node's zlib writes it, the browser's own `DecompressionStream`
   reads it, so no decoder ships;
-- a **manifest** (`manifest.json`) beside the levels, of its own format version: the frame, every parameter the bake
-  depends on and the levels' grids; the page uses tiles only when their parameters match its own.
+- a **manifest** (`manifest.json`) of its own format version: the build directory its levels lie in, the frame, every
+  parameter the bake depends on and the levels' grids; the page uses tiles only when their parameters match its own.
+  Each build has a directory of its own and the manifest, written last and whole, makes it live, so the page never
+  reads a manifest of one build with the tiles of another.
 
 ## Consequences
 
