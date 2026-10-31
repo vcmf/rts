@@ -972,6 +972,11 @@ export class CampaignMapView {
     return [p.x, p.y, p.z]
   }
 
+  /** The ground's lowest and highest, km: a sunk lake's bed, and above the highest relief. */
+  heightRange(): [number, number] {
+    return [this.far ? this.far.level.base / 1000 : 0, this.highest]
+  }
+
   /** How high the map stands at a point (km), as it is drawn (the far mesh, and the patch up close). */
   heightAt(xKm: number, zKm: number): number {
     return this.riseAt(xKm, zKm)
@@ -1064,6 +1069,11 @@ export class CampaignMapView {
     }
     this.scene.render()
     this.onFrame?.(performance.now() - t)
+  }
+
+  /** Draws what lies over the map again in the next frame (the fonts came, say). */
+  redraw() {
+    this.surfaceMoved = true
   }
 
   /** Starts drawing every frame (once: a second call while it draws does nothing). */

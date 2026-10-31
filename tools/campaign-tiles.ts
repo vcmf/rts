@@ -287,8 +287,9 @@ function labelsOf(t: Theatre, data: Data, proj: ReturnType<typeof projection>): 
     const [x, z] = proj.forward(r.lat, r.lon)
     return { name: r.name, angle: r.angle, x, z }
   })
+  // the rivers the page draws (rank RIVER_RANK or larger), not a name where no river is
   const rivers = t.rivers
-    .filter(r => r.name)
+    .filter(r => r.name && r.rank <= RIVER_RANK)
     .map(r => {
       const p: number[] = []
       for (let i = 0; i < r.p.length; i += 4) p.push(r.p[i], r.p[i + 1])
@@ -405,6 +406,11 @@ async function main() {
   const out = path.resolve(process.argv[3] ?? 'scratch/campaign')
   const prototypeOut = path.resolve(process.argv[4] ?? 'scratch/campaign-tiles')
   const t = loadTheatre(theatreFile)
+  // the data file read and checked first: a bad one stops the run before minutes of baking, not after
+  const data = loadData()
+  if (!(['lat0', 'lon0', 'halfX', 'halfZ'] as const).every(k => data.frame[k] === t.frame[k])) {
+    throw new Error("the data file's frame is not the theatre's: run tools/campaign-theatre.ts")
+  }
   const proj = projection(t.frame.lat0, t.frame.lon0)
   // the level the fields lie on must be one of the levels: the manifest names their file
   if (!LEVELS[FIELDS_LEVEL]) throw new Error(`the fields' level ${FIELDS_LEVEL} is not one of the ${LEVELS.length}`)
@@ -440,7 +446,7 @@ async function main() {
       prototypeMeta = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams(), build: prototypeBuild }
     }
   }
-  const labels = labelsOf(t, loadData(), proj)
+  const labels = labelsOf(t, data, proj)
   await writeFlushed(path.join(out, build, LABELS_FILE), JSON.stringify(labels))
   console.log(`labels: ${labels.towns.length} towns, ${labels.regions.length} regions, ${labels.rivers.length} rivers`)
   const manifest: Manifest = {

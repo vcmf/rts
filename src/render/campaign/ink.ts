@@ -69,9 +69,14 @@ export class Ink {
     this.labels = labels
     this.half = half
     this.bounds = labels.rivers.map(r => {
-      const xs = r.p.filter((_, i) => i % 2 === 0)
-      const zs = r.p.filter((_, i) => i % 2 === 1)
-      return [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)]
+      const b: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity]
+      for (let i = 0; i < r.p.length; i += 2) {
+        b[0] = Math.min(b[0], r.p[i])
+        b[1] = Math.min(b[1], r.p[i + 1])
+        b[2] = Math.max(b[2], r.p[i])
+        b[3] = Math.max(b[3], r.p[i + 1])
+      }
+      return b
     })
     this.resize()
   }
@@ -84,7 +89,7 @@ export class Ink {
   }
 
   /**
-   * Whether a box on the map (metres), on the ground or as high as the relief goes (10 km), lies wholly off the
+   * Whether a box on the map (metres), from the lowest ground (a sunk lake's bed) to the highest, lies wholly off the
    * screen: its eight corners all past one edge of the view, or all behind the camera.
    */
   private offScreen([x0, z0, x1, z1]: [number, number, number, number]): boolean {
@@ -92,7 +97,7 @@ export class Ink {
     const corners: Clip[] = []
     for (const x of [x0 / 1000, x1 / 1000]) {
       for (const z of [z0 / 1000, z1 / 1000]) {
-        for (const y of [0, 10]) {
+        for (const y of this.view.heightRange()) {
           corners.push([
             x * m[0] + y * m[4] + z * m[8] + m[12],
             x * m[1] + y * m[5] + z * m[9] + m[13],
@@ -295,7 +300,9 @@ export class Ink {
       draw.towns.push(entry)
       if (!seen) continue
       const s = townMark(t.size, ppk)
-      const mark: Box = [sx - s, sy - s, 2 * s, 2 * s]
+      // a fortress's ring reaches 1.15 times as far as its block
+      const r = t.fort ? s * 1.15 : s
+      const mark: Box = [sx - r, sy - r, 2 * r, 2 * r]
       placement.mark(mark)
       drawn.push({ t, sx, sy, s, mark, entry })
       g.fillStyle = INK
@@ -336,8 +343,9 @@ export class Ink {
     const g = this.g
     g.font = `italic 400 16px ${SERIF}`
     g.letterSpacing = '0.08em'
-    // a name once, on the longest run of all the river's lines that carry it
-    const best = new Map<string, { at: [number, number]; angle: number; length: number; map: [number, number] }>()
+    // a name once a river, on the longest of its lines' runs that is seen and free (the next longest when not)
+    type Place = { at: [number, number]; angle: number; length: number; map: [number, number] }
+    const places = new Map<string, Place[]>()
     for (const [k, r] of this.labels.rivers.entries()) {
       if (!riverShown(r.rank, ppk) || !riverNamed(r.rank, ppk) || this.offScreen(this.bounds[k])) continue
       const runs = this.screenLine(r.p)
@@ -345,19 +353,24 @@ export class Ink {
         runs.map(run => run.pts),
         p => this.inside(p),
       )
-      if (!place || place.length <= (best.get(r.name)?.length ?? 0)) continue
-      best.set(r.name, { ...place, map: runs[place.run].map[place.index] })
+      if (!place) continue
+      const list = places.get(r.name) ?? []
+      list.push({ ...place, map: runs[place.run].map[place.index] })
+      places.set(r.name, list)
     }
-    for (const [name, { at, angle, map }] of best) {
-      if (!this.seen(map[0], map[1])) continue
+    for (const [name, list] of places) {
       const w = g.measureText(name).width
-      // the text as drawn: its baseline 5 px above the course, the glyphs and halo from 18 px above it to 1 px below
-      if (placement.take([turnedBox(at, angle, w + 4, -18, 1)]) < 0) continue
-      g.save()
-      g.translate(at[0], at[1])
-      g.rotate(angle)
-      this.haloText(name, -w / 2, -5, RIVER_INK)
-      g.restore()
+      for (const { at, angle, map } of list.sort((a, b) => b.length - a.length)) {
+        if (!this.seen(map[0], map[1])) continue
+        // the text as drawn: its baseline 5 px above the course, the glyphs and halo from 18 px above it to 1 px below
+        if (placement.take([turnedBox(at, angle, w + 4, -18, 1)]) < 0) continue
+        g.save()
+        g.translate(at[0], at[1])
+        g.rotate(angle)
+        this.haloText(name, -w / 2, -5, RIVER_INK)
+        g.restore()
+        break
+      }
     }
     g.letterSpacing = '0px'
   }

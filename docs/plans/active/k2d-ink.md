@@ -77,6 +77,13 @@ frame):
   after, at eight views: no name over a name or a mark, every town drawn and hidden as its ray finds; a redraw
   0.25 to 1.9 ms; panning up close a mean of 2.8 ms, the 95th centile 3.8 ms, the worst 5.0 ms; at 250 km 3.6, 5.1
   and 6.2 ms (1080p): the culled rivers took the ink back under the 6.7 ms line.
+- **Round 2**: no severe finding; fixed: the data file read and its frame checked before the bake, not after it; only
+  the rivers the page draws (rank 6 or larger) named (83 named lines down to 19: a name had been lettered where no
+  river is drawn); the rivers' boxes culled between the ground's real lowest (a sunk lake's bed) and highest; a
+  fortress's mark as large as its ring; a river's next longest run tried when the longest is hidden or taken; the
+  rivers' boxes in one loop; the ink drawn again when the fonts come. Left: the ink is redrawn while any tile fades
+  in (0.4 s a tile), not only one under the names; the clip-space product written twice (the view's `clipOf` and the
+  ink's cull).
 
 ## Open questions
 

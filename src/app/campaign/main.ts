@@ -202,6 +202,8 @@ async function main() {
     drawScale(ppk)
   }
   addEventListener('resize', () => ink.resize())
+  // the names measured again when the fonts come (they may come after the first draw, which fell back to Georgia)
+  document.fonts.ready.then(() => view.redraw()).catch(() => {})
   view.start()
   const readyMs = Math.round(performance.now() - t0)
   // for the checks (tools/shot.mjs): the view's controls and when the page was ready
