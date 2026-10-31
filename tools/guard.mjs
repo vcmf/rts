@@ -20,7 +20,7 @@
 // here): whether a block is more saturated than the 99th percentile of the ground's saturation.
 // Exit 1 on a failure. The page: the look page, built (`npm run build`, `npx vite preview`).
 //
-//   node tools/guard.mjs <look page URL?armies=n> --figures [--seasons …] [outDir]   the armies' real figures, measured
+//   node tools/guard.mjs <look page URL?battle> --figures [--seasons …] [outDir]   the armies' real figures, measured
 //
 // --figures (docs/plans/active/armies-demo.md): the battalions themselves, not blocks, at the fight's middle
 // (__armies.focus) at the default zoom and the widest, the script's clock held in the fire phase. The figures' pixels
@@ -327,7 +327,8 @@ const lab = (r, g, b) => {
   return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]
 }
 export function figures(url, outDir) {
-  if (!new URL(url).searchParams.has('armies')) throw new Error('--figures needs a page URL with ?armies=<n>')
+  const q = new URL(url).searchParams
+  if (!q.has('battle') && !q.has('armies')) throw new Error('--figures needs a page URL with ?battle (or ?armies=<n>)')
   fs.mkdirSync(outDir, { recursive: true })
   const steps = prepSteps()
   const r3 = 'for (let i = 0; i < 3; i++) __proto.scene.render()'

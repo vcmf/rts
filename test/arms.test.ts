@@ -1,32 +1,31 @@
-// The armies demo's other arms (docs/plans/done/cavalry-artillery-demo.md): their scripts (src/look/world/arms.ts:
-// the infantry's behind the same interface, unchanged; a ride; a service), their places on the demo map clear of the
-// infantry and of one another, their figures (data/figures/fr-cuirassier.unitdata, fr-foot-artillery.unitdata,
-// written by tools/bake-figure.py) whole, dressed from the dyes, and their shadows' pure parts: the contacts' spread,
-// the shape's heights (their mean, a regression), the texel fitted to a big figure
+// The armies demo's arms (docs/plans/done/cavalry-artillery-demo.md, docs/plans/active/division-armies.md): their
+// scripts (src/look/world/arms.ts: the infantry's behind the same interface; a ride; a service; each with its
+// reserve) and footprints at the division scale's blocks (decision 0076, the sim's since #280), placeArm, their
+// figures (data/figures/fr-cuirassier.unitdata, fr-foot-artillery.unitdata, written by tools/bake-figure.py) whole,
+// dressed from the dyes, and their shadows' pure parts: the contacts' spread, the shape's heights (their mean, a
+// regression), the texel fitted to a big figure. The battle's layout: test/battle.test.ts
 import { readFileSync } from 'node:fs'
-import { gunzipSync } from 'node:zlib'
-import { describe, expect, it, vi } from 'vitest'
-import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { describe, expect, it } from 'vitest'
+import { napoleonicDivision as rs } from '../src/rulesets/napoleonic-division.ts'
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
-import { CYCLE, layout, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
+import { APPROACH, CYCLE, extents, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
 import {
   armScript,
-  battalionBoxes,
   boxOf,
   drillScript,
   formationSlots,
   lookAtSpot,
   placeArm,
-  placeArmUnits,
   rideDistance,
+  rideLength,
   rideScript,
   serveScript,
   serveOrder,
   type Box,
 } from '../src/look/world/arms.ts'
 import { dressAll, dressed, FIGURE_PARTS } from '../src/look/world/dyes.ts'
-import { ARMIES_DEMO, ARMS_DEMO } from '../src/scenarios/armies-demo.ts'
+import { ARMS_DEMO } from '../src/scenarios/armies-demo.ts'
 import {
   FIGURE_HEIGHT,
   LEGACY_ROLES,
@@ -66,24 +65,26 @@ const man = (): ManState => ({ x: 0, z: 0, face: 0, role: '', since: 0, moving: 
 const speedsOf = (d: UnitData) => Object.fromEntries(Object.entries(d.ranges).map(([k, r]) => [k, r.speed]))
 
 describe("the infantry's script behind the arms' interface (drillScript)", () => {
-  const g = napoleonic.types.infantry.geometry
+  const g = rs.types.infantry.geometry
   const d: Drill = { ...g }
   const sp = { march: 0.9, run: 3.2 }
   const s = drillScript(d, sp)
   it("gives phaseAt's phases, manAt's men, the line's bearer and the cycle as before", () => {
     const sl = slots(d)
     expect([s.men, s.cycle, s.fileSpacing]).toEqual([sl.line.length, CYCLE, d.fileSpacing])
+    expect(s.men).toBe(240)
     for (const t of [0, 30, 46, 52, 70, 109]) {
       const p = s.phase(t, false)
       expect(p).toEqual(phaseAt(d, t, sp.march, sp.run))
-      for (const i of [0, 77, 413]) {
+      // (the first man, one inside, the last: the division's 240th, #280's block)
+      for (const i of [0, 77, s.men - 1]) {
         expect(s.man(i, t, p, 0.3, man())).toEqual(manAt(d, sl, i, t, p, sp.run, sp.march, 0.3, man()))
       }
       expect(s.moving(p)).toBe(p.phase === 'column' || p.phase === 'deploy')
     }
     expect(s.phase(30, true).phase).toBe('halt')
     const [bx, bz] = sl.line[s.bearer]
-    expect(Math.abs(bx)).toBeLessThanOrEqual(d.fileSpacing + 1e-9) // (six companies: the gap between two at the middle)
+    expect(Math.abs(bx)).toBeLessThanOrEqual(d.fileSpacing + 1e-9) // (four sections: the gap between two at the middle)
     expect(bz).toBeCloseTo(-d.rankSpacing, 9)
   })
 })
@@ -126,6 +127,17 @@ describe('a ride (rideScript)', () => {
   it('carries its leg on its phase', () => {
     expect([1, 3, 7, 9.5].map(t => s.phase(t, false).leg)).toEqual([0, 1, 2, 3])
   })
+  it('stands a reserve halted in its slots, whenever, its phase never changing', () => {
+    for (const t of [0, 3, 7, 9.5]) {
+      const p = s.phase(t, true)
+      expect(p).toMatchObject({ phase: 'reserve', start: 0, reserve: true })
+      expect(s.moving(p)).toBe(false)
+      expect(s.man(1, t, p, 0.5, man())).toEqual({ x: 1, z: 0, face: 0, role: 'halt', since: 0, moving: false })
+    }
+  })
+  it('refuses a ride with no halted leg (its reserve would have no role)', () => {
+    expect(() => rideScript(places, [{ role: 'walk', seconds: 2 }], speeds, 1)).toThrow(/halted leg/)
+  })
 })
 
 describe('a service (serveScript)', () => {
@@ -149,14 +161,53 @@ describe('a service (serveScript)', () => {
       ]),
     ).toEqual([1, 2, 0])
   })
+  it("rests a reserve's pieces, whenever", () => {
+    for (const t of [4, 9.5, 29]) {
+      const p = s.phase(t, true)
+      expect(p.started).toBe(0)
+      expect(places.map((_, i) => s.man(i, t, p, 0, man()).role)).toEqual(['halt', 'halt', 'halt', 'halt'])
+    }
+  })
   it('refuses pieces that cannot all start within the cycle', () => {
     expect(() => serveScript(places, { rest: 'h', work: 'f' }, { rest: 20, lag: 5, cycle: 30 }, 16)).toThrow(/cycle/)
   })
 })
 
+describe("the arms' footprints (armScript)", () => {
+  const spec = (name: string) => {
+    const a = ARMS_DEMO.find(x => x.name === name)
+    if (!a) throw new Error(name)
+    const t = rs.types[a.unitType]
+    return armScript(a, t.geometry, t.formations[a.formation].place, speedsOf(figure(a.figure)))
+  }
+  it('gives a drill its line, approach and column at work and its column at rest, 3 m round', () => {
+    const d: Drill = { ...rs.types.infantry.geometry }
+    const e = extents(d)
+    const { work, rest, script } = spec('infantry')
+    expect(script.men).toBe(240)
+    expect(work).toEqual({ a0: -e.halfFront - 3, a1: e.halfFront + 3, z0: -(APPROACH + e.columnDepth) - 3, z1: 3 })
+    expect(rest).toEqual({ a0: -e.columnHalf - 3, a1: e.columnHalf + 3, z0: -e.columnDepth - 3, z1: 3 })
+  })
+  it('gives the light infantry its open order: 160 figures, wider than the line', () => {
+    const light = spec('light')
+    expect(light.script.men).toBe(160)
+    expect(light.work.a1).toBeGreaterThan(spec('infantry').work.a1)
+  })
+  it("gives a ride its whole ride at work and its halted slots at rest; a service its pieces' ground", () => {
+    const c = spec('cavalry')
+    expect(c.script.men).toBe(80)
+    const ride = ARMS_DEMO.find(a => a.name === 'cavalry')?.script
+    expect(ride?.kind).toBe('ride')
+    expect(c.work.z1 - c.rest.z1).toBeCloseTo(rideLength(ride?.kind === 'ride' ? ride.legs : [], speedsOf(CAVALRY)), 9)
+    expect(spec('cuirassiers').script.men).toBe(120)
+    const b = spec('artillery')
+    expect([b.script.men, b.work]).toEqual([4, b.rest])
+  })
+})
+
 describe("the arms' places (placeArm, formationSlots)", () => {
   it("stands a regiment's squadrons as the ruleset's column, files across, ranks behind", () => {
-    const t = napoleonic.types.cavalry
+    const t = rs.types.cavalry
     const p = formationSlots(t.geometry, t.formations.column.place)
     const g = t.geometry
     expect(p.length).toBe(g.companies * g.files * g.ranks)
@@ -183,50 +234,6 @@ describe("the arms' places (placeArm, formationSlots)", () => {
     const p = placeArm(foot, 0, { turn: 0, ahead: 40, across: 0 }, [0, 0], 55, open, [])
     expect(p && boxOf(p.x, p.z, p.heading, -5, 5, -2, 60).z1).toBeLessThanOrEqual(0)
     expect(placeArm(foot, 0, { turn: 0, ahead: 10, across: 0 }, [0, 0], 55, () => true, [])).toBeNull()
-  })
-  // the demo map's blocked ground (test/armies.test.ts reads it the same way)
-  const bits = gunzipSync(readFileSync(new URL('./fixtures/demo-map-blocked.bin.gz', import.meta.url)))
-  const N = 961
-  const bit = (i: number, j: number) =>
-    i < 0 || j < 0 || i >= N || j >= N || ((bits[(j * N + i) >> 3] >> ((j * N + i) & 7)) & 1) === 1
-  const demo = (x: number, z: number) => {
-    const i = Math.floor((x + 240) / 0.5)
-    const j = Math.floor((z + 240) / 0.5)
-    return bit(i, j) || bit(i + 1, j) || bit(i, j + 1) || bit(i + 1, j + 1)
-  }
-  const drill: Drill = { ...napoleonic.types.infantry.geometry }
-  it('fields each arm on both sides of the demo map at 1 to 40 battalions, clear of the infantry and of one another', () => {
-    for (const n of [1, 10, 20, 40]) {
-      const bs = layout(n, drill, demo, ARMIES_DEMO.sides)
-      const taken = battalionBoxes(bs, drill)
-      const inf = taken.length
-      for (const spec of ARMS_DEMO) {
-        const t = napoleonic.types[spec.unitType]
-        const d = spec.figure === 'fr-cuirassier' ? CAVALRY : BATTERY
-        const { foot } = armScript(spec, t.geometry, t.formations[spec.formation].place, speedsOf(d))
-        const units = placeArmUnits(spec, foot, [0, 0], 55, demo, taken)
-        expect(
-          units.map(u => u.side),
-          `${spec.name} at ${n}`,
-        ).toEqual([0, 1])
-      }
-      const arms = taken.slice(inf)
-      for (const [i, a] of arms.entries()) {
-        for (const b of taken.slice(0, inf + i)) {
-          expect(a.x0 >= b.x1 || b.x0 >= a.x1 || a.z0 >= b.z1 || b.z0 >= a.z1, `n ${n}`).toBe(true)
-        }
-        for (let x = a.x0; x <= a.x1; x += 2.5) for (let z = a.z0; z <= a.z1; z += 2.5) expect(demo(x, z)).toBe(false)
-      }
-    }
-  })
-  it('warns and leaves a side out when it has no room', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const spec = ARMS_DEMO[0]
-    const t = napoleonic.types[spec.unitType]
-    const { foot } = armScript(spec, t.geometry, t.formations[spec.formation].place, speedsOf(BATTERY))
-    expect(placeArmUnits(spec, foot, [0, 0], 55, () => true, [])).toEqual([])
-    expect(warn).toHaveBeenCalledTimes(2)
-    warn.mockRestore()
   })
 })
 
@@ -291,9 +298,9 @@ describe('the figures (fr-cuirassier, fr-foot-artillery)', () => {
   })
   it('are dressed from the dyes for their own parts: every arm uniform, never a raw colour', () => {
     for (const spec of ARMS_DEMO) {
-      const d = spec.figure === 'fr-cuirassier' ? CAVALRY : BATTERY
+      const d = figure(spec.figure)
       const dress = Object.fromEntries(spec.sides.map(id => [id, UNIFORMS[id]]))
-      const worn = dressAll(dress, DYES, { parts: d.parts ?? undefined })
+      const worn = dressAll(dress, DYES, { parts: { ...(d.parts ?? FIGURE_PARTS), ...spec.parts } })
       for (const id of spec.sides) {
         expect(Object.keys(worn[id].colours).sort()).toEqual([...d.palette].sort())
         for (const c of Object.values(worn[id].colours)) {

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
-import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
+import { ARMIES_DEMO, ARMS_DEMO } from '../src/scenarios/armies-demo.ts'
 import { FIGURE_PARTS, deltaE, dressAll, dressed, dyeOverride, labOf, wearInTurn } from '../src/look/world/dyes.ts'
 import { farRule, type Battalion } from '../src/look/world/armies.ts'
 import type { Dress } from '../src/sim/ruleset.ts'
@@ -66,8 +66,8 @@ describe('dressed', () => {
     expect(u.flag).toEqual(UNIFORMS['br-line'].flag.map(n => DYES.flags[n]))
   })
   it("paints the demo's sides as the owner picked: the French coat the dark blue", () => {
-    expect(dressed(UNIFORMS[ARMIES_DEMO.sides[0]], DYES).colours.coat).toBe('#26386E')
-    expect(dressed(UNIFORMS[ARMIES_DEMO.sides[1]], DYES).colours.coat).toBe(DYES.dyes.white)
+    expect(dressed(UNIFORMS[ARMS_DEMO[0].sides[0]], DYES).colours.coat).toBe('#26386E')
+    expect(dressed(UNIFORMS[ARMS_DEMO[0].sides[1]], DYES).colours.coat).toBe(DYES.dyes.white)
   })
   it('covers the coat and the facings with the greatcoat when worn; without one, the coat stays', () => {
     const d = UNIFORMS['at-line']
@@ -125,7 +125,9 @@ describe('wearInTurn (?uniforms=all)', () => {
   })
   it('names only uniforms the era has', () => {
     const era = RULESETS[ARMIES_DEMO.ruleset]
-    for (const id of [...ARMIES_DEMO.sides, ...ARMIES_DEMO.reviewSides.flat()]) expect(era.uniforms[id]).toBeDefined()
+    for (const id of [...ARMS_DEMO.flatMap(a => a.sides), ...ARMIES_DEMO.reviewSides.flat()]) {
+      expect(era.uniforms[id]).toBeDefined()
+    }
   })
 })
 

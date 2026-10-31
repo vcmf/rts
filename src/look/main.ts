@@ -39,6 +39,9 @@ import { buildTerrain, splitGround } from './terrain.ts'
 import { buildBuildings } from './buildings.ts'
 import { buildBuildingLight } from './building-light.ts'
 import type { Units } from './units.ts'
+import type { UnitData } from './units-data.ts'
+import { ARMIES_DEMO } from '../scenarios/armies-demo.ts'
+import { battleChoice, battleHref } from './world/battle.ts'
 // the figures' unit data by file (data/figures/<figure>.unitdata): a scenario names its figure, the page finds it here
 const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', {
   query: '?url',
@@ -619,17 +622,23 @@ if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach, meadowLook) : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dark ground under its clumps (shore.glsl)
-// ?armies=<battalions a side>: the demo's two armies (docs/plans/active/armies-demo.md): battalions of the ruleset's
-// infantry (about 400 a battalion, decision 0018) that march up in column, deploy and fire on a scripted loop, drawn
-// as figures (src/look/units.ts); ?unitshadow=0: without their cast shadows (decision 0047's A/B). Not on the page by
-// default: the goldens and the look checks never see them
+// ?battle[=typical|16k|32k]: the demo's two armies at the division scale (docs/plans/active/division-armies.md,
+// decision 0076): a stress-test battle of corps filled up to a figure budget (bare: the scenario's default, 16,000;
+// the panel's Battle select reloads with another), whose first corps march up in column, deploy and fire on a
+// scripted loop and the rest stand in column behind, drawn as figures (src/look/units.ts); the old ?armies=<n> maps
+// onto the battle nearest its figures (src/look/world/battle.ts battleChoice). ?unitshadow=0: without their cast
+// shadows (decision 0047's A/B). Not on the page by default: the goldens and the look checks never see them
 // The uniforms are the era's, named by dye and resolved onto the figure's roles (world/dyes.ts, decision 0068). Test
-// switches (with ?armies): ?uniforms=all, each side's battalions wearing the scenario's reviewSides in turn;
+// switches (with ?battle): ?uniforms=all, each side's line infantry wearing the scenario's reviewSides in turn;
 // ?uniforms=all-greatcoats, the same with every man in his greatcoat; ?dye=<dye>:<rrggbb>[;…] (bare, or '#' as
-// %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride). The other arms
-// (docs/plans/done/cavalry-artillery-demo.md, the scenario's ARMS_DEMO): ?cavalry=0, ?artillery=0 leave them out
-// (with both, main's page before them)
-const armiesParam = params.get('armies')
+// %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride). The other arms (the
+// scenario's ARMS_DEMO after the line infantry): ?light=0, ?artillery=0, ?cavalry=0, ?cuirassiers=0 leave them out
+const battleName = battleChoice(
+  params,
+  Object.fromEntries(Object.entries(ARMIES_DEMO.battles).map(([k, b]) => [k, b.figures])),
+  ARMIES_DEMO.battle,
+  ARMIES_DEMO.legacyBattalion,
+)
 // (under ?sim the other arms are left out: their scripts are stand-ins the sim does not drive, nor place against its
 // armies; asked for there, a clear error)
 const armSwitch = (name: string) => {
@@ -728,14 +737,9 @@ if (
 }
 // ?sim: the armies played by the sim, not the script (battle threads PR 4b; needs ?armies)
 const simParam = params.has('sim')
-if (simParam && armiesParam === null) throw new Error('?sim plays the armies: give ?armies=<battalions a side> too')
+if (simParam && battleName === null) throw new Error('?sim plays the armies: give ?battle too')
 // (a window's armies: stage A4 of docs/plans/active/look-austerlitz-a1.md's plan)
-if (onMap && armiesParam !== null) throw new Error("?armies is the demo world's: a map window has none yet")
-if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 40)) {
-  throw new Error(
-    `?armies must be 1 to 40 battalions a side (the demo map holds 40: docs/plans/active/armies-32k.md), not ${armiesParam}`,
-  )
-}
+if (onMap && battleName !== null) throw new Error("?battle is the demo world's: a map window has none yet")
 if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') {
   throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
 }
@@ -748,21 +752,22 @@ if (params.has('msaa')) {
 // (the fight's middle: the bench's focus)
 let armiesFocus: [number, number] | null = null
 // (?lookat looks at the armies' arms: without them a clear error)
-if (armiesParam === null && params.get('lookat') !== null) {
-  throw new Error(`?lookat=${params.get('lookat')} needs ?armies: it looks at the armies' arms`)
+if (battleName === null && params.get('lookat') !== null) {
+  throw new Error(`?lookat=${params.get('lookat')} needs ?battle: it looks at the armies' arms`)
 }
-if (armiesParam !== null) {
+if (battleName !== null) {
   if (mats.webgl1) {
     throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
   }
   const [
     { Units: UnitsC },
     { decodeUnits },
-    { layout, facingAt, FIELD },
-    { dressAll, dyeOverride, wearInTurn },
+    { facingAt },
+    { FIGURE_PARTS, dressAll, dyeOverride, wearInTurn },
     { RULESETS },
-    { ARMIES_DEMO, ARMS_DEMO },
-    { armScript, battalionBoxes, drillScript, lookAtSpot, placeArmUnits },
+    { ARMS_DEMO },
+    { armScript, lookAtSpot },
+    { battleLayout, figuresOf, orderOfBattle },
     { Trodden, ViewRays },
   ] = await Promise.all([
     import('./units.ts'),
@@ -772,38 +777,37 @@ if (armiesParam !== null) {
     import('../rulesets/index.ts'),
     import('../scenarios/armies-demo.ts'),
     import('./world/arms.ts'),
+    import('./world/battle.ts'),
     import('./trodden.ts'),
   ])
   if (tinyPxParam !== null && +tinyPxParam >= UnitsC.LOD_PX) {
     throw new Error(`?tinypx must be under the far LOD's switch (${UnitsC.LOD_PX} px), not ${tinyPxParam}`)
   }
-  // the scenario's era, unit type and figure, resolved by name (decision 0015: the page names none of them)
+  // the scenario's era, unit types and figures, resolved by name (decision 0015: the page names none of them)
   const era = RULESETS[ARMIES_DEMO.ruleset]
   if (!era) throw new Error(`armies: no ruleset ${ARMIES_DEMO.ruleset} (src/rulesets/index.ts)`)
-  const type = era.ruleset.types[ARMIES_DEMO.unitType]
-  if (!type) throw new Error(`armies: the ruleset ${ARMIES_DEMO.ruleset} has no unit type ${ARMIES_DEMO.unitType}`)
-  // a figure's unit data by name (data/figures/<figure>.unitdata)
-  const figureData = async (figure: string) => {
-    const url = FIGURES[`../../data/figures/${figure}.unitdata`]
-    if (!url) throw new Error(`armies: no figure ${figure} in data/figures/`)
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`unit data: ${res.status} ${res.statusText} for ${url}`)
-    return decodeUnits(await res.arrayBuffer())
+  // a figure's unit data by name (data/figures/<figure>.unitdata), fetched and decoded once for every arm drawn with it
+  const figures = new Map<string, Promise<UnitData>>()
+  const figureData = (figure: string) => {
+    let p = figures.get(figure)
+    if (!p) {
+      const url = FIGURES[`../../data/figures/${figure}.unitdata`]
+      if (!url) throw new Error(`armies: no figure ${figure} in data/figures/`)
+      p = fetch(url).then(async res => {
+        if (!res.ok) throw new Error(`unit data: ${res.status} ${res.statusText} for ${url}`)
+        return decodeUnits(await res.arrayBuffer())
+      })
+      figures.set(figure, p)
+    }
+    return p
   }
-  const g = type.geometry
-  const drill = {
-    companies: g.companies,
-    files: g.files,
-    ranks: g.ranks,
-    fileSpacing: g.fileSpacing,
-    rankSpacing: g.rankSpacing,
-  }
-  // the ground a battalion keeps clear of: the river and its banks, the trees (a 10 m grid of them), the buildings'
-  // yards, the tile's last 30 m
+  // the ground a unit keeps clear of: the river and its banks, the trees (a 10 m grid of them), the buildings' yards,
+  // the tile's last EDGE m
   const CELL = 10
+  const EDGE = 30
   const trees = new Map<number, number[]>()
   const key = (i: number, j: number) => i * 4096 + j
-  // (the trees alone, their trunk and low crown: half the crown's reach; a battalion walks through the bushes)
+  // (the trees alone, their trunk and low crown: half the crown's reach; a unit walks through the bushes)
   for (const t of nature.canopy) {
     if (!t[4]) continue
     const i = Math.floor(t[0] / CELL)
@@ -826,7 +830,7 @@ if (armiesParam !== null) {
     return false
   }
   const blocked = (x: number, z: number) => {
-    if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - 30) return true
+    if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - EDGE) return true
     const q = riverQuery(x, z)
     return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z)
   }
@@ -836,31 +840,38 @@ if (armiesParam !== null) {
   }
   const greatcoat = uniformsParam === 'all-greatcoats'
   const dyes = dyeOverride(params.get('dye'), era.dyes)
-  const uniforms = dressAll(era.uniforms, dyes, { greatcoat })
-  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides, FIELD.centre, FIELD.gap)
-  // every figure fetched and decoded at once (the infantry's and each arm on the page)
-  const armSpecs = ARMS_DEMO.filter(spec => armSwitch(spec.name))
-  const [infantry, ...armData] = await Promise.all([ARMIES_DEMO.figure, ...armSpecs.map(a => a.figure)].map(figureData))
-  const speed = { march: infantry.ranges.march?.speed ?? 0, run: infantry.ranges.run?.speed ?? 0 }
-  if (!(speed.march > 0 && speed.run > 0)) throw new Error('units: the march and run roles have no root speed')
+  // the arms on the page (the line infantry always; the others by their switch, none under ?sim), each its unit type,
+  // figure and script (src/look/world/arms.ts armScript)
+  const armSpecs = ARMS_DEMO.filter((spec, i) => i === 0 || armSwitch(spec.name))
+  const datas = await Promise.all(armSpecs.map(a => figureData(a.figure)))
+  const built = armSpecs.map((spec, i) => {
+    const t = era.ruleset.types[spec.unitType]
+    const f = t?.formations[spec.formation]
+    if (!t || !f) throw new Error(`armies: the ruleset has no ${spec.unitType} in ${spec.formation} (${spec.name})`)
+    const speeds = Object.fromEntries(Object.entries(datas[i].ranges).map(([k, r]) => [k, r.speed]))
+    return { spec, data: datas[i], ...armScript(spec, t.geometry, g => f.place(g), speeds) }
+  })
+  // the battle: each side's order of battle (the ruleset's corps up to the budget, the arms on the page), laid out
+  // past the camera's play area to the tile's edge (src/look/world/battle.ts; the bigger map is the next step)
+  const sizes = Object.fromEntries(
+    Object.entries(era.ruleset.types).map(([k, t]) => [k, t.geometry.companies * t.geometry.files * t.geometry.ranks]),
+  )
+  const order = orderOfBattle(ARMIES_DEMO.battles[battleName], sizes).filter(u =>
+    armSpecs.some(a => a.unitType === u.type),
+  )
+  const placed = battleLayout(
+    [order, order],
+    Object.fromEntries(built.map(b => [b.spec.unitType, { work: b.work, rest: b.rest, cycle: b.script.cycle }])),
+    ARMIES_DEMO.deploy,
+    blocked,
+    Object.fromEntries(built.map(b => [b.spec.unitType, b.spec.sides])),
+    D.spec.tile / 2 - EDGE,
+  )
   const tinyPx = tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined
   // the ground and the grass: the figures' shadow map (with its switches) and the trodden mask fall on them
   const receivers = [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])]
   // the frame's corner rays, cast once for the sun's box and the trodden mask (made before them: read after it)
   const view = new ViewRays(scene, camera)
-  // (the infantry's arm owns the figures' shadow map behind its switches, decision 0075)
-  const foot = new UnitsC(
-    scene,
-    camera,
-    mats,
-    infantry,
-    drillScript(drill, speed),
-    uniformsParam === null ? placed : wearInTurn(placed, ARMIES_DEMO.reviewSides),
-    uniforms,
-    () => S.t,
-    view,
-    { tinyPx, map: receivers },
-  )
   // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
   // after the bounce map (the season, the shadows' switch, the grain) and when the occlusion's switch changes
   const shade = simpleShadowsDraw(params) ? bakes.unitShade(ushDesat) : null
@@ -906,28 +917,38 @@ if (armiesParam !== null) {
     // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
     units.setSmooth(smoothMove ?? true)
   }
+  // each arm its renderer (decision 0075): the line infantry's owns the figures' shadow map behind its switches and
+  // wears every uniform of the era (?uniforms=all); the others draw their simple shadows, their sides' uniforms
+  // resolved for their figure's parts (a stand-in's own: the light cavalry's cuirass in its coat); an arm with no unit
+  // in the battle is not made
+  const [first, ...others] = built
+  const foot = new UnitsC(
+    scene,
+    camera,
+    mats,
+    first.data,
+    first.script,
+    uniformsParam === null
+      ? placed[first.spec.unitType]
+      : wearInTurn(placed[first.spec.unitType], ARMIES_DEMO.reviewSides),
+    dressAll(era.uniforms, dyes, { greatcoat }),
+    () => S.t,
+    view,
+    { tinyPx, map: receivers, flags: first.spec.flags, tread: first.spec.tread },
+  )
   configure(foot)
-  // the other arms (ARMS_DEMO): each side's unit placed after the infantry, clear of it and of one another; no shadow
-  // map of its own (its simple shadows); its uniforms resolved for its figure's parts
   const arms: Record<string, Units> = {}
-  const taken = battalionBoxes(placed, drill)
-  for (const [i, spec] of armSpecs.entries()) {
-    const data = armData[i]
-    const t = era.ruleset.types[spec.unitType]
-    const f = t?.formations[spec.formation]
-    if (!t || !f) throw new Error(`armies: the ruleset has no ${spec.unitType} in ${spec.formation} (${spec.name})`)
-    const speeds = Object.fromEntries(Object.entries(data.ranges).map(([k, r]) => [k, r.speed]))
-    const { script, foot: footprint } = armScript(spec, t.geometry, g => f.place(g), speeds)
-    // (from the layout's centre, its fronts half its gap either side: src/look/world/armies.ts FIELD)
-    const placedArm = placeArmUnits(spec, footprint, FIELD.centre, FIELD.gap / 2, blocked, taken)
-    if (placedArm.length === 0) continue
+  for (const { spec, data, script } of others) {
+    const units = placed[spec.unitType]
+    if (!units || units.length === 0) continue
     // (its sides' dresses alone: another arm's lack this figure's parts, a carriage's paint)
-    const dress = Object.fromEntries(spec.sides.map(id => [id, era.uniforms[id]]))
     for (const id of spec.sides) if (!era.uniforms[id]) throw new Error(`armies: no uniform ${id} (${spec.name})`)
-    const worn = dressAll(dress, dyes, { greatcoat, parts: data.parts ?? undefined })
-    const u = new UnitsC(scene, camera, mats, data, script, placedArm, worn, () => S.t, view, {
+    const dress = Object.fromEntries(spec.sides.map(id => [id, era.uniforms[id]]))
+    const parts = { ...(data.parts ?? FIGURE_PARTS), ...spec.parts }
+    const worn = dressAll(dress, dyes, { greatcoat, parts })
+    const u = new UnitsC(scene, camera, mats, data, script, units, worn, () => S.t, view, {
       tinyPx,
-      flags: false,
+      flags: spec.flags,
       tread: spec.tread,
       shadowDarken: spec.shadowDarken,
     })
@@ -941,14 +962,13 @@ if (armiesParam !== null) {
   trodden.holdShare = smHold !== 'fixed'
   trodden.setOn(trample ?? true)
   armiesFocus = facingAt(foot.battalions)
-  // ?sim: the sim plays the infantry (src/look/sim-armies.ts, battle threads PR 4b) in place of its script (the other
-  // arms are left out under it: armSwitch)
+  // ?sim: the sim plays the line infantry (src/look/sim-armies.ts, battle threads PR 4b) in place of its script (the
+  // other arms are left out under it: armSwitch)
   let sim: SimPlay | null = null
   if (simParam) {
     const { playSim } = await import('./sim-armies.ts')
-    sim = await playSim(foot.battalions, drill.companies * drill.files * drill.ranks, armiesFocus, {
+    sim = await playSim(foot.battalions, first.script.men, armiesFocus, {
       ruleset: ARMIES_DEMO.ruleset,
-      unitType: ARMIES_DEMO.unitType,
       ...ARMIES_DEMO.sim,
     })
     foot.source = sim.source
@@ -964,12 +984,23 @@ if (armiesParam !== null) {
       true,
     )
   }
-  // the tools' hooks: __units the infantry's renderer, as before the arms (tools/guard.mjs masks and scores it alone,
-  // against its coats: like for like with main); __armies' show and setMask every arm's, arms the other arms'
-  // renderers by name (the review's cameras)
+  // the tools' hooks: __units the line infantry's renderer, as before the arms (tools/guard.mjs masks and scores it
+  // alone, against its coats: like for like with main); __armies' show and setMask every arm's, arms the other arms'
+  // renderers by name (the review's cameras), battle the battle's name and figures its figures, both sides (the
+  // ruleset's: a battery's 48, drawn as its 4 pieces)
   const show = (on: boolean) => all.forEach(u => u.show(on))
   const setMask = (m: Parameters<Units['setMask']>[0]) => all.forEach(u => u.setMask(m))
-  const hooks = { blocked, focus: armiesFocus, coats: foot.coats(), arms, show, setMask, sim: sim?.link }
+  const hooks = {
+    blocked,
+    focus: armiesFocus,
+    coats: foot.coats(),
+    arms,
+    show,
+    setMask,
+    sim: sim?.link,
+    battle: battleName,
+    figures: 2 * figuresOf(order, sizes),
+  }
   Object.assign(window, { __units: foot, __armies: hooks })
   // ?lookat=<arm>[,<radius m>]: the camera starts on that arm's first unit or the fight's middle (lookAtSpot), its
   // target on the ground there: to judge the arms by eye without panning to them
@@ -1049,6 +1080,14 @@ const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => {
   S.res = +resSel.value
 }
+// the battle (a player's option, docs/plans/active/division-armies.md): none or one of the scenario's, by its figures;
+// choosing one reloads the page with it (?battle), every other switch kept
+const battleSel = byId<HTMLSelectElement>('battle')
+for (const [name, b] of Object.entries(ARMIES_DEMO.battles)) {
+  battleSel.add(new Option(`${name} (${b.figures.toLocaleString('en')})`, name))
+}
+battleSel.value = battleName ?? ''
+battleSel.onchange = () => location.assign(battleHref(location.href, battleSel.value || null))
 const scaleTick = () => {
   if (+resSel.value !== S.res) resSel.value = String(S.res) // the panel follows a scale set elsewhere (the tools)
   if (S.res) applyScale(S.res)

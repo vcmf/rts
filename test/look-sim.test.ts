@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { root } from './fx.ts'
 import { loadSimData, compileRuleset, typeOf, formationHandle, DT, M_TICK } from '../src/sim/index.ts'
-import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { rulesetOf } from '../src/rulesets/index.ts'
 import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
 import { lookArmies } from '../src/scenarios/look-world.ts'
 import { MainLink } from '../src/app/battle-link.ts'
@@ -19,16 +19,16 @@ const data = loadSimData(
   new Uint8Array(fs.readFileSync(path.join(root, 'data', 'painted-world.simdata'))),
   MAP_VERSIONS['painted-world'],
 )
-const cr = compileRuleset(napoleonic)
-const MEN = cr.types[0].slots
+// the demo's era by name (src/scenarios/armies-demo.ts): the line infantry at the division scale, 240 figures
+const A = { ruleset: ARMIES_DEMO.ruleset, ...ARMIES_DEMO.sim }
+const cr = compileRuleset(rulesetOf(A.ruleset))
+const MEN = cr.types[cr.typeIndex(A.unitType)].slots
 // two battalions facing each other east of the river, 200 m apart
 const BS: Battalion[] = [
   { side: 0, uniform: 'a', x: 40, z: -100, heading: 0, offset: 0 },
   { side: 1, uniform: 'b', x: 60, z: 100, heading: Math.PI, offset: 0 },
 ]
 const man = (): SourceMan => ({ x: 0, z: 0, yaw: 0, role: 'halt', since: 0, shown: false })
-// the demo's era by name (src/scenarios/armies-demo.ts)
-const A = { ruleset: ARMIES_DEMO.ruleset, unitType: ARMIES_DEMO.unitType, ...ARMIES_DEMO.sim }
 const at = [0, 0]
 /** Man `i` of battalion `k` from `source`, begun as the renderer begins a battalion. */
 function manAt(source: SimMen, k: number, i: number, out: SourceMan): SourceMan {

@@ -1,10 +1,11 @@
 // Samples the look page's blocked ground for the armies' layout (the page's __armies.blocked: the river and its banks,
-// the trees, the buildings' yards, the tile's edge; src/look/main.ts) every 0.5 m over ±240 m into the test fixture
-// test/fixtures/demo-map-blocked.bin.gz that test/armies.test.ts lays the demo map's armies out on: a bit a sample, row
-// by row from (−240, −240), gzipped. Rerun it when the map changes.
+// the trees, the buildings' yards, the tile's edge; src/look/main.ts) every 0.5 m over ±370 m (the tile less its last
+// 30 m, the battle's area: src/look/world/battle.ts) into the test fixture test/fixtures/demo-map-blocked.bin.gz that
+// test/armies.test.ts lays the demo map's armies out on: a bit a sample, row by row from (−370, −370), gzipped. Rerun
+// it when the map changes.
 //
-//   node tools/sample-blocked.mjs <look page URL> [out.bin.gz]     the page with ?armies (any count: the blocked ground
-//                                                                   is the map's), built and served (npx vite preview)
+//   node tools/sample-blocked.mjs <look page URL> [out.bin.gz]     the page with ?battle (any: the blocked ground is
+//                                                                   the map's), built and served (npx vite preview)
 // Exit 1 when the page gives no grid.
 import fs from 'node:fs'
 import path from 'node:path'
@@ -14,11 +15,12 @@ import { shoot } from './look-page.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const [url, out = path.join(ROOT, 'test/fixtures/demo-map-blocked.bin.gz')] = process.argv.slice(2)
-if (!url || !new URL(url).searchParams.has('armies')) {
-  console.error('usage: node tools/sample-blocked.mjs <look page URL with ?armies=<n>> [out.bin.gz]')
+const armies = url && ['battle', 'armies'].some(k => new URL(url).searchParams.has(k))
+if (!armies) {
+  console.error('usage: node tools/sample-blocked.mjs <look page URL with ?battle> [out.bin.gz]')
   process.exit(2)
 }
-const R = 240
+const R = 370
 const S = 0.5
 const N = Math.round((2 * R) / S) + 1
 const steps = [

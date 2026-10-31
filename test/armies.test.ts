@@ -1,23 +1,19 @@
 // The demo map's armies (src/look/world/armies.ts) and their figure (data/figures/fr-line-infantry.unitdata, written by
-// tools/bake-figure.py; src/look/units-data.ts): the battalion's slots by the ruleset's drill, the script's phases in
-// order, the layout clear of the blocked ground and failing loudly where there is no room, and the baked figure whole.
-// The demo map's blocked ground is a fixture (test/fixtures/demo-map-blocked.bin.gz), sampled from the page by
-// tools/sample-blocked.mjs (rerun it when the map, its trees, river or buildings change)
-import { createHash } from 'node:crypto'
+// tools/bake-figure.py; src/look/units-data.ts): a unit's slots by the ruleset's drill at the division scale (decision
+// 0076: 4 sections of 20 files × 3 ranks, the sim's blocks since #280), the script's phases in order, the scenario
+// resolved as the page resolves it, and the baked figure whole. The battle's layout: test/battle.test.ts
 import { existsSync, readFileSync } from 'node:fs'
-import { gunzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { napoleonicDivision } from '../src/rulesets/napoleonic-division.ts'
 import {
   APPROACH,
   CYCLE,
   FAR_COAT_BELOW,
   FAR_ROLES,
   extents,
-  facingAt,
   farPalette,
   farRule,
-  layout,
   luminance,
   manAt,
   phaseAt,
@@ -29,7 +25,7 @@ import { UNIFORMS as DRESS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
 import { dressAll } from '../src/look/world/dyes.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
-import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
+import { ARMIES_DEMO, ARMS_DEMO } from '../src/scenarios/armies-demo.ts'
 import {
   TINY_ROLES,
   boneParts,
@@ -48,7 +44,7 @@ import {
 // the era's uniforms as the page paints them (resolved from their dyes, decision 0068)
 const UNIFORMS = dressAll(DRESS, DYES)
 
-const g = napoleonic.types.infantry.geometry
+const g = napoleonicDivision.types.infantry.geometry
 const drill: Drill = {
   companies: g.companies,
   files: g.files,
@@ -59,7 +55,23 @@ const drill: Drill = {
 const MARCH = 0.9
 const RUN = 3.2
 
-describe('armies: the battalion', () => {
+describe('armies: the unit', () => {
+  it("is the division scale's line infantry: 4 sections of 20 files × 3 ranks, 240 figures, about 54 m in line", () => {
+    expect([g.companies, g.files, g.ranks, g.companies * g.files * g.ranks]).toEqual([4, 20, 3, 240])
+    expect(2 * extents(drill).halfFront).toBeCloseTo(54, 0)
+  })
+  it("keeps the shipped ruleset's line infantry but for its block (the sim's since #280)", () => {
+    const { geometry: a, ...shipped } = napoleonic.types.infantry
+    const { geometry: b, ...division } = napoleonicDivision.types.infantry
+    expect(division).toEqual(shipped)
+    expect({ ...b, companies: a.companies, files: a.files }).toEqual(a)
+  })
+  it("stands in column one section wide and 12 ranks deep (#283's attack column)", () => {
+    const s = slots(drill)
+    const xs = new Set(s.column.map(p => p[0].toFixed(6)))
+    const zs = new Set(s.column.map(p => p[1].toFixed(6)))
+    expect([xs.size, zs.size]).toEqual([20, 12])
+  })
   it('has a slot in line and in column for every man, and his rank', () => {
     const s = slots(drill)
     const n = g.companies * g.files * g.ranks
@@ -122,175 +134,23 @@ describe('armies: the script', () => {
 })
 
 describe('armies: the scenario', () => {
-  it("resolves as the page resolves it: its ruleset, unit type, figure file and every side's uniform", () => {
+  it("resolves as the page resolves it: its ruleset, each arm's unit type, formation, figure file and uniforms", () => {
     const era = RULESETS[ARMIES_DEMO.ruleset]
     expect(era, ARMIES_DEMO.ruleset).toBeDefined()
-    const type = era.ruleset.types[ARMIES_DEMO.unitType]
-    expect(type, ARMIES_DEMO.unitType).toBeDefined()
-    expect(type.geometry.companies * type.geometry.files * type.geometry.ranks).toBeGreaterThan(0)
-    expect(existsSync(new URL(`../data/figures/${ARMIES_DEMO.figure}.unitdata`, import.meta.url))).toBe(true)
-    for (const id of ARMIES_DEMO.sides) expect(era.uniforms[id], id).toBeDefined()
+    expect(ARMS_DEMO[0].script.kind).toBe('drill') // (the first arm, the line infantry: the shadow map's, __units)
+    for (const a of ARMS_DEMO) {
+      const type = era.ruleset.types[a.unitType]
+      expect(type, a.unitType).toBeDefined()
+      expect(type.formations[a.formation], `${a.name} ${a.formation}`).toBeDefined()
+      expect(existsSync(new URL(`../data/figures/${a.figure}.unitdata`, import.meta.url)), a.figure).toBe(true)
+      for (const id of a.sides) expect(era.uniforms[id], id).toBeDefined()
+    }
+    for (const side of ARMIES_DEMO.reviewSides) for (const id of side) expect(era.uniforms[id], id).toBeDefined()
+    expect(ARMIES_DEMO.sim.unitType).toBe(ARMS_DEMO[0].unitType)
   })
 })
 
-describe('armies: the layout', () => {
-  const open = (x: number, z: number) => Math.max(Math.abs(x), Math.abs(z)) > 370
-  it('fields 20 a side within the play area: lines in front, the rest in column behind, clear of one another', () => {
-    const bs = layout(20, drill, open, ARMIES_DEMO.sides)
-    const e = extents(drill)
-    expect(bs.filter(b => b.side === 0).length).toBe(20)
-    expect(bs.filter(b => b.side === 1).length).toBe(20)
-    for (const b of bs) expect(b.side === 0 ? b.z < 0 && b.heading === 0 : b.z > 0 && b.heading === Math.PI).toBe(true)
-    // the whole footprint within ±235: a line's front and its approach behind, a column's depth
-    for (const b of bs) {
-      expect(Math.abs(b.x) + (b.reserve ? e.columnHalf : e.halfFront)).toBeLessThanOrEqual(235)
-      expect(Math.abs(b.z) + (b.reserve ? e.columnDepth : APPROACH + e.columnDepth)).toBeLessThanOrEqual(235)
-    }
-    const lines = bs.filter(b => !b.reserve)
-    const back = (b: (typeof bs)[0]) => Math.abs(b.z)
-    expect(lines.length).toBeGreaterThanOrEqual(8)
-    for (const s of [0, 1]) {
-      expect(Math.min(...bs.filter(b => b.side === s && b.reserve).map(back))).toBeGreaterThan(
-        Math.min(...lines.filter(b => b.side === s).map(back)),
-      )
-    }
-    // no two boxes overlap: a line's (its front, its approach) or a column's
-    const box = (b: (typeof bs)[0]) => ({
-      w: b.reserve ? e.columnHalf : e.halfFront,
-      f: back(b),
-      d: b.reserve ? e.columnDepth : APPROACH + e.columnDepth,
-    })
-    for (const a of bs) {
-      for (const b of bs) {
-        if (a !== b && a.side === b.side) {
-          const p = box(a)
-          const q = box(b)
-          expect(Math.abs(a.x - b.x) >= p.w + q.w || p.f + p.d <= q.f || q.f + q.d <= p.f).toBe(true)
-        }
-      }
-    }
-    const [fx, fz] = facingAt(bs)
-    expect(Math.hypot(fx, fz)).toBeLessThan(60)
-  })
-  // the demo map's blocked ground (the page's __armies.blocked sampled every 0.5 m over ±240 m, a bit a sample, row by
-  // row from (−240, −240), by tools/sample-blocked.mjs; read conservatively: blocked when any of the
-  // four samples round a point is)
-  const bits = gunzipSync(readFileSync(new URL('./fixtures/demo-map-blocked.bin.gz', import.meta.url)))
-  const N = 961
-  const R = 240
-  const S = 0.5
-  const bit = (i: number, j: number) =>
-    i < 0 || j < 0 || i >= N || j >= N || ((bits[(j * N + i) >> 3] >> ((j * N + i) & 7)) & 1) === 1
-  const demo = (x: number, z: number) => {
-    const i = Math.floor((x + R) / S)
-    const j = Math.floor((z + R) / S)
-    return bit(i, j) || bit(i + 1, j) || bit(i, j + 1) || bit(i + 1, j + 1)
-  }
-  // the uniforms' ids when the fixture was hashed (the layout does not depend on them; decision 0068 renamed them)
-  const FIXTURE_SIDES = ['fr-line-1808', 'at-line-white']
-  it('lays out 20 a side and fewer exactly as before the close reserves (hashes of the layouts at 084d6e0)', () => {
-    const want = JSON.parse(
-      readFileSync(new URL('./fixtures/armies-layout-20.json', import.meta.url), 'utf8'),
-    ) as Record<string, string[]>
-    const masks: Record<string, (x: number, z: number) => boolean> = {
-      open,
-      wood: (x, z) => open(x, z) || (Math.abs(x) < 60 && Math.abs(z) < 200),
-      demo,
-    }
-    for (const [k, b] of Object.entries(masks)) {
-      for (let n = 1; n <= 20; n++) {
-        expect(
-          createHash('sha256')
-            .update(JSON.stringify(layout(n, drill, b, FIXTURE_SIDES)))
-            .digest('hex')
-            .slice(0, 16),
-          `${k} ${n}`,
-        ).toBe(want[k][n - 1])
-      }
-    }
-  })
-  it('fields 40 a side on the demo map: the close reserves behind, never ahead of a line, clear of every other box', () => {
-    const bs = layout(40, drill, demo, ARMIES_DEMO.sides)
-    const e = extents(drill)
-    for (const s of [0, 1]) expect(bs.filter(b => b.side === s).length).toBe(40)
-    const back = (b: (typeof bs)[0]) => Math.abs(b.z)
-    const lines = bs.filter(b => !b.reserve)
-    for (const b of bs) {
-      expect(Math.abs(b.x) + (b.reserve ? e.columnHalf : e.halfFront)).toBeLessThanOrEqual(235)
-      expect(Math.abs(b.z) + (b.reserve ? e.columnDepth : APPROACH + e.columnDepth)).toBeLessThanOrEqual(235)
-    }
-    // the men's own ground: a line's ranks (its full width) and its approach (its column's width); a column's
-    const parts = (b: (typeof bs)[0]) =>
-      b.reserve
-        ? [{ w: e.columnHalf, f: back(b), d: e.columnDepth }]
-        : [
-            { w: e.halfFront, f: back(b), d: e.lineDepth },
-            { w: e.columnHalf, f: back(b), d: APPROACH + e.columnDepth },
-          ]
-    for (const a of bs) {
-      for (const b of bs) {
-        if (a !== b && a.side === b.side) {
-          for (const p of parts(a)) {
-            for (const q of parts(b)) {
-              expect(
-                Math.abs(a.x - b.x) >= p.w + q.w || p.f + p.d <= q.f || q.f + q.d <= p.f,
-                `${a.x},${a.z} / ${b.x},${b.z}`,
-              ).toBe(true)
-            }
-          }
-        }
-      }
-    }
-    for (const r of bs.filter(b => b.reserve)) {
-      for (const l of lines) {
-        if (l.side === r.side && Math.abs(l.x - r.x) < e.halfFront + e.columnHalf) {
-          expect(back(r)).toBeGreaterThan(back(l))
-        }
-      }
-    }
-    // every man of a reserve on open ground
-    const sl = slots(drill)
-    for (const b of bs) {
-      if (b.reserve) {
-        for (const [px, pz] of sl.column) {
-          const c = Math.cos(b.heading)
-          expect(demo(b.x + c * px, b.z + c * pz)).toBe(false)
-        }
-      }
-    }
-    // and no deploying man's path (his column place to his line place) within a metre of a reserve's column
-    for (const l of lines) {
-      for (let i = 0; i < sl.line.length; i++) {
-        for (let k = 0; k <= 10; k++) {
-          const c = Math.cos(l.heading)
-          const lx = sl.column[i][0] + ((sl.line[i][0] - sl.column[i][0]) * k) / 10
-          const lz = sl.column[i][1] + ((sl.line[i][1] - sl.column[i][1]) * k) / 10
-          const x = l.x + c * lx
-          const z = l.z + c * lz
-          for (const r of bs) {
-            if (r.reserve && r.side === l.side) {
-              const rc = Math.cos(r.heading)
-              const ax = rc * (x - r.x)
-              const az = rc * (z - r.z)
-              expect(
-                Math.abs(ax) > e.columnHalf + 1 || az > 1 || az < -e.columnDepth - 1,
-                `${l.x},${l.z} man ${i} / ${r.x},${r.z}`,
-              ).toBe(true)
-            }
-          }
-        }
-      }
-    }
-  })
-  it('keeps off the blocked ground', () => {
-    const wood = (x: number, z: number) => open(x, z) || (Math.abs(x) < 60 && Math.abs(z) < 200)
-    for (const b of layout(4, drill, wood, ARMIES_DEMO.sides)) expect(Math.abs(b.x)).toBeGreaterThan(60)
-  })
-  it('fails loudly when a side has no room', () => {
-    expect(() => layout(2, drill, (_x, z) => z > 0, ARMIES_DEMO.sides)).toThrow(
-      /room for only 0 of 2 battalions for side 1/,
-    )
-  })
+describe('armies: the uniforms', () => {
   it('has a colour for every role of the figure, for every uniform, and a flag', () => {
     const d = decodeUnits(
       new Uint8Array(readFileSync(new URL('../data/figures/fr-line-infantry.unitdata', import.meta.url))).buffer,
@@ -300,7 +160,7 @@ describe('armies: the layout', () => {
       expect(u.flag.length).toBeGreaterThan(0)
       for (const c of u.flag) expect(c).toMatch(/^#[0-9A-F]{6}$/i)
     }
-    for (const id of ARMIES_DEMO.sides) expect(UNIFORMS[id], id).toBeDefined()
+    for (const id of ARMS_DEMO[0].sides) expect(UNIFORMS[id], id).toBeDefined()
   })
 })
 

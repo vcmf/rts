@@ -1,18 +1,18 @@
-// The demo map's armies (docs/plans/active/armies-demo.md): two sides facing each other across the open ground, each
-// a few battalions that march up in column, halt, deploy into line and fire by ranks, on a loop. Scripted: the sim
-// drives them in a later step (decision 0037: the sim owns the timings, the renderer binds clips to its phases); here
-// the script is the stand-in, deterministic (a function of the clock alone). Era content (the battalion's companies,
-// files, ranks and spacings) comes from the ruleset the page hands in (decision 0015); the uniforms' colours are the
-// era's dyes (decision 0068, src/look/world/dyes.ts), as the tools' blocks (tools/army-blocks.mjs). No Babylon: the
-// tests read it in Node.
+// The demo map's armies (docs/plans/active/armies-demo.md, docs/plans/active/division-armies.md): the infantry's
+// drill, a unit's column of sections marching up, halting, deploying into line and firing by ranks, on a loop.
+// Scripted: the sim drives them in a later step (decision 0037: the sim owns the timings, the renderer binds clips to
+// its phases); here the script is the stand-in, deterministic (a function of the clock alone). Era content (the
+// unit's sections, files, ranks and spacings) comes from the ruleset the page hands in (decision 0015); the uniforms'
+// colours are the era's dyes (decision 0068, src/look/world/dyes.ts), as the tools' blocks (tools/army-blocks.mjs). The
+// battle's units are laid out by src/look/world/battle.ts. No Babylon: the tests read it in Node.
 //
-// Frames: a battalion at (x, z) with heading h faces fwd = (sin h, cos h); its own frame has x across (right =
+// Frames: a unit at (x, z) with heading h faces fwd = (sin h, cos h); its own frame has x across (right =
 // (cos h, −sin h)) and z ahead, as the figures' instance matrices turn them (src/look/units.ts)
 
 import type { Uniform } from '../../sim/ruleset.ts'
 export type { Uniform } // (the type is the rulesets': src/sim/ruleset.ts)
 
-/** the battalion's shape, from the ruleset's infantry geometry */
+/** a unit's drill shape, from its ruleset type's geometry (companies: its sections) */
 export interface Drill {
   companies: number
   files: number
@@ -59,7 +59,9 @@ export const farRule = (u: Uniform): 'coat' | 'own' =>
 
 /** the script's phases a battalion goes through, in order, each cycle (the roles its men are given) */
 export type Phase = 'column' | 'halt' | 'deploy' | 'fire'
-/** reserve: it stands in column of companies, out of the script (layout's reserves) */
+/** a unit on the field (the name is the old battalion's: every arm's unit): its side, uniform, place (m), heading
+ *  (rad) and its cycle's start (s); reserve: it stands at rest, out of the script (a drill's column, a ride halted, a
+ *  service's pieces resting: src/look/world/battle.ts) */
 export interface Battalion {
   side: number
   uniform: string
@@ -118,162 +120,6 @@ export function extents(d: Drill): { halfFront: number; lineDepth: number; colum
 
 /** the ground a site must keep clear: water, trees, buildings, the tile's edge (true: blocked) */
 export type Blocked = (x: number, z: number) => boolean
-
-/** each side's battalions on the open ground, all of each within the camera's play area (±play m: the player can
- *  reach every one), in two kinds (batch C, docs/plans/active/armies-demo.md):
- *  - the lines: up to LINE_ROWS rows behind the side's front, each battalion running the script (its column's approach,
- *    its deployment, its fire), its whole footprint (the line, the approach behind it, a margin) clear and within
- *    play, its box clear of the others'; candidates on a 5 m grid, the front row and the middle first;
- *  - the reserves, the rest: standing in column of companies at least RESERVE_BACK m behind the front (a column's box
- *    and a margin, clear of the lines' footprints), the nearest the front and the middle first;
- *  - the close reserves, only when the reserves leave a side short (docs/plans/active/armies-32k.md: 40 a side; never
- *    at 20 or fewer on the demo map, whose layout stays as it was): more columns in column of companies, CLOSE m apart
- *    (men to men) on a finer grid, a line's footprint taken as its shape (a T: the line's full width only as deep as
- *    its ranks, its approach only as wide as its column), so they may stand behind a line's flanks, never ahead of a
- *    line they overlap across.
- *  Fails loudly if a side cannot field `perSide` battalions. uniforms: each side's battalions' uniform; centre:
- *  between the two fronts; gap: between them, m (about a volley's range) */
-export const LINE_ROWS = 2
-export const RESERVE_BACK = 40
-// the close reserves: m (their boxes CLOSE.margin a side and CLOSE.pad apart)
-const CLOSE = { grid: 2.5, margin: 2, pad: 2 }
-const DEPLOY_SLICES = 4 // the close reserves keep off a deploying line's trapezoid in this many boxes
-// the close reserves' candidates on their CLOSE.grid, the nearest the front and the middle first: the same for either
-// side, built once a play area
-const fineGrids = new Map<number, [number, number][]>()
-function fineGrid(play: number): [number, number][] {
-  let fine = fineGrids.get(play)
-  if (!fine) {
-    fine = []
-    const g = CLOSE.grid
-    for (let bi = 0; bi * g <= 2 * play; bi++) {
-      for (let ai = -Math.floor(play / g); ai * g <= play; ai++) fine.push([ai * g, bi * g])
-    }
-    fine.sort((p, q) => 0.5 * Math.abs(p[0]) + p[1] - (0.5 * Math.abs(q[0]) + q[1]) || p[0] - q[0] || p[1] - q[1])
-    fineGrids.set(play, fine)
-  }
-  return fine
-}
-/** the demo field: the centre between the two fronts and the gap between them, m (about a volley's range): layout's
- *  defaults, and the other arms' (src/look/world/arms.ts placeArmUnits) */
-export const FIELD: { readonly centre: readonly [number, number]; readonly gap: number } = { centre: [0, 0], gap: 110 }
-export function layout(
-  perSide: number,
-  d: Drill,
-  blocked: Blocked,
-  uniforms: readonly string[],
-  centre: readonly [number, number] = FIELD.centre,
-  gap = FIELD.gap,
-  play = 235,
-): Battalion[] {
-  const e = extents(d)
-  const out: Battalion[] = []
-  const step = 2.5
-  const margin = 3
-  const G = 5
-  const lineW = 2 * e.halfFront + 2 * margin + 6
-  const lineD = APPROACH + e.columnDepth + 2 * margin + 6
-  const resW = 2 * e.columnHalf + 2 * margin + 4
-  const resD = e.columnDepth + 2 * margin + 4
-  for (let s = 0; s < 2; s++) {
-    // the side faces the other across the centre: side 0 northward (+z), side 1 southward
-    const h = s === 0 ? 0 : Math.PI
-    const fs = Math.sin(h)
-    const fc = Math.cos(h)
-    const fx = centre[0] - (fs * gap) / 2
-    const fz = centre[1] - (fc * gap) / 2
-    const at = (ac: number, bh: number): [number, number] => [fx + fc * ac - fs * bh, fz - fs * ac - fc * bh]
-    // a footprint in the battalion's frame (b across, a ahead: from a0 to a1, half-width wide(a)) clear and in play
-    const clear = (x: number, z: number, a0: number, a1: number, wide: (a: number) => number) => {
-      for (let a = a0; a <= a1; a += step) {
-        const w = wide(a)
-        for (let b = -w; b <= w; b += step) {
-          const px = x + fc * b + fs * a
-          const pz = z - fs * b + fc * a
-          if (Math.abs(px) > play || Math.abs(pz) > play || blocked(px, pz)) return false
-        }
-      }
-      return true
-    }
-    // placed: across, behind (their front), width, depth
-    const boxes: { ac: number; bh: number; w: number; d: number }[] = []
-    const free = (ac: number, bh: number, w: number, dd: number) =>
-      boxes.every(o => Math.abs(o.ac - ac) >= (o.w + w) / 2 || bh + dd <= o.bh || o.bh + o.d <= bh)
-    const cands: [number, number][] = []
-    for (let bi = 0; bi * G <= 2 * play; bi++) {
-      for (let ai = -Math.floor(play / G); ai * G <= play; ai++) cands.push([ai * G, bi * G])
-    }
-    let lines = 0
-    // the lines: within LINE_ROWS footprints' depth (and 15 m) of the front, the front row and the middle first
-    cands.sort((p, q) => Math.abs(p[0]) + 3 * p[1] - (Math.abs(q[0]) + 3 * q[1]) || p[0] - q[0] || p[1] - q[1])
-    for (const [ac, bh] of cands) {
-      if (lines >= perSide) break
-      if (bh > (LINE_ROWS - 1) * lineD + 15 || !free(ac, bh, lineW, lineD)) continue
-      const [x, z] = at(ac, bh)
-      if (
-        !clear(x, z, -(APPROACH + e.columnDepth + margin), margin, a =>
-          a > -(e.lineDepth + margin) ? e.halfFront + margin : e.columnHalf + margin,
-        )
-      ) {
-        continue
-      }
-      boxes.push({ ac, bh, w: lineW, d: lineD })
-      lines++
-      out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: ((lines - 1) * 9.7) % CYCLE })
-    }
-    // the reserves: in column behind the front row (never in it: RESERVE_BACK m back at least), clear of the lines'
-    // footprints, the nearest the front and the middle first
-    cands.sort((p, q) => 0.5 * Math.abs(p[0]) + p[1] - (0.5 * Math.abs(q[0]) + q[1]) || p[0] - q[0] || p[1] - q[1])
-    let placed = lines
-    for (const [ac, bh] of cands) {
-      if (placed >= perSide) break
-      if (bh < RESERVE_BACK || !free(ac, bh, resW, resD)) continue
-      const [x, z] = at(ac, bh)
-      if (!clear(x, z, -(e.columnDepth + margin), margin, () => e.columnHalf + margin)) continue
-      boxes.push({ ac, bh, w: resW, d: resD })
-      placed++
-      out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: 0, reserve: true })
-    }
-    if (placed < perSide) {
-      // the close reserves: the lines' boxes as their T (head: the ranks and a margin; stem: the column's
-      // approach) and the ground the companies cross as they deploy, from their column to the line (a trapezoid
-      // behind the head, as wide as the line at the ranks' depth and as the column at its rear: DEPLOY_SLICES
-      // boxes, each as wide as its front)
-      const m = CLOSE.margin
-      const w = 2 * e.columnHalf + 2 * m + CLOSE.pad
-      const dd = e.columnDepth + 2 * m + CLOSE.pad
-      const headD = e.lineDepth + 2 * margin + 6
-      const stemW = 2 * e.columnHalf + 2 * margin + 6
-      const ls = boxes.slice(0, lines)
-      const span = Math.max(0, e.columnDepth - e.lineDepth)
-      const half = (dep: number) =>
-        e.columnHalf + (e.halfFront - e.columnHalf) * (span > 0 ? (e.columnDepth - dep) / span : 0)
-      const deploy = (o: (typeof boxes)[0]) =>
-        Array.from({ length: span > 0 ? DEPLOY_SLICES : 0 }, (_, k) => {
-          const d0 = e.lineDepth + (span * k) / DEPLOY_SLICES
-          return { ac: o.ac, bh: o.bh + d0, w: 2 * half(d0) + 2 * margin + 6, d: span / DEPLOY_SLICES + margin }
-        })
-      const parts = [...ls.flatMap(o => [{ ...o, d: headD }, { ...o, w: stemW }, ...deploy(o)]), ...boxes.slice(lines)]
-      for (const [ac, bh] of fineGrid(play)) {
-        if (placed >= perSide) break
-        // (never ahead of a line)
-        if (bh < RESERVE_BACK || ls.some(o => Math.abs(o.ac - ac) < (o.w + w) / 2 && bh < o.bh)) continue
-        if (!parts.every(o => Math.abs(o.ac - ac) >= (o.w + w) / 2 || bh + dd <= o.bh || o.bh + o.d <= bh)) continue
-        const [x, z] = at(ac, bh)
-        if (!clear(x, z, -(e.columnDepth + m), m, () => e.columnHalf + m)) continue
-        parts.push({ ac, bh, w, d: dd })
-        placed++
-        out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: 0, reserve: true })
-      }
-    }
-    if (placed < perSide) {
-      throw new Error(
-        `armies: room for only ${placed} of ${perSide} battalions for side ${s} within ±${play} m (${lines} in line; src/look/world/armies.ts, layout)`,
-      )
-    }
-  }
-  return out
-}
 
 /** the middle of the fight: between the two sides' nearest battalions, the pair nearer the map's middle preferred (the
  *  cameras' focus: the bench's, the review's; the camera's focus stays near the middle, spec.ts play) */
