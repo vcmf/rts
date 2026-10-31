@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-31
 ---
 
-# 0097 The far trees' cards fade into their crown meshes over time, not over a band of distance
+# 0098 The far trees' cards fade into their crown meshes over time, not over a band of distance
 
 The plan: `docs/plans/active/crown-speckle.md`; as built: `docs/systems/look.md` (the far trees, "Culled per
 instance"), `src/look/tree-fade.ts`.

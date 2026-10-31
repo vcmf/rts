@@ -32,7 +32,7 @@ wholly one or the other. The culler re-packs every frame while a fade runs (it a
 moves), only the groups with a fade running when the view holds. A tree out of view does no work and snaps to its
 side (with the hysteresis) when it comes back; the first pack and a frozen clock (`?frozen`, the tools' views) snap
 too; a tree drawn with its cards at every distance (past the leaf fall) keeps its state at its cards. The shaders are
-unchanged. Decision 0097 records it, and why the figures' cross-fade (decision 0066) stays a band.
+unchanged. Decision 0098 records it, and why the figures' cross-fade (decision 0066) stays a band.
 
 Cost: no per-pixel work added; at rest fewer pixels than before (the band's trees drew both meshes, each discarding
 half). On the CPU a few operations a far tree in the frames the culler already runs, and up to 0.3 s of packs after
