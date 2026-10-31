@@ -111,6 +111,45 @@ export const UNIFORMS: Readonly<Record<string, Dress>> = {
     },
     flag: ['flag-green', 'flag-black', 'flag-green'],
   },
+  // the light infantry and the light cavalry at the division scale (docs/plans/active/division-armies.md; first picks,
+  // the owner's to change): the French light infantry (the légère): blue coat and trousers, red facings; the Austrian
+  // light infantry wears the Grenzer's (at-grenzer)
+  'fr-light': {
+    id: 'fr-light',
+    parts: {
+      coat: 'imperial-blue',
+      facings: 'madder-red',
+      trousers: 'imperial-blue',
+      headgear: 'black',
+      greatcoat: 'greatcoat-beige',
+    },
+    flag: ['flag-blue', 'flag-white', 'flag-red'],
+  },
+  // the French chasseurs à cheval: green coat and breeches, red facings (on the cuirassier figure, its cuirass in the
+  // coat: a stand-in)
+  'fr-chasseur': {
+    id: 'fr-chasseur',
+    parts: {
+      coat: 'dragoon-green',
+      facings: 'madder-red',
+      trousers: 'dragoon-green',
+      headgear: 'black',
+      greatcoat: 'greatcoat-beige',
+    },
+    flag: ['flag-blue', 'flag-white', 'flag-red'],
+  },
+  // the Austrian hussars: light blue dolman and breeches, crimson facings (the same stand-in)
+  'at-hussar': {
+    id: 'at-hussar',
+    parts: {
+      coat: 'sky-blue',
+      facings: 'crimson',
+      trousers: 'sky-blue',
+      headgear: 'black',
+      greatcoat: 'greatcoat-grey',
+    },
+    flag: ['flag-yellow', 'flag-black', 'flag-yellow'],
+  },
   // the cavalry and the artillery (docs/plans/done/cavalry-artillery-demo.md; first picks, the owner's to change):
   // the French cuirassiers: blue coat, red facings, white breeches, black boots (the figure's shabraque wears the
   // coat, its lace the breeches' white)
