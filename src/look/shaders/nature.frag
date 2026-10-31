@@ -27,7 +27,7 @@ void main(){
   vec4 lm=LM(vW);
   #ifdef FAR_CROWN
   // the dither's share first (the cards draw the rest, the instance's tint offsetting the pattern so trees do not share
-  // it); the bark only past the band, where no trunks mesh draws it
+  // it); the bark only once the fade has run, where no trunks mesh draws it
   if(vRole<1.5?dither(gl_FragCoord.xy+vTint*61.0)>=vFade:vFade<1.0)discard;
   #endif
   #ifdef GRASSY

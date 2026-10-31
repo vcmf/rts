@@ -3,7 +3,21 @@
 // and the two sides' dithers split every pixel between them.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { CARDS_M, FADE_S, HYST_M, STEP_MAX_S, fading, firstSide, stepFade, treeSide } from '../src/look/tree-fade.ts'
+import {
+  CARDS_M,
+  FADE_S,
+  HYST_M,
+  STEP_MAX_S,
+  UNKNOWN,
+  fadeStep,
+  fading,
+  firstSide,
+  snapAll,
+  stepFade,
+  treeFades,
+  treeFrame,
+  treeSide,
+} from '../src/look/tree-fade.ts'
 
 const shader = (f: string) => readFileSync(new URL(`../src/look/shaders/${f}`, import.meta.url), 'utf8')
 
@@ -59,5 +73,45 @@ describe('the far trees fade over time', () => {
     const cut = 'dither(gl_FragCoord.xy+vTint*61.0)'
     expect(shader('canopy.frag')).toContain(`if(${cut}<vFade)discard;`)
     expect(shader('nature.frag')).toContain(`${cut}>=vFade`)
+  })
+
+  it('snaps under a frozen clock, so no tool shot catches a tree mid-dither', () => {
+    expect(fadeStep(true, 16)).toBe(Infinity)
+    expect(fadeStep(false, 16)).toBeCloseTo(0.016)
+    const st = treeFades(1)
+    treeFrame(st, 0, 150 ** 2, true, false, fadeStep(true, 16))
+    expect(treeFrame(st, 0, 300 ** 2, true, false, fadeStep(true, 16))).toBe(1)
+  })
+
+  it('keeps a tree drawn with its cards at every distance (past the leaf fall) at its cards, so it fades from them', () => {
+    const st = treeFades(1)
+    expect(treeFrame(st, 0, 300 ** 2, true, false, Infinity)).toBe(1)
+    expect(treeFrame(st, 0, 300 ** 2, true, true, 1 / 60)).toBe(0)
+    expect([st.side[0], st.fade[0]]).toEqual([0, 0])
+    // the season comes back: it dissolves from the cards it was drawn with, not from a stale crown mesh
+    const f = treeFrame(st, 0, 300 ** 2, true, false, 1 / 60)!
+    expect(f).toBeCloseTo(1 / 60 / FADE_S)
+    expect(fading(f)).toBe(true)
+  })
+
+  it('does no work for a tree out of view, and snaps it when it comes back', () => {
+    const st = treeFades(1)
+    treeFrame(st, 0, 150 ** 2, true, false, Infinity)
+    expect(treeFrame(st, 0, 300 ** 2, false, false, 1 / 60)).toBeNull()
+    expect([st.side[0], st.fade[0], st.snap[0]]).toEqual([0, 0, 1])
+    expect(treeFrame(st, 0, 300 ** 2, true, false, 1 / 60)).toBe(1)
+  })
+
+  it('keeps the hysteresis when a tree snaps back into view, by CARDS_M alone only for its first frame', () => {
+    const st = treeFades(1)
+    expect(st.side[0]).toBe(UNKNOWN)
+    const inside = (CARDS_M - HYST_M * 0.5) ** 2
+    treeFrame(st, 0, 300 ** 2, true, false, Infinity)
+    treeFrame(st, 0, 0, false, false, 1 / 60)
+    expect(treeFrame(st, 0, inside, true, false, 1 / 60)).toBe(1)
+    snapAll(st)
+    expect(treeFrame(st, 0, inside, true, false, 1 / 60)).toBe(1)
+    const fresh = treeFades(1)
+    expect(treeFrame(fresh, 0, inside, true, false, 1 / 60)).toBe(0)
   })
 })

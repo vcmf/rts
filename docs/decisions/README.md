@@ -108,3 +108,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0082](0082-light-map-at-half-a-metre.md) | The baked light map at about half a metre a texel (1536² over the 800 m tile, the target 0.53 m) | accepted |
 | [0084](0084-a-soft-mid-tone-on-figures-and-buildings.md) | A soft mid tone on the figures, the buildings and the nature meshes (amends 0022) | accepted |
 | [0085](0085-upright-meadow-and-wheat-fill.md) | The meadow's grass upright and shorter, the wheat filled (`?grassup`, `?wheatfill`; amends 0041's clumps) | accepted |
+| [0097](0097-far-trees-fade-over-time.md) | The far trees' cards fade into their crown meshes over time, not over a band of distance | proposed |

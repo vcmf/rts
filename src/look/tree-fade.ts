@@ -35,6 +35,63 @@ export function stepFade(fade: number, side: 0 | 1, dt: number): number {
   return side > fade ? Math.min(side, fade + step) : Math.max(side, fade - step)
 }
 
+/** A frame's step in seconds from the engine's last frame (ms); a frozen clock (?frozen, the tools' views) snaps:
+ *  Infinity, so no shot catches a tree mid-dither */
+export function fadeStep(frozen: boolean, frameMs: number): number {
+  return frozen ? Infinity : frameMs / 1000
+}
+
+/** A far group's trees, frame to frame: each one's side (0 its cards, 1 its crown mesh, UNKNOWN before its first
+ *  frame in view), its fade, and whether it snaps the next time it is in view (it was out of view: not stepped) */
+export interface TreeFades {
+  side: Uint8Array
+  fade: Float32Array
+  snap: Uint8Array
+}
+/** a side not yet known (no frame in view yet): the first one is by CARDS_M alone */
+export const UNKNOWN = 255
+
+/** n trees' fades, none seen yet */
+export function treeFades(n: number): TreeFades {
+  return { side: new Uint8Array(n).fill(UNKNOWN), fade: new Float32Array(n), snap: new Uint8Array(n).fill(1) }
+}
+
+/** Every tree to snap the next time it is in view (a page that has just warmed up) */
+export function snapAll(st: TreeFades): void {
+  st.snap.fill(1)
+}
+
+/** Tree i's frame (not under the shadow pass's every-tree draw, which changes nothing): out of view only marked to snap
+ *  when it comes back (no work); drawn with its cards whatever its distance (cardsOnly: past the leaf fall), its state
+ *  follows what is drawn (its cards), so a later swap starts from them; otherwise its side by its squared distance to
+ *  the camera (m²) with the hysteresis, its fade stepped by dt seconds or snapped. Returns the fade it is drawn at, or
+ *  null out of view */
+export function treeFrame(
+  st: TreeFades,
+  i: number,
+  d2: number,
+  inView: boolean,
+  cardsOnly: boolean,
+  dt: number,
+): number | null {
+  if (!inView) {
+    st.snap[i] = 1
+    return null
+  }
+  if (cardsOnly) {
+    st.side[i] = 0
+    st.fade[i] = 0
+    st.snap[i] = 0
+    return 0
+  }
+  const prev = st.side[i]
+  const side = prev === UNKNOWN ? firstSide(d2) : treeSide(d2, prev)
+  st.side[i] = side
+  st.fade[i] = stepFade(st.fade[i], side, st.snap[i] ? Infinity : dt)
+  st.snap[i] = 0
+  return st.fade[i]
+}
+
 /** Whether a fade is still running (both sides drawn, the dither showing) */
 export function fading(fade: number): boolean {
   return fade > 0 && fade < 1

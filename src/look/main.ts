@@ -442,6 +442,7 @@ const nature = buildNature(
   treeSet.has('one'),
   treeSet.has('gen') ? { season: season0, clumpVolume: params.get('clumpvol') !== 'off' } : null,
   onMap ? look.trees : null,
+  params.has('frozen'), // a frozen clock: the far trees' fades snap (src/look/tree-fade.ts)
 )
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 {
