@@ -10,13 +10,20 @@ describe('the patch place', () => {
     expect(patchStart(-20.2, 400, 0.5, 50)).toBe(-45)
     expect(patchStart(-20.3, 400, 0.5, 50)).toBe(-45.5)
     // its start a whole number of steps from the frame edge
-    const x = patchStart(123.456, 400, 0.5, 50)
+    const x = patchStart(123.456, 400, 0.5, 50)!
     expect(((x + 400) / 0.5) % 1).toBe(0)
   })
 
   it('stays a step inside the frame at its edges', () => {
     expect(patchStart(-399, 400, 0.5, 50)).toBe(-399.5)
     expect(patchStart(399, 400, 0.5, 50)).toBe(349.5)
+  })
+
+  it('is none on a frame too small to hold it a step inside each edge', () => {
+    expect(patchStart(0, 20, 0.5, 50)).toBeNull()
+    expect(patchStart(0, 25.4, 0.5, 50)).toBeNull()
+    // a frame of 51 km holds it half a kilometre inside each edge
+    expect(patchStart(0, 25.5, 0.5, 50)).toBe(-25)
   })
 })
 

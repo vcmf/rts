@@ -7,12 +7,13 @@
 /**
  * Where the patch starts on one axis (km from the frame's centre): `size` km long, centred on `target`, its start on
  * the far mesh's grid (`step` km apart from the frame's edge at -`half`, so it never swims as the target moves) and
- * kept a step inside the frame (the far mesh's last quad may be narrower).
+ * kept a step inside the frame (the far mesh's last quad may be narrower); null when the frame cannot hold it so.
  */
-export function patchStart(target: number, half: number, step: number, size: number): number {
-  const steps = Math.round((target - size / 2 + half) / step)
+export function patchStart(target: number, half: number, step: number, size: number): number | null {
   const most = Math.floor((2 * half - size) / step) - 1
-  return -half + Math.min(Math.max(1, steps), Math.max(1, most)) * step
+  if (most < 1) return null
+  const steps = Math.round((target - size / 2 + half) / step)
+  return -half + Math.min(Math.max(1, steps), most) * step
 }
 
 /**

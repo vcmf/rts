@@ -1,18 +1,19 @@
 // The far mesh's own height (src/render/campaign/patch.ts farMeshHeight, the same steps), shared by the patch
-// (./patch.vert, as the include farmesh): its vertices uMeshStep nodes apart on the far level's grid (the last column and
+// (./patch.vert, as the include campaignFarMesh): its vertices uMeshStep nodes apart on the far level's grid (the last column and
 // row on the grid's edge), each quad cut from its south-east corner to its north-west one, the height linear on each
 // triangle. Needs uShape (nearest), uTexel (one over the nodes) and uCellKm.
 uniform float uMeshStep;
+uniform vec2 uNodes;          // the far level's nodes, x and z (exact, not one over uTexel)
 
 // a node's height, m
 float farNode(vec2 ij) {
-  vec2 last = 1.0 / uTexel - 1.0;
+  vec2 last = uNodes - 1.0;
   return texture2D(uShape, (min(ij, last) + 0.5) * uTexel).r;
 }
 
 // the far mesh's height at p (km from the frame's corner), m
 float farMeshHeight(vec2 p) {
-  vec2 last = 1.0 / uTexel - 1.0;
+  vec2 last = uNodes - 1.0;
   vec2 lastQuad = ceil(last / uMeshStep) - 1.0;
   vec2 g = p / uCellKm / uMeshStep;
   vec2 q = clamp(floor(g), vec2(0.0), lastQuad);

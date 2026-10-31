@@ -54,6 +54,7 @@ import { patchStart } from './patch.ts'
 import PRINT_VS from './shaders/print.vert?raw'
 import PRINT_FS from './shaders/print.frag?raw'
 import PATCH_VS from './shaders/patch.vert?raw'
+import { ShaderStore } from '@babylonjs/core/Engines/shaderStore.js'
 import DETAIL_GLSL from './shaders/detail.glsl?raw'
 import FARMESH_GLSL from './shaders/farmesh.glsl?raw'
 import SIDE_VS from './shaders/side.vert?raw'
@@ -113,6 +114,12 @@ const UPSCALE_FROM = 1920 * 1080 * 1.15
 const FOV = 0.5
 // the patch near the camera (K2c2, ./patch.ts): PATCH_KM a side, a vertex on every node of the close level
 const PATCH_KM = 50
+// the detail eases out of the patch from PATCH_INNER_KM to PATCH_OUTER_KM from the target (a square), before its band
+const PATCH_INNER_KM = 19
+const PATCH_OUTER_KM = 22.5
+// a tile fades in over FADE_MS as it is first drawn, and toward a neighbour not yet drawn over DETAIL_FADE nodes
+const FADE_MS = 400
+const DETAIL_FADE = 10
 // the rounds groundAt takes to meet the raised surface
 const GROUND_ROUNDS = 4
 
@@ -139,9 +146,11 @@ function toHalf(v: number): number {
   return sign | ((exp << 10) + ((mant + 0x1000) >> 13))
 }
 
-/** A shader's source with its includes (#include<detail>, #include<farmesh>) put in. */
-const withIncludes = (src: string) =>
-  src.replace('#include<detail>', () => DETAIL_GLSL).replace('#include<farmesh>', () => FARMESH_GLSL)
+// the shaders' shared parts, which Babylon puts in where a shader names them as includes
+ShaderStore.IncludesShadersStore.campaignDetail = DETAIL_GLSL
+ShaderStore.IncludesShadersStore.campaignFarMesh = FARMESH_GLSL
+// a rectangle off the map: no patch (the far mesh whole), or no detail area
+const OFF_MAP = () => new Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1)
 
 /**
  * The print's uniforms and textures, set alike on the map's material and the patch's: they draw with the same fragment
@@ -154,28 +163,33 @@ class Print {
     this.materials = materials
   }
 
+  /** Does `set` on each material. */
+  private each(set: (m: ShaderMaterial) => void) {
+    for (const m of this.materials) set(m)
+  }
+
   setFloat(name: string, v: number) {
-    for (const m of this.materials) m.setFloat(name, v)
+    this.each(m => m.setFloat(name, v))
   }
 
   setVector2(name: string, v: Vector2) {
-    for (const m of this.materials) m.setVector2(name, v)
+    this.each(m => m.setVector2(name, v))
   }
 
   setVector3(name: string, v: Vector3) {
-    for (const m of this.materials) m.setVector3(name, v)
+    this.each(m => m.setVector3(name, v))
   }
 
   setVector4(name: string, v: Vector4) {
-    for (const m of this.materials) m.setVector4(name, v)
+    this.each(m => m.setVector4(name, v))
   }
 
   setColor3(name: string, v: Color3) {
-    for (const m of this.materials) m.setColor3(name, v)
+    this.each(m => m.setColor3(name, v))
   }
 
   setTexture(name: string, t: Texture) {
-    for (const m of this.materials) m.setTexture(name, t)
+    this.each(m => m.setTexture(name, t))
   }
 }
 
@@ -194,6 +208,10 @@ interface Detail {
   table: SlotTable
   texT: RawTexture
   tableChanged: boolean
+  // each slot's fade-in, 0 to 1 as its tile is first drawn, and as bytes for the GPU
+  fade: Float32Array
+  fadeBytes: Uint8Array
+  texF: RawTexture
   // a slot's worth of shape and light, reused for every upload
   scratch: { shape: Float32Array; half: Uint16Array; light: Uint8Array }
   // the tile each slot is given to (loaded or not), by slot
@@ -231,6 +249,7 @@ export class CampaignMapView {
   private viewNow: CampaignView = { x: 0, z: 0, dist: 1150 }
   private dirty = true
   private running = false
+  private lastFrame = performance.now()
   // the render loop's one function, so stop can name it
   private readonly frameLoop = () => this.frame()
   /** Called after each frame with its CPU time in ms (the page's fps meter). */
@@ -272,7 +291,7 @@ export class CampaignMapView {
     return new ShaderMaterial(
       'print',
       this.scene,
-      { vertexSource: withIncludes(vertexSource), fragmentSource: withIncludes(PRINT_FS) },
+      { vertexSource, fragmentSource: PRINT_FS },
       {
         attributes: ['position'],
         uniforms: [
@@ -292,11 +311,12 @@ export class CampaignMapView {
             'uContourK',
           ],
           ...['uTime', 'uCloudK', 'uHaze', 'uScreenH', 'uWoodK', 'uWoodFrom', 'uStepKm', 'uStep', 'uBands'],
-          ...['uLineReachKm', 'uPatchRect', 'uPatchBand', 'uMeshStep'],
+          ...['uLineReachKm', 'uPatchRect', 'uPatchBand', 'uMeshStep', 'uNodes', 'uDetailFade'],
+          ...['uPatchCentre', 'uPatchInner', 'uPatchOuter'],
         ],
         samplers: [
           ...['uShape', 'uShapeL', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uLakeD', 'uContourH'],
-          ...['uDetailS', 'uDetailL', 'uDetailT', 'uPaperT', 'uClouds'],
+          ...['uDetailS', 'uDetailL', 'uDetailT', 'uDetailF', 'uPaperT', 'uClouds'],
         ],
       },
     )
@@ -330,14 +350,19 @@ export class CampaignMapView {
     // the detail area blank, its rectangle off the map, until setDetail
     m.setTexture('uDetailS', this.floatTexture(new Float32Array(1), 1, 1))
     m.setTexture('uDetailL', this.byteTexture(new Uint8Array(4), 1, 1, Constants.TEXTUREFORMAT_RGBA))
-    m.setVector4('uDetailRect', new Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1))
+    m.setVector4('uDetailRect', OFF_MAP())
+    m.setTexture('uDetailF', this.byteTexture(new Uint8Array(1), 1, 1, Constants.TEXTUREFORMAT_LUMINANCE))
+    m.setFloat('uDetailFade', DETAIL_FADE)
     m.setTexture('uDetailT', this.byteTexture(new SlotTable(1).bytes, 1, 1, Constants.TEXTUREFORMAT_RGBA))
     m.setVector2('uDetailTexel', new Vector2(1, 1))
     m.setFloat('uDetailCellKm', 0.1)
     m.setFloat('uDetailSize', 1)
     m.setFloat('uDetailArea', 1)
     // no patch until the detail is used: its rectangle off the map
-    m.setVector4('uPatchRect', new Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1))
+    m.setVector4('uPatchRect', OFF_MAP())
+    m.setVector2('uPatchCentre', new Vector2(0, 0))
+    m.setFloat('uPatchInner', PATCH_INNER_KM)
+    m.setFloat('uPatchOuter', PATCH_OUTER_KM)
     m.setFloat('uPatchBand', 0)
     m.setFloat('uMeshStep', MESH_STEP)
   }
@@ -395,6 +420,7 @@ export class CampaignMapView {
     this.setFields(fields, level, manifest.params.lineReach)
     m.setVector2('uHalf', new Vector2(this.half.x, this.half.z))
     m.setVector2('uTexel', new Vector2(1 / nx, 1 / nz))
+    m.setVector2('uNodes', new Vector2(nx, nz))
     m.setVector2('uLightTexel', new Vector2(1 / nx, 1 / nz))
     m.setFloat('uCellKm', level.cell / 1000)
     // the band at the patch's edge where it lies on the far mesh's surface: one quad of the far mesh
@@ -443,10 +469,14 @@ export class CampaignMapView {
    * fragments under the map are then hidden by the depth test, not shaded and drawn over.
    */
   private buildMeshes(far: LevelData) {
+    // the patch (rendering group 0) is drawn before the map, the plate and the table (group 1), the depth kept between
+    // them: the far mesh's triangles under the patch are then hidden by the depth test, not shaded
+    this.scene.setRenderingAutoClearDepthStencil(1, false)
     const w = this.half.x * 2
     const h = this.half.z * 2
     const plane = this.mapMesh(far)
     plane.material = this.material
+    plane.renderingGroupId = 1
     this.sideMaterial.setColor3('uPaper', colour(SIDE_PAPER))
     this.sideMaterial.setVector2('uLightXZ', new Vector2(this.sun[0], this.sun[2]).normalize())
     this.sideMaterial.setFloat('uThick', THICK)
@@ -455,9 +485,11 @@ export class CampaignMapView {
     const sides = CreateBox('sides', { width: w, height: THICK + top, depth: h }, this.scene)
     sides.position.y = (top - THICK) / 2
     sides.material = this.sideMaterial
+    sides.renderingGroupId = 1
     const table = CreateGround('table', { width: w + 2 * TABLE, height: h + 2 * TABLE }, this.scene)
     table.position.y = -THICK
     table.material = this.material
+    table.renderingGroupId = 1
   }
 
   /**
@@ -508,6 +540,9 @@ export class CampaignMapView {
     const table = new SlotTable(AREA)
     const texT = this.byteTexture(table.bytes, AREA, AREA, Constants.TEXTUREFORMAT_RGBA)
     texT.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
+    const fadeBytes = new Uint8Array(AREA * AREA)
+    const texF = this.byteTexture(fadeBytes, AREA, AREA, Constants.TEXTUREFORMAT_LUMINANCE)
+    texF.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
     this.detail = {
       level,
       load,
@@ -518,6 +553,9 @@ export class CampaignMapView {
       table,
       texT,
       tableChanged: false,
+      fade: new Float32Array(AREA * AREA).fill(1),
+      fadeBytes,
+      texF,
       scratch: {
         shape: new Float32Array(level.size * level.size),
         half: new Uint16Array(level.size * level.size),
@@ -535,10 +573,12 @@ export class CampaignMapView {
     m.setTexture('uDetailS', texS)
     m.setTexture('uDetailL', texL)
     m.setTexture('uDetailT', texT)
+    m.setTexture('uDetailF', texF)
     m.setVector2('uDetailTexel', new Vector2(1 / n, 1 / n))
     m.setFloat('uDetailCellKm', level.cell / 1000)
     m.setFloat('uDetailSize', level.size)
     m.setFloat('uDetailArea', AREA)
+    this.patch?.dispose()
     this.patch = this.patchMesh(level.cell / 1000)
     this.dirty = true
   }
@@ -548,6 +588,16 @@ export class CampaignMapView {
    * places and raises it), off until the detail is used.
    */
   private patchMesh(cellKm: number): Mesh {
+    // the patch's edge on the far mesh's grid lines and its vertices on the close level's nodes: its size a whole
+    // number of far quads, a far quad a whole number of close cells
+    const step = (MESH_STEP * this.far!.level.cell) / 1000
+    const whole = (a: number, b: number) => Math.abs(a / b - Math.round(a / b)) < 1e-9
+    if (!whole(PATCH_KM, step) || !whole(step, cellKm)) {
+      throw new Error(
+        `the patch (${PATCH_KM} km) does not fit the far mesh (${step} km) and the close cells (${cellKm} km)`,
+      )
+    }
+    if (PATCH_OUTER_KM + step * 1.5 > PATCH_KM / 2) throw new Error('the patch eases out past its band')
     const n = Math.round(PATCH_KM / cellKm) + 1
     const positions = new Float32Array(n * n * 3)
     for (let j = 0; j < n; j++) {
@@ -573,6 +623,7 @@ export class CampaignMapView {
     vd.applyToMesh(mesh, false)
     mesh.alwaysSelectAsActiveMesh = true
     mesh.material = this.patchMaterial
+    mesh.renderingGroupId = 0
     mesh.setEnabled(false)
     return mesh
   }
@@ -583,15 +634,14 @@ export class CampaignMapView {
    */
   private placePatch(on: boolean) {
     if (!this.patch || !this.far) return
-    this.patch.setEnabled(on)
-    if (!on) {
-      this.print.setVector4('uPatchRect', new Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1))
-      return
-    }
     const step = (MESH_STEP * this.far.level.cell) / 1000
     const x0 = patchStart(this.viewNow.x, this.half.x, step, PATCH_KM)
     const z0 = patchStart(this.viewNow.z, this.half.z, step, PATCH_KM)
-    this.print.setVector4('uPatchRect', new Vector4(x0, z0, x0 + PATCH_KM, z0 + PATCH_KM))
+    // none on a map too small to hold it
+    const place = on && x0 !== null && z0 !== null
+    this.patch.setEnabled(place)
+    this.print.setVector4('uPatchRect', place ? new Vector4(x0, z0, x0 + PATCH_KM, z0 + PATCH_KM) : OFF_MAP())
+    this.print.setVector2('uPatchCentre', new Vector2(this.viewNow.x, this.viewNow.z))
   }
 
   /** The detail area's state, for the fps meter and the checks. */
@@ -731,11 +781,27 @@ export class CampaignMapView {
       this.engine.updateTextureData(d.texL.getInternalTexture()!, light, x, z, size, size)
       d.table.set(s, [tile.column, tile.row])
       d.tableChanged = true
+      d.fade[s] = 0
     }
     if (d.tableChanged) {
       d.texT.update(d.table.bytes)
       d.tableChanged = false
     }
+  }
+
+  /** Advances the slots' fade-in by `ms` and sends it to the GPU while a slot is still fading. */
+  private fadeDetail(ms: number) {
+    const d = this.detail
+    if (!d) return
+    let changed = false
+    for (let s = 0; s < d.fade.length; s++) {
+      if (d.fade[s] >= 1) continue
+      d.fade[s] = Math.min(1, d.fade[s] + ms / FADE_MS)
+      changed = true
+    }
+    if (!changed) return
+    for (let s = 0; s < d.fade.length; s++) d.fadeBytes[s] = Math.round(d.fade[s] * 255)
+    d.texF.update(d.fadeBytes)
   }
 
   /** The view: where the camera looks. */
@@ -749,8 +815,39 @@ export class CampaignMapView {
     this.placeCamera()
   }
 
-  /** How high the map stands at a point (km), from the far level's shape, bilinear. */
+  /**
+   * How high the map stands at a point (km): up close, where the patch is drawn and the point's tile of the close
+   * level is cached, from its 100 m shape; else from the far level's shape; bilinear.
+   */
   private riseAt(xKm: number, zKm: number): number {
+    const near = this.patch?.isEnabled() ? this.closeRiseAt(xKm, zKm) : null
+    return near ?? this.farRiseAt(xKm, zKm)
+  }
+
+  /** The close level's height at a point (km) from its cached tile, bilinear inside the tile, or null. */
+  private closeRiseAt(xKm: number, zKm: number): number | null {
+    const d = this.detail
+    if (!d) return null
+    const { level } = d
+    const fx = (xKm + this.half.x) / (level.cell / 1000)
+    const fz = (zKm + this.half.z) / (level.cell / 1000)
+    const tile = d.cache.get(tileKey([Math.floor(fx / level.size), Math.floor(fz / level.size)]))
+    if (!tile) return null
+    const n = level.size
+    const li = Math.min(n - 1.001, Math.max(0, fx - tile.column * n))
+    const lj = Math.min(n - 1.001, Math.max(0, fz - tile.row * n))
+    const i = Math.floor(li)
+    const j = Math.floor(lj)
+    const u = li - i
+    const v = lj - j
+    const at = (a: number, b: number) => level.base + tile.shape[b * n + a] * level.scale
+    const top = at(i, j) * (1 - u) + at(i + 1, j) * u
+    const bottom = at(i, j + 1) * (1 - u) + at(i + 1, j + 1) * u
+    return (top * (1 - v) + bottom * v) / 1000
+  }
+
+  /** The far level's height at a point (km), bilinear. */
+  private farRiseAt(xKm: number, zKm: number): number {
     if (!this.far) return 0
     const { nx, nz, shape } = this.far.data
     const cellKm = this.far.level.cell / 1000
@@ -869,6 +966,9 @@ export class CampaignMapView {
       this.onViewChanged?.(ppk)
     }
     this.uploadDetail()
+    // the fade by the time since the last frame, at most a tenth of a second (a frame after a pause fades no faster)
+    this.fadeDetail(Math.min(100, t - this.lastFrame))
+    this.lastFrame = t
     this.scene.render()
     this.onFrame?.(performance.now() - t)
   }

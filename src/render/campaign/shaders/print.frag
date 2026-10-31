@@ -26,7 +26,7 @@ uniform float uHaze, uScreenH, uWoodK, uWoodFrom;
 // the water's steps: one of uStep m every uStepKm from the shore, at most uBands of them; the lines' reach in km
 uniform float uStepKm, uStep, uBands, uLineReachKm;
 
-#include<detail>
+#include<campaignDetail>
 
 // a screen pixel's size in km: set first thing in main, read by the water's steps
 float gPx = 1.0;
