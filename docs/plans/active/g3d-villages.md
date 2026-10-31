@@ -76,3 +76,13 @@ Round 1 (`/code-review high`, 10 findings, 3 severe):
   outside the scene's lists handed to its owner as it is made (`release`), so a build that throws undoes it too
   (tested, with the context-restored hooks); the map's standing buildings found once a map in the worker; a stale
   comment; the shared hash.
+
+Round 2 (`/code-review high`, no severe finding: fixed what was worth it, stopped):
+- fixed: a model scaled to its footprint's length could stand wider than it (the churches, 24 × 11 m, drew 14 m
+  wide): now the lesser of the length's and the width's scale (tested); an end-on house's front flipped by a road's
+  rounding: a road within `END_ON` of the long axis turns it no way (tested; both fail at the code before); the light's
+  wrappers and renderer handed to the owner as each is made; a detail texture asked for before `loadBuildingDetails`
+  throws (one made inside a part would go with it); `noise.ts` among the window data's sources; the segment's nearest
+  point shared (`segNear`, `geom.ts`); a dead refusal (armies never reach a map world's move); doc comments.
+- answered: the light's atlas made again on each move and the road scan a building are G5's costs (measured: the
+  buildings 1 ms, the light's setup 3–5 ms of a 280–330 ms move).

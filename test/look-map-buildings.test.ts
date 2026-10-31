@@ -27,7 +27,7 @@ const house = (ring: [number, number][], o: Partial<Standing> = {}): Standing =>
 const road = [{ pts: [[-500, 30] as [number, number], [500, 30] as [number, number]], w: 5, cls: COVER.road }]
 
 describe("a map's buildings as models (mapBuildings)", () => {
-  it('fits a model to each footprint, its scale the long side, its front toward the road', () => {
+  it('fits a model to each footprint, its scale within it, its front toward the road', () => {
     // in map metres, the window's centre at (100, 200): the house 10 m south of the road, its long side along x
     const at = { x: 100, z: 200 }
     const b = mapBuildings([house(box(100, 220, 12, 8, 0))], at, 400, road)
@@ -36,11 +36,30 @@ describe("a map's buildings as models (mapBuildings)", () => {
     const model = BUILDING_MODELS[m]
     expect(['house', 'farmhouse', 'manor']).toContain(model)
     expect([x, z]).toEqual([0, 20])
-    expect(scale).toBeCloseTo(12 / (2 * FOOT[model].hx!), 5)
+    expect(scale).toBeCloseTo(Math.min(12 / (2 * FOOT[model].hx!), 8 / (2 * FOOT[model].hz!)), 5)
     // the front (local −z) points north, at the road (z 30 from the house's 20)
     const [fx, fz] = toWorld(yaw, 0, -1)
     expect(fx).toBeCloseTo(0, 5)
     expect(fz).toBeCloseTo(1, 5)
+  })
+  it('keeps a model inside its footprint (a church, the manor: no wider than it)', () => {
+    // a narrow church, 24 × 6 m: the manor scaled to its length would be wider than 6 m
+    const at = { x: 0, z: 0 }
+    const b = mapBuildings([{ ...house(box(0, 0, 24, 6, 0)), church: true }], at, 400, [])
+    const { hx = 1, hz = 1 } = FOOT.manor
+    expect(b[4] * 2 * hx).toBeLessThanOrEqual(24 + 1e-4)
+    expect(b[4] * 2 * hz).toBeLessThanOrEqual(6 + 1e-4)
+  })
+  it('turns an end-on house no way (its road off its gable: the same front whichever side the road bends to)', () => {
+    // a house whose long axis points at the road (along z, the road 20 m north of its gable): its front the long side's
+    // either, the same for a road leaving a hair east or west of the axis
+    const at = { x: 0, z: 0 }
+    const along = (dx: number) => [
+      { pts: [[dx, 30] as [number, number], [dx, 500] as [number, number]], w: 5, cls: COVER.road },
+    ]
+    const east = mapBuildings([house(box(0, 0, 12, 8, Math.PI / 2))], at, 400, along(0.3))
+    const west = mapBuildings([house(box(0, 0, 12, 8, Math.PI / 2))], at, 400, along(-0.3))
+    expect(east[3]).toBeCloseTo(west[3], 5)
   })
   it('turns a model with its footprint, the front still toward the road', () => {
     const b = mapBuildings([house(box(0, -10, 12, 8, 0.4))], { x: 0, z: 0 }, 400, road)
@@ -64,7 +83,7 @@ describe("a map's buildings as models (mapBuildings)", () => {
     )
     expect(b.length).toBe(BUILDING_FLOATS)
     expect(BUILDING_MODELS[b[0]]).toBe('manor')
-    expect(b[4]).toBeCloseTo(24 / (2 * FOOT.manor.hx!), 5)
+    expect(b[4]).toBeCloseTo(Math.min(24 / (2 * FOOT.manor.hx!), 11 / (2 * FOOT.manor.hz!)), 5)
   })
 
   it('gives a house the same model whichever tile holds it (the bug: picked by its place on the tile)', () => {

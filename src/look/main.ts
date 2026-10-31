@@ -1590,7 +1590,6 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
   // every check before the first change: a tile refused leaves the page as it was
   if (look.world.kind !== 'map') throw new Error("retile: a map world only (the demo's river is its tile's)")
   // (the armies' shade hangs on the bakes and their places on the first tile: not on a map world yet)
-  if (armiesParam !== null) throw new Error('retile: not with armies (not on a map world yet)')
   // (the water, the banks and the river are the first tile's and stay: neither tile may have any yet, G3d)
   for (const d of [look, next]) {
     if (d.river.n || d.water.spans.length || d.bank.spans.length) throw new Error('retile: a tile with water (G3d)')

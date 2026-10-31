@@ -160,6 +160,8 @@ export function buildWindowData(
 export function standingOf(map: MapFile, L: Layers): Standing[] {
   return standing(map.features, L.table, L.built, { x0: L.x0, z0: L.z0, cell: L.cell, nx: L.nx, nz: L.nz })
 }
+/** A window's look data (not encoded): its tile at `tileAt` (map metres), the far ring, the light; `built`, the map's
+ *  standing buildings if found already (standingOf: the worker finds them once a map) */
 export function windowData(
   win: LookWindow,
   map: MapFile,

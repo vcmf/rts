@@ -74,32 +74,38 @@ const PALETTE: Record<Building['model'], Paint> = {
 }
 const DETAIL_AMT = 0.35 // how much of the texture's value shows (the paint's grain is on top)
 
-// baked: the static light read from the bake (src/look/building-light.ts; ?bldlm=0, the runtime's taps, the A/B);
-// bounce: the ground's bounce on the walls (paint's BOUNCE: computed before and never added;
-// the baked path's only: main.ts)
-/** The world's buildings (`list`: the demo's BUILDINGS, none on a map's window yet) as instanced, painted meshes. */
 // the models' detail textures, once a page (a moved tile's buildings reuse them: made again, their materials would
 // wait on the images' loading and the buildings drop out for a few frames, G3d); made before the first buildings by
 // loadBuildingDetails, outside any rebuilt part (src/look/owned.ts would take them away with it)
 const DETAILS = new WeakMap<Scene, Map<string, Texture>>()
 function detailTexture(scene: Scene, model: Building['model']): Texture {
-  let m = DETAILS.get(scene)
-  if (!m) DETAILS.set(scene, (m = new Map()))
-  let t = m.get(model)
-  if (!t) {
-    const p = PALETTE[model]
-    t = new Texture(p.detail, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) =>
-      console.error(`the ${model}'s detail texture (${p.detail}): ${msg}`),
-    )
-    m.set(model, t)
+  const t = DETAILS.get(scene)?.get(model)
+  // (made only by loadBuildingDetails, before any rebuilt part: one made inside a part would go with it)
+  if (!t || !t.getInternalTexture()) {
+    throw new Error(`buildings: the ${model}'s detail texture is not loaded (loadBuildingDetails first)`)
   }
   return t
 }
 /** Every model's detail texture made (and loading) for the page, once: before the first buildings (src/look/main.ts) */
 export function loadBuildingDetails(scene: Scene): void {
-  for (const model of Object.keys(PALETTE) as Building['model'][]) detailTexture(scene, model)
+  let m = DETAILS.get(scene)
+  if (!m) DETAILS.set(scene, (m = new Map()))
+  for (const model of Object.keys(PALETTE) as Building['model'][]) {
+    const p = PALETTE[model]
+    if (m.get(model)?.getInternalTexture()) continue
+    m.set(
+      model,
+      new Texture(p.detail, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) =>
+        console.error(`the ${model}'s detail texture (${p.detail}): ${msg}`),
+      ),
+    )
+  }
 }
 
+// baked: the static light read from the bake (src/look/building-light.ts; ?bldlm=0, the runtime's taps, the A/B);
+// bounce: the ground's bounce on the walls (paint's BOUNCE: computed before and never added;
+// the baked path's only: main.ts)
+/** The world's buildings (`list`: the demo's BUILDINGS, or a map world's tile's: G3d) as instanced, painted meshes. */
 export function buildBuildings(
   scene: Scene,
   mats: Materials,

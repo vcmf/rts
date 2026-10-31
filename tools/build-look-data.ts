@@ -155,6 +155,7 @@ const WINDOW_SOURCES = [
   'src/look/river.ts',
   'src/look/heightfield.ts',
   'src/look/spec.ts',
+  'src/look/noise.ts',
   'src/render/lit',
   'src/map',
   'maps/engine.ts',

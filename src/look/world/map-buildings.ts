@@ -4,7 +4,7 @@
 import type { Pt } from '../../map/schema.ts'
 import type { Standing } from '../../render/lit/houses.ts'
 import { FOOT, type Building } from './buildings.ts'
-import { segD } from './geom.ts'
+import { segNear } from './geom.ts'
 import { hash } from '../noise.ts'
 import type { MapLine } from './from-map.ts'
 
@@ -19,6 +19,9 @@ const HOUSES: readonly Building['model'][] = ['house', 'farmhouse', 'manor']
 const FIT_SLACK = 0.12
 // m: a road farther than this from a building turns it no way (its front its long side's either)
 const ROAD_NEAR = 60
+// a road this near the long axis's line (the cosine of its direction off the front) turns it no way either: an
+// end-on house's front its long side's either, not the side a rounding picks
+const END_ON = 0.2
 
 /** A footprint's centre, its long axis (unit) and its length and width along and across it, m (a 4-corner ring's) */
 function frame(ring: readonly Pt[]): { c: Pt; u: Pt; length: number; width: number } {
@@ -47,8 +50,8 @@ function frame(ring: readonly Pt[]): { c: Pt; u: Pt; length: number; width: numb
  * left out: no burnt model) whose centre lies within `half` m of the tile's centre `at` (map metres; the window's
  * frame is `at` less `tileAt`), its model (a house or a barn the model whose shape fits its footprint best, the long
  * side the model's x, the fits within FIT_SLACK picked among by its place; a church the manor), its scale (the
- * model's length to the footprint's), its yaw (the front, the model's −z, toward the nearest road within ROAD_NEAR of
- * it: `lines`, in the window's metres). BUILDING_FLOATS a building.
+ * model's length to the footprint's, or its width's if less), its yaw (the front, the model's −z, toward the nearest
+ * road within ROAD_NEAR of it unless end-on to it: `lines`, in the window's metres). BUILDING_FLOATS a building.
  */
 export function mapBuildings(
   standing: readonly Standing[],
@@ -74,7 +77,9 @@ export function mapBuildings(
       // (picked by its place on the map, not on the tile: a house keeps its model whichever tile holds it)
       model = good[Math.min(good.length - 1, Math.floor(hash(f.c[0], f.c[1]) * good.length))]
     }
-    const scale = f.length / (2 * (FOOT[model].hx ?? 1))
+    // (the model within its footprint: its length's scale, or its width's if that is less)
+    const { hx = 1, hz = 1 } = FOOT[model]
+    const scale = Math.min(f.length / (2 * hx), f.width / (2 * hz))
     // the front: across the long axis, toward the nearest road's segment
     let n: Pt = [-f.u[1], f.u[0]]
     let near = ROAD_NEAR
@@ -82,18 +87,13 @@ export function mapBuildings(
     for (const l of lines) {
       for (let k = 0; k + 1 < l.pts.length; k++) {
         const [a, c] = [l.pts[k], l.pts[k + 1]]
-        const d = segD(x, z, a, c)
-        if (d < near) {
-          near = d
-          // the segment's nearest point
-          const dx = c[0] - a[0]
-          const dz = c[1] - a[1]
-          const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)))
-          toward = [a[0] + t * dx - x, a[1] + t * dz - z]
-        }
+        const p = segNear(x, z, a, c)
+        const d = Math.hypot(p[0] - x, p[1] - z)
+        if (d < near) [near, toward] = [d, [p[0] - x, p[1] - z]]
       }
     }
-    if (toward && n[0] * toward[0] + n[1] * toward[1] < 0) n = [-n[0], -n[1]]
+    const side = toward ? (n[0] * toward[0] + n[1] * toward[1]) / (Math.hypot(toward[0], toward[1]) || 1) : 0
+    if (side < -END_ON) n = [-n[0], -n[1]]
     // (the model's front, local (0, −1), is (−sin yaw, −cos yaw) in the world: buildings.ts, toWorld)
     const yaw = Math.atan2(-n[0], -n[1])
     out.push(BUILDING_MODELS.indexOf(model), x, z, yaw, scale)
