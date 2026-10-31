@@ -33,7 +33,7 @@
 .frames figure { margin: 0; display: grid; gap: 22px; }
 .frames figcaption span { color: var(--pencil); text-transform: none; }
 .specimen { width: 150px; height: 96px; }
-.specimen.attn { --tick: 120px; --frame-tick: var(--accent); border-color: var(--accent); }
+.specimen.attn { --tick: 120px; --frame-tick: var(--accent); border-color: var(--accent); background: var(--accent-wash); }
 
 .states { border-collapse: collapse; }
 .states th, .states td { padding: 12px 22px 12px 0; text-align: left; }
@@ -71,13 +71,11 @@
   .frames, .overlays, .cards, .battle, .kit-menu { padding: 0 8px; }
 }
 
-/* Under review: the accent switcher, the bars' states, the experience series. */
-.accent-pick { display: grid; gap: 10px; margin-top: 18px; }
-.accent-note { margin: 0; max-width: 62ch; color: var(--ink-soft); font-size: 13px; }
+/* The bars' states and the experience series (the series under review). */
 .gauges { grid-template-columns: 110px repeat(3, minmax(0, 1fr)); gap: 14px 22px; max-width: 760px; }
 .bar-cell { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 10px; align-items: center; }
 .levels { display: grid; gap: 28px; }
-.level-row { display: grid; grid-template-columns: 220px repeat(5, minmax(0, 1fr)); gap: 18px; align-items: end; padding-bottom: 22px; border-bottom: 1px solid var(--rule); }
+.level-row { display: grid; grid-template-columns: 200px repeat(6, minmax(0, 1fr)); gap: 18px; align-items: end; padding-bottom: 22px; border-bottom: 1px solid var(--rule); }
 .level-row .display { font-size: 24px; }
 .level-row p { margin: 4px 0 0; color: var(--ink-soft); font-size: 13px; }
 .level-row figure { margin: 0; display: grid; justify-items: center; gap: 10px; }
@@ -87,6 +85,6 @@
 @media (max-width: 860px) {
   .gauges { grid-template-columns: 70px repeat(3, minmax(0, 1fr)); gap: 12px; }
   .bar-cell { grid-template-columns: minmax(0, 1fr); }
-  .level-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .level-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .level-row > div:first-child { grid-column: 1 / -1; }
 }

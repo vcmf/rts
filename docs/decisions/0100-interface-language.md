@@ -21,7 +21,10 @@ grotesk, a mono for data, one accent per army), but only for that map, and nothi
 - **One interface language for every screen**, extending the staff map's §8 to the whole game: warm paper
   (`#ece3d2`, raised `#f6efe3`, sunk `#e2d7c3`), warm graphite ink (`#2b2824`, never black), pencil (`#8a847a`).
 - **Colour belongs to the armies**, set from data; the interface's only other colour is **one accent for selection
-  and focus** (`#a4532b`).
+  and focus: gamboge** (`#e4b412`), the yellow wash period plans laid over projected works (Vauban's convention;
+  the Clements Library's bulletin 4 on French wash manuals). It is too light for a line or text (1.5:1 on paper), so
+  it is a wash and a fill under ink lines; the owner chose it over verdigris and violet (2026-10-31). A first
+  terracotta read as a brand orange.
 - **The ticked frame** (the owner's sketch) contains everything that can be chosen; its ticks grow when it has
   attention.
 - **Pencil means not yet**: what cannot be used yet is drawn grey and dashed, stays visible, and cannot be chosen by
@@ -35,6 +38,8 @@ grotesk, a mono for data, one accent per army), but only for that map, and nothi
 
 - New screens (Settings, Campaign, the battle's panels) take their elements from the theme rather than restyling;
   the sheet already shows the settings controls, gauges, dialog, dispatch and battle panel they will need.
+- Unit bars take their colours from the same washes (bistre toughness, verdigris morale, violet fatigue), their low
+  and critical states drawn, not hued.
 - The army colours of Prussia and Poland, not yet set by the art bible, are provisional in the content
   (`tools/history-content.ts`).
 - The fonts load from Google Fonts; offline play will need them bundled (later).

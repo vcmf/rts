@@ -1,6 +1,8 @@
-// A unit's experience level as a marker: five ink glyphs that read as an ordered scale at 14–16 px, without colour.
-// Three candidate series (the plan's open questions, docs/plans/active/front-menu.md); the levels' names are a
-// ruleset's, not this file's (decision 0015). Drawn on a 16 × 16 box.
+// A unit's experience level as a marker: six ink glyphs that read as an ordered scale at 14–16 px, without colour.
+// The levels are the unit model's, 1 to 6 (docs/proposals/unit-model.md § Experience: three of the line, then three
+// of the Guard); their names are a ruleset's, not this file's (decision 0015). Every series draws the line's levels
+// as counted marks and the Guard's as one family of a star, so the step into the Guard reads as a change of kind.
+// Three candidate series (the plan's open questions, docs/plans/active/front-menu.md). Drawn on a 16 × 16 box.
 
 /** One stroke of a glyph: drawn as an ink line, an ink fill, or cut out of the fill in paper. */
 export interface Stroke {
@@ -10,7 +12,8 @@ export interface Stroke {
 
 export type LevelSeries = 'sleeve' | 'shield' | 'honours'
 export const LEVEL_SERIES: readonly LevelSeries[] = ['sleeve', 'shield', 'honours']
-export const LEVELS = 5
+/** The unit model's levels: 1 to LEVELS. */
+export const LEVELS = 6
 
 const line = (d: string): Stroke => ({ d, mode: 'line' })
 const fill = (d: string): Stroke => ({ d, mode: 'fill' })
@@ -35,40 +38,51 @@ export function starPath(cx: number, cy: number, r: number): string {
 
 const ring = (r: number) => line(`M${8 - r} 8 A${r} ${r} 0 1 0 ${8 + r} 8 A${r} ${r} 0 1 0 ${8 - r} 8`)
 const SHIELD = 'M3 2.5 H13 V8 C13 11.5 10.5 13.5 8 14.8 C5.5 13.5 3 11.5 3 8 Z'
+/** The shield made smaller to sit inside a laurel. */
+const SMALL_SHIELD = 'M4.8 3.2 H11.2 V8 C11.2 10.4 9.6 11.9 8 12.8 C6.4 11.9 4.8 10.4 4.8 8 Z'
 
-/** "Sleeve": a ring, one to three service chevrons, then a star (the period's chevrons, then a distinction). */
+const LAUREL = [line('M3.2 5 C2 9 4 13.4 8 14.6'), line('M12.8 5 C14 9 12 13.4 8 14.6')]
+/** A star as an outline (the Young Guard's in Sleeve). */
+const starLine = (cx: number, cy: number, r: number) => line(starPath(cx, cy, r))
+
+/** "Sleeve": a ring, one and two service chevrons; then the Guard: a star drawn, filled, filled in a laurel. */
 const SLEEVE: Stroke[][] = [
   [ring(2.5)],
   [chevron(6.2)],
   [chevron(4.2), chevron(8.2)],
-  [chevron(2.2), chevron(6.2), chevron(10.2)],
+  [starLine(8, 8.4, 6.6)],
   [fill(starPath(8, 8.4, 7.2))],
+  [...LAUREL, fill(starPath(8, 8, 4.6))],
 ]
 
-/** "Shield": one outline at every level, filling with bars, then solid, then solid with a cross cut out. */
+/** "Shield": one outline at every level, filling with bars; the Guard's a star: inside the outline, cut out of the
+ *  solid shield, then that shield in a laurel. */
 const SHIELD_SERIES: Stroke[][] = [
   [line(SHIELD)],
   [line(SHIELD), line('M5.5 7.5 H10.5')],
   [line(SHIELD), line('M5.5 6 H10.5'), line('M5.5 9.5 H10.5')],
-  [fill(SHIELD)],
-  [fill(SHIELD), cut('M8 4.8 V11.6 M5.2 7.8 H10.8')],
+  [line(SHIELD), fill(starPath(8, 7.6, 3.4))],
+  [fill(SHIELD), cut(starPath(8, 7.6, 3.2))],
+  [...LAUREL, fill(SMALL_SHIELD), cut(starPath(8, 7.4, 2.4))],
 ]
 
-/** "Honours": every mark filled: a bar, one and two chevrons, two and a dot, then a star in a laurel. */
+/** "Honours": every mark filled: a bar, one and two chevrons; then the Guard: a star, a star over a bar, a star in
+ *  a laurel. */
 const HONOURS: Stroke[][] = [
   [fill('M5 7 H11 V9.4 H5 Z')],
   [solidChevron(5)],
   [solidChevron(2.5), solidChevron(8)],
-  [solidChevron(4.5), solidChevron(9.5), fill('M6.6 2.2 A1.4 1.4 0 1 0 9.4 2.2 A1.4 1.4 0 1 0 6.6 2.2')],
-  [line('M3.2 5 C2 9 4 13.4 8 14.6'), line('M12.8 5 C14 9 12 13.4 8 14.6'), fill(starPath(8, 8, 4.6))],
+  [fill(starPath(8, 8, 5.6))],
+  [fill(starPath(8, 6.6, 5)), fill('M3.5 12.4 H12.5 V14.6 H3.5 Z')],
+  [...LAUREL, fill(starPath(8, 8, 4.6))],
 ]
 
 const SERIES: Record<LevelSeries, Stroke[][]> = { sleeve: SLEEVE, shield: SHIELD_SERIES, honours: HONOURS }
 
-/** The strokes of `level` (0 to LEVELS − 1, clamped) in `series`. */
+/** The strokes of `level` (1 to LEVELS, clamped) in `series`. */
 export function levelGlyph(series: LevelSeries, level: number): Stroke[] {
-  const at = Math.min(LEVELS - 1, Math.max(0, Math.round(level)))
-  return SERIES[series][at]
+  const at = Math.min(LEVELS, Math.max(1, Math.round(level)))
+  return SERIES[series][at - 1]
 }
 
 const SVG = 'http://www.w3.org/2000/svg'

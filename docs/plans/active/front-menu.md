@@ -49,17 +49,18 @@ Out: the background art (the home stays empty paper), Campaign, Battles and Sett
   `--selftest` fails on each sabotage.
 - Screenshots of every screen at 1440 × 900 and 390 × 844, looked at.
 
+## Decided
+
+- **The selection accent: gamboge** (the owner, 2026-10-31), a wash under ink lines (decision 0100). Terracotta read
+  as a brand orange; verdigris and violet were the other candidates.
+
 ## Open questions
 
-- **The selection accent** (the owner, 2026-10-31: terracotta reads as a brand orange; wants one of the period).
-  Candidates from period pigments, switchable on `app/ui-kit.html` and by `?accent=` on both pages: gamboge (a
-  yellow wash under ink lines, after Vauban's wash for projected works: recommended, the default for now),
-  verdigris, violet. Research: the Clements Library's bulletin 4 (French wash manuals, swatches measured from it),
-  contrast and colour-blind distance computed (Machado 2009).
-- **Experience markers** for five levels: three series on the sheet (Sleeve: a ring, one to three service chevrons,
-  a star; Shield; Honours). Recommended: Sleeve (French service chevrons counted to three; the Guard a distinction).
+- **Experience markers** for the unit model's six levels (`docs/proposals/unit-model.md` § Experience: Recruits,
+  Line, Veterans, Young, Middle and Old Guard): three series on the sheet, each with the line's levels as counted
+  marks and the Guard's as a star family (Sleeve: a ring, one and two chevrons, a star drawn, filled, in a laurel;
+  Shield; Honours). Recommended: Sleeve.
 - **Unit bars**: continuous, bistre toughness, verdigris morale, violet fatigue; low hatched, critical outlined.
-  Verdigris and violet as accents would clash with the morale and fatigue bars: the bars assume the gamboge accent.
 
 - The game's title ("Empires" is a placeholder).
 - Prussia's and Poland's army colours (`#23324a`, `#9c2440`) are provisional: the art bible names only France,

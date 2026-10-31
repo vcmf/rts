@@ -1,7 +1,6 @@
 // The specimen sheet (app/ui-kit.html): fills the samples that come from data (the army colours, cards, meters) and
 // makes the settings controls and the dialog live. docs/systems/front-menu.md ("The specimen sheet").
 import { find, h, paintArmy } from './dom.ts'
-import { ACCENTS, accentOf, applyAccent, type Accent } from './accent.ts'
 import { bar, barShare, barState, card } from './elements.ts'
 import { LEVEL_SERIES, LEVELS, levelMarker, type LevelSeries } from './levels.ts'
 import { historyImage } from './images.ts'
@@ -66,69 +65,37 @@ function barSamples(): HTMLElement[] {
   return [...head, ...rows]
 }
 
-/** The levels' names (a ruleset's, in the game; the research's period-grounded ones here) by series. */
-const LEVEL_NAMES: Record<LevelSeries, string[]> = {
-  sleeve: ['Conscript', 'Soldier', 'Seasoned', 'Veteran', 'Guard'],
-  shield: ['Recruit', 'Trained', 'Seasoned', 'Veteran', 'Élite'],
-  honours: ['Conscript', 'Fusilier', 'Grenadier', 'Grognard', 'Vieille Garde'],
-}
+/** The levels' names: the Napoleonic ruleset's (docs/proposals/unit-model.md § Experience), 1 to 6. In the game
+ *  they come from the ruleset; the sheet names them here. */
+const LEVEL_NAMES = ['Recruits', 'Line', 'Veterans', 'Young Guard', 'Middle Guard', 'Old Guard']
 const SERIES_NOTES: Record<LevelSeries, string> = {
-  sleeve: 'Recommended. A ring, one to three service chevrons (as French sleeves counted service), then a star.',
-  shield: 'One outline at every level that fills: bars, solid, then a cross cut out.',
-  honours: 'All marks filled; the most flavour, the closest steps (3 and 4) at small size.',
+  sleeve:
+    'Recommended. A ring, then one and two service chevrons (French sleeves counted service in chevrons); the Guard a star: drawn, filled, filled in a laurel.',
+  shield:
+    'One outline that fills with bars; the Guard a star: inside the outline, cut from the solid shield, then in a laurel.',
+  honours: 'All marks filled: a bar, one and two chevrons; the Guard a star, a star over a bar, a star in a laurel.',
 }
 
-/** One row a series: its name and note, then each level at 16 and 32 px with its name. */
+/** One row a series: its name and note, then each level at 40 and 16 px with its name. */
 function levelRows(): HTMLElement[] {
   return LEVEL_SERIES.map(series => {
-    const cells = Array.from({ length: LEVELS }, (_, level) => {
-      const name = LEVEL_NAMES[series][level]
-      const big = levelMarker(series, level, name)
+    const cells = Array.from({ length: LEVELS }, (_, i) => {
+      const name = LEVEL_NAMES[i]
+      const big = levelMarker(series, i + 1, name)
       big.classList.add('big')
-      return h('figure', {}, big, levelMarker(series, level, name), h('figcaption', { class: 'mono' }, name))
+      return h('figure', {}, big, levelMarker(series, i + 1, name), h('figcaption', { class: 'mono' }, name))
     })
     const title = h('div', {}, h('div', { class: 'display' }, series), h('p', {}, SERIES_NOTES[series]))
     return h('div', { class: 'level-row' }, title, ...cells)
   })
 }
 
+/** Each `data-level="<1–6>"` becomes its Sleeve marker. */
 function fillLevelMarks(): void {
   for (const node of document.querySelectorAll<HTMLElement>('[data-level]')) {
     const level = Number(node.dataset.level)
-    node.replaceWith(levelMarker('sleeve', level, LEVEL_NAMES.sleeve[level]))
+    node.replaceWith(levelMarker('sleeve', level, LEVEL_NAMES[level - 1]))
   }
-}
-
-const ACCENT_NOTES: Record<Accent, string> = {
-  terracotta: "Today's accent: read as a brand orange; to be replaced.",
-  gamboge:
-    "Recommended. Vauban's yellow wash for projected works: a wash under ink lines, as a plan marks what is to be done. Too light for a line of its own, so lines stay ink.",
-  verdigris:
-    "The draughtsman's fluid verdigris: strong enough for lines and text, but close to Russia's green and to the morale bar.",
-  violet:
-    "Carmine and indigo mixed: the most distinct from the armies for most eyes, but it is the fatigue bar's colour and nears Austria for deuteranopes.",
-}
-
-/** The accent switcher: sets the page's accent and its address (?accent=), so the menu can be opened with it too. */
-function accentPicker(): void {
-  const group = find('[data-slot=accents]')
-  const note = find('[data-slot=accent-note]')
-  const show = (accent: Accent) => {
-    applyAccent(accent)
-    for (const b of group.querySelectorAll('button')) {
-      b.setAttribute('aria-pressed', String(b.dataset.accent === accent))
-    }
-    note.textContent = ACCENT_NOTES[accent]
-    const url = new URL(location.href)
-    url.searchParams.set('accent', accent)
-    history.replaceState(null, '', url)
-  }
-  for (const accent of ACCENTS) {
-    const button = h('button', { 'data-accent': accent }, accent)
-    button.addEventListener('click', () => show(accent))
-    group.append(button)
-  }
-  show(accentOf(location.search))
 }
 
 function liveSwitches(): void {
@@ -191,7 +158,6 @@ async function main(): Promise<void> {
   find('[data-slot=bars]').replaceChildren(...barSamples())
   find('[data-slot=levels]').replaceChildren(...levelRows())
   fillLevelMarks()
-  accentPicker()
   liveSwitches()
   liveRanges()
   liveSegments()

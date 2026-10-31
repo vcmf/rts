@@ -65,9 +65,11 @@ keydown ──keyAction(route, key)──▶ go(route) | step | activate
   goes to Close as it opens and back to the card last shown as it closes. `src/ui/elements.ts` builds the elements made in
   code (the card, the meter), shared by the screens and the specimen sheet.
 - **The interface language** (`src/ui/theme.css`, decision 0100): tokens (paper, raised and sunk paper, ink, soft
-  ink, pencil, rule, the one accent), type (condensed display, text, mono labels, mono data), the ticked frame and the
+  ink, pencil, rule, the one accent: a gamboge wash under ink lines; the unit bars' colours), type (condensed display, text, mono labels, mono data), the ticked frame and the
   elements: buttons, menu items, tags and stamps, tabs, chips, crumbs, settings controls (switch, scale-bar range,
-  segmented choice, check, select, ruled input), meters and progress, tooltip, dialog, dispatch, cards, and the
+  segmented choice, check, select, ruled input), continuous unit bars (low hatched, critical outlined) and progress,
+  experience markers for the unit model's six levels (`src/ui/levels.ts`: the line's levels counted marks, the
+  Guard's a star family; three candidate series), tooltip, dialog, dispatch, cards, and the
   battle's cartouche, unit panel and status bar. Each interactive element also takes `.is-hover`, `.is-focus` and
   `.is-active`, so the sheet can show its states side by side.
 - **The specimen sheet** (`app/ui-kit.html`, `src/ui/kit.ts`, layout `src/ui/kit.css`): every element in every state,
