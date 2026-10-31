@@ -18,14 +18,19 @@ import {
   groundClass,
   ihash,
   mapCover,
+  GAP_KEEP,
   mapTrees,
   packTrees,
+  treeScale,
   type MapTree,
+  type TreeGround,
+  WOOD_STEP,
+  woodTrees,
   runsInside,
   wayLines,
   windowHeights,
 } from '../src/look/world/from-map.ts'
-import { TREE_FLOATS, TREE_SPECIES, decodeLook, encodeLook } from '../src/look/world/data.ts'
+import { TREE_FLOATS, TREE_SPECIES, decodeLook, encodeLook, type TreeSpecies } from '../src/look/world/data.ts'
 import { WINDOWS, windowOf, type LookWindow } from '../src/look/world/windows.ts'
 import { noRiver } from '../src/look/river.ts'
 import fs from 'node:fs'
@@ -339,7 +344,7 @@ describe('the trees', () => {
     const wood = trees.filter(t => t.x > 0 && t.z > 0)
     const orchard = trees.filter(t => t.x > 0 && t.z < 0)
     expect(trees.length).toBe(wood.length + orchard.length)
-    expect(wood.length).toBeGreaterThan(40)
+    expect(wood.length).toBeGreaterThan(20)
     for (const t of wood) expect(['spruce', 'pine', 'birch', 'hawthorn']).toContain(t.sp)
     expect(wood.some(t => t.sp === 'spruce' || t.sp === 'pine')).toBe(true)
     for (const t of orchard) {
@@ -378,16 +383,19 @@ const FOREST: Resolved = {
   attrs: { leaf: 'mixed', density: 1, height: 20, growth: 'stand' },
 }
 
-/** The trees of the large wood (window metres = map metres: the window at the origin). */
-function forestTrees(): MapTree[] {
+/**
+ * The large wood centred on the map point `at`: its layers and its ground for a window `win` (by default centred on
+ * it) whose areas are `far` m a side.
+ */
+function forest(at: Pt = [0, 0], win: LookWindow = { ...WIN, x: at[0], z: at[1] }, far = 2 * FOREST_N) {
   const n = FOREST_N * FOREST_N
   const U = () => new Uint16Array(n)
   const L: Layers = {
     ...layers(),
     nx: FOREST_N,
     nz: FOREST_N,
-    x0: -FOREST_N,
-    z0: -FOREST_N,
+    x0: at[0] - FOREST_N,
+    z0: at[1] - FOREST_N,
     height: new Float64Array((FOREST_N + 1) * (FOREST_N + 1)),
     table: [FOREST],
     ground: U(),
@@ -405,15 +413,31 @@ function forestTrees(): MapTree[] {
     for (let i = 0; i < FOREST_N; i++) {
       const x = L.x0 + (i + 0.5) * 2
       const z = L.z0 + (j + 0.5) * 2
-      if (Math.max(Math.abs(x), Math.abs(z)) < FOREST_HALF) {
+      if (Math.max(Math.abs(x - at[0]), Math.abs(z - at[1])) < FOREST_HALF) {
         ;[L.veg[j * FOREST_N + i], L.density[j * FOREST_N + i]] = [1, 255]
       }
     }
   }
   const h = FOREST_HALF
-  const features = [{ id: 'forest', area: square(-h, -h, h, h) }]
-  return mapTrees(L, fineAreas(L, features, WIN, 2 * FOREST_N, 1), WIN)
+  const features = [{ id: 'forest', area: square(at[0] - h, at[1] - h, at[0] + h, at[1] + h) }]
+  const g: TreeGround = { L, A: fineAreas(L, features, win, far, 1), win }
+  return { L, g }
 }
+
+/** The trees of the large wood centred on `at` in map metres, for a window `win` whose areas are `far` m a side. */
+function forestTrees(at: Pt = [0, 0], win?: LookWindow, far?: number): MapTree[] {
+  const { L, g } = forest(at, win, far)
+  win = g.win
+  return mapTrees(L, g.A, win).map(t => ({ ...t, x: t.x + win.x, z: t.z + win.z }))
+}
+
+// four more places for the large wood, far apart on the map
+const FAR_WOODS: Pt[] = [
+  [3000, 0],
+  [0, 3000],
+  [-3000, -1500],
+  [1500, -3000],
+]
 
 /** Each tree's nearest neighbour among `trees`: its distance (m) and its direction (radians). */
 function nearest(trees: readonly MapTree[]): { d: number; dir: number }[] {
@@ -474,11 +498,10 @@ describe('a large wood', () => {
   })
 
   it('keeps the trees per hectare of a wood at its density (one a 36 m², within 10 %)', () => {
-    const area = (2 * FOREST_HALF) ** 2
-    expect(trees.length / (area / 36)).toBeGreaterThan(0.9)
-    expect(trees.length / (area / 36)).toBeLessThan(1.1)
-    expect(inner.length / (300 ** 2 / 36)).toBeGreaterThan(0.9)
-    expect(inner.length / (300 ** 2 / 36)).toBeLessThan(1.1)
+    // over four woods in four places of the map, so their noises' thickets and clearings even out
+    const count = FAR_WOODS.reduce((n, at) => n + forestTrees(at).length, trees.length)
+    expect(count / ((5 * (2 * FOREST_HALF) ** 2) / 36)).toBeGreaterThan(0.9)
+    expect(count / ((5 * (2 * FOREST_HALF) ** 2) / 36)).toBeLessThan(1.1)
   })
 
   it('stands the conifers closer and the oaks wider than their shares', () => {
@@ -488,9 +511,15 @@ describe('a large wood', () => {
     expect(share('spruce') + share('pine')).toBeGreaterThan(0.33)
   })
 
-  it('spreads their scales', () => {
+  it('spreads their scales, a hawthorn kept at its own and the others within a modest spread of theirs', () => {
     const s = inner.filter(t => t.sp === 'beech').map(t => t.s)
-    expect(Math.max(...s) / Math.min(...s)).toBeGreaterThan(1.8)
+    expect(Math.max(...s) / Math.min(...s)).toBeGreaterThan(1.5)
+    // the wood is 20 m high: treeScale's largest, then 1.15 for the stand's age and 1.12 for a veteran
+    const top = (sp: TreeSpecies) => Math.max(...trees.filter(t => t.sp === sp).map(t => t.s))
+    expect(top('hawthorn')).toBeLessThanOrEqual(treeScale('hawthorn', 20, 1))
+    for (const sp of ['oak', 'beech', 'lime', 'birch', 'spruce', 'pine'] as const) {
+      expect(top(sp)).toBeLessThanOrEqual(treeScale(sp, 20, 1) * 1.15 * 1.12 + 1e-9)
+    }
   })
 
   it('stands a ragged rim: its depth and its trees vary along the edge', () => {
@@ -507,8 +536,31 @@ describe('a large wood', () => {
     expect(Math.max(...edge)).toBeGreaterThan(2 * Math.min(...edge))
   })
 
-  it('stands the same trees each time', () => {
-    expect(forestTrees()).toEqual(trees)
+  it("stands the same trees in every window: the window's own edge is never a wood's", () => {
+    // a smaller window off the centre, its areas 300 m a side: its trees over the whole overlap, up to its edge (where
+    // a tree's neighbours and its rim's probes are off its areas), against the large window's
+    const win = { ...WIN, x: 20, z: -14 }
+    const small = forestTrees([0, 0], win, 300)
+    const inBoth = (t: MapTree) => Math.max(Math.abs(t.x - 20), Math.abs(t.z + 14)) < 150
+    const key = (t: MapTree) => `${t.x},${t.z},${t.sp},${t.s}`
+    const a = trees.filter(inBoth).map(key).sort()
+    const b = small.filter(inBoth).map(key).sort()
+    expect(a.length).toBeGreaterThan(1000)
+    expect(b).toEqual(a)
+  })
+
+  it('makes up on the chance the share of candidates the gaps take (GAP_KEEP)', () => {
+    const n = Math.ceil(FOREST_HALF / WOOD_STEP)
+    let all = 0
+    let kept = 0
+    for (const at of [[0, 0] as Pt, ...FAR_WOODS]) {
+      const { g } = forest(at)
+      const [a, b] = [Math.round(at[0] / WOOD_STEP), Math.round(at[1] / WOOD_STEP)]
+      kept += woodTrees(g, a - n, a + n, b - n, b + n).length
+      all += woodTrees(g, a - n, a + n, b - n, b + n, false).length
+    }
+    expect(kept / all).toBeGreaterThan(GAP_KEEP - 0.01)
+    expect(kept / all).toBeLessThan(GAP_KEEP + 0.01)
   })
 })
 

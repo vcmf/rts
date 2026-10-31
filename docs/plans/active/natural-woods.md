@@ -22,7 +22,7 @@ the page are unchanged; epic/gameplay-map has the same code and merges main late
 1. **No lattice.** A finer lattice (3 m) whose candidates may fall anywhere in their cell, each kept with about a
    quarter of the old chance: near a Poisson scatter, so trees clump by chance and no row survives.
 2. **Thickets and clearings.** The keep chance scaled by a low-frequency value noise (two octaves, 45 and 17 m)
-   built on `ihash`, from thin to thick, and by a 14 m one that opens small clearings where it is lowest.
+   (`src/map/noise.ts`), from thin to thick, and by a 14 m one that opens small clearings where it is lowest.
 3. **Species spacing.** Each candidate's species chosen first (its stand's noise and its own hash, so the woods have
    patches of one species), and its chance scaled by the species (conifers closer, oaks wider), normalised over the
    leaf's shares so the trees per hectare stay the same; a minimum gap to a kept neighbour by species, so two trunks
@@ -32,7 +32,7 @@ the page are unchanged; epic/gameplay-map has the same code and merges main late
 5. **Scale.** A stand's age (a noise) and the tree's own hash spread the scale more widely; the yaw is already random
    per tree on the page (`hash(x, z)` in `src/look/nature.ts`).
 
-Deterministic: everything is a function of the map's position through `ihash`, so the same map gives the same trees
+Deterministic: everything is a function of the map's position through `ihash` and the noises, so the same map gives the same trees
 and two windows agree where they overlap. `woodTree(g, a, b)` keeps its signature; the look data is rebuilt
 (`node tools/build-look-data.ts`).
 
@@ -59,5 +59,13 @@ after on both windows and kept within ±10 %, so no bench.
   one's peak over every period from 2 to 12 m about 4.5 (a random scatter's is of order 1 to 5). The nearest
   neighbours' spread (standard deviation over mean) 0.26 → 0.38; the trees within 2.8 m of a neighbour 11 % → 36 %;
   12 m squares of the inside left empty 0 → 26 of 576.
-- The far ring's trees: Kobelnitz 4747 → 4569 (−3.7 %), Pratzen 9133 → 9043 (−1.0 %); within ±10 %, so no bench.
-- Calibration: the noises' means measured over 6 km; the share the gaps take (5 %) measured on both windows.
+- The far ring's trees: Kobelnitz 4747 → 4829 (+1.7 %), Pratzen 9133 → 9122 (−0.1 %); within ±10 %, so no bench.
+- Calibration: the noises' means worked out on load over 4 km of the map (about 27 ms more to import
+  `src/look/world/from-map.ts`); the share the gaps take (`GAP_KEEP`, 0.92) measured on five large woods and
+  recomputed by a test.
+- Review round 1: the edge probes, the neighbours past the window's areas and the gap test read the map's layers, so
+  two windows stand the same trees (a test compares every tree of a smaller window's overlap); the stand's age only
+  on pack-scaled species, within ±15 % and a veteran's 12 % (a test caps each species); the candidates built once
+  into a grid (`woodTrees`) and the cheap rejections first; the noise is `src/map/noise.ts`'s.
+- Build time (mapTrees over the far ring, the fastest of 5): Kobelnitz 54 → 84 ms, Pratzen 56 → 90 ms (the fastest; the whole
+  window's build about 8 and 2 s either way); the tests' file 0.45 → 0.76 s with the new tests.

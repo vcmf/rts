@@ -6,7 +6,7 @@
 //
 // What the map language lacks, the compiler fills here until the language says it (the plan's table): the arable is
 // one feature, so it is cut into strips (fieldAt, temporary until the language's field generator); a wood is an area,
-// so its trees are scattered (woodTree); an orchard's trees stand in its rows. Each is decided by a hash of the map's
+// so its trees are scattered (woodTrees); an orchard's trees stand in its rows. Each is decided by a hash of the map's
 // position, so two windows agree where they overlap.
 import type { Layers } from '../../map/apply.ts'
 import { CELL, lineReach, nearLine } from '../../map/apply.ts'
@@ -17,6 +17,7 @@ import type { Resolved } from '../../map/resolve.ts'
 import type { Feature, Pt as MapPt } from '../../map/schema.ts'
 import type { Grid, Heightfield } from '../heightfield.ts'
 import type { Derived } from '../spec.ts'
+import { valueNoise } from '../../map/noise.ts'
 import { sstep } from '../noise.ts'
 import { COVER, WEAR_STEP, isField, resample, type CoverClass, type CoverGrid } from './cover.ts'
 import { TREE_SPECIES, type TreeSpecies } from './data.ts'
@@ -602,22 +603,28 @@ function markNear(mark: Uint8Array, n: number, cell: number, wear: Float32Array)
 // a wood's trees (docs/plans/active/natural-woods.md): a candidate anywhere in each cell of a WOOD_STEP m lattice,
 // kept by a chance that gives a wood at full density a tree per WOOD_AREA m² on average, near a random scatter: trees
 // clump by chance and no row shows. A slow noise thickens and thins the chance (thickets and clearings), the species
-// scales it (conifers closer, oaks wider) and, in the edge band, another noise (bays and spurs); a tree keeps off a
-// kept neighbour by its species' gap. Within a wandering WOOD_RIM of the edge, the rim's birches and thorns
-const WOOD_STEP = 3
+// scales it (conifers closer, oaks wider) and, in the edge band, another noise (bays and spurs); a candidate gives way
+// to a neighbour's candidate of higher rank within their species' gap. Within a wandering WOOD_RIM of the edge, the
+// rim's birches and thorns. The edge is the map's (its layers'), never the window's, so every window agrees
+export const WOOD_STEP = 3
 const WOOD_AREA = 36 // m² a tree at full density (the earlier 6 m lattice's)
 const WOOD_RIM: readonly [number, number] = [3, 8] // the rim's width, m, between the two by a noise
 const WOOD_BAND = 10 // the edge band's depth, m, thinned into bays
-// the factors on the chance, each a noise (its lattice's spacing in m) through a smoothstep from lo to hi, divided by
-// its mean over the map (measured over 6 km): the thickets' (two octaves, from `floor` thin to `floor + 1.4` thick),
-// the small clearings' (none where it is lowest) and the bays' along the edge
-const THICKET = { big: 45, small: 17, lo: 0.25, hi: 0.75, floor: 0.3 }
-const CLEARING = { size: 14, lo: 0.15, hi: 0.25 }
-const THICKET_MEAN = 0.9128 // the two together
-const BAYS = { size: 22, lo: 0.25, hi: 0.65, mean: 0.58 }
+// the noises on the chance, each a value noise (its lattice's spacing in m, its seed) through a smoothstep from lo to
+// hi: the thickets' (two octaves, from `floor` thin to `floor + THICK` thick), the small clearings' (none where it is
+// lowest) and the bays' along the edge; each factor divided by its mean over the map (THICKET_MEAN, BAYS_MEAN)
+const THICKET = { big: 45, small: 17, lo: 0.25, hi: 0.75, floor: 0.3, seed: 50 }
+const THICK = 1.4
+const CLEARING = { size: 14, lo: 0.15, hi: 0.25, seed: 57 }
+const BAYS = { size: 22, lo: 0.25, hi: 0.65, seed: 55 }
+// the other noises' seeds: the rim's width, the stands' wobble (two) and their age
+const SEED = { rim: 54, wobbleX: 52, wobbleZ: 53, age: 56 }
 // a stand: a patch about STAND m across, its border wobbled up to STAND_WOBBLE m, where half the trees are its species
 const STAND = 36
 const STAND_WOBBLE = 12
+// a pack-scaled tree's age by its stand (a factor from 1 − AGE to 1 + AGE) and the odd veteran's (VETERAN of them)
+const AGE = 0.15
+const VETERAN: readonly [number, number] = [0.05, 1.12]
 // each species' spacing: its chance's factor against its leaf's mean, and its gap to a neighbour's trunk (m)
 const SPACING: Partial<Record<TreeSpecies, readonly [number, number]>> = {
   spruce: [1.35, 1.4],
@@ -628,9 +635,11 @@ const SPACING: Partial<Record<TreeSpecies, readonly [number, number]>> = {
   lime: [0.9, 2],
   oak: [0.75, 2.3],
 }
-const SPACING_GAP_MAX = 2.3
-// the share of candidates the gaps leave standing (measured on the Austerlitz windows), made up on the chance
-const GAP_KEEP = 0.95
+const GAP_DEFAULT = 1.8
+const GAP_MAX = 2.3
+// the share of candidates the gaps leave standing (measured on five large woods; test/look-from-map.test.ts recomputes
+// it), made up on the chance
+export const GAP_KEEP = 0.92
 // the rim's probes: six directions 60° apart from 15° or from 45° (the tree's hash picks), none on the map's axes
 const C15 = 0.9659258262890683
 const S15 = 0.25881904510252074
@@ -692,8 +701,8 @@ function speciesOf(shares: readonly [TreeSpecies, number][], u: number): TreeSpe
 
 /**
  * A tree's scale for its species and the feature's height (m): a pack-scaled species at the scatter's 3.4–4.8 (a
- * wood's default 20 m height), the others in metres about the height over their models' (apple 6 m, a hawthorn 5 m,
- * a poplar 20 m); `u` (0..1) spreads it.
+ * wood's default 20 m height; a wood's spread by its stand's age, woodScale), the others in metres about the height
+ * over their models' (apple 6 m, a hawthorn 5 m, a poplar 20 m); `u` (0..1) spreads it.
  */
 export function treeScale(sp: TreeSpecies, height: number, u: number): number {
   if (PACK_SCALED.includes(sp)) return (3.4 + 1.4 * u) * Math.min(1.5, Math.max(0.5, height / 20))
@@ -721,42 +730,86 @@ const treeFree = (g: TreeGround, x: number, z: number): boolean => {
   return c >= 0 && k >= 0 && !g.A.water[c] && !g.A.built[c] && !g.L.way[k]
 }
 
-/**
- * A smooth value noise over the map's metres, 0..1, from `ihash` (the same on every machine): its lattice's values
- * `size` m apart, smoothstepped between; `salt` picks its own.
- */
-export function woodNoise(x: number, z: number, size: number, salt: number): number {
-  const u = x / size
-  const v = z / size
-  const i = Math.floor(u)
-  const j = Math.floor(v)
-  const su = sstep(0, 1, u - i)
-  const sv = sstep(0, 1, v - j)
-  const lo = ihash(i, j, salt) + (ihash(i + 1, j, salt) - ihash(i, j, salt)) * su
-  const hi = ihash(i, j + 1, salt) + (ihash(i + 1, j + 1, salt) - ihash(i, j + 1, salt)) * su
-  return lo + (hi - lo) * sv
+/** A value noise over the map's metres in 0..1: its lattice's values `size` m apart (src/map/noise.ts). */
+const noise01 = (seed: number, x: number, z: number, size: number): number =>
+  (valueNoise(seed, x / size, z / size) + 1) / 2
+
+/** The thickets' factor on a wood's chance before its mean: 0 in a clearing, up to THICKET.floor + THICK. */
+function thicketRaw(x: number, z: number): number {
+  const n = 0.65 * noise01(THICKET.seed, x, z, THICKET.big) + 0.35 * noise01(THICKET.seed + 1, x, z, THICKET.small)
+  const thick = THICKET.floor + THICK * sstep(THICKET.lo, THICKET.hi, n)
+  return thick * sstep(CLEARING.lo, CLEARING.hi, noise01(CLEARING.seed, x, z, CLEARING.size))
 }
 
-/** The thickets' factor on a wood's chance at a map point: 0 in a clearing, about 1.9 in a thicket, 1 on average. */
-function thicket(x: number, z: number): number {
-  const n = 0.65 * woodNoise(x, z, THICKET.big, 50) + 0.35 * woodNoise(x, z, THICKET.small, 51)
-  const thick = THICKET.floor + 1.4 * sstep(THICKET.lo, THICKET.hi, n)
-  const open = sstep(CLEARING.lo, CLEARING.hi, woodNoise(x, z, CLEARING.size, 57))
-  return (thick * open) / THICKET_MEAN
+/** The bays' factor on a wood's chance in its edge band before its mean: 0 in a bay, 1 on a spur. */
+const baysRaw = (x: number, z: number): number => sstep(BAYS.lo, BAYS.hi, noise01(BAYS.seed, x, z, BAYS.size))
+
+/** The mean of f over a 4 km square of the map, sampled every 7.3 m: a noise factor's normaliser. */
+function meanOverMap(f: (x: number, z: number) => number): number {
+  let sum = 0
+  let n = 0
+  for (let x = -2000; x < 2000; x += 7.3) {
+    for (let z = -2000; z < 2000; z += 7.3) {
+      sum += f(x, z)
+      n++
+    }
+  }
+  return sum / n
 }
+
+export const THICKET_MEAN = meanOverMap(thicketRaw)
+export const BAYS_MEAN = meanOverMap(baysRaw)
+
+/** A species' factor on a wood's chance before its leaf's mean. */
+const spacingRaw = (sp: TreeSpecies): number => SPACING[sp]?.[0] ?? 1
+
+// each share list's species factors against its mean (1: the list's mean), worked out once
+const SPACING_OF = new Map<readonly [TreeSpecies, number][], Map<TreeSpecies, number>>(
+  [...Object.values(LEAF), RIM].map(shares => {
+    const mean = shares.reduce((m, [sp, p]) => m + p * spacingRaw(sp), 0)
+    return [shares, new Map(shares.map(([sp]) => [sp, spacingRaw(sp) / mean]))]
+  }),
+)
+// the largest factor of each kind on a chance: a candidate above their product is rejected before the costly parts
+const SPACING_TOP = Math.max(...[...SPACING_OF.values()].flatMap(m => [...m.values()]))
+const THICKET_TOP = (THICKET.floor + THICK) / THICKET_MEAN
+const BAYS_TOP = 1 / BAYS_MEAN
 
 /** A wood's lattice cell (a, b)'s candidate point, map metres: anywhere in its cell. */
 const woodPoint = (a: number, b: number): Pt => [(a + ihash(a, b, 20)) * WOOD_STEP, (b + ihash(a, b, 21)) * WOOD_STEP]
 
 /**
- * Where a wood's point stands against its edge: on its rim (within the rim's wandering width: its birches and thorns),
- * in its edge band (thinned into bays) or inside. Probed in six directions turned by `turn` (0..1).
+ * The wood a tree may stand in at a map point, if any: on the window's areas by their 1 m shapes, off them (a
+ * neighbour past the window's edge) by the map's layers; dry, off the built and off the layers' ways.
  */
-function edgeOf(g: TreeGround, x: number, z: number, turn: number): 'rim' | 'band' | 'inside' {
+function woodAt(g: TreeGround, x: number, z: number): Resolved | null {
+  const k = cellAt(g.L, x, z)
+  if (k < 0 || g.L.way[k]) return null
+  const c = fineAt(g.A, g.win, x, z)
+  const onAreas = c >= 0
+  if (onAreas ? g.A.water[c] || g.A.built[c] : g.L.water[k] || g.L.built[k]) return null
+  const v = onAreas ? g.A.veg[c] : g.L.veg[k]
+  const r = v ? g.L.table[v - 1] : null
+  return isWood(r) ? r : null
+}
+
+/** Whether a map point is a wood's by the map's layers, or off them (unknown, so no edge is made there). */
+function woodOrUnknown(L: Layers, x: number, z: number): boolean {
+  const k = cellAt(L, x, z)
+  return k < 0 || isWood(featureOf(L, L.veg[k]))
+}
+
+/**
+ * Where a wood's point stands against the map's edge of its wood: on its rim (within the rim's wandering width: its
+ * birches and thorns), in its edge band (thinned into bays) or inside. Probed in six directions picked by `turn`
+ * (0..1), on the map's layers, so the window's own edge is never taken for a wood's.
+ */
+function edgeOf(L: Layers, x: number, z: number, turn: number): 'rim' | 'band' | 'inside' {
   const dirs = PROBES[turn < 0.5 ? 0 : 1]
-  const out = (r: number) => dirs.some(([dx, dz]) => !isWood(vegAt(g, x + dx * r, z + dz * r)))
-  const rim = WOOD_RIM[0] + (WOOD_RIM[1] - WOOD_RIM[0]) * woodNoise(x, z, 25, 54)
-  return out(rim) ? 'rim' : out(WOOD_BAND) ? 'band' : 'inside'
+  const out = (r: number) => dirs.some(([dx, dz]) => !woodOrUnknown(L, x + dx * r, z + dz * r))
+  if (!out(WOOD_BAND)) return 'inside'
+  const rim = WOOD_RIM[0] + (WOOD_RIM[1] - WOOD_RIM[0]) * noise01(SEED.rim, x, z, 25)
+  return out(rim) ? 'rim' : 'band'
 }
 
 /**
@@ -771,59 +824,85 @@ function woodSpecies(
   z: number,
 ): TreeSpecies {
   if (ihash(a, b, 26) >= 0.5) return speciesOf(shares, ihash(a, b, 23))
-  const wx = x + 2 * STAND_WOBBLE * (woodNoise(x, z, 20, 52) - 0.5)
-  const wz = z + 2 * STAND_WOBBLE * (woodNoise(x, z, 20, 53) - 0.5)
+  const wx = x + 2 * STAND_WOBBLE * (noise01(SEED.wobbleX, x, z, 20) - 0.5)
+  const wz = z + 2 * STAND_WOBBLE * (noise01(SEED.wobbleZ, x, z, 20) - 0.5)
   return speciesOf(shares, ihash(Math.floor(wx / STAND), Math.floor(wz / STAND), 27))
 }
 
-/** A species' factor on a wood's chance, against the mean of the shares it was drawn from (1: a leaf's mean). */
-function spacingOf(sp: TreeSpecies, shares: readonly [TreeSpecies, number][]): number {
-  const f = (s: TreeSpecies) => SPACING[s]?.[0] ?? 1
-  return f(sp) / shares.reduce((m, [s, p]) => m + p * f(s), 0)
+/** The gap (m) two trees of these species keep between their trunks. */
+const gapOf = (p: TreeSpecies, q: TreeSpecies): number =>
+  ((SPACING[p]?.[1] ?? GAP_DEFAULT) + (SPACING[q]?.[1] ?? GAP_DEFAULT)) / 2
+
+/**
+ * A wood tree's scale: treeScale's, and a pack-scaled species' spread by its stand's age (1 ± AGE by a noise) and the
+ * odd veteran; the others (a hawthorn) at treeScale's own.
+ */
+export function woodScale(sp: TreeSpecies, height: number, a: number, b: number, x: number, z: number): number {
+  const s = treeScale(sp, height, ihash(a, b, 24))
+  if (!PACK_SCALED.includes(sp)) return s
+  const age = 1 - AGE + 2 * AGE * noise01(SEED.age, x, z, 30)
+  return s * age * (ihash(a, b, 28) < VETERAN[0] ? VETERAN[1] : 1)
 }
 
-/** The gap (m) two kept trees of these species keep between their trunks. */
-const gapOf = (p: TreeSpecies, q: TreeSpecies): number => ((SPACING[p]?.[1] ?? 1.8) + (SPACING[q]?.[1] ?? 1.8)) / 2
-
-/** The tree a wood's lattice cell (a, b) offers before its neighbours' gaps: its map point, species and scale. */
-function woodCandidate(g: TreeGround, a: number, b: number): MapTree | null {
-  const [x, z] = woodPoint(a, b)
-  if (!treeFree(g, x, z)) return null
-  const r = vegAt(g, x, z)
-  if (!isWood(r)) return null
-  const edge = edgeOf(g, x, z, ihash(a, b, 29))
-  const shares = edge === 'rim' ? RIM : (LEAF[String(r!.attrs.leaf)] ?? LEAF.mixed)
-  const sp = woodSpecies(shares, a, b, x, z)
-  const bays = edge === 'inside' ? 1 : sstep(BAYS.lo, BAYS.hi, woodNoise(x, z, BAYS.size, 55)) / BAYS.mean
-  // (the density's ramp from the layers' cell)
-  const density = g.L.density[cellAt(g.L, x, z)] / 255
-  const chance =
-    ((density * WOOD_STEP * WOOD_STEP) / WOOD_AREA / GAP_KEEP) * thicket(x, z) * spacingOf(sp, shares) * bays
-  if (ihash(a, b, 22) >= chance) return null
-  // a stand's age and the odd veteran spread the scale
-  const age = (0.72 + 0.56 * woodNoise(x, z, 30, 56)) * (ihash(a, b, 28) < 0.05 ? 1.25 : 1)
-  return { x, z, sp, s: treeScale(sp, Number(r!.attrs.height ?? 20), ihash(a, b, 24)) * age }
+/** A wood's candidate tree and its rank among its neighbours (a hash: the higher stands). */
+interface WoodCandidate extends MapTree {
+  rank: number
 }
 
 /**
- * The tree a wood's lattice cell (a, b) holds, if any: its map point, species and scale. Its candidate gives way to a
- * kept neighbour's of higher rank (a hash) within their species' gap, so no two trunks stand in one place.
+ * The tree a wood's lattice cell (a, b) offers before its neighbours' gaps, if any. The cheap tests first: the hash
+ * against the density's and the thickets' bound, then the edge's probes and the species for the survivors.
  */
-export function woodTree(g: TreeGround, a: number, b: number): MapTree | null {
-  const t = woodCandidate(g, a, b)
-  if (!t) return null
-  const rank = ihash(a, b, 25)
-  for (let db = -1; db <= 1; db++) {
-    for (let da = -1; da <= 1; da++) {
-      if ((da === 0 && db === 0) || ihash(a + da, b + db, 25) < rank) continue
-      const [nx, nz] = woodPoint(a + da, b + db)
-      const d2 = (nx - t.x) ** 2 + (nz - t.z) ** 2
-      if (d2 >= SPACING_GAP_MAX ** 2) continue
-      const n = woodCandidate(g, a + da, b + db)
-      if (n && d2 < gapOf(t.sp, n.sp) ** 2) return null
+function woodCandidate(g: TreeGround, a: number, b: number): WoodCandidate | null {
+  const [x, z] = woodPoint(a, b)
+  const r = woodAt(g, x, z)
+  if (!r) return null
+  const u = ihash(a, b, 22)
+  // (the density's ramp from the layers' cell)
+  const base = ((g.L.density[cellAt(g.L, x, z)] / 255) * WOOD_STEP * WOOD_STEP) / WOOD_AREA / GAP_KEEP
+  if (u >= base * THICKET_TOP * SPACING_TOP * BAYS_TOP) return null
+  const thick = base * (thicketRaw(x, z) / THICKET_MEAN)
+  if (u >= thick * SPACING_TOP * BAYS_TOP) return null
+  const edge = edgeOf(g.L, x, z, ihash(a, b, 29))
+  const bays = edge === 'inside' ? 1 : baysRaw(x, z) / BAYS_MEAN
+  if (u >= thick * SPACING_TOP * bays) return null
+  const shares = edge === 'rim' ? RIM : (LEAF[String(r.attrs.leaf)] ?? LEAF.mixed)
+  const sp = woodSpecies(shares, a, b, x, z)
+  if (u >= thick * SPACING_OF.get(shares)!.get(sp)! * bays) return null
+  return { x, z, sp, s: woodScale(sp, Number(r.attrs.height ?? 20), a, b, x, z), rank: ihash(a, b, 25) }
+}
+
+/**
+ * The trees of a wood's lattice cells a0..a1 × b0..b1: each cell's candidate worked out once (and its ring of
+ * neighbours'), then each kept unless a neighbour's candidate of higher rank stands within their species' gap, so no
+ * two trunks stand in one place. `gaps` false skips that rule (its share is measured by the tests: GAP_KEEP).
+ */
+export function woodTrees(g: TreeGround, a0: number, a1: number, b0: number, b1: number, gaps = true): MapTree[] {
+  const w = a1 - a0 + 3
+  const grid: (WoodCandidate | null)[] = []
+  for (let b = b0 - 1; b <= b1 + 1; b++) for (let a = a0 - 1; a <= a1 + 1; a++) grid.push(woodCandidate(g, a, b))
+  const at = (a: number, b: number) => grid[(b - b0 + 1) * w + (a - a0 + 1)]
+  const out: MapTree[] = []
+  for (let b = b0; b <= b1; b++) {
+    for (let a = a0; a <= a1; a++) {
+      const t = at(a, b)
+      if (t && !(gaps && givesWay(t, a, b, at))) out.push({ x: t.x, z: t.z, sp: t.sp, s: t.s })
     }
   }
-  return t
+  return out
+}
+
+/** Whether a candidate gives way: a neighbour's candidate of higher rank stands within their species' gap. */
+function givesWay(t: WoodCandidate, a: number, b: number, at: (a: number, b: number) => WoodCandidate | null): boolean {
+  for (let db = -1; db <= 1; db++) {
+    for (let da = -1; da <= 1; da++) {
+      const n = da === 0 && db === 0 ? null : at(a + da, b + db)
+      if (!n || n.rank < t.rank) continue
+      const d2 = (n.x - t.x) ** 2 + (n.z - t.z) ** 2
+      if (d2 < GAP_MAX ** 2 && d2 < gapOf(t.sp, n.sp) ** 2) return true
+    }
+  }
+  return false
 }
 
 /** The tree an orchard's row point (a, b) holds, if any: its rows along `rows.dir`, `rows.spacing` apart. */
@@ -865,7 +944,7 @@ export function mapTrees(L: Layers, A: FineAreas, win: LookWindow): MapTree[] {
   const a1 = Math.ceil((win.x + h) / WOOD_STEP) + 1
   const b0 = Math.floor((win.z - h) / WOOD_STEP) - 1
   const b1 = Math.ceil((win.z + h) / WOOD_STEP) + 1
-  for (let b = b0; b <= b1; b++) for (let a = a0; a <= a1; a++) keep(woodTree(g, a, b))
+  for (const t of woodTrees(g, a0, a1, b0, b1)) keep(t)
   for (const r of orchardsIn(g)) {
     const rows = (r.attrs.rows ?? {}) as Record<string, number>
     const sp = Number(rows.spacing ?? 9)
