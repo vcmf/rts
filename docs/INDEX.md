@@ -13,6 +13,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 ## Frame
 
 - [`vision.md`](vision.md): pitch, pillars, scale, non-goals. *(draft)*
+- [`getting-started.md`](getting-started.md): run the demo, the prototypes, restore the asset packs, credits.
 - [`art-bible.md`](art-bible.md): the look: fixed constraints, palette, light, seasons, water, assets. *(current)*
 - [`architecture.md`](architecture.md): sim/render split, data model, commands, tick, Babylon setup. *(current; parts superseded by `docs/proposals/sim-design.md`)*
 - [`engine-map.md`](engine-map.md): every engine part with its owner doc, phase and status. *(draft)*
