@@ -22,7 +22,7 @@ import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './material
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
 import { CLOSE_ZOOM, CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { meadowLookDefines, meadowLookOf } from './meadow-look.ts'
-import { type GrassDetail, grassDetailOf, isGrassDetail, withGrassDetail } from './grass-detail.ts'
+import { type GrassDetail, grassDetailOf, isGrassDetail, searchWithGrassDetail, THIN_EASE_S } from './grass-detail.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
@@ -235,7 +235,7 @@ if (reliefK > 0) {
 // ?grassup=0|1|2, ?wheatfill=0|1: the meadow's look (docs/plans/done/grass-upright.md, decision 0085; meadowLookOf in
 // src/look/meadow-look.ts)
 const meadowLook = meadowLookOf(params, grassMode)
-// ?grassdetail=full|balanced: the player's grass detail (src/look/grass-detail.ts, decision 0092), Full by default and
+// ?grassdetail=full|balanced: the player's grass detail (src/look/grass-detail.ts, decision 0095), Full by default and
 // without the meadow; the panel's Grass detail changes it live
 const grassDetail = grassDetailOf(params, meadowOn)
 const grain0 = makeGrainCanvas(null)
@@ -619,7 +619,18 @@ else if (params.has('bench') || params.has('water') || params.get('river') === '
 if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowMap
-  ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach, meadowLook, grassDetail)
+  ? buildMeadow(
+      scene,
+      mats,
+      camera,
+      meadowMap,
+      !flag('nowide'),
+      grassReach,
+      meadowLook,
+      grassDetail,
+      // (the look tools' frozen page renders a view in a few frames: Balanced's share snaps, not eased)
+      params.has('frozen') ? 0 : THIN_EASE_S,
+    )
   : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dark ground under its clumps (shore.glsl)
 // ?armies=<battalions a side>: the demo's two armies (docs/plans/active/armies-demo.md): battalions of the ruleset's
@@ -1048,15 +1059,15 @@ const applyScale = (s: number) => {
   post.scale = k
   engine.setHardwareScalingLevel(k / s)
 }
-// the grass detail: applied live (Meadow.setDetail), and the address kept to the level in force (?grassdetail, none
-// for Full, the default: a Balanced the page could not apply, without the meadow, is dropped from it), so a reload or
-// a shared address opens on it; without the meadow there is nothing to choose: the row is hidden
+/** Keeps the address to the grass detail in force (level): only its grassdetail key edited, and only when it names
+ * another level (none named is Full), so a reload or a shared address opens on it and every other parameter stays as
+ * written */
 const showDetail = (level: GrassDetail) => {
-  const q = withGrassDetail(new URLSearchParams(location.search), level).toString()
-  const u = new URL(location.href)
-  u.search = q
-  if (u.href !== location.href) history.replaceState(history.state, '', u.href)
+  const search = searchWithGrassDetail(location.search, level)
+  if (search !== location.search) history.replaceState(history.state, '', location.pathname + search + location.hash)
 }
+// the grass detail: applied live (Meadow.setDetail); a Balanced the page could not apply (without the meadow) dropped
+// from the address; without the meadow there is nothing to choose: the row is hidden
 showDetail(grassDetail)
 const detailSel = byId<HTMLSelectElement>('grassdetail')
 detailSel.value = grassDetail

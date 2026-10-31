@@ -19,7 +19,8 @@ import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
 import { MEADOW_LOOK, type MeadowLook } from './meadow-look.ts'
-import { dropAtZoom, type GrassDetail, THIN_RAMP, THIN_SOFT, thinOn } from './grass-detail.ts'
+import { type GrassDetail, THIN_EASE_S, THIN_RAMP, THIN_SOFT, ThinEase } from './grass-detail.ts'
+import { switchDefineWhenReady, warmDefine } from './define-switch.ts'
 import {
   CLUMP_REACH,
   CROP_WIDE,
@@ -334,6 +335,7 @@ export function buildMeadow(
   reach = CLUMP_REACH,
   look: MeadowLook = MEADOW_LOOK,
   detail: GrassDetail = 'full',
+  thinEaseS = THIN_EASE_S,
 ): Meadow {
   const t0 = performance.now()
   const { map, growingCells, growthAt, cropAt, groundAt: groundAtMap } = mm
@@ -485,26 +487,29 @@ export function buildMeadow(
   let meadowOn = true
   const bands = RINGS.map(r => new Vector4(...r.band))
   RINGS.forEach((_, ri) => ringMats[ri].setVector4('uBand', bands[ri]))
-  // the grass detail: Balanced's program on the near ring up close (thinOn), toggled by its define as the trodden
-  // mask toggles TRAMPLE (src/look/trodden.ts). A toggle asks for the new program at once (isReady starts its
-  // compile) and keeps the old defines until it is compiled, asking again each frame: the ring never blinks
+  // the grass detail on the near ring (src/look/grass-detail.ts): its share eased each frame (ThinEase, uThin.x), its
+  // program (GRASS_THIN) switched in the mesh's own render, once every other define of the frame is set (the trodden
+  // mask's, the figures' shadows'), and only when compiled (switchDefineWhenReady): the ring never blinks
   let level = detail
-  let thinNow = false
+  const ease = new ThinEase(thinEaseS)
   const near = ringMats[0]
   near.setVector4('uThinRamp', new Vector4(...THIN_RAMP))
   const thinV = new Vector2(0, THIN_SOFT)
   near.setVector2('uThin', thinV)
-  const applyThin = () => {
-    const want = thinOn(level, camera.radius)
-    thinV.x = dropAtZoom(camera.radius)
-    if (want === thinNow) return
-    const defines = near.options.defines.slice()
-    near.setDefine(THIN, want)
-    if (meshes[0].isReady(true)) thinNow = want
-    else near.options.defines.splice(0, near.options.defines.length, ...defines)
+  let askProgram = false
+  // GRASS_THIN's program compiled (warmed as soon as Balanced is chosen, even zoomed out)
+  let thinCompiled = false
+  meshes[0].onBeforeRenderObservable.add(m => applyThin(m))
+  /** The near ring's program for this frame, as it is drawn (mesh: the near ring): GRASS_THIN compiled ahead while
+   * Balanced is chosen, then switched on or off when the ease asks and the new program is ready */
+  function applyThin(mesh: Mesh): void {
+    const ready = () => mesh.isReady(true)
+    if (level === 'balanced' && !thinCompiled && !ease.program) thinCompiled = warmDefine(near, THIN, true, ready)
+    if (askProgram !== ease.program && switchDefineWhenReady(near, THIN, askProgram, ready)) ease.program = askProgram
   }
   scene.onBeforeRenderObservable.add(() => {
-    applyThin()
+    askProgram = ease.step(level, camera.radius, scene.getEngine().getDeltaTime() / 1000)
+    thinV.x = ease.share
     const t = wide ? Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))) : 0
     const k = 1 - t * t * (3 - 2 * t)
     under.z = underOn && meadowOn ? k : 0

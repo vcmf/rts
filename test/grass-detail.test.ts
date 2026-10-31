@@ -1,4 +1,4 @@
-// The player's grass detail (src/look/grass-detail.ts, issue #257, decision 0092): ?grassdetail's parsing and the
+// The player's grass detail (src/look/grass-detail.ts, issue #257, decision 0095): ?grassdetail's parsing and the
 // address, the share of the near ring's grass Balanced drops by distance and zoom, the clumps shrinking away instead
 // of popping, and the shader's drop (meadow.vert, GRASS_THIN): the same rule, on the grass branch only, absent from
 // Full's program.
@@ -14,9 +14,12 @@ import {
   THIN_RAMP,
   THIN_SOFT,
   thinKeep,
+  THIN_EASE_S,
+  ThinEase,
   thinOn,
-  withGrassDetail,
+  searchWithGrassDetail,
 } from '../src/look/grass-detail.ts'
+import { type DefineHost, switchDefineWhenReady, warmDefine } from '../src/look/define-switch.ts'
 import { CLOSE_ZOOM, RINGS } from '../src/look/meadow-spec.ts'
 
 const q = (s: string) => new URLSearchParams(s)
@@ -27,7 +30,7 @@ const fullOf = (src: string) => src.replace(/[ \t]*#ifdef GRASS_THIN\n[\s\S]*?#e
 const thinCode = (src: string) =>
   [...src.matchAll(/#ifdef GRASS_THIN\n([\s\S]*?)#endif/g)].map(m => m[1].replace(/\/\/.*$/gm, '')).join('\n')
 // a clump's size at a distance and zoom with the drop's hash hd: what meadow.vert grows it to, times this
-const sizeAt = (hd: number, d: number, radius: number) => thinKeep(hd, dropShare(d, radius))
+const sizeAt = (hd: number, d: number, radius: number) => thinKeep(hd, dropShare(d, dropAtZoom(radius)))
 
 describe('the grass detail', () => {
   it('is Full when absent, and takes full or balanced', () => {
@@ -48,19 +51,26 @@ describe('the grass detail', () => {
     expect(grassDetailOf(q(''), false)).toBe('full')
     expect(() => grassDetailOf(q('grassdetail=x'), false)).toThrow(/grassdetail must be/)
   })
-  it('writes the level in force to the address: Balanced named, Full none, the rest kept', () => {
-    expect(withGrassDetail(q('map=a&grassdetail=balanced'), 'full').toString()).toBe('map=a')
-    expect(withGrassDetail(q('map=a'), 'balanced').toString()).toBe('map=a&grassdetail=balanced')
-    expect(withGrassDetail(q('grassdetail=full&x=1'), 'full').toString()).toBe('x=1')
+  it('keeps the address byte for byte unless its grassdetail names another level, then edits only that key', () => {
+    // (the regression: every load re-encoded the whole query: ?bench became bench=, lean,big lean%2Cbig)
+    for (const a of ['', '?bench&grassoff=lean,big&midtone=u3,b2', '?map=austerlitz&window=kobelnitz&x=%20']) {
+      expect(searchWithGrassDetail(a, 'full')).toBe(a)
+    }
+    expect(searchWithGrassDetail('?grassdetail=full&bench', 'full')).toBe('?grassdetail=full&bench')
+    expect(searchWithGrassDetail('?bench&grassdetail=balanced&a=b,c', 'balanced')).toBe(
+      '?bench&grassdetail=balanced&a=b,c',
+    )
+    expect(searchWithGrassDetail('?bench&grassdetail=balanced&a=b,c', 'full')).toBe('?bench&a=b,c')
+    expect(searchWithGrassDetail('?bench&a=b,c', 'balanced')).toBe('?bench&a=b,c&grassdetail=balanced')
+    expect(searchWithGrassDetail('?grassdetail=full&bench', 'balanced')).toBe('?grassdetail=balanced&bench')
+    expect(searchWithGrassDetail('?grassdetail=balanced', 'full')).toBe('')
   })
   it('drops BALANCED_DROP between its ramps up close, none inside 8 m nor from the near ring edge out', () => {
     // (the ramp out: the near ring's own band out, where the middle ring fades in at full density)
     expect(THIN_RAMP.slice(2)).toEqual(RINGS[0].band.slice(2))
-    for (const radius of [15, 45, CLOSE_ZOOM[0]]) {
-      for (let d = 0; d <= THIN_RAMP[0]; d += 0.5) expect(dropShare(d, radius)).toBe(0)
-      for (let d = THIN_RAMP[1]; d <= THIN_RAMP[2]; d += 0.5) expect(dropShare(d, radius)).toBe(BALANCED_DROP)
-      for (let d = THIN_RAMP[3]; d <= 110; d += 0.5) expect(dropShare(d, radius)).toBe(0)
-    }
+    for (let d = 0; d <= THIN_RAMP[0]; d += 0.5) expect(dropShare(d, BALANCED_DROP)).toBe(0)
+    for (let d = THIN_RAMP[1]; d <= THIN_RAMP[2]; d += 0.5) expect(dropShare(d, BALANCED_DROP)).toBe(BALANCED_DROP)
+    for (let d = THIN_RAMP[3]; d <= 110; d += 0.5) expect(dropShare(d, BALANCED_DROP)).toBe(0)
   })
   it('falls to none across CLOSE_ZOOM, so from its end out (the default zoom too) Balanced is Full', () => {
     expect(dropAtZoom(CLOSE_ZOOM[0])).toBe(BALANCED_DROP)
@@ -68,7 +78,6 @@ describe('the grass detail', () => {
       expect(dropAtZoom(radius)).toBe(0)
       // (Full's own program there: no GRASS_THIN)
       expect(thinOn('balanced', radius)).toBe(false)
-      for (let d = 0; d <= 110; d += 0.5) expect(dropShare(d, radius)).toBe(0)
     }
     expect(thinOn('balanced', 45)).toBe(true)
     expect(thinOn('full', 45)).toBe(false)
@@ -90,7 +99,71 @@ describe('the grass detail', () => {
     // whole above the share, nothing THIN_SOFT under it, whole at a share of none
     expect(thinKeep(0.6, 0.5)).toBe(1)
     expect(thinKeep(0.5 - THIN_SOFT, 0.5)).toBe(0)
-    expect(thinKeep(0.01, 0)).toBe(1)
+    expect(thinKeep(0, 0)).toBe(1)
+  })
+  it('switches the program on at a share of none and eases it up, and down to none before it switches off', () => {
+    // (the regression: the full share applied the frame the program landed, half the near tufts gone at once)
+    const e = new ThinEase()
+    const dt = 1 / 60
+    // Balanced chosen up close: the program asked for, the share none until it is in force
+    for (let i = 0; i < 30; i++) expect(e.step('balanced', 45, dt)).toBe(true)
+    expect(e.share).toBe(0)
+    e.program = true
+    let last = 0
+    for (let t = 0; t < THIN_EASE_S + 0.1; t += dt) {
+      e.step('balanced', 45, dt)
+      expect(e.share - last).toBeLessThanOrEqual((BALANCED_DROP / THIN_EASE_S) * dt + 1e-12)
+      last = e.share
+    }
+    expect(e.share).toBe(BALANCED_DROP)
+    // back to Full: the program kept while the share eases down, given up at none
+    let steps = 0
+    while (e.step('full', 45, dt)) {
+      expect(e.share).toBeLessThan(BALANCED_DROP)
+      steps++
+    }
+    expect(e.share).toBe(0)
+    expect(steps).toBeGreaterThanOrEqual(Math.floor(THIN_EASE_S / dt) - 1)
+    // zoomed out past CLOSE_ZOOM: the same, Full's program from 110 m
+    e.program = true
+    e.share = BALANCED_DROP
+    for (let i = 0; i < 40; i++) e.step('balanced', 125, dt)
+    expect(e.share).toBe(0)
+    expect(e.step('balanced', 125, dt)).toBe(false)
+  })
+  it('snaps the share at once with no ease (the frozen page of the look tools)', () => {
+    const e = new ThinEase(0)
+    e.program = true
+    e.step('balanced', 45, 0)
+    expect(e.share).toBe(BALANCED_DROP)
+  })
+  it('switches a define only once its program is ready, the old defines kept meanwhile; warms one without switching', () => {
+    // (the regression: the ring drew nothing the frames its new program compiled)
+    const host = (defines: string[]): DefineHost => ({
+      options: { defines },
+      setDefine(d: string, on: boolean) {
+        const i = this.options.defines.findIndex(x => x === d || x.startsWith(d + ' '))
+        if (i >= 0) this.options.defines.splice(i, 1)
+        if (on) this.options.defines.push(d + ' true')
+      },
+    })
+    const m = host(['#define A', '#define TRAMPLE true'])
+    const seen: string[][] = []
+    const notYet = () => (seen.push(m.options.defines.slice()), false)
+    expect(switchDefineWhenReady(m, '#define GRASS_THIN', true, notYet)).toBe(false)
+    // asked with the new defines, then put back as they were
+    expect(seen[0]).toEqual(['#define A', '#define TRAMPLE true', '#define GRASS_THIN true'])
+    expect(m.options.defines).toEqual(['#define A', '#define TRAMPLE true'])
+    expect(switchDefineWhenReady(m, '#define GRASS_THIN', true, () => true)).toBe(true)
+    expect(m.options.defines).toEqual(['#define A', '#define TRAMPLE true', '#define GRASS_THIN true'])
+    // off again, not ready: the program with it kept
+    expect(switchDefineWhenReady(m, '#define GRASS_THIN', false, () => false)).toBe(false)
+    expect(m.options.defines).toEqual(['#define A', '#define TRAMPLE true', '#define GRASS_THIN true'])
+    // warming never switches, ready or not
+    const w = host(['#define A'])
+    expect(warmDefine(w, '#define GRASS_THIN', true, () => true)).toBe(true)
+    expect(warmDefine(w, '#define GRASS_THIN', true, () => false)).toBe(false)
+    expect(w.options.defines).toEqual(['#define A'])
   })
   it("leaves the crops untouched: the shader's drop is on the grass branch, after the crop decision", () => {
     const body = VERT.slice(VERT.indexOf('void main()'))
