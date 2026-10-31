@@ -1,4 +1,4 @@
-// The layered leaf atlas's pure parts (src/look/leaves.ts; docs/plans/active/crown-leaves.md): the clump layout, the
+// The layered leaf atlas's pure parts (src/look/leaves.ts; docs/plans/done/crown-leaves.md): the clump layout, the
 // clumps' radii, and the per-pixel pass (layers, strays, one draw per leaf, highlights)
 import { describe, expect, it } from 'vitest'
 import { CLUMP_REACH, HIGHLIGHT, SPLIT, clumpCopies, clumpRadii, layerPixels } from '../src/look/leaves.ts'

@@ -3,7 +3,7 @@
 // from the RTS camera's views at its baked steps (lodGaps). The cuirassier's near LOD, decimated from the GLB's mesh
 // split at every seam, was torn (holes, shredded legs, loose shards: the owner, 2026-10-29): 1.9 open edges a
 // triangle, and 6.4 % of the nearest's cells uncovered on average, its far LOD 35 %, the battery's far LOD 17 %
-// (docs/plans/active/cavalry-artillery-demo.md, tools/bake-figure.py's welded and remeshed).
+// (docs/plans/done/cavalry-artillery-demo.md, tools/bake-figure.py's welded and remeshed).
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { decodeUnits, type UnitData } from '../src/look/units-data.ts'

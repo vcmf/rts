@@ -24,7 +24,7 @@ The ones to read before touching a given area:
 | anything | `docs/decisions/` (accepted records are binding; proposed ones are open) |
 
 Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in the git-ignored
-`assets/` folder (how to restore them: `README.md`); reference images in `design/refs/`. Conventions (commits, units, docs) are in
+`assets/` folder (how to restore them: `docs/getting-started.md`); reference images in `design/refs/`. Conventions (commits, units, docs) are in
 `docs/conventions.md`; terms in `docs/glossary.md`.
 
 ## Commands

@@ -1,4 +1,4 @@
-// The armies demo's other arms (docs/plans/active/cavalry-artillery-demo.md): their scripts (src/look/world/arms.ts:
+// The armies demo's other arms (docs/plans/done/cavalry-artillery-demo.md): their scripts (src/look/world/arms.ts:
 // the infantry's behind the same interface, unchanged; a ride; a service), their places on the demo map clear of the
 // infantry and of one another, their figures (data/figures/fr-cuirassier.unitdata, fr-foot-artillery.unitdata,
 // written by tools/bake-figure.py) whole, dressed from the dyes, and their shadows' pure parts: the contacts' spread,

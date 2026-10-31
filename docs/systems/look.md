@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-30
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, data/leaf-clumps-simple-v1.png, test/leaves.test.ts, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/trodden.ts, src/look/world/arms.ts, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/arms.test.ts, src/look/meadow-look.ts, test/meadow-look.test.ts, test/meadow-spec.test.ts, src/look/smoke.ts, src/look/world/smoke.ts, src/look/shaders/smoke.vert, src/look/shaders/smoke.frag, src/rulesets/napoleonic-smoke.ts, test/smoke.test.ts, test/gun-smoke.test.ts]
-decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline, 0083-smoke-as-soft-painted-banks, 0084-a-soft-mid-tone-on-figures-and-buildings]
+last_reviewed: 2026-10-31
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, data/leaf-clumps-simple-v1.png, test/leaves.test.ts, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/trodden.ts, src/look/world/arms.ts, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/arms.test.ts, src/look/meadow-look.ts, test/meadow-look.test.ts, test/meadow-spec.test.ts, src/look/grass-detail.ts, src/look/define-switch.ts, test/grass-detail.test.ts, src/look/tree-fade.ts, test/tree-fade.test.ts, src/look/smoke.ts, src/look/world/smoke.ts, src/look/shaders/smoke.vert, src/look/shaders/smoke.frag, src/rulesets/napoleonic-smoke.ts, test/smoke.test.ts, test/gun-smoke.test.ts]
+decisions: [0098-far-trees-fade-over-time, 0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline, 0084-a-soft-mid-tone-on-figures-and-buildings, 0095-grass-detail-a-player-option, 0097-balanced-is-the-default-grass-detail, 0083-smoke-as-soft-painted-banks]
 ---
 
 # The look page (Track E, L0)
@@ -145,7 +145,7 @@ from the centre; the demo 392.6, Kobelnitz 392.0). `derive` keeps the camera's o
   frozen page (`?frozen`, the tools' views) it settles at once. A jump (a tool's new view, 10 m plus half the zoom in a frame) is
   taken at once. The camera stays the top-down view (decision 0002), its yaw, pitch and zoom limits unchanged
   (decision 0010). **The demo keeps its focus plane at 8 m** (`SPEC.camera.focusY`, its focus range one height), so
-  its camera and its goldens do not move (open question: `docs/plans/active/look-austerlitz-a1b.md`).
+  its camera and its goldens do not move (open question: `docs/plans/done/look-austerlitz-a1b.md`).
 - **The zoom's hold reads the rise near the focus** (decision 0051): it holds the zoom out only below `clearBelow` of
   the highest ground within the eye's reach (`eyeReach`, 216 m) over the focus's height, from blocks of the
   heightfield (14.3 m) and of the far ring (28.6 m, `maxGrid`), not the world's highest point over 8 m. The held
@@ -332,7 +332,7 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
   (0.4) of the texture's own.
 - **Band edges:** never narrower than two pixels' change of the light value (`fwidth`) nor than 0.12 of it, baked
   shadows included: where they step within a pixel the edge comes out about two pixels soft.
-- **The mid tone** (decision 0084, `src/look/midtone.ts`, `docs/plans/active/soft-midtone.md`): how wide the band edges
+- **The mid tone** (decision 0084, `src/look/midtone.ts`, `docs/plans/done/soft-midtone.md`): how wide the band edges
   are, by material class, routed in `paint()` by defines (`MIDn_U`, `MIDn_B`, `MIDn_N`, `MIDn_G`). The default is
   `u3,b2,n2,g0`; `?midtone=0|1|2` sets every class, `?midtone=u3,b2,n2,g0` each (0 the bands before it, edges 0.08
   wide). 1 widens every band edge to 0.24 (the ground's floor to 0.24) and lightens the mid a little; 2 wraps the light
@@ -372,7 +372,7 @@ The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the ow
   cut by a leaf-clump atlas; sphere normals, so a crown shades as one mass; each card takes its shadow at its
   point on the crown surface. The trunk is a mesh of the model's triangles off the crown (`trunks_<model>`).
 - **The atlas** (`src/look/leaves.ts`): four clumps in 2×2 cells of 512², value in R and coverage in A. By default
-  the painter's layers (`docs/plans/active/crown-leaves.md`, the owner's 2026-10-29 calls: leaves that read up close
+  the painter's layers (`docs/plans/done/crown-leaves.md`, the owner's 2026-10-29 calls: leaves that read up close
   as Tiny Glade's, painted in layers, not lit leaf by leaf). `?leaves=layered` (the default) reads the owner's sheet
   `data/leaf-clumps-simple-v1.png` (1254², 1.15 MB; generated by the owner from the prompt kept beside its source,
   `leaf-clumps-simple-greyscale-v1.png` in the design references, untracked: four rosettes of plain pointed leaves
@@ -458,11 +458,20 @@ crowns as cards.
   bushes were; the woods every item, oak, beech, lime and birch, about one wood in four mostly spruce. **Culled per
   instance:** one mesh a model holds every far instance (no box culls a ring); just before the game camera draws, the
   instances in its frustum (a sphere holding the crown and its cards) are packed to the front of the buffers: nearer
-  than 190 m with their cards, past 250 m with the model's own crown mesh, and between (`CARDS_M` 220 m ± `FADE_M`
-  30 m) with both, the cards giving way to the crown pixel by pixel (a dither offset per tree by its tint, the
-  instance's `aFade`): no pop as a tree crosses it. The crown mesh is lit as the cards are (`FAR_CROWN` in
+  than `CARDS_M` with their cards, farther with the model's own crown mesh (`src/look/tree-fade.ts`, its constants:
+  a tree's side changes only past `HYST_M` either side). A tree that changes side draws both for `FADE_S`, the cards
+  giving way to the crown pixel by pixel (a dither offset per tree by its tint, the instance's `aFade`): no pop as a
+  tree crosses it. The fade is by time, not by distance (decision 0098: a band of distance left the trees in it half
+  of each at rest, and as the two looks differ the dither showed as a dotted speckle over the crowns,
+  `docs/plans/active/crown-speckle.md`). A group is re-packed when the view or the season changes; while the view
+  holds, a group with a fade still running (a tree's fade short of its side) steps it once an engine frame, uploading
+  only the fades, and re-packs on the frames a fade leaves or reaches either end. A tree out of view does no work and
+  snaps to its side (with the hysteresis) when it comes back, as does every tree on the first pack; under a frozen
+  clock (`?frozen`, the tools' views; `frameStep` in `src/look/spec.ts`) every tree snaps to its side by `CARDS_M`
+  alone, so a tool's view does not depend on the camera's path. A tree drawn with its cards at every distance (past
+  the leaf fall) fades into them, and out of them when the season comes back. The crown mesh is lit as the cards are (`FAR_CROWN` in
   `nature.frag`: each vertex its clump's ellipsoid, the soft ramp, the crown's own shade along the sun, the darker
-  core), with the cards' volume light only; its bark draws only past the band, where no trunks mesh does. Without
+  core), with the cards' volume light only; its bark draws only once its fade has run, where no trunks mesh does. Without
   cards the crown mesh takes every distance; a deciduous far tree past the leaf fall's start keeps its cards at every
   distance (the crown mesh neither thins nor shows twigs). Until every far material is compiled the far meshes draw
   all their instances (600 frames at most). The shadow pass bakes with every far tree and its cards (`farCull.all`).
@@ -471,7 +480,7 @@ crowns as cards.
   foot times 0.6, `TRUNK_TAPER`; its crown's lowest point) is drawn into the light map's sun after the terrain, once,
   multiplied in: a quad on the ground from the root away from the sun to where the crown's shadow starts, crisp at
   the root, softening along it, 0.85 dark (`TRUNK_DARK`). Nothing a frame. The light map's 0.52 m texels keep the
-  strips (at 1 m they vanish: the light resolution test, `docs/plans/active/lightmap-half.md`).
+  strips (at 1 m they vanish: the light resolution test, `docs/plans/done/lightmap-half.md`).
 - **One volume per clump** (`cardMesh(…, clumpVolume)` in `src/look/canopy.ts`): each card carries the ellipsoid of
   the clump it stands on in `aEllC`, `aEllR`, so L7b's light runs per clump; `?clumpvol=off` gives each crown one
   ellipsoid, as the pack crowns have. A column's cards are sized to its width, not its height (`cardOpts`).
@@ -615,7 +624,7 @@ shader); `?meadow=off` puts back the old scatter.
   wheat's too, a pale straw over the darker soil (`stubbleTip`, no redder than the standing wheat), browning by late
   autumn; the green crop lime to olive. Ploughed fields grow nothing.
 - **The wheat's fill** (decision 0085; `?wheatfill=0|1`, the default 1; the owner, 2026-10-29: bare earth showed between
-  the clumps; `docs/plans/active/grass-upright.md`): the standing wheat's clumps (class 6 only: the green crop and
+  the clumps; `docs/plans/done/grass-upright.md`): the standing wheat's clumps (class 6 only: the green crop and
   stubble as before) wider at the root (`WHEAT_FILL_WIDE`, `src/look/meadow-spec.ts`) and none thinned out by the clump
   field (`WHEAT_FILL` in `meadow.vert`), and the ground under the near standing wheat
   (`meadowUnder`) painted toward the wheat's own deep gold (`UNDER_WHEAT`, orange through the autumn), not darkened
@@ -645,12 +654,46 @@ shader); `?meadow=off` puts back the old scatter.
     `CLUMP_REACH`), which `tools/river-check.js` checks at the page's reach (`__look.meadow.reach`).
   - **Upright** (decision 0085, accepted by the owner 2026-10-30; `?grassup=0|1|2`, `GRASS_UP` in
     `src/look/meadow-spec.ts`, given as defines, parsed in `src/look/meadow-look.ts`, refused with `?grass=brush`; the
-    owner, 2026-10-29: "more straight up", a short dense carpet like Tiny Glade's; `docs/plans/active/grass-upright.md`): the flow's lean
+    owner, 2026-10-29: "more straight up", a short dense carpet like Tiny Glade's; `docs/plans/done/grass-upright.md`): the flow's lean
     narrower round the vertical (`LEAN_MIN`, `LEAN_MAX`), the clump's own fan partly undone as a crop's is
     (`GRASS_FAN_UNDO`), and on the default look (2) the clumps shorter on every ring (`GRASS_SHORT`), wider up close and
     none thinned out between the patches there (`GRASS_DENSE`), the middle ring fading to the outer ring's plain clumps
     across its band out (no seam). 0 is the splayed look before it, 1 upright alone (both kept for comparisons). Every
     look stays within the combed clumps' reach (`clumpReach`, under `CLUMP_REACH_FLOW`, which the growth keeps).
+  - **Grass detail** (decisions 0095 and 0097, issue #257; `src/look/grass-detail.ts`; `docs/plans/active/grass-detail.md`):
+    - **The levels.** `?grassdetail=full|balanced`, any other value refused. **Balanced** is the default everywhere
+      (map windows too; decision 0097, the owner, 2026-10-31). Without the meadow the page is Full
+      (`GRASS_DETAIL_NO_MEADOW`). **Full** (`?grassdetail=full`) draws the meadow above with main's materials and
+      program.
+    - **The panel and the address.** The settings panel's Grass detail is applied live, its row hidden without the
+      meadow. The address names the level only when it differs from the one a page there takes without it
+      (`searchWithGrassDetail`: Balanced with the meadow, Full without). Only that key is edited, and a stale one
+      without the meadow is dropped.
+    - **What Balanced does, up close:** it turns on `GRASS_THIN` on the near ring's material (`setDefine`, as the
+      trodden mask's `TRAMPLE`), and a share of the near ring's *grass* clumps shrinks away, each picked by a hash of
+      its own (not `h2`, so the kept clumps grow as at Full):
+      - the share is none inside 8 m; from 12 m half the clumps are culled (`BALANCED_DROP`) and a fifth more shrunk
+        (`THIN_SOFT`); it goes back to none across the near ring's own band out (18–25 m), where the middle ring fades
+        in, so the density never steps (`THIN_RAMP`, `dropShare`; `uThinRamp`);
+      - a clump below the share shrinks away across `THIN_SOFT` of the hash rather than vanishing (`thinKeep`,
+        `uThin`; `grow` times it), so panning and zooming never pop one;
+      - the crops are untouched (the thinning is on the grass branch), as are the outer rings;
+      - across `CLOSE_ZOOM` (70–110 m of the camera's radius, `src/look/meadow-spec.ts`, shared with the combed
+        clumps) the share falls to none, and from 110 m out, the default zoom included, the ring draws Full's program
+        itself (`thinOn`).
+    - **Switching.** The program is compiled ahead while Balanced is chosen and the camera is within 140 m
+      (`THIN_WARM_RADIUS`; `warmDefine`, from a scene hook, again when the material's other defines change), so a
+      page never zoomed in never compiles it. A switch happens in the near ring's own render, once the new program is
+      ready (`switchDefineWhenReady`, `src/look/define-switch.ts`; the old defines kept meanwhile), so the ring never
+      blinks. The share eases from none after a switch on and to none before a switch off (`ThinEase`, `THIN_EASE_S`),
+      so no clump pops.
+    - **The tools.** They wait until the grass detail has settled (`__look.meadowSettled`): `tools/look-page.mjs`'s
+      views and the bench before each camera. On the tools' frozen page the share snaps on the frame the program
+      lands. The bench measures the page's level and records it (`grassDetail`, bench version 10; `?grassdetail=full`
+      compares with runs before it). `tools/golden.mjs` renders with `?grassdetail=full` unless the URL sets it.
+    - **Look and cost.** Past 10 m the close carpet is sparser, with more ground between its tufts. Its cost (Metal,
+      two rounds: the plan): 0.6–0.7 ms less at Kobelnitz's close camera and 0.1–0.35 ms at the demo's; even at 90 m,
+      the default and the wide zooms. `?grassdetail=full`'s goldens match main's.
   - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
   - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
     `__look.flowBuildMs`: the flow textures' time on load.
@@ -734,7 +777,7 @@ The page names no era (decision 0015): the demo's scenario (`src/scenarios/armie
 type, figure and uniforms, resolved through `src/rulesets/index.ts` (`RULESETS`: a ruleset and its uniforms by name)
 and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glob in `src/look/main.ts`).
 
-- **The other arms** (decision 0075, `docs/plans/active/cavalry-artillery-demo.md`; `?cavalry=0`, `?artillery=0`: left
+- **The other arms** (decision 0075, `docs/plans/done/cavalry-artillery-demo.md`; `?cavalry=0`, `?artillery=0`: left
   out, both: the page before them; `?lookat=<arm>|fight[,<radius m>]`: the camera starts on that arm's first unit or
   the fight's middle, on the ground there, at 30 m or that zoom, `lookAtSpot`; a clear error without `?armies`, or
   naming the arms on the page, none under `?sim`): the scenario's `ARMS_DEMO` (`src/scenarios/armies-demo.ts`), each a unit type and

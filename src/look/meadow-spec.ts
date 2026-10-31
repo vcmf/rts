@@ -26,6 +26,10 @@ export const RINGS: Ring[] = [
   { cell: 1.0, n: 104, spread: 2.85, band: [18, 25, 38, 50], clump: 'Grass_Small' },
   { cell: 2.0, n: 104, spread: 4.2, band: [38, 50, 80, 100], clump: 'Grass_Small' },
 ]
+/** The camera's radius, m, over which the combed clumps go from larger and denser up close to the default's (the
+ * closest zoom is 15 m, decision 0051; the default view 125), and over which the grass detail's Balanced hands back
+ * to Full (src/look/grass-detail.ts) */
+export const CLOSE_ZOOM: [number, number] = [70, 110]
 // the clumps' meshes' widest radius, m, in data/meadow-grass.json's units (the test measures them), and the largest
 // size jitter (meadow.vert: mix(0.8, 1.2, h3))
 export const CLUMP_RADIUS = { Grass_Large: 0.393, Grass_Small: 0.258 } as const
@@ -41,7 +45,7 @@ export const GRASS_TALL = 1.15
 export const LEAN_MIN = 0.18
 export const LEAN_MAX = 0.75
 export const LEAN_JITTER = 0.12
-/** A look of the combed clumps (?grassup, docs/plans/active/grass-upright.md) */
+/** A look of the combed clumps (?grassup, docs/plans/done/grass-upright.md) */
 export interface GrassUp {
   /** up close (CLOSE_ZOOM, the inner rings): the footprint and the height times these */
   wide: number

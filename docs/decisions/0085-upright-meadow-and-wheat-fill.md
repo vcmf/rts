@@ -6,7 +6,7 @@ date: 2026-10-30
 # 0085 The meadow's grass upright and shorter, the wheat filled
 
 Accepted by the owner on 2026-10-30 ("I like straighter and shorter grass, and wheat fill more space"), from the
-stills and the compare page of `docs/plans/active/grass-upright.md`; as built: `docs/systems/look.md` (the meadow and
+stills and the compare page of `docs/plans/done/grass-upright.md`; as built: `docs/systems/look.md` (the meadow and
 the crops). It amends decision 0041's look of the combed clumps (the combed meadow stays the default grass); the
 wheat's height rule (decision 0026) is unchanged.
 

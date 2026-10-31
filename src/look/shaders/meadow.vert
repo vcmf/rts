@@ -10,6 +10,12 @@ uniform vec3 uCamPos,uFocus;   // (the zoom: how far the camera stands from the 
 varying vec3 vFlow;   // the combed meadow: the clump hue (a hash), the growth at its root, how far it is from winter (1 to 0)
 #endif
 #include<meadow>
+#ifdef GRASS_THIN
+// the grass detail's Balanced (src/look/grass-detail.ts; the near ring's program up close only): uThin, the share of
+// the grass clumps dropped at this zoom (dropAtZoom) and how far below it a clump shrinks away (THIN_SOFT); uThinRamp,
+// where the share ramps in (xy) and back out (zw), m from the focus (THIN_RAMP)
+uniform vec2 uThin;uniform vec4 uThinRamp;
+#endif
 #ifdef TRAMPLE
 // the grass trodden under the formations (batch C, src/look/units.ts trample): shorter and pressed where they stand and
 // just behind; uTrampleBox: the mask's world corner and 1 / its size
@@ -76,6 +82,19 @@ void main(){
   vec4 m=meadowAt(root);float c=clumpAt(root);
   // grass or a crop, never both on one patch: a crop where it grows more than the grass
   bool crop=m.a>m.g;
+  #ifdef GRASS_THIN
+  // (Balanced, dropShare and thinKeep: a grass clump under the share by a hash of its own, not h2, so the kept clumps
+  // grow as at Full, shrinks away across THIN_SOFT below it and is culled under that; a crop never)
+  float thinK=1.0;
+  if(!crop){
+    float sh=uThin.x*smoothstep(uThinRamp.x,uThinRamp.y,d)*(1.0-smoothstep(uThinRamp.z,uThinRamp.w,d)),hd=mHash(k*1.17+57.3);
+    if(sh>0.0){
+      float lo=sh-uThin.y;
+      if(hd<lo){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
+      thinK=smoothstep(lo,sh,hd);
+    }
+  }
+  #endif
   // the growth here, thinner between the clumps (a crop evenly sown, less so), and a clump shrinks away instead of
   // vanishing (no pop)
   #ifdef GRASS_FLOW
@@ -101,6 +120,9 @@ void main(){
   if(!crop)keep=m.g*band*mix(mix(0.45,GRASS_DENSE,nearK),1.0,c);   // (GRASS_DENSE: the look's, ?grassup)
   #endif
   float grow=smoothstep(h2-0.12,h2+0.12,keep);
+  #ifdef GRASS_THIN
+  grow*=thinK;
+  #endif
   // nothing where nothing grows (the smoothstep above is over 0 at a growth of 0 for a low hash, and the height factor
   // is not zeroed by the rules: the zones and the banks)
   if(keep<=0.0){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
@@ -151,7 +173,7 @@ void main(){
   #else
   vec3 fl=flowTex(root);
   #endif
-  // upright (?grassup, docs/plans/active/grass-upright.md): the clump's own fan partly undone, as a crop's is
+  // upright (?grassup, docs/plans/done/grass-upright.md): the clump's own fan partly undone, as a crop's is
   if(!crop)p.xz/=1.0+GRASS_FAN_UNDO*big*CROP_FAN*aV;
   if(!crop)p.xz+=mix((vec2(h5,h6)-0.5)*0.25,fl.xy*mix(LEAN_MIN,LEAN_MAX,fl.z)*p.y/max(hgt,0.05)+(vec2(h5,h6)-0.5)*LEAN_JITTER,big)*p.y;   // (as the default under the snow)
   else p.xz+=(vec2(h5,h6)-0.5)*0.06*p.y;

@@ -40,7 +40,7 @@ export const DYES: DyeSet = {
     'greatcoat-brown': '#5E5448',
     // black: boots, gaiters, shakos, bearskins, the rifles' facings
     black: '#24252B',
-    // the French guns' paint: the carriages' olive green (Gribeauval's; docs/plans/active/cavalry-artillery-demo.md,
+    // the French guns' paint: the carriages' olive green (Gribeauval's; docs/plans/done/cavalry-artillery-demo.md,
     // a first pick; the Austrian guns' yellow ochre is the buff)
     'carriage-olive': '#5A6236',
   },

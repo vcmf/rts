@@ -1,4 +1,4 @@
-// The mid tone (docs/plans/active/soft-midtone.md, decision 0084): how wide the painter's ramp turns from light to
+// The mid tone (docs/plans/done/soft-midtone.md, decision 0084): how wide the painter's ramp turns from light to
 // shade, by material class. The default (no ?midtone) is the owner's pick, MIDTONE_DEFAULT: the figure's turn on the
 // units (3), the wide mid tone on the buildings and the nature meshes (2), the ground's bands as before (0).
 // ?midtone=0|1|2 sets every class (0: the three bands with edges 0.08 wide, the look before decision 0084; 1: soft band

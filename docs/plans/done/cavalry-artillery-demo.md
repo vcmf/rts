@@ -1,6 +1,6 @@
 ---
-status: active
-last_reviewed: 2026-10-27
+status: done
+last_reviewed: 2026-10-30
 ---
 
 # Plan: the cavalry and the artillery on the look page's demo map
