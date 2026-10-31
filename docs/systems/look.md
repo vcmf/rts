@@ -652,18 +652,25 @@ shader); `?meadow=off` puts back the old scatter.
     across its band out (no seam). 0 is the splayed look before it, 1 upright alone (both kept for comparisons). Every
     look stays within the combed clumps' reach (`clumpReach`, under `CLUMP_REACH_FLOW`, which the growth keeps).
   - **Grass detail** (decision 0092, issue #257; `src/look/grass-detail.ts`, `?grassdetail=full|balanced`, any other
-    value refused, Balanced read as Full without the meadow; the settings panel's Grass detail, applied live and kept
-    in the address, its row hidden without the meadow; `docs/plans/active/grass-detail.md`). **Full**, the default
-    everywhere (map windows too), draws the meadow above with main's materials and program. **Balanced** swaps the
-    near ring's material (`Meadow.setDetail`) for the same one compiled with `GRASS_THIN`:
-    - up close it drops a share of the near ring's *grass* clumps, by a hash of their own: none inside 8 m, half from
-      12 m (`BALANCED_CUT`, `dropShare`; `uThin`, `THIN_CUT`);
-    - the crops are untouched (the drop is on the grass branch), as are the outer rings;
+    value refused, Balanced read as Full without the meadow; the settings panel's Grass detail, applied live; the
+    address rewritten to the level in force; the row hidden without the meadow; `docs/plans/active/grass-detail.md`).
+    **Full**, the default everywhere (map windows too), draws the meadow above with main's materials and program.
+    **Balanced**, up close, turns on `GRASS_THIN` on the near ring's material (`setDefine`, as the trodden mask's
+    `TRAMPLE`):
+    - a share of the near ring's *grass* clumps shrinks away, picked by a hash of their own (not `h2`, so the kept
+      clumps grow as at Full);
+    - the share is none inside 8 m and half from 12 m, then back to none across the near ring's own band out
+      (18–25 m), where the middle ring fades in, so the density never steps (`THIN_RAMP`, `dropShare`; `uThinRamp`);
+    - a clump below the share shrinks away across `THIN_SOFT` of the hash rather than vanishing (`thinKeep`, `uThin`;
+      `grow` times it), so panning and zooming never pop one;
+    - the crops are untouched (the thinning is on the grass branch), as are the outer rings;
     - across `CLOSE_ZOOM` (70–110 m of the camera's radius, `src/look/meadow-spec.ts`, shared with the combed clumps)
-      the share falls to none, so from 110 m out, the default zoom included, Balanced draws Full.
+      the share falls to none, and from 110 m out, the default zoom included, the ring draws Full's program itself
+      (`thinOn`).
 
-    A dropped clump stops after the meadow map's read, as an empty cell does. Past 10 m the close carpet is sparser,
-    with more ground between its tufts. Its cost: the plan (to be measured).
+    A switch of program waits until the new one is compiled (`Mesh.isReady`; the old defines kept meanwhile), so the
+    ring never blinks. Both programs stay cached after their first use. Past 10 m the close carpet is sparser, with
+    more ground between its tufts. Its cost: the plan (to be measured).
   - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
   - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
     `__look.flowBuildMs`: the flow textures' time on load.

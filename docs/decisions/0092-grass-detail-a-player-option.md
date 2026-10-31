@@ -26,10 +26,10 @@ We will give the player a **Grass detail** setting with two levels (`src/look/gr
 look page's settings panel):
 
 - **Full**: decision 0085's meadow, the default everywhere, map windows included.
-- **Balanced**: up close, the near ring drops a share of its grass clumps beyond a cut. The share grows from none at
-  8 m from the focus to half at 12 m, and each clump is picked by a hash of its own. Across 70–110 m of zoom the share
-  falls to none, so from 110 m out, the default zoom included, Balanced draws Full's meadow. It is the near ring's
-  own shader with one define (`GRASS_THIN`), in a second material; nothing else changes.
+- **Balanced**: up close, the near ring's own program with one define (`GRASS_THIN`) shrinks away a share of its
+  grass clumps, each picked by a hash of its own. The share is none at 8 m from the focus and half from 12 m, back to
+  none across the near ring's band out (18–25 m), where the middle ring fades in. Across 70–110 m of zoom the share
+  falls to none, and from 110 m out, the default zoom included, the ring draws Full's program.
 
 The crops are drawn as at Full at both levels: the drop lies on the grass branch only (decision 0085's wheat fill
 unchanged). Full's material and program are main's. The setting applies live.
@@ -39,12 +39,13 @@ unchanged). Full's material and program are main's. The setting applies live.
 - **Balanced** is meant to spare GPU time at the close camera, toward Kobelnitz's 8.3 ms budget, and to be even with
   Full at the default and wide zooms. **Pending measurement** (an estimate, not measured on the current design): the
   plan's final pass benches it.
-- **What Balanced loses.** Past about 10 m the carpet is sparser: about half the grass tufts, with more of the ground
-  showing between them. Inside 8 m, the crops and the outer rings are unchanged.
-- **Full** draws main's program: the shader without the `GRASS_THIN` blocks is main's, as is the ring's material.
-  **Pending**: the goldens are redone in the plan's final pass. The Balanced material is made at load. It is never
-  compiled or drawn at Full, but the per-frame material updates touch it: a few uniforms, CPU only.
-- **Applying a change.** It swaps the near ring's material, live, without a reload.
+- **What Balanced loses.** From about 10 to 20 m the carpet is sparser: about half the grass tufts, with more of the
+  ground showing between them. Inside 8 m, the crops and the outer rings are unchanged.
+- **Full** draws main's program: the shader without the `GRASS_THIN` blocks is main's, and the near ring keeps its
+  material. Its only addition is two uniforms set on it, which Full's program does not read. **Pending**: the goldens
+  are redone in the plan's final pass.
+- **Applying a change.** It toggles the define live, without a reload. The switch waits until the new program is
+  compiled, so the ring never blinks.
 
 ## Alternatives considered
 

@@ -23,20 +23,23 @@ The owner (2026-10-30) chose a player option with two levels: **Full** (today's 
 - **`src/look/grass-detail.ts`** (pure):
   - the levels and `isGrassDetail`;
   - `?grassdetail=full|balanced` (anything else throws; Balanced reads as Full without the meadow);
-  - Balanced's cut (`BALANCED_CUT`) and its share;
-  - the share dropped by distance and zoom (`dropShare`, `dropAtZoom`).
+  - where Balanced thins, its share and softness (`THIN_RAMP`, `BALANCED_DROP`, `THIN_SOFT`), and the address for a level
+    (`withGrassDetail`);
+  - the share by distance and zoom (`dropShare`, `dropAtZoom`, `thinOn`) and a clump's size (`thinKeep`).
 - **`shaders/meadow.vert`**: the drop inside `#ifdef GRASS_THIN`. Without the define the shader is main's.
 - **`src/look/meadow.ts`**:
-  - the near ring's Balanced material: the ring's own with `GRASS_THIN`, `THIN_CUT` and `uThin`;
-  - `setDetail`, which swaps the ring's material;
-  - `materials`, for the figures' shadows and the trodden mask.
+  - `GRASS_THIN` toggled on the near ring's material, and its uniforms (`uThin`, `uThinRamp`);
+  - `setDetail`;
+  - a switch that waits for the new program.
 - **The look page's settings panel**: a Grass detail select (Full | Balanced), applied live and kept in the address.
   The row is hidden without the meadow.
 - **Docs**: `docs/systems/look.md` (the setting) and decision 0092 (a player option over decision 0085's meadow).
 - **Tests**:
-  - the parsing;
+  - the parsing and the address;
   - the share by distance and zoom (none from 110 m: Balanced is Full);
+  - the clumps shrinking continuously as the camera pans and zooms;
   - the drop on the grass branch only (the crops untouched);
+  - the shader reading the same rule;
   - Full's shader free of `GRASS_THIN`.
 
 Not in scope:
@@ -47,14 +50,26 @@ Not in scope:
 ## Approach
 
 **What Balanced draws** (the redesign's Option A1, below; chosen by the owner, 2026-10-31). The near (0.5 m) ring
-keeps its large clump, its cells and its crops. Its Balanced material drops a share of the *grass* clumps by a hash of
-their own (not the growth's `h2`, so the kept clumps grow as at Full):
-- none inside 8 m, ramping to half at 12 m and beyond;
-- across `CLOSE_ZOOM` (70–110 m, shared with the combed clumps) the share falls to none, so from 110 m out, the default
-  zoom included, Balanced draws Full.
+keeps its large clump, its cells and its crops. Up close, its material turns on `GRASS_THIN` (`setDefine`). Its grass
+clumps (never its crops) then shrink away by a share, each picked by a hash of its own (not the growth's `h2`, so the
+kept clumps grow as at Full):
+- **The share by distance:** none inside 8 m and half from 12 m, back to none across the near ring's own band out
+  (18–25 m), so it meets the middle ring's full density without a step.
+- **No pop:** below the share a clump shrinks away across `THIN_SOFT` of the hash rather than vanishing, so panning
+  and zooming never pop one.
+- **The share by zoom:** across `CLOSE_ZOOM` (70–110 m, shared with the combed clumps) it falls to none. From 110 m
+  out, the default zoom included, the define is off: Full's program.
+- **Switching:** a program switch waits until the new program is compiled (the ring never blinks).
 
-A dropped clump stops right after the meadow map's read, as an empty cell does. There are no other rings, no world
-chunks and no per-frame CPU beyond one uniform.
+**Why ramp back out across 18–25 m rather than thin the middle ring there** (review round 1 of A1):
+- The ramp touches only the near ring.
+- Thinning the middle ring would put `GRASS_THIN` on its program too: more of every player's Balanced vertex work,
+  and its own density step would move out to 38–50 m.
+- The ramp loses the drop on half of 18–25 m. Most of the saving lies at 12–18 m, closest to the camera, where the
+  clumps cover the most pixels.
+
+A thinned clump stops after the meadow map's read, as an empty cell does. There are no other rings, no world chunks
+and no per-frame CPU beyond one uniform.
 
 **The tuning before the redesign.** Each step below is a single run on Kobelnitz on the dev Mac (M1 Pro, ANGLE
 Metal), with the GPU frame p50 in ms. These designs are not built:
