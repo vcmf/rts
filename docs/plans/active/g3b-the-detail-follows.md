@@ -6,7 +6,7 @@ last_reviewed: 2026-10-31
 # Plan: G3b, the detail follows the camera
 
 Track G (`docs/plans/active/track-g.md`), the second sub-phase of G3 (`docs/plans/active/g3-austerlitz-in-3d.md`), on
-`epic/gameplay-map`, after G3a (`docs/plans/active/g3a-the-whole-map-far.md`, #291). The owner (2026-10-31): G3b–e
+`epic/gameplay-map`, after G3a (`docs/plans/done/g3a-the-whole-map-far.md`, #291). The owner (2026-10-31): G3b–e
 first, then G4.
 
 ## Problem

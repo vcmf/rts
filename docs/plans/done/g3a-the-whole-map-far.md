@@ -31,7 +31,7 @@ no sky occlusion (`painter.glsl`), the shadow map covers the tile alone.
 3. **The ring's cover:** the macro colour's far bake (4 m texels) reads a cover of its own over the ring at 4 m
    (`fineAreas` at 4 m, the ways cut to the ring); the fine cover (1 m, the tile's bakes and pixels) stays over
    `SPEC.far` about the window. The trees stay within `SPEC.far` about the window, as today (the whole map's: G3d).
-4. **Paper past the map's edge** (the owner's choice, track-g.md): the ring's ground past the map's extent is the staff
+4. **Paper past the map's edge** (the owner's choice, `docs/plans/active/track-g.md`): the ring's ground past the map's extent is the staff
    map's paper (`src/render/lit/`'s colour), unlit, its heights the edge's held as today, a fine ink line on the edge.
 5. **The coarse light.** G2's `bakeLight` on the map's heights (2 m nodes, ×1, the staff map's `SUN`: the look's
    direction, a 2.5° disc), at build time, stored in the window's data (R the sun's soft shadow, G the open sky;
