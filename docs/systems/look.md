@@ -651,19 +651,26 @@ shader); `?meadow=off` puts back the old scatter.
     none thinned out between the patches there (`GRASS_DENSE`), the middle ring fading to the outer ring's plain clumps
     across its band out (no seam). 0 is the splayed look before it, 1 upright alone (both kept for comparisons). Every
     look stays within the combed clumps' reach (`clumpReach`, under `CLUMP_REACH_FLOW`, which the growth keeps).
-  - **Grass detail** (decision 0092, issue #257; `src/look/grass-detail.ts`, `?grassdetail=full|balanced`, any other
-    value refused, and Balanced without the meadow; the settings panel's Grass detail, applied live and kept in the
-    address, its row hidden without the meadow; `docs/plans/active/grass-detail.md`). The meadow builds both levels'
-    rings (`ringsFor`): the near (0.5 m) ring with the large clump and, on the same cells, a cut ring with the small
-    clump thinned to every other blade (`thinClump`), its spread scaled by the thinned clump's own radius
-    (`clumpRadius`) so its footprint is the large clump's; a level only sets what each ring draws (`ringBands`, read by
-    `meadow.vert` as `uBand`, `uBandMix`, `uCropBand`). **Full**, the default everywhere (map windows too), draws the
-    meadow above, unchanged, the cut ring not at all. **Balanced** draws the near ring's grass to 8–12 m from the
-    focus and the cut ring's beyond it; the crops stay the near ring's out to its edge at both levels (the wheat's
-    fill unchanged). Across 70–110 m of the camera's radius the near ring's edge moves out to main's while the cut ring
-    fades by as much (the rings always add to one: no pop, no overdraw), so from 110 m out, the default zoom included,
-    Balanced draws Full. Each ring's slots cover its widest band (`slotBand`). Past 10 m the close carpet is thinner and
-    darker, with more ground between its strokes; its cost: the plan.
+  - **Grass detail** (decision 0092, issue #257; `src/look/grass-detail.ts`, `src/look/meadow-clump.ts`,
+    `?grassdetail=full|balanced`, any other value refused, Balanced read as Full without the meadow; the settings
+    panel's Grass detail, applied live and kept in the address, its row hidden without the meadow;
+    `docs/plans/active/grass-detail.md`). The meadow builds both levels' rings (`ringsFor`); a level only sets what
+    each draws (`ringBands`, read by `meadow.vert` as `uBand`, `uBandMix` and `uRing`, and the band its chunks are
+    culled to). **Full**, the default everywhere (map windows too), draws the meadow above. **Balanced**, up close:
+    - the near (0.5 m) ring draws grass and crops to 8–12 m from the focus (its chunks 2 m, so its cull stops near
+      there);
+    - beyond it, out to 25 m, two rings anchored to the world, their slots only the 0.5 m cells where their kind grows
+      (made per 2 m chunk as the focus nears them, from the static meadow map), so an empty cell costs nothing: the
+      cut ring's grass with the small clump thinned to every other blade (`thinClump`, renormalised to a height of 1,
+      its spread scaled by its own radius, `clumpRadius`, to the large clump's footprint), and the crop ring's crops
+      with the large clump as at Full (the wheat's fill unchanged);
+    - on the near ring's cells the cut and crop rings keep a clump where the hash is under 1 minus its weight (`uRing.z`),
+      so across the cut each root is kept by one ring at most, as many as at Full;
+    - across 70–110 m of the camera's radius (`CLOSE_ZOOM`, `src/look/meadow-spec.ts`, shared with the combed clumps)
+      the near ring's edge moves out to main's while the cut and crop rings fade by as much: the rings always add to
+      one, and from 110 m out, the default zoom included, Balanced draws Full.
+
+    Its cost: the plan (to be measured). Past 10 m the close carpet is thinner, with more ground between its strokes.
   - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
   - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
     `__look.flowBuildMs`: the flow textures' time on load.

@@ -19,7 +19,8 @@ import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
 import { MEADOW_LOOK, type MeadowLook } from './meadow-look.ts'
-import { clumpRadius, type GrassDetail, ringBands, ringBandsOf, ringsFor, slotBand, thinClump } from './grass-detail.ts'
+import { type DetailRing, type GrassDetail, ringBands, ringBandsOf, ringsFor, slotBand } from './grass-detail.ts'
+import { type ClumpSource, clumpRadius, indexClump, thinClump } from './meadow-clump.ts'
 import {
   CLUMP_REACH,
   CROP_WIDE,
@@ -60,8 +61,17 @@ interface Chunk {
   j1: number
   slots: Float32Array
   hole: Float32Array
+  key?: number // (a world ring's chunk: its key in the world's grid)
 }
 const CHUNKS = 8
+// (the near ring's: 2 m chunks, so at the grass detail's Balanced its cull stops near the cut, not 6.5 m past it)
+const CHUNKS_NEAR = 26
+// a world ring's chunks (the grass detail's cut and crop rings, src/look/grass-detail.ts): WORLD_CHUNK cells a side,
+// keyed by their place in the world's grid (WORLD_KEYS a row, the grid offset by half of it)
+const WORLD_CHUNK = 4
+const WORLD_KEYS = 1 << 14
+/** A world ring: its slots the world's cells where its kind grows, not a square around the focus */
+const isWorld = (r: DetailRing) => r.kind === 'cut' || r.kind === 'crop'
 // the chunks of a ring to draw (index × 2, + 1 for its hole slots): their square on the ground (the slots' cells, the
 // roots' jitter and a clump's reach) against the band (b: in from x to y, out from z to w) and the view (vp, the
 // view-projection's column-major array: this frame's), the ground from 20 m under to 20 m over the focus height y, as
@@ -335,38 +345,61 @@ export function buildMeadow(
   const t0 = performance.now()
   const { map, growingCells, growthAt, cropAt, groundAt: groundAtMap } = mm
 
-  // the clumps, indexed (the export is a triangle list): the large near, the small (fewer vertices) farther
-  const src = JSON.parse(GRASS) as Record<string, { pos: number[]; nrm: number[]; v: number[] }>
-  const indexed = (c: { pos: number[]; nrm: number[]; v: number[] }) => {
-    const pos: number[] = []
-    const nrm: number[] = []
-    const vv: number[] = []
-    const idx: number[] = []
-    const seen = new Map<string, number>()
-    let top = 0
-    for (let t = 1; t < c.pos.length; t += 3) top = Math.max(top, c.pos[t])
-    for (let t = 0; t < c.v.length; t++) {
-      // normalised to a height of 1 (the shader scales it to HEIGHT)
-      const p = [c.pos[t * 3] / top, c.pos[t * 3 + 1] / top, c.pos[t * 3 + 2] / top]
-      const key = [...p, c.nrm[t * 3], c.nrm[t * 3 + 1], c.nrm[t * 3 + 2], c.v[t]].join(',')
-      let k = seen.get(key)
-      if (k === undefined) {
-        k = vv.length
-        seen.set(key, k)
-        pos.push(...p)
-        nrm.push(c.nrm[t * 3], c.nrm[t * 3 + 1], c.nrm[t * 3 + 2])
-        vv.push(c.v[t])
-      }
-      idx.push(k)
-    }
-    return { pos, nrm, vv, idx, top }
-  }
-  const clumps = { Grass_Large: indexed(src.Grass_Large), Grass_Small: indexed(src.Grass_Small) }
+  // the clumps, indexed (the export is a triangle list: src/look/meadow-clump.ts): the large near, the small (fewer
+  // vertices) farther
+  const src = JSON.parse(GRASS) as Record<string, ClumpSource>
+  const clumps = { Grass_Large: indexClump(src.Grass_Large), Grass_Small: indexClump(src.Grass_Small) }
   // the rings of both grass detail levels (src/look/grass-detail.ts): main's, the near one cut in two, the cut ring's
   // small clump thinned (drawn at Balanced only)
   const thinSmall = thinClump(clumps.Grass_Small)
   const rings = ringsFor(clumpRadius(thinSmall))
   let level = detail
+
+  // a world ring's reach from the focus (its band's edge, a clump's reach and the cell's margin, as cullRing pads it),
+  // and the most of its chunks a side that reach can touch
+  const worldReach = (r: DetailRing) => slotBand(r)[3] + reach + 2.2 * r.cell
+  const worldSpan = (r: DetailRing) => Math.ceil((2 * worldReach(r)) / (WORLD_CHUNK * r.cell)) + 1
+  // a world ring's chunks, made as the focus first nears them (the meadow map is static): the cells where its kind
+  // grows at any corner (the GPU's bilinear read, within one texel's patch as a 0.5 m cell lies, is greatest at a
+  // corner), so an empty cell costs nothing
+  const worldCache = new Map<number, Map<number, Chunk>>()
+  const worldCand = new Map<number, Chunk[]>()
+  const worldChunk = (r: DetailRing, ci: number, cj: number, key: number): Chunk => {
+    const at = r.kind === 'crop' ? cropAt : growthAt
+    const sl: number[] = []
+    const i0 = ci * WORLD_CHUNK
+    const j0 = cj * WORLD_CHUNK
+    for (let j = j0; j < j0 + WORLD_CHUNK; j++) {
+      for (let i = i0; i < i0 + WORLD_CHUNK; i++) {
+        const x = i * r.cell
+        const z = j * r.cell
+        const c = r.cell
+        if (at(x, z) > 0 || at(x + c, z) > 0 || at(x, z + c) > 0 || at(x + c, z + c) > 0) sl.push(i, j)
+      }
+    }
+    const none = new Float32Array(0)
+    return { i0, i1: i0 + WORLD_CHUNK, j0, j1: j0 + WORLD_CHUNK, slots: new Float32Array(sl), hole: none, key }
+  }
+  // a world ring's chunks within its reach of the focus (the list reused: nothing allocated a frame once made)
+  const worldChunks = (ri: number): Chunk[] => {
+    const r = rings[ri]
+    const cs = WORLD_CHUNK * r.cell
+    const R = worldReach(r)
+    let cache = worldCache.get(ri)
+    if (!cache) worldCache.set(ri, (cache = new Map()))
+    let out = worldCand.get(ri)
+    if (!out) worldCand.set(ri, (out = []))
+    out.length = 0
+    for (let cj = Math.floor((centre.y - R) / cs); cj <= Math.floor((centre.y + R) / cs); cj++) {
+      for (let ci = Math.floor((centre.x - R) / cs); ci <= Math.floor((centre.x + R) / cs); ci++) {
+        const key = (cj + WORLD_KEYS / 2) * WORLD_KEYS + ci + WORLD_KEYS / 2
+        let c = cache.get(key)
+        if (!c) cache.set(key, (c = worldChunk(r, ci, cj, key)))
+        out.push(c)
+      }
+    }
+    return out
+  }
 
   const meshes: Mesh[] = []
   const ringMats: ShaderMaterial[] = []
@@ -382,7 +415,7 @@ export function buildMeadow(
       MEADOW_FS,
       {
         attributes: ['position', 'normal', 'aV', 'aSlot'],
-        uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand', 'uBandMix', 'uCropBand'],
+        uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand', 'uBandMix', 'uRing'],
         samplers: ['uMeadow', 'uGB'],
         defines: [
           ...grassDefinesForClumps(look.up),
@@ -422,12 +455,14 @@ export function buildMeadow(
     // (its widest band at any level and zoom: slotBand)
     const sb = slotBand(r)
     const ch: Chunk[] = []
-    for (let cj = 0; cj < CHUNKS; cj++) {
-      for (let ci = 0; ci < CHUNKS; ci++) {
-        const i0 = Math.floor((ci * r.n) / CHUNKS)
-        const i1 = Math.floor(((ci + 1) * r.n) / CHUNKS)
-        const j0 = Math.floor((cj * r.n) / CHUNKS)
-        const j1 = Math.floor(((cj + 1) * r.n) / CHUNKS)
+    // (a world ring's chunks are the world's, made as the focus nears them: worldChunks, below)
+    const nc = isWorld(r) ? 0 : r.kind === 'near' ? CHUNKS_NEAR : CHUNKS
+    for (let cj = 0; cj < nc; cj++) {
+      for (let ci = 0; ci < nc; ci++) {
+        const i0 = Math.floor((ci * r.n) / nc)
+        const i1 = Math.floor(((ci + 1) * r.n) / nc)
+        const j0 = Math.floor((cj * r.n) / nc)
+        const j1 = Math.floor(((cj + 1) * r.n) / nc)
         const sl: number[] = []
         const hole: number[] = []
         for (let j = j0; j < j1; j++) {
@@ -445,7 +480,12 @@ export function buildMeadow(
     }
     chunks.push(ch)
     // the buffer starts with every slot of the ring (the hole's after), the frame's cull packs it from the first frame
-    const buf = new Float32Array(ch.reduce((a, c) => a + c.slots.length + c.hole.length, 0))
+    // (a world ring's buffer holds every cell of the chunks it can draw at once: worldSpan² of them)
+    const buf = new Float32Array(
+      isWorld(r)
+        ? worldSpan(r) ** 2 * WORLD_CHUNK ** 2 * 2
+        : ch.reduce((a, c) => a + c.slots.length + c.hole.length, 0),
+    )
     slotBufs.push(buf)
     let n0 = 0
     for (const c of ch) {
@@ -477,17 +517,17 @@ export function buildMeadow(
   const outer = rings[rings.length - 1].band
   let underOn = true
   let meadowOn = true
-  // each ring's bands this frame (the grass detail's, ringBands, scaled for the zoom out), as meadow.vert reads them,
-  // and the band its chunks are culled to (cullBands: the grass's and the crops' together)
+  // each ring's bands this frame (the grass detail's, ringBands, scaled for the zoom out) as meadow.vert reads them,
+  // what it draws (uRing: grass, crops, the hash flipped), and the band its chunks are culled to
   const bands = rings.map(r => new Vector4(...r.band))
   const mixes = rings.map(() => new Vector4(0, 0, 0, 1))
-  const crops = rings.map(() => new Vector4())
+  const kinds = rings.map(() => new Vector3(1, 1, 0))
   const cullBands = rings.map(() => new Vector4())
   const rb = rings.map(ringBandsOf)
   rings.forEach((_, ri) => {
     ringMats[ri].setVector4('uBand', bands[ri])
     ringMats[ri].setVector4('uBandMix', mixes[ri])
-    ringMats[ri].setVector4('uCropBand', crops[ri])
+    ringMats[ri].setVector3('uRing', kinds[ri])
   })
   scene.onBeforeRenderObservable.add(() => {
     const t = wide ? Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))) : 0
@@ -499,30 +539,20 @@ export function buildMeadow(
       ringBands(r, level, camera.radius, q)
       // (zoomed out every edge shrinks to the focus by k but the outer ring's edge out, as before)
       const ko = outer ? 1 : k
-      const b = bands[ri].set(q.band[0] * k, q.band[1] * k, q.band[2] * ko, q.band[3] * ko)
-      const m = mixes[ri].set(q.mix[0] * ko, q.mix[1] * ko, q.mix[2], q.mix[3])
-      const c = crops[ri].set(q.crop[0] * k, q.crop[1] * k, q.crop[2] * ko, q.crop[3] * ko)
-      const grass = b.w > 0 && m.w > 0
-      // the chunks' cull: the grass's band (its edge out the farther of the two it moves between) and the crops'
-      const gz = Math.max(b.z, m.z > 0 ? m.x : b.z)
-      const gw = Math.max(b.w, m.z > 0 ? m.y : b.w)
-      if (!grass) cullBands[ri].copyFrom(c)
-      else if (c.w <= 0) cullBands[ri].set(b.x, b.y, gz, gw)
-      else {
-        cullBands[ri].set(
-          Math.min(b.x, c.x),
-          b.y > 0 && c.y > 0 ? Math.min(b.y, c.y) : 0,
-          Math.max(gz, c.z),
-          Math.max(gw, c.w),
-        )
-      }
-      meshes[ri].isVisible = grass || c.w > 0 // (visibility: the page's own switches set enabled)
+      bands[ri].set(q.band[0] * k, q.band[1] * k, q.band[2] * ko, q.band[3] * ko)
+      mixes[ri].set(q.mix[0] * ko, q.mix[1] * ko, q.mix[2], q.mix[3])
+      kinds[ri].set(q.grass, q.crop, q.flip)
+      const cb = cullBands[ri].set(q.cull[0] * k, q.cull[1] * k, q.cull[2] * ko, q.cull[3] * ko)
+      meshes[ri].isVisible = cb.w > 0 // (visibility: the page's own switches set enabled)
     })
     const f = camera.target
     const y = heightAt(f.x, f.z)
     centre.set(f.x, f.z)
     rings.forEach((r, ri) => {
-      origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell)
+      // (a world ring's slots are world cells: its origin stays at 0)
+      if (!isWorld(r)) {
+        origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell)
+      }
       ringMats[ri].setFloat('uCentreY', y)
     })
     focusY = y
@@ -537,16 +567,21 @@ export function buildMeadow(
     const vp = scene.getTransformMatrix().m
     rings.forEach((r, ri) => {
       if (!meshes[ri].isVisible) return
-      cullRing(r, chunks[ri], origins[ri], centre, focusY, cullBands[ri], vp, holes, reach, keep)
+      // (a world ring: its chunks near the focus, made as they are first needed)
+      const world = isWorld(r)
+      const ch = world ? worldChunks(ri) : chunks[ri]
+      cullRing(r, ch, origins[ri], centre, focusY, cullBands[ri], vp, holes, reach, keep)
       // (none in view: not drawn, a forced count of 0 would draw one clump without
       // instances, in another shader variant)
+      // (a world ring's drawn set by its chunks' keys in the world's grid: its candidates change with the focus)
+      if (world) for (let i = 0; i < keep.length; i++) keep[i] = ch[keep[i] >> 1].key! * 2
       meshes[ri].isVisible = keep.length > 0
       if (sameList(keep, drawn[ri])) return
       drawn[ri] = keep.slice()
       const buf = slotBufs[ri]
       let n = 0
       for (const k of keep) {
-        const c = chunks[ri][k >> 1]
+        const c = world ? worldCache.get(ri)!.get(k >> 1)! : chunks[ri][k >> 1]
         const part = k & 1 ? c.hole : c.slots
         buf.set(part, n)
         n += part.length

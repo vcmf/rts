@@ -20,7 +20,7 @@ import { TR, tr, trNow } from './trace.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
-import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
+import { CLOSE_ZOOM, CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { meadowLookDefines, meadowLookOf } from './meadow-look.ts'
 import { GRASS_DETAILS, type GrassDetail, grassDetailOf } from './grass-detail.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
@@ -201,9 +201,6 @@ const grassOff = params.get('grassoff')?.split(',') ?? []
 if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassMode !== 'flow')) {
   throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with the combed meadow (not ?grass=brush)`)
 }
-// the camera's distance from the focus over which the combed clumps go from larger and denser to the default's (the
-// closest zoom is 15 m, decision 0051; the default view 125)
-const CLOSE_ZOOM: [number, number] = [70, 110]
 // the strokes' largest footprint, m a pixel (strokeK, macro.glsl: whole under about half of it, gone past it); the near
 // bake reads it too (below)
 const STROKE_FOOT = 0.15

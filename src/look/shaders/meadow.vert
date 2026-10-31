@@ -4,10 +4,11 @@ uniform mat4 viewProjection;uniform float uSeason,uAutumnWarm;   // uAutumnWarm:
 // (in from x to y, out from z to w), the meadow map (R the ground height, G the growth, B the height factor, A the
 // crops growth), the cover grid (nearest: its class, src/look/shaders/macro.glsl)
 uniform vec2 uOrigin,uCentre;uniform float uCentreY;uniform float uCell,uSpread,uHeight;uniform vec4 uBand;uniform sampler2D uMeadow,uCover;
-// the grass detail (src/look/grass-detail.ts, ringBands): the grass's edge out moves from uBand's to uBandMix.xy by
-// uBandMix.z, the grass times uBandMix.w (a ring fading away); the crops across their own band uCropBand (w 0: none).
-// A main ring: uBandMix (uBand.zw, 0, 1) and uCropBand uBand, so both are uBand's band
-uniform vec4 uBandMix,uCropBand;
+// the grass detail (src/look/grass-detail.ts, ringBands): the edge out moves from uBand's to uBandMix.xy by
+// uBandMix.z, the whole times uBandMix.w (a ring fading away); uRing: whether the ring draws grass (x) and crops (y),
+// and (z) its clumps kept by 1 - the hash (the cut and crop rings, on the near ring's cells: across the cut the rings
+// keep complementary roots). A main ring: uBandMix (uBand.zw, 0, 1), uRing (1, 1, 0): uBand's band as before
+uniform vec4 uBandMix;uniform vec3 uRing;
 varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;
 #ifdef GRASS_FLOW
 uniform vec3 uCamPos,uFocus;   // (the zoom: how far the camera stands from the focus)
@@ -67,11 +68,10 @@ vec4 cropLook(float k,float j){
 void main(){
   vec2 cell=uOrigin+aSlot*uCell;                                 // this slot in the world: what it draws hangs on the cell
   vec2 k=floor(cell/uCell+0.5);float h0=mHash(k+uCell*31.7),h1=mHash(k*1.31+5.3),h2=mHash(k*0.71-9.1),h3=mHash(k+71.9),h4=mHash(k*1.71+13.3),h5=mHash(k*0.53-27.7),h6=mHash(k*2.13+3.9);   // one hash a trait
+  if(uRing.z>0.5)h2=1.0-h2;   // (the cut and crop rings keep the roots the near ring drops: uRing)
   vec2 root=cell+vec2(h0,h1)*uCell;
   float d=length(root-uCentre);
-  float bandG=(uBand.y>0.0?smoothstep(uBand.x,uBand.y,d):1.0)*(1.0-mix(smoothstep(uBand.z,uBand.w,d),smoothstep(uBandMix.x,uBandMix.y,d),uBandMix.z))*uBandMix.w;   // the inner ring has no fade in
-  float bandC=uCropBand.w>0.0?(uCropBand.y>0.0?smoothstep(uCropBand.x,uCropBand.y,d):1.0)*(1.0-smoothstep(uCropBand.z,uCropBand.w,d)):0.0;
-  float band=max(bandG,bandC);   // (grass or crops may grow: which, once the meadow map is read)
+  float band=(uBand.y>0.0?smoothstep(uBand.x,uBand.y,d):1.0)*(1.0-mix(smoothstep(uBand.z,uBand.w,d),smoothstep(uBandMix.x,uBandMix.y,d),uBandMix.z))*uBandMix.w;   // the inner ring has no fade in
   // the cheap tests first, before any read of the meadow map: outside the band, or outside the view: the root at
   // 20 m under and over the focus height (the ground on the tile spans less), culled only when both lie past the
   // same edge of the frame, with a margin of a clump
@@ -82,7 +82,8 @@ void main(){
   vec4 m=meadowAt(root);float c=clumpAt(root);
   // grass or a crop, never both on one patch: a crop where it grows more than the grass
   bool crop=m.a>m.g;
-  band=crop?bandC:bandG;
+  // (a ring that does not draw this kind: none here, the other ring on these cells draws it)
+  if((crop?uRing.y:uRing.x)<0.5){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   // the growth here, thinner between the clumps (a crop evenly sown, less so), and a clump shrinks away instead of
   // vanishing (no pop)
   #ifdef GRASS_FLOW
