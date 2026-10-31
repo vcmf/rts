@@ -40,9 +40,10 @@ location.hash ──parseRoute──normalizeRoute──▶ Route ──▶ scre
 keydown ──keyAction(route, key)──▶ go(route) | step | activate
 ```
 
-- **The roster** (`src/ui/roster.ts`): nations, arms, featured ids, commanders (name, role, life, likeness note,
+- **The roster** (`src/ui/roster.ts`): nations, arms, the experience levels' names, featured ids, commanders (name, role, life, likeness note,
   image) and regiments (library number, name, detail, arm, image). `rosterProblems` checks it (unique ids, known
-  nations and arms, an image each, the featured entries present); the page refuses an unsound roster, the data tool
+  nations and arms, an image each, the featured entries present, a nation and a level name at least, no arm named
+  like the every-arm filter); the page refuses an unsound roster and says so where its menu would be, the data tool
   refuses to write one, and a test checks the committed one.
 - **Routes** (`src/ui/route.ts`): `#home`, `#history`, `#roster/<kind>/<nation>/<arm>[/<entry id>]`. A plate is named
   by its entry's id, not its place, so a link survives a rebuilt roster. `parseRoute` reads what is written (a hash
@@ -51,7 +52,9 @@ keydown ──keyAction(route, key)──▶ go(route) | step | activate
   the hash in place. `parentRoute` is one level up: plate → roster → History → home.
 - **History moves** (`Move`): opening something pushes a history entry; turning a plate replaces it; going up (Esc,
   Close) goes back when the page came from there (`upMove`) and replaces otherwise, so Back never reopens what Esc
-  closed and a run of turned plates is one entry.
+  closed and a run of turned plates is one entry. A control already showing its route adds no entry; a Back that lands
+  elsewhere than the `up` move meant (the user went Back and Forward meanwhile) is corrected in place. The page draws on
+  `popstate` alone (a fragment navigation fires it; `hashchange` too would draw twice).
 - **Keyboard** (`src/ui/keys.ts`): on home, ↑ and ↓ move between live items (muted ones are skipped, `stepLive`) and
   Enter opens the chosen one; on a plate, ← and → turn to the previous and next entry; Esc goes one level up
   everywhere. A key the screen does not use, or held with Alt, Ctrl or Meta (Alt+← is Back), is left to the browser.
@@ -92,8 +95,8 @@ keydown ──keyAction(route, key)──▶ go(route) | step | activate
   390 × 844, no screen wider than the window; muted items unfocusable and unclickable; History's counts and plates;
   every army's roster of each kind and arm shows exactly the roster's entries; a plate opens, turns and Esc walks
   back to home, focus on Close while a plate is open (the roster inert) and back on the card after; every card's
-  thumbnail loads. `--selftest` also runs five sabotages (a regiment dropped, focus left behind, a muted item
-  focusable, a page too wide, Esc swallowed) and fails unless each is caught.
+  thumbnail loads; pressed controls add no history; Next at the last entry leaves focus on Close. `--selftest` also runs six sabotages (a regiment dropped, focus left behind, a pressed tab pushing
+  history, a muted item focusable, a page too wide, Esc swallowed) and fails unless each is caught.
 - `node tools/build-history-data.ts --check`: the committed roster and thumbnail record match the design libraries
   (locally: `design/` is not in git; from a worktree, `HISTORY_DESIGN=<main checkout>/design`).
 

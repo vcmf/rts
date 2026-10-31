@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ARM_RULES, ARMS, DEFAULT_ARM, FEATURED, NATIONS } from './history-content.ts'
+import { ARM_RULES, ARMS, DEFAULT_ARM, FEATURED, LEVEL_NAMES, NATIONS } from './history-content.ts'
 import { armOfSlug, parseGallery, parseUnitCards, personIdOf, splitTitle } from './history-sources.ts'
 import { ROSTER_VERSION, rosterProblems, type Commander, type Regiment, type Roster } from '../src/ui/roster.ts'
 
@@ -76,6 +76,7 @@ export function buildRoster(): { roster: Roster; jobs: ImageJob[] } {
     version: ROSTER_VERSION,
     nations: NATIONS,
     arms: ARMS,
+    levels: LEVEL_NAMES,
     featured: FEATURED,
     commanders: readCommanders(jobs),
     regiments: readRegiments(jobs),

@@ -49,6 +49,20 @@ describe('parseUnitCards', () => {
   })
 })
 
+describe('the parsers read each entry within itself', () => {
+  it('reads an entry wrapped across lines', () => {
+    const wrapped = `<figure>\n  <a href="polish/x-portrait.png"><img src="polish/x-portrait.png"></a>\n  <figcaption><b>Józef X</b><br>\n  General<br></figcaption>\n</figure>`
+    expect(parseGallery(wrapped)).toEqual([{ src: 'polish/x-portrait.png', name: 'Józef X', role: 'General' }])
+    const card = `<article id="03-x">\n<h2>03-x — Name — detail</h2>\n<img\n loading="lazy" src="03-x.png" alt="">\n</article>`
+    expect(parseUnitCards(card)).toEqual([{ slug: '03-x', title: 'Name — detail', src: '03-x.png' }])
+  })
+
+  it("fails on a card without an image rather than take the next card's", () => {
+    const html = `<article id="01-a"><h2>01-a — A</h2></article><article id="02-b"><h2>02-b — B</h2><img src="b.png"></article>`
+    expect(() => parseUnitCards(html)).toThrow(/image of 01-a/)
+  })
+})
+
 describe('splitTitle', () => {
   it('splits at the first dash and keeps the rest as the detail', () => {
     expect(splitTitle("King's German Legion — 1st Light Battalion — rifleman")).toEqual({

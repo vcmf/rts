@@ -24,9 +24,14 @@ export function renderPlate(root: HTMLElement, roster: Roster, route: Route, go:
   find('[data-slot=position]', root).textContent = `${plate.index + 1} / ${plate.total}`
   const facts = plate.facts.flatMap(([label, value]) => [h('dt', { class: 'mono' }, label), h('dd', {}, value)])
   find('[data-slot=facts]', root).replaceChildren(...facts)
+  // read before the turn buttons change: a button disabled while focused loses focus at once
+  const focused = document.activeElement
   wireTurn(find<HTMLButtonElement>('[data-turn=prev]', root), route, plate.prev, go)
   wireTurn(find<HTMLButtonElement>('[data-turn=next]', root), route, plate.next, go)
-  find<HTMLButtonElement>('[data-turn=close]', root).onclick = () => go({ ...route, open: null }, 'up')
+  const close = find<HTMLButtonElement>('[data-turn=close]', root)
+  close.onclick = () => go({ ...route, open: null }, 'up')
+  // a turn button just disabled at an end would drop focus out of the modal plate: Close takes it
+  if (focused instanceof HTMLButtonElement && focused.disabled && root.contains(focused)) close.focus()
   return true
 }
 

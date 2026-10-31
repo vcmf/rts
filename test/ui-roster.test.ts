@@ -65,12 +65,22 @@ describe('rosterProblems', () => {
     broken.commanders[0].image = ''
     broken.featured.regiments = 'nobody'
     expect(rosterProblems(broken)).toEqual([
-      'version 99, expected 1',
+      'version 99, expected 2',
       'commanders: north/a has no image',
       'commanders: south/c of unknown nation west',
       'regiments: north/01-foot twice',
       'regiments: north/03-horse of unknown arm dragons',
       'featured regiments nobody not found',
     ])
+  })
+
+  it('refuses a roster the screens cannot draw: no nations, no level names, an arm named like the every-arm filter', () => {
+    const broken = fixtureRoster()
+    broken.arms.push('all')
+    broken.levels = []
+    expect(rosterProblems(broken)).toEqual(['an arm named "all", the filter that keeps every arm', 'no level names'])
+    const empty = fixtureRoster()
+    empty.nations = []
+    expect(rosterProblems(empty)).toContain('no nations')
   })
 })

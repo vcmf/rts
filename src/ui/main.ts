@@ -1,6 +1,6 @@
 // The front menu page (app/menu.html): home, History, the rosters and the full plate. Loads the roster, follows the
 // route in the hash, and turns keys into actions. docs/systems/front-menu.md.
-import { find } from './dom.ts'
+import { find, h } from './dom.ts'
 import { keyAction, type KeyAction } from './keys.ts'
 import { loadRoster } from './load.ts'
 import { entriesOf, type Roster } from './roster.ts'
@@ -34,6 +34,8 @@ class FrontMenu {
   private readonly home: HomeMenu
   /** the route last drawn: the grid is redrawn only when its kind, nation or arm changes */
   private drawn: Route | null = null
+  /** the hash an `up` move went back to: if Back landed elsewhere (the history changed under it), it is corrected */
+  private upTo: string | null = null
 
   constructor(roster: Roster) {
     this.roster = roster
@@ -43,9 +45,8 @@ class FrontMenu {
       crumb.addEventListener('click', () => this.go(parseRoute(crumb.dataset.route ?? '')))
     }
     document.addEventListener('keydown', event => this.onKey(event))
-    // a pushed entry, Back and Forward, and an address typed or set by a script
-    window.addEventListener('popstate', () => this.render())
-    window.addEventListener('hashchange', () => this.render())
+    // Back and Forward, and an address typed or set by a script (each fires popstate; hashchange would draw twice)
+    window.addEventListener('popstate', () => this.onPop())
     this.render()
   }
 
@@ -60,11 +61,23 @@ class FrontMenu {
     const hash = formatRoute(route)
     const state = history.state as EntryState | null
     if (move === 'up' && upMove(state?.from, hash) === 'back') {
+      this.upTo = hash
       history.back()
       return
     }
+    // a control already showing its route (a pressed chip, the current tab) adds no history entry
+    if (move === 'push' && hash === location.hash) return
     if (move === 'push') history.pushState({ from: location.hash || '#home' } satisfies EntryState, '', hash)
     else history.replaceState(state, '', hash)
+    this.render()
+  }
+
+  /** After Back or Forward: an `up` move's Back that landed on another entry than the one it came from (the user
+   *  went Back and Forward meanwhile, and that entry was replaced) is corrected in place. */
+  private onPop(): void {
+    const upTo = this.upTo
+    this.upTo = null
+    if (upTo !== null && location.hash !== upTo) history.replaceState(history.state, '', upTo)
     this.render()
   }
 
@@ -118,4 +131,12 @@ async function main(): Promise<void> {
   window.MENU = { roster, route: () => menu.route() }
 }
 
-void main()
+/** A page that could not start says so where its menu would be, rather than showing items that do nothing. */
+function showFailure(error: unknown): void {
+  console.error(error)
+  const message = error instanceof Error ? error.message : String(error)
+  const note = h('p', { class: 'failure mono', role: 'alert' }, `The menu could not start: ${message}`)
+  find('#home .menu').replaceWith(note)
+}
+
+main().catch(showFailure)

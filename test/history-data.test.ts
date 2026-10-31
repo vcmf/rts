@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { ARM_RULES, ARMS, DEFAULT_ARM, FEATURED, NATIONS } from '../tools/history-content.ts'
+import { ARM_RULES, ARMS, DEFAULT_ARM, FEATURED, LEVEL_NAMES, NATIONS } from '../tools/history-content.ts'
 import { armOfSlug } from '../tools/history-sources.ts'
 import {
   HISTORY_DIR,
@@ -39,6 +39,7 @@ describe('data/history/roster.json', () => {
     expect(roster.nations).toEqual(NATIONS)
     expect(roster.arms).toEqual(ARMS)
     expect(roster.featured).toEqual(FEATURED)
+    expect(roster.levels).toEqual(LEVEL_NAMES)
   })
 
   it('has commanders and regiments for every army', () => {

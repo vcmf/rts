@@ -22,7 +22,8 @@ const MENU_CHECKS = {
   /** The page is no wider than the window on every screen it shows. */
   async overflow(expected) {
     const failures = []
-    const plate = `#roster/commanders/x/all/${encodeURIComponent(expected.commanders[0].id)}`
+    const first = expected.commanders[0]
+    const plate = `#roster/commanders/${first.nation}/all/${encodeURIComponent(first.id)}`
     for (const hash of ['#home', '#history', '#roster/regiments', plate]) {
       await visit(hash)
       const over = document.documentElement.scrollWidth - innerWidth
@@ -122,6 +123,35 @@ const MENU_CHECKS = {
       }
     }
     if (back.join() !== '#roster,#history,#home') failures.push(`Esc: walked back ${back.join(' → ')}`)
+    return failures
+  },
+
+  /** A control already showing its route adds no history entry; Next at the last entry leaves focus on Close. */
+  async historyAndEnds(expected) {
+    const failures = []
+    const nation = expected.nations[0].id
+    await visit(`#roster/regiments/${nation}/all`)
+    // counted at pushState: history.length stops growing at the browser's cap (50 in Chrome)
+    const push = history.pushState
+    let pushes = 0
+    history.pushState = (...args) => {
+      pushes += 1
+      return push.apply(history, args)
+    }
+    document.querySelector('#roster [data-slot=nations] .chip[aria-pressed=true]').click()
+    document.querySelector('#roster .tab[aria-selected=true]').click()
+    await settle()
+    history.pushState = push
+    if (pushes) failures.push(`history: pressed controls added ${pushes} entries`)
+    const ids = expected.regiments.filter(e => e.nation === nation).map(e => e.id)
+    await visit(`#roster/regiments/${nation}/all/${encodeURIComponent(ids[ids.length - 2])}`)
+    const next = document.querySelector('#plate [data-turn=next]')
+    next.focus()
+    next.click()
+    await settle()
+    if (document.activeElement !== document.querySelector('#plate [data-turn=close]')) {
+      failures.push('ends: focus left the plate when Next reached the last entry')
+    }
     return failures
   },
 

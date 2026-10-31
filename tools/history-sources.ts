@@ -23,23 +23,30 @@ export function decodeEntities(text: string): string {
   return text.replace(/&(amp|#39|quot|lt|gt);/g, m => ENTITIES[m] ?? m)
 }
 
-/** The portraits in design/generals/gallery.html, in page order. */
+/** The first group of `pattern` in `block`; throws, naming `what`, when it is missing (a page the parser no longer
+ *  reads right must fail, not drop an entry or take its neighbour's field). */
+function field(block: string, pattern: RegExp, what: string): string {
+  const found = block.match(pattern)?.[1]
+  if (found === undefined) throw new Error(`history sources: no ${what} in ${block.slice(0, 80).replace(/\s+/g, ' ')}`)
+  return found
+}
+
+/** The portraits in design/generals/gallery.html, in page order: each `<figure>`, read within itself. */
 export function parseGallery(html: string): GalleryPortrait[] {
-  const figure = /<figure><a href="([^"]+)">.*?<b>([^<]+)<\/b><br>([^<]+)<br>/g
-  return [...html.matchAll(figure)].map(([, src, name, role]) => ({
-    src,
-    name: decodeEntities(name).trim(),
-    role: decodeEntities(role).trim(),
+  return [...html.matchAll(/<figure\b[^>]*>(.*?)<\/figure>/gs)].map(([, block]) => ({
+    src: field(block, /<a\s+href="([^"]+)"/, 'portrait link'),
+    name: decodeEntities(field(block, /<b>([^<]+)<\/b>/, 'name')).trim(),
+    role: decodeEntities(field(block, /<\/b>\s*<br>\s*([^<]+?)\s*<br>/, 'role')).trim(),
   }))
 }
 
-/** The cards in a design/units/<nation>/unit-cards.html, in page order. The heading is "<slug> — <title>". */
+/** The cards in a design/units/<nation>/unit-cards.html, in page order: each `<article>`, read within itself. The
+ *  heading is "<slug> — <title>". */
 export function parseUnitCards(html: string): UnitCard[] {
-  const article = /<article id="([^"]+)"><h2>([^<]*)<\/h2>.*?<img[^>]*?src="([^"]+)"/g
-  return [...html.matchAll(article)].map(([, slug, heading, src]) => ({
+  return [...html.matchAll(/<article\s+id="([^"]+)"[^>]*>(.*?)<\/article>/gs)].map(([, slug, block]) => ({
     slug,
-    title: titleOfHeading(slug, decodeEntities(heading)),
-    src,
+    title: titleOfHeading(slug, decodeEntities(field(block, /<h2>([^<]*)<\/h2>/, `heading of ${slug}`)).trim()),
+    src: field(block, /<img\b[^>]*?\ssrc="([^"]+)"/, `image of ${slug}`),
   }))
 }
 

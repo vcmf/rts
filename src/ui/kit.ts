@@ -65,23 +65,20 @@ function barSamples(): HTMLElement[] {
   return [...head, ...rows]
 }
 
-/** The levels' names: the Napoleonic ruleset's (docs/proposals/unit-model.md § Experience), 1 to 6. In the game
- *  they come from the ruleset; the sheet names them here. */
-const LEVEL_NAMES = ['Recruits', 'Line', 'Veterans', 'Young Guard', 'Middle Guard', 'Old Guard']
-/** The six markers, each at 40 and 16 px with its name. */
-function levelCells(): HTMLElement[] {
-  return LEVEL_NAMES.map((name, i) => {
+/** The markers of the roster's levels, each at 40 and 16 px with its name (the ruleset's). */
+function levelCells(names: readonly string[]): HTMLElement[] {
+  return names.map((name, i) => {
     const big = levelMarker(i + 1, name)
     big.classList.add('big')
     return h('figure', {}, big, levelMarker(i + 1, name), h('figcaption', { class: 'mono' }, name))
   })
 }
 
-/** Each `data-level="<1–6>"` becomes its marker. */
-function fillLevelMarks(): void {
+/** Each `data-level="<1–6>"` becomes its marker, named from the roster's levels. */
+function fillLevelMarks(names: readonly string[]): void {
   for (const node of document.querySelectorAll<HTMLElement>('[data-level]')) {
     const level = Number(node.dataset.level)
-    node.replaceWith(levelMarker(level, LEVEL_NAMES[level - 1]))
+    node.replaceWith(levelMarker(level, names[level - 1] ?? ''))
   }
 }
 
@@ -143,8 +140,8 @@ async function main(): Promise<void> {
   if (regiment) find<HTMLImageElement>('[data-slot=unit-image]').src = historyImage(regiment.image)
   fillBars()
   find('[data-slot=bars]').replaceChildren(...barSamples())
-  find('[data-slot=levels]').replaceChildren(...levelCells())
-  fillLevelMarks()
+  find('[data-slot=levels]').replaceChildren(...levelCells(roster.levels))
+  fillLevelMarks(roster.levels)
   liveSwitches()
   liveRanges()
   liveSegments()

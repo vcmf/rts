@@ -31,6 +31,7 @@ export function fixtureRoster(): Roster {
       { id: 'south', name: 'South', native: 'Süd', colour: '#445566' },
     ],
     arms: ['foot', 'horse', 'guns'],
+    levels: ['Green', 'Steady', 'Hardened', 'First', 'Second', 'Third'],
     featured: { commanders: 'north/a', regiments: 'north/01-foot' },
     commanders: [commander('north', 'a'), commander('north', 'b', '', ''), commander('south', 'c')],
     regiments: [

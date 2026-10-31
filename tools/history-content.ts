@@ -31,5 +31,8 @@ export const DEFAULT_ARM = 'infantry'
 /** The arms in the order the filters show them. */
 export const ARMS = ['infantry', 'cavalry', 'artillery', 'command', 'mounts']
 
+/** The experience levels' names, 1 to 6 (docs/proposals/unit-model.md § Experience). */
+export const LEVEL_NAMES = ['Recruits', 'Line', 'Veterans', 'Young Guard', 'Middle Guard', 'Old Guard']
+
 /** The entries the History plates show: a commander's and a regiment's roster id. */
 export const FEATURED = { commanders: 'french/napoleon', regiments: 'french/07-old-guard-grenadier' }

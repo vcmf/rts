@@ -1,5 +1,5 @@
 {
- "version": 1,
+ "version": 2,
  "nations": [
   {
    "id": "french",
@@ -44,6 +44,14 @@
   "artillery",
   "command",
   "mounts"
+ ],
+ "levels": [
+  "Recruits",
+  "Line",
+  "Veterans",
+  "Young Guard",
+  "Middle Guard",
+  "Old Guard"
  ],
  "featured": {
   "commanders": "french/napoleon",

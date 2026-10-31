@@ -35,6 +35,8 @@ export interface Roster {
   version: number
   nations: Nation[]
   arms: string[]
+  /** the names of the experience levels, 1 to 6 (docs/proposals/unit-model.md § Experience) */
+  levels: string[]
   featured: { commanders: string; regiments: string }
   commanders: Commander[]
   regiments: Regiment[]
@@ -44,7 +46,7 @@ export type Kind = 'commanders' | 'regiments'
 export const KINDS: readonly Kind[] = ['commanders', 'regiments']
 /** The arm filter that keeps every arm. */
 export const ALL_ARMS = 'all'
-export const ROSTER_VERSION = 1
+export const ROSTER_VERSION = 2
 
 /** How the screens name each kind: its title, and the noun its count takes ("75 portraits"). */
 export const KIND_WORDS: Record<Kind, { name: string; noun: string }> = {
@@ -107,6 +109,9 @@ export function entryById(roster: Roster, kind: Kind, id: string): Entry | undef
 export function rosterProblems(roster: Roster): string[] {
   const problems: string[] = []
   if (roster.version !== ROSTER_VERSION) problems.push(`version ${roster.version}, expected ${ROSTER_VERSION}`)
+  if (!roster.nations.length) problems.push('no nations')
+  if (roster.arms.includes(ALL_ARMS)) problems.push(`an arm named "${ALL_ARMS}", the filter that keeps every arm`)
+  if (!roster.levels.length) problems.push('no level names')
   const nations = new Set(roster.nations.map(n => n.id))
   const arms = new Set(roster.arms)
   for (const kind of KINDS) {

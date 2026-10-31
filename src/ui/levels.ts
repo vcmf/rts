@@ -42,9 +42,10 @@ const GLYPHS: Stroke[][] = [
   [...LAUREL, fill(starPath(8, 8, 4.6))],
 ]
 
-/** The strokes of `level` (1 to LEVELS, clamped). */
+/** The strokes of `level` (1 to LEVELS, clamped; a level that is not a number is 1). */
 export function levelGlyph(level: number): Stroke[] {
-  const at = Math.min(LEVELS, Math.max(1, Math.round(level)))
+  const known = Number.isFinite(level) ? Math.round(level) : 1
+  const at = Math.min(LEVELS, Math.max(1, known))
   return GLYPHS[at - 1]
 }
 
