@@ -97,19 +97,24 @@ page keeps `window.__campaign` for the checks: `setView`, `view`, `detail`, `ups
 | Module | What |
 |---|---|
 | `view.ts` | `CampaignMapView`: Babylon, the map raised by the far level's shape on a mesh (a vertex every two nodes), the plate's sides and the table; the textures from the tiles and fields (the lakes' mask halved, a mean of 2 × 2, where the GPU's textures are smaller); the detail area of the close level around the camera (`ring.ts`), 6 tiles loading at once, 320 kept, 2 uploaded a frame; FSR 1 above 1080p; a frame every display frame (the clouds drift) |
-| `shaders/print.vert`, `shaders/print.frag` | the prototype's print: the paper, the forests, the contours, the water's steps, the lines, then the sun and the sky per pixel, the clouds, the lamp, the haze; `shaders/side.*` the plate's sides |
+| `shaders/print.vert`, `shaders/print.frag` | the prototype's print: the paper, the forests, the contours, the water's steps, the lines, then the sun and the sky per pixel, the clouds, the lamp, the haze; `shaders/side.*` the plate's sides; `shaders/patch.vert` the patch (below); `shaders/detail.glsl` and `shaders/farmesh.glsl` shared by them, put in where a shader says `#include<detail>` or `#include<farmesh>` (by the view, before Babylon reads the source) |
+| `patch.ts` | pure (K2c2): the patch near the camera, a mesh of 501 × 501 vertices on the close level's nodes (50 km a side) that follows the target up close on the far mesh's grid, raised by the 100 m shape where its tiles are in their slots; within one far quad (500 m) of its edge it lies on the far mesh's own surface (`farMeshHeight`, its triangles), where the far mesh is drawn too with the same fragments, so the two meet without a crack; the far mesh's vertices further inside drop under the plate |
 | `level.ts` | pure: the manifest checked, a level put together from its tiles, a tile copied into a window, the fields' planes made ready for the GPU |
 | `ring.ts` | pure (K2c1): the detail area as a ring of 12 × 12 tile slots, the tile at (i, j) always in slot (i mod 12, j mod 12) of textures that wrap, so a move loads only the tiles that come in; the area's place (moved when the target is more than a tile off its middle), its tiles nearest first, the slots' table (the tile each slot holds, 16 bits a column and a row: the shader uses the detail only where every tile its reads reach is in its slot), the tiles to load (not cached nor in their slot, a failed one again after 5 s, doubling to 60 s), the uploads waiting (one a slot, each tile into its own rectangle of the textures, 2 a frame) |
 | `camera.ts` | pure: the tilt (30° far to 45° at the closest), the view kept on the map and above its ground, the camera's place, a ray's ground point |
 | `paper.ts` | the paper's grain and the clouds' noise, two canvases drawn at load |
 
-Tested in `test/campaign-page.test.ts` and `test/campaign-ring.test.ts`. Against the prototype (`docs/plans/done/k2b-page.md`): the same image to a
+Tested in `test/campaign-page.test.ts`, `test/campaign-ring.test.ts` and `test/campaign-patch.test.ts`. Against the prototype (`docs/plans/done/k2b-page.md`): the same image to a
 mean of 1 to 2 levels a channel at four views; 2.7 to 5.3 ms a frame at 1080p on test machine A, 2.7 to 6.7 ms at 4K
 with FSR 1; ready in 2.4 s (the prototype 6.5 s, 5.5 s of it its bake).
 
-Panning up close (K2c1, `docs/plans/active/k2c-stream.md`): a mean of 2.6 to 3.0 ms a frame and the worst about
-5 ms at 1080p on test machine A (single frames of 7 to 13 ms when the GPU is shared), where the refilling window of
-K2b took 80 to 100 ms.
+Panning up close (K2c, `docs/plans/active/k2c-stream.md`): a mean of about 3 ms a frame and the 95th centile about
+4.5 ms at 1080p on test machine A, the patch drawn (single frames of 7 to 13 ms when the GPU is shared), where the
+refilling window of K2b took 80 to 100 ms.
+
+Babylon's shader preprocessor reads a `#include<…>` even in a comment (it waits for a file that is never there, and
+the material is never ready, with no error), and fails on a semicolon in a comment on a `uniform` line: the shaders'
+comments avoid both.
 
 ## Open questions
 

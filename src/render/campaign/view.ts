@@ -50,8 +50,12 @@ import {
   type CampaignView,
 } from './camera.ts'
 import { cloudCanvas, paperCanvas } from './paper.ts'
+import { patchStart } from './patch.ts'
 import PRINT_VS from './shaders/print.vert?raw'
 import PRINT_FS from './shaders/print.frag?raw'
+import PATCH_VS from './shaders/patch.vert?raw'
+import DETAIL_GLSL from './shaders/detail.glsl?raw'
+import FARMESH_GLSL from './shaders/farmesh.glsl?raw'
 import SIDE_VS from './shaders/side.vert?raw'
 import SIDE_FS from './shaders/side.frag?raw'
 
@@ -107,6 +111,8 @@ const RETRY_MOST_MS = 60000
 // brings it back to about that many, 1.3 to 2
 const UPSCALE_FROM = 1920 * 1080 * 1.15
 const FOV = 0.5
+// the patch near the camera (K2c2, ./patch.ts): PATCH_KM a side, a vertex on every node of the close level
+const PATCH_KM = 50
 // the rounds groundAt takes to meet the raised surface
 const GROUND_ROUNDS = 4
 
@@ -131,6 +137,46 @@ function toHalf(v: number): number {
   if (exp >= 31) return sign | 0x7c00
   // added, not or-ed: a mantissa rounding up to 1024 carries into the exponent
   return sign | ((exp << 10) + ((mant + 0x1000) >> 13))
+}
+
+/** A shader's source with its includes (#include<detail>, #include<farmesh>) put in. */
+const withIncludes = (src: string) =>
+  src.replace('#include<detail>', () => DETAIL_GLSL).replace('#include<farmesh>', () => FARMESH_GLSL)
+
+/**
+ * The print's uniforms and textures, set alike on the map's material and the patch's: they draw with the same fragment
+ * shader, so the band where both lie draws the same.
+ */
+class Print {
+  readonly materials: ShaderMaterial[]
+
+  constructor(materials: ShaderMaterial[]) {
+    this.materials = materials
+  }
+
+  setFloat(name: string, v: number) {
+    for (const m of this.materials) m.setFloat(name, v)
+  }
+
+  setVector2(name: string, v: Vector2) {
+    for (const m of this.materials) m.setVector2(name, v)
+  }
+
+  setVector3(name: string, v: Vector3) {
+    for (const m of this.materials) m.setVector3(name, v)
+  }
+
+  setVector4(name: string, v: Vector4) {
+    for (const m of this.materials) m.setVector4(name, v)
+  }
+
+  setColor3(name: string, v: Color3) {
+    for (const m of this.materials) m.setColor3(name, v)
+  }
+
+  setTexture(name: string, t: Texture) {
+    for (const m of this.materials) m.setTexture(name, t)
+  }
 }
 
 /** '#rrggbb' as a Color3. */
@@ -171,6 +217,9 @@ export class CampaignMapView {
   private readonly scene: Scene
   private readonly camera: FreeCamera
   private readonly material: ShaderMaterial
+  private readonly patchMaterial: ShaderMaterial
+  private readonly print: Print
+  private patch: Mesh | null = null
   private readonly sideMaterial: ShaderMaterial
   private readonly full: boolean
   private fsr: FSR1RenderingPipeline | null = null
@@ -206,7 +255,10 @@ export class CampaignMapView {
     this.camera.fov = FOV
     this.camera.minZ = 1
     this.camera.maxZ = 20000
-    this.material = this.printMaterial()
+    this.material = this.printMaterial(PRINT_VS)
+    this.patchMaterial = this.printMaterial(PATCH_VS)
+    this.print = new Print([this.material, this.patchMaterial])
+    this.setPrintDefaults()
     this.sideMaterial = new ShaderMaterial(
       'side',
       this.scene,
@@ -215,12 +267,12 @@ export class CampaignMapView {
     )
   }
 
-  /** The print material, its textures blank until setMap. */
-  private printMaterial(): ShaderMaterial {
-    const m = new ShaderMaterial(
+  /** A material drawing the print (./shaders/print.frag) from a vertex shader: the map's mesh or the patch's. */
+  private printMaterial(vertexSource: string): ShaderMaterial {
+    return new ShaderMaterial(
       'print',
       this.scene,
-      { vertexSource: PRINT_VS, fragmentSource: PRINT_FS },
+      { vertexSource: withIncludes(vertexSource), fragmentSource: withIncludes(PRINT_FS) },
       {
         attributes: ['position'],
         uniforms: [
@@ -240,7 +292,7 @@ export class CampaignMapView {
             'uContourK',
           ],
           ...['uTime', 'uCloudK', 'uHaze', 'uScreenH', 'uWoodK', 'uWoodFrom', 'uStepKm', 'uStep', 'uBands'],
-          'uLineReachKm',
+          ...['uLineReachKm', 'uPatchRect', 'uPatchBand', 'uMeshStep'],
         ],
         samplers: [
           ...['uShape', 'uShapeL', 'uLight', 'uLines', 'uRivers', 'uLakes', 'uLakeD', 'uContourH'],
@@ -248,6 +300,11 @@ export class CampaignMapView {
         ],
       },
     )
+  }
+
+  /** The print's settings, its textures blank until setMap. */
+  private setPrintDefaults() {
+    const m = this.print
     for (const [name, hex] of Object.entries(COLOURS)) m.setColor3(name, colour(hex))
     m.setColor3('uPaper', colour(PAPER))
     m.setColor3('uTable', colour(TABLE_COLOUR))
@@ -279,7 +336,10 @@ export class CampaignMapView {
     m.setFloat('uDetailCellKm', 0.1)
     m.setFloat('uDetailSize', 1)
     m.setFloat('uDetailArea', 1)
-    return m
+    // no patch until the detail is used: its rectangle off the map
+    m.setVector4('uPatchRect', new Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1))
+    m.setFloat('uPatchBand', 0)
+    m.setFloat('uMeshStep', MESH_STEP)
   }
 
   /** A tileable noise canvas as a wrapping texture. */
@@ -323,7 +383,7 @@ export class CampaignMapView {
     const el = (manifest.params.sunEl * Math.PI) / 180
     const az = (manifest.params.sunAz * Math.PI) / 180
     this.sun = [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)]
-    const m = this.material
+    const m = this.print
     const { nx, nz } = far
     const nearest = this.floatTexture(far.shape, nx, nz)
     // read only at its texel centres (by the Catmull-Rom pass): the GPU's bilinear filter rounds the coordinates and
@@ -337,6 +397,8 @@ export class CampaignMapView {
     m.setVector2('uTexel', new Vector2(1 / nx, 1 / nz))
     m.setVector2('uLightTexel', new Vector2(1 / nx, 1 / nz))
     m.setFloat('uCellKm', level.cell / 1000)
+    // the band at the patch's edge where it lies on the far mesh's surface: one quad of the far mesh
+    m.setFloat('uPatchBand', (MESH_STEP * level.cell) / 1000)
     m.setVector3('uSun', new Vector3(...this.sun))
     this.buildMeshes(far)
     this.placeCamera()
@@ -344,7 +406,7 @@ export class CampaignMapView {
 
   /** The fields' textures: the lakes (halved where the GPU's textures are smaller), their distance, lines, contours. */
   private setFields(fields: Map<string, Plane>, level: Level, lineReach: number) {
-    const m = this.material
+    const m = this.print
     const plane = (name: string) => {
       const p = fields.get(name)
       if (!p) throw new Error(`the fields have no ${name}`)
@@ -469,7 +531,7 @@ export class CampaignMapView {
       uploads: new Uploads<Tile>(),
       target: [0, 0],
     }
-    const m = this.material
+    const m = this.print
     m.setTexture('uDetailS', texS)
     m.setTexture('uDetailL', texL)
     m.setTexture('uDetailT', texT)
@@ -477,7 +539,59 @@ export class CampaignMapView {
     m.setFloat('uDetailCellKm', level.cell / 1000)
     m.setFloat('uDetailSize', level.size)
     m.setFloat('uDetailArea', AREA)
+    this.patch = this.patchMesh(level.cell / 1000)
     this.dirty = true
+  }
+
+  /**
+   * The patch's mesh: a vertex every `cellKm` over PATCH_KM a side, from its south-west corner (the vertex shader
+   * places and raises it), off until the detail is used.
+   */
+  private patchMesh(cellKm: number): Mesh {
+    const n = Math.round(PATCH_KM / cellKm) + 1
+    const positions = new Float32Array(n * n * 3)
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        positions[(j * n + i) * 3] = i * cellKm
+        positions[(j * n + i) * 3 + 2] = j * cellKm
+      }
+    }
+    const indices = new Uint32Array((n - 1) * (n - 1) * 6)
+    let o = 0
+    for (let j = 0; j < n - 1; j++) {
+      for (let i = 0; i < n - 1; i++) {
+        const a = j * n + i
+        // the far mesh's winding and cut (south-east to north-west), so its diagonals lie on the patch's
+        indices.set([a, a + 1, a + n, a + 1, a + n + 1, a + n], o)
+        o += 6
+      }
+    }
+    const mesh = new Mesh('patch', this.scene)
+    const vd = new VertexData()
+    vd.positions = positions
+    vd.indices = indices
+    vd.applyToMesh(mesh, false)
+    mesh.alwaysSelectAsActiveMesh = true
+    mesh.material = this.patchMaterial
+    mesh.setEnabled(false)
+    return mesh
+  }
+
+  /**
+   * Puts the patch under the camera's target while the detail is used (`on`), on the far mesh's grid, and takes it
+   * away (its rectangle off the map, so the far mesh is whole) when it is not.
+   */
+  private placePatch(on: boolean) {
+    if (!this.patch || !this.far) return
+    this.patch.setEnabled(on)
+    if (!on) {
+      this.print.setVector4('uPatchRect', new Vector4(1e6, 1e6, 1e6 + 1, 1e6 + 1))
+      return
+    }
+    const step = (MESH_STEP * this.far.level.cell) / 1000
+    const x0 = patchStart(this.viewNow.x, this.half.x, step, PATCH_KM)
+    const z0 = patchStart(this.viewNow.z, this.half.z, step, PATCH_KM)
+    this.print.setVector4('uPatchRect', new Vector4(x0, z0, x0 + PATCH_KM, z0 + PATCH_KM))
   }
 
   /** The detail area's state, for the fps meter and the checks. */
@@ -507,7 +621,7 @@ export class CampaignMapView {
     const x0 = -this.half.x + origin.ox * spanKm
     const z0 = -this.half.z + origin.oz * spanKm
     const lastKm = ((d.n - 1) * level.cell) / 1000
-    this.material.setVector4('uDetailRect', new Vector4(x0, z0, x0 + lastKm, z0 + lastKm))
+    this.print.setVector4('uDetailRect', new Vector4(x0, z0, x0 + lastKm, z0 + lastKm))
     const tiles = areaTiles(level, AREA, origin)
     const { given, changed } = assignSlots(d.given, tiles, AREA)
     d.given = given
@@ -659,7 +773,7 @@ export class CampaignMapView {
     this.camera.position.set(x, y, z)
     this.camera.setTarget(new Vector3(this.viewNow.x, 0, this.viewNow.z))
     const tilt = (tiltFor(this.viewNow.dist) * 180) / Math.PI
-    this.material.setFloat('uHaze', 0.35 * sstep(TILT_FAR, Math.max(TILT_NEAR, TILT_FAR + 1), tilt))
+    this.print.setFloat('uHaze', 0.35 * sstep(TILT_FAR, Math.max(TILT_NEAR, TILT_FAR + 1), tilt))
     this.dirty = true
   }
 
@@ -728,7 +842,7 @@ export class CampaignMapView {
     }
     if (this.fsr) this.fsr.scaleFactor = factor
     // the scene is drawn at the screen's height over the factor, and gl_FragCoord counts its pixels
-    this.material.setFloat('uScreenH', this.engine.getRenderHeight() / this.upscaleFactor())
+    this.print.setFloat('uScreenH', this.engine.getRenderHeight() / this.upscaleFactor())
   }
 
   /** The canvas resized: the engine, the upscale and the haze's screen height follow. */
@@ -741,14 +855,16 @@ export class CampaignMapView {
   /** One frame: the clouds' time, the zoom's settings when the view changed, the detail area's upload, the render. */
   private frame() {
     const t = performance.now()
-    this.material.setFloat('uTime', t / 1000)
+    this.print.setFloat('uTime', t / 1000)
     if (this.dirty) {
       this.dirty = false
       const ppk = this.pxPerKm()
       // by the zoom (screen pixels per km): the ordinary contours from about 1.2, the 100 m tiles from about 4 (a
       // tile node 0.4 px), fully from 9
-      this.material.setFloat('uContourK', sstep(1.2, 3, ppk))
-      this.material.setFloat('uDetailK', this.detail ? sstep(4, 9, ppk) : 0)
+      this.print.setFloat('uContourK', sstep(1.2, 3, ppk))
+      const detailK = this.detail ? sstep(4, 9, ppk) : 0
+      this.print.setFloat('uDetailK', detailK)
+      this.placePatch(detailK > 0)
       this.wantDetail(ppk)
       this.onViewChanged?.(ppk)
     }

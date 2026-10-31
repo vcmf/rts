@@ -89,6 +89,22 @@ same image as before at the four views of K2b2 once the tiles have loaded (a mea
 or overlap at the patch's edge (a check of the heights along it, in Vitest on the edge's formula, and screenshots
 along the edge); still no frame over 6.7 ms panning up close on test machine A.
 
+The patch is 501 × 501 vertices (50 km, a multiple of the far mesh's 500 m), its triangles cut as the far mesh's so
+its diagonals lie on the far mesh's; the band where both are drawn is one far quad wide. The shaders share their
+detail reads and the far mesh's height through two GLSL files put in by the view (`shaders/detail.glsl`,
+`shaders/farmesh.glsl`).
+
+**Results** (K2c2), on test machine A:
+- Up close, the Alps' silhouettes from the 100 m relief (screenshots at 30 and 60 km); the patch's edge unseen: the
+  view at Lake Constance from 90 km with and without the patch differs only inside the patch's trapezoid, by its
+  finer relief (a mean of 0.5 level a channel, 0.4% of the pixels by more than 16), with no line along its border;
+  from 100 km and further, where the detail is not used, the same image as without it.
+- Panning up close, the patch drawn: a mean of 2.9 to 3.0 ms and the 95th centile 4.4 to 4.5 ms at 1080p over two runs,
+  3.5 and 5.1 ms at 4K; the worst single frames 7.7 to 12.9 ms, as without the patch in the same hour (K2c1's
+  results: the GPU shared with another page).
+- Learnt: Babylon's shader preprocessor reads a `#include<…>` in a comment as an include and waits for its file, the
+  material never ready and no error logged.
+
 ## Open questions
 
 - A denser mesh far out too (a mesh in rings around the camera) if Europe's far views need it.
