@@ -11,11 +11,16 @@ import WATERDATA from './shaders/waterdata.glsl?raw'
 import SHORE from './shaders/shore.glsl?raw'
 import MACRO from './shaders/macro.glsl?raw'
 import MEADOW from './shaders/meadow.glsl?raw'
+import TILE_GLSL from './shaders/tile.glsl?raw'
+import { ShaderStore } from '@babylonjs/core/Engines/shaderStore.js'
 import type { Color3 } from '@babylonjs/core/Maths/math.color.js'
 import { SUN_TOWARD } from './sun.ts'
 import { lockMood, MOOD, SEASON, type Mood, type SeasonLight } from './mood.ts'
 import { D } from './spec.ts'
 import type { Effect } from '@babylonjs/core/Materials/effect.js'
+
+// the tile's place (G3b, src/look/tile.ts) for every shader that reads it: #include<tile>
+ShaderStore.IncludesShadersStore.tile = TILE_GLSL
 
 // the panel's state; t is the clock (cloud drift, water flow)
 export const S = {

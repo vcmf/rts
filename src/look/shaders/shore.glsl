@@ -140,7 +140,7 @@ float track1(float a,vec2 xz,float s,float c,float k){
 vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT,out float dusty){
   jn=0.0;dist=1e9;past=0.0;otherT=0.0;dusty=0.0;float bestT=0.0;
   if(coverAt(xz).w>ROAD_NEAR)return vec4(0.0);
-  vec2 g=(xz-uTileO+TILE_HALF)/ROAD_CELL;
+  vec2 g=tileUV(xz)*ROAD_N;
   if(any(lessThan(g,vec2(0.0)))||any(greaterThanEqual(g,vec2(ROAD_N))))return vec4(0.0);
   vec2 c=floor(g);float best=1e9,other=1e9,bestLine=-1.0;vec4 r=vec4(0.0);bool done=false;
   for(int k=0;k<ROAD_SLOTS/4;k++){

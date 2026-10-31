@@ -628,10 +628,10 @@ describe("the frame's coarse cover and the roads' gate", () => {
 
 describe('a moved tile (G3b-1)', () => {
   it('keeps a tile on the 200 m grid, and refuses one off it', () => {
-    expect(() => checkTileAt([400, -1200])).not.toThrow()
-    expect(() => checkTileAt([0, 0])).not.toThrow()
-    expect(() => checkTileAt([401, 0])).toThrow(/not on the 200 m grid/)
-    expect(() => checkTileAt([0, NaN])).toThrow(/not on the 200 m grid/)
+    expect(() => checkTileAt([400, -1200], 200)).not.toThrow()
+    expect(() => checkTileAt([0, 0], 200)).not.toThrow()
+    expect(() => checkTileAt([401, 0], 200)).toThrow(/not on the 200 m grid/)
+    expect(() => checkTileAt([0, NaN], 200)).toThrow(/not on the 200 m grid/)
   })
 
   it('moves every place in the data with the tile, and back again', () => {

@@ -1,8 +1,6 @@
 precision highp float;attribute vec3 position;
 #include<instancesDeclaration>
-// the tile's place (G3b: painter.glsl's tileUV, tileEdge; src/look/tile.ts)
-uniform vec2 uTileO;
-vec2 tileUV(vec2 xz){return (xz-uTileO+TILE_HALF)/TILE_W;}
+#include<tile>
 // THE SIMPLE SHADOWS (decision 0049; src/look/units.ts): each soldier draws his own shadow in the main pass, a grid lying
 // on the ground from his feet along the sun's shadow (uShDir; position: 0 to 1 across it in x, along it in z), on the
 // battalion's own instances: his place moves with him every frame (the step's place and the share of the next step's

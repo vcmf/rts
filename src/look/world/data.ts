@@ -101,8 +101,9 @@ export interface LookData {
 /** A tile's centre, m (x, z) */
 export type TileAt = readonly [number, number]
 
-/** Throws unless a tile's centre lies on the tile grid (SPEC.tileStep: every grid of the tile and the ring lines up) */
-export function checkTileAt(t: TileAt, step = 200): void {
+/** Throws unless a tile's centre lies on the tile grid (`step`: SPEC.tileStep, every grid of the tile and the ring
+ *  lines up) */
+export function checkTileAt(t: TileAt, step: number): void {
   const on = (v: number) => Number.isFinite(v) && Math.abs(v / step - Math.round(v / step)) < 1e-9
   if (!on(t[0]) || !on(t[1])) throw new Error(`a tile's centre ${t[0]}, ${t[1]} is not on the ${step} m grid`)
 }
@@ -116,7 +117,6 @@ export function checkTileAt(t: TileAt, step = 200): void {
 export function moveLook(d: LookData, [dx, dz]: TileAt): LookData {
   if (!dx && !dz) return d
   if (d.river.n) throw new Error('look data: a world with a river cannot be moved')
-  const at = <T extends { x0: number; z0: number }>(g: T): T => ({ ...g, x0: g.x0 + dx, z0: g.z0 + dz })
   const segs = Float32Array.from(d.roads.segs)
   for (let k = 0; k < segs.length; k += ROAD_SEG) {
     segs[k] += dx
@@ -129,6 +129,14 @@ export function moveLook(d: LookData, [dx, dz]: TileAt): LookData {
     trees[k] += dx
     trees[k + 1] += dz
   }
+  const m = moveGrids(d, [dx, dz])
+  return { ...m, roads: { ...m.roads, segs }, trees }
+}
+
+/** The look data's grids, rectangles and tile centre moved by (dx, dz) m, their arrays shared (moveLook moves the
+ *  places in its arrays too; the checks, checkLookData, need the grids alone) */
+function moveGrids(d: LookData, [dx, dz]: TileAt): LookData {
+  const at = <T extends { x0: number; z0: number }>(g: T): T => ({ ...g, x0: g.x0 + dx, z0: g.z0 + dz })
   const rect = (r: Rect): Rect => ({ x0: r.x0 + dx, z0: r.z0 + dz, x1: r.x1 + dx, z1: r.z1 + dz })
   return {
     ...d,
@@ -136,11 +144,10 @@ export function moveLook(d: LookData, [dx, dz]: TileAt): LookData {
     far: at(d.far),
     bank: at(d.bank),
     water: at(d.water),
-    roads: { ...at(d.roads), segs },
+    roads: at(d.roads),
     cover: at(d.cover),
     farCover: d.farCover && at(d.farCover),
     light: d.light && at(d.light),
-    trees,
     world: d.world.kind === 'map' ? { ...d.world, play: rect(d.world.play), edge: rect(d.world.edge) } : d.world,
     tileAt: [d.tileAt[0] + dx, d.tileAt[1] + dz],
   }
@@ -329,7 +336,7 @@ export function decodeLook(buf: ArrayBuffer): LookData {
     trees: arr.trees,
     farCover,
     light,
-    tileAt: meta.tileAt ?? [0, 0],
+    tileAt: meta.tileAt,
   }
 }
 
@@ -359,7 +366,7 @@ export function checkLookData(d: Derived, moved: LookData): void {
   const s = d.spec
   // (a moved tile's data is checked at the origin: every grid's place is the tile's centre's plus the spec's)
   checkTileAt(moved.tileAt, s.tileStep)
-  const look = moveLook(moved, [-moved.tileAt[0], -moved.tileAt[1]])
+  const look = moveGrids(moved, [-moved.tileAt[0], -moved.tileAt[1]])
   const bad: string[] = []
   const m = d.hfMargin
   const n = s.tileSub + 1 + 2 * m

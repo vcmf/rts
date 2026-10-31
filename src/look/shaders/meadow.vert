@@ -9,10 +9,7 @@ varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;
 uniform vec3 uCamPos,uFocus;   // (the zoom: how far the camera stands from the focus)
 varying vec3 vFlow;   // the combed meadow: the clump hue (a hash), the growth at its root, how far it is from winter (1 to 0)
 #endif
-// the tile's place (G3b: painter.glsl's tileUV, tileEdge; src/look/tile.ts)
-uniform vec2 uTileO;
-vec2 tileUV(vec2 xz){return (xz-uTileO+TILE_HALF)/TILE_W;}
-float tileEdge(vec2 xz){vec2 d=abs(xz-uTileO);return max(d.x,d.y);}
+#include<tile>
 #include<meadow>
 #ifdef TRAMPLE
 // the grass trodden under the formations (batch C, src/look/units.ts trample): shorter and pressed where they stand and

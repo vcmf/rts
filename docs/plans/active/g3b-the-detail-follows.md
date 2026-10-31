@@ -67,3 +67,16 @@ panning (G3e).
   150 ms of CPU): until G3c a move costs a visible frame.
 - **Float precision:** a tile 1.5 km from the origin: float32 world positions hold millimetres there; to check on the
   goldens.
+
+## Review
+
+G3b-1, round 1 (`/code-review high`, 10 findings, none severe; fixed or answered, then stopped):
+- fixed: the tile step checked against every grid over the tile (the roads', the covers', the meadow's, the bakes'
+  texels), not only the far and tile cells (100 m passed with half road cells; tested); the compiler's tile check by
+  the spec's step, not a literal; the checks' move of a tile without copying its trees and roads (`moveGrids`);
+  `groundOf` given the tile's centre, not one worked out from the heightfield; the armies' field and the bench's
+  focus about the tile's centre (a map window has no armies yet: for G3b-2); the tile's GLSL in one chunk
+  (`shaders/tile.glsl`, `#include<tile>`), not five copies; `?tileat`'s messages, and the missing file's naming the
+  command that builds it; a `--tileat` file written whole then moved; a dead fallback; the tile module's comment;
+- answered: a `--tileat` file is a check's, built only when asked (not rebuilt by `--missing`: G3b-3 builds tiles on
+  the page); `windowBase` samples the window's heights a second time, only for a `--tileat` build.

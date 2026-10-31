@@ -107,10 +107,14 @@ const lookWindow = windowOf(new URLSearchParams(location.search))
 // ?tileat=<x>,<z>: the window's data with its tile there (G3b-1's check; built by tools/build-look-data.ts --tileat)
 const tileAtParam = new URLSearchParams(location.search).get('tileat')
 const tileAt = tileAtParam === null ? undefined : (tileAtParam.split(',').map(Number) as [number, number])
-if (tileAt && (!lookWindow || tileAt.length !== 2)) throw new Error('?tileat=<x>,<z> needs ?map and ?window')
+if (tileAt && !lookWindow) throw new Error('?tileat=<x>,<z> needs ?map and ?window')
+if (tileAt && tileAt.length !== 2) throw new Error(`?tileat must be <x>,<z> in metres, not ${tileAtParam}`)
 if (tileAt) checkTileAt(tileAt, D.spec.tileStep)
 const lookUrl = lookWindow ? WINDOW_DATA[`../../${windowFile(lookWindow, tileAt)}`] : LOOK_URL
-if (!lookUrl) throw new Error(`look data: no ${windowFile(lookWindow!, tileAt)}: run node tools/build-look-data.ts`)
+if (!lookUrl) {
+  const make = tileAt ? ` --window ${lookWindow!.name} --tileat ${tileAt.join(',')}` : ''
+  throw new Error(`look data: no ${windowFile(lookWindow!, tileAt)}: run node tools/build-look-data.ts${make}`)
+}
 const res = await fetch(lookUrl)
 if (!res.ok) throw new Error(`look data: ${res.status} ${res.statusText} for ${lookUrl}`)
 const look = decodeLook(await res.arrayBuffer())
@@ -131,7 +135,7 @@ setHeightfield(look.hf, look.far, D.spec.tile / 2)
 // ground in play: docs/plans/done/look-austerlitz-a1b.md) and goes anywhere over its map's play area (G3a)
 const worldGround =
   look.world.kind === 'map'
-    ? groundOf(D.spec, look.hf, look.far, null, look.world.play)
+    ? groundOf(D.spec, look.hf, look.far, null, look.world.play, look.tileAt)
     : groundOf(D.spec, look.hf, look.far, D.spec.camera.focusY)
 // the far ring's rectangle (a map world's the whole map: G3a, docs/plans/done/g3a-the-whole-map-far.md)
 const ring = rectOf(look.far)
@@ -876,7 +880,9 @@ if (armiesParam !== null) {
   const greatcoat = uniformsParam === 'all-greatcoats'
   const dyes = dyeOverride(params.get('dye'), era.dyes)
   const uniforms = dressAll(era.uniforms, dyes, { greatcoat })
-  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides, FIELD.centre, FIELD.gap)
+  // (the field about the tile's centre: src/look/tile.ts)
+  const fieldAt: [number, number] = [FIELD.centre[0] + TILE_O.x, FIELD.centre[1] + TILE_O.y]
+  const placed = layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides, fieldAt, FIELD.gap)
   // every figure fetched and decoded at once (the infantry's and each arm on the page)
   const armSpecs = ARMS_DEMO.filter(spec => armSwitch(spec.name))
   const [infantry, ...armData] = await Promise.all([ARMIES_DEMO.figure, ...armSpecs.map(a => a.figure)].map(figureData))
@@ -958,7 +964,7 @@ if (armiesParam !== null) {
     const speeds = Object.fromEntries(Object.entries(data.ranges).map(([k, r]) => [k, r.speed]))
     const { script, foot: footprint } = armScript(spec, t.geometry, g => f.place(g), speeds)
     // (from the layout's centre, its fronts half its gap either side: src/look/world/armies.ts FIELD)
-    const placedArm = placeArmUnits(spec, footprint, FIELD.centre, FIELD.gap / 2, blocked, taken)
+    const placedArm = placeArmUnits(spec, footprint, fieldAt, FIELD.gap / 2, blocked, taken)
     if (placedArm.length === 0) continue
     // (its sides' dresses alone: another arm's lack this figure's parts, a carriage's paint)
     const dress = Object.fromEntries(spec.sides.map(id => [id, era.uniforms[id]]))
@@ -1818,8 +1824,12 @@ if (params.has('bench')) {
   // with ?armies and no ?benchat, between the two sides' battalions facing each other (armies.ts, facing), clamped to
   // the tile's play area (the armies are the tile's): the bench's cameras on the fight
   const mid = armiesFocus
-  const clampPlay = (v: number) => Math.max(-D.spec.play, Math.min(D.spec.play, v))
-  const focus = at ? { x: at[0], z: at[1] } : mid ? { x: clampPlay(mid[0]), z: clampPlay(mid[1]) } : undefined
+  const clampPlay = (v: number, c: number) => Math.max(c - D.spec.play, Math.min(c + D.spec.play, v))
+  const focus = at
+    ? { x: at[0], z: at[1] }
+    : mid
+      ? { x: clampPlay(mid[0], TILE_O.x), z: clampPlay(mid[1], TILE_O.y) }
+      : undefined
   void runBench(scene, camera, passes, arms, hold, focus).then(
     r => {
       Object.assign(window, { __bench: r })

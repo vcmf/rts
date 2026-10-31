@@ -1,7 +1,8 @@
 // The detailed tile's place in the world (G3b, docs/plans/active/g3b-the-detail-follows.md): its centre, m, on
 // SPEC.tileStep's grid (the look data's tileAt). The shaders read it as uTileO (painter.glsl's tileUV and tileEdge);
-// every material is given this one vector (Materials.make, and the few made apart: bindTile), which Babylon keeps by
-// reference, so a moved tile is set here once.
+// every material Materials.make makes is given this one vector (bindTile), which Babylon keeps by reference, so a moved
+// tile is set here once; a material made apart that reads the tile calls bindTile, and the bakes' effect wrappers set
+// it a draw (src/look/macro.ts). The shaders' side: shaders/tile.glsl (#include<tile>, src/look/materials.ts)
 import { Vector2 } from '@babylonjs/core/Maths/math.vector.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 

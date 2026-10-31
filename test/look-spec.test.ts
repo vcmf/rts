@@ -68,6 +68,14 @@ describe('world spec', () => {
       /tile step 210 m/,
     ],
     [
+      // (7 far cells and 56 tile cells, but 12.5 road cells: a moved tile's roads half a cell off the first's)
+      'a tile step off the road grid',
+      s => {
+        s.tileStep = 100
+      },
+      /tile step 100 m is not a whole number of road cells/,
+    ],
+    [
       'far cells not a whole number of tile cells',
       s => {
         s.farSub = 181

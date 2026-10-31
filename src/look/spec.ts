@@ -330,9 +330,24 @@ export function derive(s: Spec = SPEC): Derived {
       bad.push((e as Error).message.replace(/^world spec \([^)]*\): /, ''))
     }
   }
-  // a moved tile (G3b): its edges on the far grid (the apron), its nodes on the first tile's (a swap moves no ground)
-  if (!(s.tileStep > 0 && isInt(s.tileStep / farCell) && isInt(s.tileStep / cell))) {
-    bad.push(`grid: the tile step ${s.tileStep} m is not a whole number of far cells and of tile cells`)
+  // a moved tile (G3b): its edges on the far grid (the apron), and every grid over it on the first tile's (a swap
+  // moves no ground, road, cover edge or texel): the tile's nodes, the roads', the covers', the meadow map's 1 m and
+  // its growth's 2 m (src/look/meadow.ts), the light map's, the occlusion's and the bakes' texels
+  const steps: [string, number][] = [
+    ['far cells', farCell],
+    ['tile cells', cell],
+    ['road cells', s.road.cell],
+    ['cover cells', s.macro.cover],
+    ['macro texels', s.macro.texel],
+    ['bank texels', s.bank.texel],
+    ['water texels', s.water.texel],
+    ['light map texels', s.tile / s.sizes.lightMap],
+    ['occlusion texels', s.tile / s.sizes.aoTex],
+    ['meadow cells', 2],
+  ]
+  const off = steps.filter(([, c]) => !isInt(s.tileStep / c)).map(([k]) => k)
+  if (!(s.tileStep > 0) || off.length) {
+    bad.push(`grid: the tile step ${s.tileStep} m is not a whole number of ${off.join(', ') || 'metres'}`)
   }
   if (s.aoMargin < s.aoRing) {
     bad.push(`bake: the heightfield's margin ${s.aoMargin} m < the occlusion ring ${s.aoRing} m`)
@@ -809,6 +824,7 @@ export function groundOf(
   far: NodeGrid,
   plane: number | null,
   play: Rect = playOf(s),
+  tileAt: readonly [number, number] = [0, 0],
 ): WorldGround {
   let lo = Infinity
   let hi = -Infinity
@@ -827,11 +843,9 @@ export function groundOf(
       }
     }
   }
-  // the far ring's nodes past the tile (inside it the heightfield is the ground; the tile's centre is the
-  // heightfield's: a moved tile's, G3b)
+  // the far ring's nodes past the tile (inside it the heightfield is the ground; `tileAt` its centre, G3b)
   const e = s.tile / 2
-  const tx = hf.x0 + ((hf.n - 1) * hf.cell) / 2
-  const tz = hf.z0 + ((hf.n - 1) * hf.cell) / 2
+  const [tx, tz] = tileAt
   let farLo = Infinity
   for (let j = 0; j < far.n; j++) {
     const z = far.z0 + j * far.cell

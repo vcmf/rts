@@ -260,7 +260,7 @@ export function buildWindowData(
   tileAt: TileAt = [0, 0],
 ): Uint8Array {
   const s = D.spec
-  checkTileAt(tileAt)
+  checkTileAt(tileAt, s.tileStep)
   // the tile's centre in map metres: the window is built about it, in its frame, then moved into the window's (G3b)
   const at = { ...win, x: win.x + tileAt[0], z: win.z + tileAt[1] }
   checkWindowInside(L, at, s.tile)
@@ -421,7 +421,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (!w || at.length !== 2) throw new Error('--tileat x,z needs --window <name>')
     const { map, layers } = layersOf(mapFile(w))
     const file = path.join(ROOT, windowFile(w, at))
-    fs.writeFileSync(file, buildWindowData(w, map, layers, coarseLight(layers), at))
+    // (written whole, then moved, as buildMissingWindows; a check's file: rebuilt only by asking again)
+    fs.writeFileSync(file + '.part', buildWindowData(w, map, layers, coarseLight(layers), at))
+    fs.renameSync(file + '.part', file)
     console.log(`look data: wrote ${path.relative(ROOT, file)}`)
     process.exit(0)
   }
