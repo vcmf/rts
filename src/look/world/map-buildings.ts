@@ -1,4 +1,4 @@
-// A map's buildings as the look page's models (G3d, docs/plans/active/g3d-villages.md): each standing house, barn and
+// A map's buildings as the look page's models (G3d, docs/plans/done/g3d-villages.md): each standing house, barn and
 // church (src/render/lit/houses.ts, standing: the staff map's rule) a model of prototypes/buildings.data.js turned and
 // scaled onto its footprint. Pure: the compiler (window-build.ts) and the tile worker run it.
 import type { Pt } from '../../map/schema.ts'

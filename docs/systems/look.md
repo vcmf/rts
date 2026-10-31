@@ -170,7 +170,7 @@ comes within 200 m of the tile's edge the tile centred on it (on the 200 m grid,
 over the last and new tiles' squares (`reliefPatch`), the worker sending a tile's per-frame cover and flow texels (the
 flow's texture written in place); each part's time in `__look.moveParts`. G3c-2: the meadow map's data from the worker too (`meadowMapData`; on a map world its rules are the cover's alone: `src/look/world/growth.ts`), the trees' generated models made once a page.
 
-**A map world's villages (G3d, `docs/plans/active/g3d-villages.md`).** A tile's data holds its buildings as the page's models (`mapBuildings`: each standing house, barn and church a house, farmhouse or manor fitted to its footprint, its front toward its road; a church the manor until a church model); the buildings and their baked light are parts of the tile, built again on a move. No yards on map worlds yet (the paving takes 16 at most, apart and off the roads).
+**A map world's villages (G3d, `docs/plans/done/g3d-villages.md`).** A tile's data holds its buildings as the page's models (`mapBuildings`: each standing house, barn and church a house, farmhouse or manor fitted to its footprint, its front toward its road; a church the manor until a church model); the buildings and their baked light are parts of the tile, built again on a move. No yards on map worlds yet (the paving takes 16 at most, apart and off the roads).
 
 The page loads that window's data (`windowOf`; an unknown name throws, and so does a file holding another world).
 On a map world the demo's hand-placed copses, woods, hedgerows, extras, wheat lattice and formation zones are off;

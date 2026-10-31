@@ -14,7 +14,7 @@ import { BUILDING_FLOATS } from './map-buildings.ts'
 // (the demo, or a map's window) and a map world's trees (docs/plans/active/look-austerlitz-a1.md); 10: a map world's
 // far ring the whole map, its cover and its coarse light (docs/plans/done/g3a-the-whole-map-far.md); 11: the tile's
 // centre (G3b, docs/plans/done/g3b-the-detail-follows.md); 12: a map world's buildings (G3d,
-// docs/plans/active/g3d-villages.md)
+// docs/plans/done/g3d-villages.md)
 export const LOOK_VERSION = 12
 
 // the trees' species a map world's data names by index (src/look/world/from-map.ts; the page draws each as its
