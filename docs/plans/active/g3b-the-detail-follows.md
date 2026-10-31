@@ -140,3 +140,11 @@ After the redesign, round 1 (8 findings, 2 taken as severe):
   to every builder; the lists cover what the tile's builders make, the bakes' casters now leave the last parts out);
   the relief's tone over the whole ring, the far macro bake on every move, the first tile's data kept: a move's cost
   and memory, G3c's.
+
+After the redesign, round 2 (9 findings, none severe; fixed or answered, then stopped):
+- fixed: a move waits for a colour bake under way (it would bake the new covers on the last tile's place); the move's
+  fault fires once; the first tile's flow and meadow map named as the load's (`flowAtLoad`, `meadowMapAtLoad`); the
+  hooks' comments; the design's decision record (0096, proposed);
+- answered: the bakes' casters by the scene's list with the leaving parts left out, and owners that record four
+  observables (explicit caster lists and disposables: a change to every builder; decision 0096's consequences); the
+  apron's buffers and the flow's comb made again on a move: G3c's cost.

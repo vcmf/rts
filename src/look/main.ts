@@ -573,7 +573,7 @@ const tileFlow = () =>
     return f
   })
 let flowOwned = grassMode === 'flow' ? tileFlow() : null
-const flowTex = flowOwned?.value ?? null
+const flowAtLoad = flowOwned?.value ?? null
 // the meadow map (src/look/meadow.ts), before the ground's bake: the combed meadow bakes the default pattern where no
 // grass grows and the combed one where it does (the combed clumps reach farther: their roots keep farther from the
 // zones and the banks; the crops keep the default's rule)
@@ -586,7 +586,7 @@ const tileMeadowMap = (n: Nature) =>
     return buildMeadowMap(scene, mats, n.growth, allowed, n.crop, n.growthAllowed)
   })
 let meadowMapOwned = meadowOn ? tileMeadowMap(nature) : null
-const meadowMap = meadowMapOwned?.value ?? null
+const meadowMapAtLoad = meadowMapOwned?.value ?? null
 // the combed meadow's near bake runs only where its strokes show: out to the strokes' ring, at the zooms where a pixel
 // can be under the strokes' largest footprint (STROKE_FOOT; at the focus, the ground the screen's centre shows, under
 // twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
@@ -599,8 +599,8 @@ const macro = buildMacro(
   meadowOn,
   roadTex,
   grassDefines,
-  flowTex,
-  meadowMap?.map ?? null,
+  flowAtLoad,
+  meadowMapAtLoad?.map ?? null,
   {
     reach: RINGS[0].band[3],
     shows: () => !focusDist || ((pixA * D.spec.detail.lines) / sceneH()) * focusDist < 2 * STROKE_FOOT,
@@ -695,7 +695,9 @@ else if (params.has('bench') || params.has('water') || params.get('river') === '
 // ?dofnear=0: the near blur off (its cost's A/B: docs/plans/done/dof-v2.md)
 if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
-const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach, meadowLook) : null
+const meadow = meadowMapAtLoad
+  ? buildMeadow(scene, mats, camera, meadowMapAtLoad, !flag('nowide'), grassReach, meadowLook)
+  : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dark ground under its clumps (shore.glsl)
 // ?armies=<battalions a side>: the demo's two armies (docs/plans/active/armies-demo.md): battalions of the ruleset's
 // infantry (about 400 a battalion, decision 0018) that march up in column, deploy and fire on a scripted loop, drawn
@@ -1209,7 +1211,7 @@ const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']
   window.addEventListener('pointerup', () => {
     held = false
   })
-  // (hooked again on a moved tile's bakes: hookBakes)
+  // (hooked again on a moved tile's bakes: bakeHooks, move)
   const hook = () =>
     bakes.groundBounce.onAfterRenderObservable.add(() => {
       baked = key()
@@ -1571,6 +1573,8 @@ async function move(next: LookData): Promise<number> {
   // the camera on the new tile's ground (the checks at load: checkView)
   const ground = groundOf(D.spec, next.hf, look.far, null, worldGround.play, next.tileAt)
   checkView(D.spec, ground)
+  // (a colour bake under way finishes on the last tile's place and covers first: the move then writes them)
+  await macro.settled()
   // Built beside the last, in one task (no frame between): the tile's place (TILE_O, the heightfield, the ground's
   // meshes, the covers: what the parts read) set to the new tile's, its parts built; if a build throws, the new parts
   // are taken away and the place and the bindings put back, the last tile untouched; else the last parts go
@@ -1594,7 +1598,12 @@ async function move(next: LookData): Promise<number> {
     at(next, frame)
     const roads = roadsOwned && build(tileRoads(next.roads))
     const n = build(tileNature(next))
-    if (moveFault) throw new Error(`a move made to fail (__look.moveFault: ${moveFault})`)
+    if (moveFault) {
+      // (once: the next move is a real one)
+      const why = moveFault
+      moveFault = null
+      throw new Error(`a move made to fail (__look.moveFault: ${why})`)
+    }
     const bk = build(tileBakes(n.value, leaving))
     const fl = flowOwned && build(tileFlow())
     const mm = meadowMapOwned && build(tileMeadowMap(n.value))
@@ -1772,8 +1781,8 @@ Object.assign(window, {
     get sky() {
       return bakes.sky // (the tile's now: a moved tile's, retile)
     },
-    meadowBakeMs: meadow?.bakeMs ?? null, // (the first tile's, as the bench has always read it)
-    // (the combed meadow's flow textures, on load)
+    meadowBakeMs: meadow?.bakeMs ?? null, // (on load: the map's and the near meadow's, as the bench has read it)
+    // (the combed meadow's flow textures: the last built, on load or a move)
     get flowBuildMs() {
       return flowOwned?.value.ms ?? null
     },
