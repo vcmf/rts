@@ -57,3 +57,26 @@ its cover, the coarse light, the window's base again).
 ## Out of scope
 
 The water, villages and woods past the windows' data (G3d); the frame while panning beyond the move (G3e).
+
+## G3c-1: the move's arithmetic trimmed (built)
+
+- **The relief's tone made again where the ground changed** (`reliefPatch`, `src/look/relief.ts`): over the last and
+  new tiles' squares and the blurs' reach past them (46 cells), from heights read another reach past that, written
+  into the field's kept bytes; the same tone as the whole field's to a byte (tested). 92–115 ms to 23–35 ms.
+- **The worker sends a tile's per-frame cover** (coarsened to the spec's cells) **and its flow's texels**
+  (`flowBytes`, `src/look/flow-field.ts`: the field's arithmetic out of `src/look/flow.ts`, no Babylon); the page
+  writes the flow's texture in place (its comb is the tile's never: not made again) and takes the cover as it is. The
+  tools' `retile` hook (a `--tileat` file, no worker) makes both on the page as before.
+- **Each part timed** (`__look.moveParts`).
+
+Measured (the dev Mac, Metal, Kobelnitz):
+
+| | Before G3c | G3c-1 |
+|---|---|---|
+| a move followed (the worker's cover and flow) | 0.80–0.93 s | 0.46–0.61 s |
+| a move by the hook (the page makes them) | 0.61–0.77 s | 0.53–0.67 s |
+| its parts (followed) | | the meadow map 127–153, the trees 115–174, the bakes' CPU side 62–102, the terrain 51–66, the split 31, the relief 30, the colour bake 23 ms |
+
+Next (G3c-2): the meadow map's arithmetic in the worker (its growth and crops read the tile's cover alone on a map
+world), the trees' generated models made once a page, the ground's split by cell and the tile mesh's heights and
+normals from the worker.

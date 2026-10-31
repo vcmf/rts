@@ -7,7 +7,11 @@ import type { Layers } from '../map/apply.ts'
 import { compileMap } from '../map/compile.ts'
 import type { LightGrid, TileAt } from './world/data.ts'
 import type { LookWindow } from './world/windows.ts'
-import { buildWindowData, coarseLight } from './world/window-build.ts'
+import { coarseLight, windowData } from './world/window-build.ts'
+import { encodeLook } from './world/data.ts'
+import { coarsenCover } from './world/cover.ts'
+import { flowBytes } from './flow-field.ts'
+import { D } from './spec.ts'
 
 /** The page's requests: the map (once, first), then a tile by its centre (on the tile grid, in the window's frame) */
 export type TileRequest =
@@ -16,7 +20,17 @@ export type TileRequest =
 /** The replies: the map compiled (its time, ms), a tile's look data (its bytes, its time), or what failed */
 export type TileReply =
   | { type: 'map'; ms: number }
-  | { type: 'tile'; seq: number; at: TileAt; bytes: ArrayBuffer; ms: number }
+  // (with the tile: its per-frame cover, coarsened to the spec's cells, and its flow's texels: the page writes them in
+  // place, G3c)
+  | {
+      type: 'tile'
+      seq: number
+      at: TileAt
+      bytes: ArrayBuffer
+      frame: { n: number; cell: number; x0: number; z0: number; tex: ArrayBuffer }
+      flow: ArrayBuffer
+      ms: number
+    }
   | { type: 'error'; seq: number | null; message: string }
 
 let world: { win: LookWindow; map: MapFile; layers: Layers; light: LightGrid } | null = null
@@ -36,13 +50,29 @@ self.onmessage = (e: MessageEvent<TileRequest>) => {
     }
     if (!world) throw new Error('a tile asked for before the map')
     const t0 = performance.now()
-    const bytes = buildWindowData(world.win, world.map, world.layers, world.light, q.at)
+    const data = windowData(world.win, world.map, world.layers, world.light, q.at)
+    const bytes = encodeLook(data)
+    const frame = coarsenCover(data.cover, D.spec.macro.cover)
+    const flow = flowBytes(q.at[0], q.at[1], D.spec.tile)
     // (the encoding's own buffer when it is all of it: transferred, not copied)
     const whole = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
     const buf = (
       whole ? bytes.buffer : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
     ) as ArrayBuffer
-    post({ type: 'tile', seq: q.seq, at: q.at, bytes: buf, ms: performance.now() - t0 }, [buf])
+    const ft = frame.tex.slice().buffer as ArrayBuffer
+    const fb = flow.buffer as ArrayBuffer
+    post(
+      {
+        type: 'tile',
+        seq: q.seq,
+        at: q.at,
+        bytes: buf,
+        frame: { ...frame, tex: ft },
+        flow: fb,
+        ms: performance.now() - t0,
+      },
+      [buf, ft, fb],
+    )
   } catch (err) {
     post({ type: 'error', seq: q.type === 'tile' ? q.seq : null, message: (err as Error).message })
   }

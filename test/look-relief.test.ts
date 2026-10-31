@@ -1,7 +1,7 @@
 // The relief's painted tone (src/look/relief.ts): flat ground takes none, a slope turned to the sun is lighter and one
 // turned away darker, a crest lighter and a valley darker; the blur keeps a flat field flat.
 import { describe, expect, it } from 'vitest'
-import { blur, reliefField, RELIEF_CELL } from '../src/look/relief.ts'
+import { blur, reliefField, reliefPatch, RELIEF_CELL } from '../src/look/relief.ts'
 
 const SUN: [number, number, number] = (() => {
   const v = [-0.7, 0.45, 0.55]
@@ -39,5 +39,27 @@ describe('the relief tone', () => {
     for (const v of flat) expect(v).toBeCloseTo(3, 5)
     const ramp = Float32Array.from({ length: n * n }, (_, k) => k % n)
     expect(blur(ramp, n, 2)[10 * n + 10]).toBeCloseTo(10, 5)
+  })
+})
+
+describe("the relief's tone made again where the heights changed (reliefPatch, G3c)", () => {
+  it("is the whole field's tone, a byte at most, on a field whose heights changed in a square", () => {
+    const sun: [number, number, number] = [-0.7, 0.45, 0.55]
+    const hill = (x: number, z: number) => 20 * Math.sin(x / 90) * Math.cos(z / 70) + 0.01 * x
+    // a moved tile: the heights inside a square read finer (a bump the coarse ground had not)
+    const sq = { x0: -100, z0: 40, x1: 300, z1: 440 }
+    const inSq = (x: number, z: number) => x >= sq.x0 && x <= sq.x1 && z >= sq.z0 && z <= sq.z1
+    const moved = (x: number, z: number) => hill(x, z) + (inSq(x, z) ? 3 * Math.sin(x / 7) * Math.sin(z / 9) : 0)
+    const before = reliefField(hill, 1600, sun, -800, -700)
+    const after = reliefField(moved, 1600, sun, -800, -700)
+    const tex = Uint8Array.from(before.tex)
+    reliefPatch(moved, { n: before.n, cell: before.cell, x0: -800, z0: -700 }, sq, sun, tex)
+    let worst = 0
+    for (let k = 0; k < tex.length; k++) worst = Math.max(worst, Math.abs(tex[k] - after.tex[k]))
+    expect(worst).toBeLessThanOrEqual(1)
+    // and it did change: the square's tone is not the field's before
+    let changed = 0
+    for (let k = 0; k < tex.length; k++) if (tex[k] !== before.tex[k]) changed++
+    expect(changed).toBeGreaterThan(1000)
   })
 })

@@ -141,7 +141,8 @@ const emptySpans = (n: number, cell: number, ch: number): SpanGrid => ({
  * no river, water or bank normals yet (the plan's PR c). Its far ring is the whole map (G3a,
  * docs/plans/done/g3a-the-whole-map-far.md): the play area and the camera's widest footprint past it (on the map's
  * whole range of heights, a bound), its own cover at the far bake's texels, and the map's coarse light (bakeLight on
- * its true heights, the look's sun). `map`: the expanded map; `L`: its layers.
+ * its true heights, the look's sun). `map`: the expanded map; `L`: its layers. Encoded (buildWindowData), or not
+ * (windowData: the tile worker derives a moved tile's per-frame cover and flow from it, G3c).
  */
 export function buildWindowData(
   win: LookWindow,
@@ -150,6 +151,15 @@ export function buildWindowData(
   mapLight = coarseLight(L),
   tileAt: TileAt = [0, 0],
 ): Uint8Array {
+  return encodeLook(windowData(win, map, L, mapLight, tileAt))
+}
+export function windowData(
+  win: LookWindow,
+  map: MapFile,
+  L: Layers,
+  mapLight = coarseLight(L),
+  tileAt: TileAt = [0, 0],
+): LookData {
   const s = D.spec
   checkTileAt(tileAt, s.tileStep)
   // the tile's centre in map metres: the window is built about it, in its frame, then moved into the window's (G3b)
@@ -179,7 +189,7 @@ export function buildWindowData(
     light: { ...mapLight, x0: L.x0 - at.x, z0: L.z0 - at.z },
     tileAt: [0, 0],
   }
-  return encodeLook(moveLook(data, tileAt))
+  return moveLook(data, tileAt)
 }
 
 /** The height base of a window's own build (windowHeights at its centre, over its ring): the lowest node. */

@@ -8,48 +8,9 @@ import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { D } from './spec.ts'
-import { sstep } from './noise.ts'
+import { FLOW, FLOW_TEXEL, flowAt, flowBytes, mHash, mValue } from './flow-field.ts'
+export { FLOW, FLOW_TEXEL, flowAt }
 
-const fract = (x: number) => x - Math.floor(x)
-// mHash and mValue (src/look/shaders/meadow.glsl)
-function mHash(x: number, y: number): number {
-  let a = fract(x * 0.1031)
-  let b = fract(y * 0.103)
-  let c = fract(x * 0.0973)
-  const d = a * (b + 33.33) + b * (c + 33.33) + c * (a + 33.33)
-  a += d
-  b += d
-  c += d
-  return fract((a + b) * c)
-}
-// (h: the lattice's hash, mHash by default; the comb's wraps it to tile)
-function mValue(x: number, y: number, h: (i: number, j: number) => number = mHash): number {
-  const i = Math.floor(x)
-  const j = Math.floor(y)
-  let u = x - i
-  let v = y - j
-  u = u * u * (3 - 2 * u)
-  v = v * v * (3 - 2 * v)
-  const a = h(i, j)
-  const b = h(i + 1, j)
-  const c = h(i, j + 1)
-  const e = h(i + 1, j + 1)
-  return (a + (b - a) * u) * (1 - v) + (c + (e - c) * u) * v
-}
-// the field's numbers, one home: this and the GLSL (flowDefines) both read them. scale: its patches (m, a patch combed
-// one way over 30-60 m, as the references); warp, warpAmt: the domain warp's scale and reach; oct2, oct2K: the second
-// octave's weight and frequency; turns: how far the angle wanders (rad); lieScale, lieLo, lieHi: how far it lies over
-export const FLOW = {
-  scale: 70,
-  warp: 120,
-  warpAmt: 0.9,
-  oct2: 0.2,
-  oct2K: 2.1,
-  turns: 7.5,
-  lieScale: 19,
-  lieLo: 0.2,
-  lieHi: 0.8,
-}
 export const flowDefines = (): string[] =>
   [
     ['SCALE', FLOW.scale],
@@ -62,16 +23,7 @@ export const flowDefines = (): string[] =>
     ['LIE_LO', FLOW.lieLo],
     ['LIE_HI', FLOW.lieHi],
   ].map(([k, v]) => `#define FLOW_${k} ${(v as number).toFixed(4)}`)
-export function flowAt(x: number, z: number): [number, number, number] {
-  const F = FLOW
-  const qx = x / F.scale + (mValue(x / F.warp, z / F.warp) - 0.5) * F.warpAmt
-  const qz = z / F.scale + (mValue(x / F.warp + 19, z / F.warp + 19) - 0.5) * F.warpAmt
-  const a = (mValue(qx, qz) * (1 - F.oct2) + mValue(qx * F.oct2K + 5, qz * F.oct2K + 5) * F.oct2) * F.turns
-  return [Math.cos(a), Math.sin(a), sstep(F.lieLo, F.lieHi, mValue(x / F.lieScale + 31, z / F.lieScale + 31))]
-}
 
-// FLOW_TEXEL m texels over the tile: RG the lean (×0.5 + 0.5), B how far it lies over; bilinear
-export const FLOW_TEXEL = 2
 // the strokes' noise: value noise of period COMB_PERIOD lattice cells, COMB_RES texels a cell, tiling (R one octave, G
 // another offset), read stretched along the flow (combedBrush)
 export const COMB_PERIOD = 32
@@ -86,20 +38,7 @@ export function buildFlow(scene: Scene): FlowTextures {
   const t0 = performance.now()
   const TILE = D.spec.tile
   const n = Math.round(TILE / FLOW_TEXEL)
-  const f = new Uint8Array(n * n * 4)
-  for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) {
-      const [dx, dz, lie] = flowAt(
-        TILE_O.x + (i + 0.5) * FLOW_TEXEL - TILE / 2,
-        TILE_O.y + (j + 0.5) * FLOW_TEXEL - TILE / 2,
-      )
-      const k = (j * n + i) * 4
-      f[k] = Math.round((dx * 0.5 + 0.5) * 255)
-      f[k + 1] = Math.round((dz * 0.5 + 0.5) * 255)
-      f[k + 2] = Math.round(lie * 255)
-      f[k + 3] = 255
-    }
-  }
+  const f = flowBytes(TILE_O.x, TILE_O.y, TILE)
   const flow = new RawTexture(f, n, n, Constants.TEXTUREFORMAT_RGBA, scene, false, false, Texture.BILINEAR_SAMPLINGMODE)
   flow.wrapU = flow.wrapV = Texture.CLAMP_ADDRESSMODE
   // the comb's noise, tiling: the lattice wraps at COMB_PERIOD
