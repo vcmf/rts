@@ -19,6 +19,7 @@ html,body{height:100%;background:#0d0e10;overflow:hidden;font-family:ui-monospac
 .tg.on{background:var(--ink);color:#111;border-color:var(--ink)}
 input[type=range]{width:100px;accent-color:var(--accent)}
 select{font:inherit;font-size:10px}
+#panel select{background:#111;color:#ddd;border:1px solid #444;border-radius:5px;font:inherit;padding:3px}
 .hint{color:var(--mute);font-size:9px;line-height:1.5}
 #fps{position:fixed;right:14px;top:12px;font-size:10px;color:var(--mute)}
 #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(10,10,12,.6);font-size:13px;letter-spacing:.12em;text-transform:uppercase;pointer-events:none}
@@ -47,7 +48,8 @@ select{font:inherit;font-size:10px}
   <div class="row"><span>Bloom</span><button class="tg on" data-k="bloom">On</button></div>
   <div class="row"><span>Depth of field <em style="color:var(--mute);font-style:normal">(gameplay setting)</em></span><button class="tg on" data-k="dof">On</button></div>
   <div class="row"><span>Blur strength</span><input id="dofamt" type="range" min="0.2" max="2" step="0.05" value="1"></div>
-  <div class="row"><span>Render scale</span><select id="res" style="background:#111;color:#ddd;border:1px solid #444;border-radius:5px;font:inherit;padding:3px"><option value="0" selected>Auto</option><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.5">1.5× (Retina)</option></select></div>
+  <div class="row"><span>Grass detail</span><select id="grassdetail"><option value="full">Full</option><option value="balanced" selected>Balanced</option></select></div>
+  <div class="row"><span>Render scale</span><select id="res"><option value="0" selected>Auto</option><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.5">1.5× (Retina)</option></select></div>
   <div class="hint">arrows/WASD move · Q E turn · swipe moves, pinch or wheel zooms · drag orbits · H hides this<br>drop a PNG (e.g. from Procreate) to replace the grain</div>
 </div>
 

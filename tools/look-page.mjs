@@ -28,7 +28,8 @@ export const prepSteps = () => [
 ]
 
 // a camera [name, alpha, beta, radius, target, season], checked against the page's limits (a clamped view would be
-// rendered somewhere else, silently), then every material and render target made ready and 3 frames rendered; after
+// rendered somewhere else, silently), then every material and render target made ready, the grass detail settled
+// (its program compiled and in force: __look.meadowSettled, src/look/main.ts) and 3 frames rendered; after
 // them the camera's radius must still be the one asked for (the closest zooms are held out over high ground,
 // decision 0051: a view there would measure another radius, so it fails and its target must move)
 export const viewStep = ([name, a, b, r, t, season]) => [
@@ -40,6 +41,8 @@ export const viewStep = ([name, a, b, r, t, season]) => [
     throw new Error("camera ${name} is outside the page's camera limits or play area")
   c.alpha = ${a}; c.beta = ${b}; c.radius = ${r}; __proto.zoom?.set(${r}); c.target.set(...t); __proto.S.season = ${season}
   await Promise.race([__proto.scene.whenReadyAsync(true), new Promise((_, no) => setTimeout(() => no(new Error("scene never ready at camera ${name} (120 s)")), 120000))])
+  for (let i = 0; i < 600 && window.__look?.meadowSettled?.() === false; i++) { __proto.scene.render(); await new Promise(r => setTimeout(r, 16)) }
+  if (window.__look?.meadowSettled?.() === false) throw new Error("the grass detail never settled at camera ${name} (its program never compiled?)")
   for (let i = 0; i < 3; i++) __proto.scene.render()
   if (Math.abs(c.radius - ${r}) > 1e-6) throw new Error("camera ${name}: the zoom was held out to " + c.radius.toFixed(2) + " m over high ground, not ${r} m (decision 0051): move its target")
   return "${name}" })()`,

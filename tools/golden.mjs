@@ -10,8 +10,10 @@
 //
 // The page contract: window.__proto = { scene, camera (ArcRotateCamera), S (state with .t, the clock, and .season),
 // play (the half-size of the square the camera focus is clamped to) },
-// and ?frozen keeps S.t at 0 (checked: a page that ignores it fails). The cameras are this tool's own, not
-// render-check.js's (those aim at the river); each must lie inside the page's camera limits (checked).
+// and ?frozen keeps S.t at 0 (checked: a page that ignores it fails). Both pages render with ?grassdetail=full unless
+// their URL sets it (withFullGrass: Full's meadow, what every build before the grass detail drew). The cameras are
+// this tool's own, not render-check.js's (those aim at the river); each must lie inside the page's camera limits
+// (checked).
 // Writes <cam>.base.png, <cam>.cand.png, <cam>.diff.png to outDir and prints a table; exits 1 when any region
 // is over its tolerance. Software GL (SwiftShader) via tools/shot.mjs: deterministic on one machine.
 import { execFileSync } from 'node:child_process'
@@ -84,10 +86,19 @@ const cleanup = () => {
   }
 }
 
+/** A page's URL with ?grassdetail=full unless it sets the grass detail itself: the goldens keep covering Full's
+ * meadow program (the default, Balanced, thins it up close, inside the close camera's zoom), and compare exactly with
+ * builds from before the grass detail (decisions 0095, 0097); a page without it ignores the parameter */
+export function withFullGrass(url) {
+  const u = new URL(url)
+  if (!u.searchParams.has('grassdetail')) u.searchParams.set('grassdetail', 'full')
+  return u.href
+}
+
 function render(url, dir, tag) {
   const steps = prepSteps()
   for (const cam of CAMS) steps.push(viewStep(cam), ['shot', `${cam[0]}.${tag}`])
-  shoot(url, dir, steps, W, H)
+  shoot(withFullGrass(url), dir, steps, W, H)
 }
 
 function compare(a, b) {
