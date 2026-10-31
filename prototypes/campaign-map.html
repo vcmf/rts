@@ -220,6 +220,7 @@ const WOOD_FROM = param('woodfrom', 0.6, 0.05, 0.95);
 // the water, sunk into the model as stepped basins (the owner's Black Sea model): the lake floor first SINK m of the
 // shape below the shore, then a step of STEP m every STEP_KM from the shore, at most BANDS steps (?steps=0: one level)
 const SINK = 70;
+const SINK_WIDTH_M = 500;
 const STEP = 45;
 const STEP_KM = param('stepkm', 0.7, 0.1, 5);
 const BANDS = Math.round(param('steps', 6, 0, 12));
@@ -561,11 +562,13 @@ function lakeDistance() {
   return blur(raw, NX, NZ, 3);
 }
 
-/** The lakes sunk into the shape: SINK m below the shore, eased in over the shore's half cell (steps per pixel). */
+/**
+ * The lakes sunk into the shape: SINK m below the shore, eased in over SINK_WIDTH_M across it, as the tiles are
+ * (tools/campaign-tiles.ts: over one cell, the 100 m tiles drew a staircase along the shore).
+ */
 function sinkLakes(shape, dist) {
   for (let k = 0; k < shape.length; k++) {
-    const cells = (dist[k] * 1000) / CELL;
-    shape[k] -= SINK * clamp(cells + 0.5, 0, 1);
+    shape[k] -= SINK * clamp((dist[k] * 1000) / SINK_WIDTH_M + 0.5, 0, 1);
   }
   return shape;
 }
@@ -1610,7 +1613,9 @@ function tilesMatch(meta) {
   const sun = same(p.sun, SUN_EL) && same(p.az, SUN_AZ) && same(p.soft, SUN_R);
   const frame = same((meta.nx - 1) * meta.cell, 2 * halfX) && same((meta.nz - 1) * meta.cell, 2 * halfZ);
   // three bytes a node: the sun, the sky and the tree cover (older tiles had two), smoothed as the theatre's
-  return params && sun && frame && p.bytes === 3 && p.woodBoxM === T.forestBoxM;
+  // the lakes sunk over the same width as this page's
+  const shore = p.sinkWidthM === SINK_WIDTH_M;
+  return params && sun && frame && shore && p.bytes === 3 && p.woodBoxM === T.forestBoxM;
 }
 
 /**

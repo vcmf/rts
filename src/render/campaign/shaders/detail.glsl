@@ -1,4 +1,4 @@
-// The campaign map's detail area (src/render/campaign/ring.ts, docs/plans/active/k2c-stream.md), shared by the print
+// The campaign map's detail area (src/render/campaign/ring.ts, docs/plans/done/k2c-stream.md), shared by the print
 // (./print.frag) and the patch near the camera (./patch.vert), which name it as the include campaignDetail: the 100 m tiles in
 // a ring of slots around the camera, its textures wrapping (node k of the close level at k modulo the area), and a
 // table of the tile each slot holds; a tile fades in as it arrives, and toward a neighbour not yet drawn, in the light

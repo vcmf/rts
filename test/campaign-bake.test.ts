@@ -1,6 +1,6 @@
 // The campaign map's bake (src/render/campaign/bake.ts): the box mean, the lakes' signed distance and the baked light.
 import { describe, it, expect } from 'vitest'
-import { bakeLightRows, boxMean, despiked, lakeDistance, type Grid } from '../src/render/campaign/bake.ts'
+import { bakeLightRows, boxMean, despiked, lakeDistance, sinkLakes, type Grid } from '../src/render/campaign/bake.ts'
 
 /** The box mean computed the slow way: the mean of the nodes within r, clamped to the grid. */
 function slowMean(h: number[], nx: number, nz: number, r: number): number[] {
@@ -81,5 +81,25 @@ describe('the bake', () => {
       bakeLightRows(shape, g, { el: 20, az: 55, size: 2.5 }, bands, j0, j1)
     }
     expect(bands).toEqual(whole)
+  })
+})
+
+describe('the lakes sunk', () => {
+  it('drop the same over the same metres from the shore at every level, given the same distances', () => {
+    // the distance to the shore in km at a node (positive in the water): a 100 m level and a 250 m one
+    const fine = Float32Array.from({ length: 11 }, (_, k) => (k - 5) * 0.1)
+    const coarse = Float32Array.from({ length: 5 }, (_, k) => (k - 2) * 0.25)
+    // over 500 m, as the tiles are baked (tools/campaign-tiles.ts)
+    const sunkFine = sinkLakes(new Float32Array(11), fine, 500, 70)
+    const sunkCoarse = sinkLakes(new Float32Array(5), coarse, 500, 70)
+    // dry 250 m and more inland, full 250 m and more out, half at the shore
+    expect(sunkFine[2]).toBe(0)
+    expect(sunkFine[5]).toBeCloseTo(-35, 4)
+    expect(sunkFine[8]).toBeCloseTo(-70, 4)
+    // at 100 m the drop takes five nodes: a node 100 m out is sunk part of the way
+    expect(sunkFine[6]).toBeCloseTo(-49, 4)
+    // the 250 m level's nodes at 0 and 250 m out fall where the 100 m level's would
+    expect(sunkCoarse[2]).toBeCloseTo(sunkFine[5], 4)
+    expect(sunkCoarse[3]).toBeCloseTo(-70, 4)
   })
 })

@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-31
 ---
 
@@ -141,8 +141,24 @@ detail reads and the far mesh's height through two GLSL files put in by the view
 ## Open questions
 
 - A denser mesh far out too (a mesh in rings around the camera) if Europe's far views need it.
-- Up close, a lake's shore in the light shows a saw-tooth, from K2b on, with or without the patch (seen at the
-  frame's east edge, 30 to 40 km): the bake sinks a lake 70 m below its shore across one cell of the level, so at
-  100 m the drop is a staircase along the shore, which the 100 m slope draws (checked: the 100 m slope left out by
-  the water, the teeth go). The fix is the bake's: the sinking eased over a fixed width in metres, as wide as the far
-  level's cell or more, then the tiles baked again.
+- Up close, a lake's shore in the light showed a saw-tooth, from K2b on, with or without the patch (seen at the
+  frame's east edge, 30 to 40 km): the bake sank a lake 70 m below its shore across one cell of the level, so at
+  100 m the drop was a staircase along the shore, which the 100 m slope drew (checked: the 100 m slope left out by
+  the water, the teeth went). Fixed after K2c (the owner, 2026-10-31): below.
+
+## Follow-up: the lake shore
+
+`sinkLakes` (`src/render/campaign/bake.ts`) eases the drop over a fixed width in metres at every level, 500 m
+(`tools/campaign-tiles.ts`, `sinkWidthM` in the manifest), instead of one cell of the level. Tried at 250 m (the far
+level's cell): the teeth faint but still there along a shore at 30 km; at 500 m they are gone, the land's edge at the
+shore a little softer up close (the water's own steps, drawn per pixel, as crisp). Tested: given the same distances,
+the same drop at 100 m and 250 m (`test/campaign-bake.test.ts`). The tiles baked again (78 s); the prototype sinks
+its own far level over the same 500 m and uses only tiles sunk so (`sinkWidthM` in its meta file); the manifest's
+format 4, so the page refuses a bake from before. This fix was written without a plan of its own first (the workflow
+asks for one): this section is its record.
+
+Its review round (`/code-review high`): no severe finding; the above came of it (the format, the prototype, the test
+at 500 m, a comment that called 500 m the far level's cell). Left, as trade-offs: the land dips up to 35 m for 250 m
+inland of a shore, and a lake narrower than about 500 m (its blurred distance never 250 m in) is not sunk the whole
+70 m; and the two levels still put a shore a little apart, their lakes' distance blurred over a whole number of their
+own cells and the shore placed by their nodes (from K2a on, up to 14 m of sinking apart where the levels meet).

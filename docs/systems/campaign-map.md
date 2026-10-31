@@ -19,7 +19,7 @@ no Node. Renderer data, not the campaign's rules: plain float, outside the exact
 |---|---|---|
 | Heights | `despiked` | each node clamped to the range of its eight neighbours (the terrain tiles' single-node spikes drew dark dots) |
 | Shape | `buildShape` | the large forms kept (a 3 km blur), detail scaled by `fine`, mountain regions lifted, the whole raised `vert` times, flattened over 12 km to the frame's edge |
-| Lakes | `lakeDistance`, `sinkLakes` | the signed distance to the shores, blurred; the lakes sunk 70 m below them |
+| Lakes | `lakeDistance`, `sinkLakes` | the signed distance to the shores, blurred; the lakes sunk 70 m below them, eased over 500 m across the shore at every level (over one cell, the 100 m level drew a staircase along the shore) |
 | Light | `bakeLightRows` | the sun's soft shadow (a ray toward a sun disc 2.5° across, to about 60 km) and the sky's occlusion (the horizon in eight directions, to 9 km), a byte each, by bands of rows |
 | Forests | `smoothCover`, `resampleField` | the tree cover smoothed by three box means of 500 m either side (copses fade, large forests stay), made once at 100 m and resampled to each level |
 
@@ -108,7 +108,7 @@ Tested in `test/campaign-page.test.ts`, `test/campaign-ring.test.ts` and `test/c
 mean of 1 to 2 levels a channel at four views; 2.7 to 5.3 ms a frame at 1080p on test machine A, 2.7 to 6.7 ms at 4K
 with FSR 1; ready in 2.4 s (the prototype 6.5 s, 5.5 s of it its bake).
 
-Panning up close (K2c, `docs/plans/active/k2c-stream.md`): a mean of about 3 ms a frame and the 95th centile about
+Panning up close (K2c, `docs/plans/done/k2c-stream.md`): a mean of about 3 ms a frame and the 95th centile about
 4.5 ms at 1080p on test machine A, the patch drawn (single frames of 7 to 13 ms when the GPU is shared), where the
 refilling window of K2b took 80 to 100 ms.
 
@@ -121,7 +121,5 @@ comments avoid both.
 - One light model for both map views (decision 0058): the battle map's lit view bakes its own relief
   (`src/render/lit/bake.ts`), at another scale; the campaign page has its own renderer (K2b), the question settled in
   K3.
-- Up close, a lake's shore shows a saw-tooth in the light, since K2b: `sinkLakes` drops a lake 70 m across one cell of
-  the level, a staircase along the shore at 100 m (fix: ease it over a fixed width in metres, and bake again).
 - A smaller format (a predictor for the light planes, another codec), if the size matters once the whole of Europe
   is baked (K6).

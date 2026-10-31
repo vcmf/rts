@@ -1,4 +1,4 @@
-// The campaign map's patch near the camera (src/render/campaign/patch.ts, docs/plans/active/k2c-stream.md K2c2): where
+// The campaign map's patch near the camera (src/render/campaign/patch.ts, docs/plans/done/k2c-stream.md K2c2): where
 // it lies, and the far mesh's own height, which its edge takes so the two meet without a crack.
 import { describe, it, expect } from 'vitest'
 import { farMeshHeight, patchRamp, patchStart } from '../src/render/campaign/patch.ts'

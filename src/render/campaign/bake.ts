@@ -193,9 +193,13 @@ export function lakeDistance(rings: Pt[][], g: Grid, blurM: number): Float32Arra
   return blur(raw, nx, nz, Math.round(blurM / cell))
 }
 
-/** The lakes sunk into the shape (in place): `sink` m below the shore, eased in over the shore's half cell. */
-export function sinkLakes(shape: Float32Array, dist: Float32Array, cell: number, sink: number): Float32Array {
-  for (let k = 0; k < shape.length; k++) shape[k] -= sink * clamp((dist[k] * 1000) / cell + 0.5, 0, 1)
+/**
+ * The lakes sunk into the shape (in place): `sink` m below the shore, eased in over `widthM` metres across it (from
+ * half of it on land to half in the water). The same width at every level: across one cell of a fine level, the drop
+ * would follow the nodes and draw a staircase along the shore in the light.
+ */
+export function sinkLakes(shape: Float32Array, dist: Float32Array, widthM: number, sink: number): Float32Array {
+  for (let k = 0; k < shape.length; k++) shape[k] -= sink * clamp((dist[k] * 1000) / widthM + 0.5, 0, 1)
   return shape
 }
 

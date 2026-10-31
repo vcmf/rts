@@ -1,4 +1,4 @@
-// The close zoom's ring of tiles (src/render/campaign/ring.ts, docs/plans/active/k2c-stream.md): a tile's slot, the
+// The close zoom's ring of tiles (src/render/campaign/ring.ts, docs/plans/done/k2c-stream.md): a tile's slot, the
 // area's place and tiles, a move's slots, the tiles to load, the slots' table, the uploads waiting.
 import { describe, it, expect } from 'vitest'
 import {

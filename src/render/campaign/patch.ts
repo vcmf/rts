@@ -1,4 +1,4 @@
-// The campaign map's patch near the camera (docs/plans/active/k2c-stream.md, K2c2): a mesh of vertices 100 m apart that
+// The campaign map's patch near the camera (docs/plans/done/k2c-stream.md, K2c2): a mesh of vertices 100 m apart that
 // follows the camera's target up close, raised by the 100 m shape, on top of the far mesh (a vertex every 500 m),
 // whose vertices inside it drop away. At its edge the patch takes the far mesh's own height, so the two meet without a
 // crack. Pure: where the patch lies, and the far mesh's height the edge must match; the shaders (./shaders/patch.vert,
