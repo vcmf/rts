@@ -21,7 +21,8 @@ the dither's cells: the owner saw a dotted speckle over the crowns (2026-10-31).
 We will fade the far trees' swap over time: each tree keeps a side (its cards nearer than 220 m, its crown mesh
 farther, changed only 5 m past the line), and when it changes side it dissolves into the other over 0.3 s. At rest
 every tree is wholly one or the other; the dither shows only while a fade runs. A frozen clock (`?frozen`), the first
-pack and a tree coming back into view snap.
+pack and a tree coming back into view snap; a frozen clock without the hysteresis, so the tools' views do not
+depend on the camera's path.
 
 It differs from the figures' cross-fade (decision 0066, `src/look/lod-fade.ts`), which stays a band, by the figure's
 height on screen: there each man fades over his own short share of the band, so few men are half drawn at once, the
@@ -30,8 +31,10 @@ camera rests at the zooms where the band sat, so any tree left half dithered at 
 
 ## Consequences
 
-- No speckle on the crowns at rest; at rest fewer pixels drawn than before (the band's trees drew both meshes).
+- No speckle on the crowns at rest. Estimated, not measured: at rest fewer pixels drawn than before (the band's trees
+  drew both meshes, each discarding half), and on the CPU a few operations a far tree in the frames that already
+  re-pack, plus up to 0.3 s of steps (fades uploaded alone) after the camera stops.
 - The swap at 220 m shows as a 0.3 s dissolve while the camera moves; if it reads as a pop, the crown mesh's look is
   what to bring nearer the cards'.
-- The culler re-packs a group every frame while one of its fades runs; a tree's side depends a little on the camera's
-  path (the hysteresis), so the tools' views use the frozen clock.
+- A tree's side depends a little on the camera's path (the hysteresis) on a live page; the tools' views use the
+  frozen clock, which has none.

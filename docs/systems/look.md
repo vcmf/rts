@@ -458,15 +458,18 @@ crowns as cards.
   bushes were; the woods every item, oak, beech, lime and birch, about one wood in four mostly spruce. **Culled per
   instance:** one mesh a model holds every far instance (no box culls a ring); just before the game camera draws, the
   instances in its frustum (a sphere holding the crown and its cards) are packed to the front of the buffers: nearer
-  than `CARDS_M` (220 m) with their cards, farther with the model's own crown mesh (`src/look/tree-fade.ts`: a tree's
-  side changes only past `HYST_M`, 5 m, either side). A tree that changes side draws both for `FADE_S` (0.3 s), the
-  cards giving way to the crown pixel by pixel (a dither offset per tree by its tint, the instance's `aFade`): no pop
-  as a tree crosses it; a group with a fade running re-packs every frame until it has run. The fade is by time, not
-  by distance (decision 0098: a band of distance left the trees in it half of each at rest, and as the two looks
-  differ the dither showed as a dotted speckle over the crowns, `docs/plans/active/crown-speckle.md`). A tree out of
-  view does no work and snaps to its side (with the hysteresis) when it comes back, as does every tree on the first
-  pack and under a frozen clock (`?frozen`, the tools' views); a tree drawn with its cards at every distance (past
-  the leaf fall) keeps its state at its cards, so a later swap starts from them. The crown mesh is lit as the cards are (`FAR_CROWN` in
+  than `CARDS_M` with their cards, farther with the model's own crown mesh (`src/look/tree-fade.ts`, its constants:
+  a tree's side changes only past `HYST_M` either side). A tree that changes side draws both for `FADE_S`, the cards
+  giving way to the crown pixel by pixel (a dither offset per tree by its tint, the instance's `aFade`): no pop as a
+  tree crosses it. The fade is by time, not by distance (decision 0098: a band of distance left the trees in it half
+  of each at rest, and as the two looks differ the dither showed as a dotted speckle over the crowns,
+  `docs/plans/active/crown-speckle.md`). A group is re-packed when the view or the season changes; while the view
+  holds, a group with a fade still running (a tree's fade short of its side) steps it once an engine frame, uploading
+  only the fades, and re-packs on the frames a fade leaves or reaches either end. A tree out of view does no work and
+  snaps to its side (with the hysteresis) when it comes back, as does every tree on the first pack; under a frozen
+  clock (`?frozen`, the tools' views; `frameStep` in `src/look/spec.ts`) every tree snaps to its side by `CARDS_M`
+  alone, so a tool's view does not depend on the camera's path. A tree drawn with its cards at every distance (past
+  the leaf fall) fades into them, and out of them when the season comes back. The crown mesh is lit as the cards are (`FAR_CROWN` in
   `nature.frag`: each vertex its clump's ellipsoid, the soft ramp, the crown's own shade along the sun, the darker
   core), with the cards' volume light only; its bark draws only once its fade has run, where no trunks mesh does. Without
   cards the crown mesh takes every distance; a deciduous far tree past the leaf fall's start keeps its cards at every

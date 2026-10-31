@@ -138,6 +138,9 @@ scene.skipPointerMovePicking = true
 // ?soft=off: the shadows before the soft-shadow plan (docs/plans/done/soft-shadows.md); ?penumbra: metres of edge
 // radius per metre between a shadow and its caster
 const params = new URLSearchParams(location.search)
+// ?frozen: the page's clock frozen (golden screenshots, tools/golden.mjs, and the tools' views): the clock stays at 0,
+// and what eases settles at once (the camera's hold, the far trees' fades: frameStep in src/look/spec.ts)
+const FROZEN = params.has('frozen')
 const softParam = params.get('soft')
 const penumbraParam = params.get('penumbra')
 // a switch with no value (?rt16, ?nowide): present, or present as 1; any other value throws
@@ -442,7 +445,7 @@ const nature = buildNature(
   treeSet.has('one'),
   treeSet.has('gen') ? { season: season0, clumpVolume: params.get('clumpvol') !== 'off' } : null,
   onMap ? look.trees : null,
-  params.has('frozen'), // a frozen clock: the far trees' fades snap (src/look/tree-fade.ts)
+  FROZEN,
 )
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 {
@@ -562,7 +565,7 @@ const camera = (() => {
       highest: (x, z, reach) => Math.max(nearTile(x, z, reach), nearFar(x, z, reach)),
       follow: new FocusFollow(worldGround.focus),
     },
-    new URLSearchParams(location.search).has('frozen'),
+    FROZEN,
   )
 })()
 // the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
@@ -1257,8 +1260,6 @@ addEventListener('drop', e => {
 
 /* ---------- loop ---------- */
 const fpsEl = byId('fps')
-// golden screenshots (tools/golden.mjs): the clock stays at 0
-const FROZEN = new URLSearchParams(location.search).has('frozen')
 // sun colour follows the season: warm gold in summer and autumn, pale gold in winter (keeps snow white, not yellow)
 const SUNCOL = MOOD.sun.clone()
 // the mood's light by the season (seasonLight, src/look/mood.ts), recomputed only when the season moves; the clear
