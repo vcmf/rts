@@ -166,7 +166,7 @@ once (its map, catalogue and heightfield sent from the built page's assets) and 
 the compiler's window build (`src/look/world/window-build.ts`, shared with `tools/build-look-data.ts`); when the focus
 comes within 200 m of the tile's edge the tile centred on it (on the 200 m grid, a whole tile inside the map:
 `tileWanted`) is asked for and swapped in by `retile`. Not on a frozen page nor under `?follow=0`;
-`__look.follow` its state (the map's compile, the last build and swap, ms). A move's arithmetic is trimmed (G3c-1, `docs/plans/active/g3c-the-move-spread.md`): the relief's tone made again only
+`__look.follow` its state (the map's compile, the last build and swap, ms). A move's arithmetic is trimmed (G3c-1, `docs/plans/done/g3c-the-move-spread.md`): the relief's tone made again only
 over the last and new tiles' squares (`reliefPatch`), the worker sending a tile's per-frame cover and flow texels (the
 flow's texture written in place); each part's time in `__look.moveParts`. G3c-2: the meadow map's data from the worker too (`meadowMapData`; on a map world its rules are the cover's alone: `src/look/world/growth.ts`), the trees' generated models made once a page.
 
