@@ -7,6 +7,7 @@
 //   b-<time>-<pid>/l<level>/t-<i>-<j>.bin: one tile of a build (src/render/campaign/tiles.ts, the format)
 //   b-<time>-<pid>/fields.bin: the far level's fields, the lakes, the lines and the contours' heights
 //     (src/render/campaign/fields.ts)
+//   b-<time>-<pid>/labels.json: the towns, regions and named rivers the page letters (src/render/campaign/labels.ts)
 // Until the campaign page replaces the prototype (K2b), the 100 m level is also written as the prototype's tiles
 // (prototypes/campaign-map.html cannot fetch binary from file://), under scratch/campaign-tiles/:
 //   meta.js: window.CAMPAIGN_TILES = { cell, nx, nz, size, tilesX, tilesZ, scale, params, build }
@@ -55,6 +56,8 @@ import {
   type Tile,
 } from '../src/render/campaign/tiles.ts'
 import { packFields, quantise, type Plane } from '../src/render/campaign/fields.ts'
+import type { LabelsFile } from '../src/render/campaign/labels.ts'
+import { loadData, type Data } from './campaign-data.ts'
 import { commitBuild, liveBuild, pruneBuilds, startBuild, writeFlushed } from './campaign-builds.ts'
 import { frameGrid, projection, type Frame, type Pt } from './campaign-theatre-lib.ts'
 import { sampleGrid } from './terrarium.ts'
@@ -90,6 +93,10 @@ const SINK_WIDTH_M = 500
 // the level the fields are baked on (the far one, which spans the whole theatre in one texture), their file
 const FIELDS_LEVEL = 0
 const FIELDS_FILE = 'fields.bin'
+// the labels the page draws (src/render/campaign/labels.ts LabelsFile)
+const LABELS_FILE = 'labels.json'
+// the rivers' names as the map letters them (Natural Earth's are the local ones)
+const RIVER_NAMES: Record<string, string> = { Rhein: 'Rhine', Rhin: 'Rhine', Donau: 'Danube' }
 // the far level's fields (the prototype's): the lakes' mask, texels a cell (a page on a GPU whose textures are smaller
 // than the mask halves it); the lines' reach in cells either way, the rivers drawn (rank 6 or larger: Natural Earth's
 // scalerank, smaller is larger); the contours' heights blurred over cells; the Uint16 steps of the lakes' distance
@@ -128,7 +135,7 @@ interface Theatre {
   h: string
   lakes: number[][]
   roads: { kind: string; p: number[] }[]
-  rivers: { rank: number; p: number[] }[]
+  rivers: { name: string; rank: number; p: number[] }[]
   credit: string
 }
 
@@ -262,6 +269,37 @@ function fieldsOf(src: Sources, grid: Grid, heights: Float32Array, lakeD: Float3
   ]
 }
 
+/**
+ * The labels the page draws: the data file's towns (names, sizes, fortresses) and regions (names, angles), placed
+ * through the theatre's projection (as tools/campaign-theatre.ts placed them for the roads: from the data file itself,
+ * so a town moved or a region renamed there is lettered where it now is), and the theatre's named rivers, their points
+ * thinned to every other one (the last kept), as the prototype projects them for their names. Throws when the data
+ * file's frame is not the theatre's.
+ */
+function labelsOf(t: Theatre, data: Data, proj: ReturnType<typeof projection>): LabelsFile {
+  const same = (['lat0', 'lon0', 'halfX', 'halfZ'] as const).every(k => data.frame[k] === t.frame[k])
+  if (!same) throw new Error("the data file's frame is not the theatre's: run tools/campaign-theatre.ts")
+  const towns = data.towns.map(town => {
+    const [x, z] = proj.forward(town.lat, town.lon)
+    return { id: town.id, name: town.name, size: town.size, fort: town.fort ?? false, x, z }
+  })
+  const regions = data.regions.map(r => {
+    const [x, z] = proj.forward(r.lat, r.lon)
+    return { name: r.name, angle: r.angle, x, z }
+  })
+  // the rivers the page draws (rank RIVER_RANK or larger), not a name where no river is
+  const rivers = t.rivers
+    .filter(r => r.name && r.rank <= RIVER_RANK)
+    .map(r => {
+      const p: number[] = []
+      for (let i = 0; i < r.p.length; i += 4) p.push(r.p[i], r.p[i + 1])
+      const n = r.p.length
+      if (n >= 2 && (n - 2) % 4 !== 0) p.push(r.p[n - 2], r.p[n - 1])
+      return { name: RIVER_NAMES[r.name] ?? r.name, rank: r.rank, p }
+    })
+  return { towns, regions, rivers }
+}
+
 /** The tiles of a level, cut from its bake row by row, their shape above BASE. */
 function* tilesOf(bake: LevelBake, level: number): Generator<Tile> {
   const { tilesX, tilesZ } = levelLayout(bake.grid.nx, bake.grid.nz, SIZE)
@@ -368,6 +406,11 @@ async function main() {
   const out = path.resolve(process.argv[3] ?? 'scratch/campaign')
   const prototypeOut = path.resolve(process.argv[4] ?? 'scratch/campaign-tiles')
   const t = loadTheatre(theatreFile)
+  // the data file read and checked first: a bad one stops the run before minutes of baking, not after
+  const data = loadData()
+  if (!(['lat0', 'lon0', 'halfX', 'halfZ'] as const).every(k => data.frame[k] === t.frame[k])) {
+    throw new Error("the data file's frame is not the theatre's: run tools/campaign-theatre.ts")
+  }
   const proj = projection(t.frame.lat0, t.frame.lon0)
   // the level the fields lie on must be one of the levels: the manifest names their file
   if (!LEVELS[FIELDS_LEVEL]) throw new Error(`the fields' level ${FIELDS_LEVEL} is not one of the ${LEVELS.length}`)
@@ -403,6 +446,9 @@ async function main() {
       prototypeMeta = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams(), build: prototypeBuild }
     }
   }
+  const labels = labelsOf(t, data, proj)
+  await writeFlushed(path.join(out, build, LABELS_FILE), JSON.stringify(labels))
+  console.log(`labels: ${labels.towns.length} towns, ${labels.regions.length} regions, ${labels.rivers.length} rivers`)
   const manifest: Manifest = {
     format: MANIFEST_FORMAT,
     build,
@@ -410,6 +456,7 @@ async function main() {
     params: params(src.low),
     levels,
     fields: { level: FIELDS_LEVEL, path: `${build}/${FIELDS_FILE}` },
+    labels: `${build}/${LABELS_FILE}`,
     credit: t.credit,
   }
   // the builds replaced, kept for a page still reading them

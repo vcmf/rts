@@ -66,6 +66,7 @@ const manifest = (): Manifest => ({
   params: { sunEl: 20, sunAz: 55, lineReach: 6 },
   levels: [level],
   fields: { level: 0, path: 'b-1-2/fields.bin' },
+  labels: 'b-1-2/labels.json',
   credit: 'test',
 })
 
@@ -75,7 +76,7 @@ describe('the manifest', () => {
   })
 
   it('is refused in another format, with a level off the frame, or fields on no level', () => {
-    expect(() => readManifest({ ...manifest(), format: 3 })).toThrow(/format is 3, this page reads 4/)
+    expect(() => readManifest({ ...manifest(), format: 4 })).toThrow(/format is 4, this page reads 5/)
     expect(() => readManifest({ ...manifest(), levels: [{ ...level, nx: 6 }] })).toThrow(/level 0 does not span/)
     expect(() => readManifest({ ...manifest(), fields: { level: 1, path: 'x' } })).toThrow(/fields lie on level 1/)
     expect(() => readManifest(null)).toThrow(/not an object/)

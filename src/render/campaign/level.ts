@@ -26,8 +26,8 @@ export function readManifest(json: unknown): Manifest {
       `the manifest's format is ${m.format}, this page reads ${MANIFEST_FORMAT}: run tools/campaign-tiles.ts`,
     )
   }
-  if (!m.frame || !Array.isArray(m.levels) || !m.levels.length || !m.fields || !m.params) {
-    throw new Error('the manifest has no frame, levels, fields or parameters')
+  if (!m.frame || !Array.isArray(m.levels) || !m.levels.length || !m.fields || !m.params || !m.labels) {
+    throw new Error('the manifest has no frame, levels, fields, labels or parameters')
   }
   for (const [k, level] of m.levels.entries()) {
     const spans = (level.nx - 1) * level.cell === 2 * m.frame.halfX && (level.nz - 1) * level.cell === 2 * m.frame.halfZ

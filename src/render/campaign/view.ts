@@ -207,6 +207,8 @@ interface Detail {
   table: SlotTable
   texT: RawTexture
   tableChanged: boolean
+  // the tile written in each slot (the slots' table on the CPU, for the heights), by slot
+  written: (Tile | null)[]
   // each slot's fade-in, 0 to 1 as its tile is first drawn, and as bytes for the GPU
   fade: Float32Array
   fadeBytes: Uint8Array
@@ -257,13 +259,20 @@ export class CampaignMapView {
   private sun: [number, number, number] = [0, 1, 0]
   private viewNow: CampaignView = { x: 0, z: 0, dist: 1150 }
   private dirty = true
+  // the zoom, screen pixels a km, as the last dirty frame measured it
+  private ppk = 1
+  // whether the view or the surface as drawn changed since onViewChanged last ran
+  private surfaceMoved = false
   private running = false
   private lastFrame = performance.now()
   // the render loop's one function, so stop can name it
   private readonly frameLoop = () => this.frame()
   /** Called after each frame with its CPU time in ms (the page's fps meter). */
   onFrame: ((cpuMs: number) => void) | null = null
-  /** Called in the frame after the view changed, with the screen pixels a km at the screen's centre. */
+  /**
+   * Called in a frame where the view or the surface as drawn changed (the close tiles written or fading in), after
+   * both are set, with the screen pixels a km at the screen's centre.
+   */
   onViewChanged: ((pxPerKm: number) => void) | null = null
 
   /** Throws when the browser has no WebGL2. */
@@ -571,6 +580,7 @@ export class CampaignMapView {
       table,
       texT,
       tableChanged: false,
+      written: new Array<Tile | null>(AREA * AREA).fill(null),
       fade: new Float32Array(AREA * AREA).fill(1),
       fadeBytes,
       texF,
@@ -705,6 +715,7 @@ export class CampaignMapView {
     )
     changed.sort((a, b) => near.get(tileKey(a[1]))! - near.get(tileKey(b[1]))!)
     for (const [s, tile] of changed) {
+      d.written[s] = null
       d.table.set(s, null)
       d.tableChanged = true
       d.uploads.drop(s)
@@ -783,9 +794,10 @@ export class CampaignMapView {
    * Writes up to UPLOADS waiting tiles to the GPU, each into its slot's own rectangle of the two textures, and enters
    * them in the slots' table (sent when it changed).
    */
-  private uploadDetail() {
+  private uploadDetail(): boolean {
     const d = this.detail
-    if (!d) return
+    if (!d) return false
+    let written = false
     const { size } = d.level
     for (const [s, tile] of d.uploads.take(UPLOADS)) {
       // the scratch arrays are reused: each GL call has copied them when it returns
@@ -802,27 +814,31 @@ export class CampaignMapView {
       this.engine.updateTextureData(d.texL.getInternalTexture()!, light, x, z, size, size)
       d.table.set(s, [tile.column, tile.row])
       d.tableChanged = true
+      d.written[s] = tile
       d.fade[s] = 0
+      written = true
     }
     if (d.tableChanged) {
       d.texT.update(d.table.bytes)
       d.tableChanged = false
     }
+    return written
   }
 
   /** Advances the slots' fade-in by `ms` and sends it to the GPU while a slot is still fading. */
-  private fadeDetail(ms: number) {
+  private fadeDetail(ms: number): boolean {
     const d = this.detail
-    if (!d) return
+    if (!d) return false
     let changed = false
     for (let s = 0; s < d.fade.length; s++) {
       if (d.fade[s] >= 1) continue
       d.fade[s] = Math.min(1, d.fade[s] + ms / FADE_MS)
       changed = true
     }
-    if (!changed) return
+    if (!changed) return false
     for (let s = 0; s < d.fade.length; s++) d.fadeBytes[s] = Math.round(d.fade[s] * 255)
     d.texF.update(d.fadeBytes)
+    return true
   }
 
   /** The view: where the camera looks. */
@@ -865,12 +881,12 @@ export class CampaignMapView {
     const n = level.size
     const fx = (xKm + this.half.x) / (level.cell / 1000)
     const fz = (zKm + this.half.z) / (level.cell / 1000)
-    // the tiles written in their slots, by key, for the four nodes
+    // the tile written in the slot of node (i, j)'s tile, if it is that tile
     const written = (i: number, j: number): Tile | null => {
-      const t: TileAt = [Math.floor(i / n), Math.floor(j / n)]
-      const held = d.table.get(slotOf(t[0], t[1], AREA))
-      if (!held || held[0] !== t[0] || held[1] !== t[1]) return null
-      return d.cache.get(tileKey(t)) ?? null
+      const tx = Math.floor(i / n)
+      const tz = Math.floor(j / n)
+      const tile = d.written[slotOf(tx, tz, AREA)]
+      return tile && tile.column === tx && tile.row === tz ? tile : null
     }
     let missing = false
     const at = (i: number, j: number) => {
@@ -883,8 +899,7 @@ export class CampaignMapView {
     }
     const height = bilinear(at, fx, fz, level.nx, level.nz) / 1000
     if (missing) return null
-    const tile: TileAt = [Math.floor(fx / n), Math.floor(fz / n)]
-    return { height, fade: d.fade[slotOf(tile[0], tile[1], AREA)] }
+    return { height, fade: d.fade[slotOf(Math.floor(fx / n), Math.floor(fz / n), AREA)] }
   }
 
   /** The far mesh's height at a point (km), as drawn: its triangles (`farMeshHeight`). */
@@ -920,14 +935,59 @@ export class CampaignMapView {
     return rayGround(o, d, (x, z) => this.riseAt(x, z), this.highest, bottom) ?? groundHit(o, d)
   }
 
+  /** The camera's view and projection as a column-major array (Babylon's), as refreshTransform last set it. */
+  transform(): ArrayLike<number> {
+    return this.scene.getTransformMatrix().m
+  }
+
+  /** Brings the camera's view and projection up to date (clipOf reads them as they are, for speed). */
+  refreshTransform() {
+    this.scene.updateTransformMatrix(true)
+  }
+
+  /**
+   * A map point (km), at the height of the ground there as drawn, in clip space: [x, y, w] (w the depth, km), through
+   * the camera as refreshTransform (or a frame) last set it.
+   */
+  clipOf(x: number, z: number): [number, number, number] {
+    // read off the matrix (column vectors, Babylon's row-major array): no vectors made a point, the ink projects many
+    const m = this.scene.getTransformMatrix().m
+    const y = this.riseAt(x, z)
+    return [
+      x * m[0] + y * m[4] + z * m[8] + m[12],
+      x * m[1] + y * m[5] + z * m[9] + m[13],
+      x * m[3] + y * m[7] + z * m[11] + m[15],
+    ]
+  }
+
+  /** The canvas's size in CSS pixels. */
+  screenSize(): [number, number] {
+    const rect = this.engine.getRenderingCanvasClientRect()
+    return rect ? [rect.width, rect.height] : [1, 1]
+  }
+
+  /** The camera's place, km (x east, y up, z north). */
+  eye(): [number, number, number] {
+    const p = this.camera.position
+    return [p.x, p.y, p.z]
+  }
+
+  /** The ground's lowest and highest, km: a sunk lake's bed, and above the highest relief. */
+  heightRange(): [number, number] {
+    return [this.far ? this.far.level.base / 1000 : 0, this.highest]
+  }
+
+  /** How high the map stands at a point (km), as it is drawn (the far mesh, and the patch up close). */
+  heightAt(xKm: number, zKm: number): number {
+    return this.riseAt(xKm, zKm)
+  }
+
   /** A map point (km) on the screen, at the height of the ground there, in CSS pixels, or null behind the camera. */
   private toScreen(x: number, z: number): [number, number] | null {
-    const m = this.scene.getTransformMatrix()
-    const c = Vector4.TransformCoordinates(new Vector3(x, this.riseAt(x, z), z), m)
-    if (c.w <= 1e-6) return null
-    const canvas = this.engine.getRenderingCanvasClientRect()
-    if (!canvas) return null
-    return [((c.x / c.w + 1) / 2) * canvas.width, ((1 - c.y / c.w) / 2) * canvas.height]
+    const [cx, cy, cw] = this.clipOf(x, z)
+    if (cw <= 1e-6) return null
+    const [w, h] = this.screenSize()
+    return [((cx / cw + 1) / 2) * w, ((1 - cy / cw) / 2) * h]
   }
 
   /** Screen pixels per km at the screen's centre. */
@@ -993,14 +1053,27 @@ export class CampaignMapView {
       this.detailShare = detailK
       this.placePatch(detailK > 0)
       this.wantDetail(ppk)
-      this.onViewChanged?.(ppk)
+      this.ppk = ppk
+      this.surfaceMoved = true
     }
-    this.uploadDetail()
+    // the close tiles written and faded in change the surface as drawn where the patch is
+    const written = this.uploadDetail()
     // the fade by the time since the last frame, at most a tenth of a second (a frame after a pause fades no faster)
-    this.fadeDetail(Math.min(100, t - this.lastFrame))
+    const faded = this.fadeDetail(Math.min(100, t - this.lastFrame))
     this.lastFrame = t
+    if ((written || faded) && this.detailShare > 0) this.surfaceMoved = true
+    // what is drawn over the map (the ink, the scale) follows the view and the surface, once they are set this frame
+    if (this.surfaceMoved) {
+      this.surfaceMoved = false
+      this.onViewChanged?.(this.ppk)
+    }
     this.scene.render()
     this.onFrame?.(performance.now() - t)
+  }
+
+  /** Draws what lies over the map again in the next frame (the fonts came, say). */
+  redraw() {
+    this.surfaceMoved = true
   }
 
   /** Starts drawing every frame (once: a second call while it draws does nothing). */

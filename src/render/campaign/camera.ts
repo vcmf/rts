@@ -109,3 +109,28 @@ export function rayGround(
   }
   return null
 }
+
+/**
+ * Whether a point on the ground (km: x, its height y, z) is seen from `eye`: the segment between them passes over the
+ * ground, `rise(x, z)` sampled every `stepKm` along it (at most `most` samples), the last `nearKm` before the point
+ * left out (its own ground, and the slope it stands on, are not in its way).
+ */
+export function seenFrom(
+  eye: [number, number, number],
+  point: [number, number, number],
+  rise: (x: number, z: number) => number,
+  stepKm = 0.1,
+  nearKm = 0.5,
+  most = 2000,
+): boolean {
+  const d = [point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]]
+  const length = Math.hypot(d[0], d[1], d[2])
+  if (length <= nearKm) return true
+  const n = Math.min(most, Math.ceil(length / stepKm))
+  const last = 1 - nearKm / length
+  for (let k = 1; k < n; k++) {
+    const t = (k / n) * last
+    if (rise(eye[0] + d[0] * t, eye[2] + d[2] * t) > eye[1] + d[1] * t) return false
+  }
+  return true
+}
