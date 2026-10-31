@@ -860,8 +860,10 @@ describe("a world's ground from its data (groundOf, maxGrid)", () => {
   })
 })
 
+// (the windows' and the demo's: a check's moved tile, `--tileat`'s -at<x>_<z> file, is left out: its tile is off the
+// origin these read, and nothing rebuilds it when the data's version moves)
 describe("each world's data against the camera (checkView, nearFrameOf)", () => {
-  for (const file of fs.readdirSync('data').filter(f => f.endsWith('.lookdata'))) {
+  for (const file of fs.readdirSync('data').filter(f => f.endsWith('.lookdata') && !/-at-?\d/.test(f))) {
     longIt(`${file}: the whole frame inside the far ring, the frame below the focus row inside the tile`, () => {
       const b = fs.readFileSync(`data/${file}`)
       const d = decodeLook(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer)
