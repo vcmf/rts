@@ -87,3 +87,25 @@ and flow checked against the page's textures' sizes before the swap; a failed mo
 worker's flow made only for a combed meadow, its cover copied only when the coarsening kept it; the move's laps named
 for what they hold (`checks`, `settle`, `heightfield`); the flow's dead setter and re-export gone; the doc over
 `retile` again; the patch tested at the field's edge, the blur on a field not square.
+
+## G3c-2: the meadow map from the worker, the trees' models once (built)
+
+- **The meadow map's arithmetic in the worker** (`src/look/meadow-data.ts`, `meadowMapData`, out of
+  `buildMeadowMap`; the cover's growth and crop rules in `src/look/world/growth.ts`, out of `src/look/nature.ts`): on
+  a map world its rules are the cover's alone (no formation zones, no river: `growthAllowed` is true there), so the
+  worker makes the map's half floats from the tile's cover and heights and the page makes the texture from them. A
+  page that moved its tile there counts the same growing and cropping texels as one loaded there (195,358 and 83,645 at
+  (1000, −200)).
+- **The trees' generated models made once a page** (`generatedOnce`): the generator's species and variants are not
+  the tile's.
+
+Measured (the dev Mac, Metal, Kobelnitz, a move followed):
+
+| | Before G3c | G3c-1 | G3c-2 |
+|---|---|---|---|
+| a move's frame | 0.80–0.93 s | 0.46–0.61 s | 0.31–0.37 s |
+| its parts | | | the bakes' CPU side 74–101, the trees 59–81, the terrain 53–66, the relief 41–53, the split 33, the colour bake 21–26, the meadow map 1 ms |
+| the worker's tile | 1.2–1.7 s | | 1.5–1.8 s (the meadow map's data added) |
+
+Next (G3c-3): the move spread over frames (each part built in its own frame beside the last tile, the swap one step),
+the terrain's heights and normals and the split from the worker.

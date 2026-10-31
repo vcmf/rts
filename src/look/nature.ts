@@ -21,7 +21,8 @@ import { D } from './spec.ts'
 import { fbm, hash, mulberry } from './noise.ts'
 import { H } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
-import { COVER, coverAt, fieldAt, inFormationZone, isField, type CoverGrid } from './world/cover.ts'
+import { COVER, coverAt, inFormationZone, isField, type CoverGrid } from './world/cover.ts'
+import { AROUND, EDGE, GRASSY_MODEL, LINE_COVER, TRODDEN, coverAllows, meadowGrowth } from './world/growth.ts'
 import { TREE_FLOATS, TREE_SPECIES, type TreeSpecies } from './world/data.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
@@ -97,29 +98,7 @@ export interface Nature {
 // village; trees and the far hedgerows' bushes too, but hidden on fields and bare earth (addPlaced). Anything on a
 // road, a track or the village is placed but hidden (addPlaced): rejected, it would draw a new candidate and shift the
 // scatter's stream after it, so a new road would move every tree (docs/plans/done/roads.md)
-const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood]
-const LINE_COVER: readonly number[] = [COVER.road, COVER.track, COVER.village]
-const TRODDEN: readonly number[] = [...LINE_COVER, COVER.bare]
-// the models that keep to grass (coverAllows), and so never stand on a field: the hidden rule below skips them
-const GRASSY_MODEL = /^(Grass|Flowers|Plant_1|Bush|TreeStump|WoodLog)/
-// The point and eight points EDGE m around it must all pass: the shader paints a class edge pushed up to 1.5 m along
-// each axis by the grain (coverWarp, src/look/shaders/macro.glsl), and the bake blends it over ±1 m, so an instance
-// nearer an edge could stand on another painted class
-const EDGE = 2.5
-const AROUND = [
-  [0, 0],
-  ...Array.from({ length: 8 }, (_, k) => [Math.cos((k * Math.PI) / 4), Math.sin((k * Math.PI) / 4)]),
-]
 type Placed = false | 'drawn' | 'hidden'
-function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boolean {
-  const ok = (c: number) =>
-    model === 'Wheat'
-      ? c === COVER.wheat
-      : GRASSY_MODEL.test(model)
-        ? GRASSY_COVER.includes(c)
-        : !LINE_COVER.includes(c)
-  return AROUND.every(([dx, dz]) => ok(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
-}
 
 // cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md,
 // ?trees=cards);
@@ -147,7 +126,7 @@ export function buildNature(
 ): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
-  const genModels = gen ? addGenerated(NATURE) : null
+  const genModels = gen ? generatedOnce(NATURE) : null
 
   // farCrown: a far tree's crown mesh, lit as its cards and faded with them (farCuller)
   const natMat = (
@@ -928,24 +907,9 @@ export function buildNature(
       far.filter((b, i) => i % 4 === 2 && drawn(b)),
     )
   }
-  // the meadow's growth: where the old tufts could stand (the placement rule: the cover's grassy classes and their
-  // edges, off the banks and the water, out of the formation zones); pasture grazed shorter
-  const growth = (x: number, z: number): [number, number] =>
-    coverAllows(cover, 'Grass_Short', x, z) ? [1, coverAt(cover, x, z) === COVER.pasture ? 0.65 : 1] : [0, 0]
-  // the crops' growth: a sown class (ploughed grows nothing) and the same field EDGE round it, so a crop never stands
-  // on another painted field, nor runs across two (the shader reads the class and the field's shade at its root)
-  const SOWN: readonly number[] = [COVER.wheat, COVER.green, COVER.stubble]
-  const crop = (x: number, z: number) => {
-    const c = coverAt(cover, x, z)
-    const f = fieldAt(cover, x, z)
-    return SOWN.includes(c) &&
-      AROUND.every(
-        ([dx, dz]) =>
-          coverAt(cover, x + dx * EDGE, z + dz * EDGE) === c && fieldAt(cover, x + dx * EDGE, z + dz * EDGE) === f,
-      )
-      ? 1
-      : 0
-  }
+  // the meadow's growth and the crops' by the cover (src/look/world/growth.ts); off the banks and the water, out of
+  // the formation zones: growthAllowed, below
+  const { growth, crop } = meadowGrowth(cover)
   // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the
   // outer ring's footprint and lean)
   const growthAllowed = (x: number, z: number, reach = CLUMP_REACH) =>
@@ -1055,6 +1019,13 @@ const GEN_FOR: Record<string, [species: string, share: number][]> = {
     ['pine', 0.4],
     ['spruce', 0.6],
   ],
+}
+// the generated models once a page (they are the generator's, not the tile's: a moved tile's trees reuse them, G3c)
+const GENERATED = new WeakMap<Record<string, NatureModel>, ReturnType<typeof addGenerated>>()
+function generatedOnce(NATURE: Record<string, NatureModel>): ReturnType<typeof addGenerated> {
+  let g = GENERATED.get(NATURE)
+  if (!g) GENERATED.set(NATURE, (g = addGenerated(NATURE)))
+  return g
 }
 function addGenerated(NATURE: Record<string, NatureModel>) {
   const G = window.TREEGEN

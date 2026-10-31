@@ -8,6 +8,7 @@
 import { TILE_O, tileEdge } from './tile.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { FromHalfFloat, ToHalfFloat } from '@babylonjs/core/Misc/textureTools.js'
+import { bilerp, meadowMapData, type MeadowData } from './meadow-data.ts'
 import type { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
@@ -149,13 +150,6 @@ export interface Meadow {
 }
 
 // a bilinear blend of at(i, j) at the grid point (u, v)
-const bilerp = (at: (i: number, j: number) => number, u: number, v: number) => {
-  const i = Math.floor(u)
-  const j = Math.floor(v)
-  const fu = u - i
-  const fv = v - j
-  return (at(i, j) * (1 - fu) + at(i + 1, j) * fu) * (1 - fv) + (at(i, j + 1) * (1 - fu) + at(i + 1, j + 1) * fu) * fv
-}
 
 // growth(x, z): how much grass grows at a point (0..1, by the cover and its edges) and its height factor; allowed(x,
 // z): the placement rule's hard edges at any point; crop(x, z): a sown field there, 0 or 1 (src/look/nature.ts)
@@ -168,6 +162,7 @@ export function buildMeadowMap(
   allowed: (x: number, z: number) => boolean,
   crop: (x: number, z: number) => number,
   allowedCrop = allowed,
+  made?: MeadowData,
 ): MeadowMap {
   const t0 = performance.now()
   // the map's corner: the tile's (src/look/tile.ts)
@@ -178,106 +173,9 @@ export function buildMeadowMap(
   // rules at the texel itself (the cover's edge, the formation zones, the banks) zero it; then the growing area
   // shrinks by a texel, so the GPU's bilinear read, which blends a texel with its neighbours, never carries grass
   // across a rule (between the last growing texel and a zero one it stays inside the allowed ground)
-  const G = MAP_N / 2
-  // the 2 m cells: f at each cell's centre
-  const cellGrid = (f: (x: number, z: number) => number) => {
-    const a = new Float32Array(G * G)
-    for (let j = 0; j < G; j++) {
-      for (let i = 0; i < G; i++) a[j * G + i] = f(X0 + (i + 0.5) * 2, Z0 + (j + 0.5) * 2)
-    }
-    return a
-  }
-  const atCell = (a: Float32Array, i: number, j: number) =>
-    a[Math.min(G - 1, Math.max(0, j)) * G + Math.min(G - 1, Math.max(0, i))]
-  const sampler = (a: Float32Array) => (i: number, j: number) => atCell(a, i, j)
-  // the hard rules at the 2 m cells' centres too: a texel whose four cells agree takes their answer, and only a texel
-  // near a rule's edge (its cells disagree) is tested itself (a few in a hundred: the bake's time)
-  const okGrass = cellGrid((x, z) => (allowed(x, z) ? 1 : 0))
-  const okCrop = allowedCrop === allowed ? okGrass : cellGrid((x, z) => (allowedCrop(x, z) ? 1 : 0))
-  // the grass's growth and height factor from one growth() call a cell
-  const gCell = new Float32Array(G * G)
-  const hCell = new Float32Array(G * G)
-  for (let j = 0; j < G; j++) {
-    for (let i = 0; i < G; i++) {
-      ;[gCell[j * G + i], hCell[j * G + i]] = growth(X0 + (i + 0.5) * 2, Z0 + (j + 0.5) * 2)
-    }
-  }
-  const cCell = cellGrid((x, z) => crop(x, z))
-  // one growth channel (the grass's by growth(), the crops' by crop()), each texel interpolating its cells, zeroed by
-  // the cover's edge and the rules at the texel, then shrunk a texel against the GPU's blend
-  const channel = (
-    cell: Float32Array,
-    cover: (x: number, z: number) => number,
-    okCell: Float32Array,
-    ruleAt: (x: number, z: number) => boolean,
-  ): { g: Float32Array; count: number } => {
-    const raw = new Float32Array(MAP_N * MAP_N)
-    const at = sampler(cell)
-    for (let j = 0; j < MAP_N; j++) {
-      for (let i = 0; i < MAP_N; i++) {
-        const x = X0 + i + 0.5
-        const z = Z0 + j + 0.5
-        const k = j * MAP_N + i
-        const gu = (i + 0.5) / 2 - 0.5
-        const gv = (j + 0.5) / 2 - 0.5
-        const i0 = Math.floor(gu)
-        const j0 = Math.floor(gv)
-        const d = bilerp(at, gu, gv)
-        if (d <= 0) continue
-        const c00 = atCell(cell, i0, j0)
-        const c10 = atCell(cell, i0 + 1, j0)
-        const c01 = atCell(cell, i0, j0 + 1)
-        const c11 = atCell(cell, i0 + 1, j0 + 1)
-        const ok =
-          atCell(okCell, i0, j0) +
-          atCell(okCell, i0 + 1, j0) +
-          atCell(okCell, i0, j0 + 1) +
-          atCell(okCell, i0 + 1, j0 + 1)
-        const coverOk = (c00 > 0 && c10 > 0 && c01 > 0 && c11 > 0) || cover(x, z) > 0
-        const ruleOk = ok === 4 ? true : ok === 0 ? false : ruleAt(x, z)
-        raw[k] = coverOk && ruleOk ? d : 0
-      }
-    }
-    const g = new Float32Array(MAP_N * MAP_N)
-    let count = 0
-    for (let j = 0; j < MAP_N; j++) {
-      for (let i = 0; i < MAP_N; i++) {
-        const k = j * MAP_N + i
-        let d = raw[k]
-        for (let dj = -1; dj <= 1 && d > 0; dj++) {
-          for (let di = -1; di <= 1; di++) {
-            const a = i + di
-            const b = j + dj
-            if (a >= 0 && b >= 0 && a < MAP_N && b < MAP_N && raw[b * MAP_N + a] <= 0) {
-              d = 0
-              break
-            }
-          }
-        }
-        g[k] = d
-        if (d > 0) count++
-      }
-    }
-    return { g, count }
-  }
-  const grass = channel(gCell, (x, z) => growth(x, z)[0], okGrass, allowed)
-  const crops = channel(cCell, crop, okCrop, allowedCrop)
-  const g = grass.g
-  const growingCells = grass.count
-  // the meadow map: R the ground's height, G the grass's growth, B the grass's height factor, A the crops' growth
-  // (half floats, filtered by the GPU)
-  const data = new Uint16Array(MAP_N * MAP_N * 4)
-  const hAtCell = sampler(hCell)
-  for (let j = 0; j < MAP_N; j++) {
-    for (let i = 0; i < MAP_N; i++) {
-      const k = j * MAP_N + i
-      const hf = bilerp(hAtCell, (i + 0.5) / 2 - 0.5, (j + 0.5) / 2 - 0.5)
-      data[k * 4] = ToHalfFloat(heightAt(X0 + i + 0.5, Z0 + j + 0.5))
-      data[k * 4 + 1] = ToHalfFloat(g[k])
-      data[k * 4 + 2] = ToHalfFloat(hf)
-      data[k * 4 + 3] = ToHalfFloat(crops.g[k])
-    }
-  }
+  const md = made ?? meadowMapData(X0, Z0, TILE_W, growth, allowed, crop, allowedCrop, heightAt)
+  const { data, g, growingCells } = md
+  const crops = { g: md.cropG, count: md.croppingCells }
   const map = new RawTexture(
     data,
     MAP_N,
