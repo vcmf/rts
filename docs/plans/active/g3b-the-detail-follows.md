@@ -50,7 +50,7 @@ cells, so a moved tile's grids meet the far ring's and the apron joins them as t
 | | What | Acceptance |
 |---|---|---|
 | **G3b-1** | **The tile off the origin.** The tile's centre in the data (`tileAt`, on the 200 m grid; the compiler's `--tileat`), `uTileO` in every shader that reads the tile (about 25 reads), and the CPU's tile-bound code taking the centre (the heightfield, the ground mesh, the apron, the far ring's hole, the bakes' cameras, the meadow map, the flow, the roads' grid, the water data, the units' ground, the trees' tile and far split). The tile is still fixed for a page's life. | At the origin the windows draw as on #291 (golden shots, identical); Kobelnitz's data with its tile 400 m east (`--tileat 400,0`) draws as Kobelnitz's own where the two tiles overlap (the same frame: the painted grain lies in world metres, so two frames cannot match pixel for pixel), within the golden's limits |
-| **G3b-2** | **The tile rebuilt.** The nature (the trees, the canopy, the trunks, the casters, the growth the meadow reads: one 870-line closure today) disposed and rebuilt for a tile; the tile's textures written in place; the bakes rerun; the shadow map's casters from the new nature. A test hook moves the tile (`__look.moveTile(x, z)`). | A tile moved to three places (Kobelnitz, the Pratzen, Sokolnitz) looks as a window built there; no leak over ten moves (the GPU's memory, the meshes counted) |
+| **G3b-2** | **The tile rebuilt.** The nature (the trees, the canopy, the trunks, the casters, the growth the meadow reads: one 870-line closure today) disposed and rebuilt for a tile; the tile's textures written in place; the bakes rerun; the shadow map's casters from the new nature. A test hook moves the tile (`__look.retile(x, z)`, from `--tileat` data). | A page whose tile moved draws as a page loaded with its tile there (the same views, the same frame); no leak over ten moves (the scene's meshes, materials, textures, cameras, render targets, observers and the GPU's textures counted) |
 | **G3b-3** | **The tile follows the camera.** The map compiled in a worker on load; a new tile's data built there when the focus nears the edge, swapped in when ready (the old tile drawn until then); the re-centring's rule and its hysteresis. | Pan across Austerlitz: the detail under the focus everywhere; the swap's frame measured (G3c spreads the bakes) |
 
 ## Out of scope
@@ -80,3 +80,71 @@ G3b-1, round 1 (`/code-review high`, 10 findings, none severe; fixed or answered
   command that builds it; a `--tileat` file written whole then moved; a dead fallback; the tile module's comment;
 - answered: a `--tileat` file is a check's, built only when asked (not rebuilt by `--missing`: G3b-3 builds tiles on
   the page); `windowBase` samples the window's heights a second time, only for a `--tileat` build.
+
+## G3b-2: measured
+
+- **A moved tile against one loaded there** (Kobelnitz, its tile moved to (400, 0) by `__look.retile`, against a page
+  loaded with `?tileat=400,0`, four views, SwiftShader): with the relief's tone off, the frames identical (largest
+  difference 1/255, mean 0); with it on, within 13/255 (mean 0.5–1.1). The relief reads the far ring's heights, which
+  the two files hold to within 0.00006 m (each window's far ring is sampled at float32 places in its own frame), and
+  the far macro bake's hash follows it; with the relief off the far bake's hash is the same.
+- **No leak:** ten moves (to (400, 0) and back, five times), the scene's meshes (90), materials (33), textures (26),
+  cameras (3), render targets (3), per-frame observers (13), the painted materials (28) and the GPU's textures (28)
+  as before; the home view after them as on a fresh page (the frame readout and a few isolated pixels apart).
+- **A move's time:** 594–766 ms on the dev Mac's GPU (Metal, four moves), 6–9 s on SwiftShader: one long frame, until
+  G3c spreads the bakes.
+
+G3b-2, round 1 (`/code-review high`, 8 findings, 1 taken as severe):
+- fixed, severe: a refused tile could leave the page half moved (the covers' size checked after the ground had moved):
+  every check now before the first change (the data, the world, the covers' and far ring's sizes, no water or banks);
+- fixed: the page's hooks for the tools (`window`'s trees, shadow map and light camera, `__look`'s meadow and flow)
+  read the tile's parts now, not the first tile's; the macro colour's checks bound on materials made later (a moved
+  tile's trees); a page with buildings or armies refuses a move (their light and shade hang on the bakes: not on a map
+  world yet);
+- answered: the relief's tone over the whole ring and the trees' generated models built again on each move: a move's
+  cost, G3c's (it spreads and trims the move).
+
+G3b-2, round 2 (10 findings, 3 severe):
+- fixed, severe: the page's `window` hooks set by `Object.assign` (it copies a getter's value: they stayed the first
+  tile's; now property descriptors); the new tile checked against the far ring drawn (the page's: its edges on its
+  grid, a far cell inside it), not its own; a move that fails midway (a build that throws) now puts back the tile it
+  came from, and an owner's build that throws takes away what it had added (tested: fails at the owner before);
+- fixed: the camera's checks (`checkView`) on the new tile's ground before the move, and `GROUND` the tile's now; the
+  scatter pass the scene's now (the bench's A/Bs); an owner keeps no snapshot of the parts that stood at its build;
+  the far ring's heights kept on a move (its hole and normals alone); the meadow's bake time the map's now;
+- answered: one holder of the tile's parts with a registry of who reads them (the reviewer's suggestion, against
+  stale captures): the parts are few and every reader goes through a getter or the live variable now; a registry if
+  G3c adds parts; the flow's comb built again on a move: G3c's cost.
+
+G3b-2, round 3 (10 findings, 2 taken as severe): the rollback put the last tile back with the new tile's ground range;
+a build that failed midway left the rollback disposing the last parts a second time; and smaller ones of the same
+root (a first tile with water, overlapping moves). A third round with severe findings: **redesigned** (AGENTS.md).
+Every round had found an edge of one flaw: the move disposed each last part, then built its successor, so a failure
+needed a rollback that rebuilt the last tile, and the rollback was where the bugs lived. Now the move **builds beside,
+then swaps**: every check first; then, in one task (no frame between), the tile's place set to the new tile's, every
+new part built while the last ones stand; a build that throws takes its new parts away, puts the place back and lets
+each last part bind again what the new had overwritten (`Owned.rebind`, its own bindings alone), the last tile
+untouched; else the last parts go. One move at a time (a queue); neither tile may have water (G3d); `?far=off` in the
+trees' builder. Checked on the page: a move made to fail (`__look.moveFault`) leaves the page as a fresh one (the
+frame identical, every count the same); a move draws as a page loaded there (relief off: identical); ten moves leak
+nothing. The round count restarts.
+
+After the redesign, round 1 (8 findings, 2 taken as severe):
+- fixed, severe: the new bakes took their shadow casters from the scene while the last tile's trees still stood in it
+  (they cast in the new shadow map until disposed, and stayed in its list): a part going away now casts nothing
+  (`buildBakes`' `leaving`, from the last parts' owners: `Owned.has`; after a move no caster is disposed); the swap
+  could still throw after the last parts were gone (the ground's split, the relief's tone): both now in the build's
+  guarded half, the swap left with assignments, disposals and hooks;
+- fixed: the tools' `retile` hook checks the place asked for and that the file holds it; the focus range's comment;
+- answered: owners that find their parts by the scene's lists (the reviewer's explicit disposables: a larger change
+  to every builder; the lists cover what the tile's builders make, the bakes' casters now leave the last parts out);
+  the relief's tone over the whole ring, the far macro bake on every move, the first tile's data kept: a move's cost
+  and memory, G3c's.
+
+After the redesign, round 2 (9 findings, none severe; fixed or answered, then stopped):
+- fixed: a move waits for a colour bake under way (it would bake the new covers on the last tile's place); the move's
+  fault fires once; the first tile's flow and meadow map named as the load's (`flowAtLoad`, `meadowMapAtLoad`); the
+  hooks' comments; the design's decision record (0096, proposed);
+- answered: the bakes' casters by the scene's list with the leaving parts left out, and owners that record four
+  observables (explicit caster lists and disposables: a change to every builder; decision 0096's consequences); the
+  apron's buffers and the flow's comb made again on a move: G3c's cost.

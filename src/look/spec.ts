@@ -681,7 +681,8 @@ export class FocusFollow {
   y = NaN
   private x = NaN
   private z = NaN
-  readonly range: readonly [number, number]
+  // (a moved tile's ground's: retile in src/look/main.ts; with the far ring's nodes in play, the whole map's)
+  range: readonly [number, number]
   constructor(range: readonly [number, number]) {
     this.range = range
   }

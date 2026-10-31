@@ -5,6 +5,7 @@
 import { TILE_O } from './tile.ts'
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { Material } from '@babylonjs/core/Materials/material.js'
@@ -97,6 +98,8 @@ export function buildBakes(
   trunks: Nature['trunks'] = [],
   farCull: Nature['farCull'] = null,
   ring: RingBakes | null = null,
+  // the meshes of a part going away (a moved tile's last trees, built beside: src/look/main.ts, move): cast nothing
+  leaving: (m: AbstractMesh) => boolean = () => false,
 ): Bakes {
   /* ---------- shadow pass: an orthographic camera at the sun, depth of every caster, rendered ONCE ---------- */
   // (about the tile's centre: src/look/tile.ts)
@@ -195,7 +198,8 @@ export function buildBakes(
       m.name !== 'apron' &&
       (m.name !== 't' || m === terrains[0]) &&
       !/Grass|Flowers|Plant|Wheat|^cards_/.test(m.name) &&
-      !cardCasters?.packs.includes(m as Mesh),
+      !cardCasters?.packs.includes(m as Mesh) &&
+      !leaving(m),
   )
   for (const m of shadowRT.renderList) shadowRT.setMaterialForRendering(m, depthMat)
   if (cardCasters) {

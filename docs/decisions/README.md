@@ -110,3 +110,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0085](0085-upright-meadow-and-wheat-fill.md) | The meadow's grass upright and shorter, the wheat filled (`?grassup`, `?wheatfill`; amends 0041's clumps) | accepted |
 | [0090](0090-the-staff-map-lit-as-a-model.md) | The staff map lit as a model under the 3D world's sun and the sky, in the campaign map's palette (amends 0064 and 0065) | proposed |
 | [0092](0092-static-light-baked-coarse-and-fine.md) | Static light is never computed per frame: coarse for the whole map, fine around the camera | accepted |
+| [0096](0096-a-moved-tile-built-beside-then-swapped.md) | A moved tile is built beside the last, then swapped; its parts are owned by what their builds add | proposed |

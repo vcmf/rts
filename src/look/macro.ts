@@ -94,6 +94,10 @@ export interface BakeStats {
 }
 export interface Macro {
   cover: RawTexture
+  // a moved tile's covers (G3b-2): the per-frame one and the bakes', of the first's sizes, written in place (then bake)
+  setCovers(frame: CoverGrid, bake: CoverGrid): void
+  setMeadowMap(t: BaseTexture | null): void // a moved tile's meadow map (G3b-2), which the bakes read
+  setFlow(f: FlowTextures | null): void // a moved tile's flow (G3b-2), which the bakes read
   // the far ring's cover and its place (a map world's whole map: G3a; the demo's the bake's), which the far ring's
   // ground reads too (src/look/main.ts)
   farCover: { tex: BaseTexture; box: Vector4 }
@@ -161,6 +165,13 @@ export function buildMacro(
   }
   const coverTex = coverTexOf(cover)
   const bakeCoverTex = bakeCover === cover ? coverTex : coverTexOf(bakeCover)
+  // the covers now (a moved tile's: setCovers, G3b-2), and the per-frame cover's place, one vector every material reads
+  const covers = { frame: cover, bake: bakeCover }
+  // the meadow map the bakes read (a moved tile's: setMeadowMap)
+  let meadowTex = meadowMap
+  // the flow's textures the bakes read (a moved tile's: setFlow)
+  let flowNow = flowTex
+  const frameBox = coverBox(cover)
   // the far ring: the demo's SPEC.far about the origin, its bake reading the cover; a map world's the whole map, its
   // bake reading the ring's own cover (G3a, docs/plans/done/g3a-the-whole-map-far.md)
   const farGrid = ring ?? { n: D.spec.farSub + 1, cell: D.farCell, x0: -D.spec.far / 2, z0: -D.spec.far / 2, h: [] }
@@ -257,7 +268,7 @@ export function buildMacro(
     })
   mats.bindAll(m => {
     m.setTexture('uCover', coverTex)
-    m.setVector4('uCoverBox', coverBox(cover))
+    m.setVector4('uCoverBox', frameBox)
     m.setTexture('uMacro', tile)
     m.setTexture('uMacroFar', far)
     m.setTexture('uSurf', surf)
@@ -389,7 +400,7 @@ export function buildMacro(
     temp = false,
     x0 = -world / 2,
     z0 = x0,
-    cov: CoverGrid = bakeCover,
+    cov: CoverGrid = covers.bake,
     covTex: BaseTexture = bakeCoverTex,
   ): Promise<BakeStats> => {
     await ready(wrapper)
@@ -417,11 +428,11 @@ export function buildMacro(
           e.setFloat('uReliefK', relief.k)
         }
         if (brush) e.setTexture('uMeadowBrush', brush)
-        if (flowTex) {
-          e.setTexture('uFlow', flowTex.flow)
-          e.setTexture('uComb', flowTex.comb)
+        if (flowNow) {
+          e.setTexture('uFlow', flowNow.flow)
+          e.setTexture('uComb', flowNow.comb)
         }
-        if (meadowMap) e.setTexture('uMeadow', meadowMap)
+        if (meadowTex) e.setTexture('uMeadow', meadowTex)
         // the roads, without the grit (its marks are finer than a texel)
         if (roads) {
           e.setTexture('uRoadSegs', roads.segs)
@@ -463,6 +474,10 @@ export function buildMacro(
     for (const d of MATERIAL_DEFINES) m.setDefine(`#define ${d}`, ARM_DEFINE[arm] === d)
   }
   mats.bindAll(applyArm) // a painted material made later (the meadow's) gets the arm too
+  // and the checks set now (setCheck): a material made later (a moved tile's trees, G3b-2) takes them too
+  mats.bindAll(m => {
+    for (const d of MACRO_CHECK_DEFINES) m.setDefine(`#define ${d}`, checks.includes(d))
+  })
   // The bakes run one at a time, in the order asked (a new grain, a restored context, an arm, a check, a rebake): each
   // takes the arm and the checks wanted when it starts. The bake's shader's defines are the checks' (all but the class
   // view, which the bake ignores) and arm 4's strokes; `baked` is what the targets hold, set once a bake finishes
@@ -483,7 +498,11 @@ export function buildMacro(
     }
     return { kuw: bakeArm === 'kuwahara', key: wantedKey() }
   }
+  // the near comb bake's place forgotten (set below, with ?grass=flow): a bake redraws it where the focus is (a moved
+  // tile's, G3b-2, reads the new covers and flow even if the camera stays)
+  let nearStale = (): void => undefined
   const bakeNow = async (): Promise<BakeStats> => {
+    nearStale()
     const w = wanted()
     baked = ''
     const t = D.spec.tile
@@ -562,6 +581,9 @@ export function buildMacro(
     })
     const rect = new Vector4(1e6, 1e6, NEAR_W, 0)
     const centre = { x: NaN, z: NaN }
+    nearStale = () => {
+      centre.x = centre.z = NaN
+    }
     mats.bindAll(m => {
       m.setTexture('uCombNear', nearRT)
       m.setVector4('uCombNearRect', rect)
@@ -593,12 +615,12 @@ export function buildMacro(
       e.setFloat('uTexel', t)
       e.setTexture('uGrain', mats.grain)
       e.setTexture('uCover', bakeCoverTex)
-      e.setFloat4('uCoverBox', ...coverBoxOf(bakeCover))
+      e.setFloat4('uCoverBox', ...coverBoxOf(covers.bake))
       e.setVector2('uTileO', TILE_O)
       if (brush) e.setTexture('uMeadowBrush', brush)
-      e.setTexture('uFlow', flowTex.flow)
-      e.setTexture('uComb', flowTex.comb)
-      if (meadowMap) e.setTexture('uMeadow', meadowMap)
+      e.setTexture('uFlow', flowNow!.flow)
+      e.setTexture('uComb', flowNow!.comb)
+      if (meadowTex) e.setTexture('uMeadow', meadowTex)
       nearRenderer.draw()
       engine.unBindFramebuffer(nearRT.renderTarget!, false)
       nearRenderer.restoreStates()
@@ -609,6 +631,21 @@ export function buildMacro(
   }
   return {
     cover: coverTex,
+    setCovers(frame, bake) {
+      // (a moved tile's covers are its first's size: their textures written in place)
+      if (frame.n !== covers.frame.n || bake.n !== covers.bake.n) throw new Error('macro: a moved cover changed size')
+      coverTex.update(frame.tex)
+      if (bakeCoverTex !== coverTex) bakeCoverTex.update(bake.tex)
+      frameBox.set(...coverBoxOf(frame))
+      covers.frame = frame
+      covers.bake = bake
+    },
+    setMeadowMap(t) {
+      meadowTex = t
+    },
+    setFlow(f) {
+      flowNow = f
+    },
     farCover: { tex: farCoverTex, box: coverBox(farCover) },
     tile,
     far,
