@@ -1,13 +1,14 @@
 ---
 status: accepted
-date: 2026-10-30
+date: 2026-10-31
 ---
 
-# 0095 Grass detail, a player option: Full by default, Balanced to spare the frame
+# 0095 Grass detail, a player option: Balanced by default, Full for the whole carpet
 
-Accepted by the owner on 2026-10-30 (issue #257), from the experiments' numbers and stills. As built:
-`docs/systems/look.md` (the meadow and the crops) and `docs/plans/active/grass-detail.md`. It adds a choice over
-decision 0085's meadow, which stays the default and is unchanged.
+Accepted by the owner on 2026-10-30 (issue #257), from the experiments' numbers and stills, with Full as the default.
+On 2026-10-31 the owner tried Balanced ("not bad") and made it the default; that choice supersedes "Full everywhere by
+default" (the record had not reached main). As built: `docs/systems/look.md` (the meadow and the crops) and
+`docs/plans/active/grass-detail.md`. It adds a choice over decision 0085's meadow, which Full draws unchanged.
 
 ## Context
 
@@ -18,14 +19,17 @@ Two cheaper meadows were tried:
 - Fewer, wider blades past about 10 m: about 0.7 ms less close, but 0.3–0.5 ms more at the default zoom.
 - Crops drawn only near the camera: 0.1–0.2 ms less, and their 25 m edge shows.
 
-The owner wanted the cheaper grass as the player's choice, not as everyone's meadow.
+The owner first wanted the cheaper grass as the player's choice, with the full carpet as everyone's meadow. Having
+tried it, he made the cheaper grass the default and kept the full carpet as the choice.
 
 ## Decision
 
 We will give the player a **Grass detail** setting with two levels (`src/look/grass-detail.ts`, `?grassdetail`, the
 look page's settings panel):
 
-- **Full**: decision 0085's meadow, the default everywhere, map windows included.
+- **Balanced** is the default everywhere, map windows included (a missing `?grassdetail`); without the meadow
+  (WebGL1, `?meadow=off`) the page reads Full, as there is nothing to thin.
+- **Full** (`?grassdetail=full`): decision 0085's meadow.
 - **Balanced**: up close, the near ring's own program with one define (`GRASS_THIN`) shrinks away a share of its
   grass clumps, each picked by a hash of its own. The share is none at 8 m from the focus; from 12 m half the clumps
   are culled and a fifth more shrunk. It goes back to
@@ -51,7 +55,8 @@ unchanged). Full's material and program are main's. The setting applies live.
     GL call: the program has no location for them);
   - a few arithmetic operations of the share's ease run each frame.
 
-  The goldens against main's build match in every region of every view, on the demo and on Kobelnitz.
+  `?grassdetail=full` against main's build: the goldens match in every region of every view, on the demo and on
+  Kobelnitz. The default (Balanced) differs from main up close, by design; from 110 m out it draws Full's program.
 - **Applying a change.** It toggles the define live, without a reload:
   - the new program is compiled ahead while Balanced is chosen (and again when the material's other defines change);
   - the look tools wait for it to be in force before a still (`__look.meadowSettled`);
@@ -68,7 +73,8 @@ unchanged). Full's material and program are main's. The setting applies live.
   carpet shows more ground.
 - **Crops beyond 25 m left to the ground's paint.** It saves 0.1–0.2 ms, and the 25 m line shows as a change of
   tone.
-- **Balanced for everyone.** The owner keeps the full carpet as the look; the cheaper one is a choice.
+- **Full by default** (the record as first accepted, 2026-10-30). Superseded by the owner's choice of 2026-10-31,
+  after trying Balanced.
 - **The near ring split into a large-clump ring and a thinned-clump ring beyond the cut, with crop and world-anchored
   rings around them** (review rounds 1–3). Crops and grass share the near ring and its clump. So every change to the
   grass alone needed more rings, and their cost and complexity moved onto the crops, the CPU and finally Full

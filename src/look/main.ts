@@ -235,8 +235,8 @@ if (reliefK > 0) {
 // ?grassup=0|1|2, ?wheatfill=0|1: the meadow's look (docs/plans/done/grass-upright.md, decision 0085; meadowLookOf in
 // src/look/meadow-look.ts)
 const meadowLook = meadowLookOf(params, grassMode)
-// ?grassdetail=full|balanced: the player's grass detail (src/look/grass-detail.ts, decision 0095), Full by default and
-// without the meadow; the panel's Grass detail changes it live
+// ?grassdetail=full|balanced: the player's grass detail (src/look/grass-detail.ts, decision 0095), Balanced by default,
+// Full without the meadow; the panel's Grass detail changes it live
 const grassDetail = grassDetailOf(params, meadowOn)
 const grain0 = makeGrainCanvas(null)
 // ?midtone=0|1|2 or per class (u3,b2,n2,g0): how wide the ramp turns from light to shade (src/look/midtone.ts,
@@ -1056,15 +1056,15 @@ const applyScale = (s: number) => {
   engine.setHardwareScalingLevel(k / s)
 }
 /** Keeps the address to the grass detail in force (level): only its grassdetail key edited, and only when it names
- * another level (none named is Full), so a reload or a shared address opens on it and every other parameter stays as
- * written */
+ * another level (none named is the default, Balanced), so a reload or a shared address opens on it and every other
+ * parameter stays as written */
 const showDetail = (level: GrassDetail) => {
   const search = searchWithGrassDetail(location.search, level)
   if (search !== location.search) history.replaceState(history.state, '', location.pathname + search + location.hash)
 }
-// the grass detail: applied live (Meadow.setDetail); a Balanced the page could not apply (without the meadow) dropped
-// from the address; without the meadow there is nothing to choose: the row is hidden
-showDetail(grassDetail)
+// the grass detail: applied live (Meadow.setDetail), the address kept to it; without the meadow there is nothing to
+// choose: the row is hidden and the address left as it is
+if (meadow) showDetail(grassDetail)
 const detailSel = byId<HTMLSelectElement>('grassdetail')
 detailSel.value = grassDetail
 const detailRow = detailSel.closest<HTMLElement>('.row')

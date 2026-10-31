@@ -19,7 +19,7 @@ import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
 import { MEADOW_LOOK, type MeadowLook } from './meadow-look.ts'
-import { type GrassDetail, THIN_EASE_S, THIN_RAMP, THIN_SOFT, ThinEase } from './grass-detail.ts'
+import { GRASS_DETAIL_DEFAULT, type GrassDetail, THIN_EASE_S, THIN_RAMP, THIN_SOFT, ThinEase } from './grass-detail.ts'
 import { switchDefineWhenReady, warmDefine } from './define-switch.ts'
 import {
   CLUMP_REACH,
@@ -350,7 +350,7 @@ export function buildMeadow(
     wide = true,
     reach = CLUMP_REACH,
     look = MEADOW_LOOK,
-    detail = 'full',
+    detail = GRASS_DETAIL_DEFAULT,
     thinEaseS = THIN_EASE_S,
   }: MeadowOptions = {},
 ): Meadow {

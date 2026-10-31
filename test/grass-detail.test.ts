@@ -35,9 +35,10 @@ const thinCode = (src: string) =>
 const sizeAt = (hd: number, d: number, radius: number) => thinKeep(hd, dropShare(d, dropAtZoom(radius)))
 
 describe('the grass detail', () => {
-  it('is Full when absent, and takes full or balanced', () => {
-    expect(GRASS_DETAIL_DEFAULT).toBe('full')
-    expect(grassDetailOf(q(''), true)).toBe('full')
+  it('is Balanced when absent (the owner, 2026-10-31), and takes full or balanced', () => {
+    expect(GRASS_DETAIL_DEFAULT).toBe('balanced')
+    expect(grassDetailOf(q(''), true)).toBe('balanced')
+    expect(grassDetailOf(q('map=austerlitz&window=kobelnitz'), true)).toBe('balanced')
     expect(grassDetailOf(q('grassdetail=full'), true)).toBe('full')
     expect(grassDetailOf(q('grassdetail=balanced'), true)).toBe('balanced')
     expect(isGrassDetail('balanced')).toBe(true)
@@ -48,7 +49,7 @@ describe('the grass detail', () => {
       expect(() => grassDetailOf(q(`grassdetail=${v}`), true)).toThrow(/grassdetail must be full or balanced/)
     }
   })
-  it('reads Balanced as Full without the meadow, so a saved address still opens', () => {
+  it('reads Full without the meadow, Balanced asked or by default, so a saved address still opens', () => {
     expect(grassDetailOf(q('grassdetail=balanced'), false)).toBe('full')
     expect(grassDetailOf(q(''), false)).toBe('full')
     expect(() => grassDetailOf(q('grassdetail=x'), false)).toThrow(/grassdetail must be/)
@@ -56,16 +57,17 @@ describe('the grass detail', () => {
   it('keeps the address byte for byte unless its grassdetail names another level, then edits only that key', () => {
     // (the regression: every load re-encoded the whole query: ?bench became bench=, lean,big lean%2Cbig)
     for (const a of ['', '?bench&grassoff=lean,big&midtone=u3,b2', '?map=austerlitz&window=kobelnitz&x=%20']) {
-      expect(searchWithGrassDetail(a, 'full')).toBe(a)
+      expect(searchWithGrassDetail(a, 'balanced')).toBe(a)
     }
-    expect(searchWithGrassDetail('?grassdetail=full&bench', 'full')).toBe('?grassdetail=full&bench')
-    expect(searchWithGrassDetail('?bench&grassdetail=balanced&a=b,c', 'balanced')).toBe(
-      '?bench&grassdetail=balanced&a=b,c',
-    )
-    expect(searchWithGrassDetail('?bench&grassdetail=balanced&a=b,c', 'full')).toBe('?bench&a=b,c')
-    expect(searchWithGrassDetail('?bench&a=b,c', 'balanced')).toBe('?bench&a=b,c&grassdetail=balanced')
-    expect(searchWithGrassDetail('?grassdetail=full&bench', 'balanced')).toBe('?grassdetail=balanced&bench')
-    expect(searchWithGrassDetail('?grassdetail=balanced', 'full')).toBe('')
+    // (an explicit default kept: it names the level in force)
+    expect(searchWithGrassDetail('?grassdetail=balanced&bench', 'balanced')).toBe('?grassdetail=balanced&bench')
+    expect(searchWithGrassDetail('?bench&grassdetail=full&a=b,c', 'full')).toBe('?bench&grassdetail=full&a=b,c')
+    // the key written only off the default, removed back to it, in its place
+    expect(searchWithGrassDetail('?bench&grassdetail=full&a=b,c', 'balanced')).toBe('?bench&a=b,c')
+    expect(searchWithGrassDetail('?bench&a=b,c', 'full')).toBe('?bench&a=b,c&grassdetail=full')
+    expect(searchWithGrassDetail('?grassdetail=balanced&bench', 'full')).toBe('?grassdetail=full&bench')
+    expect(searchWithGrassDetail('?grassdetail=full', 'balanced')).toBe('')
+    expect(searchWithGrassDetail('', 'full')).toBe('?grassdetail=full')
   })
   it('culls BALANCED_DROP of the grass clumps between its ramps up close, shrinks THIN_SOFT more, none outside', () => {
     // (the regression: the share was 0.5 with the soft band under it, so only 0.3 of the clumps were culled)

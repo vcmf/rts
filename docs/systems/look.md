@@ -654,7 +654,8 @@ shader); `?meadow=off` puts back the old scatter.
   - **Grass detail** (decision 0095, issue #257; `src/look/grass-detail.ts`, `?grassdetail=full|balanced`, any other
     value refused, Balanced read as Full without the meadow; the settings panel's Grass detail, applied live; the
     address rewritten to the level in force; the row hidden without the meadow; `docs/plans/active/grass-detail.md`).
-    **Full**, the default everywhere (map windows too), draws the meadow above with main's materials and program.
+    **Balanced** is the default everywhere (map windows too; the owner, 2026-10-31), Full without the meadow.
+    **Full** (`?grassdetail=full`) draws the meadow above with main's materials and program.
     **Balanced**, up close, turns on `GRASS_THIN` on the near ring's material (`setDefine`, as the trodden mask's
     `TRAMPLE`):
     - a share of the near ring's *grass* clumps shrinks away, picked by a hash of their own (not `h2`, so the kept
@@ -676,7 +677,7 @@ shader); `?meadow=off` puts back the old scatter.
     meanwhile), so the ring never blinks. The share eases from none after a switch on and to none before a switch off
     (`ThinEase`, `THIN_EASE_S`; snapped on the tools' frozen page), so no clump pops. Past 10 m the close carpet is sparser, with
     more ground between its tufts. Its cost (Metal, two rounds: the plan): 0.6–0.7 ms less at Kobelnitz's close camera, 0.1–0.35 at the
-    demo's, even at 90 m, the default and the wide zooms; Full's goldens match main's.
+    demo's, even at 90 m, the default and the wide zooms; `?grassdetail=full`'s goldens match main's.
   - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
   - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
     `__look.flowBuildMs`: the flow textures' time on load.

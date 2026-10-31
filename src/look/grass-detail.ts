@@ -9,23 +9,22 @@ import { sstep } from './noise.ts'
 /** The levels, in the settings panel's order */
 export const GRASS_DETAILS = ['full', 'balanced'] as const
 export type GrassDetail = (typeof GRASS_DETAILS)[number]
-/** Full everywhere, map windows included */
-export const GRASS_DETAIL_DEFAULT: GrassDetail = 'full'
+/** Balanced, map windows included (the owner, 2026-10-31, decision 0095); Full where there is no meadow to thin */
+export const GRASS_DETAIL_DEFAULT: GrassDetail = 'balanced'
 /** Whether a string is a level (the query's value, the panel's) */
 export const isGrassDetail = (v: string): v is GrassDetail => (GRASS_DETAILS as readonly string[]).includes(v)
 
-/** The page's grass detail from its query: ?grassdetail=full|balanced, Full when absent; throws on any other value.
- * Without the meadow (WebGL1, ?meadow=off) there is no grass to thin: Full, whatever the address says (a saved
- * address with Balanced still opens) */
+/** The page's grass detail from its query: ?grassdetail=full|balanced, the default (Balanced) when absent; throws on
+ * any other value. Without the meadow (WebGL1, ?meadow=off) there is no grass to thin: Full, whatever the address
+ * says (a saved address with Balanced still opens) */
 export function grassDetailOf(params: URLSearchParams, meadowOn: boolean): GrassDetail {
   const v = params.get('grassdetail')
-  if (v === null) return GRASS_DETAIL_DEFAULT
-  if (!isGrassDetail(v)) throw new Error(`?grassdetail must be ${GRASS_DETAILS.join(' or ')}, not ${v}`)
-  return meadowOn ? v : GRASS_DETAIL_DEFAULT
+  if (v !== null && !isGrassDetail(v)) throw new Error(`?grassdetail must be ${GRASS_DETAILS.join(' or ')}, not ${v}`)
+  return meadowOn ? (v ?? GRASS_DETAIL_DEFAULT) : 'full'
 }
 /** The address's search string (location.search) for a level in force: the same string when it already says that
- * level (none named is Full: an address without grassdetail at Full untouched), else only that key edited
- * (grassdetail=balanced, or gone for Full), every other part kept as written (no re-encoding) */
+ * level (none named is the default, Balanced: an address without grassdetail at Balanced untouched), else only that
+ * key edited (grassdetail=full, or gone for the default), every other part kept as written (no re-encoding) */
 export function searchWithGrassDetail(search: string, level: GrassDetail): string {
   const parts = search
     .replace(/^\?/, '')
@@ -33,7 +32,7 @@ export function searchWithGrassDetail(search: string, level: GrassDetail): strin
     .filter(p => p !== '')
   const isKey = (p: string) => p === 'grassdetail' || p.startsWith('grassdetail=')
   const now = parts.find(isKey)
-  // (the level the address says: Full when it names none)
+  // (the level the address says: the default when it names none)
   if ((now === undefined ? GRASS_DETAIL_DEFAULT : now.slice('grassdetail='.length)) === level) return search
   const want = level === GRASS_DETAIL_DEFAULT ? undefined : `grassdetail=${level}`
   const at = parts.findIndex(isKey)
