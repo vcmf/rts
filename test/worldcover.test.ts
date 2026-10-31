@@ -1,20 +1,11 @@
-// The WorldCover reader's header parse (tools/worldcover.ts, docs/plans/active/k1b-forests.md): the levels of a tiled
+// The WorldCover reader's header parse (tools/worldcover.ts, docs/plans/done/k1b-forests.md): the levels of a tiled
 // little-endian TIFF, their sizes and tile tables, from its first bytes.
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import {
-  chooseLevel,
-  fileName,
-  parseCog,
-  pixelOf,
-  range,
-  resampleField,
-  smoothCover,
-  type CogLevel,
-  type Fetch,
-} from '../tools/worldcover.ts'
+import { chooseLevel, fileName, parseCog, pixelOf, range, type CogLevel, type Fetch } from '../tools/worldcover.ts'
+import { resampleField, smoothCover } from '../src/render/campaign/bake.ts'
 
 /** A little-endian TIFF of the given levels, each a directory with its size, tile size and tile tables. */
 function tiff(levels: { size: number; tile: number; offsets: number[]; counts: number[] }[]): Buffer {

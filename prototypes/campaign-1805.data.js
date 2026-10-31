@@ -1,4 +1,4 @@
-// The 1805 theatre for the campaign map prototype (docs/plans/active/k1-theatre-look.md): its frame, towns, roads and
+// The 1805 theatre for the campaign map prototype (docs/plans/done/k1-theatre-look.md): its frame, towns, roads and
 // region names, written by hand. Positions are the towns' modern ones (degrees, WGS 84). The roads are the period's
 // main routes as far as known: a sketch for the look, not a traced network (that is Track K's K4).
 // Read by prototypes/campaign-map.html and by tools/campaign-theatre.ts, which routes the roads over the heights.

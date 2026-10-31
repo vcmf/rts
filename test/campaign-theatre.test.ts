@@ -1,4 +1,4 @@
-// The campaign map prototype's theatre tool (docs/plans/active/k1-theatre-look.md): its projection and grid, the
+// The campaign map prototype's theatre tool (docs/plans/done/k1-theatre-look.md): its projection and grid, the
 // lakes' rings kept through simplification, and the road router.
 import { describe, it, expect } from 'vitest'
 import {

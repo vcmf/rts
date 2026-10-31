@@ -1,6 +1,6 @@
-// The campaign map's bake (tools/campaign-bake.ts): the box mean, the lakes' signed distance and the baked light.
+// The campaign map's bake (src/render/campaign/bake.ts): the box mean, the lakes' signed distance and the baked light.
 import { describe, it, expect } from 'vitest'
-import { bakeLightRows, boxMean, despiked, lakeDistance, type Grid } from '../tools/campaign-bake.ts'
+import { bakeLightRows, boxMean, despiked, lakeDistance, type Grid } from '../src/render/campaign/bake.ts'
 
 /** The box mean computed the slow way: the mean of the nodes within r, clamped to the grid. */
 function slowMean(h: number[], nx: number, nz: number, r: number): number[] {
@@ -65,5 +65,21 @@ describe('the bake', () => {
     const sun = (x: number) => out[(10 * g.nx + (x - g.x0) / g.cell) * 2]
     expect(sun(3000)).toBe(255)
     expect(sun(-3000)).toBe(0)
+  })
+
+  it('bakes the same bytes by bands as in one pass, as the workers of the tool do', () => {
+    const g: Grid = { nx: 41, nz: 31, cell: 100, x0: 0, z0: 0 }
+    const shape = Float32Array.from({ length: g.nx * g.nz }, (_, k) => 300 * Math.sin(k * 0.37) + 400)
+    const whole = new Uint8Array(g.nx * g.nz * 2)
+    bakeLightRows(shape, g, { el: 20, az: 55, size: 2.5 }, whole, 0, g.nz)
+    const bands = new Uint8Array(g.nx * g.nz * 2)
+    for (const [j0, j1] of [
+      [0, 7],
+      [7, 20],
+      [20, 31],
+    ]) {
+      bakeLightRows(shape, g, { el: 20, az: 55, size: 2.5 }, bands, j0, j1)
+    }
+    expect(bands).toEqual(whole)
   })
 })

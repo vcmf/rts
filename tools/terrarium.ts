@@ -1,7 +1,7 @@
 // The AWS terrain tiles (Terrarium PNGs: height = red · 256 + green + blue / 256 − 32768 m; built from SRTM,
 // GMTED2010 and, in Europe, EU-DEM), fetched once and cached under scratch/terrarium/, and sampled onto a grid in the
 // campaign map's projection. Used by tools/campaign-theatre.ts and tools/campaign-tiles.ts
-// (docs/plans/active/k1-theatre-look.md).
+// (docs/plans/done/k1-theatre-look.md).
 import fs from 'node:fs'
 import path from 'node:path'
 import { read as readPng } from './png.mjs'

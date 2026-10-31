@@ -1,4 +1,4 @@
-// Builds the campaign map prototype's theatre (docs/plans/active/k1-theatre-look.md) from the hand-written data file
+// Builds the campaign map prototype's theatre (docs/plans/done/k1-theatre-look.md) from the hand-written data file
 // prototypes/campaign-1805.data.js, into a generated .js under scratch/ (git-ignored, never committed):
 //   window.THEATRE = { frame, cell, nx, nz, h, forest, forestBoxM, towns, regions, rivers, lakes, roads, credit }
 // - h: heights in whole metres on a `cell` grid (250 m by default) in a Lambert azimuthal equal-area projection
@@ -31,7 +31,8 @@ import {
   type Pt,
 } from './campaign-theatre-lib.ts'
 import { cached, sampleGrid } from './terrarium.ts'
-import { forestField, resampleField, WOOD_BOX_M, WORLDCOVER_CREDIT } from './worldcover.ts'
+import { resampleField, WOOD_BOX_M } from '../src/render/campaign/bake.ts'
+import { forestField, WORLDCOVER_CREDIT } from './worldcover.ts'
 
 const DATA_FILE = 'prototypes/campaign-1805.data.js'
 const TILE_ZOOM = 9

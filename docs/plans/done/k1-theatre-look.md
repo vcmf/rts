@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-29
 ---
 
@@ -227,7 +227,7 @@ The owner: "do 1 + 2 as a proof of concept, if it works we consider the prototyp
   resolution**, on all cores; cut into 640 tiles of 256 × 256 nodes under scratch/campaign-tiles/ (216 MB, git-ignored),
   with a meta file the page checks the parameters against. The bake: 62 s on the dev machine (i7-9700K, 8 cores),
   26 s of it fetching and sampling the heights.
-- The shared parts: `tools/terrarium.ts` (the terrain tiles, from the theatre tool) and `tools/campaign-bake.ts`
+- The shared parts: `tools/terrarium.ts` (the terrain tiles, from the theatre tool) and `src/render/campaign/bake.ts` (moved there by K2a)
   (the shape, the lakes' distance, the light; tested in `test/campaign-bake.test.ts`), a TypeScript copy of the page's
   steps, which the page still runs at load on its 250 m grid.
 - The page keeps its 250 m bake for the far zoom; from about 4 px a km it streams the tiles around the camera into a

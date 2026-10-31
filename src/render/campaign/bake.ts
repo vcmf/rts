@@ -1,10 +1,15 @@
-// The campaign map's bake (docs/plans/active/k1-theatre-look.md, the proof of concept of the tiles): the one shape
-// the 3D map is raised by and lit from, the lakes sunk into it, and the light that does not change (the sun's soft
-// shadow and the sky's occlusion), on any grid. The same steps as prototypes/campaign-map.html (buildShape,
-// lakeDistance, sinkLakes, bakeLight), which bakes them at load on the 250 m grid; tools/campaign-tiles.ts bakes them
-// offline at 100 m. Plain float64 in a tool, not the sim's. Tested in test/campaign-bake.test.ts.
-import { inRing } from '../src/map/geometry.ts'
-import type { Pt } from '../src/map/schema.ts'
+// The campaign map's bake (docs/systems/campaign-map.md, docs/plans/active/k2a-bake.md): the one shape the 3D map is
+// raised by and lit from, the lakes sunk into it, the light that does not change (the sun's soft shadow and the sky's
+// occlusion) and the forests printed under it, on any grid. Pure functions, no DOM and no Node:
+// tools/campaign-tiles.ts runs them offline for each level of tiles (src/render/campaign/tiles.ts). The prototype
+// (prototypes/campaign-map.html) holds its own copy of the same steps, baked at load. Renderer data, not the
+// campaign's rules: plain float, not the sim's exact numbers. Tested in test/campaign-bake.test.ts.
+import { inRing } from '../../map/geometry.ts'
+import type { Pt } from '../../map/schema.ts'
+
+// the forests' smoothing (three box means this many metres either side) and the forest field's cell, in metres
+export const WOOD_BOX_M = 500
+export const FIELD_CELL = 100
 
 /** A grid of nx × nz nodes `cell` metres apart, node (i, j) at (x0 + i·cell, z0 + j·cell), the south row first. */
 export interface Grid {
@@ -247,4 +252,47 @@ export function bakeLightRows(shape: Float32Array, g: Grid, sun: SunParams, out:
       out[k * 2 + 1] = Math.round((sky / dirs.length) * 255)
     }
   }
+}
+
+/**
+ * The cover smoothed for printing: three box means of WOOD_BOX_M either side, in metres (a forest smaller than about
+ * the box fades, a large one keeps its core). The grid's cell must divide WOOD_BOX_M.
+ */
+export function smoothCover(cover: Uint8Array, nx: number, nz: number, cell: number): Uint8Array {
+  const r = WOOD_BOX_M / cell
+  if (!Number.isInteger(r)) throw new RangeError(`smoothCover: a cell of ${cell} m does not divide ${WOOD_BOX_M} m`)
+  const smooth = boxMean(boxMean(boxMean(cover, nx, nz, r), nx, nz, r), nx, nz, r)
+  return Uint8Array.from(smooth, v => Math.round(v))
+}
+
+/** The forest field: the smoothed cover, 0–255, on a grid of nx × nz nodes `cell` metres apart, the south row first. */
+export interface ForestField {
+  cell: number
+  nx: number
+  nz: number
+  cover: Uint8Array
+}
+
+/**
+ * The field on another grid over the same frame (nx × nz nodes `cell` metres apart from the same south-west corner):
+ * bilinear between the field's nodes, held at its edge. Where a node falls on one of the field's, it is that node's
+ * value, so the two layers agree.
+ */
+export function resampleField(field: ForestField, cell: number, nx: number, nz: number): Uint8Array {
+  const out = new Uint8Array(nx * nz)
+  const at = (i: number, j: number) => field.cover[Math.min(field.nz - 1, j) * field.nx + Math.min(field.nx - 1, i)]
+  for (let j = 0; j < nz; j++) {
+    const fz = (j * cell) / field.cell
+    const j0 = Math.floor(fz)
+    const v = fz - j0
+    for (let i = 0; i < nx; i++) {
+      const fx = (i * cell) / field.cell
+      const i0 = Math.floor(fx)
+      const u = fx - i0
+      const south = at(i0, j0) * (1 - u) + at(i0 + 1, j0) * u
+      const north = at(i0, j0 + 1) * (1 - u) + at(i0 + 1, j0 + 1) * u
+      out[j * nx + i] = Math.round(south * (1 - v) + north * v)
+    }
+  }
+  return out
 }
