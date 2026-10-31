@@ -107,18 +107,21 @@ Kobelnitz on Austerlitz, (−450, 350); the Pratzen, (700, 250)). `tools/build-l
   `src/look/shaders/shore.glsl`; the demo's roads set no flag); a grass verge (4 m past a road's edge, 2.5 m past a
   track's: `VERGE`) where the arable reached them;
 - the trees: a wood's scattered as a forest grows, not planted (`woodTrees`, docs/plans/active/natural-woods.md): a
-  candidate anywhere in each cell of a 3 m lattice, kept by a chance that gives a tree per 36 m² at full density
-  (near a random scatter, so no row shows and trees clump by chance), that chance scaled by the density, by a slow
-  value noise (`src/map/noise.ts`, seeded from the map's seed) into thickets and small clearings, by the species
-  (conifers closer, oaks wider, normalised over the `leaf`'s shares) and in the 10 m edge band by a noise into bays,
-  each noise's factor divided by its mean (`THICKET_MEAN`, `BAYS_MEAN`, recomputed by the tests); half the trees take
-  their stand's species (patches about 36 m across on a lattice turned 37°, wobbled ±18 m); a candidate gives way to
-  a neighbour's of higher rank within their species' gap (1.1–1.8 m; the few it takes are not made up); the rim's
-  birches and hawthorns within a width that wanders from 3 to 8 m, along the outline, rides and glades alike, probed
-  in six directions off the map's axes; its size by its `height`, a pack-scaled tree's spread ±15 % by its stand's
-  age and the odd veteran's 12 % (a hawthorn at its own). Every decision reads the map's layers alone, never the
-  window's 1 m areas, so every window stands the same trees; the far ring's count stays near the earlier 6 m
-  lattice's (Kobelnitz −6.3 %, Pratzen −2.7 %); an orchard's apples in its rows (against the 1 m areas); the
+  candidate anywhere in each cell of a 3 m lattice, kept by a chance that gives a tree per 34 m² at full density
+  (near a random scatter, so no row shows and trees clump by chance; the gaps and the trunks' footprints thin it to
+  about 36), that chance scaled by the density, by a slow value noise (`src/map/noise.ts`) into thickets and small
+  clearings, by the species (conifers closer, oaks wider, normalised over the `leaf`'s shares) and in the 10 m edge
+  band by a noise into bays, each noise's factor divided by its mean over the map's own noise (`woodField`, once a
+  seed, at build time); half the trees take their stand's species and every pack-scaled tree its stand's age (±15 %;
+  stands about 36 m across on a lattice turned 37°, wobbled ±18 m); a candidate gives way to a neighbour's of higher
+  rank within their species' gap (1.1–1.8 m); a trunk stands only where the cells under its footprint (±1 m) are
+  wood, off ways, water and the built; the rim's birches and hawthorns within a width that wanders from 3 to 8 m,
+  along the outline, rides, glades and roads through the wood alike, probed every 2 m out to the band in six
+  directions off the map's axes; its size by its `height`, the stand's age and the odd veteran's 12 % (a hawthorn at
+  its own). The noises and the trees' own hashes are seeded from the map's seed (`mapTrees` takes it). Every decision
+  reads the map's layers alone, never the window's 1 m areas, so every window stands the same trees; the far ring's
+  count stays near the earlier 6 m lattice's (Kobelnitz −5.4 %, Pratzen −0.2 %); an orchard's apples in its rows
+  (against the 1 m areas); the
   free-standing trees. On the page the tile's are placed by the placement rule as the demo's scatter, but
   as placed on purpose (`onFields`: one beside a field stays drawn), the far ring's are far trees (none in the apron
   band).

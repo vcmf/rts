@@ -18,15 +18,13 @@ import {
   groundClass,
   ihash,
   mapCover,
-  BAYS_MEAN,
   mapTrees,
   packTrees,
   standOf,
-  THICKET_MEAN,
   treeScale,
   type MapTree,
-  WOOD_CHANCE_TOP,
   WOOD_STEP,
+  woodField,
   woodNoiseMeans,
   woodSeeds,
   woodTrees,
@@ -342,7 +340,7 @@ describe('the roads', () => {
 
 describe('the trees', () => {
   const L = layers()
-  const trees = mapTrees(L, fineAreas(L, FEATURES, WIN, 120, 1), WIN)
+  const trees = mapTrees(L, fineAreas(L, FEATURES, WIN, 120, 1), WIN, 0)
 
   it('stands the woods by their leaf and their rim, the orchards in rows, nowhere else', () => {
     const wood = trees.filter(t => t.x > 0 && t.z > 0)
@@ -361,7 +359,7 @@ describe('the trees', () => {
 
   it('stands the same trees whatever the window, moved by its centre', () => {
     const win = { ...WIN, x: 10, z: -10 }
-    const moved = mapTrees(L, fineAreas(L, FEATURES, win, 80, 1), win)
+    const moved = mapTrees(L, fineAreas(L, FEATURES, win, 80, 1), win, 0)
     const t = moved.find(m => m.sp !== 'apple')!
     expect(
       trees.some(u => u.sp === t.sp && Math.abs(u.x - (t.x + 10)) < 1e-9 && Math.abs(u.z - (t.z - 10)) < 1e-9),
@@ -373,7 +371,11 @@ describe('the trees', () => {
     // patch of the noises, so one seed's count ranges about ±60 %
     let count = 0
     for (let seed = 0; seed < 12; seed++) {
-      count += mapTrees(L, fineAreas(L, FEATURES, WIN, 120, 1), WIN, seed).filter(t => t.x > 0 && t.z > 0).length
+      const n = mapTrees(L, fineAreas(L, FEATURES, WIN, 120, 1), WIN, seed).filter(t => t.x > 0 && t.z > 0).length
+      // each seed's within a sane range of the 100 the density asks
+      expect(n, `seed ${seed}`).toBeGreaterThan(30)
+      expect(n, `seed ${seed}`).toBeLessThan(200)
+      count += n
     }
     expect(count / 12 / (60 ** 2 / 36)).toBeGreaterThan(0.85)
     expect(count / 12 / (60 ** 2 / 36)).toBeLessThan(1.15)
@@ -400,13 +402,16 @@ interface ForestOpts {
   leaf?: string
   density?: number
   rides?: number[]
+  rideWidth?: number // m, 6 by default
   glades?: Pt[]
+  gladeSide?: number // m, 6 by default
+  lane?: boolean // a lane through the wood (way cells within 2 m of z = x / 2), and a house's built cells at (−60, 60)
 }
 
 /** The large wood's layers, centred on the map point `at` (its trees are a function of them and the map's seed). */
 function forestLayers(
   at: Pt = [0, 0],
-  { leaf = 'mixed', density = 1, rides = [], glades = [] }: ForestOpts = {},
+  { leaf = 'mixed', density = 1, rides = [], rideWidth = 6, glades = [], gladeSide = 6, lane = false }: ForestOpts = {},
 ): Layers {
   const n = FOREST_N * FOREST_N
   const U = () => new Uint16Array(n)
@@ -435,12 +440,15 @@ function forestLayers(
       const x = L.x0 + (i + 0.5) * 2 - at[0]
       const z = L.z0 + (j + 0.5) * 2 - at[1]
       const inRide =
-        rides.some(r => x > r && x < r + 6) ||
-        glades.some(([gx, gz]) => Math.max(Math.abs(x - gx), Math.abs(z - gz)) < 3)
+        rides.some(r => x > r && x < r + rideWidth) ||
+        glades.some(([gx, gz]) => Math.max(Math.abs(x - gx), Math.abs(z - gz)) < gladeSide / 2)
       // (the density stays over the ride: only the vegetation's layer clears it)
       if (Math.max(Math.abs(x), Math.abs(z)) < FOREST_HALF) {
         L.density[j * FOREST_N + i] = Math.round(255 * density)
         if (!inRide) L.veg[j * FOREST_N + i] = 1
+        // (a lane and a house leave the wood's vegetation under them, as apply does)
+        if (lane && Math.abs(z - x / 2) < 2) L.way[j * FOREST_N + i] = 1
+        if (lane && Math.max(Math.abs(x + 60), Math.abs(z - 60)) < 6) L.built[j * FOREST_N + i] = 1
       }
     }
   }
@@ -535,22 +543,22 @@ describe('a large wood', () => {
     }
   })
 
-  it("never asks a chance above 1 (the factors' tops together), so the factors' means hold everywhere", () => {
-    expect(WOOD_CHANCE_TOP).toBeLessThanOrEqual(1)
+  it("never asks a chance above 1 (the factors' tops together), whatever the map's seed", () => {
+    for (let seed = 0; seed < 8; seed++) expect(woodField(seed).chanceTop, `seed ${seed}`).toBeLessThanOrEqual(1)
   })
 
-  it("holds the noises' means as the map's noise gives them (THICKET_MEAN, BAYS_MEAN), whatever its seed", () => {
-    for (const seed of [0, 1805]) {
-      const m = woodNoiseMeans(seed)
-      expect(Math.abs(m.thicket / THICKET_MEAN - 1)).toBeLessThan(0.02)
-      expect(Math.abs(m.bays / BAYS_MEAN - 1)).toBeLessThan(0.02)
-    }
+  it("divides each noise's factor by its own seed's mean, worked out once a seed", () => {
+    const f = woodField(1805)
+    expect(woodField(1805)).toBe(f)
+    expect(f.thicketMean).toBe(woodNoiseMeans(1805).thicket)
+    expect(f.baysMean).toBe(woodNoiseMeans(1805).bays)
+    expect(woodField(7).thicketMean).not.toBe(f.thicketMean)
   })
 
-  it("grows other woods from another map's seed", () => {
+  it("grows other woods from another map's seed: other places, not the same candidates thinned otherwise", () => {
     const other = forestTrees([0, 0], {}, 1805)
     const same = other.filter(t => trees.some(u => u.x === t.x && u.z === t.z)).length
-    expect(same / other.length).toBeLessThan(0.7)
+    expect(same / other.length).toBeLessThan(0.05)
   })
 
   it('stands the conifers closer and the oaks wider than their shares', () => {
@@ -615,7 +623,7 @@ describe('a large wood', () => {
     const L = forestLayers([0, 0], { rides })
     const features = [{ id: 'forest', area: square(-FOREST_HALF, -FOREST_HALF, FOREST_HALF, FOREST_HALF) }]
     const treesOf = (win: LookWindow, far: number) =>
-      mapTrees(L, fineAreas(L, features, win, far, 1), win).map(t => ({ ...t, x: t.x + win.x, z: t.z + win.z }))
+      mapTrees(L, fineAreas(L, features, win, far, 1), win, 0).map(t => ({ ...t, x: t.x + win.x, z: t.z + win.z }))
     const key = (t: MapTree) => `${t.x},${t.z},${t.sp},${t.s}`
     const whole = treesOf(WIN, 2 * FOREST_N)
     for (const x of centres) {
@@ -630,6 +638,37 @@ describe('a large wood', () => {
         `${x}`,
       ).toEqual(want)
     }
+  })
+
+  it('gives a glade narrower than its rim its rim too, right beside it', () => {
+    // one-cell glades (2 m) every 20 m: the trees within 2 m of one mostly a rim's (birches and hawthorns)
+    const glades: Pt[] = []
+    for (let x = -141; x <= 141; x += 20) for (let z = -141; z <= 141; z += 20) glades.push([x, z])
+    const beside = forestTrees([0, 0], { glades, gladeSide: 2 }).filter(t =>
+      glades.some(([x, z]) => Math.max(Math.abs(t.x - x), Math.abs(t.z - z)) < 3),
+    )
+    const thorns = beside.filter(t => t.sp === 'hawthorn').length
+    expect(beside.length).toBeGreaterThan(20)
+    expect(thorns / beside.length).toBeGreaterThan(0.2)
+  })
+
+  it('stands no trunk within 1 m of a lane or a house through the wood, and gives the lane its rim', () => {
+    const ridden = forestTrees([0, 0], { lane: true })
+    // the lane's cells: within 2 m of z = x / 2 by their centres; the house's: a 12 m square at (−60, 60)
+    const L = forestLayers([0, 0], { lane: true })
+    const off = (x: number, z: number) => {
+      const k = cellAt(L, x, z)
+      return k >= 0 && (L.way[k] > 0 || L.built[k] > 0)
+    }
+    for (const t of ridden) {
+      for (let q = 0; q < 16; q++) {
+        const a = (q * Math.PI) / 8
+        expect(off(t.x + 0.99 * Math.cos(a), t.z + 0.99 * Math.sin(a)), `${t.x}, ${t.z}`).toBe(false)
+      }
+    }
+    // along the lane, inside the wood: hawthorns (a rim's alone) within 4 m of its cells
+    const byLane = ridden.filter(t => Math.abs(t.x) < 150 && Math.abs(t.z - t.x / 2) < 6)
+    expect(byLane.filter(t => t.sp === 'hawthorn').length).toBeGreaterThan(10)
   })
 
   it("gives a glade inside the wood its rim, as its outline, though the edge band's depth reaches past it", () => {

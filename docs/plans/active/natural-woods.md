@@ -37,8 +37,8 @@ noises seeded from the map's seed, so the trees are a function of the map and ev
 
 **API change, for epic/gameplay-map's merge:** `woodTree(g, a, b)` (one lattice point) is gone; its one caller,
 `mapTrees`, now calls `woodTrees(L, mapSeed, a0, a1, b0, b1)` (every cell of a range at once, for the gap test's
-grid), and `mapTrees` takes the map's seed as a fourth argument (`tools/build-look-data.ts` passes `map.seed`; 0 by
-default). The look data is rebuilt (`node tools/build-look-data.ts`).
+grid), and `mapTrees` takes the map's seed as a required fourth argument (`tools/build-look-data.ts` passes
+`map.seed`). The look data is rebuilt (`node tools/build-look-data.ts`).
 
 ## Cost
 
@@ -64,11 +64,12 @@ after on both windows and kept within ±10 %, so no bench.
   one's peak over every period from 2 to 12 m about 4.5 (a random scatter's is of order 1 to 5). The nearest
   neighbours' spread (standard deviation over mean) 0.26 → 0.38; the trees within 2.8 m of a neighbour 11 % → 36 %;
   12 m squares of the inside left empty 0 → 26 of 576.
-- The far ring's trees: Kobelnitz 4747 → 4448 (−6.3 %), Pratzen 9133 → 8888 (−2.7 %); within ±10 %, so no bench.
-- Calibration: the noises' means (`THICKET_MEAN`, `BAYS_MEAN`) held as constants, recomputed by a test for two
-  seeds; the factors' tops together never ask a chance above 1 (`WOOD_CHANCE_TOP`, tested). The few candidates the
-  gaps take (a few per cent, more in thickets) are not made up: the trees per hectare stay within ±10 % at densities
-  0.5 and 1 and for the broad, needle and mixed leaves (tested over five woods).
+- The far ring's trees: Kobelnitz 4747 → 4493 (−5.4 %), Pratzen 9133 → 9111 (−0.2 %); within ±10 %, so no bench.
+- Calibration: the noises' means worked out once a seed at build time (`woodField`; the page reads the look data and
+  never calls it); the factors' tops together never ask a chance above 1 (tested for eight seeds). The candidates the
+  gaps and the trunks' footprints take are not made up one by one; the chance is set for a tree per 34 m², which they
+  thin to about 36: the trees per hectare stay within ±10 % of one per 36 m² at densities 0.5 and 1 and for the
+  broad, needle and mixed leaves (tested over five woods).
 - Review round 1: the edge probes, the neighbours past the window's areas and the gap test read the map's layers, so
   two windows stand the same trees (a test compares every tree of a smaller window's overlap); the stand's age only
   on pack-scaled species, within ±15 % and a veteran's 12 % (a test caps each species); the candidates built once
@@ -79,5 +80,12 @@ after on both windows and kept within ±10 %, so no bench.
   probed at its rim's distance and at the band's, so glades and rides get their rims (tested); the stands' lattice
   turned 37° and wobbled ±18 m (a test on the borders' orientation); the noises seeded from the map's seed; the gap
   compensation dropped; a small wood's density tested over a dozen seeds.
-- Build time (mapTrees over the far ring, the fastest of 5): Kobelnitz 54 → 88 ms, Pratzen 56 → 99 ms (the whole
-  window's build about 8 and 2 s either way); the tests' file 0.45 → 1.2 s with the new tests.
+- Review round 3: the edge probed every 2 m out to the band, so a ride or a glade narrower than the rim gets its rim
+  (a test with one-cell glades); ways, water and the built through a wood make an edge (a lane's rim, tested); a
+  trunk only where the cells under its ±1 m footprint are wood and free (a test: no trunk within 1 m of a lane or a
+  house); the map's seed in the trees' own hashes too (places, ranks, species) and `mapTrees`' seed required; a
+  per-seed range on the small wood; the age the stand's own; the noises' means per seed, memoised; one allocation a
+  tree.
+- Build time (mapTrees over the far ring, the fastest of 5): Kobelnitz 54 → 147 ms, Pratzen 56 → 156 ms, the last
+  measured at a load of about 25 (the earlier ones near 10); the whole window's build about 8–10 and 2 s either way;
+  the tests' file 0.45 → 4 s with the new tests.
