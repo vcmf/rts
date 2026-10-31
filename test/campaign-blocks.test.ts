@@ -3,7 +3,7 @@
 // shape past it (bakeLightRows).
 import { describe, it, expect } from 'vitest'
 import { bakeLightRows, buildShape, type Grid, type ShapeParams } from '../src/render/campaign/bake.ts'
-import { levelBlocks } from '../src/render/campaign/tiles.ts'
+import { cutTile, levelBlocks } from '../src/render/campaign/tiles.ts'
 
 describe('a level blocks', () => {
   it('hold every tile once, their own nodes inside their margins, clipped to the level', () => {
@@ -20,11 +20,21 @@ describe('a level blocks', () => {
       }
       expect(b.baked.i0).toBe(Math.max(0, b.own.i0 - 40))
       expect(b.baked.i1).toBe(Math.min(nx, b.own.i1 + 40))
-      expect(b.own.i1).toBeLessThanOrEqual(nx)
-      expect(b.own.j1).toBeLessThanOrEqual(nz)
+      expect(b.baked.j0).toBe(Math.max(0, b.own.j0 - 40))
+      expect(b.baked.j1).toBe(Math.min(nz, b.own.j1 + 40))
+      // its own nodes are its tiles', up to the level's edge
+      expect([b.own.i0, b.own.j0]).toEqual([b.tiles.c0 * 64, b.tiles.r0 * 64])
+      expect(b.own.i1).toBe(Math.min(nx, b.tiles.c1 * 64))
+      expect(b.own.j1).toBe(Math.min(nz, b.tiles.r1 * 64))
     }
     // 18 × 11 tiles of 64 nodes
     expect(seen.size).toBe(18 * 11)
+    // the blocks' own nodes tile the level: every node once
+    const count = new Uint8Array(nx * nz)
+    for (const b of blocks) {
+      for (let j = b.own.j0; j < b.own.j1; j++) for (let i = b.own.i0; i < b.own.i1; i++) count[j * nx + i]++
+    }
+    expect(count.every(c => c === 1)).toBe(true)
   })
 })
 
@@ -114,5 +124,22 @@ describe('a block light near the map edge', () => {
     bakeLightRows(shape, block, sun, out, 5, 6, { shape: farShape, g: far }, 0, 21, near)
     // the wall 1.3 km north, 3 km high: the node in its shadow
     expect(out[(5 * 21 + 10) * 2]).toBe(0)
+  })
+})
+
+describe('a tile cut from a block', () => {
+  it('is refused when it is not wholly in the block nodes', () => {
+    // a block of a level of 300 × 300 nodes, its nodes 100..199 in x and z; tiles of 50 nodes
+    const grid: Grid = { nx: 100, nz: 100, cell: 100, x0: 10000, z0: 10000 }
+    const bake = {
+      grid,
+      shape: new Float32Array(100 * 100),
+      light: new Uint8Array(100 * 100 * 2),
+      forest: new Uint8Array(100 * 100),
+      place: { i0: 100, j0: 100, nx: 300, nz: 300 },
+    }
+    expect(cutTile(bake, { level: 0, column: 2, row: 3 }, 50, 0.5, 0).shape).toHaveLength(2500)
+    expect(() => cutTile(bake, { level: 0, column: 1, row: 2 }, 50, 0.5, 0)).toThrow(/not wholly in the bake/)
+    expect(() => cutTile(bake, { level: 0, column: 4, row: 2 }, 50, 0.5, 0)).toThrow(/not wholly in the bake/)
   })
 })

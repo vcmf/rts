@@ -59,8 +59,9 @@ level's bake, `levelLayout` says how a level is cut. Tested in `test/campaign-ti
 
 `tools/campaign-tiles.ts` bakes and writes them under `scratch/campaign/` (git-ignored), each level by blocks of
 4 × 4 tiles with a margin of 24 km (`levelBlocks`; EU1, `docs/plans/active/europe.md`): every step exact on a block's
-own nodes, the sun's rays past the margin reading a coarse 1 km shape of the whole map, so its memory does not grow
-with the map's size (but for the forests' field, still whole):
+own nodes, the sun's rays past the margin reading a coarse 1 km shape of the whole map (the frame's extents whole
+kilometres), the light on every core (`tools/campaign-light.ts`, workers kept for the run), so its memory does not
+grow with the map's size (but for the forests' field, still whole, and the fields' level, at most 20 M nodes):
 
 | Level | Cell | Nodes (1805 theatre) | Tiles | On disk |
 |---|---|---|---|---|

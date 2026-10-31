@@ -213,6 +213,12 @@ export function cutTile(bake: LevelBake, place: TilePlace, size: number, scale: 
   const at = bake.place ?? wholeOf(bake.grid)
   const { nx, nz } = at
   const gx = bake.grid.nx
+  // a tile wholly inside the bake's nodes (a block's), or its reads would wrap into the rows beside it
+  const first = [column * size - at.i0, row * size - at.j0]
+  const last = [Math.min(nx - 1, (column + 1) * size - 1) - at.i0, Math.min(nz - 1, (row + 1) * size - 1) - at.j0]
+  if (first[0] < 0 || first[1] < 0 || last[0] >= gx || last[1] >= bake.grid.nz) {
+    throw new RangeError(`cutTile: the tile at ${column}, ${row} is not wholly in the bake's nodes`)
+  }
   const n = size * size
   const tile: Tile = {
     level,

@@ -73,6 +73,15 @@ margin its steps reach, so the memory stays that of a few tiles whatever the map
   coarse cell the first of 1 km, 500 m, 250 m the frame divides; one named type for a shared shape; `Place` used in the
   tiles' module; a block's heights and lakes' distance returned only for the fields' level. Left: a block's forests
   and light sized to its margin, not its own nodes (2.2 times at 100 m); a block's shape copied once to share it.
+- **Round 2**: no severe finding; fixed: the coarse shape always 1 km (the frame's extents whole kilometres, or the
+  bake refuses: a fallback to 250 m would have held a whole continent at 250 m); the fields' level refused past 20 M
+  nodes (they are made on it whole); a tile cut from a block it is not wholly in refused (its reads would have wrapped
+  into the rows beside it); the light's pool its own module (`tools/campaign-light.ts`) and tested
+  (`test/campaign-light.test.ts`: a block baked by the pool is the light baked in one thread; a worker gone fails the
+  next bake); the blocks' test on both axes and the blocks' own nodes tiling the level once. Left for EU2, where they
+  count at a continent's size: a block's preparation (its heights, shape, lakes, tiles' writing) does not overlap the
+  light of the one before, so the light's workers wait meanwhile; the terrain tiles under a margin are read and
+  decoded again for each block that reaches them (a cache of decoded tiles across blocks).
 
 ### EU2: Europe's sources and its bake
 
