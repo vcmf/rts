@@ -9,8 +9,11 @@ import { sstep } from './noise.ts'
 /** The levels, in the settings panel's order */
 export const GRASS_DETAILS = ['full', 'balanced'] as const
 export type GrassDetail = (typeof GRASS_DETAILS)[number]
-/** Balanced, map windows included (the owner, 2026-10-31, decision 0095); Full where there is no meadow to thin */
+/** The level by default where the meadow is drawn: Balanced, map windows included (the owner, 2026-10-31, decision
+ * 0097) */
 export const GRASS_DETAIL_DEFAULT: GrassDetail = 'balanced'
+/** The level without the meadow (WebGL1, ?meadow=off): Full, as there is nothing to thin */
+export const GRASS_DETAIL_NO_MEADOW: GrassDetail = 'full'
 /** Whether a string is a level (the query's value, the panel's) */
 export const isGrassDetail = (v: string): v is GrassDetail => (GRASS_DETAILS as readonly string[]).includes(v)
 
@@ -20,21 +23,23 @@ export const isGrassDetail = (v: string): v is GrassDetail => (GRASS_DETAILS as 
 export function grassDetailOf(params: URLSearchParams, meadowOn: boolean): GrassDetail {
   const v = params.get('grassdetail')
   if (v !== null && !isGrassDetail(v)) throw new Error(`?grassdetail must be ${GRASS_DETAILS.join(' or ')}, not ${v}`)
-  return meadowOn ? (v ?? GRASS_DETAIL_DEFAULT) : 'full'
+  return meadowOn ? (v ?? GRASS_DETAIL_DEFAULT) : GRASS_DETAIL_NO_MEADOW
 }
-/** The address's search string (location.search) for a level in force: the same string when it already says that
- * level (none named is the default, Balanced: an address without grassdetail at Balanced untouched), else only that
- * key edited (grassdetail=full, or gone for the default), every other part kept as written (no re-encoding) */
-export function searchWithGrassDetail(search: string, level: GrassDetail): string {
+/** The address's search string (location.search) for a level in force, with the meadow drawn or not: the same
+ * string when it already says that level (none named is the level a page there takes, GRASS_DETAIL_DEFAULT, or
+ * GRASS_DETAIL_NO_MEADOW without the meadow: an address without grassdetail is never touched), else only that key
+ * edited (named, or gone when the level is the implied one), every other part kept as written (no re-encoding) */
+export function searchWithGrassDetail(search: string, level: GrassDetail, meadowOn: boolean): string {
   const parts = search
     .replace(/^\?/, '')
     .split('&')
     .filter(p => p !== '')
   const isKey = (p: string) => p === 'grassdetail' || p.startsWith('grassdetail=')
   const now = parts.find(isKey)
-  // (the level the address says: the default when it names none)
-  if ((now === undefined ? GRASS_DETAIL_DEFAULT : now.slice('grassdetail='.length)) === level) return search
-  const want = level === GRASS_DETAIL_DEFAULT ? undefined : `grassdetail=${level}`
+  // (the level a page takes when the address names none)
+  const implied = meadowOn ? GRASS_DETAIL_DEFAULT : GRASS_DETAIL_NO_MEADOW
+  if ((now === undefined ? implied : now.slice('grassdetail='.length)) === level) return search
+  const want = level === implied ? undefined : `grassdetail=${level}`
   const at = parts.findIndex(isKey)
   const kept = parts.filter(p => !isKey(p))
   if (want) kept.splice(at < 0 ? kept.length : at, 0, want)
@@ -56,6 +61,9 @@ export const THIN_SOFT = 0.2
  * is Full's */
 export const dropAtZoom = (radius: number): number =>
   (BALANCED_DROP + THIN_SOFT) * (1 - sstep(CLOSE_ZOOM[0], CLOSE_ZOOM[1], radius))
+/** The camera's radius, m, under which Balanced's program is compiled ahead (src/look/meadow.ts, warmThin): a margin
+ * past CLOSE_ZOOM's far edge, where the program is first needed, so a page that is never zoomed in never compiles it */
+export const THIN_WARM_RADIUS = CLOSE_ZOOM[1] + 30
 /** Whether the near ring draws with Balanced's program at a level and the camera's radius: Full's from CLOSE_ZOOM's
  * end out, where nothing drops */
 export const thinOn = (level: GrassDetail, radius: number): boolean => level === 'balanced' && dropAtZoom(radius) > 0

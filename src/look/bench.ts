@@ -8,6 +8,9 @@
 // frame's) far above 1 means the backend inflates them (ANGLE on Metal does), and only the frame time stands.
 // Arms are variants of the page measured in the same session, interleaved A B B A per camera so that heat and clock
 // changes fall on both equally.
+// The grass detail (decision 0095 and its successor) is the page's: Balanced by default, what players get, recorded
+// as grassDetail; ?grassdetail=full measures Full's meadow, the one every bench before version 10 measured (compare
+// with older runs on it). Each camera is timed once the grass detail has settled.
 import type { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import type { AbstractEngine } from '@babylonjs/core/Engines/abstractEngine.js'
@@ -274,6 +277,8 @@ export async function runBench(
   arms: Arm[],
   holdS: number,
   focus: { x: number; z: number } = { x: START.x, z: START.z },
+  settled: () => boolean = () => true,
+  meta: Record<string, unknown> = {},
 ): Promise<object> {
   const engine = scene.getEngine()
   const gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl
@@ -528,6 +533,10 @@ export async function runBench(
         let t1 = 0
         for (let tries = 0; ; tries++) {
           await frames(10)
+          // (the grass detail at rest after the move: its program switched and its share eased, settled; else the
+          // first part of the hold would time the switch)
+          for (let i = 0; i < 600 && !settled(); i++) await frames(1)
+          if (!settled()) throw new Error(`bench camera ${cam.name}: the grass detail never settled (600 frames)`)
           // (the closest zooms are held out over high ground, decision 0051: a camera
           // there would measure another radius)
           if (Math.abs(camera.radius - cam.radius) > 1e-6) {
@@ -596,13 +605,15 @@ export async function runBench(
   const r = engine.getRenderingCanvas()
   return {
     tool: 'look-bench',
-    // 9: each run's longTasks (and longTasksObserved), the trace's simMs (battle threads PR 6's measurement); 8:
-    // trace (?benchtrace=1: each run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is
+    // 10: the page's own record (meta: the grass detail measured, grassDetail), each camera timed once the grass detail
+    // settled; 9: each run's longTasks (and longTasksObserved), the trace's simMs (battle threads PR 6's measurement);
+    // 8: trace (?benchtrace=1: each run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is
     // measured); 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under
     // the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render
-    // scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits
-    // the start
-    version: 9,
+    // scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the
+    // start
+    version: 10,
+    ...meta,
     build: __BUILD__,
     date: new Date().toISOString(),
     userAgent: navigator.userAgent,

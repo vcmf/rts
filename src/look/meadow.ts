@@ -19,7 +19,7 @@ import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
 import { MEADOW_LOOK, type MeadowLook } from './meadow-look.ts'
-import { GRASS_DETAIL_DEFAULT, type GrassDetail, THIN_EASE_S, THIN_RAMP, THIN_SOFT, ThinEase } from './grass-detail.ts'
+import { type GrassDetail, THIN_EASE_S, THIN_RAMP, THIN_SOFT, THIN_WARM_RADIUS, ThinEase } from './grass-detail.ts'
 import { switchDefineWhenReady, warmDefine } from './define-switch.ts'
 import {
   CLUMP_REACH,
@@ -335,8 +335,8 @@ export interface MeadowOptions {
   reach?: number
   /** the combed clumps' look (decision 0085) */
   look?: MeadowLook
-  /** the player's grass detail to start at (decision 0095) */
-  detail?: GrassDetail
+  /** the player's grass detail to start at (decisions 0095, 0097): the page's, never assumed */
+  detail: GrassDetail
   /** how long Balanced's share eases, s (THIN_EASE_S; 0 snaps it: the look tools' frozen page) */
   thinEaseS?: number
 }
@@ -346,13 +346,7 @@ export function buildMeadow(
   mats: Materials,
   camera: ArcRotateCamera,
   mm: MeadowMap,
-  {
-    wide = true,
-    reach = CLUMP_REACH,
-    look = MEADOW_LOOK,
-    detail = GRASS_DETAIL_DEFAULT,
-    thinEaseS = THIN_EASE_S,
-  }: MeadowOptions = {},
+  { wide = true, reach = CLUMP_REACH, look = MEADOW_LOOK, detail, thinEaseS = THIN_EASE_S }: MeadowOptions,
 ): Meadow {
   const t0 = performance.now()
   const { map, growingCells, growthAt, cropAt, groundAt: groundAtMap } = mm
@@ -519,11 +513,12 @@ export function buildMeadow(
   // the figures' shadows') warms it again
   let warmedFor = ''
   meshes[0].onBeforeRenderObservable.add(() => switchThin())
-  /** Warms GRASS_THIN's program while Balanced is chosen and the program is off and not being asked for (zoomed out,
-   * the ring maybe hidden): the switch then finds it compiled. Once a frame from the scene, before the render; a
+  /** Warms GRASS_THIN's program while Balanced is chosen, the program is off and not being asked for, and the camera
+   * is within THIN_WARM_RADIUS (coming in toward CLOSE_ZOOM, the ring maybe hidden): the switch then finds it compiled;
+   * a page never zoomed in never compiles it. Once a frame from the scene, before the render; a
    * cached lookup once compiled, and only when the ring's defines changed since */
   function warmThin(): void {
-    if (level !== 'balanced' || ease.program || askProgram) return
+    if (level !== 'balanced' || ease.program || askProgram || camera.radius >= THIN_WARM_RADIUS) return
     const key = near.options.defines.join('\n')
     if (key !== warmedFor && warmDefine(near, THIN, true, ready)) warmedFor = key
   }

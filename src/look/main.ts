@@ -22,7 +22,14 @@ import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './material
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
 import { CLOSE_ZOOM, CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { meadowLookDefines, meadowLookOf } from './meadow-look.ts'
-import { type GrassDetail, grassDetailOf, isGrassDetail, searchWithGrassDetail, THIN_EASE_S } from './grass-detail.ts'
+import {
+  GRASS_DETAIL_NO_MEADOW,
+  type GrassDetail,
+  grassDetailOf,
+  isGrassDetail,
+  searchWithGrassDetail,
+  THIN_EASE_S,
+} from './grass-detail.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
@@ -1056,23 +1063,27 @@ const applyScale = (s: number) => {
   engine.setHardwareScalingLevel(k / s)
 }
 /** Keeps the address to the grass detail in force (level): only its grassdetail key edited, and only when it names
- * another level (none named is the default, Balanced), so a reload or a shared address opens on it and every other
- * parameter stays as written */
+ * another level than the one in force (none named is the level a page takes: Balanced with the meadow, Full without),
+ * so a reload or a shared address opens on it and every other parameter stays as written */
 const showDetail = (level: GrassDetail) => {
-  const search = searchWithGrassDetail(location.search, level)
+  const search = searchWithGrassDetail(location.search, level, !!meadow)
   if (search !== location.search) history.replaceState(history.state, '', location.pathname + search + location.hash)
 }
-// the grass detail: applied live (Meadow.setDetail), the address kept to it; without the meadow there is nothing to
-// choose: the row is hidden and the address left as it is
-if (meadow) showDetail(grassDetail)
+// the grass detail: applied live (Meadow.setDetail), the address kept to it (without the meadow a stale Balanced
+// dropped); without the meadow there is nothing to choose: the row is hidden
+let detailNow: GrassDetail = meadow ? grassDetail : GRASS_DETAIL_NO_MEADOW
+/** The grass detail in force (the bench records it) */
+const grassDetailNow = () => detailNow
+showDetail(detailNow)
 const detailSel = byId<HTMLSelectElement>('grassdetail')
-detailSel.value = grassDetail
+detailSel.value = detailNow
 const detailRow = detailSel.closest<HTMLElement>('.row')
 if (!meadow && detailRow) detailRow.style.display = 'none'
 detailSel.onchange = () => {
   const v = detailSel.value
   if (!meadow || !isGrassDetail(v)) return
   meadow.setDetail(v)
+  detailNow = v
   showDetail(v)
 }
 const resSel = byId<HTMLSelectElement>('res')
@@ -1807,7 +1818,10 @@ if (params.has('bench')) {
   const mid = armiesFocus
   const clampPlay = (v: number) => Math.max(-D.spec.play, Math.min(D.spec.play, v))
   const focus = at ? { x: at[0], z: at[1] } : mid ? { x: clampPlay(mid[0]), z: clampPlay(mid[1]) } : undefined
-  void runBench(scene, camera, passes, arms, hold, focus).then(
+  // (the grass detail measured: the page's, recorded; each camera timed once it settled)
+  const benchSettled = () => meadow?.thinSettled() ?? true
+  const benchMeta = { grassDetail: meadow ? grassDetailNow() : 'full' }
+  void runBench(scene, camera, passes, arms, hold, focus, benchSettled, benchMeta).then(
     r => {
       Object.assign(window, { __bench: r })
       showBench(r)

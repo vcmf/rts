@@ -9,10 +9,12 @@ import {
   dropAtZoom,
   dropShare,
   GRASS_DETAIL_DEFAULT,
+  GRASS_DETAIL_NO_MEADOW,
   grassDetailOf,
   isGrassDetail,
   THIN_RAMP,
   THIN_SOFT,
+  THIN_WARM_RADIUS,
   thinKeep,
   THIN_EASE_S,
   ThinEase,
@@ -57,17 +59,28 @@ describe('the grass detail', () => {
   it('keeps the address byte for byte unless its grassdetail names another level, then edits only that key', () => {
     // (the regression: every load re-encoded the whole query: ?bench became bench=, lean,big lean%2Cbig)
     for (const a of ['', '?bench&grassoff=lean,big&midtone=u3,b2', '?map=austerlitz&window=kobelnitz&x=%20']) {
-      expect(searchWithGrassDetail(a, 'balanced')).toBe(a)
+      expect(searchWithGrassDetail(a, 'balanced', true)).toBe(a)
     }
     // (an explicit default kept: it names the level in force)
-    expect(searchWithGrassDetail('?grassdetail=balanced&bench', 'balanced')).toBe('?grassdetail=balanced&bench')
-    expect(searchWithGrassDetail('?bench&grassdetail=full&a=b,c', 'full')).toBe('?bench&grassdetail=full&a=b,c')
+    expect(searchWithGrassDetail('?grassdetail=balanced&bench', 'balanced', true)).toBe('?grassdetail=balanced&bench')
+    expect(searchWithGrassDetail('?bench&grassdetail=full&a=b,c', 'full', true)).toBe('?bench&grassdetail=full&a=b,c')
     // the key written only off the default, removed back to it, in its place
-    expect(searchWithGrassDetail('?bench&grassdetail=full&a=b,c', 'balanced')).toBe('?bench&a=b,c')
-    expect(searchWithGrassDetail('?bench&a=b,c', 'full')).toBe('?bench&a=b,c&grassdetail=full')
-    expect(searchWithGrassDetail('?grassdetail=balanced&bench', 'full')).toBe('?grassdetail=full&bench')
-    expect(searchWithGrassDetail('?grassdetail=full', 'balanced')).toBe('')
-    expect(searchWithGrassDetail('', 'full')).toBe('?grassdetail=full')
+    expect(searchWithGrassDetail('?bench&grassdetail=full&a=b,c', 'balanced', true)).toBe('?bench&a=b,c')
+    expect(searchWithGrassDetail('?bench&a=b,c', 'full', true)).toBe('?bench&a=b,c&grassdetail=full')
+    expect(searchWithGrassDetail('?grassdetail=balanced&bench', 'full', true)).toBe('?grassdetail=full&bench')
+    expect(searchWithGrassDetail('?grassdetail=full', 'balanced', true)).toBe('')
+    expect(searchWithGrassDetail('', 'full', true)).toBe('?grassdetail=full')
+  })
+  it('drops a stale grassdetail without the meadow, where none named means Full', () => {
+    expect(searchWithGrassDetail('?meadow=off&grassdetail=balanced', 'full', false)).toBe('?meadow=off')
+    expect(searchWithGrassDetail('?meadow=off', 'full', false)).toBe('?meadow=off')
+    expect(searchWithGrassDetail('?meadow=off&grassdetail=full', 'full', false)).toBe('?meadow=off&grassdetail=full')
+    expect(GRASS_DETAIL_NO_MEADOW).toBe('full')
+  })
+  it('compiles Balanced ahead only once the camera comes within a margin of CLOSE_ZOOM', () => {
+    expect(THIN_WARM_RADIUS).toBeGreaterThan(CLOSE_ZOOM[1])
+    // (the default zoom, 125 m, warms it: a player zooming in finds it compiled; the widest never does)
+    expect(THIN_WARM_RADIUS).toBeLessThan(260)
   })
   it('culls BALANCED_DROP of the grass clumps between its ramps up close, shrinks THIN_SOFT more, none outside', () => {
     // (the regression: the share was 0.5 with the soft band under it, so only 0.3 of the clumps were culled)

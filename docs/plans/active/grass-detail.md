@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-30
+last_reviewed: 2026-10-31
 ---
 
 # Plan: a Grass detail setting, Full and Balanced (issue #257)
@@ -17,8 +17,8 @@ The research note's first two experiments (the issue's comment of 2026-10-30):
 
 The owner (2026-10-30) chose a player option with two levels: **Full** (today's meadow) and **Balanced** (the thin
 blades, tuned so the default zoom costs nothing). The crops experiment is dropped. Full was the default first; on
-2026-10-31, having tried Balanced ("not bad"), the owner made **Balanced the default** (`?grassdetail=full` for Full;
-Full without the meadow).
+2026-10-31, having tried Balanced ("not bad"), the owner made **Balanced the default** (decision 0097, superseding
+0095's default; `?grassdetail=full` for Full; Full without the meadow).
 
 ## Scope
 
@@ -37,7 +37,8 @@ Full without the meadow).
 - **The look page's settings panel**: a Grass detail select (Full | Balanced, Balanced selected by default), applied live
   and kept in the address (the key only off the default).
   The row is hidden without the meadow.
-- **Docs**: `docs/systems/look.md` (the setting) and decision 0095 (a player option over decision 0085's meadow).
+- **Docs**: `docs/systems/look.md` (the setting), decision 0095 (a player option over decision 0085's meadow) and
+  decision 0097 (Balanced the default).
 - **Tests**:
   - the parsing and the address;
   - the share by distance and zoom (none from 110 m: Balanced is Full);
@@ -102,7 +103,8 @@ Two notes on these results:
   2026-10-30), and each run also waits for it.
   - Balanced: Kobelnitz's close cameras under 8.3 ms.
   - Default and wide: no worse than Full.
-- **Goldens.** `?grassdetail=full` is identical to main's build.
+- **Goldens.** `?grassdetail=full` is identical to main's build (`tools/golden.mjs` pins it unless the URL sets the
+  grass detail).
 - **Stills.** Full and Balanced at close-up and default zoom on Kobelnitz and on the demo's meadow, in the main
   checkout's output/farmland-perf/compare.html (not committed).
 - **Checks.** `npm test`, `check:data`, the docs check and the build pass.
@@ -147,8 +149,14 @@ cell gives the GPU frame p50, then the frame-interval p50, in ms:
 
 **Goldens.** Full against origin/main's build, `tools/golden.mjs`, the demo and Kobelnitz: every region of all 8 views
 matches (0.000 % differing, mean 0.000). After Balanced became the default, run again on `?grassdetail=full`: the same,
-on both. The default page now differs from main up close by design (its golden `close` view, at 80 m, is inside
-`CLOSE_ZOOM`).
+on both. The default page differs from main up close by design (the golden `close` view, at 80 m, is inside `CLOSE_ZOOM`), so
+`tools/golden.mjs` now renders both pages with `?grassdetail=full` unless the URL sets it.
+
+**After the last review.**
+- The bench waits for the grass detail to settle before timing each camera, and records the level it measured
+  (`grassDetail`, bench version 10).
+- Balanced's program is compiled once the camera comes within 140 m (`THIN_WARM_RADIUS`), not at load. Its compile
+  cost is an estimate, not measured (decision 0097).
 
 **Stills** (main checkout, output/farmland-perf/compare.html, not committed), Full against Balanced at 20, 45, 90
 and 125 m on Kobelnitz and the demo's meadow:

@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-30
+last_reviewed: 2026-10-31
 code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, src/look/world/windows.ts, src/look/world/from-map.ts, src/look/relief.ts, test/look-relief.test.ts, data/austerlitz-kobelnitz.lookdata, test/look-from-map.test.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, data/leaf-clumps-simple-v1.png, test/leaves.test.ts, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/step-shadows.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/rulesets/napoleonic-dyes.ts, src/look/world/dyes.ts, test/dyes.test.ts, tools/army-blocks.mjs, src/scenarios/armies-demo.ts, src/look/trace.ts, src/look/sim-men.ts, src/look/sim-armies.ts, test/look-sim.test.ts, src/look/trodden.ts, src/look/world/arms.ts, data/figures/fr-cuirassier.unitdata, data/figures/fr-foot-artillery.unitdata, test/arms.test.ts, src/look/meadow-look.ts, test/meadow-look.test.ts, test/meadow-spec.test.ts, src/look/grass-detail.ts, src/look/define-switch.ts, test/grass-detail.test.ts]
-decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline, 0084-a-soft-mid-tone-on-figures-and-buildings, 0095-grass-detail-a-player-option]
+decisions: [0068-dye-palette, 0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom, 0067-simple-shadows-darker, 0071-soldier-contact-shadow, 0074-soldier-shadow-per-step, 0075-arms-share-the-units-pipeline, 0084-a-soft-mid-tone-on-figures-and-buildings, 0095-grass-detail-a-player-option, 0097-balanced-is-the-default-grass-detail]
 ---
 
 # The look page (Track E, L0)
@@ -651,33 +651,40 @@ shader); `?meadow=off` puts back the old scatter.
     none thinned out between the patches there (`GRASS_DENSE`), the middle ring fading to the outer ring's plain clumps
     across its band out (no seam). 0 is the splayed look before it, 1 upright alone (both kept for comparisons). Every
     look stays within the combed clumps' reach (`clumpReach`, under `CLUMP_REACH_FLOW`, which the growth keeps).
-  - **Grass detail** (decision 0095, issue #257; `src/look/grass-detail.ts`, `?grassdetail=full|balanced`, any other
-    value refused, Balanced read as Full without the meadow; the settings panel's Grass detail, applied live; the
-    address rewritten to the level in force; the row hidden without the meadow; `docs/plans/active/grass-detail.md`).
-    **Balanced** is the default everywhere (map windows too; the owner, 2026-10-31), Full without the meadow.
-    **Full** (`?grassdetail=full`) draws the meadow above with main's materials and program.
-    **Balanced**, up close, turns on `GRASS_THIN` on the near ring's material (`setDefine`, as the trodden mask's
-    `TRAMPLE`):
-    - a share of the near ring's *grass* clumps shrinks away, picked by a hash of their own (not `h2`, so the kept
-      clumps grow as at Full);
-    - the share is none inside 8 m; from 12 m half the clumps are culled (`BALANCED_DROP`) and a fifth more shrunk
-      (`THIN_SOFT`); back to none across the near ring's own band out (18–25 m), where the middle ring fades in, so
-      the density never steps (`THIN_RAMP`, `dropShare`; `uThinRamp`);
-    - a clump below the share shrinks away across `THIN_SOFT` of the hash rather than vanishing (`thinKeep`, `uThin`;
-      `grow` times it), so panning and zooming never pop one;
-    - the crops are untouched (the thinning is on the grass branch), as are the outer rings;
-    - across `CLOSE_ZOOM` (70–110 m of the camera's radius, `src/look/meadow-spec.ts`, shared with the combed clumps)
-      the share falls to none, and from 110 m out, the default zoom included, the ring draws Full's program itself
-      (`thinOn`).
-
-    The program is compiled ahead while Balanced is chosen (`warmDefine`, from a scene hook, again when the material's
-    other defines change). The look tools wait until it is in force (`__look.meadowSettled`, `tools/look-page.mjs`); on
-    their frozen page the share snaps on the frame it lands. A switch happens in the near ring's own
-    render, once the new program is ready (`switchDefineWhenReady`, `src/look/define-switch.ts`; the old defines kept
-    meanwhile), so the ring never blinks. The share eases from none after a switch on and to none before a switch off
-    (`ThinEase`, `THIN_EASE_S`; snapped on the tools' frozen page), so no clump pops. Past 10 m the close carpet is sparser, with
-    more ground between its tufts. Its cost (Metal, two rounds: the plan): 0.6–0.7 ms less at Kobelnitz's close camera, 0.1–0.35 at the
-    demo's, even at 90 m, the default and the wide zooms; `?grassdetail=full`'s goldens match main's.
+  - **Grass detail** (decisions 0095 and 0097, issue #257; `src/look/grass-detail.ts`; `docs/plans/active/grass-detail.md`):
+    - **The levels.** `?grassdetail=full|balanced`, any other value refused. **Balanced** is the default everywhere
+      (map windows too; decision 0097, the owner, 2026-10-31). Without the meadow the page is Full
+      (`GRASS_DETAIL_NO_MEADOW`). **Full** (`?grassdetail=full`) draws the meadow above with main's materials and
+      program.
+    - **The panel and the address.** The settings panel's Grass detail is applied live, its row hidden without the
+      meadow. The address names the level only when it differs from the one a page there takes without it
+      (`searchWithGrassDetail`: Balanced with the meadow, Full without). Only that key is edited, and a stale one
+      without the meadow is dropped.
+    - **What Balanced does, up close:** it turns on `GRASS_THIN` on the near ring's material (`setDefine`, as the
+      trodden mask's `TRAMPLE`), and a share of the near ring's *grass* clumps shrinks away, each picked by a hash of
+      its own (not `h2`, so the kept clumps grow as at Full):
+      - the share is none inside 8 m; from 12 m half the clumps are culled (`BALANCED_DROP`) and a fifth more shrunk
+        (`THIN_SOFT`); it goes back to none across the near ring's own band out (18–25 m), where the middle ring fades
+        in, so the density never steps (`THIN_RAMP`, `dropShare`; `uThinRamp`);
+      - a clump below the share shrinks away across `THIN_SOFT` of the hash rather than vanishing (`thinKeep`,
+        `uThin`; `grow` times it), so panning and zooming never pop one;
+      - the crops are untouched (the thinning is on the grass branch), as are the outer rings;
+      - across `CLOSE_ZOOM` (70–110 m of the camera's radius, `src/look/meadow-spec.ts`, shared with the combed
+        clumps) the share falls to none, and from 110 m out, the default zoom included, the ring draws Full's program
+        itself (`thinOn`).
+    - **Switching.** The program is compiled ahead while Balanced is chosen and the camera is within 140 m
+      (`THIN_WARM_RADIUS`; `warmDefine`, from a scene hook, again when the material's other defines change), so a
+      page never zoomed in never compiles it. A switch happens in the near ring's own render, once the new program is
+      ready (`switchDefineWhenReady`, `src/look/define-switch.ts`; the old defines kept meanwhile), so the ring never
+      blinks. The share eases from none after a switch on and to none before a switch off (`ThinEase`, `THIN_EASE_S`),
+      so no clump pops.
+    - **The tools.** They wait until the grass detail has settled (`__look.meadowSettled`): `tools/look-page.mjs`'s
+      views and the bench before each camera. On the tools' frozen page the share snaps on the frame the program
+      lands. The bench measures the page's level and records it (`grassDetail`, bench version 10; `?grassdetail=full`
+      compares with runs before it). `tools/golden.mjs` renders with `?grassdetail=full` unless the URL sets it.
+    - **Look and cost.** Past 10 m the close carpet is sparser, with more ground between its tufts. Its cost (Metal,
+      two rounds: the plan): 0.6–0.7 ms less at Kobelnitz's close camera and 0.1–0.35 ms at the demo's; even at 90 m,
+      the default and the wide zooms. `?grassdetail=full`'s goldens match main's.
   - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
   - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
     `__look.flowBuildMs`: the flow textures' time on load.
