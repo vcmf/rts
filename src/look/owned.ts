@@ -31,6 +31,8 @@ const observables = (s: Scene): Observable<any>[] => [
   s.onAfterRenderObservable,
   s.onBeforeCameraRenderObservable,
   s.onAfterCameraRenderObservable,
+  // (a lost context's rebake: the buildings' light hooks it, G3d)
+  s.getEngine().onContextRestoredObservable,
 ]
 
 /** What the scene holds now, and a function giving what was added since (the snapshot dropped once read, so an owner
@@ -62,7 +64,8 @@ function takeAway(scene: Scene, added: unknown[][], hooks: unknown[][], forget: 
   }
 }
 
-/** Builds a part of the scene, recording what it adds: dispose() takes it all away again; a build that throws is taken
+/** Builds a part of the scene, recording what it adds: dispose() takes it all away again (and calls the part's own
+ *  release(), if it has one: what lies outside the scene's lists, an effect wrapper); a build that throws is taken
  *  away at once and its error rethrown */
 export function owned<T>(scene: Scene, mats: Materials, build: () => T): Owned<T> {
   const diff = since(scene)
@@ -78,5 +81,14 @@ export function owned<T>(scene: Scene, mats: Materials, build: () => T): Owned<T
   const { added, hooks } = diff()
   const { forget, bind } = done()
   const mine = new Set(added.flat())
-  return { value, dispose: () => takeAway(scene, added, hooks, forget), rebind: bind, has: x => mine.has(x) }
+  const release = (value as { release?: () => void } | null)?.release
+  return {
+    value,
+    dispose: () => {
+      release?.call(value)
+      takeAway(scene, added, hooks, forget)
+    },
+    rebind: bind,
+    has: x => mine.has(x),
+  }
 }

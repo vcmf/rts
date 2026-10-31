@@ -46,3 +46,20 @@ ring turned to its road; the churches 11 × 24 m); on the 3D page their ground i
 
 - **The light's atlas** grows with the buildings in a tile (one 256² tile each: 40 buildings, 1792²): measured.
 - **Fit:** four models for 126 footprints: villages of repeated models; the owner's eye.
+
+## Built
+
+- **The compiler** (`src/look/world/map-buildings.ts`, `mapBuildings`; in a tile's data as `buildings`, moved with
+  it, `LOOK_VERSION` 12): each standing house, barn and church (`standing()`) whose centre is on the tile a model:
+  a house or a barn the house, the farmhouse or the manor whose shape fits its footprint best (the fits within 12 %
+  picked among by its place), a church the manor scaled to its length; the long side the model's x, the front toward
+  the nearest road within 60 m; ruins (roofless) left out. Kobelnitz's first tile: 8 buildings, the Pratzen's 9.
+- **The page:** the buildings and their baked light parts of the tile (`tileBuildings`, `tileBldLight`, built in the
+  move beside the last: the trees, the buildings into their canopy, the bakes, the light bound to the new bakes); the
+  owner (`src/look/owned.ts`) also records the engine's context-restored hooks and calls a part's own `release()`
+  (the light's effect wrappers); no yards on map worlds.
+- **Checked** (Kobelnitz): a move with its buildings draws as a page loaded there (five views, relief off: identical,
+  1/255 at most); ten moves leak nothing (100 meshes, 40 materials, 35 GPU textures throughout); a move made to fail
+  leaves the page as a fresh one. A move followed (Metal): 280–330 ms (the buildings 1 ms, their light's setup 3–5 ms;
+  its bake on the GPU in the next frames). Shots of Pratze, Šlapanice, Újezd and Telnitz, the tile carried there by
+  the follower: `scratch/g3d/villages.png`.

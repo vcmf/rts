@@ -18,7 +18,7 @@ import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
-import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
+import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type Bakes, type SoftOptions } from './bakes.ts'
 import { midtoneDefines, parseMidtone } from './midtone.ts'
 import { q, runBench, showBench } from './bench.ts'
 import { TR, tr, trNow } from './trace.ts'
@@ -80,6 +80,7 @@ import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
 import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
 import { BUILDINGS, YARD_ALL, YARD_BASE, onPaving, paveShape, type Building } from './world/buildings.ts'
+import { BUILDING_FLOATS, BUILDING_MODELS } from './world/map-buildings.ts'
 import { COVER, coarsenCover, type CoverGrid } from './world/cover.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
@@ -135,7 +136,19 @@ checkLookData(D, look)
 checkWorld(look.world, lookWindow)
 // a map's window: no hand-placed copses, zones or buildings (the demo's), its trees from its data
 const onMap = look.world.kind === 'map'
-const worldBuildings: readonly Building[] = onMap ? [] : BUILDINGS
+// a tile's buildings: the demo's own list, or a map world's from its data (G3d: src/look/world/map-buildings.ts)
+const buildingsOf = (d: LookData): Building[] => {
+  const out: Building[] = []
+  for (let k = 0; k < d.buildings.length; k += BUILDING_FLOATS) {
+    const [m, x, z, yaw, scale] = d.buildings.subarray(k, k + BUILDING_FLOATS)
+    out.push({ model: BUILDING_MODELS[m], x, z, yaw, scale })
+  }
+  return out
+}
+const worldBuildings: readonly Building[] = onMap ? buildingsOf(look) : BUILDINGS
+// the buildings whose yards are paved: the demo's (a map world's are not yet: at most 16, apart and off the roads,
+// where the villages' houses stand 3 m from their road; G3d)
+const yarded: readonly Building[] = onMap ? [] : worldBuildings
 // the cover the per-frame shaders read (and the road split, which must class its triangles as they paint): a map
 // world's coarsened to the spec's cells (src/look/world/cover.ts, coarsenCover); the macro colour's bakes read the fine
 const frameCover = coarsenCover(look.cover, D.spec.macro.cover)
@@ -376,7 +389,7 @@ if (!mats.webgl1) {
   mats.bindAll(m => m.setTexture('uRoadGrit', grit))
   // the buildings' paving (docs/plans/done/buildings.md; shore.glsl, pavePaint): the buildings' shapes, on every
   // material that paints the roads; the cobbles ride in the grit (its G and B), their mean until it has loaded
-  const shapes = worldBuildings.map(paveShape)
+  const shapes = yarded.map(paveShape)
   if (shapes.length > 16) {
     throw new Error(`buildings: ${shapes.length} paved yards, the shader takes 16 (shore.glsl, pavePaint)`)
   }
@@ -384,7 +397,7 @@ if (!mats.webgl1) {
   // changed would paint one building's shape under another's yard, silently. Each building's centre texel names it
   {
     const C = look.cover
-    worldBuildings.forEach((b, bi) => {
+    yarded.forEach((b, bi) => {
       const i = Math.floor((b.x - C.x0) / C.cell)
       const j = Math.floor((b.z - C.z0) / C.cell)
       const o = (j * C.n + i) * 4
@@ -528,13 +541,13 @@ if (bldbounceParam !== null && bldbounceParam !== '0') throw new Error(`?bldboun
 // WebGL1's always: the bake's reads are GLSL ES 3's); ?bldbounce=0: without the ground's bounce on their walls
 const bldBaked = bldlmParam === null && !mats.webgl1
 // (the runtime path without the bounce, as main had it: it computed the bounce and never added it)
-const buildings = buildBuildings(
-  scene,
-  mats,
-  nature.canopy,
-  { baked: bldBaked, bounce: bldBaked && bldbounceParam === null },
-  worldBuildings,
-)
+// (a part of the tile: a moved tile's own, retile; its sky blobs go into the trees' canopy, which the bakes read)
+const tileBuildings = (n: Nature, list: readonly Building[]) =>
+  owned(scene, mats, () =>
+    buildBuildings(scene, mats, n.canopy, { baked: bldBaked, bounce: bldBaked && bldbounceParam === null }, list),
+  )
+let buildingsOwned = tileBuildings(nature, worldBuildings)
+let buildings = buildingsOwned.value
 const tileBakes = (n: Nature, leaving?: (m: AbstractMesh) => boolean) =>
   owned(scene, mats, () =>
     buildBakes(
@@ -557,20 +570,23 @@ let bakes = bakesOwned.value
 const bakeHooks: (() => void)[] = []
 // the buildings' static light, baked after the light map (src/look/building-light.ts)
 // (each bake timed, by reading it back, on the bench only)
-const bldLight =
-  bldBaked && buildings.meshes.length
-    ? buildBuildingLight(scene, mats, bakes, buildings.meshes, buildings.instances, {
-        bounce: bldbounceParam === null,
-        timed: params.has('bench'),
-      })
-    : null
-if (bldLight) {
-  for (const m of buildings.meshes) {
-    const mt = m.material as ShaderMaterial
-    mt.setTexture('uBldLight', bldLight.atlas)
-    if (bldLight.bounce) mt.setTexture('uBldBounce', bldLight.bounce)
-  }
-}
+// (a part of the tile: a moved tile's own, bound to its bakes and its buildings, retile)
+const tileBldLight = (bk: Bakes, b: typeof buildings) =>
+  owned(scene, mats, () => {
+    if (!(bldBaked && b.meshes.length)) return null
+    const l = buildBuildingLight(scene, mats, bk, b.meshes, b.instances, {
+      bounce: bldbounceParam === null,
+      timed: params.has('bench'),
+    })
+    for (const m of b.meshes) {
+      const mt = m.material as ShaderMaterial
+      mt.setTexture('uBldLight', l.atlas)
+      if (l.bounce) mt.setTexture('uBldBounce', l.bounce)
+    }
+    return l
+  })
+let bldOwned = tileBldLight(bakes, buildings)
+let bldLight = bldOwned.value
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm
 // (bake by default), set once every material is made; the bake runs before the first frame
 // the flow's textures (?grass=flow, src/look/flow.ts), on every painted material and the bake
@@ -1579,7 +1595,8 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
   // every check before the first change: a tile refused leaves the page as it was
   if (look.world.kind !== 'map') throw new Error("retile: a map world only (the demo's river is its tile's)")
   // (what is not rebuilt yet: the buildings' light and the units' shade hang on the bakes; a map world has neither)
-  if (bldLight || armiesParam !== null) throw new Error('retile: not with buildings or armies (not on a map world yet)')
+  // (the armies' shade hangs on the bakes and their places on the first tile: not on a map world yet)
+  if (armiesParam !== null) throw new Error('retile: not with armies (not on a map world yet)')
   // (the water, the banks and the river are the first tile's and stay: neither tile may have any yet, G3d)
   for (const d of [look, next]) {
     if (d.river.n || d.water.spans.length || d.bank.spans.length) throw new Error('retile: a tile with water (G3d)')
@@ -1627,7 +1644,7 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
   }
   // (what the last parts made: the new bakes cast none of it, the scene still holds it while they are built)
   // (the flow stays: its texture written in place)
-  const last = [roadsOwned, natureOwned, bakesOwned, meadowMapOwned]
+  const last = [roadsOwned, natureOwned, buildingsOwned, bakesOwned, bldOwned, meadowMapOwned]
   const leaving = (m: AbstractMesh) => last.some(o => o?.has(m))
   let parts
   try {
@@ -1642,8 +1659,12 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
       moveFault = null
       throw new Error(`a move made to fail (__look.moveFault: ${why})`)
     }
+    const bl = build(tileBuildings(n.value, buildingsOf(next)))
+    lap('buildings')
     const bk = build(tileBakes(n.value, leaving))
     lap('bakes')
+    const bll = build(tileBldLight(bk.value, bl.value))
+    lap('buildingLight')
     // (the flow's texels: its texture written in place at the swap, its comb the tile's never)
     const fl = flowOwned && (made?.flow ?? flowBytes(next.tileAt[0], next.tileAt[1], D.spec.tile))
     // (what the worker made: the sizes the page's textures take, checked before the swap)
@@ -1682,7 +1703,7 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
       reliefPatch(groundAt, field, box, [SUN.x, SUN.y, SUN.z], tone)
     }
     lap('relief')
-    parts = { roads, n, bk, fl, mm, share, tone }
+    parts = { roads, n, bl, bk, bll, fl, mm, share, tone }
   } catch (err) {
     // (a failed move's parts' times too, marked)
     moveParts = { ...parts0, failed: 1 }
@@ -1698,8 +1719,12 @@ async function move(next: LookData, made?: TileMade): Promise<number> {
   lap('dispose')
   natureOwned = parts.n
   nature = natureOwned.value
+  buildingsOwned = parts.bl
+  buildings = buildingsOwned.value
   bakesOwned = parts.bk
   bakes = bakesOwned.value
+  bldOwned = parts.bll
+  bldLight = bldOwned.value
   for (const h of bakeHooks) h()
   if (parts.roads && roadTex) {
     roadsOwned = parts.roads
@@ -1999,9 +2024,11 @@ Object.assign(window, {
     splitShare: () => groundShare, // the tile's triangles paved, by the roads, neither (terrain.ts, splitGround)
     // the buildings' light bake: its atlas and raw bake (the checks), its time once baked (on the bench), its bakes so
     // far, its memory
-    bldLight: bldLight
-      ? { atlas: bldLight.atlas, raw: bldLight.raw, ms: bldLight.ms, baked: bldLight.baked, bytes: bldLight.bytes }
-      : null,
+    get bldLight() {
+      return bldLight
+        ? { atlas: bldLight.atlas, raw: bldLight.raw, ms: bldLight.ms, baked: bldLight.baked, bytes: bldLight.bytes }
+        : null
+    },
     lab,
     mats,
     passes,

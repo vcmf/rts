@@ -119,6 +119,7 @@ export function buildLookData(): Uint8Array {
     farCover: null,
     light: null,
     tileAt: [0, 0],
+    buildings: new Float32Array(0),
   }
   return encodeLook(data)
 }

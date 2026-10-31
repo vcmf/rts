@@ -32,6 +32,8 @@ import {
   windowHeights,
 } from './from-map.ts'
 import type { LookWindow } from './windows.ts'
+import { mapBuildings } from './map-buildings.ts'
+import { standing } from '../../render/lit/houses.ts'
 
 type Pt = readonly [number, number]
 
@@ -185,6 +187,13 @@ export function windowData(
     cover: mapCover(areas, L.table, at, lines),
     world: { kind: 'map', map: win.map, window: win.name, x: win.x, z: win.z, base, play, edge },
     trees: packTrees(mapTrees(L, areas, at)),
+    // (the map's standing buildings on the tile, as the page's models: G3d)
+    buildings: mapBuildings(
+      standing(map.features, L.table, L.built, { x0: L.x0, z0: L.z0, cell: L.cell, nx: L.nx, nz: L.nz }),
+      at,
+      s.tile / 2,
+      lines,
+    ),
     farCover,
     light: { ...mapLight, x0: L.x0 - at.x, z0: L.z0 - at.z },
     tileAt: [0, 0],
