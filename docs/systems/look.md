@@ -780,26 +780,35 @@ its uniforms by name) and the figures' unit data by file (`data/figures/<figure>
 
 - **The battle** (`src/look/world/battle.ts`): each side's order of battle (`orderOfBattle`: the battle's `once`
   corps, then its `repeat` corps again and again, each unit taken while it fits in half the budget; a corps is cut at
-  its first unit that does not fit and the side ends there), laid out (`battleLayout`) on the tile less its last 30 m
-  (±370 m: past the camera's ±235 m play area until the bigger map), each side on its own half, 110 m between the
-  fronts (`FIELD`): the first two repeated corps a side side by side along the front, each by the scenario's template
-  (`Deploy`: rows of posts, its first line of three line units and its light infantry deploying and firing on the
-  script, its battery 12 m before it, its light cavalry riding along the front 36 m before it; each unit at the spot
-  nearest its post's, `placeArm` with `back`: along the front or back from it, never ahead), the rest at rest in
-  column 40 m behind the front at least (`RESERVE_BACK`), the nearest the front and the middle first on a 5 m grid,
-  each type's pass resuming where its last unit stood (a spot refused stays refused: the ground only fills); a unit
-  its post had no room for joins them. Water, trees (bushes are walked through), the buildings' yards are kept clear,
-  every unit's box clear of every other's, and it throws when a side has no room. The engaged units' cycles are
-  staggered (9.7 s a unit of a type). On the demo map the river splits the front, so some units stand behind it
+  its first unit that does not fit and the side ends there; a corps of no figures refused), laid out (`battleLayout`)
+  on the tile less its last 30 m (±370 m: past the camera's ±235 m play area until the bigger map), each side on its
+  own half, 110 m between the fronts (`FIELD`), under two **friendly-line rules**: no unit stands before a firing unit
+  of its side (a drill's, a battery's) it overlaps across, and no engaged unit stands behind another of its side it
+  overlaps across ("before" and "behind" by each side's own way; along the front an engaged unit's ground is its
+  own). The first two repeated corps a side stand side by side along the front, each one row from its outer flank to
+  the middle (`Deploy`: its posts left to right, a corps right of the middle mirrored): a light cavalry regiment
+  riding up to the front (its ride ending there), its light infantry, its battery in the line, two line units
+  deploying and firing, so the line infantry of both corps meet at the middle. Each takes the legal spot nearest its
+  post's (`placeArm` with `back`, never ahead of it, and `allows`, no engaged box of its side across it); one with
+  none joins the reserve, with a warning, and is counted (`fellBack`, `__armies.fellBack`: uneven sides for the bench
+  to see). Then the rest stand at rest in column, 40 m behind the front at least and 40 m behind every engaged
+  footprint of their side they overlap across (`RESERVE_BACK`), the nearest the front and the middle first on a 5 m
+  grid (`reserveSpots`, only spots on the field), each type's pass resuming where its last unit stood (a spot refused
+  stays refused: the engaged boxes are fixed, the ground only fills). Water, trees (bushes are walked through), the
+  buildings' yards are kept clear, every unit's box clear of every other's, and it throws when a side has no room for
+  its reserves. The engaged units' cycles are staggered (9.7 s a unit of a type). On the demo map the river and the
+  orchards push some engaged units back, and one engaged unit a side or so finds no legal spot
   (`test/battle.test.ts` lays out all three battles on the page's blocked ground,
-  `test/fixtures/demo-map-blocked.bin.gz`, sampled over ±370 m by `tools/sample-blocked.mjs`).
+  `test/fixtures/demo-map-blocked.bin.gz`, sampled over ±370 m by `tools/sample-blocked.mjs`, and checks both rules
+  for every pair of friendly units).
 - **The stand-ins** (the owner, 2026-10-31): the light infantry is the line infantryman in open order (160 figures, 4
   sections of 20 × 2, 1 m files, 1.5 m ranks) in its own dye (`fr-light`; the Austrians the Grenzer's), no colours;
   the light cavalry the cuirassier figure with its metal role (cuirass and helmet) painted in its coat (an arm's
   `parts` override), in light cavalry dyes (`fr-chasseur`, `at-hussar`), 80 figures against the cuirassiers' 120.
   Their own figures: #308, #309.
-- **The arms** (decision 0075, `docs/plans/done/cavalry-artillery-demo.md`; `?light=0`, `?artillery=0`, `?cavalry=0`,
-  `?cuirassiers=0`: left out; each 0 or 1, `armOn`; the line infantry always on, `?infantry=0` an error; `?lookat=<arm>|fight[,<radius m>]`: the camera starts on that arm's first unit or
+- **The arms** (decision 0075, `docs/plans/done/cavalry-artillery-demo.md`; `?light=0`, `?artillery=0`, `?lightcav=0`,
+  `?cuirassiers=0`: left out, and `?cavalry=0` both cavalry arms (as before the division scale: no horse; an arm's own
+  switch wins over its group's, `group`); each 0 or 1, `armOn`; the line infantry always on, `?infantry=0` an error; `?lookat=<arm>|fight[,<radius m>]`: the camera starts on that arm's first unit or
   the fight's middle, on the ground there, at 30 m or that zoom, `lookAtSpot`; a clear error without `?battle`, or
   naming the arms on the page, none under `?sim`): the scenario's `ARMS_DEMO` (`src/scenarios/armies-demo.ts`), the
   line infantry first (always on the page), each a unit type and formation of the ruleset, a figure, a script
@@ -827,7 +836,9 @@ its uniforms by name) and the figures' unit data by file (`data/figures/<figure>
   infantry's `drillScript` wraps `phaseAt` and `manAt` as before) for a unit's phase and each man's place and role.
   `__armies.arms` holds them by name; `__armies.coats` stays the line infantry's (the guard measures them);
   `__armies.battle` and `__armies.figures` name the battle and its figures (the ruleset's: a battery's 48, drawn as
-  its 4 pieces). Under `?sim` (the sim plays the line infantry) the other arms are left out (their scripts are
+  its 4 pieces), `__armies.fellBack` each side's engaged units with no legal spot. The panel labels each battle by the
+  figures it fields (`BATTLE_FIGURES`, checked against `orderOfBattle`). Two arms drawn with one figure (the light
+  infantry, the light cavalry) each build that figure's GPU resources again (#313). Under `?sim` (the sim plays the line infantry) the other arms are left out (their scripts are
   stand-ins the sim neither drives nor places against its armies); `?<arm>=1` with `?sim` is an error.
 - **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
   `data/figures/<figure>.unitdata` (`src/look/units-data.ts` reads and checks it): its LODs nearest first (here
@@ -1120,8 +1131,8 @@ its uniforms by name) and the figures' unit data by file (`data/figures/<figure>
   (`tools/look-check.js`).
 - **Measured**: `node tools/guard.mjs <url?battle> --figures`: per side, the figures' luma against the ground's at
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
-- **The bench**: `?bench&battle=<name>` with no `?benchat` orbits the fight's middle (the two sides' nearest line
-  infantry units in line, `facingAt`). `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?benchtrace=1`
+- **The bench**: `?bench&battle=<name>` with no `?benchat` orbits the fight's middle (`facingAt`: between the facing
+  pair of engaged line infantry units nearest the field's centre, as main's focus near the middle). `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?benchtrace=1`
   records every measured frame (version 9): its interval and what happened in it (`src/look/trace.ts`: the figures'
   shadow map drawn and its casters and triangles, the sun's box refit, the trodden mask drawn and its CPU ms,
   battalions placed and place()'s and frame()'s CPU ms, thin-instance uploads and their KB and ms, the flags' update,

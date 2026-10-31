@@ -12,7 +12,7 @@ import { MainLink } from '../src/app/battle-link.ts'
 import { MAN_ALIVE, MARCH_FROM, RUN_FROM } from '../src/render/men.ts'
 import { SimMen, FIRE_FOR, placeQuota, pickPlacings, type SourceMan } from '../src/look/sim-men.ts'
 import { marchTo, spawns, ordersDue, SHORT, GIVE_UP, type Orders } from '../src/look/sim-armies.ts'
-import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
+import { ARMIES_DEMO, ARMS_DEMO } from '../src/scenarios/armies-demo.ts'
 import type { Battalion } from '../src/look/world/armies.ts'
 
 const data = loadSimData(
@@ -20,7 +20,7 @@ const data = loadSimData(
   MAP_VERSIONS['painted-world'],
 )
 // the demo's era by name (src/scenarios/armies-demo.ts): the line infantry at the division scale, 240 figures
-const A = { ruleset: ARMIES_DEMO.ruleset, ...ARMIES_DEMO.sim }
+const A = { ruleset: ARMIES_DEMO.ruleset, unitType: ARMS_DEMO[0].unitType, ...ARMIES_DEMO.sim }
 const cr = compileRuleset(rulesetOf(A.ruleset))
 const MEN = cr.types[cr.typeIndex(A.unitType)].slots
 // two battalions facing each other east of the river, 200 m apart

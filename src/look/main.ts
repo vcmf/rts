@@ -48,8 +48,9 @@ import { buildBuildings } from './buildings.ts'
 import { buildBuildingLight } from './building-light.ts'
 import type { Units } from './units.ts'
 import type { UnitData } from './units-data.ts'
-import { BATTLE_BUDGETS, DEFAULT_BATTLE, LEGACY_BATTALION } from '../scenarios/battles.ts'
+import { BATTLE_BUDGETS, BATTLE_FIGURES, DEFAULT_BATTLE, LEGACY_BATTALION } from '../scenarios/battles.ts'
 import { armOn, battleChoice, battleHref, battleOptions } from './world/battle-url.ts'
+import { bit as bitOf } from './switch.ts'
 // the figures' unit data by file (data/figures/<figure>.unitdata): a scenario names its figure, the page finds it here
 const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', {
   query: '?url',
@@ -655,11 +656,7 @@ const unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
 // frame (else only when it would change); ?ushadowlod=1 casts from the LOD the view draws (else the far LOD always);
 // ?ushadowvs=0: the meadow reads it at every pixel (else once a blade, at its root: the owner's choice, 2026-10-22)
-const bit = (k: string) => {
-  const v = params.get(k)
-  if (v !== null && v !== '0' && v !== '1') throw new Error(`?${k} must be 0 or 1, not ${v}`)
-  return v === null ? null : v === '1'
-}
+const bit = (k: string) => bitOf(params, k)
 const uShadowRate = bit('ushadowrate')
 const uShadowLod = bit('ushadowlod')
 const uShadowVs = bit('ushadowvs')
@@ -769,8 +766,8 @@ if (battleName !== null) {
     { FIGURE_PARTS, dressAll, dyeOverride, wearInTurn },
     { RULESETS },
     { ARMIES_DEMO, ARMS_DEMO },
-    { armScript, lookAtSpot },
-    { battleLayout, figuresOf, orderOfBattle },
+    { armFires, armScript, lookAtSpot },
+    { FIELD, battleLayout, figuresOf, orderOfBattle },
     { Trodden, ViewRays },
   ] = await Promise.all([
     import('./units.ts'),
@@ -845,7 +842,7 @@ if (battleName !== null) {
   const dyes = dyeOverride(params.get('dye'), era.dyes)
   // the arms on the page (the line infantry always; the others by their switch, none under ?sim), each its unit type,
   // figure and script (src/look/world/arms.ts armScript)
-  const armSpecs = ARMS_DEMO.filter((spec, i) => armOn(params, spec.name, simParam, i === 0))
+  const armSpecs = ARMS_DEMO.filter((spec, i) => armOn(params, spec.name, simParam, i === 0, spec.group))
   const datas = await Promise.all(armSpecs.map(a => figureData(a.figure)))
   const built = armSpecs.map((spec, i) => {
     const t = era.ruleset.types[spec.unitType]
@@ -859,12 +856,13 @@ if (battleName !== null) {
   const sizes = Object.fromEntries(
     Object.entries(era.ruleset.types).map(([k, t]) => [k, t.geometry.companies * t.geometry.files * t.geometry.ranks]),
   )
-  const order = orderOfBattle(ARMIES_DEMO.battles[battleName], sizes).filter(u =>
-    armSpecs.some(a => a.unitType === u.type),
-  )
-  const placed = battleLayout(
+  const spec = ARMIES_DEMO.battles[battleName]
+  if (!spec) throw new Error(`armies: the scenario has no battle ${battleName} (src/scenarios/armies-demo.ts)`)
+  const order = orderOfBattle(spec, sizes).filter(u => armSpecs.some(a => a.unitType === u.type))
+  const kinds = built.map(b => [b.spec.unitType, { ...b, cycle: b.script.cycle, fires: armFires(b.spec) }] as const)
+  const { units: placed, fellBack } = battleLayout(
     [order, order],
-    Object.fromEntries(built.map(b => [b.spec.unitType, { work: b.work, rest: b.rest, cycle: b.script.cycle }])),
+    Object.fromEntries(kinds),
     ARMIES_DEMO.deploy,
     blocked,
     Object.fromEntries(built.map(b => [b.spec.unitType, b.spec.sides])),
@@ -964,7 +962,7 @@ if (battleName !== null) {
   for (const u of all) trodden.add(u)
   trodden.holdShare = smHold !== 'fixed'
   trodden.setOn(trample ?? true)
-  armiesFocus = facingAt(foot.battalions)
+  armiesFocus = facingAt(foot.battalions, FIELD.centre)
   // ?sim: the sim plays the line infantry (src/look/sim-armies.ts, battle threads PR 4b) in place of its script (the
   // other arms are left out under it: armOn)
   let sim: SimPlay | null = null
@@ -972,6 +970,7 @@ if (battleName !== null) {
     const { playSim } = await import('./sim-armies.ts')
     sim = await playSim(foot.battalions, first.script.men, armiesFocus, {
       ruleset: ARMIES_DEMO.ruleset,
+      unitType: first.spec.unitType,
       ...ARMIES_DEMO.sim,
     })
     foot.source = sim.source
@@ -990,7 +989,8 @@ if (battleName !== null) {
   // the tools' hooks: __units the line infantry's renderer, as before the arms (tools/guard.mjs masks and scores it
   // alone, against its coats: like for like with main); __armies' show and setMask every arm's, arms the other arms'
   // renderers by name (the review's cameras), battle the battle's name and figures its figures, both sides (the
-  // ruleset's: a battery's 48, drawn as its 4 pieces)
+  // ruleset's: a battery's 48, drawn as its 4 pieces), fellBack each side's engaged units with no legal spot (in
+  // reserve: uneven sides for the bench to see)
   const show = (on: boolean) => all.forEach(u => u.show(on))
   const setMask = (m: Parameters<Units['setMask']>[0]) => all.forEach(u => u.setMask(m))
   const hooks = {
@@ -1002,6 +1002,7 @@ if (battleName !== null) {
     setMask,
     sim: sim?.link,
     battle: battleName,
+    fellBack,
     figures: 2 * figuresOf(order, sizes),
   }
   Object.assign(window, { __units: foot, __armies: hooks })
@@ -1111,7 +1112,7 @@ resSel.onchange = () => {
 // choosing one reloads the page with it (?battle), every other switch kept
 // (none on a map window: hidden)
 const battleSel = byId<HTMLSelectElement>('battle')
-const battleChoices = battleOptions(onMap, BATTLE_BUDGETS)
+const battleChoices = battleOptions(onMap, BATTLE_FIGURES)
 if (battleChoices) {
   battleSel.replaceChildren(...battleChoices.map(o => new Option(o.label, o.value)))
   battleSel.value = battleName ?? ''

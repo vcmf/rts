@@ -146,7 +146,6 @@ describe('armies: the scenario', () => {
       for (const id of a.sides) expect(era.uniforms[id], id).toBeDefined()
     }
     for (const side of ARMIES_DEMO.reviewSides) for (const id of side) expect(era.uniforms[id], id).toBeDefined()
-    expect(ARMIES_DEMO.sim.unitType).toBe(ARMS_DEMO[0].unitType)
   })
 })
 

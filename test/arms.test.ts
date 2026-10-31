@@ -202,9 +202,9 @@ describe("the arms' footprints (armScript)", () => {
     expect(light.work.a1).toBeGreaterThan(spec('infantry').work.a1)
   })
   it("gives a ride its whole ride at work and its halted slots at rest; a service its pieces' ground", () => {
-    const c = spec('cavalry')
+    const c = spec('lightcav')
     expect(c.script.men).toBe(80)
-    const ride = ARMS_DEMO.find(a => a.name === 'cavalry')?.script
+    const ride = ARMS_DEMO.find(a => a.name === 'lightcav')?.script
     expect(ride?.kind).toBe('ride')
     expect(c.work.z1 - c.rest.z1).toBeCloseTo(rideLength(ride?.kind === 'ride' ? ride.legs : [], speedsOf(CAVALRY)), 9)
     expect(spec('cuirassiers').script.men).toBe(120)
@@ -597,7 +597,7 @@ describe("the guns' shadows a little darker (SH_DARKEN)", () => {
     const k = ARMS_DEMO.find(a => a.name === 'artillery')?.shadowDarken ?? 1
     expect(k).toBeGreaterThan(1)
     expect(k).toBeLessThanOrEqual(1.2)
-    expect(ARMS_DEMO.find(a => a.name === 'cavalry')?.shadowDarken ?? 1).toBe(1)
+    for (const n of ['lightcav', 'cuirassiers']) expect(ARMS_DEMO.find(a => a.name === n)?.shadowDarken ?? 1).toBe(1)
     const f = readFileSync(new URL('../src/look/shaders/unitdecal.frag', import.meta.url), 'utf8').replace(/\s+/g, '')
     // (applied to the share before its cap: never past the ground's shade k, the soldiers' core)
     expect(f.indexOf('v*=SH_DARKEN;')).toBeLessThan(f.indexOf('floata=min(1.0,v/dm);'))

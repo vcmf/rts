@@ -242,7 +242,7 @@ export function shadowModes(q: URLSearchParams): { simpleFar: boolean; simpleClo
 
 /** Whether the soldiers' simple shadows draw anywhere: armies on the page (?battle, or the old ?armies it maps),
  *  their shadows on (not ?unitshadow=0), and the simple ones beyond close zoom (not ?ushadowfar=map: shadowModes). The
- *  page refuses a battle it does not know and ?armies outside 1 to 40 (src/look/world/battle.ts battleChoice), so
+ *  page refuses a battle it does not know and ?armies outside 1 to 40 (src/look/world/battle-url.ts battleChoice), so
  *  either present means armies */
 export function simpleShadowsDraw(q: URLSearchParams): boolean {
   const armies = q.get('battle') !== null || q.get('armies') !== null

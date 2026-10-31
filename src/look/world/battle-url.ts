@@ -1,6 +1,7 @@
 // The look page's battle switches (docs/plans/active/division-armies.md): which battle ?battle (or the old ?armies)
 // asks for, and the panel's Battle select (its choices, the address it reloads). No imports: the page reads it at load,
 // the battle itself (src/look/world/battle.ts) only with the armies.
+import { bit } from '../switch.ts'
 
 /** The battle the page asks for (src/look/main.ts): ?battle=<name> (bare: the default), or the old ?armies=<n>
  *  (n battalions a side of `legacy` figures) as the battle whose budget is nearest its figures; null: no armies. A
@@ -43,32 +44,36 @@ export function battleHref(href: string, name: string | null): string {
   return u.href
 }
 
-/** The panel's Battle choices, each its name and label (none first), or null where the page has no armies to offer
- *  (a map window: ?battle is the demo world's) */
+/** The panel's Battle choices, each its name and label by the figures it fields (none first), or null where the page
+ *  has no armies to offer (a map window: ?battle is the demo world's) */
 export function battleOptions(
   onMap: boolean,
-  budgets: Readonly<Record<string, number>>,
+  figures: Readonly<Record<string, number>>,
 ): { value: string; label: string }[] | null {
   if (onMap) return null
   return [
     { value: '', label: 'None' },
-    ...Object.entries(budgets).map(([name, n]) => ({ value: name, label: `${name} (${n.toLocaleString('en')})` })),
+    ...Object.entries(figures).map(([name, n]) => ({ value: name, label: `${name} (${n.toLocaleString('en')})` })),
   ]
 }
 
-/** Whether an arm is on the page by its switch (?<name>=0|1; another value: an error): by default on, but under ?sim
- *  (the sim drives the line infantry alone; another arm asked for there, an error: its script is a stand-in the sim
- *  neither drives nor places against its armies). The first arm (always) is on the page whatever, ?<name>=0 an error
- *  (it owns the figures' shadow map) */
-export function armOn(q: URLSearchParams, name: string, sim: boolean, always = false): boolean {
-  const v = q.get(name)
-  if (v !== null && v !== '0' && v !== '1') throw new Error(`?${name} must be 0 or 1, not ${v}`)
+/** Whether an arm is on the page by its switch (?<name>=0|1, or its group's, ?<group>=0|1, when its own is absent;
+ *  another value: an error): by default on, but under ?sim (the sim drives the line infantry alone; another arm asked
+ *  for there, an error: its script is a stand-in the sim neither drives nor places against its armies). The first arm
+ *  (always) is on the page whatever, ?<name>=0 an error (it owns the figures' shadow map) */
+export function armOn(q: URLSearchParams, name: string, sim: boolean, always = false, group?: string): boolean {
+  const own = bit(q, name)
+  const of = group === undefined ? null : bit(q, group)
   if (always) {
-    if (v === '0') throw new Error(`?${name}=0: the ${name} is always on the page (it owns the figures' shadow map)`)
+    if (own === false) {
+      throw new Error(`?${name}=0: the ${name} is always on the page (it owns the figures' shadow map)`)
+    }
     return true
   }
-  if (v === '1' && sim) {
-    throw new Error(`?${name}=1 with ?sim: the sim drives the line infantry alone; the ${name} is scripted`)
+  const on = own ?? of
+  if (on && sim) {
+    const k = own === null ? group : name
+    throw new Error(`?${k}=1 with ?sim: the sim drives the line infantry alone; the ${name} is scripted`)
   }
-  return v === null ? !sim : v === '1'
+  return on ?? !sim
 }

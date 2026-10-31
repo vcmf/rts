@@ -121,9 +121,11 @@ export function extents(d: Drill): { halfFront: number; lineDepth: number; colum
 /** the ground a site must keep clear: water, trees, buildings, the tile's edge (true: blocked) */
 export type Blocked = (x: number, z: number) => boolean
 
-/** the middle of the fight: between the two sides' nearest battalions, the pair nearer the map's middle preferred (the
- *  cameras' focus: the bench's, the review's; the camera's focus stays near the middle, spec.ts play) */
-export function facingAt(bs: readonly Battalion[]): [number, number] {
+/** the middle of the fight (the cameras' focus: the bench's, the guard's, ?lookat=fight): between the facing pair of
+ *  the two sides' engaged units nearest the field's `centre` (m), a pair the nearer facing the more it stands
+ *  straight across from each other (its offset along the front counts as distance from the centre), so the focus stays
+ *  near the middle, comparable from one layout to the next; the reserves only when a side has no engaged unit */
+export function facingAt(bs: readonly Battalion[], centre: readonly [number, number] = [0, 0]): [number, number] {
   let best = Infinity
   let at: [number, number] | null = null
   // (the lines: the reserves stand back)
@@ -132,15 +134,14 @@ export function facingAt(bs: readonly Battalion[]): [number, number] {
       ? bs.filter(b => !b.reserve)
       : bs
   for (const a of lines) {
-    if (a.side === 0) {
-      for (const o of lines) {
-        if (o.side === 1) {
-          const d = Math.hypot(a.x - o.x, a.z - o.z) + (0.5 * Math.hypot(a.x + o.x, a.z + o.z)) / 2
-          if (d < best) {
-            best = d
-            at = [(a.x + o.x) / 2, (a.z + o.z) / 2]
-          }
-        }
+    if (a.side !== 0) continue
+    for (const o of lines) {
+      if (o.side !== 1) continue
+      const mid: [number, number] = [(a.x + o.x) / 2, (a.z + o.z) / 2]
+      const d = Math.hypot(mid[0] - centre[0], mid[1] - centre[1]) + Math.abs(a.x - o.x)
+      if (d < best) {
+        best = d
+        at = mid
       }
     }
   }

@@ -4,7 +4,7 @@
 // tools/sample-blocked.mjs: rerun it when the map, its trees, river or buildings change), and the page's switches
 import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { compileRuleset } from '../src/sim/index.ts'
 import { CORPS, napoleonicDivision as rs } from '../src/rulesets/napoleonic-division.ts'
 import { rulesetOf } from '../src/rulesets/index.ts'
@@ -12,7 +12,7 @@ import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { DYES } from '../src/rulesets/napoleonic-dyes.ts'
 import { ARMIES_DEMO, ARMS_DEMO } from '../src/scenarios/armies-demo.ts'
 import { facingAt, type Battalion } from '../src/look/world/armies.ts'
-import { armScript, boxOf, type Box } from '../src/look/world/arms.ts'
+import { armFires, armScript, boxOf, type Box } from '../src/look/world/arms.ts'
 import {
   FIELD,
   RESERVE_BACK,
@@ -24,7 +24,7 @@ import {
   type Fielded,
 } from '../src/look/world/battle.ts'
 import { armOn, battleChoice, battleHref, battleOptions } from '../src/look/world/battle-url.ts'
-import { BATTLE_BUDGETS, DEFAULT_BATTLE, LEGACY_BATTALION } from '../src/scenarios/battles.ts'
+import { BATTLE_BUDGETS, BATTLE_FIGURES, DEFAULT_BATTLE, LEGACY_BATTALION } from '../src/scenarios/battles.ts'
 import { dressed, FIGURE_PARTS } from '../src/look/world/dyes.ts'
 import { decodeUnits, type UnitData } from '../src/look/units-data.ts'
 
@@ -41,7 +41,7 @@ const built = ARMS_DEMO.map(a => {
   return { spec: a, ...armScript(a, t.geometry, t.formations[a.formation].place, speeds) }
 })
 const KINDS: Record<string, FieldKind> = Object.fromEntries(
-  built.map(b => [b.spec.unitType, { work: b.work, rest: b.rest, cycle: b.script.cycle }]),
+  built.map(b => [b.spec.unitType, { work: b.work, rest: b.rest, cycle: b.script.cycle, fires: armFires(b.spec) }]),
 )
 const SIDES = Object.fromEntries(ARMS_DEMO.map(a => [a.unitType, a.sides]))
 const EXTENT = 370
@@ -131,10 +131,44 @@ const boxOfUnit = (type: string, b: Battalion): Box => {
   const f = b.reserve ? KINDS[type].rest : KINDS[type].work
   return boxOf(b.x, b.z, b.heading, f.a0, f.a1, f.z0, f.z1)
 }
+const layouts = new Map<string, { o: Fielded[]; placed: Record<string, Battalion[]>; fellBack: number[] }>()
 const layoutOf = (name: string) => {
-  const o = orderOfBattle(ARMIES_DEMO.battles[name], sizes)
-  return { o, placed: battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, demo, SIDES, EXTENT) }
+  let l = layouts.get(name)
+  if (!l) {
+    const o = orderOfBattle(ARMIES_DEMO.battles[name], sizes)
+    const { units, fellBack } = battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, demo, SIDES, EXTENT)
+    l = { o, placed: units, fellBack }
+    layouts.set(name, l)
+  }
+  return l
 }
+
+// the unit types that fire (a drill's volleys, a service's guns): nothing of their side may stand before them
+const FIRING = new Set(ARMS_DEMO.filter(a => a.script.kind !== 'ride').map(a => a.unitType))
+const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+afterAll(() => warn.mockRestore())
+
+describe('the friendly-line rules on the demo map (battleLayout)', () => {
+  // (review round 2: reserves stood 20–45 m before a firing line pushed back; firing lines stood behind firing lines)
+  for (const name of Object.keys(ARMIES_DEMO.battles)) {
+    it(`keeps, in the ${name} battle, nothing before a firing unit it overlaps across, no engaged unit behind another`, () => {
+      const { placed } = layoutOf(name)
+      const all = Object.entries(placed).flatMap(([type, bs]) => bs.map(b => ({ type, b, box: boxOfUnit(type, b) })))
+      // (how far ahead a box's rear and front edges stand, by its side's own way: side 0 faces +z, side 1 −z)
+      const rear = (u: (typeof all)[0]) => (u.b.side === 0 ? u.box.z0 : -u.box.z1)
+      const fore = (u: (typeof all)[0]) => (u.b.side === 0 ? u.box.z1 : -u.box.z0)
+      for (const a of all) {
+        for (const b of all) {
+          if (a === b || a.b.side !== b.b.side) continue
+          if (!(a.box.x0 < b.box.x1 && b.box.x0 < a.box.x1)) continue
+          const at = `${a.type} ${a.b.x},${a.b.z} / ${b.type} ${b.b.x},${b.b.z}`
+          if (!a.b.reserve && !b.b.reserve) expect(false, `engaged one behind the other: ${at}`).toBe(true)
+          if (!b.b.reserve && FIRING.has(b.type)) expect(fore(a) <= rear(b), `before a firing unit: ${at}`).toBe(true)
+        }
+      }
+    })
+  }
+})
 
 describe('the layout on the demo map (battleLayout)', () => {
   for (const name of Object.keys(ARMIES_DEMO.battles)) {
@@ -165,29 +199,44 @@ describe('the layout on the demo map (battleLayout)', () => {
       }
     })
   }
-  it('stands the first corps in line at the front, their lines deploying and the rest in column behind', () => {
-    const { placed } = layoutOf('16k')
-    const front = FIELD.gap / 2
-    const lines = placed.infantry.filter(b => !b.reserve)
-    // (two corps of three line units a side, each side's light infantry beside them, the reserves 40 m back at least)
-    expect([lines.filter(b => b.side === 0).length, lines.filter(b => b.side === 1).length]).toEqual([6, 6])
-    expect(placed.light.filter(b => !b.reserve).length).toBe(4)
-    for (const [type, bs] of Object.entries(placed)) {
-      for (const b of bs.filter(u => u.reserve)) {
-        expect(Math.abs(b.z) - front, type).toBeGreaterThanOrEqual(RESERVE_BACK - 1e-9)
-        expect(b.heading).toBe(b.side === 0 ? 0 : Math.PI)
+  for (const name of Object.keys(ARMIES_DEMO.battles)) {
+    it(`stands the ${name} battle's first corps along the front, the rest in column behind, the focus near the middle`, () => {
+      const { placed, fellBack } = layoutOf(name)
+      const front = FIELD.gap / 2
+      const engaged = Object.values(placed).flatMap(bs => bs.filter(b => !b.reserve))
+      // (two corps a side, each its template's row: a ride, two line units, a battery, a light unit; a unit with no
+      // legal spot in reserve, counted)
+      const row = ARMIES_DEMO.deploy.posts.reduce((a, p) => a + p.units.length, 0)
+      for (const side of [0, 1]) {
+        expect(engaged.filter(b => b.side === side).length + fellBack[side], `side ${side}`).toBe(2 * row)
+        expect(fellBack[side]).toBeLessThanOrEqual(row)
       }
-    }
-    // (the lines' fronts at the front or a little behind it where the ground is blocked, never ahead: the gap between
-    // the lines kept; the fight's middle, the cameras' focus, within the camera's play area)
-    for (const b of lines) {
-      expect(Math.abs(b.z)).toBeGreaterThanOrEqual(front - 1e-9)
-      expect(Math.abs(b.z)).toBeLessThan(front + 60)
-    }
-    const [fx, fz] = facingAt(placed.infantry)
-    expect(Math.max(Math.abs(fx), Math.abs(fz))).toBeLessThanOrEqual(235)
-    // (the engaged cycles staggered: no two of a type in step)
-    expect(new Set(lines.filter(b => b.side === 0).map(b => b.offset)).size).toBe(6)
+      for (const [type, bs] of Object.entries(placed)) {
+        for (const b of bs.filter(u => u.reserve)) {
+          expect(Math.abs(b.z) - front, type).toBeGreaterThanOrEqual(RESERVE_BACK - 1e-9)
+          expect(b.heading).toBe(b.side === 0 ? 0 : Math.PI)
+        }
+      }
+      // (the lines' fronts at the front or behind it where the ground is blocked, never ahead: the gap kept)
+      const lines = placed.infantry.filter(b => !b.reserve)
+      for (const b of lines) expect(Math.abs(b.z)).toBeGreaterThanOrEqual(front - 1e-9)
+      // (review round 2: the focus fell on a flank by the play area's edge, x ≈ 223, not comparable with main's)
+      const [fx] = facingAt(placed.infantry, FIELD.centre)
+      expect(Math.abs(fx - FIELD.centre[0])).toBeLessThanOrEqual(60)
+      // (the engaged cycles staggered: no two of a type in step)
+      const own = lines.filter(b => b.side === 0)
+      expect(new Set(own.map(b => b.offset)).size).toBe(own.length)
+    })
+  }
+  // (review round 2: an engaged unit with no room joined the reserve silently, the sides uneven with no notice)
+  it('warns of the engaged units with no legal spot, and counts them', () => {
+    warn.mockClear()
+    const o = orderOfBattle(ARMIES_DEMO.battles.typical, sizes)
+    // (a field blocked but for a band far back: the template's rows find no spot, all go to reserve)
+    const band = (x: number, z: number) => Math.abs(z) < 200 || Math.abs(z) > 360 || Math.abs(x) > 360
+    const { fellBack } = battleLayout([o, o], KINDS, ARMIES_DEMO.deploy, band, SIDES, EXTENT)
+    expect(fellBack[0]).toBeGreaterThan(0)
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/engaged units of side 0 found no legal spot/))
   })
   // (review round 1: rows past the field, every spot of them refused, were scanned for each reserve)
   it("keeps the reserves' spots on the field, 40 m back at least, the nearest the front and the middle first", () => {
@@ -215,8 +264,8 @@ describe('the stand-ins (docs/plans/active/division-armies.md)', () => {
   }
   it("paints the light cavalry's cuirass in its coat, the cuirassiers' in metal", () => {
     const d = figure('fr-cuirassier')
-    for (const id of arm('cavalry').sides) {
-      const c = dressed(UNIFORMS[id], DYES, { parts: { ...d.parts, ...arm('cavalry').parts } }).colours
+    for (const id of arm('lightcav').sides) {
+      const c = dressed(UNIFORMS[id], DYES, { parts: { ...d.parts, ...arm('lightcav').parts } }).colours
       expect(c.metal).toBe(c.coat)
     }
     for (const id of arm('cuirassiers').sides) {
@@ -237,8 +286,13 @@ describe('the stand-ins (docs/plans/active/division-armies.md)', () => {
 describe('the page switches (battleChoice, battleHref)', () => {
   const budgets = BATTLE_BUDGETS
   const choose = (s: string) => battleChoice(new URLSearchParams(s), budgets, DEFAULT_BATTLE, LEGACY_BATTALION)
-  it("names the scenario's battles by the page's budgets", () => {
+  it("names the scenario's battles by the page's budgets, and labels them by the figures each fields", () => {
     expect(Object.fromEntries(Object.entries(ARMIES_DEMO.battles).map(([k, b]) => [k, b.figures]))).toEqual(budgets)
+    const fielded = Object.entries(ARMIES_DEMO.battles).map(([k, b]) => [
+      k,
+      2 * figuresOf(orderOfBattle(b, sizes), sizes),
+    ])
+    expect(Object.fromEntries(fielded)).toEqual(BATTLE_FIGURES)
   })
   it('gives no battle without ?battle or ?armies, the default bare, and a named one', () => {
     expect([choose(''), choose('battle'), choose('battle=typical'), choose('battle=32k')]).toEqual([
@@ -280,9 +334,10 @@ describe('the page switches (battleChoice, battleHref)', () => {
   })
   // (review round 1: on a map window every choice reloaded into the page's error, ?battle being the demo world's)
   it('offers no battle on a map window, and None then each battle on the demo world', () => {
-    expect(battleOptions(true, budgets)).toBeNull()
-    expect(battleOptions(false, budgets)?.map(o => o.value)).toEqual(['', 'typical', '16k', '32k'])
-    expect(battleOptions(false, budgets)?.[2].label).toBe('16k (16,000)')
+    expect(battleOptions(true, BATTLE_FIGURES)).toBeNull()
+    expect(battleOptions(false, BATTLE_FIGURES)?.map(o => o.value)).toEqual(['', 'typical', '16k', '32k'])
+    // (review round 2: labelled by its budget, 6,400, not the 6,272 it fields)
+    expect(battleOptions(false, BATTLE_FIGURES)?.[1].label).toBe('typical (6,272)')
   })
   // (review round 1: ?infantry=x was silently ignored, every other arm's switch refusing it)
   it("reads each arm's switch, 0 or 1, the first arm always on, the others off under ?sim but asked for", () => {
@@ -297,6 +352,19 @@ describe('the page switches (battleChoice, battleHref)', () => {
       expect(() => armOn(q(s), s.split('=')[0], false, always)).toThrow(/must be 0 or 1/)
     }
     expect(() => armOn(q('infantry=0'), 'infantry', false, true)).toThrow(/always on the page/)
+  })
+  // (review round 2: ?cavalry=0 had come to mean the light cavalry alone; saved infantry-only addresses drew horses)
+  it('leaves every cavalry arm out at ?cavalry=0, each by its own switch, its own winning', () => {
+    const on = (s: string) =>
+      ARMS_DEMO.filter((a, i) => armOn(new URLSearchParams(s), a.name, false, i === 0, a.group)).map(a => a.name)
+    expect(on('cavalry=0&artillery=0')).toEqual(['infantry', 'light'])
+    expect(on('lightcav=0')).toEqual(['infantry', 'light', 'artillery', 'cuirassiers'])
+    expect(on('cuirassiers=0')).toEqual(['infantry', 'light', 'artillery', 'lightcav'])
+    expect(on('cavalry=0&cuirassiers=1')).toEqual(['infantry', 'light', 'artillery', 'cuirassiers'])
+    expect(() => armOn(new URLSearchParams('cavalry=1'), 'lightcav', true, false, 'cavalry')).toThrow(
+      /\?cavalry=1 with/,
+    )
+    expect(() => armOn(new URLSearchParams('cavalry=2'), 'lightcav', false, false, 'cavalry')).toThrow(/must be 0 or 1/)
   })
   it('names ?battle, not ?armies, in the WebGL2 error (the page, src/look/main.ts)', () => {
     const main = readFileSync(new URL('../src/look/main.ts', import.meta.url), 'utf8')

@@ -326,7 +326,7 @@ describe('where the stencil goes (stencilFor, #134)', () => {
       expect(stencilFor(q(params))).toBe(at)
     })
   }
-  // (?armies=0 never gets here: the page refuses a count outside 1 to 40, src/look/world/battle.ts battleChoice)
+  // (?armies=0 never gets here: the page refuses a count outside 1 to 40, src/look/world/battle-url.ts battleChoice)
   it('refuses another value', () => {
     for (const v of ['1', 'engine', '']) expect(() => stencilFor(q(`stencil=${v}`)), v).toThrow(/\?stencil must be/)
   })

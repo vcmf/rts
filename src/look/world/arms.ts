@@ -262,11 +262,12 @@ export const overlaps = (p: Box, q: Box): boolean => p.x0 < q.x1 && q.x0 < p.x1 
  *  lines) whose footprint lies within the play area (±play m), on the side's own half of the field (its side of the
  *  line through `at` between the fronts), off the blocked ground (sampled every 2.5 m) and clear of the boxes taken
  *  (taken: pushed onto); with `back`, never ahead of the spot wanted (along the front or back from it: the battle's
- *  posts keep the gap between the lines). The sides face +z (side 0) and −z, as the infantry's layout. null: no room */
+ *  posts keep the gap between the lines); with `allows`, only where it allows the footprint's world box (the battle's
+ *  friendly-line rules). The sides face +z (side 0) and −z, as the infantry's layout. null: no room */
 export function placeArm(
   foot: { a0: number; a1: number; z0: number; z1: number },
   side: number,
-  want: { turn: number; ahead: number; across: number; back?: boolean },
+  want: { turn: number; ahead: number; across: number; back?: boolean; allows?: (box: Box) => boolean },
   at: readonly [number, number],
   front: number,
   blocked: Blocked,
@@ -292,6 +293,7 @@ export function placeArm(
     if (box.x0 < -play || box.x1 > play || box.z0 < -play || box.z1 > play) continue
     if (side === 0 ? box.z1 > at[1] : box.z0 < at[1]) continue
     if (taken.some(t => overlaps(t, box))) continue
+    if (want.allows && !want.allows(box)) continue
     if (!clearIn(box, blocked)) continue
     taken.push(box)
     return { x: ux, z: uz, heading }
@@ -330,6 +332,8 @@ export function footprint(
  *  rest for `rest` s, each starting `lag` s after the one before, its cycle `cycle` s; one figure a company */
 export interface ArmSpec {
   name: string
+  /** a switch it answers to besides its own (?<group>=0: every arm of the group left out; its own wins) */
+  group?: string
   unitType: string
   formation: string
   figure: string
@@ -347,6 +351,10 @@ export interface ArmSpec {
    *  cuirass, its metal role, painted as its coat) */
   parts?: Readonly<Record<string, FigurePart>>
 }
+
+/** whether an arm's units fire (a drill's volleys, a service's guns; a ride does not): nothing of their side may stand
+ *  before them (src/look/world/battle.ts) */
+export const armFires = (spec: ArmSpec): boolean => spec.script.kind !== 'ride'
 
 /** a unit's footprint in its own frame (across a0..a1, ahead z0..z1, m) */
 export interface Foot {

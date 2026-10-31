@@ -5,16 +5,17 @@
 // - the line infantry marches up in column, deploys into line and fires by ranks (the drill);
 // - the light infantry, the same figure in open order and its own dye (a stand-in until a voltigeur figure, #308);
 // - the light cavalry, the cuirassier figure without its cuirass in a light cavalry dye, a smaller unit (a stand-in
-//   until a hussar and chasseur figure, #309), and the cuirassiers (the reserve cavalry corps'), riding along the
-//   front: they walk, trot, gallop a little and halt;
-// - the foot battery, unlimbered before the lines, its pieces resting, then firing in turn.
+//   until a hussar and chasseur figure, #309), and the cuirassiers (the reserve cavalry corps'), riding up to the
+//   front: they walk, trot, gallop a little and halt (?cavalry=0: neither; ?lightcav=0, ?cuirassiers=0: one);
+// - the foot battery, unlimbered in the line, its pieces resting, then firing in turn.
 // Scripted, not the sim's: when the sim drives the armies, its scenarios name these instead.
+import type { Composition } from '../sim/ruleset.ts'
 import type { ArmSpec, Leg } from '../look/world/arms.ts'
 import type { BattleSpec, Deploy } from '../look/world/battle.ts'
 import { CORPS } from '../rulesets/napoleonic-division.ts'
 import { BATTLE_BUDGETS } from './battles.ts'
 
-// the horse's ride along the front (the old cavalry demo's)
+// the horse's ride (the old cavalry demo's): about 115 m
 const RIDE: readonly Leg[] = [
   { role: 'halt', seconds: 4 },
   { role: 'walk', seconds: 6 },
@@ -58,8 +59,9 @@ export const ARMS_DEMO: readonly ArmSpec[] = [
     flags: false,
   },
   {
-    name: 'cavalry',
+    name: 'lightcav',
     unitType: 'cavalry',
+    group: 'cavalry',
     formation: 'column',
     figure: 'fr-cuirassier',
     sides: ['fr-chasseur', 'at-hussar'],
@@ -76,6 +78,7 @@ export const ARMS_DEMO: readonly ArmSpec[] = [
   {
     name: 'cuirassiers',
     unitType: 'cuirassiers',
+    group: 'cavalry',
     formation: 'column',
     figure: 'fr-cuirassier',
     sides: ['fr-cuirassier', 'at-cuirassier'],
@@ -85,25 +88,34 @@ export const ARMS_DEMO: readonly ArmSpec[] = [
   },
 ]
 
-// the battles (the owner, 2026-10-31): a typical one for the look, about 6,000 figures (two infantry corps a side),
-// and the stress tests at 16,000 (the default) and 32,000, the main army's with its reserve cavalry corps
-const BATTLES: Readonly<Record<string, BattleSpec>> = {
-  typical: { figures: BATTLE_BUDGETS.typical, once: [], repeat: CORPS.infantry },
-  '16k': { figures: BATTLE_BUDGETS['16k'], once: [CORPS.cavalryReserve], repeat: CORPS.infantry },
-  '32k': { figures: BATTLE_BUDGETS['32k'], once: [CORPS.cavalryReserve], repeat: CORPS.infantry },
+// the battles by the page's names and budgets (src/scenarios/battles.ts; the owner, 2026-10-31): a typical one for
+// the look, two infantry corps a side, and the stress tests at 16,000 (the default) and 32,000, the main army's with
+// its reserve cavalry corps fielded first
+const ONCE: Readonly<Record<string, readonly Composition[]>> = {
+  typical: [],
+  '16k': [CORPS.cavalryReserve],
+  '32k': [CORPS.cavalryReserve],
 }
+const BATTLES: Readonly<Record<string, BattleSpec>> = Object.fromEntries(
+  Object.entries(BATTLE_BUDGETS).map(([name, figures]) => {
+    const once = ONCE[name]
+    if (!once) throw new Error(`armies-demo: the battle ${name} (src/scenarios/battles.ts) has no corps here`)
+    return [name, { figures, once, repeat: CORPS.infantry }]
+  }),
+)
 
-// the first two infantry corps a side in line along the front: each its first line of three line units and its light
-// infantry (on the right), its battery 12 m before it, its light cavalry riding along the front between the lines
-// (the old demo's lane, 36 m before the front); the rest in column behind
+// the first two infantry corps a side in line along the front, each one row from its outer flank to the middle: a
+// light cavalry regiment riding up to the front (its ride, about 118 m, ending at the front), its light infantry, its
+// battery in the line, two line units deploying and firing (the line infantry nearest the middle: the cameras' fight
+// there, as before); the rest in column behind. Along the front each engaged unit's ground is its own
+// (src/look/world/battle.ts: none fires through another)
 const DEPLOY: Deploy = {
   engaged: 2,
   corpsGap: 20,
   gap: 8,
   posts: [
-    { units: ['infantry', 'infantry', 'infantry', 'light'], ahead: 0 },
-    { units: ['battery'], ahead: 12 },
-    { units: ['cavalry', 'cavalry'], ahead: 36, turn: Math.PI / 2 },
+    { units: ['cavalry'], ahead: -118 },
+    { units: ['light', 'battery', 'infantry', 'infantry'], ahead: 0 },
   ],
 }
 
@@ -117,7 +129,7 @@ export const ARMIES_DEMO = {
     ['fr-line', 'fr-guard-grenadier', 'fr-dragoon'],
     ['at-line', 'ru-line', 'br-line', 'at-grenzer', 'br-rifles'],
   ],
-  // played by the sim (?sim, src/look/sim-armies.ts): the line infantry, the shape each unit approaches in, and the
-  // one it fights in
-  sim: { unitType: 'infantry', approach: 'column', fight: 'line' },
+  // played by the sim (?sim, src/look/sim-armies.ts): the first arm's (the line infantry's) units, the shape each
+  // approaches in, and the one it fights in
+  sim: { approach: 'column', fight: 'line' },
 } as const

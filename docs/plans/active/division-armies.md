@@ -59,24 +59,30 @@ Decision 0099 (proposed) records the choices below.
 3. **The page**: `?battle` (16k), `?battle=typical|16k|32k`; `?armies=<n>` maps to the battle nearest its old figure
    count (n × 828: up to about 11,000 typical, up to about 24,000 16k, beyond 32k), an error with `?battle` too. The
    panel's **Battle** select reloads the page with the chosen `?battle` (none, typical, 16k, 32k). The other switches
-   (`?sim`, `?uniforms`, `?lookat`, `?cavalry=0`, ...) keep their meaning; `?light=0` and `?cuirassiers=0` join them.
-4. **The layout** (`src/look/world/battle.ts`, `battleLayout`), each side:
-   - the first `engaged` corps (2) stand side by side along the front, each a template: its first line (3 line units
-     and its light infantry, deploying and firing on the script, the light on the right), its battery 12 m before its
-     centre, its light cavalry riding along the front between the lines; each unit at the spot nearest its template's
-     (`placeArm`, never ahead of it: the gap between the lines kept), clear of the others and of the blocked ground;
-   - the rest stand in column, behind the front by at least `RESERVE_BACK` (40 m), the nearest the front and the
-     middle first, a kind at a time (one pass over the grid's spots, which only fill); a unit the template had no
-     room for joins them.
+   (`?sim`, `?uniforms`, `?lookat`, `?cavalry=0`: no cavalry of any kind, ...) keep their meaning; `?light=0`,
+   `?lightcav=0` and `?cuirassiers=0` join them. The select is labelled by the figures each battle fields and hidden on
+   a map window; None drops `?sim` and `?lookat`.
+4. **The layout** (`src/look/world/battle.ts`, `battleLayout`), each side, under two friendly-line rules (review
+   round 2: on the cramped map, reserves stood before firing lines pushed back, and firing lines behind firing
+   lines): no unit stands before a firing unit of its side it overlaps across, and no engaged unit stands behind
+   another of its side it overlaps across (each side by its own way). Enforced in the placement itself:
+   - the first `engaged` corps (2) stand side by side along the front, each one row from its outer flank to the
+     middle: a light cavalry regiment riding up to the front, its light infantry, its battery in the line, two line
+     units deploying and firing (the line infantry of both corps at the middle, the cameras' focus near it as on
+     main); each unit at the legal spot nearest its post's (`placeArm`: never ahead of it, and no engaged box of its
+     side across it), or, with none, in reserve, with a warning and a count (`__armies.fellBack`);
+   - then the rest stand in column, 40 m behind the front at least and 40 m behind every engaged footprint of their
+     side they overlap across (`RESERVE_BACK`), the nearest the front and the middle first, a kind at a time (one
+     pass over the grid's spots, which only fill).
    - The area: the tile less its last 30 m (±370 m), past the camera's ±235 m: the next PR's bigger map takes them
-     back into the play area. Fails loudly when a side cannot field its order of battle.
+     back into the play area. Fails loudly when a side cannot field its reserves.
    The old `layout` (lines, reserves and close reserves of one drill) and its fixture hashes go
-   (~~`test/fixtures/armies-layout-20.json`~~): nothing else uses them. On the demo map the river splits the front, so
-   some of the first corps stand behind it, and the cameras' fight's middle (`facingAt`) falls on the west strip.
+   (~~`test/fixtures/armies-layout-20.json`~~): nothing else uses them.
 5. **The arms** (`ARMS_DEMO`): one list, each a renderer (`Units`): line infantry (the shadow map's owner, `__units`),
    light infantry (the same figure, `drillScript` of its block, no flags), light cavalry and cuirassiers (the
    cuirassier figure, `rideScript`; the light cavalry's metal role painted as its coat), the battery (`serveScript`).
-   The ride and the service learn the reserve: a reserve unit stands at rest in its places.
+   The ride and the service learn the reserve: a reserve unit stands at rest in its places. Two arms drawn with one
+   figure each build its GPU resources (#313: shared later, the final bench says what it costs).
 6. **Uniforms** (`src/rulesets/napoleonic-uniforms.ts`): `fr-light` (blue coat and trousers: the légère's), the
    Austrian light infantry the Grenzer (`at-grenzer`, there); `fr-chasseur` (dragoon green, red facings) and
    `at-hussar` (sky blue, crimson facings) for the light cavalry.
@@ -97,7 +103,7 @@ Decision 0099 (proposed) records the choices below.
 
 ## Out of scope
 
-- The bigger map (next PR); the sim driving the other arms; the voltigeur and hussar figures (issues); corps grouped
+- The bigger map (next PR); sharing a figure's GPU resources between arms (#313); the sim driving the other arms; the voltigeur and hussar figures (issues); corps grouped
   in reserve by corps on the ground (they pack by kind); the formations of #283 drawn (the look keeps its line and
   column of sections).
 
