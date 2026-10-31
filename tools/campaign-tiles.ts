@@ -1,10 +1,12 @@
-// Bakes the campaign map offline (docs/systems/campaign-map.md, docs/plans/active/k2a-bake.md): for each level, 250 m
+// Bakes the campaign map offline (docs/systems/campaign-map.md, docs/plans/done/k2a-bake.md): for each level, 250 m
 // (the whole theatre, far) and 100 m (close), the heights from the terrain tiles, the one shape, the lakes sunk into
 // it, the light that does not change (on all cores) and the forests (src/render/campaign/bake.ts), cut into tiles of
 // 256 × 256 nodes, deflated, under scratch/campaign/ (git-ignored, never committed):
 //   manifest.json: the format, its build, the frame, the bake's parameters, the levels (src/render/campaign/tiles.ts,
 //     Manifest)
 //   b-<time>-<pid>/l<level>/t-<i>-<j>.bin: one tile of a build (src/render/campaign/tiles.ts, the format)
+//   b-<time>-<pid>/fields.bin: the far level's fields, the lakes, the lines and the contours' heights
+//     (src/render/campaign/fields.ts)
 // Until the campaign page replaces the prototype (K2b), the 100 m level is also written as the prototype's tiles
 // (prototypes/campaign-map.html cannot fetch binary from file://), under scratch/campaign-tiles/:
 //   meta.js: window.CAMPAIGN_TILES = { cell, nx, nz, size, tilesX, tilesZ, scale, params, build }
@@ -27,6 +29,9 @@ import zlib from 'node:zlib'
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads'
 import {
   bakeLightRows,
+  blur,
+  lakeMask,
+  lineOffsets,
   buildShape,
   despiked,
   lakeDistance,
@@ -49,6 +54,7 @@ import {
   type Manifest,
   type Tile,
 } from '../src/render/campaign/tiles.ts'
+import { packFields, quantise, type Plane } from '../src/render/campaign/fields.ts'
 import { commitBuild, liveBuild, pruneBuilds, startBuild, writeFlushed } from './campaign-builds.ts'
 import { frameGrid, projection, type Frame, type Pt } from './campaign-theatre-lib.ts'
 import { sampleGrid } from './terrarium.ts'
@@ -77,6 +83,20 @@ const SHAPE: Omit<ShapeParams, 'low'> = {
 const SUN: SunParams = { el: 20, az: 55, size: 2.5 }
 const SINK = 70
 const LAKE_BLUR_M = 750
+// the level the fields are baked on (the far one, which spans the whole theatre in one texture), their file
+const FIELDS_LEVEL = 0
+const FIELDS_FILE = 'fields.bin'
+// the far level's fields (the prototype's): the lakes' mask, texels a cell (a page on a GPU whose textures are smaller
+// than the mask halves it); the lines' reach in cells either way, the rivers drawn (rank 6 or larger: Natural Earth's
+// scalerank, smaller is larger); the contours' heights blurred over cells; the Uint16 steps of the lakes' distance
+// (km, from its lowest) and of the contours' heights (m)
+const LAKE_RES = 2
+const LINE_REACH = 6
+const RIVER_RANK = 6
+const CONTOUR_SMOOTH = 3
+const LAKE_D_STEP = 0.00025
+const LAKE_D_FROM = -3
+const CONTOUR_STEP = 0.25
 // the height the stored shape's zero stands for: the shape is 0 or more until the lakes sink it by SINK at most
 const BASE = -SINK
 
@@ -103,6 +123,8 @@ interface Theatre {
   nz: number
   h: string
   lakes: number[][]
+  roads: { kind: string; p: number[] }[]
+  rivers: { rank: number; p: number[] }[]
   credit: string
 }
 
@@ -158,33 +180,82 @@ async function bakeLight(shape: Float32Array, grid: Grid): Promise<Uint8Array> {
   return new Uint8Array(light)
 }
 
-/** What every level is baked from: the theatre, its projection, its lowest ground, the forests. */
+/** What every level is baked from: the theatre, its projection, its lowest ground, its lakes, the forests. */
 interface Sources {
   t: Theatre
   proj: ReturnType<typeof projection>
   low: number
+  rings: Pt[][]
   forest: ForestField
 }
 
-/**
- * One level baked: its heights (sampled at `zoom`), shape, lakes, light and forest, on a grid spanning the frame (the
- * cell must divide it).
- */
-async function bakeLevel(src: Sources, cell: number, zoom: number): Promise<LevelBake> {
-  const { t, proj, low } = src
-  const { frame } = t
-  const grid: Grid = { ...frameGrid(frame, cell), cell, x0: -frame.halfX, z0: -frame.halfZ }
-  const sampled = await sampleGrid(proj, zoom, grid.x0, grid.z0, cell, grid.nx, grid.nz)
-  const shape = buildShape(despiked(sampled, grid.nx, grid.nz), grid, { ...SHAPE, low })
-  const rings: Pt[][] = t.lakes.map(flat => {
+/** The theatre's lakes as rings of points. */
+function lakeRings(t: Theatre): Pt[][] {
+  return t.lakes.map(flat => {
     const ring: Pt[] = []
     for (let k = 0; k < flat.length; k += 2) ring.push([flat[k], flat[k + 1]])
     return ring
   })
-  sinkLakes(shape, lakeDistance(rings, grid, LAKE_BLUR_M), cell, SINK)
+}
+
+/** A level baked, and its fields when it is the level they lie on. */
+interface Baked {
+  bake: LevelBake
+  fields?: Plane[]
+}
+
+/**
+ * One level baked: its heights (sampled at `zoom`), shape, lakes, light and forest, on a grid spanning the frame (the
+ * cell must divide it); with `withFields`, its fields too.
+ */
+async function bakeLevel(src: Sources, cell: number, zoom: number, withFields: boolean): Promise<Baked> {
+  const { t, proj, low } = src
+  const { frame } = t
+  const grid: Grid = { ...frameGrid(frame, cell), cell, x0: -frame.halfX, z0: -frame.halfZ }
+  const sampled = await sampleGrid(proj, zoom, grid.x0, grid.z0, cell, grid.nx, grid.nz)
+  const heights = despiked(sampled, grid.nx, grid.nz)
+  const shape = buildShape(heights, grid, { ...SHAPE, low })
+  const lakeD = lakeDistance(src.rings, grid, LAKE_BLUR_M)
+  sinkLakes(shape, lakeD, cell, SINK)
   const forest = resampleField(src.forest, cell, grid.nx, grid.nz)
+  // made before the light, so the heights and the lakes' distance are not kept through the tiles' writing
+  const fields = withFields ? fieldsOf(src, grid, heights, lakeD) : undefined
   const light = await bakeLight(shape, grid)
-  return { grid, shape, light, forest }
+  return { bake: { grid, shape, light, forest }, fields }
+}
+
+/**
+ * The far level's fields (src/render/campaign/fields.ts): the lakes' mask (LAKE_RES texels a cell) and distance, the
+ * offsets to the high roads, the country roads and the rivers of rank RIVER_RANK or larger, the contours' heights
+ * (stored from the lowest of them, a whole step below).
+ */
+function fieldsOf(src: Sources, grid: Grid, heights: Float32Array, lakeD: Float32Array): Plane[] {
+  const { t } = src
+  const { nx, nz } = grid
+  const mask = lakeMask(src.rings, grid, LAKE_RES)
+  const lines = (name: string, of: number[][]): Plane => {
+    const values = lineOffsets(of, grid, LINE_REACH)
+    return { name, kind: 'bytes', w: nx - 1, h: nz - 1, channels: 2, values }
+  }
+  const contour = blur(heights, nx, nz, CONTOUR_SMOOTH)
+  const contourFrom = Math.floor(lowest(contour) / CONTOUR_STEP) * CONTOUR_STEP
+  return [
+    { name: 'lakes', kind: 'bytes', w: mask.w, h: mask.h, channels: 1, values: mask.data },
+    quantise('lakeD', nx, nz, lakeD, LAKE_D_STEP, LAKE_D_FROM),
+    lines(
+      'high',
+      t.roads.filter(r => r.kind === 'high').map(r => r.p),
+    ),
+    lines(
+      'country',
+      t.roads.filter(r => r.kind !== 'high').map(r => r.p),
+    ),
+    lines(
+      'rivers',
+      t.rivers.filter(r => r.rank <= RIVER_RANK).map(r => r.p),
+    ),
+    quantise('contour', nx, nz, contour, CONTOUR_STEP, contourFrom),
+  ]
 }
 
 /** The tiles of a level, cut from its bake row by row, their shape above BASE. */
@@ -275,6 +346,10 @@ function params(low: number): Record<string, number> {
     woodBoxM: WOOD_BOX_M,
     forestCell: FIELD_CELL,
     forestLevelPx: WORLDCOVER_LEVEL_PX,
+    lakeRes: LAKE_RES,
+    lineReach: LINE_REACH,
+    riverRank: RIVER_RANK,
+    contourSmooth: CONTOUR_SMOOTH,
   }
 }
 
@@ -288,7 +363,10 @@ async function main() {
   const prototypeOut = path.resolve(process.argv[4] ?? 'scratch/campaign-tiles')
   const t = loadTheatre(theatreFile)
   const proj = projection(t.frame.lat0, t.frame.lon0)
-  const src: Sources = { t, proj, low: lowest(theatreHeights(t)), forest: await forestField(t.frame, proj) }
+  // the level the fields lie on must be one of the levels: the manifest names their file
+  if (!LEVELS[FIELDS_LEVEL]) throw new Error(`the fields' level ${FIELDS_LEVEL} is not one of the ${LEVELS.length}`)
+  const low = lowest(theatreHeights(t))
+  const src: Sources = { t, proj, low, rings: lakeRings(t), forest: await forestField(t.frame, proj) }
   // a directory of its own in each output, live once its manifest and meta file are written: a failed run leaves the
   // last builds as they were
   const build = startBuild(out)
@@ -297,7 +375,8 @@ async function main() {
   let prototypeMeta = {}
   for (const [level, { cell, zoom }] of LEVELS.entries()) {
     const start = performance.now()
-    const bake = await bakeLevel(src, cell, zoom)
+    const baked = await bakeLevel(src, cell, zoom, level === FIELDS_LEVEL)
+    const { bake } = baked
     // the close level for the prototype too
     const forPrototype = level === LEVELS.length - 1 ? path.join(prototypeOut, prototypeBuild) : undefined
     const written = await writeLevel(path.join(out, build, `l${level}`), bake, level, forPrototype)
@@ -307,6 +386,12 @@ async function main() {
     const ms = Math.round(performance.now() - start)
     const tiles = layout.tilesX * layout.tilesZ
     console.log(`level ${level}: ${nx} × ${nz} nodes at ${cell} m, ${tiles} tiles, ${mb(written.bytes)}, ${ms} ms`)
+    if (baked.fields) {
+      const fieldsStart = performance.now()
+      const packed = await deflate(packFields(baked.fields), { level: 9 })
+      await writeFlushed(path.join(out, build, FIELDS_FILE), packed)
+      console.log(`fields: ${mb(packed.length)}, packed in ${Math.round(performance.now() - fieldsStart)} ms`)
+    }
     if (forPrototype) {
       console.log(`prototype tiles: ${mb(written.prototype)}`)
       prototypeMeta = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams(), build: prototypeBuild }
@@ -318,6 +403,7 @@ async function main() {
     frame: t.frame,
     params: params(src.low),
     levels,
+    fields: { level: FIELDS_LEVEL, path: `${build}/${FIELDS_FILE}` },
     credit: t.credit,
   }
   // the builds replaced, kept for a page still reading them
