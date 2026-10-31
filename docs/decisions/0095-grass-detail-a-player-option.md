@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-30
 ---
 
-# 0092 Grass detail, a player option: Full by default, Balanced to spare the frame
+# 0095 Grass detail, a player option: Full by default, Balanced to spare the frame
 
 Accepted by the owner on 2026-10-30 (issue #257), from the experiments' numbers and stills. As built:
 `docs/systems/look.md` (the meadow and the crops) and `docs/plans/active/grass-detail.md`. It adds a choice over
@@ -42,10 +42,16 @@ unchanged). Full's material and program are main's. The setting applies live.
 - **What Balanced loses.** From about 10 to 20 m the carpet is sparser: about half the grass tufts, with more of the
   ground showing between them. Inside 8 m, the crops and the outer rings are unchanged.
 - **Full** draws main's program: the shader without the `GRASS_THIN` blocks is main's, and the near ring keeps its
-  material. Its only addition is two uniforms set on it, which Full's program does not read. **Pending**: the goldens
-  are redone in the plan's final pass.
-- **Applying a change.** It toggles the define live, without a reload. The switch waits until the new program is
-  compiled, so the ring never blinks.
+  material. Full now differs from main on the CPU only:
+  - the material declares two more uniforms and holds values for them, which Babylon's bind asks for each frame (no
+    GL call: the program has no location for them);
+  - a few arithmetic operations of the share's ease run each frame.
+
+  **Pending**: the goldens decide the pixels in the plan's final pass.
+- **Applying a change.** It toggles the define live, without a reload:
+  - the new program is compiled ahead as soon as Balanced is chosen;
+  - the switch waits until it is ready, so the ring never blinks;
+  - the share eases up from none after the switch on and down to none before the switch off, so no clump pops.
 
 ## Alternatives considered
 

@@ -23,21 +23,23 @@ The owner (2026-10-30) chose a player option with two levels: **Full** (today's 
 - **`src/look/grass-detail.ts`** (pure):
   - the levels and `isGrassDetail`;
   - `?grassdetail=full|balanced` (anything else throws; Balanced reads as Full without the meadow);
-  - where Balanced thins, its share and softness (`THIN_RAMP`, `BALANCED_DROP`, `THIN_SOFT`), and the address for a level
-    (`withGrassDetail`);
-  - the share by distance and zoom (`dropShare`, `dropAtZoom`, `thinOn`) and a clump's size (`thinKeep`).
+  - where Balanced thins, its share and softness (`THIN_RAMP`, `BALANCED_DROP`, `THIN_SOFT`);
+  - the share by distance and zoom (`dropShare`, `dropAtZoom`, `thinOn`), a clump's size (`thinKeep`), the share's ease
+    (`ThinEase`), and the address's edit (`searchWithGrassDetail`).
 - **`shaders/meadow.vert`**: the drop inside `#ifdef GRASS_THIN`. Without the define the shader is main's.
 - **`src/look/meadow.ts`**:
   - `GRASS_THIN` toggled on the near ring's material, and its uniforms (`uThin`, `uThinRamp`);
   - `setDetail`;
-  - a switch that waits for the new program.
+  - the share eased (`ThinEase`);
+  - a switch that waits for the new program (`src/look/define-switch.ts`).
 - **The look page's settings panel**: a Grass detail select (Full | Balanced), applied live and kept in the address.
   The row is hidden without the meadow.
-- **Docs**: `docs/systems/look.md` (the setting) and decision 0092 (a player option over decision 0085's meadow).
+- **Docs**: `docs/systems/look.md` (the setting) and decision 0095 (a player option over decision 0085's meadow).
 - **Tests**:
   - the parsing and the address;
   - the share by distance and zoom (none from 110 m: Balanced is Full);
-  - the clumps shrinking continuously as the camera pans and zooms;
+  - the clumps shrinking continuously as the camera pans and zooms, and the share's ease around a switch;
+  - the switch keeping the old defines until the new program is ready;
   - the drop on the grass branch only (the crops untouched);
   - the shader reading the same rule;
   - Full's shader free of `GRASS_THIN`.
@@ -59,7 +61,9 @@ kept clumps grow as at Full):
   and zooming never pop one.
 - **The share by zoom:** across `CLOSE_ZOOM` (70–110 m, shared with the combed clumps) it falls to none. From 110 m
   out, the default zoom included, the define is off: Full's program.
-- **Switching:** a program switch waits until the new program is compiled (the ring never blinks).
+- **Switching:** the program is compiled as soon as Balanced is chosen. A switch waits until the new program is
+  ready (the ring never blinks), and the share eases up from none after it and down to none before a switch off (no
+  pop).
 
 **Why ramp back out across 18–25 m rather than thin the middle ring there** (review round 1 of A1):
 - The ramp touches only the near ring.
@@ -68,8 +72,9 @@ kept clumps grow as at Full):
 - The ramp loses the drop on half of 18–25 m. Most of the saving lies at 12–18 m, closest to the camera, where the
   clumps cover the most pixels.
 
-A thinned clump stops after the meadow map's read, as an empty cell does. There are no other rings, no world chunks
-and no per-frame CPU beyond one uniform.
+A thinned clump stops after the meadow map's read, as an empty cell does, but still runs its vertices that far (the
+Redesign's Option A, as built). There are no other rings and no world chunks. The per-frame CPU is the share's ease
+and the switch's check.
 
 **The tuning before the redesign.** Each step below is a single run on Kobelnitz on the dev Mac (M1 Pro, ANGLE
 Metal), with the GPU frame p50 in ms. These designs are not built:
@@ -106,7 +111,7 @@ redesigned (the next section; Option A1 built). The review rounds restart. The f
 - the stills and the goldens;
 - the full checks.
 
-## Redesign (proposal, 2026-10-31: not built)
+## Redesign (2026-10-31: Option A1 chosen by the owner and built, as amended below)
 
 Review round 3 found severe issues, so by the owner's rule Balanced is redesigned. Three rounds share one cause:
 - Crops and grass share the near ring and its large clump, so changing only the grass meant extra rings around it:
@@ -141,63 +146,52 @@ What a slot costs in Full's vertex shader:
 The research note's ablation (the demo, closest zoom) puts the meadow at 2.8 ms: 2.0 ms of fragment shading and 0.8 ms
 of vertex work and binning. A blade cut is mostly a fragment saving.
 
-### Option A: thin the near ring's grass inside its own shader, at Balanced only (recommended)
+### Option A: thin the near ring's grass inside its own shader, at Balanced only (chosen; A1 built)
 
-**What changes.** At Balanced the near ring's material is swapped for a variant compiled with one define
-(`GRASS_THIN`). In that variant, a *grass* clump beyond the cut is dropped by its own hash:
-- the share dropped ramps from 0 at 8 m to one half at 12 m;
-- across `CLOSE_ZOOM` (70–110 m) it falls back to 0, so from 110 m out Balanced draws Full.
+**As built** (after A1's review rounds 1 and 2; Approach above):
+- **The define.** At Balanced the near ring's own material turns on `GRASS_THIN` with `setDefine`. There is no
+  second material.
+- **The drop.** A grass clump below the share, by its own hash, shrinks away across `THIN_SOFT` (`grow` times
+  `thinK`) and is culled below that. The share ramps in across 8–12 m and back out across 18–25 m.
+- **The share's ease.** The share (`uThin.x`) eases from none after the program switches on, and down to none
+  before it switches off (`ThinEase`, `THIN_EASE_S` 0.3 s), so a switch never pops. The look tools' frozen page
+  snaps it.
+- **The switch.** It happens in the near ring's own render, after every other define of the frame, and only once
+  the mesh is ready with the new program (`switchDefineWhenReady`, `src/look/define-switch.ts`).
+- **Compiling ahead.** The program is compiled as soon as Balanced is chosen, at load or in the panel, even zoomed
+  out (`warmDefine`).
+- **The default zoom.** From 110 m out the define is off: Full's program.
 
-A dropped clump stops right after the meadow-map read that tells grass from crop. It costs about what an empty cell
-costs Full. The kept grass clumps, the crops and everything inside 8 m are drawn as Full draws them. There are no
-other rings, no world chunks and no per-frame CPU.
-
-Two variants to choose between on stills:
-- **A1, half the clumps:** the cheapest vertex work, but the carpet is sparser by whole 0.5 m tufts.
-- **A2, half the blades of every clump:** each grass vertex reads a blade-parity attribute and the odd blades
-  collapse. The texture is more even, but every vertex still runs, so the saving is fragments only.
-
-A1 and A2 can be combined if one alone saves too little.
-
-**How the crops stay identical to Full.** The drop applies only on the grass branch (`!crop`), after the crop
+**How the crops stay identical to Full.** The thinning is only on the grass branch (`!crop`), after the crop
 decision. Crop clumps take the same code, the same hashes and the same clump as in Full's shader.
 
-**Why Full costs nothing.** Full keeps main's material, shader text and defines. The variant is a second material,
-compiled on the first switch to Balanced. Switching only assigns the near ring's material, live. Full therefore
-compiles, binds and draws exactly what main does: no new uniform, chunking, attribute or ring.
+**What Full costs against main** (stated as it is):
+- **The same.** Full draws main's program: the shader with the `GRASS_THIN` blocks stripped is main's, checked by
+  test and script, and the near ring keeps its material.
+- **The differences, all CPU:**
+  - The near ring's material declares two more uniforms (`uThin`, `uThinRamp`) and holds values for them. Each frame
+    Babylon's bind asks for both, and the program has no location for them, so no GL call is made.
+  - Each frame `ThinEase.step` runs (a few arithmetic operations).
+  - The near ring's render runs a callback that returns at once at Full.
+- **No uploads, no memory.** There are no uploads beyond main's, and no memory beyond two small vectors.
+- **The goldens** decide the pixels in the final pass.
 
-A2 adds a blade-parity vertex buffer to the large clump's mesh. Full's effect does not declare it, so it is never
-bound, but it costs 600 bytes. A1 adds nothing.
+**Work at Balanced, up close.** Over 12–18 m, and tapering across 8–12 and 18–25 m:
+- **Fragments:** about half the grass clumps' fragments are gone (the clumps below the share minus `THIN_SOFT`, and
+  shrunken ones in the soft band).
+- **Vertices:** dropped clumps **still run their vertices**. Each is instanced, so all 58–108 of its vertices go
+  through the band test, the view cull, the meadow map's read and the extra hash before the cull. Balanced therefore
+  saves mostly fragments and the per-clump logic after the read, little of the vertex work itself: on Kobelnitz about
+  1,200 dropped clumps still cost about 100k vertex invocations a frame.
+- **If the final bench falls short:** a follow-up would leave the clumps below the steady share minus `THIN_SOFT` out
+  of the packed slot buffer per chunk (`cullRing`), keeping only the soft edge in the shader. It is not built now.
 
-**Work at Balanced (A1), up close.**
-
-| zone | vertex invocations | per-clump logic | fragments |
-|---|---|---|---|
-| 0–8 m | as Full | as Full | as Full |
-| 8–12 m | as Full | 0–50 % fewer grass clumps (the ramp) | as the logic |
-| 12–25 m | as Full: 150 a cell | half the grass clumps stop early | the grass clumps' fragments halved |
-
-On the 12–25 m zone, against Full:
-- **Kobelnitz:** about 1,200 grass clumps of about 2,400 stop early. That is 31 % less per-clump logic over the
-  growing cells (2,650 full clumps against 3,870).
-- **The demo** (a meadow view, about 4,800 grass cells): about 2,400 stop early, half of the zone's work.
-
-The saving is a guess: about 0.3–0.6 ms at the close camera on Kobelnitz, more on the demo's meadow. The earlier
-variant that thinned the crops too measured 0.8–1.0 ms. **Risk:** A1 alone may not reach Kobelnitz's 8.3 ms (it
-needs about 0.6 ms). A2 on top, or a larger dropped share, are the knobs.
-
-**Memory, CPU and uploads.**
-- One more material and effect: one compile on the first switch, a few tens of ms, avoidable by compiling it
-  asynchronously at load.
-- No per-frame CPU beyond one uniform (the drop share).
-- No uploads.
+The estimate of 0.3–0.6 ms at Kobelnitz's close camera stands until the final bench.
 
 **Size.**
-- About 30 shader lines inside `#ifdef GRASS_THIN`.
-- About 40 TypeScript lines: the second material, the swap, the drop share by zoom.
-- Pure tests for the drop share by distance and zoom, and that Full's material is main's.
-- It removes the cut, crop and world rings, `uBandMix`, `uRing`, `CHUNKS_NEAR` and `meadow-clump.ts`'s thinning: the
-  branch gets smaller than main plus the current work.
+- `grass-detail.ts`: the rule, the ease and the address.
+- `define-switch.ts`: about 20 lines.
+- About 20 lines each in `meadow.ts` and in the shader's two `GRASS_THIN` blocks.
 
 ### Option B: a crop ring made once, so the grass rings can change freely
 
