@@ -651,26 +651,19 @@ shader); `?meadow=off` puts back the old scatter.
     none thinned out between the patches there (`GRASS_DENSE`), the middle ring fading to the outer ring's plain clumps
     across its band out (no seam). 0 is the splayed look before it, 1 upright alone (both kept for comparisons). Every
     look stays within the combed clumps' reach (`clumpReach`, under `CLUMP_REACH_FLOW`, which the growth keeps).
-  - **Grass detail** (decision 0092, issue #257; `src/look/grass-detail.ts`, `src/look/meadow-clump.ts`,
-    `?grassdetail=full|balanced`, any other value refused, Balanced read as Full without the meadow; the settings
-    panel's Grass detail, applied live and kept in the address, its row hidden without the meadow;
-    `docs/plans/active/grass-detail.md`). The meadow builds both levels' rings (`ringsFor`); a level only sets what
-    each draws (`ringBands`, read by `meadow.vert` as `uBand`, `uBandMix` and `uRing`, and the band its chunks are
-    culled to). **Full**, the default everywhere (map windows too), draws the meadow above. **Balanced**, up close:
-    - the near (0.5 m) ring draws grass and crops to 8–12 m from the focus (its chunks 2 m, so its cull stops near
-      there);
-    - beyond it, out to 25 m, two rings anchored to the world, their slots only the 0.5 m cells where their kind grows
-      (made per 2 m chunk as the focus nears them, from the static meadow map), so an empty cell costs nothing: the
-      cut ring's grass with the small clump thinned to every other blade (`thinClump`, renormalised to a height of 1,
-      its spread scaled by its own radius, `clumpRadius`, to the large clump's footprint), and the crop ring's crops
-      with the large clump as at Full (the wheat's fill unchanged);
-    - on the near ring's cells the cut and crop rings keep a clump where the hash is under 1 minus its weight (`uRing.z`),
-      so across the cut each root is kept by one ring at most, as many as at Full;
-    - across 70–110 m of the camera's radius (`CLOSE_ZOOM`, `src/look/meadow-spec.ts`, shared with the combed clumps)
-      the near ring's edge moves out to main's while the cut and crop rings fade by as much: the rings always add to
-      one, and from 110 m out, the default zoom included, Balanced draws Full.
+  - **Grass detail** (decision 0092, issue #257; `src/look/grass-detail.ts`, `?grassdetail=full|balanced`, any other
+    value refused, Balanced read as Full without the meadow; the settings panel's Grass detail, applied live and kept
+    in the address, its row hidden without the meadow; `docs/plans/active/grass-detail.md`). **Full**, the default
+    everywhere (map windows too), draws the meadow above with main's materials and program. **Balanced** swaps the
+    near ring's material (`Meadow.setDetail`) for the same one compiled with `GRASS_THIN`:
+    - up close it drops a share of the near ring's *grass* clumps, by a hash of their own: none inside 8 m, half from
+      12 m (`BALANCED_CUT`, `dropShare`; `uThin`, `THIN_CUT`);
+    - the crops are untouched (the drop is on the grass branch), as are the outer rings;
+    - across `CLOSE_ZOOM` (70–110 m of the camera's radius, `src/look/meadow-spec.ts`, shared with the combed clumps)
+      the share falls to none, so from 110 m out, the default zoom included, Balanced draws Full.
 
-    Its cost: the plan (to be measured). Past 10 m the close carpet is thinner, with more ground between its strokes.
+    A dropped clump stops after the meadow map's read, as an empty cell does. Past 10 m the close carpet is sparser,
+    with more ground between its tufts. Its cost: the plan (to be measured).
   - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
   - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
     `__look.flowBuildMs`: the flow textures' time on load.
