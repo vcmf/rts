@@ -16,7 +16,7 @@ foliage crowns the one exception. In `paint()` (`src/look/shaders/painter.glsl`)
 light value, a cel-like step. The owner (2026-10-29), against Tiny Glade's crowns and figures: "a common problem for
 our shadow in general, not just trees; on soldiers' models we change tone from light to dark quite abruptly, it lacks
 the mid tone". Tiny Glade turns light into shade through a wide, soft, lighter middle tone. The plan and its results:
-`docs/plans/active/soft-midtone.md`.
+`docs/plans/done/soft-midtone.md`.
 
 ## Decision
 

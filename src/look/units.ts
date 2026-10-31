@@ -6,7 +6,7 @@
 // behind its switches (?ushadowclose=map up close, ?ushadowfar=map everywhere). Ported from the crowd
 // bench (look/l1a-crowd-bench, L1a/L1b); moved by the demo's scripts (src/look/world/arms.ts), not by the sim yet.
 // The figure names its clips by role (decision 0015: the infantryman's halt, march, run, fire; another figure's own,
-// at most four). One renderer an arm (decision 0075, docs/plans/active/cavalry-artillery-demo.md); the page-wide parts
+// at most four). One renderer an arm (decision 0075, docs/plans/done/cavalry-artillery-demo.md); the page-wide parts
 // are owned once: the trodden mask by src/look/trodden.ts (every arm's men), the ground heights a scene (GROUND_TEX),
 // the shade by main.ts, the figures' shadow map and its receivers by the one arm that owns it (ownsMap: the
 // infantry's; the others draw their simple shadows at every zoom, none under ?ushadowfar=map). A figure whose ground

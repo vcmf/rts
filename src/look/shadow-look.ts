@@ -126,7 +126,7 @@ export interface Strip {
  *  floored), its close rows at its contacts' reach and liftRamp past it, each held inside the box: the lift, linear
  *  between rows, rises across its footprint from the floor behind it to nearly whole at its contacts, so its shadow
  *  stands over the meadow's grass (from the root's ramp alone the grass hid it; its own legs measured unharmed:
- *  docs/plans/active/cavalry-artillery-demo.md) */
+ *  docs/plans/done/cavalry-artillery-demo.md) */
 export function decalStrip(
   base: ShapeBox,
   full: ShapeBox,

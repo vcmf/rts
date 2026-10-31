@@ -6,7 +6,7 @@ date: 2026-10-27
 # 0075 The cavalry and the artillery share the units pipeline; a figure on more than its root measures its shadow from its contacts
 
 Amends 0062 and 0074 (the soldiers' simple shadow) for figures other than the infantryman; his shadow is unchanged.
-Proposed for the owner's review. The plan and its measurements: `docs/plans/active/cavalry-artillery-demo.md`; as
+Proposed for the owner's review. The plan and its measurements: `docs/plans/done/cavalry-artillery-demo.md`; as
 built: `docs/systems/look.md` ("The armies").
 
 ## Context

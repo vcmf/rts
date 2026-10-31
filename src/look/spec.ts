@@ -530,6 +530,15 @@ export interface HoldGround {
   follow: FocusFollow
 }
 
+/** seconds: the longest frame a motion stepped by the frame's time moves by (a stalled frame does not jump) */
+export const FRAME_MAX_S = 0.1
+
+/** A frame's step in seconds from the engine's last frame time (ms), at most FRAME_MAX_S; Infinity under a frozen
+ *  clock (?frozen, the tools' views), so what eases settles at once (the camera's hold, the far trees' fades) */
+export function frameStep(frozen: boolean, frameMs: number): number {
+  return frozen ? Infinity : Math.min(FRAME_MAX_S, frameMs / 1000)
+}
+
 /** The camera's hold, once a frame before it renders (src/look/post.ts): the focus kept within ±play, its height on the
  *  ground under it (FocusFollow; dt, s, since the last frame), and the radius the zoom hold gives, held out over high
  *  ground where the eye could come within its clearance of it (clearRadius below clearBelow of the highest ground

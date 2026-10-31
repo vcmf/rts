@@ -20,8 +20,16 @@ import { TR, tr, trNow } from './trace.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
-import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
+import { CLOSE_ZOOM, CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { meadowLookDefines, meadowLookOf } from './meadow-look.ts'
+import {
+  GRASS_DETAIL_NO_MEADOW,
+  type GrassDetail,
+  grassDetailOf,
+  isGrassDetail,
+  searchWithGrassDetail,
+  THIN_EASE_S,
+} from './grass-detail.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
@@ -123,7 +131,7 @@ setRiver(look.river)
 setHeightfield(look.hf, look.far, D.spec.tile / 2)
 // the world's ground range, from the heights themselves (not the header): the camera's checks take it (checkView), and
 // the focus keeps to its range (the demo's focus stays on its 8 m plane, SPEC.camera.focusY; a map world's follows its
-// ground in play: docs/plans/active/look-austerlitz-a1b.md)
+// ground in play: docs/plans/done/look-austerlitz-a1b.md)
 const worldGround = groundOf(D.spec, look.hf, look.far, onMap ? null : D.spec.camera.focusY)
 checkView(D.spec, worldGround)
 const canvas = document.getElementById('c') as HTMLCanvasElement
@@ -149,6 +157,9 @@ scene.skipPointerMovePicking = true
 // ?soft=off: the shadows before the soft-shadow plan (docs/plans/done/soft-shadows.md); ?penumbra: metres of edge
 // radius per metre between a shadow and its caster
 const params = new URLSearchParams(location.search)
+// ?frozen: the page's clock frozen (golden screenshots, tools/golden.mjs, and the tools' views): the clock stays at 0,
+// and what eases settles at once (the camera's hold, the far trees' fades: frameStep in src/look/spec.ts)
+const FROZEN = params.has('frozen')
 const softParam = params.get('soft')
 const penumbraParam = params.get('penumbra')
 // a switch with no value (?rt16, ?nowide): present, or present as 1; any other value throws
@@ -211,9 +222,6 @@ const grassOff = params.get('grassoff')?.split(',') ?? []
 if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassMode !== 'flow')) {
   throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with the combed meadow (not ?grass=brush)`)
 }
-// the camera's distance from the focus over which the combed clumps go from larger and denser to the default's (the
-// closest zoom is 15 m, decision 0051; the default view 125)
-const CLOSE_ZOOM: [number, number] = [70, 110]
 // the strokes' largest footprint, m a pixel (strokeK, macro.glsl: whole under about half of it, gone past it); the near
 // bake reads it too (below)
 const STROKE_FOOT = 0.15
@@ -245,9 +253,12 @@ if (reliefK > 0) {
   tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE
   relief = { tex, k: reliefK }
 }
-// ?grassup=0|1|2, ?wheatfill=0|1: the meadow's look (docs/plans/active/grass-upright.md, decision 0085; meadowLookOf in
+// ?grassup=0|1|2, ?wheatfill=0|1: the meadow's look (docs/plans/done/grass-upright.md, decision 0085; meadowLookOf in
 // src/look/meadow-look.ts)
 const meadowLook = meadowLookOf(params, grassMode)
+// ?grassdetail=full|balanced: the player's grass detail (src/look/grass-detail.ts, decision 0095), Balanced by default,
+// Full without the meadow; the panel's Grass detail changes it live
+const grassDetail = grassDetailOf(params, meadowOn)
 const grain0 = makeGrainCanvas(null)
 // ?midtone=0|1|2 or per class (u3,b2,n2,g0): how wide the ramp turns from light to shade (src/look/midtone.ts,
 // decision 0084); none is the default, u3,b2,n2,g0; 0 the hard bands from before it
@@ -384,7 +395,7 @@ if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has(
 // the generator (a plain script that sets window.TREEGEN), loaded only for the arm that draws its trees
 if (treeSet.has('gen')) await import('../../prototypes/tree-core.js')
 const cardsOn = treeSet.has('cards')
-// ?leaves: the leaf atlas (docs/plans/active/crown-leaves.md): layered (the default), the owner's sheet of simple
+// ?leaves: the leaf atlas (docs/plans/done/crown-leaves.md): layered (the default), the owner's sheet of simple
 // leaves read as the painter's layers; oak, the oak picture the crowns had before; procedural, L7a's drawn oak clumps
 const LEAVES = ['layered', 'oak', 'procedural'] as const
 const leavesParam = params.get('leaves') ?? 'layered'
@@ -406,7 +417,7 @@ const cardOpt = (k: string, d: number) => {
   if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`)
   return v
 }
-// ?leafscale=<x>: the layered leaves' size, 1 the sheet's clumps at 0.8 a cell (docs/plans/active/crown-leaves.md)
+// ?leafscale=<x>: the layered leaves' size, 1 the sheet's clumps at 0.8 a cell (docs/plans/done/crown-leaves.md)
 if (params.has('leafscale') && !paintedLeaves) {
   throw new Error('?leafscale needs the layered leaves (not oak or procedural)')
 }
@@ -453,6 +464,7 @@ const nature = buildNature(
   treeSet.has('one'),
   treeSet.has('gen') ? { season: season0, clumpVolume: params.get('clumpvol') !== 'off' } : null,
   onMap ? look.trees : null,
+  FROZEN,
 )
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 {
@@ -572,7 +584,7 @@ const camera = (() => {
       highest: (x, z, reach) => Math.max(nearTile(x, z, reach), nearFar(x, z, reach)),
       follow: new FocusFollow(worldGround.focus),
     },
-    new URLSearchParams(location.search).has('frozen'),
+    FROZEN,
   )
 })()
 // the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
@@ -628,7 +640,16 @@ else if (params.has('bench') || params.has('water') || params.get('river') === '
 // ?dofnear=0: the near blur off (its cost's A/B: docs/plans/done/dof-v2.md)
 if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
-const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach, meadowLook) : null
+const meadow = meadowMap
+  ? buildMeadow(scene, mats, camera, meadowMap, {
+      wide: !flag('nowide'),
+      reach: grassReach,
+      look: meadowLook,
+      detail: grassDetail,
+      // (the look tools' frozen page renders a view in a few frames: Balanced's share snaps, not eased)
+      thinEaseS: params.has('frozen') ? 0 : THIN_EASE_S,
+    })
+  : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dark ground under its clumps (shore.glsl)
 // ?armies=<battalions a side>: the demo's two armies (docs/plans/active/armies-demo.md): battalions of the ruleset's
 // infantry (about 400 a battalion, decision 0018) that march up in column, deploy and fire on a scripted loop, drawn
@@ -638,7 +659,7 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat]) // the dar
 // switches (with ?armies): ?uniforms=all, each side's battalions wearing the scenario's reviewSides in turn;
 // ?uniforms=all-greatcoats, the same with every man in his greatcoat; ?dye=<dye>:<rrggbb>[;…] (bare, or '#' as
 // %23), those cloth dyes' values swapped for every uniform that names them (dyeOverride). The other arms
-// (docs/plans/active/cavalry-artillery-demo.md, the scenario's ARMS_DEMO): ?cavalry=0, ?artillery=0 leave them out
+// (docs/plans/done/cavalry-artillery-demo.md, the scenario's ARMS_DEMO): ?cavalry=0, ?artillery=0 leave them out
 // (with both, main's page before them)
 const armiesParam = params.get('armies')
 // (under ?sim the other arms are left out: their scripts are stand-ins the sim does not drive, nor place against its
@@ -1204,6 +1225,30 @@ const applyScale = (s: number) => {
   post.scale = k
   engine.setHardwareScalingLevel(k / s)
 }
+/** Keeps the address to the grass detail in force (level): only its grassdetail key edited, and only when it names
+ * another level than the one in force (none named is the level a page takes: Balanced with the meadow, Full without),
+ * so a reload or a shared address opens on it and every other parameter stays as written */
+const showDetail = (level: GrassDetail) => {
+  const search = searchWithGrassDetail(location.search, level, !!meadow)
+  if (search !== location.search) history.replaceState(history.state, '', location.pathname + search + location.hash)
+}
+// the grass detail: applied live (Meadow.setDetail), the address kept to it (without the meadow a stale Balanced
+// dropped); without the meadow there is nothing to choose: the row is hidden
+let detailNow: GrassDetail = meadow ? grassDetail : GRASS_DETAIL_NO_MEADOW
+/** The grass detail in force (the bench records it) */
+const grassDetailNow = () => detailNow
+showDetail(detailNow)
+const detailSel = byId<HTMLSelectElement>('grassdetail')
+detailSel.value = detailNow
+const detailRow = detailSel.closest<HTMLElement>('.row')
+if (!meadow && detailRow) detailRow.style.display = 'none'
+detailSel.onchange = () => {
+  const v = detailSel.value
+  if (!meadow || !isGrassDetail(v)) return
+  meadow.setDetail(v)
+  detailNow = v
+  showDetail(v)
+}
 const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => {
   S.res = +resSel.value
@@ -1415,8 +1460,6 @@ addEventListener('drop', e => {
 
 /* ---------- loop ---------- */
 const fpsEl = byId('fps')
-// golden screenshots (tools/golden.mjs): the clock stays at 0
-const FROZEN = new URLSearchParams(location.search).has('frozen')
 // sun colour follows the season: warm gold in summer and autumn, pale gold in winter (keeps snow white, not yellow)
 const SUNCOL = MOOD.sun.clone()
 // the mood's light by the season (seasonLight, src/look/mood.ts), recomputed only when the season moves; the clear
@@ -1675,6 +1718,8 @@ Object.assign(window, {
     // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
     sky: bakes.sky,
     meadowBakeMs: meadow?.bakeMs ?? null,
+    // the grass detail at rest (its program in force, its share at its target): the look tools wait on it
+    meadowSettled: () => meadow?.thinSettled() ?? true,
     // (the combed meadow's flow textures, on load)
     flowBuildMs: flowTex?.ms ?? null,
     meadow: meadow
@@ -1954,7 +1999,10 @@ if (params.has('bench')) {
   const mid = armiesFocus
   const clampPlay = (v: number) => Math.max(-D.spec.play, Math.min(D.spec.play, v))
   const focus = at ? { x: at[0], z: at[1] } : mid ? { x: clampPlay(mid[0]), z: clampPlay(mid[1]) } : undefined
-  void runBench(scene, camera, passes, arms, hold, focus).then(
+  // (the grass detail measured: the page's, recorded; each camera timed once it settled)
+  const benchSettled = () => meadow?.thinSettled() ?? true
+  const benchMeta = { grassDetail: meadow ? grassDetailNow() : 'full' }
+  void runBench(scene, camera, passes, arms, hold, focus, benchSettled, benchMeta).then(
     r => {
       Object.assign(window, { __bench: r })
       showBench(r)

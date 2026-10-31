@@ -31,7 +31,7 @@ export const FIGURE_PARTS: Readonly<Record<string, RolePart>> = {
  *  flag's bands among the flag dyes; the boots the set's. greatcoat: worn by every man (the all-greatcoat test; the
  *  share by the cold is a later step), over the coat and the facings (it has no coloured facings; the belts, the
  *  trousers below it and the headgear stay); a dress without one keeps its coat. parts: the figure's roles' parts (its
- *  unit data's, docs/plans/active/cavalry-artillery-demo.md; FIGURE_PARTS, the infantryman's, by default). An unknown
+ *  unit data's, docs/plans/done/cavalry-artillery-demo.md; FIGURE_PARTS, the infantryman's, by default). An unknown
  *  dye, flag dye, material or part: a loud failure */
 export function dressed(
   d: Dress,

@@ -40,7 +40,7 @@ void main(){
   // far crowns: less value noise between leaves
   float val=mix(clamp(tx.r/max(tx.a,1e-3),0.0,1.0),0.6,smoothstep(1.5,4.0,lod));
   #ifdef LEAF_PAINT
-  // the painter's layers (docs/plans/active/crown-leaves.md): up close a leaf's layer (the atlas value: dark, mid,
+  // the painter's layers (docs/plans/done/crown-leaves.md): up close a leaf's layer (the atlas value: dark, mid,
   // light, highlight) picks its flat tone after the crown's light (below); farther, by the mip level, the old mass
   // (LEAF_LOD: smaller leaves, ?leafscale, reach the mass sooner, at the same leaf size on screen)
   // the brush's grain looser on a mass than on a drawn leaf

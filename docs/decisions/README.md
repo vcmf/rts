@@ -109,3 +109,6 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0083](0083-smoke-as-soft-painted-banks.md) | Powder smoke as soft painted banks, thinned over the formations | proposed |
 | [0084](0084-a-soft-mid-tone-on-figures-and-buildings.md) | A soft mid tone on the figures, the buildings and the nature meshes (amends 0022) | accepted |
 | [0085](0085-upright-meadow-and-wheat-fill.md) | The meadow's grass upright and shorter, the wheat filled (`?grassup`, `?wheatfill`; amends 0041's clumps) | accepted |
+| [0095](0095-grass-detail-a-player-option.md) | Grass detail, a player option: Full by default, Balanced to spare the frame (`?grassdetail`; over 0085) | accepted |
+| [0097](0097-balanced-is-the-default-grass-detail.md) | Balanced is the default grass detail (supersedes 0095's default; `?grassdetail=full` for Full) | accepted |
+| [0098](0098-far-trees-fade-over-time.md) | The far trees' cards fade into their crown meshes over time, not over a band of distance | accepted |

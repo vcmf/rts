@@ -29,7 +29,7 @@ figure; #164, where reversing them drew every figure inside out: a face on the b
 the chest).
 Steps: 12 a second (the art bible's stepped animation), every other frame of the 24 fps clips along a role's chain;
 a chain whose span is not a whole number of steps (a gallop of 13 frames) is resampled to the nearest whole number
-of steps between frames, its root speed scaled so the feet stay planted (docs/plans/active/cavalry-artillery-demo.md).
+of steps between frames, its root speed scaled so the feet stay planted (docs/plans/done/cavalry-artillery-demo.md).
 
 The figure's kind (clips.json's `unit`; none: the line infantryman) picks its profile (PROFILES): the infantryman's
 three published LOD GLBs and his colour roles from his texture, as before (his file unchanged, byte for byte); a
@@ -173,7 +173,7 @@ def battery_role(mat, bone, rgb, co):
 # own). The LOD targets keep about the infantryman's triangles a pixel of the figure's
 # side on screen at each LOD's switch, which falls at the same height in pixels for every figure (his 1,197 and 243;
 # at its switch a horse and rider shows about twice his pixels: 2,000 and 450; 4,000 cost 3.5 ms of GPU at 63 m with
-# a regiment in view, docs/plans/active/cavalry-artillery-demo.md; a gun and its four gunners about five figures)
+# a regiment in view, docs/plans/done/cavalry-artillery-demo.md; a gun and its four gunners about five figures)
 PROFILES = {
     'infantry': dict(roles=ROLES_INFANTRY, palette=PALETTE_INFANTRY, height=(1.6, 2.6)),
     'cavalry': dict(glb='cavalry.glb', targets={'lod1': 1200, 'lod2': 300},

@@ -1,6 +1,6 @@
 // The share of a figure's nearest LOD a lighter LOD fails to cover, seen as the page draws it (back faces culled),
 // from the RTS camera's views at the figure's baked steps: what catches a torn LOD (holes, shredded parts, flipped
-// faces), the cuirassier's near LOD found by the owner (2026-10-29, docs/plans/active/cavalry-artillery-demo.md).
+// faces), the cuirassier's near LOD found by the owner (2026-10-29, docs/plans/done/cavalry-artillery-demo.md).
 // A test helper: orthographic rasters of the posed vertices, no renderer.
 import { posedVertices, type UnitData } from '../src/look/units-data.ts'
 
