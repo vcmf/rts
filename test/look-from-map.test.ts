@@ -36,6 +36,7 @@ import {
   type LookData,
 } from '../src/look/world/data.ts'
 import { WINDOWS, windowOf, type LookWindow } from '../src/look/world/windows.ts'
+import { TILE_O, tileWanted } from '../src/look/tile.ts'
 import { noRiver } from '../src/look/river.ts'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -682,5 +683,30 @@ describe('a moved tile (G3b-1)', () => {
     })
     // a world with a river is not moved (its samples' places are the demo's)
     expect(() => moveLook({ ...d, river: { ...d.river, n: 1 } }, [200, 0])).toThrow(/river/)
+  })
+})
+
+describe('the tile following the focus (tileWanted, G3b-3)', () => {
+  // Kobelnitz's frame: the map from −1274 to 1726 m east, −1676 to 1324 m north; the tile 800 m on the 200 m grid
+  const edge = { x0: -1274, z0: -1676, x1: 1726, z1: 1324 }
+  const want = (x: number, z: number) => tileWanted(x, z, edge, 200, 400, 200)
+  it('keeps the tile while the focus lies 200 m or more inside it, and wants the nearest centre past that', () => {
+    TILE_O.set(0, 0)
+    expect(want(150, -199)).toBeNull()
+    expect(want(201, 0)).toEqual([200, 0])
+    expect(want(650, -320)).toEqual([600, -400])
+    // after a move the focus lies within half a step of the centre: no move back
+    TILE_O.set(600, -400)
+    expect(want(650, -320)).toBeNull()
+    TILE_O.set(0, 0)
+  })
+  it('keeps a whole tile inside the map near its edge, and wants no move when that is the tile now', () => {
+    TILE_O.set(0, 0)
+    // the most a centre can be: 1726 − 400 = 1326, on the grid 1200; the least −1274 + 400 = −874, on it −800
+    expect(want(1700, 1300)).toEqual([1200, 800])
+    expect(want(-1270, -1670)).toEqual([-800, -1200])
+    TILE_O.set(1200, 800)
+    expect(want(1700, 1300)).toBeNull()
+    TILE_O.set(0, 0)
   })
 })

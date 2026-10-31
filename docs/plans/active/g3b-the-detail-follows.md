@@ -148,3 +148,19 @@ After the redesign, round 2 (9 findings, none severe; fixed or answered, then st
 - answered: the bakes' casters by the scene's list with the leaving parts left out, and owners that record four
   observables (explicit caster lists and disposables: a change to every builder; decision 0096's consequences); the
   apron's buffers and the flow's comb made again on a move: G3c's cost.
+
+## G3b-3: built
+
+- **The worker** (`src/look/tile-worker.ts`): a map world's page sends it the window's map, its catalogue and its
+  heightfield's bytes once (the built page's assets); it compiles the map (validate, the files, expand, apply: the CLI's
+  `layersOf` steps) and bakes the coarse light, then builds each tile asked for with the compiler's own window build
+  (`src/look/world/window-build.ts`, moved out of `tools/build-look-data.ts` so the browser runs it; the compiler's
+  bytes unchanged).
+- **The rule** (`tileWanted`, `src/look/tile.ts`): when the focus comes within 200 m of the tile's edge, the centre on
+  the 200 m grid nearest it, kept so the whole tile lies inside the map (the compiler builds none past it: within about
+  130 m of Austerlitz's east and north edges the far ring shows under the focus), is asked for; it takes the tile's
+  place (`retile`) when it comes; one request at a time. Not on a frozen page (the look tools keep their tile) nor under
+  `?follow=0`.
+- **Measured** (the dev Mac, Kobelnitz, the focus sent 1 km east): the map compiled in the worker in 3.3 s on load;
+  the tile built in 1.6–1.7 s, off the page's thread; its swap 0.93 s on Metal (12 s under SwiftShader). Shots in
+  `scratch/g3b3/` (the far ring, then the tile come).

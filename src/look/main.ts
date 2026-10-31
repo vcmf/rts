@@ -2,8 +2,10 @@
 // prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js'
+import { demFileNames } from '../map/dem.ts'
+import type { TileReply, TileRequest } from './tile-worker.ts'
 import { owned } from './owned.ts'
-import { TILE_O, tileEdge } from './tile.ts'
+import { TILE_O, tileEdge, tileWanted } from './tile.ts'
 import type { SimPlay } from './sim-armies.ts'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
@@ -60,6 +62,12 @@ const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', {
 // the map worlds' look data by file (data/<map>-<window>.lookdata, src/look/world/windows.ts): ?map&window picks one
 // (a glob takes a literal pattern; the page reads only the files the windows name: windowFile)
 const WINDOW_DATA = import.meta.glob<string>('../../data/*-*.lookdata', {
+  query: '?url',
+  import: 'default',
+  eager: true,
+})
+// the maps, their catalogue and heightfields, as URLs: a map world's tile worker compiles its map (G3b-3: retile below)
+const MAP_FILES = import.meta.glob<string>(['../../maps/*.map.json', '../../maps/kinds.json', '../../maps/*.rdem'], {
   query: '?url',
   import: 'default',
   eager: true,
@@ -1653,6 +1661,73 @@ async function move(next: LookData): Promise<number> {
 
 // the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
 // and the detail layer's switches
+/**
+ * The tile follows the camera (G3b-3, docs/plans/active/g3b-the-detail-follows.md): on a map world a worker compiles
+ * its map once (src/look/tile-worker.ts) and builds the tile the focus needs; when the focus comes within FOLLOW_EDGE m
+ * of the tile's edge, the tile centred on it (on the tile grid, kept inside the map: the compiler builds no tile past
+ * it) is asked for and takes the tile's place when it comes (retile). After a move the focus lies within half a grid
+ * step of the centre, well inside the rule: no flip back and forth. Not on a frozen page (the look tools' views keep
+ * their tile) nor under ?follow=0
+ */
+const FOLLOW_EDGE = 200
+const follower = (() => {
+  if (look.world.kind !== 'map' || !lookWindow || FROZEN || params.get('follow') === '0') return null
+  const win = lookWindow
+  const edge = look.world.edge
+  const worker = new Worker(new URL('./tile-worker.ts', import.meta.url), { type: 'module' })
+  const state = { ready: false, busy: false, moves: 0, lastBuildMs: 0, lastSwapMs: 0, mapMs: 0, error: '' }
+  let seq = 0
+  worker.onmessage = async (e: MessageEvent<TileReply>) => {
+    const r = e.data
+    if (r.type === 'error') {
+      state.error = r.message
+      state.busy = false
+      console.error(`the tile worker: ${r.message}`)
+      return
+    }
+    if (r.type === 'map') {
+      state.ready = true
+      state.mapMs = r.ms
+      return
+    }
+    if (r.seq !== seq) return
+    state.lastBuildMs = r.ms
+    try {
+      state.lastSwapMs = await retile(decodeLook(r.bytes))
+      state.moves++
+    } catch (err) {
+      state.error = (err as Error).message
+      console.error(`the tile's move to ${r.at.join(', ')} failed: ${state.error}`)
+    }
+    state.busy = false
+  }
+  void (async () => {
+    const url = (name: string) => {
+      const u = MAP_FILES[`../../maps/${name}`]
+      if (!u) throw new Error(`the tile worker: no maps/${name} in the build`)
+      return u
+    }
+    const text = async (name: string) => (await fetch(url(name))).text()
+    const mapText = await text(`${win.map}.map.json`)
+    const files: Record<string, ArrayBuffer> = {}
+    for (const n of demFileNames(JSON.parse(mapText))) files[n] = await (await fetch(url(n))).arrayBuffer()
+    const req: TileRequest = { type: 'map', win, mapText, kindsText: await text('kinds.json'), files }
+    worker.postMessage(req, Object.values(files))
+  })().catch((err: unknown) => {
+    state.error = (err as Error).message
+    console.error(state.error)
+  })
+  scene.onBeforeRenderObservable.add(() => {
+    if (!state.ready || state.busy) return
+    const at = tileWanted(camera.target.x, camera.target.z, edge, D.spec.tileStep, D.spec.tile / 2, FOLLOW_EDGE)
+    if (!at) return
+    state.busy = true
+    const req: TileRequest = { type: 'tile', seq: ++seq, at }
+    worker.postMessage(req)
+  })
+  return state
+})()
+
 const lab = new Lab(scene, mats)
 const passes = {
   terrain: [terrain.tileGround, terrain.farGround, terrain.apron],
@@ -1742,6 +1817,8 @@ let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | n
 const hidden: Mesh[] = []
 Object.assign(window, {
   __look: {
+    // the tile following the camera (G3b-3): its worker's state, null where it does not follow
+    follow: follower,
     // the tile moved to (x, z) on the tile grid (G3b-2's check): its data from the built files (--tileat), its time, ms
     // a move made to fail once its trees are built (the check of a failed move: the page as it was), or null
     set moveFault(why: string | null) {
