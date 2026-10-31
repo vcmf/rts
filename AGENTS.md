@@ -78,6 +78,10 @@ a **research note** (`docs/research/`) needs no plan and no `/code-review` (chec
 Decisions 0052 and 0054; the rules are in `docs/conventions.md`, Code. Prettier lays code out (`npm run format`);
 small functions, doc comments and tests are on you and on review, in every file, prototypes included.
 
+Shader comments (`src/**/shaders/*`, `.glsl`/`.vert`/`.frag`, GLSL in prototype template strings): Babylon's
+preprocessor reads them. Never write `#include<…>` in a comment (it loads that include, the shader never gets ready
+and nothing logs; name it in words), and no `;` in a comment on a `uniform` line (a syntax error).
+
 ## Commits and PRs
 
 Conventional Commits with a mandatory scope; PR titles in the same format (squash-merged). The full

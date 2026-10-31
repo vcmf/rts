@@ -32,7 +32,7 @@ included, whatever the older code around it does.
   semicolons, single quotes; `npm run format` before committing, `format:check` in `npm test` and CI); ESLint keeps
   every line within 120 columns, comments included, and one statement and one declaration per line. The areas it
   covers are `formatted` in `eslint.config.js`; the rest is in `.prettierignore` (prototypes, generated data,
-  `test/fixtures/`). GLSL keeps its own rules.
+  `test/fixtures/`). GLSL keeps its own rules; what shader comments must avoid is in `AGENTS.md`, Code quality.
 - **Formatting PRs**: layout only, no change of behaviour. A new area joins `formatted` and leaves `.prettierignore`
   in the same PR (`test/format-scope.test.ts` checks the two agree). After the squash merge, a one-line follow-up adds
   the squashed commit to `.git-blame-ignore-revs`.
