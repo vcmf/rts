@@ -87,6 +87,8 @@ const UPLOAD_MS = 120
 // brings it back to about that many, 1.3 to 2
 const UPSCALE_FROM = 1920 * 1080 * 1.15
 const FOV = 0.5
+// the rounds groundAt takes to meet the raised surface
+const GROUND_ROUNDS = 4
 
 /** How the page asked to upscale: by the screen ('auto'), never ('off'), or by a factor. */
 export type Upscale = 'auto' | 'off' | number
@@ -132,6 +134,10 @@ interface Detail {
   lastUpload: number
 }
 
+/**
+ * The campaign map on a canvas: setMap with the far level and its fields, setDetail with the close level, setView to
+ * move the camera, start to draw every frame.
+ */
 export class CampaignMapView {
   private readonly engine: Engine
   private readonly scene: Scene
@@ -329,35 +335,44 @@ export class CampaignMapView {
     m.setFloat('uLineReachKm', (lineReach * level.cell) / 1000)
   }
 
-  /** The table, the plate's sides and the map's mesh (raised in the vertex shader). */
+  /**
+   * The map's mesh (raised in the vertex shader), the plate's sides and the table. The map is made first: the table
+   * shares its material, and Babylon draws the meshes of one material in the order they were made, so the table's
+   * fragments under the map are then hidden by the depth test, not shaded and drawn over.
+   */
   private buildMeshes(far: LevelData) {
     const w = this.half.x * 2
     const h = this.half.z * 2
-    const table = CreateGround('table', { width: w + 2 * TABLE, height: h + 2 * TABLE }, this.scene)
-    table.position.y = -THICK
-    table.material = this.material
+    const plane = this.mapMesh(far)
+    plane.material = this.material
     this.sideMaterial.setColor3('uPaper', colour(SIDE_PAPER))
     this.sideMaterial.setVector2('uLightXZ', new Vector2(this.sun[0], this.sun[2]).normalize())
     this.sideMaterial.setFloat('uThick', THICK)
-    const sides = CreateBox('sides', { width: w, height: THICK - 0.02, depth: h }, this.scene)
-    sides.position.y = -THICK / 2 - 0.02
+    // the box's top below the deepest lake (its shape at the level's base), so it never hides a low lake
+    const top = Math.min(-0.02, this.far!.level.base / 1000 - 0.01)
+    const sides = CreateBox('sides', { width: w, height: THICK + top, depth: h }, this.scene)
+    sides.position.y = (top - THICK) / 2
     sides.material = this.sideMaterial
-    const plane = this.mapMesh(far)
-    plane.material = this.material
+    const table = CreateGround('table', { width: w + 2 * TABLE, height: h + 2 * TABLE }, this.scene)
+    table.position.y = -THICK
+    table.material = this.material
   }
 
-  /** The map's surface: a grid of vertices MESH_STEP nodes apart, flat (the vertex shader raises it), in km. */
+  /**
+   * The map's surface: a grid of vertices MESH_STEP nodes apart, flat (the vertex shader raises it), in km; the last
+   * column and row on the frame's east and north edges, however many nodes are left before them.
+   */
   private mapMesh(far: LevelData): Mesh {
     const cellKm = (this.half.x * 2) / (far.nx - 1)
-    const nx = Math.floor((far.nx - 1) / MESH_STEP) + 1
-    const nz = Math.floor((far.nz - 1) / MESH_STEP) + 1
-    const stepKm = MESH_STEP * cellKm
+    const nx = Math.ceil((far.nx - 1) / MESH_STEP) + 1
+    const nz = Math.ceil((far.nz - 1) / MESH_STEP) + 1
+    const at = (k: number, n: number) => Math.min(k * MESH_STEP, n - 1) * cellKm
     const positions = new Float32Array(nx * nz * 3)
     for (let j = 0; j < nz; j++) {
       for (let i = 0; i < nx; i++) {
         const o = (j * nx + i) * 3
-        positions[o] = -this.half.x + i * stepKm
-        positions[o + 2] = -this.half.z + j * stepKm
+        positions[o] = -this.half.x + at(i, far.nx)
+        positions[o + 2] = -this.half.z + at(j, far.nz)
       }
     }
     const indices = new Uint32Array((nx - 1) * (nz - 1) * 6)
@@ -432,6 +447,8 @@ export class CampaignMapView {
     if (origin === d.origin) return
     d.origin = origin
     d.light.fill(0)
+    // a tile that failed (the server restarted, a fetch cut) is tried again once the area moves
+    d.failed.clear()
     const x0 = -this.half.x + origin.ox * spanKm
     const z0 = -this.half.z + origin.oz * spanKm
     const lastKm = ((d.n - 1) * level.cell) / 1000
@@ -543,19 +560,27 @@ export class CampaignMapView {
     this.dirty = true
   }
 
-  /** The point of the map (km) under a screen position (CSS pixels), or null above the horizon. */
+  /**
+   * The point of the map (km) under a screen position (CSS pixels), or null above the horizon: where the ray meets
+   * the raised surface, found by meeting the level of the ground under the last guess (a few rounds converge: the
+   * camera looks down at 30° or more and the shape's slopes, at the far level, are gentle against it).
+   */
   groundAt(sx: number, sy: number): [number, number] | null {
     this.scene.updateTransformMatrix(true)
     const ray = this.scene.createPickingRay(sx, sy, Matrix.Identity(), this.camera)
-    const o = ray.origin
-    const d = ray.direction
-    return groundHit([o.x, o.y, o.z], [d.x, d.y, d.z])
+    const d: [number, number, number] = [ray.direction.x, ray.direction.y, ray.direction.z]
+    let hit = groundHit([ray.origin.x, ray.origin.y, ray.origin.z], d)
+    for (let k = 0; k < GROUND_ROUNDS && hit; k++) {
+      const rise = this.riseAt(hit[0], hit[1])
+      hit = groundHit([ray.origin.x, ray.origin.y - rise, ray.origin.z], d)
+    }
+    return hit
   }
 
-  /** A map point (km, on the plane y = 0) on the screen, in CSS pixels, or null behind the camera. */
+  /** A map point (km) on the screen, at the height of the ground there, in CSS pixels, or null behind the camera. */
   private toScreen(x: number, z: number): [number, number] | null {
     const m = this.scene.getTransformMatrix()
-    const c = Vector4.TransformCoordinates(new Vector3(x, 0, z), m)
+    const c = Vector4.TransformCoordinates(new Vector3(x, this.riseAt(x, z), z), m)
     if (c.w <= 1e-6) return null
     const canvas = this.engine.getRenderingCanvasClientRect()
     if (!canvas) return null
@@ -582,30 +607,31 @@ export class CampaignMapView {
     return this.fsr ? this.fsr.scaleFactor : 1
   }
 
+  /**
+   * Applies the upscale: the factor that brings the canvas back to about UPSCALE_FROM pixels (or the one asked for),
+   * none below 1.15, else 1.3 to 2; FSR 1 made on first use, and left off where the GPU cannot run it. The haze's
+   * screen height follows the height the scene is drawn at.
+   */
   private applyUpscale() {
     const pixels = this.engine.getRenderWidth(true) * this.engine.getRenderHeight(true)
     let factor = this.upscale === 'off' ? 1 : this.upscale === 'auto' ? Math.sqrt(pixels / UPSCALE_FROM) : this.upscale
     factor = factor < 1.15 ? 1 : Math.min(2, Math.max(1.3, factor))
-    if (factor === 1) {
-      if (this.fsr) this.fsr.scaleFactor = 1
-      return
-    }
-    if (!this.fsr) {
+    if (factor > 1 && !this.fsr) {
       this.fsr = new FSR1RenderingPipeline('fsr', this.scene, [this.camera])
       if (!this.fsr.isSupported) {
         this.fsr.dispose()
         this.fsr = null
-        return
       }
     }
-    this.fsr.scaleFactor = factor
+    if (this.fsr) this.fsr.scaleFactor = factor
+    // the scene is drawn at the screen's height over the factor, and gl_FragCoord counts its pixels
+    this.material.setFloat('uScreenH', this.engine.getRenderHeight() / this.upscaleFactor())
   }
 
   /** The canvas resized: the engine, the upscale and the haze's screen height follow. */
   resize() {
     this.engine.resize()
     this.applyUpscale()
-    this.material.setFloat('uScreenH', this.engine.getRenderHeight())
     this.dirty = true
   }
 

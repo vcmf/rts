@@ -96,7 +96,11 @@ function bindInput(canvas: HTMLCanvasElement, view: CampaignMapView) {
     e => {
       e.preventDefault()
       const before = view.groundAt(e.clientX, e.clientY)
-      view.setView({ ...view.view, dist: view.view.dist * Math.exp(e.deltaY * 0.0012) })
+      // in pixels: a wheel that counts lines (Firefox) or pages scaled to about Chrome's pixels a notch
+      const pixels =
+        e.deltaY *
+        (e.deltaMode === WheelEvent.DOM_DELTA_LINE ? 33 : e.deltaMode === WheelEvent.DOM_DELTA_PAGE ? 800 : 1)
+      view.setView({ ...view.view, dist: view.view.dist * Math.exp(pixels * 0.0012) })
       const after = view.groundAt(e.clientX, e.clientY)
       if (before && after) {
         const v = view.view
@@ -152,10 +156,13 @@ function cartouche(m: Manifest) {
   $('credit').textContent = m.credit
 }
 
+/** Loads the manifest, the far level and its fields, and starts the view; the checks' hooks on `window`. */
 async function main() {
   const canvas = $('c') as HTMLCanvasElement
   const url = manifestUrl()
-  const manifest = readManifest(await (await fetch(url)).json())
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`${url.pathname}: ${r.status} ${r.statusText}: run node tools/campaign-tiles.ts`)
+  const manifest = readManifest(await r.json())
   const farIndex = manifest.fields.level
   const far = manifest.levels[farIndex]
   const [fields, tiles] = await Promise.all([

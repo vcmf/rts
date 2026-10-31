@@ -103,7 +103,7 @@ page keeps `window.__campaign` for the checks: `setView`, `view`, `detail`, `ups
 | `paper.ts` | the paper's grain and the clouds' noise, two canvases drawn at load |
 
 Tested in `test/campaign-page.test.ts`. Against the prototype (`docs/plans/active/k2b-page.md`): the same image to a
-mean of 1 to 2 levels a channel at four views; 2.7 to 3.7 ms a frame at 1080p on test machine A, and the same at 4K
+mean of 1 to 2 levels a channel at four views; 2.7 to 5.3 ms a frame at 1080p on test machine A, 2.7 to 6.7 ms at 4K
 with FSR 1; ready in 2.4 s (the prototype 6.5 s, 5.5 s of it its bake).
 
 ## Open questions
