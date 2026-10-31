@@ -13,7 +13,8 @@
 // --enable-automation); a mismatch fails the run. A Windows browser attached from WSL gets local files through wslpath
 // (tools/attach.ts). Set SHOT_CDP per run, not exported: an exported SHOT_CDP makes every tool built on this one (the
 // goldens, the guard, the look bench, the page checks) attach to that browser, and several agents sharing one browser
-// skew each other's timings.
+// skew each other's timings. SHOT_DPR: the device pixel ratio the page is shown at (1 by default; 2 for a 4K screen
+// at 1920 × 1080 CSS pixels).
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -299,7 +300,8 @@ try {
       throw new Error(`the browser at ${CDP} renders with ${renderer}, not ${ANGLE} (SHOT_ANGLE; ${RESTART})`)
     }
   }
-  await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: 1, mobile: false })
+  const deviceScaleFactor = +(process.env.SHOT_DPR || 1)
+  await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor, mobile: false })
   const nav = await send('Page.navigate', { url })
   if (nav.errorText) throw new Error(`could not open ${url}: ${nav.errorText}`)
   const LOAD = +(process.env.SHOT_LOAD_S || 60) // seconds; a busy machine or a slow page raises it

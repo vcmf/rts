@@ -84,6 +84,29 @@ The fields and the tiles unchanged.
   frame time panning and zooming over a scripted path, at 1080p and at 4K with FSR 1.
 - Nothing baked at load: the time to the first frame measured, against the prototype's.
 
+**Results** (K2b2), on test machine A (Windows Chrome on its RTX 3080, headless over CDP, 1920 × 1080):
+- The page against the prototype (its ink hidden: names and towns are K2d) at four views (the whole theatre at
+  1,150 km, the Danube at 250 km, the Alps at 60 km, Lake Constance at 90 km): a mean difference of 2.1, 1.1, 1.4 and
+  2.0 levels a channel; 0.7 to 1.1% of the pixels off by more than 48. Where they differ: the lakes' steps (the
+  page's lakes' distance is K2a's, which its sunk lakes follow; K2b1's results), and the light slightly, the page's far
+  light baked at 250 m where the prototype's is at 500 m.
+- The frame (`bench(60)`, each frame waited for on the GPU), over four runs (the same build measured 3.7 ms and
+  then 5.5 ms at the far view, an hour apart: the GPU's state, not the page): 2.7 to 5.3 ms at the four views at
+  1080p, the far view the dearest; 2.7 to 6.7 ms at 4K (device pixel ratio 2, FSR 1 at ×1.87), the far view at the
+  150 fps line in the slowest run. Panning up close over 120 steps: a mean of 3.0 to 4.8 ms, the 95th centile 2.1 to
+  5.1 ms, the worst 82 to 98 ms: the detail area's refill and upload, K2c's.
+- The load (three runs each): the far level's tiles and the fields fetched and inflated in 0.6 s, the page ready in
+  2.4 s; the prototype ready in 6.5 s, 5.5 s of it its bake.
+- `tools/shot.mjs` gains `SHOT_DPR` (the device pixel ratio, for the 4K runs).
+
+**Review rounds** (K2b2): round 1 (`/code-review high`), no severe finding; fixed: the haze's screen height the
+height the scene is drawn at under FSR 1 (at 4K it had almost gone); the plate's top below the deepest lake (a lake
+near the lowest ground was hidden under it); the pointer's map point on the raised surface, not the plane under it (a
+drag over the Alps slid); a tile that failed tried again once the area moves; the mesh's last column and row on the
+frame's edge for any count of nodes; the manifest's HTTP status reported; a wheel that counts lines zooms as one that
+counts pixels; the map's mesh made before the table (measured: no change in the frame); doc comments. Left to K2c:
+a tile's arrival uploads the whole detail area (75 MB), the cause of the panning frames of 80 to 100 ms.
+
 ## Decisions
 
 - The page's renderer is its own (`src/render/campaign/`), not the battle map's lit view (`src/render/lit/`): its
