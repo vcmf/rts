@@ -49,6 +49,52 @@ export function nearestFirst(tiles: TileAt[], ti: number, tj: number): TileAt[] 
   return [...tiles].sort((a, b) => d(a) - d(b))
 }
 
+/** A tile's key, as the caches hold it. */
+export const tileKey = ([i, j]: TileAt) => `${i},${j}`
+
+/**
+ * The slots given to the area's tiles after a move: `given` (the tile key each slot was given to, by slot) with each
+ * tile of the area in its slot, and the slots that changed hands, which the table must stop drawing until their new
+ * tile is written. A slot keeps its tile when the tile is still in the area.
+ */
+export function assignSlots(
+  given: (string | null)[],
+  tiles: TileAt[],
+  area: number,
+): { given: (string | null)[]; changed: [slot: number, tile: TileAt][] } {
+  const next = [...given]
+  const changed: [number, TileAt][] = []
+  for (const tile of tiles) {
+    const s = slotOf(tile[0], tile[1], area)
+    const key = tileKey(tile)
+    if (next[s] === key) continue
+    next[s] = key
+    changed.push([s, tile])
+  }
+  return { given: next, changed }
+}
+
+/**
+ * The tiles of the area to load, the nearest (ti, tj) first: those not cached, not loading, and not failed within
+ * the last `retryMs` (a failure at `failed.get(key)` ms is tried again after it).
+ */
+export function tilesToLoad(
+  tiles: TileAt[],
+  ti: number,
+  tj: number,
+  have: { cached: (key: string) => boolean; loading: (key: string) => boolean },
+  failed: Map<string, number>,
+  now: number,
+  retryMs: number,
+): TileAt[] {
+  const wanted = tiles.filter(t => {
+    const key = tileKey(t)
+    const at = failed.get(key)
+    return !have.cached(key) && !have.loading(key) && (at === undefined || now - at >= retryMs)
+  })
+  return nearestFirst(wanted, ti, tj)
+}
+
 // a slot's table entry when it holds no tile: 0xffff for the column and the row
 export const EMPTY = 0xffff
 
@@ -89,15 +135,15 @@ export class SlotTable {
 }
 
 /**
- * The uploads waiting for the GPU, one a slot: a tile to write into its slot, or null to clear the slot (its old tile
- * must not show while the new one loads). A later upload for a slot replaces the one waiting; `take` hands out at most
- * `budget` of them, the oldest first.
+ * The uploads waiting for the GPU, one a slot: a tile to write into its slot. A later upload for a slot replaces the
+ * one waiting; `take` hands out at most `budget` of them, the oldest first. (A slot given to a new tile is not
+ * cleared: the slots' table stops the shader drawing it, and its neighbours' edges, until the new tile is written.)
  */
 export class Uploads<T> {
-  private readonly waiting = new Map<number, T | null>()
+  private readonly waiting = new Map<number, T>()
 
-  /** Slot `s` is to be written with `item` (null: cleared). */
-  set(s: number, item: T | null) {
+  /** Slot `s` is to be written with `item`. */
+  set(s: number, item: T) {
     this.waiting.delete(s)
     this.waiting.set(s, item)
   }
@@ -107,9 +153,14 @@ export class Uploads<T> {
     return this.waiting.size
   }
 
+  /** Forgets slot `s`'s upload, if one waits (its slot was given to another tile). */
+  drop(s: number) {
+    this.waiting.delete(s)
+  }
+
   /** Up to `budget` uploads, the oldest first, taken from the waiting ones. */
-  take(budget: number): [slot: number, item: T | null][] {
-    const out: [number, T | null][] = []
+  take(budget: number): [slot: number, item: T][] {
+    const out: [number, T][] = []
     for (const [s, item] of this.waiting) {
       if (out.length >= budget) break
       out.push([s, item])

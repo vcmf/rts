@@ -23,7 +23,17 @@ import '@babylonjs/core/PostProcesses/RenderPipeline/postProcessRenderPipelineMa
 import '@babylonjs/core/Culling/ray.js'
 import { FSR1RenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/fsr1RenderingPipeline.js'
 import { blitTile, halved, interleave, type LevelData } from './level.ts'
-import { areaOrigin, areaTiles, nearestFirst, slotOf, SlotTable, Uploads, type TileAt } from './ring.ts'
+import {
+  areaOrigin,
+  areaTiles,
+  assignSlots,
+  slotOf,
+  SlotTable,
+  tileKey,
+  tilesToLoad,
+  Uploads,
+  type TileAt,
+} from './ring.ts'
 import { numbers, type Plane } from './fields.ts'
 import type { Level, Manifest, Tile } from './tiles.ts'
 import {
@@ -86,6 +96,8 @@ const SLACK = 1
 const TILE_CACHE = 320
 const LOADS = 6
 const UPLOADS = 2
+// a tile that failed to load is tried again this long after, ms
+const RETRY_MS = 5000
 // the upscale (decisions 0045, 0059): FSR 1 when the canvas holds more than UPSCALE_FROM pixels, at a factor that
 // brings it back to about that many, 1.3 to 2
 const UPSCALE_FROM = 1920 * 1080 * 1.15
@@ -132,14 +144,17 @@ interface Detail {
   texT: RawTexture
   tableChanged: boolean
   // a slot's worth of shape and light, reused for every upload
-  scratch: { shape: Float32Array; light: Uint8Array }
+  scratch: { shape: Float32Array; half: Uint16Array; light: Uint8Array }
   // the tile each slot is given to (loaded or not), by slot
   given: (string | null)[]
   cache: Map<string, Tile>
   loading: Set<string>
-  failed: Set<string>
+  // when each tile that failed last failed (ms), tried again RETRY_MS after
+  failed: Map<string, number>
   queue: TileAt[]
   uploads: Uploads<Tile>
+  // the tile under the target when the area last moved
+  target: TileAt
 }
 
 /**
@@ -161,6 +176,9 @@ export class CampaignMapView {
   private sun: [number, number, number] = [0, 1, 0]
   private viewNow: CampaignView = { x: 0, z: 0, dist: 1150 }
   private dirty = true
+  private running = false
+  // the render loop's one function, so stop can name it
+  private readonly frameLoop = () => this.frame()
   /** Called after each frame with its CPU time in ms (the page's fps meter). */
   onFrame: ((cpuMs: number) => void) | null = null
   /** Called in the frame after the view changed, with the screen pixels a km at the screen's centre. */
@@ -278,12 +296,6 @@ export class CampaignMapView {
     const t = RawTexture.CreateRTexture(data, w, h, this.scene, false, false, Texture.BILINEAR_SAMPLINGMODE, type)
     t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
     return t
-  }
-
-  /** Writes numbers into a square of `size` texels of a float texture made by floatTexture, from texel (x, z). */
-  private updateFloatRect(t: RawTexture, values: Float32Array, x: number, z: number, size: number) {
-    const data = this.full ? values : Uint16Array.from(values, toHalf)
-    this.engine.updateTextureData(t.getInternalTexture()!, data, x, z, size, size)
   }
 
   /** A raw byte texture, clamped, bilinear; mipmapped (trilinear) when `mips`. */
@@ -439,13 +451,18 @@ export class CampaignMapView {
       table,
       texT,
       tableChanged: false,
-      scratch: { shape: new Float32Array(level.size * level.size), light: new Uint8Array(level.size * level.size * 4) },
+      scratch: {
+        shape: new Float32Array(level.size * level.size),
+        half: new Uint16Array(level.size * level.size),
+        light: new Uint8Array(level.size * level.size * 4),
+      },
       given: new Array<string | null>(AREA * AREA).fill(null),
       cache: new Map(),
       loading: new Set(),
-      failed: new Set(),
+      failed: new Map(),
       queue: [],
       uploads: new Uploads<Tile>(),
+      target: [0, 0],
     }
     const m = this.material
     m.setTexture('uDetailS', texS)
@@ -469,7 +486,7 @@ export class CampaignMapView {
   /**
    * Moves the detail area under the camera when it is close enough to use it (about 3 px a km and more) and its
    * target is more than SLACK tiles off the area's middle: the slots of the tiles that left are given to those that
-   * came in, cleared at once in the table (and on the GPU, in turn), and the new tiles queued, the nearest first.
+   * came in (out of the slots' table at once), the cached ones sent to their slots, the others queued.
    */
   private wantDetail(ppk: number) {
     const d = this.detail
@@ -481,28 +498,32 @@ export class CampaignMapView {
     const origin = areaOrigin(level, AREA, ti, tj, d.origin, SLACK)
     if (origin === d.origin) return
     d.origin = origin
-    // a tile that failed (the server restarted, a fetch cut) is tried again once the area moves
-    d.failed.clear()
+    d.target = [ti, tj]
     const x0 = -this.half.x + origin.ox * spanKm
     const z0 = -this.half.z + origin.oz * spanKm
-    const lastKm = ((AREA * level.size - 1) * level.cell) / 1000
+    const lastKm = ((d.n - 1) * level.cell) / 1000
     this.material.setVector4('uDetailRect', new Vector4(x0, z0, x0 + lastKm, z0 + lastKm))
-    const wanted: TileAt[] = []
-    for (const [i, j] of areaTiles(level, AREA, origin)) {
-      const key = `${i},${j}`
-      const s = slotOf(i, j, AREA)
-      if (d.given[s] === key) continue
-      // the slot's old tile out of the table now, its texels cleared in turn, unless this tile is cached
-      d.given[s] = key
+    const { given, changed } = assignSlots(d.given, areaTiles(level, AREA, origin), AREA)
+    d.given = given
+    for (const [s, tile] of changed) {
       d.table.set(s, null)
       d.tableChanged = true
-      const cached = d.cache.get(key)
-      d.uploads.set(s, cached ?? null)
-      if (!cached) wanted.push([i, j])
+      d.uploads.drop(s)
+      const cached = d.cache.get(tileKey(tile))
+      if (cached) d.uploads.set(s, cached)
     }
-    // the tiles no longer in the area are not loaded; those still wanted, nearest last (taken from the end)
-    const inArea = ([i, j]: TileAt) => d.given[slotOf(i, j, AREA)] === `${i},${j}`
-    d.queue = nearestFirst([...d.queue.filter(inArea), ...wanted], ti, tj).reverse()
+    this.queueTiles()
+  }
+
+  /** The area's tiles to load, the nearest the target first (failed ones again after RETRY_MS), then loading. */
+  private queueTiles() {
+    const d = this.detail
+    if (!d || !d.origin) return
+    const have = { cached: (key: string) => d.cache.has(key), loading: (key: string) => d.loading.has(key) }
+    const tiles = areaTiles(d.level, AREA, d.origin)
+    const [ti, tj] = d.target
+    // nearest last: the queue is taken from its end
+    d.queue = tilesToLoad(tiles, ti, tj, have, d.failed, performance.now(), RETRY_MS).reverse()
     this.pumpTiles()
   }
 
@@ -511,15 +532,20 @@ export class CampaignMapView {
     const d = this.detail
     if (!d) return
     while (d.loading.size < LOADS && d.queue.length) {
-      const [i, j] = d.queue.pop()!
-      const key = `${i},${j}`
-      if (d.loading.has(key) || d.cache.has(key) || d.failed.has(key)) continue
+      const tile = d.queue.pop()!
+      const key = tileKey(tile)
+      if (d.loading.has(key) || d.cache.has(key)) continue
       d.loading.add(key)
-      d.load(i, j)
-        .then(tile => this.tileLoaded(key, tile))
+      d.load(...tile)
+        .then(loaded => {
+          d.failed.delete(key)
+          this.tileLoaded(key, loaded)
+        })
         .catch((e: unknown) => {
-          d.failed.add(key)
-          console.warn(`campaign map: tile ${key} of the close level failed:`, e)
+          d.failed.set(key, performance.now())
+          console.warn(`campaign map: tile ${key} of the close level failed, tried again in ${RETRY_MS} ms:`, e)
+          // tried again if it is still in the area then
+          setTimeout(() => this.queueTiles(), RETRY_MS)
         })
         .finally(() => {
           d.loading.delete(key)
@@ -539,28 +565,28 @@ export class CampaignMapView {
   }
 
   /**
-   * Writes up to UPLOADS waiting slots to the GPU, each into its own rectangle of the two textures (the slot cleared,
-   * or its tile written and entered in the table), and the table when it changed.
+   * Writes up to UPLOADS waiting tiles to the GPU, each into its slot's own rectangle of the two textures, and enters
+   * them in the slots' table (sent when it changed).
    */
   private uploadDetail() {
     const d = this.detail
     if (!d) return
     const { size } = d.level
     for (const [s, tile] of d.uploads.take(UPLOADS)) {
-      // the next upload reuses the scratch arrays: the GL call has copied them by then
+      // the scratch arrays are reused: each GL call has copied them when it returns
+      const { shape, half, light } = d.scratch
+      blitTile(tile, d.level, { shape, light, n: size, m: size, ox: tile.column * size, oz: tile.row * size })
       const x = (s % AREA) * size
       const z = Math.floor(s / AREA) * size
-      const { shape, light } = d.scratch
-      if (!tile) {
-        shape.fill(0)
-        light.fill(0)
-      } else {
-        blitTile(tile, d.level, { shape, light, n: size, m: size, ox: tile.column * size, oz: tile.row * size })
-        d.table.set(s, [tile.column, tile.row])
-        d.tableChanged = true
+      const texS = d.texS.getInternalTexture()!
+      if (this.full) this.engine.updateTextureData(texS, shape, x, z, size, size)
+      else {
+        for (let k = 0; k < shape.length; k++) half[k] = toHalf(shape[k])
+        this.engine.updateTextureData(texS, half, x, z, size, size)
       }
-      this.updateFloatRect(d.texS, shape, x, z, size)
       this.engine.updateTextureData(d.texL.getInternalTexture()!, light, x, z, size, size)
+      d.table.set(s, [tile.column, tile.row])
+      d.tableChanged = true
     }
     if (d.tableChanged) {
       d.texT.update(d.table.bytes)
@@ -701,14 +727,17 @@ export class CampaignMapView {
     this.onFrame?.(performance.now() - t)
   }
 
-  /** Starts drawing every frame. */
+  /** Starts drawing every frame (once: a second call while it draws does nothing). */
   start() {
-    this.engine.runRenderLoop(() => this.frame())
+    if (this.running) return
+    this.running = true
+    this.engine.runRenderLoop(this.frameLoop)
   }
 
   /** Stops drawing every frame (the checks then draw each frame themselves, with bench). */
   stop() {
-    this.engine.stopRenderLoop()
+    this.running = false
+    this.engine.stopRenderLoop(this.frameLoop)
   }
 
   /** Renders n frames back to back, waiting for the GPU after each; returns the mean in ms. */

@@ -1,9 +1,11 @@
 // The close zoom's ring of tiles (src/render/campaign/ring.ts, docs/plans/active/k2c-stream.md): a tile's slot, the
-// area's place and tiles, the slots' table, the uploads waiting.
+// area's place and tiles, a move's slots, the tiles to load, the slots' table, the uploads waiting.
 import { describe, it, expect } from 'vitest'
 import {
   areaOrigin,
   areaTiles,
+  assignSlots,
+  tilesToLoad,
   EMPTY,
   nearestFirst,
   slotOf,
@@ -101,10 +103,12 @@ describe('the slots table', () => {
 describe('the uploads waiting', () => {
   it('keeps one a slot, the later replacing the earlier, and hands out the oldest within the budget', () => {
     const u = new Uploads<string>()
-    u.set(4, null)
+    u.set(4, 'old')
     u.set(7, 'b')
     u.set(4, 'a')
     u.set(9, 'c')
+    u.set(2, 'gone')
+    u.drop(2)
     expect(u.size).toBe(3)
     // slot 4 was set again after 7: it waits behind 7 now
     expect(u.take(2)).toEqual([
@@ -113,5 +117,46 @@ describe('the uploads waiting', () => {
     ])
     expect(u.take(2)).toEqual([[9, 'c']])
     expect(u.size).toBe(0)
+  })
+})
+
+describe('a move of the area', () => {
+  it('gives the slots of the tiles that left to those that came in, and keeps the others', () => {
+    const before = assignSlots(new Array<string | null>(144).fill(null), areaTiles(level, 12, { ox: 4, oz: 2 }), 12)
+    // the first area: every slot changes hands
+    expect(before.changed).toHaveLength(144)
+    const after = assignSlots(before.given, areaTiles(level, 12, { ox: 5, oz: 2 }), 12)
+    // one column came in (x = 16), into the slots of the column that left (x = 4)
+    expect(after.changed.map(([, t]) => t[0])).toEqual(new Array<number>(12).fill(16))
+    expect(after.changed.map(([s]) => s % 12)).toEqual(new Array<number>(12).fill(4))
+    expect(after.given.filter(key => key?.startsWith('4,'))).toEqual([])
+    // the input is left as it was
+    expect(before.given.filter(key => key?.startsWith('4,'))).toHaveLength(12)
+  })
+})
+
+describe('the tiles to load', () => {
+  const tiles: TileAt[] = [
+    [0, 0],
+    [1, 0],
+    [2, 0],
+    [3, 0],
+  ]
+  const have = { cached: (key: string) => key === '1,0', loading: (key: string) => key === '2,0' }
+
+  it('are those neither cached nor loading, the nearest first', () => {
+    expect(tilesToLoad(tiles, 3, 0, have, new Map(), 0, 5000)).toEqual([
+      [3, 0],
+      [0, 0],
+    ])
+  })
+
+  it('leave out a tile that failed, until the retry time has passed', () => {
+    const failed = new Map([['3,0', 1000]])
+    expect(tilesToLoad(tiles, 3, 0, have, failed, 5999, 5000)).toEqual([[0, 0]])
+    expect(tilesToLoad(tiles, 3, 0, have, failed, 6000, 5000)).toEqual([
+      [3, 0],
+      [0, 0],
+    ])
   })
 })

@@ -18,7 +18,7 @@ uniform sampler2D uLakes;     // the lakes' coverage, its texels tiling the fram
 uniform sampler2D uLakeD;     // the signed distance to the shore, km (positive in the water), a node
 uniform sampler2D uContourH;  // the heights smoothed for the contours, m, a node
 uniform sampler2D uDetailS;   // the detail area's shape, m, nearest, its tile slots wrapping (src/render/campaign/ring.ts)
-uniform sampler2D uDetailL;   // the detail area's light: R sun, G sky, B tree cover, A loaded
+uniform sampler2D uDetailL;   // the detail area's light: R sun, G sky, B tree cover
 uniform sampler2D uDetailT;   // the slots' table: the tile each slot holds, column in RG and row in BA (high byte
                               // first), 0xffff when none
 uniform sampler2D uPaperT, uClouds;
@@ -107,21 +107,29 @@ vec2 detailNode(vec2 w) {
 vec2 detailUv(vec2 w) {
   return (detailNode(w) + 0.5) * uDetailTexel;
 }
-// whether the slot of the tile a point lies in holds that tile
-bool detailHeld(vec2 w) {
-  vec2 tile = floor((detailNode(w) + 0.5) / uDetailSize);
+// whether the slot of the tile node k lies in holds that tile, written
+bool slotHolds(vec2 k) {
+  vec2 tile = floor(k / uDetailSize);
   vec2 slot = mod(tile, uDetailArea);
   vec4 t = texture2D(uDetailT, (slot + 0.5) / uDetailArea) * 255.0;
   vec2 held = vec2(t.r * 256.0 + t.g, t.b * 256.0 + t.a);
   return all(lessThan(abs(held - tile), vec2(0.5)));
 }
-// how much of the detail to use at a point: the zoom's share, faded over 8 km to the area's edge, and only where its
-// slot holds its tile, loaded (alpha)
+// whether every tile the detail reads at a point is in its slot: the reads reach two nodes either way (the
+// Catmull-Rom pass from one before to two after), so the corners of that box, which between them touch every tile
+// it does (a tile is far wider than the box)
+bool detailHeld(vec2 w) {
+  vec2 k = floor(detailNode(w));
+  return slotHolds(k + vec2(-2.0, -2.0)) && slotHolds(k + vec2(3.0, -2.0)) &&
+         slotHolds(k + vec2(-2.0, 3.0)) && slotHolds(k + vec2(3.0, 3.0));
+}
+// how much of the detail to use at a point: the zoom's share, faded over 8 km to the area's edge, and only where the
+// tiles it reads are in their slots
 float detailK(vec2 w) {
   if (uDetailK <= 0.0) return 0.0;
   float edge = min(min(w.x - uDetailRect.x, uDetailRect.z - w.x), min(w.y - uDetailRect.y, uDetailRect.w - w.y));
   if (edge <= 0.0 || !detailHeld(w)) return 0.0;
-  return uDetailK * smoothstep(0.0, 8.0, edge) * texture2D(uDetailL, detailUv(w)).a;
+  return uDetailK * smoothstep(0.0, 8.0, edge);
 }
 
 // the lake floor's steps at a point (m below the sunk surface)

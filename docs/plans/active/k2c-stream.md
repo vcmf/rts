@@ -25,16 +25,19 @@ Two PRs, each reviewed by the workflow in `AGENTS.md`:
   come into the area are loaded, into the slots of those that left; nothing is cleared, copied back or uploaded again.
 - **Which tile a slot holds**: a small texture of 12 × 12 texels (the slots' table) holds the column and row of the
   tile in each slot, as 16 bits each (Europe's 100 m level has 157 × 137 tiles); the shader uses the detail at a point
-  only where its slot holds the tile that point lies in, and that tile is loaded. A slot given to a new tile is
-  marked empty at once (its table texel), so its old tile is never drawn in the new place.
+  only where every tile its reads reach (two nodes either way) is in its slot. A slot given to a new tile is marked
+  empty at once (its table texel), so neither its old tile nor its neighbours' edges next to it are drawn until the
+  new tile is written; the slot is not cleared on the GPU.
 - **Each tile uploaded alone**: a tile that arrives is written into its slot's rectangle of the two textures
   (`texSubImage2D`, Babylon's `updateTextureData`): 256 × 256 floats and 256 × 256 × 4 bytes, about 0.5 MB, not
-  75 MB. At most a few tiles uploaded in a frame (a budget in bytes), the rest the next frame.
+  75 MB. At most 2 tiles uploaded in a frame, the rest the next frame.
 - **The area follows the camera**: centred on the tile under the camera's target, re-centred when the target leaves
-  the area's middle by more than a tile; the tiles queued nearest first, the ones no longer wanted dropped from the
-  queue; at most 6 loading at once; the decoded tiles kept in a cache as today.
-- **Pure parts** in `src/render/campaign/ring.ts`, tested: a tile's slot, the area's tiles for a target, the tiles
-  to load and to let go when the area moves, the queue's order, the upload budget.
+  the area's middle by more than a tile; the area's tiles not cached nor loading queued nearest first; at most 6
+  loading at once; a tile that fails tried again 5 s later if still in the area; the decoded tiles kept in a cache as
+  today.
+- **Pure parts** in `src/render/campaign/ring.ts`, tested: a tile's slot, the area's place and tiles, the slots a
+  move gives to new tiles, the tiles to load (the failed ones again after their wait), the slots' table, the uploads
+  waiting.
 
 **Acceptance**: Vitest on the ring's pure parts. On test machine A: no frame over 6.7 ms panning the Alps up close
 (a scripted pan over the same path as K2b2's, each frame waited for on the GPU) at 1080p, measured at 4K too; the
@@ -50,6 +53,18 @@ same image as before at the four views of K2b2 once the tiles have loaded (a mea
   check warms the GPU up first.
 - The same image as K2b's at the four views (a mean difference of 0.01 level a channel, the clouds' drift).
 - Learnt: Babylon's shader preprocessor fails on a semicolon in a comment on a `uniform` line.
+- After review round 1 (the shader's four reads of the slots' table): the worst panning frame 6.4 ms at 1080p and
+  6.6 ms at 4K, the mean 2.8 and 2.6 ms; the image unchanged.
+
+**Review rounds** (K2c1):
+- **Round 1** (`/code-review high`): severe: a tile that failed was never fetched again while it stayed in the area
+  (a hole for the session): the tiles to load are now all the area's tiles not cached nor loading, a failed one again
+  5 s later. With: every slot given to a new tile was cleared by an upload queued ahead of the tiles (the first tile
+  up close drawn after about 72 frames): no clears now; at a tile's edge, the shader's reads reached a neighbour slot
+  still cleared or holding another tile (a seam in the light while the tiles stream in): the detail used only where
+  every tile its reads reach is in its slot; the move's logic pulled out of the view into `ring.ts` and tested
+  (`assignSlots`, `tilesToLoad`); a second `start` no longer adds a second render loop; the half floats converted into
+  a reused array; one value for the textures' side.
 
 ## K2c2: a denser mesh near the camera
 
