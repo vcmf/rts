@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-31
 ---
 
-# 0097 The look page's armies at the division scale: a stress-test battle of corps, stand-ins for the light arms
+# 0099 The look page's armies at the division scale: a stress-test battle of corps, stand-ins for the light arms
 
 Proposed with `docs/plans/active/division-armies.md`, from the owner's choices of 2026-10-31; as built:
 `docs/systems/look.md` (the armies).

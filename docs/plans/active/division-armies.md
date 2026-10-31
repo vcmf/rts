@@ -43,7 +43,7 @@ blocks, the ranges) and #283 (the formations) are held until the look has moved 
 
 ## Approach
 
-Decision 0097 (proposed) records the choices below.
+Decision 0099 (proposed) records the choices below.
 
 
 1. **Ruleset data** (`src/rulesets/napoleonic-division.ts`, registered in `src/rulesets/index.ts`): the types `infantry`
