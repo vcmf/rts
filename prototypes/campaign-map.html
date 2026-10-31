@@ -1633,7 +1633,8 @@ function loadTiles() {
       return;
     }
     DETAIL.meta = meta;
-    DETAIL.base = base;
+    // the tiles of the build the meta file names (tools/campaign-builds.ts), so a run under way never mixes in
+    DETAIL.base = meta.build ? base + meta.build + '/' : base;
     setupDetail();
     dirty = true;
   };

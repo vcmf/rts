@@ -16,7 +16,7 @@ import type { Grid } from './bake.ts'
 export const TILE_MAGIC = 'CMPT'
 export const TILE_VERSION = 1
 // the manifest's own format, apart from the tiles' (a field added to one need not refuse the other)
-export const MANIFEST_FORMAT = 1
+export const MANIFEST_FORMAT = 2
 const HEADER = 16
 const PLANES = 3
 
@@ -199,7 +199,7 @@ export function cutTile(bake: LevelBake, place: TilePlace, size: number, scale: 
       if (!Number.isFinite(height)) throw new RangeError(`cutTile: a shape of ${height} m at node ${g}`)
       const steps = Math.round(Math.max(0, height - base) / scale)
       if (steps > 0xffff) {
-        throw new RangeError(`cutTile: a shape of ${bake.shape[g]} m past ${base + 0xffff * scale} m`)
+        throw new RangeError(`cutTile: a shape of ${height} m past ${base + 0xffff * scale} m`)
       }
       tile.shape[k] = steps
       tile.sun[k] = bake.light[g * 2]

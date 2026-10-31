@@ -7,14 +7,15 @@
 //   b-<time>-<pid>/l<level>/t-<i>-<j>.bin: one tile of a build (src/render/campaign/tiles.ts, the format)
 // Until the campaign page replaces the prototype (K2b), the 100 m level is also written as the prototype's tiles
 // (prototypes/campaign-map.html cannot fetch binary from file://), under scratch/campaign-tiles/:
-//   meta.js: window.CAMPAIGN_TILES = { cell, nx, nz, size, tilesX, tilesZ, scale, params }
-//   t-<i>-<j>.js: window.__campaignTile(i, j, shape, light): the shape as base64 of little-endian Uint16 in `scale`
-//     metres, the light as base64 of three bytes a node (the sun, the sky, the forest), the south row first.
+//   meta.js: window.CAMPAIGN_TILES = { cell, nx, nz, size, tilesX, tilesZ, scale, params, build }
+//   b-<time>-<pid>/t-<i>-<j>.js: window.__campaignTile(i, j, shape, light): the shape as base64 of little-endian
+//     Uint16 in `scale` metres, the light as base64 of three bytes a node (the sun, the sky, the forest), the south
+//     row first.
 // Reads the theatre (tools/campaign-theatre.ts's output) for the frame, its lowest ground and the lakes, and the
-// frame's forest field (tools/worldcover.ts, made by the theatre and cached). Each build goes into a directory of its
-// own and is made live by its manifest, written last (tools/campaign-builds.ts); the prototype's meta file is removed
-// before its tiles are written and written again after them, so a failed run never leaves the last tiles unusable or
-// a mix of two runs in use (the prototype then keeps its 250 m bake).
+// frame's forest field (tools/worldcover.ts, made by the theatre and cached). Each build of both outputs goes into a
+// directory of its own and is made live by the file that names it, the manifest or the meta file, written last
+// (tools/campaign-builds.ts): a failed run leaves the last build whole and in use, and the one before it is kept for
+// a page still reading it. One run at a time: two at once each keep the other's build, but the last to finish wins.
 // Usage: node tools/campaign-tiles.ts [theatre out prototypeOut]
 //   default: scratch/campaign-1805.js scratch/campaign scratch/campaign-tiles
 import fs from 'node:fs'
@@ -48,7 +49,7 @@ import {
   type Manifest,
   type Tile,
 } from '../src/render/campaign/tiles.ts'
-import { commitBuild, pruneBuilds, startBuild, writeWhole } from './campaign-builds.ts'
+import { commitBuild, liveBuild, pruneBuilds, startBuild, writeFlushed } from './campaign-builds.ts'
 import { frameGrid, projection, type Frame, type Pt } from './campaign-theatre-lib.ts'
 import { sampleGrid } from './terrarium.ts'
 import { forestField, WORLDCOVER_LEVEL_PX } from './worldcover.ts'
@@ -80,6 +81,9 @@ const LAKE_BLUR_M = 750
 const BASE = -SINK
 
 const deflate = promisify(zlib.deflate)
+// the files that name each output's live build
+const MANIFEST = 'manifest.json'
+const META = 'meta.js'
 
 /** What a light worker is given. */
 interface Job {
@@ -208,46 +212,38 @@ function prototypeTile(tile: Tile): string {
   return `window.__campaignTile(${tile.column},${tile.row},"${b64(shape)}","${b64(light)}")\n`
 }
 
-// as many deflates at once as libuv's pool has threads (its default 4 when the variable is unset or not a count)
-const WRITERS = Math.max(1, Math.floor(Number(process.env.UV_THREADPOOL_SIZE)) || 4)
+// as many deflates at once as libuv's pool has threads (its default 4 when the variable is unset or not a count, 1024
+// at most as libuv)
+const WRITERS = Math.min(1024, Math.max(1, Math.floor(Number(process.env.UV_THREADPOOL_SIZE)) || 4))
 
 /**
- * Writes a level's tiles under `dir`, deflated on libuv's thread pool, and, given `prototypeDir`, the prototype's
- * tiles and meta file there too, from the same cut: the meta file removed first and written last, so the prototype
- * never uses a half-written level. Returns the tiles written and the bytes on disk of each output.
+ * Writes a level's tiles under `dir`, deflated on libuv's thread pool and flushed to the disk, and, given
+ * `prototypeDir`, the prototype's tiles there too, from the same cut. Returns the tiles written and the bytes on disk
+ * of each output; throws unless every tile of the level was written.
  */
 async function writeLevel(dir: string, bake: LevelBake, level: number, prototypeDir?: string) {
   fs.mkdirSync(dir, { recursive: true })
-  const meta = prototypeDir && path.join(prototypeDir, 'meta.js')
-  if (prototypeDir && meta) {
-    fs.mkdirSync(prototypeDir, { recursive: true })
-    fs.rmSync(meta, { force: true })
-  }
+  if (prototypeDir) fs.mkdirSync(prototypeDir, { recursive: true })
   const tiles = tilesOf(bake, level)
   const written = { tiles: 0, bytes: 0, prototype: 0 }
   const worker = async () => {
     for (const tile of tiles) {
       const name = `t-${tile.column}-${tile.row}`
       const packed = await deflate(packTile(tile), { level: 9 })
-      await fs.promises.writeFile(path.join(dir, `${name}.bin`), packed)
+      await writeFlushed(path.join(dir, `${name}.bin`), packed)
       written.tiles++
       written.bytes += packed.length
       if (prototypeDir) {
         const js = prototypeTile(tile)
-        await fs.promises.writeFile(path.join(prototypeDir, `${name}.js`), js)
+        await writeFlushed(path.join(prototypeDir, `${name}.js`), js)
         written.prototype += js.length
       }
     }
   }
   await Promise.all(Array.from({ length: WRITERS }, worker))
-  const { nx, nz, cell } = bake.grid
-  const layout = levelLayout(nx, nz, SIZE)
+  const layout = levelLayout(bake.grid.nx, bake.grid.nz, SIZE)
   if (written.tiles !== layout.tilesX * layout.tilesZ) {
     throw new Error(`level ${level}: ${written.tiles} tiles written of ${layout.tilesX * layout.tilesZ}`)
-  }
-  if (meta) {
-    const content = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams() }
-    writeWhole(meta, `window.CAMPAIGN_TILES = ${JSON.stringify(content)}\n`)
   }
   return written
 }
@@ -293,14 +289,17 @@ async function main() {
   const t = loadTheatre(theatreFile)
   const proj = projection(t.frame.lat0, t.frame.lon0)
   const src: Sources = { t, proj, low: lowest(theatreHeights(t)), forest: await forestField(t.frame, proj) }
-  // a directory of its own, live once its manifest is written: a failed run leaves the last build as it was
+  // a directory of its own in each output, live once its manifest and meta file are written: a failed run leaves the
+  // last builds as they were
   const build = startBuild(out)
+  const prototypeBuild = startBuild(prototypeOut)
   const levels: Level[] = []
+  let prototypeMeta = {}
   for (const [level, { cell, zoom }] of LEVELS.entries()) {
     const start = performance.now()
     const bake = await bakeLevel(src, cell, zoom)
     // the close level for the prototype too
-    const forPrototype = level === LEVELS.length - 1 ? prototypeOut : undefined
+    const forPrototype = level === LEVELS.length - 1 ? path.join(prototypeOut, prototypeBuild) : undefined
     const written = await writeLevel(path.join(out, build, `l${level}`), bake, level, forPrototype)
     const { nx, nz } = bake.grid
     const layout = levelLayout(nx, nz, SIZE)
@@ -308,7 +307,10 @@ async function main() {
     const ms = Math.round(performance.now() - start)
     const tiles = layout.tilesX * layout.tilesZ
     console.log(`level ${level}: ${nx} × ${nz} nodes at ${cell} m, ${tiles} tiles, ${mb(written.bytes)}, ${ms} ms`)
-    if (forPrototype) console.log(`prototype tiles: ${mb(written.prototype)}`)
+    if (forPrototype) {
+      console.log(`prototype tiles: ${mb(written.prototype)}`)
+      prototypeMeta = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams(), build: prototypeBuild }
+    }
   }
   const manifest: Manifest = {
     format: MANIFEST_FORMAT,
@@ -318,8 +320,12 @@ async function main() {
     levels,
     credit: t.credit,
   }
-  commitBuild(out, build, manifest)
-  const removed = pruneBuilds(out)
+  // the builds replaced, kept for a page still reading them
+  const last = liveBuild(out, MANIFEST)
+  const prototypeLast = liveBuild(prototypeOut, META)
+  commitBuild(out, build, MANIFEST, JSON.stringify(manifest, null, 2) + '\n')
+  commitBuild(prototypeOut, prototypeBuild, META, `window.CAMPAIGN_TILES = ${JSON.stringify(prototypeMeta)}\n`)
+  const removed = [...pruneBuilds(out, MANIFEST, [last]), ...pruneBuilds(prototypeOut, META, [prototypeLast])]
   console.log(
     `${out}/${build}: built on ${os.cpus().length} cores in ${Math.round(performance.now() - t0)} ms, ${removed.length} older build(s) removed`,
   )

@@ -1,17 +1,17 @@
 // How tools/campaign-tiles.ts replaces its last output without ever leaving none (docs/systems/campaign-map.md): each
-// build writes into a directory of its own beside the manifest, never into the live one; the manifest, which names
-// its build, is written last, to a temporary file renamed over the old one (a file's rename is all or nothing); only
-// then are the other builds removed. A run that fails or is killed at any moment leaves the last manifest naming a
-// build that is still whole.
-//   <out>/manifest.json            the live one
-//   <out>/b-<time>-<pid>/l<level>/ a build's tiles
+// build writes into a directory of its own, never into the live one, and flushes its files; the file that names the
+// live build (the manifest, the prototype's meta file) is written last, to a temporary file renamed over the old one
+// (a file's rename is all or nothing); only then are older builds removed. A run that fails or is killed at any moment
+// leaves the last file naming a build that is still whole.
+//   <out>/<file>                   names the live build: `"build": "b-…"` in it
+//   <out>/b-<time>-<pid>/          a build's files
 import fs from 'node:fs'
 import path from 'node:path'
 
-/** A build directory's name: the time it started (base 36) and the process that made it. */
-export const BUILD_NAME = /^b-[0-9a-z]+-\d+$/
+/** A build directory's name: the time it started (milliseconds, base 36) and the process that made it. */
+export const BUILD_NAME = /^b-([0-9a-z]+)-\d+$/
 
-const MANIFEST = 'manifest.json'
+const NAMED = /"build":\s*"(b-[0-9a-z]+-\d+)"/
 
 /** Makes a new, empty build directory under `out` and returns its name. */
 export function startBuild(out: string, now = Date.now(), pid = process.pid): string {
@@ -22,15 +22,29 @@ export function startBuild(out: string, now = Date.now(), pid = process.pid): st
   return name
 }
 
-/** The build the live manifest names, if there is a manifest. */
-export function liveBuild(out: string): string | undefined {
-  const file = path.join(out, MANIFEST)
-  if (!fs.existsSync(file)) return undefined
-  const build: unknown = JSON.parse(fs.readFileSync(file, 'utf8')).build
-  return typeof build === 'string' ? build : undefined
+/** The build named by `text` (a manifest or meta file), if it names one. */
+export function namedBuild(text: string): string | undefined {
+  return NAMED.exec(text)?.[1]
 }
 
-/** Writes `text` to `file` whole or not at all: to a temporary file, flushed, then renamed over it. */
+/** The build `out/file` names, if the file is there. */
+export function liveBuild(out: string, file: string): string | undefined {
+  const at = path.join(out, file)
+  return fs.existsSync(at) ? namedBuild(fs.readFileSync(at, 'utf8')) : undefined
+}
+
+/** Writes `data` to `file` and flushes it to the disk before returning. */
+export async function writeFlushed(file: string, data: string | Uint8Array) {
+  const handle = await fs.promises.open(file, 'w')
+  try {
+    await handle.writeFile(data)
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
+}
+
+/** Writes `text` to `file` whole or not at all: to a temporary file, flushed, renamed over it, the rename flushed. */
 export function writeWhole(file: string, text: string) {
   const temporary = `${file}.tmp`
   const fd = fs.openSync(temporary, 'w')
@@ -41,25 +55,38 @@ export function writeWhole(file: string, text: string) {
     fs.closeSync(fd)
   }
   fs.renameSync(temporary, file)
+  const dir = fs.openSync(path.dirname(file), 'r')
+  try {
+    fs.fsyncSync(dir)
+  } finally {
+    fs.closeSync(dir)
+  }
 }
 
-/** Makes `build` the live one: its manifest written whole over the last. */
-export function commitBuild(out: string, build: string, manifest: { build: string }) {
-  if (manifest.build !== build) throw new Error(`commitBuild: a manifest of build ${manifest.build} for ${build}`)
+/** Makes `build` the live one: `out/file`, whose `text` must name it, written whole over the last. */
+export function commitBuild(out: string, build: string, file: string, text: string) {
+  const named = namedBuild(text)
+  if (named !== build) throw new Error(`commitBuild: a ${file} of build ${named} for ${build}`)
   if (!fs.statSync(path.join(out, build)).isDirectory()) throw new Error(`commitBuild: no build ${build} in ${out}`)
-  writeWhole(path.join(out, MANIFEST), JSON.stringify(manifest, null, 2) + '\n')
+  writeWhole(path.join(out, file), text)
+}
+
+/** When a build started, from its name. */
+function startOf(name: string): number {
+  return parseInt(BUILD_NAME.exec(name)![1], 36)
 }
 
 /**
- * Removes every build under `out` but the one the live manifest names (and, without a manifest, none): what failed
- * runs left and the builds replaced. Returns the names removed.
+ * Removes the builds under `out` that started before the one `out/file` names, but for those in `keep` (the one it
+ * replaced, which a page may still be reading): what failed runs left and the builds replaced. A build started after
+ * the live one (a run still going) is left, and without a live file nothing is removed. Returns the names removed.
  */
-export function pruneBuilds(out: string): string[] {
-  const live = liveBuild(out)
+export function pruneBuilds(out: string, file: string, keep: (string | undefined)[] = []): string[] {
+  const live = liveBuild(out, file)
   if (live === undefined) return []
   const removed: string[] = []
   for (const name of fs.readdirSync(out)) {
-    if (name === live || !BUILD_NAME.test(name)) continue
+    if (!BUILD_NAME.test(name) || name === live || keep.includes(name) || startOf(name) >= startOf(live)) continue
     fs.rmSync(path.join(out, name), { recursive: true, force: true })
     removed.push(name)
   }

@@ -58,7 +58,7 @@ compressed tile levels with a manifest. The page that draws them is K2b.
   18 MB.
 - The build: 69 s on 8 cores (the owner's WSL machine, an i7-9700K): 10 s for the 250 m level, 58 s for the 100 m
   one, most of it the light.
-- Tests: `test/campaign-tiles.test.ts` (13), `test/campaign-builds.test.ts` (6, the build's replacing), `test/campaign-bake.test.ts` (one more: the bands give the bytes of one
+- Tests: `test/campaign-tiles.test.ts` (13), `test/campaign-builds.test.ts` (8, the build's replacing), `test/campaign-bake.test.ts` (one more: the bands give the bytes of one
   pass), `test/worldcover.test.ts` (unchanged, its smoothing and resampling now from the bake module).
 
 ## Review rounds
@@ -91,6 +91,15 @@ compressed tile levels with a manifest. The page that draws them is K2b.
   worker gone without its band stops the build; a shape not a number refused by `cutTile`. Left: the far level
   samples its heights again rather than taking the theatre's (4 s a build; round 2 chose a true zoom in the
   manifest). The prototype's tiles still byte for byte, the binary level still the prototype's; the build 67 s.
+- **Redesign, round 1** (the count restarted): no severe finding. Fixed: the prototype's tiles in build directories
+  too, named by their meta file, which the prototype now follows (an open page no longer mixes two runs' tiles); the
+  tiles flushed to the disk before the manifest names them, and the rename flushed; the build replaced kept for a page
+  still reading it; a build started after the live one (a run under way) never removed; the manifest's format 2 (it
+  names its build); the writers at most 1024. Left: the old layout's leftovers (`l0/`, `l1/`, the `.building` and
+  `.old` directories of rounds 1 and 2) are not removed by the tool (scratch, removed by hand once); the manifest's
+  build and its levels' paths name the same directory, written from one variable, so not checked against each other.
+  The prototype's tiles still byte for byte (now in their build directory), the binary level still the prototype's;
+  in Chrome the prototype loads its close tiles from the build (144 of them, none failed).
 
 ## Open questions
 
