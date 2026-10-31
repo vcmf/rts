@@ -212,7 +212,8 @@ export function buildTerrain(
   const farGround = ground(FAR_W, FAR_SUB, fcx, fcz)
   // (every far triangle, the hole cut from them for the tile where it is)
   const farAll = Array.from(farGround.getIndices()!)
-  function shape(g: GroundMesh, coarse: boolean): void {
+  // (heights: false keeps a ground's heights and bank values, the far ring's on a move: its hole and normals alone)
+  function shape(g: GroundMesh, coarse: boolean, heights = true): void {
     const sub = coarse ? FAR_SUB : TILE_SUB
     const cx = g.position.x
     const cz = g.position.z
@@ -222,7 +223,7 @@ export function buildTerrain(
     // bank colours): on a 14 m grid they would bead along the line. Vertex (row, col) is node (col, sub − row) of its
     // grid.
     const m = D.hfMargin
-    for (let row = 0, k = 0; row <= sub; row++) {
+    for (let row = 0, k = 0; heights && row <= sub; row++) {
       for (let col = 0; col <= sub; col++, k++) {
         if (coarse) {
           p[k * 3 + 1] = far.h[(sub - row) * far.n + col]
@@ -233,8 +234,10 @@ export function buildTerrain(
         }
       }
     }
-    g.updateVerticesData(VertexBuffer.PositionKind, p)
-    g.updateCoordinateHeights()
+    if (heights) {
+      g.updateVerticesData(VertexBuffer.PositionKind, p)
+      g.updateCoordinateHeights()
+    }
     if (coarse) {
       const keep: number[] = []
       for (let t = 0; t < farAll.length; t += 3) {
@@ -248,6 +251,7 @@ export function buildTerrain(
     const n: number[] = []
     VertexData.ComputeNormals(p, g.getIndices(), n)
     g.updateVerticesData(VertexBuffer.NormalKind, n)
+    if (!heights) return
     if (g.isVerticesDataPresent('aRiver')) g.updateVerticesData('aRiver', rv)
     else g.setVerticesData('aRiver', rv, true, 1)
   }
@@ -368,7 +372,7 @@ export function buildTerrain(
     tileGround.position.set(TILE_O.x, 0, TILE_O.y)
     tileGround.computeWorldMatrix(true)
     shape(tileGround, false)
-    shape(farGround, true)
+    shape(farGround, true, false)
     putApron()
   }
   return {

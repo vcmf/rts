@@ -31,7 +31,7 @@ import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn, zoo
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
-import { D, FocusFollow, TUNED_R, checkView, farDefines, groundOf, maxGrid, rectOf } from './spec.ts'
+import { D, FocusFollow, TUNED_R, checkView, farDefines, groundOf, maxGrid, rectOf, type WorldGround } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
 import {
   checkLookData,
@@ -135,7 +135,7 @@ setHeightfield(look.hf, look.far, D.spec.tile / 2)
 // the world's ground range, from the heights themselves (not the header): the camera's checks take it (checkView), and
 // the focus keeps to its range (the demo's focus stays on its 8 m plane, SPEC.camera.focusY; a map world's follows its
 // ground in play: docs/plans/done/look-austerlitz-a1b.md) and goes anywhere over its map's play area (G3a)
-const worldGround =
+let worldGround =
   look.world.kind === 'map'
     ? groundOf(D.spec, look.hf, look.far, null, look.world.play, look.tileAt)
     : groundOf(D.spec, look.hf, look.far, D.spec.camera.focusY)
@@ -1452,69 +1452,75 @@ if (new URLSearchParams(location.search).get('river') === 'debug') {
 
 // the page contract of tools/golden.mjs, and the names tools/render-check.js and tools/river-check.js read (they were
 // written against the prototype's globals; SMW and MASKN are the prototype's names for TILE_W and MASK_N)
-Object.assign(window, {
-  // zoom: the wanted radius (ZoomHold: read wanted, set(r))
-  __proto: { S, scene, camera, zoom: zoomOf(camera), buildPost: () => post.build(), play: worldGround.play },
-  B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
-  // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring
-  // formulas the river check compares with
-  scene,
-  engine,
-  camera,
-  apron: terrain.apron,
-  __waterTexMs: waterTexMs,
-  RIVER: { ...RIVER, axisX },
-  H: groundAt,
-  baseH,
-  riverQuery,
-  lerpA,
-  wetEdges,
-  wetEdgeAt,
-  bankReachAt,
-  atCutBank,
-  BAND: D.band,
-  PLAY: D.spec.play,
-  SMW: D.spec.tile,
-  TSUB: D.spec.tileSub,
-  MASKN: D.spec.sizes.riverMask,
-  SM_FADE_M: D.spec.shadowFade,
-  SPEC: D.spec,
-  GROUND: worldGround,
-  tileGround: terrain.tileGround,
-  farGround: terrain.farGround,
-  farTerrainMat: terrain.farTerrainMat,
-  riverMask: terrain.riverMask,
-  riverMaskCanvas: terrain.riverMaskCanvas,
-  get groups() {
-    return nature.groups // (the tile's now: a moved tile's, retile)
-  },
-  get FAR() {
-    return nature.far // (the tile's now: a moved tile's, retile)
-  },
-  get STONES() {
-    return nature.stones // (the tile's now: a moved tile's, retile)
-  },
-  get KEEP_CLEAR() {
-    return nature.KEEP_CLEAR // (the tile's now: a moved tile's, retile)
-  },
-  get touchesZone() {
-    return nature.touchesZone // (the tile's now: a moved tile's, retile)
-  },
-  get placeable() {
-    return nature.placeable // (the tile's now: a moved tile's, retile)
-  },
-  get footprint() {
-    return nature.footprint // (the tile's now: a moved tile's, retile)
-  },
-  get lightCam() {
-    return bakes.lightCam // (the tile's now: a moved tile's, retile)
-  },
-  get shadowRT() {
-    return bakes.shadowRT // (the tile's now: a moved tile's, retile)
-  },
-  __macro: { bake: macroBake, macro },
-  __buildMs: performance.now() - T0,
-})
+// (as property descriptors: the getters, a moved tile's parts, stay getters on window)
+Object.defineProperties(
+  window,
+  Object.getOwnPropertyDescriptors({
+    // zoom: the wanted radius (ZoomHold: read wanted, set(r))
+    __proto: { S, scene, camera, zoom: zoomOf(camera), buildPost: () => post.build(), play: worldGround.play },
+    B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
+    // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring
+    // formulas the river check compares with
+    scene,
+    engine,
+    camera,
+    apron: terrain.apron,
+    __waterTexMs: waterTexMs,
+    RIVER: { ...RIVER, axisX },
+    H: groundAt,
+    baseH,
+    riverQuery,
+    lerpA,
+    wetEdges,
+    wetEdgeAt,
+    bankReachAt,
+    atCutBank,
+    BAND: D.band,
+    PLAY: D.spec.play,
+    SMW: D.spec.tile,
+    TSUB: D.spec.tileSub,
+    MASKN: D.spec.sizes.riverMask,
+    SM_FADE_M: D.spec.shadowFade,
+    SPEC: D.spec,
+    get GROUND() {
+      return worldGround
+    },
+    tileGround: terrain.tileGround,
+    farGround: terrain.farGround,
+    farTerrainMat: terrain.farTerrainMat,
+    riverMask: terrain.riverMask,
+    riverMaskCanvas: terrain.riverMaskCanvas,
+    get groups() {
+      return nature.groups // (the tile's now: a moved tile's, retile)
+    },
+    get FAR() {
+      return nature.far // (the tile's now: a moved tile's, retile)
+    },
+    get STONES() {
+      return nature.stones // (the tile's now: a moved tile's, retile)
+    },
+    get KEEP_CLEAR() {
+      return nature.KEEP_CLEAR // (the tile's now: a moved tile's, retile)
+    },
+    get touchesZone() {
+      return nature.touchesZone // (the tile's now: a moved tile's, retile)
+    },
+    get placeable() {
+      return nature.placeable // (the tile's now: a moved tile's, retile)
+    },
+    get footprint() {
+      return nature.footprint // (the tile's now: a moved tile's, retile)
+    },
+    get lightCam() {
+      return bakes.lightCam // (the tile's now: a moved tile's, retile)
+    },
+    get shadowRT() {
+      return bakes.shadowRT // (the tile's now: a moved tile's, retile)
+    },
+    __macro: { bake: macroBake, macro },
+    __buildMs: performance.now() - T0,
+  }),
+)
 /**
  * The tile moved (G3b-2, docs/plans/active/g3b-the-detail-follows.md): a tile's data in the page's frame (the first
  * window's; tools/build-look-data.ts --tileat, the page's worker from G3b-3) takes the tile's place: its centre
@@ -1536,10 +1542,37 @@ async function retile(next: LookData): Promise<number> {
   if (!same(next.cover, look.cover) || !same(next.far, look.far) || next.far.h.length !== look.far.h.length) {
     throw new Error("retile: the tile's cover or far ring is not the page's size")
   }
+  // the ring drawn is the page's: the new tile's edges on its grid, a far cell or more inside it (the apron)
+  {
+    const r = rectOf(look.far)
+    const e = D.spec.tile / 2
+    const [tx, tz] = next.tileAt
+    const k = [tx - e - r.x0, tz - e - r.z0, r.x1 - tx - e, r.z1 - tz - e].map(v => v / look.far.cell)
+    if (!k.every(v => Math.abs(v - Math.round(v)) < 1e-6 && v > 1 - 1e-9)) {
+      throw new Error(`retile: a tile at ${tx}, ${tz} is off the far ring's grid or not inside it`)
+    }
+  }
   // (the water, the banks and the river stay the first tile's: a moved tile has none yet, G3d)
   if (next.river.n || next.water.spans.length || next.bank.spans.length) {
     throw new Error('retile: a tile with water or banks (G3d)')
   }
+  // the camera on the new tile's ground (the checks at load: checkView)
+  const ground = groundOf(D.spec, next.hf, look.far, null, worldGround.play, next.tileAt)
+  checkView(D.spec, ground)
+  const prev = tileNow
+  try {
+    await place(next, ground)
+  } catch (err) {
+    // a move that fails midway puts back the tile it came from (its parts disposed: built again), then reports
+    if (prev !== next) await place(prev, worldGround)
+    throw err
+  }
+  return performance.now() - t0
+}
+// the tile's data now (the first's, or a moved tile's: retile)
+let tileNow = look
+/** The tile's data put in place: its centre, heightfield, meshes, covers, roads, split, parts and bakes (retile) */
+async function place(next: LookData, ground: WorldGround): Promise<void> {
   TILE_O.set(next.tileAt[0], next.tileAt[1])
   setHeightfield(next.hf, look.far, D.spec.tile / 2)
   terrain.retile()
@@ -1572,9 +1605,10 @@ async function retile(next: LookData): Promise<number> {
   // the relief's tone reads the drawn ground, the tile's heights on it (written in place: its size is the ring's)
   if (relief) relief.tex.update(reliefField(groundAt, ring.x1 - ring.x0, [SUN.x, SUN.y, SUN.z], ring.x0, ring.z0).tex)
   nearTile = maxGrid(next.hf, 8)
-  follow.range = groundOf(D.spec, next.hf, look.far, null, worldGround.play, next.tileAt).focus
+  follow.range = ground.focus
+  worldGround = ground
+  tileNow = next
   await macro.bake()
-  return performance.now() - t0
 }
 
 // the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
@@ -1582,9 +1616,12 @@ async function retile(next: LookData): Promise<number> {
 const lab = new Lab(scene, mats)
 const passes = {
   terrain: [terrain.tileGround, terrain.farGround, terrain.apron],
-  scatter: scene.meshes.filter(
-    (m): m is Mesh => m instanceof Mesh && (m.thinInstanceCount > 0 || m.forcedInstanceCount > 0),
-  ),
+  // (the scene's now: a moved tile's trees, retile)
+  get scatter() {
+    return scene.meshes.filter(
+      (m): m is Mesh => m instanceof Mesh && (m.thinInstanceCount > 0 || m.forcedInstanceCount > 0),
+    )
+  },
   water: [water.mesh],
   post: () => post.passes,
 }
@@ -1694,7 +1731,9 @@ Object.assign(window, {
     get sky() {
       return bakes.sky // (the tile's now: a moved tile's, retile)
     },
-    meadowBakeMs: meadow?.bakeMs ?? null,
+    get meadowBakeMs() {
+      return meadowMapOwned ? meadowMapOwned.value.ms : null
+    },
     // (the combed meadow's flow textures, on load)
     get flowBuildMs() {
       return flowOwned?.value.ms ?? null

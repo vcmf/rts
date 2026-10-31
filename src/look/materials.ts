@@ -355,15 +355,23 @@ export class Materials {
    *  disposed, its bindings never applied to later materials), whatever another part added or forgot since */
   mark(): () => () => void {
     const lists = () => [this.all, this.every, this.binders, this.grainUsers] as unknown[][]
-    const before = lists().map(l => new Set(l))
+    // (the snapshot dropped once read: an owner keeps no hold on what stood when it was built)
+    let before: Set<unknown>[] | null = lists().map(l => new Set(l))
     return () => {
-      const added = lists().map((l, k) => new Set(l.filter(x => !before[k].has(x))))
-      return () => {
-        for (const [k, l] of lists().entries()) {
-          const keep = l.filter(x => !added[k].has(x))
-          l.length = 0
-          l.push(...keep)
-        }
+      const b = before!
+      before = null
+      return Materials.forgetting(
+        lists,
+        lists().map((l, k) => new Set(l.filter(x => !b[k].has(x)))),
+      )
+    }
+  }
+  private static forgetting(lists: () => unknown[][], added: Set<unknown>[]): () => void {
+    return () => {
+      for (const [k, l] of lists().entries()) {
+        const keep = l.filter(x => !added[k].has(x))
+        l.length = 0
+        l.push(...keep)
       }
     }
   }

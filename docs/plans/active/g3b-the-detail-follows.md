@@ -103,3 +103,15 @@ G3b-2, round 1 (`/code-review high`, 8 findings, 1 taken as severe):
   world yet);
 - answered: the relief's tone over the whole ring and the trees' generated models built again on each move: a move's
   cost, G3c's (it spreads and trims the move).
+
+G3b-2, round 2 (10 findings, 3 severe):
+- fixed, severe: the page's `window` hooks set by `Object.assign` (it copies a getter's value: they stayed the first
+  tile's; now property descriptors); the new tile checked against the far ring drawn (the page's: its edges on its
+  grid, a far cell inside it), not its own; a move that fails midway (a build that throws) now puts back the tile it
+  came from, and an owner's build that throws takes away what it had added (tested: fails at the owner before);
+- fixed: the camera's checks (`checkView`) on the new tile's ground before the move, and `GROUND` the tile's now; the
+  scatter pass the scene's now (the bench's A/Bs); an owner keeps no snapshot of the parts that stood at its build;
+  the far ring's heights kept on a move (its hole and normals alone); the meadow's bake time the map's now;
+- answered: one holder of the tile's parts with a registry of who reads them (the reviewer's suggestion, against
+  stale captures): the parts are few and every reader goes through a getter or the live variable now; a registry if
+  G3c adds parts; the flow's comb built again on a move: G3c's cost.

@@ -65,4 +65,18 @@ describe('a part of the scene built again (owned, Materials.mark)', () => {
     expect(bound(mats)).toEqual(['c', 'a2'])
     expect(scene.meshes.map(m => m.name).sort()).toEqual(['a2a', 'a2b', 'ca', 'cb'])
   })
+
+  it('takes away at once what a build that throws had added, and rethrows', async () => {
+    const { scene, mats } = world()
+    const [m0, o0] = [scene.meshes.length, scene.onBeforeRenderObservable.observers.length]
+    expect(() =>
+      owned(scene, mats, () => {
+        part(scene, mats, 'x')()
+        throw new Error('the build failed')
+      }),
+    ).toThrow(/the build failed/)
+    await new Promise(r => setTimeout(r, 0))
+    expect([scene.meshes.length, scene.onBeforeRenderObservable.observers.length]).toEqual([m0, o0])
+    expect(bound(mats)).not.toContain('x')
+  })
 })
