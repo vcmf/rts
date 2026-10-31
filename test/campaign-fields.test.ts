@@ -147,6 +147,20 @@ describe('the fields file', () => {
     expect(() => unpackFields(Uint8Array.of(...bytes, 0))).toThrow(/1 bytes past the last plane/)
   })
 
+  it('refuses two planes of one name, a plane of part channels and a channel count past a byte', () => {
+    expect(() => packFields([planes[0], planes[0]])).toThrow(/two planes named lakes/)
+    expect(() => quantise('x', 2, 1, [1, 2, 3], 1, 0)).toThrow(/x: 3 values for 2 × 1 texels/)
+    const wide: Plane = { name: 'wide', kind: 'bytes', w: 1, h: 1, channels: 256, values: new Uint8Array(256) }
+    expect(() => packFields([wide])).toThrow(/wide: a channels of 256, past 1 to 255/)
+    // the same name twice in a file is refused on reading too
+    const bytes = packFields([planes[0], { ...planes[0], name: 'other' }])
+    bytes.set(
+      [...'lakes\0\0\0'].map(c => c.charCodeAt(0)),
+      8 + 28 + 6,
+    )
+    expect(() => unpackFields(bytes)).toThrow(/two planes named lakes/)
+  })
+
   it('refuses to pack a long name or values of the wrong length', () => {
     expect(() => packFields([{ ...planes[0], name: 'ninechars' }])).toThrow(/a plane named "ninechars"/)
     const high: Plane = { name: 'high', kind: 'bytes', w: 2, h: 1, channels: 2, values: new Uint8Array(3) }

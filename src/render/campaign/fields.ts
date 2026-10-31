@@ -3,13 +3,15 @@
 // their distance to the shore, the lines of the roads and rivers, the contours' heights. One file a build, deflated
 // (the caller's, as the tiles'); tools/campaign-tiles.ts writes it, the campaign page reads it.
 //
-// The file, little-endian:
+// The file, little-endian (src/render/campaign/rows.ts, the row differences):
 //   0  'CMPF'   4  version (1)   5  planes   6  two bytes, 0
 //   then each plane: its name (8 bytes, ASCII, padded with 0), its kind (1 bytes, 2 Uint16), its channels, two bytes
 //   0, its width and height in texels (u32 each), the scale and offset that read a Uint16 back as a number (f32 each:
 //   offset + value × scale; bytes are read as they are), then its values, width × height × channels, the south row
 //   first; a Uint16 plane's rows as differences from the value a texel before (modulo 2^16; the row's first as is),
 //   as the tiles' shape: smooth fields, small numbers that deflate well.
+
+import { rowDeltas, rowSums } from './rows.ts'
 
 export const FIELDS_MAGIC = 'CMPF'
 export const FIELDS_VERSION = 1
@@ -54,6 +56,9 @@ export function quantise(
   scale: number,
   offset: number,
 ): NumberPlane {
+  if (!Number.isInteger(values.length / (w * h))) {
+    throw new RangeError(`quantise: ${name}: ${values.length} values for ${w} × ${h} texels`)
+  }
   const stored = new Uint16Array(values.length)
   for (let k = 0; k < values.length; k++) {
     const steps = Math.round((values[k] - offset) / scale)
@@ -84,8 +89,20 @@ export function packFields(planes: Plane[]): Uint8Array {
   bytes[4] = FIELDS_VERSION
   bytes[5] = planes.length
   let at = HEADER
+  const names = new Set<string>()
   for (const p of planes) {
     if (!/^[ -~]{1,8}$/.test(p.name)) throw new RangeError(`packFields: a plane named ${JSON.stringify(p.name)}`)
+    if (names.has(p.name)) throw new RangeError(`packFields: two planes named ${p.name}`)
+    names.add(p.name)
+    for (const [field, value, max] of [
+      ['width', p.w, 0xffffffff],
+      ['height', p.h, 0xffffffff],
+      ['channels', p.channels, 0xff],
+    ] as const) {
+      if (!Number.isInteger(value) || value < 1 || value > max) {
+        throw new RangeError(`packFields: ${p.name}: a ${field} of ${value}, past 1 to ${max}`)
+      }
+    }
     if (p.values.length !== p.w * p.h * p.channels) {
       throw new RangeError(`packFields: ${p.name}: ${p.values.length} values for ${p.w} × ${p.h} × ${p.channels}`)
     }
@@ -99,11 +116,8 @@ export function packFields(planes: Plane[]): Uint8Array {
     at += PLANE_HEADER
     if (p.kind === 'bytes') bytes.set(p.values, at)
     else {
-      const row = p.w * p.channels
-      for (let k = 0; k < p.values.length; k++) {
-        const before = k % row >= p.channels ? p.values[k - p.channels] : 0
-        view.setUint16(at + k * 2, (p.values[k] - before) & 0xffff, true)
-      }
+      const deltas = rowDeltas(p.values, p.w * p.channels, p.channels)
+      for (let k = 0; k < deltas.length; k++) view.setUint16(at + k * 2, deltas[k], true)
     }
     at += planeBytes(p) - PLANE_HEADER
   }
@@ -132,16 +146,14 @@ export function unpackFields(bytes: Uint8Array): Map<string, Plane> {
     at += PLANE_HEADER
     const size = count * (kind === 2 ? 2 : 1)
     if (kind !== 1 && kind !== 2) throw new Error(`unpackFields: ${name}: a plane of kind ${kind}`)
+    if (planes.has(name)) throw new Error(`unpackFields: two planes named ${name}`)
     if (at + size > bytes.length) throw new RangeError(`unpackFields: ${name}: cut, ${bytes.length - at} of ${size}`)
     if (kind === 1) {
       planes.set(name, { name, kind: 'bytes', w, h, channels, values: bytes.slice(at, at + size) })
     } else {
-      const values = new Uint16Array(count)
-      const row = w * channels
-      for (let k = 0; k < count; k++) {
-        const before = k % row >= channels ? values[k - channels] : 0
-        values[k] = (before + view.getUint16(at + k * 2, true)) & 0xffff
-      }
+      const deltas = new Uint16Array(count)
+      for (let k = 0; k < count; k++) deltas[k] = view.getUint16(at + k * 2, true)
+      const values = rowSums(deltas, w * channels, channels)
       planes.set(name, { name, kind: 'uint16', w, h, channels, scale, offset, values })
     }
     at += size

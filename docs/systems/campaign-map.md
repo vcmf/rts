@@ -32,7 +32,8 @@ the resampling).
 
 `src/render/campaign/fields.ts` (decision 0094): the far level's fields, the page's every input besides the tiles,
 in one file a build (`fields.bin`, deflated): a header (`CMPF`, the version, the planes), then named planes, each
-bytes or Uint16 at a scale and an offset (a Uint16 plane's rows as differences, as the tiles' shape). On the far
+bytes or Uint16 at a scale and an offset (a Uint16 plane's rows as differences, as the tiles' shape:
+`src/render/campaign/rows.ts`). On the far
 level's grid (`bake.ts`):
 
 | Plane | Made by | What |
@@ -40,7 +41,7 @@ level's grid (`bake.ts`):
 | `lakes` | `lakeMask` | the lakes' coverage, two texels a cell (a texel 125 m), each from 4 × 4 samples in the water; the pieces Natural Earth splits a lake into count as one |
 | `lakeD` | `lakeDistance` | the signed distance to the shore, in km (the lakes' steps), at 0.25 m |
 | `high`, `country`, `rivers` | `lineOffsets` | a texel a cell: the vector to the nearest high road, country road or river of rank 6 or larger, in cells to 6 either way, two bytes (a bilinear read gives the exact distance, so the page draws the line crisp at any width) |
-| `contour` | `blur` | the heights blurred over 3 cells, for the contours, at 0.25 m |
+| `contour` | `blur` | the heights blurred over 3 cells, for the contours, at 0.25 m from their lowest |
 
 For the 1805 theatre: 7.6 MB, 2 s. Against the prototype's own bakes at load (sampled in Chrome): the roads and rivers
 byte for byte, the contours' heights within their step; the lakes' distance is K2a's, which the tiles' sunk lakes

@@ -12,6 +12,7 @@
 //   then the planes, size × size bytes each: the sun (0 shadow to 255 lit), the sky (its open share), the forest
 // Rows run south to north, nodes west to east; nodes past the level's grid repeat its edge.
 import type { Grid } from './bake.ts'
+import { rowDeltas, rowSums } from './rows.ts'
 
 export const TILE_MAGIC = 'CMPT'
 export const TILE_VERSION = 1
@@ -93,13 +94,8 @@ export function packTile(tile: Tile): Uint8Array {
   view.setUint16(8, tile.row, true)
   view.setUint16(10, tile.size, true)
   bytes[12] = PLANES
-  for (let j = 0; j < tile.size; j++) {
-    for (let i = 0; i < tile.size; i++) {
-      const k = j * tile.size + i
-      const before = i > 0 ? tile.shape[k - 1] : 0
-      view.setUint16(HEADER + k * 2, (tile.shape[k] - before) & 0xffff, true)
-    }
-  }
+  const deltas = rowDeltas(tile.shape, tile.size, 1)
+  for (let k = 0; k < n; k++) view.setUint16(HEADER + k * 2, deltas[k], true)
   const planes = HEADER + n * 2
   bytes.set(tile.sun, planes)
   bytes.set(tile.sky, planes + n)
@@ -129,15 +125,9 @@ export function unpackTile(bytes: Uint8Array, place: TilePlace): Tile {
   if (bytes[12] !== PLANES || bytes.length !== HEADER + n * 2 + n * PLANES) {
     throw new RangeError(`unpackTile: ${bytes.length} bytes for a tile of ${size} nodes and ${bytes[12]} planes`)
   }
-  const shape = new Uint16Array(n)
-  for (let j = 0; j < size; j++) {
-    let value = 0
-    for (let i = 0; i < size; i++) {
-      const k = j * size + i
-      value = (value + view.getUint16(HEADER + k * 2, true)) & 0xffff
-      shape[k] = value
-    }
-  }
+  const deltas = new Uint16Array(n)
+  for (let k = 0; k < n; k++) deltas[k] = view.getUint16(HEADER + k * 2, true)
+  const shape = rowSums(deltas, size, 1)
   const level = bytes[5]
   const column = view.getUint16(6, true)
   const row = view.getUint16(8, true)

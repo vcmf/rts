@@ -49,6 +49,15 @@ already differed from the prototype's; the mask different at 11 texels, each one
 one is partly or barely covered: at the one measured, the texel's centre lies 53 m outside the lake's edge (the
 prototype draws the lakes on a GPU canvas of 6400 × 4000 that stands about half a texel past the shore).
 
+**Review rounds** (K2b1): round 1 (`/code-review high`), no severe finding; fixed: the contours' heights stored from
+their own lowest (a theatre with sea deeper than 1 km stopped the build); `quantise` and `packFields` refuse a plane
+of part channels, a size or channel count past the header, two planes of one name (`unpackFields` too); the tool
+checks the fields' level is one of its levels; the fields made inside the level's bake, so the 100 m level keeps no
+heights or lakes' distance; the mask's rows only over the texels their lakes span; the row differences one module
+(`src/render/campaign/rows.ts`) for the tiles and the fields; the rings made once. Taken into K2b2: the mask is
+6400 × 4000 texels, past a GPU whose textures stop at 4096: the page halves it there (a mean of 2 × 2, not a bake).
+The fields and the tiles unchanged.
+
 ## K2b2: the page
 
 - The page (a new HTML page in `app/`, built beside the others) and its script `src/app/campaign/main.ts`: it loads the manifest (`?tiles=`, by default
@@ -62,6 +71,7 @@ prototype draws the lakes on a GPU canvas of 6400 × 4000 that stands about half
   textures (one texture: 3201 × 2001 nodes).
 - The close zoom: the 100 m tiles in a detail area around the camera, the prototype's as it is (a window of tiles,
   loaded as the camera moves, faded in); K2c replaces it with proper streaming.
+- The fields uploaded as textures; the lakes' mask halved (a mean of 2 × 2) where the GPU's textures are smaller.
 - `src/render/campaign/paper.ts`: the paper's grain and the clouds' noise, the prototype's canvases.
 - Pure parts tested in Vitest: the tiles assembled into a level (their edges, the last ones padded), the manifest's
   checks, the camera's tilt and its ground pick.

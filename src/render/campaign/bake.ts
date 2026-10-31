@@ -347,17 +347,20 @@ export function lakeMask(rings: Pt[][], g: Grid, res: number): Mask {
   for (let j = 0; j < h; j++) {
     const here = boxes.filter(b => b.j0 <= j && j <= b.j1)
     if (!here.length) continue
-    count.fill(0)
+    // only the texels the row's lakes span
+    const i0 = Math.min(...here.map(b => b.i0))
+    const i1 = Math.max(...here.map(b => b.i1))
+    count.fill(0, i0, i1 + 1)
     for (let t = 0; t < n; t++) {
-      wet.fill(0)
+      wet.fill(0, i0 * n, (i1 + 1) * n)
       const z = g.z0 + (j + (t + 0.5) / n) * texel
       for (const b of here) {
         const inside = ringRow(b.ring, z, sx.subarray(b.i0 * n, (b.i1 + 1) * n))
         for (let s = 0; s < inside.length; s++) wet[b.i0 * n + s] |= inside[s]
       }
-      for (let s = 0; s < wet.length; s++) count[Math.floor(s / n)] += wet[s]
+      for (let s = i0 * n; s < (i1 + 1) * n; s++) count[Math.floor(s / n)] += wet[s]
     }
-    for (let i = 0; i < w; i++) data[j * w + i] = Math.round((count[i] * 255) / (n * n))
+    for (let i = i0; i <= i1; i++) data[j * w + i] = Math.round((count[i] * 255) / (n * n))
   }
   return { data, w, h }
 }
@@ -402,9 +405,9 @@ export function lineOffsets(lines: ArrayLike<number>[], g: Grid, reach: number):
       }
     }
   }
+  const cell = (v: number, o: number) => (v - o) / g.cell
   for (const p of lines) {
     for (let k = 2; k < p.length; k += 2) {
-      const cell = (v: number, o: number) => (v - o) / g.cell
       segment(cell(p[k - 2], g.x0), cell(p[k - 1], g.z0), cell(p[k], g.x0), cell(p[k + 1], g.z0))
     }
   }
