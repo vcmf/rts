@@ -609,15 +609,17 @@ function markNear(mark: Uint8Array, n: number, cell: number, wear: Float32Array)
 // wandering WOOD_RIM of the edge, the rim's birches and thorns. Every decision reads the map's layers alone, never a
 // window's areas, so the trees are a function of the map and every window stands the same ones
 export const WOOD_STEP = 3
-const WOOD_AREA = 34 // m² a tree at full density before the gaps and the trunks' footprints thin it to about 36
+// m² a tree at full density before the gaps thin it to about 34: a little denser than the earlier 6 m lattice's 36,
+// as a scatter's crowns overlap more than a lattice's and close less of the canopy
+const WOOD_AREA = 32
 const WOOD_RIM: readonly [number, number] = [3, 8] // the rim's width, m, between the two by a noise
 const WOOD_BAND = 10 // the edge band's depth, m, thinned into bays
 // the noises on the chance, each a value noise (its lattice's spacing in m) through a smoothstep from lo to hi: the
 // thickets' (two octaves, from `floor` thin to `floor + THICK` thick), the small clearings' (none where it is lowest)
 // and the bays' along the edge; each factor divided by its mean over the map's own noise (woodField, once a seed)
-const THICKET = { big: 45, small: 17, lo: 0.25, hi: 0.75, floor: 0.35 }
-const THICK = 1.15
-const CLEARING = { size: 14, lo: 0.15, hi: 0.25 }
+const THICKET = { big: 30, small: 12, lo: 0.25, hi: 0.75, floor: 0.8 }
+const THICK = 0.4
+const CLEARING = { size: 14, lo: 0.12, hi: 0.2 }
 const BAYS = { size: 22, lo: 0.2, hi: 0.6 }
 // a stand: a patch about STAND m across on a lattice turned STAND_TURN off the map's axes, its border wobbled up to
 // STAND_WOBBLE m by a noise, where half the trees are its species
@@ -642,6 +644,9 @@ const GAP_DEFAULT = 1.5
 // narrower than the rim's width still makes its rim; and a trunk's footprint (± m), all wood and free on the layers
 const PROBE_STEP = 2
 const TRUNK = 1
+// a wood narrower than NARROW m (its width through the tree, along the nearest edge's probe) has its bays weakened in
+// proportion, so a strip of wood that is all edge band is not thinned all over
+const NARROW = 40
 // the rim's probes: six directions 60° apart from 15° or from 45° (the tree's hash picks), none on the map's axes
 const C15 = 0.9659258262890683
 const S15 = 0.25881904510252074
@@ -836,10 +841,13 @@ export function woodField(mapSeed: number): WoodField {
 /** A tree's own hash of a lattice point (a, b) for `salt`, moved by the map's seed. */
 const thash = (S: WoodSeeds, a: number, b: number, salt: number): number => ihash(a, b, S.hash + salt)
 
-/** A wood's lattice cell (a, b)'s candidate point, map metres: anywhere in its cell. */
-const woodPoint = (S: WoodSeeds, a: number, b: number): Pt => [
-  (a + thash(S, a, b, 20)) * WOOD_STEP,
-  (b + thash(S, a, b, 21)) * WOOD_STEP,
+/**
+ * A wood's lattice cell (a, b)'s candidate point, map metres: anywhere in its cell; `alt` its second, where the first's
+ * trunk would not fit (so the trunks' footprints cost the wood's edge no trees).
+ */
+const woodPoint = (S: WoodSeeds, a: number, b: number, alt = 0): Pt => [
+  (a + thash(S, a, b, 20 + 11 * alt)) * WOOD_STEP,
+  (b + thash(S, a, b, 21 + 11 * alt)) * WOOD_STEP,
 ]
 
 /** The wood a tree may stand in at a map point by the map's layers, if any: dry, off the built and off the ways. */
@@ -875,18 +883,32 @@ const AROUND_TRUNK: readonly Pt[] = [
 
 /**
  * Where a wood's point stands against its wood's edge (its outline, a ride, a glade, a road through it): on its rim
- * (within the rim's wandering width: its birches and thorns), in its edge band (thinned into bays) or inside. Probed
+ * (within the rim's wandering width: its birches and thorns), in its edge band (thinned into bays) or inside, and how
+ * wide the wood is there (m, up to NARROW: through the point, from the nearest edge out the other way). Probed
  * outwards every PROBE_STEP m to the band's depth in six directions picked by `turn` (0..1), on the map's layers.
  */
-function edgeOf(L: Layers, S: WoodSeeds, x: number, z: number, turn: number): 'rim' | 'band' | 'inside' {
+function edgeOf(
+  L: Layers,
+  S: WoodSeeds,
+  x: number,
+  z: number,
+  turn: number,
+): { edge: 'rim' | 'band' | 'inside'; width: number } {
   const dirs = PROBES[turn < 0.5 ? 0 : 1]
-  const out = (r: number) => dirs.some(([dx, dz]) => !woodOrUnknown(L, x + dx * r, z + dz * r))
+  const outAt = (r: number) => dirs.find(([dx, dz]) => !woodOrUnknown(L, x + dx * r, z + dz * r))
   const rim = WOOD_RIM[0] + (WOOD_RIM[1] - WOOD_RIM[0]) * noise01(S.rim, x, z, 25)
   for (let r = PROBE_STEP / 2; r < WOOD_BAND + PROBE_STEP / 2; r += PROBE_STEP) {
     const d = Math.min(r, WOOD_BAND)
-    if (out(d)) return d <= rim ? 'rim' : 'band'
+    const dir = outAt(d)
+    if (dir) return { edge: d <= rim ? 'rim' : 'band', width: d + depthAway(L, x, z, dir) }
   }
-  return 'inside'
+  return { edge: 'inside', width: NARROW }
+}
+
+/** How far the wood runs from a map point away from a direction (m, every PROBE_STEP up to NARROW). */
+function depthAway(L: Layers, x: number, z: number, [dx, dz]: readonly [number, number]): number {
+  for (let r = PROBE_STEP / 2; r < NARROW; r += PROBE_STEP) if (!woodOrUnknown(L, x - dx * r, z - dz * r)) return r
+  return NARROW
 }
 
 /**
@@ -941,7 +963,7 @@ interface WoodCandidate extends MapTree {
  */
 function woodCandidate(L: Layers, F: WoodField, a: number, b: number): WoodCandidate | null {
   const S = F.S
-  const [x, z] = woodPoint(S, a, b)
+  let [x, z] = woodPoint(S, a, b)
   const k = cellAt(L, x, z)
   if (k < 0 || !L.density[k]) return null
   const u = thash(S, a, b, 22)
@@ -950,10 +972,15 @@ function woodCandidate(L: Layers, F: WoodField, a: number, b: number): WoodCandi
   if (u >= base * F.thicketTop * SPACING_TOP * F.baysTop) return null
   const thick = base * (thicketRaw(S, x, z) / F.thicketMean)
   if (u >= thick * SPACING_TOP * F.baysTop) return null
-  const r = trunkWood(L, x, z)
-  if (!r) return null
-  const edge = edgeOf(L, S, x, z, thash(S, a, b, 29))
-  const bays = edge === 'inside' ? 1 : baysRaw(S, x, z) / F.baysMean
+  let r = trunkWood(L, x, z)
+  if (!r) {
+    ;[x, z] = woodPoint(S, a, b, 1)
+    r = trunkWood(L, x, z)
+    if (!r) return null
+  }
+  const { edge, width } = edgeOf(L, S, x, z, thash(S, a, b, 29))
+  // (the bays' factor about 1, weakened in a narrow wood)
+  const bays = edge === 'inside' ? 1 : 1 + (baysRaw(S, x, z) / F.baysMean - 1) * (width / NARROW)
   if (u >= thick * SPACING_TOP * bays) return null
   const shares = edge === 'rim' ? RIM : (LEAF[String(r.attrs.leaf)] ?? LEAF.mixed)
   const stand = standOf(S, x, z)

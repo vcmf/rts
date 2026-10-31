@@ -18,6 +18,7 @@ import {
   groundClass,
   ihash,
   mapCover,
+  MAP_COVER_CELL,
   mapTrees,
   packTrees,
   standOf,
@@ -43,6 +44,8 @@ import { validate } from '../src/map/validate.ts'
 import { expand } from '../src/map/expand.ts'
 import { apply } from '../src/map/apply.ts'
 import { segD } from '../src/look/world/geom.ts'
+import { layersOf } from '../maps/engine.ts'
+import { longIt } from './fx.ts'
 import { D as SPEC_D, ROAD_SLOTS } from '../src/look/spec.ts'
 
 const WIN: LookWindow = { map: 'test', name: 'test', x: 0, z: 0 }
@@ -640,6 +643,21 @@ describe('a large wood', () => {
     }
   })
 
+  it('keeps a narrow wood (a 30 m strip) at its density, within 15 %', () => {
+    // the strip is the wood's whole width: rims on both sides, its edge band nearly all of it
+    const rides: number[] = []
+    for (let x = -180; x < 180; x += 66) rides.push(x + 30)
+    let count = 0
+    let area = 0
+    for (const at of [[0, 0] as Pt, ...FAR_WOODS]) {
+      const L = forestLayers(at, { rides, rideWidth: 36 })
+      for (let k = 0; k < L.veg.length; k++) if (L.veg[k]) area += 4
+      count += forestTrees(at, { rides, rideWidth: 36 }).length
+    }
+    expect(count / (area / 36)).toBeGreaterThan(0.85)
+    expect(count / (area / 36)).toBeLessThan(1.15)
+  })
+
   it('gives a glade narrower than its rim its rim too, right beside it', () => {
     // one-cell glades (2 m) every 20 m: the trees within 2 m of one mostly a rim's (birches and hawthorns)
     const glades: Pt[] = []
@@ -679,6 +697,25 @@ describe('a large wood', () => {
       t => t.sp === 'hawthorn' && glades.some(([x, z]) => Math.max(Math.abs(t.x - x), Math.abs(t.z - z)) < 5),
     )
     expect(near.length).toBeGreaterThan(10)
+  })
+})
+
+describe("the Pratzen window's narrow wood", () => {
+  // its 200 m patch at (−150, 340) in window metres: 156 trees on origin/main's 6 m lattice (38b16345). A patch this
+  // small takes its thickets, clearings and bays from one stretch of the noises, so one seed's count swings about
+  // ±15 %: the mean over eight seeds is held within 10 % of it
+  longIt('holds about as many trees as the 6 m lattice did, over eight seeds', () => {
+    const { map, layers: L } = layersOf('maps/austerlitz.map.json')
+    const win = WINDOWS.find(w => w.name === 'pratzen')!
+    const A = fineAreas(L, map.features, win, SPEC_D.spec.far, MAP_COVER_CELL)
+    let count = 0
+    for (let seed = 0; seed < 8; seed++) {
+      count += mapTrees(L, A, win, seed).filter(
+        t => t.sp !== 'apple' && Math.abs(t.x + 150) < 100 && Math.abs(t.z - 340) < 100,
+      ).length
+    }
+    expect(count / 8 / 156).toBeGreaterThan(0.9)
+    expect(count / 8 / 156).toBeLessThan(1.1)
   })
 })
 

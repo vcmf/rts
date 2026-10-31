@@ -64,11 +64,11 @@ after on both windows and kept within ±10 %, so no bench.
   one's peak over every period from 2 to 12 m about 4.5 (a random scatter's is of order 1 to 5). The nearest
   neighbours' spread (standard deviation over mean) 0.26 → 0.38; the trees within 2.8 m of a neighbour 11 % → 36 %;
   12 m squares of the inside left empty 0 → 26 of 576.
-- The far ring's trees: Kobelnitz 4747 → 4493 (−5.4 %), Pratzen 9133 → 9111 (−0.2 %); within ±10 %, so no bench.
+- The far ring's trees: Kobelnitz 4747 → 4864 (+2.5 %), Pratzen 9133 → 9774 (+7.0 %); within ±10 %, so no bench.
 - Calibration: the noises' means worked out once a seed at build time (`woodField`; the page reads the look data and
   never calls it); the factors' tops together never ask a chance above 1 (tested for eight seeds). The candidates the
-  gaps and the trunks' footprints take are not made up one by one; the chance is set for a tree per 34 m², which they
-  thin to about 36: the trees per hectare stay within ±10 % of one per 36 m² at densities 0.5 and 1 and for the
+  gaps and the trunks' footprints take are not made up one by one; the chance is set for a tree per 32 m², which they
+  thin to about 34: the trees per hectare stay within ±10 % of one per 36 m² at densities 0.5 and 1 and for the
   broad, needle and mixed leaves (tested over five woods).
 - Review round 1: the edge probes, the neighbours past the window's areas and the gap test read the map's layers, so
   two windows stand the same trees (a test compares every tree of a smaller window's overlap); the stand's age only
@@ -89,3 +89,12 @@ after on both windows and kept within ±10 %, so no bench.
 - Build time (mapTrees over the far ring, the fastest of 5): Kobelnitz 54 → 147 ms, Pratzen 56 → 156 ms, the last
   measured at a load of about 25 (the earlier ones near 10); the whole window's build about 8–10 and 2 s either way;
   the tests' file 0.45 → 4 s with the new tests.
+- Tuning after the review (the owner's "true forest"): the Pratzen wood read as a sparse park. Its 200 m patch held
+  107 trees against 156: a small, narrow wood takes its thickets from one stretch of the noise (there 18 % below the
+  mean), and its edge band covered it all. The thickets now ±20 % over 30 and 12 m (from about −60/+90 % over 45 and
+  17 m), fewer clearings, the bays weakened in a wood narrower than 40 m, a trunk that does not fit tried at a second
+  point in its cell, and a tree per 32 m² (a scatter's crowns overlap more than a lattice's). Canopy cover (crown
+  discs at 0.62 × scale over the wood's area, a 200 m patch) against origin/main: Pratzen 29.8 → 22.5 %, Kobelnitz
+  (−1120, 330) 30.7 → 26.6 %, Kobelnitz (1120, −1000) 32.3 → 33.5 %; trees 156 → 134, 301 → 285, 626 → 699. The
+  Pratzen patch over eight seeds 147 on average (128–172; tested within 10 % of 156), so its 134 is its seed's
+  noise; a 30 m strip of wood holds its density within 15 % (tested).
