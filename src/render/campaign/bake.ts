@@ -234,6 +234,14 @@ function sample(h: Float32Array, g: Grid, x: number, z: number): number {
   return top * (1 - v) + bottom * v
 }
 
+/** A rectangle on the map, metres. */
+export interface Rect {
+  x0: number
+  z0: number
+  x1: number
+  z1: number
+}
+
 /** A shape on its grid. */
 export interface ShapeGrid {
   shape: Float32Array
@@ -247,8 +255,10 @@ function onGrid(g: Grid, x: number, z: number): boolean {
 
 /**
  * The light that does not change, for the rows j0 ≤ j < j1 (and the columns i0 ≤ i < i1), written into `out` (RG
- * bytes a node, the whole grid's size): the heights read from `shape` on its grid, and past its span from `far`, a
- * coarser shape of the whole map (a block baked with a margin reads its own nodes near it and the far one beyond).
+ * bytes a node, the whole grid's size): the heights read from `shape` on its grid, and, given `far` (a coarser shape
+ * of the whole map), from the far one outside `near` (where the block's shape is exact; its grid's span without it),
+ * a point past the map's edge held at it, as a whole level holds its own (a block baked with a margin reads its own
+ * nodes near it and the far shape beyond).
  * R the sun's shadow: from each node a ray walks toward the sun in growing steps (to about 60 km); the sun is
  * a disc `size` degrees across, so a ridge just grazing the ray dims it in part, and the penumbra widens with the
  * distance to the ridge. G the open sky: in eight directions, the highest horizon within about 9 km; the sky a node
@@ -264,11 +274,17 @@ export function bakeLightRows(
   far: ShapeGrid | null = null,
   i0 = 0,
   i1 = g.nx,
+  near: Rect | null = null,
 ) {
-  // the far shape only between the block's span and the map's edge: past the map's edge, the block's own edge held, as
-  // a whole level's is
-  const at = (x: number, z: number) =>
-    !far || onGrid(g, x, z) || !onGrid(far.g, x, z) ? sample(shape, g, x, z) : sample(far.shape, far.g, x, z)
+  // with a far shape: a point past the map's edge held at it first (the far shape spans the map, as a whole level's
+  // grid does), then read from the block where its shape is exact (`near`), from the far shape elsewhere
+  const at = (x: number, z: number) => {
+    if (!far) return sample(shape, g, x, z)
+    const fx = Math.min(far.g.x0 + (far.g.nx - 1) * far.g.cell, Math.max(far.g.x0, x))
+    const fz = Math.min(far.g.z0 + (far.g.nz - 1) * far.g.cell, Math.max(far.g.z0, z))
+    const inNear = near ? fx >= near.x0 && fx <= near.x1 && fz >= near.z0 && fz <= near.z1 : onGrid(g, fx, fz)
+    return inNear ? sample(shape, g, fx, fz) : sample(far.shape, far.g, fx, fz)
+  }
   const rad = Math.PI / 180
   const tanEl = Math.tan(sun.el * rad)
   const tanR = Math.tan((sun.size / 2) * rad)

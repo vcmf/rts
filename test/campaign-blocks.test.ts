@@ -88,3 +88,31 @@ describe('a block of a level', () => {
     expect(withFar[k * 2]).toBe(0)
   })
 })
+
+describe('a block light near the map edge', () => {
+  // the far shape spans the map, 0 to 20 km, flat; an inner block from 4 to 6 km, its own edge a high wall
+  const far: Grid = { nx: 21, nz: 21, cell: 1000, x0: 0, z0: 0 }
+  const farShape = new Float32Array(21 * 21)
+  const block: Grid = { nx: 21, nz: 21, cell: 100, x0: 4000, z0: 14000 }
+  // the block's shape: flat but for its last three rows (z = 15.8 to 16 km), 3 km high: a wall the whole level does not
+  // have there (three rows, so the sun's growing steps do not pass over it)
+  const shape = Float32Array.from({ length: 21 * 21 }, (_, k) => (Math.floor(k / 21) >= 18 ? 3000 : 0))
+  const sun = { el: 20, az: 0, size: 2.5 }
+
+  it('holds a ray past the map edge at the map edge, not at the block edge', () => {
+    const out = new Uint8Array(21 * 21 * 2)
+    // the block's exact zone: its first ten rows only; past it, and past the map's north edge (20 km), the far shape
+    const near = { x0: 4000, z0: 14000, x1: 6000, z1: 15000 }
+    bakeLightRows(shape, block, sun, out, 5, 6, { shape: farShape, g: far }, 0, 21, near)
+    // the wall in the block's margin is not read (past its exact zone), nor held past the map's edge: full sun
+    expect(out[(5 * 21 + 10) * 2]).toBe(255)
+  })
+
+  it('reads the block where its shape is exact', () => {
+    const out = new Uint8Array(21 * 21 * 2)
+    const near = { x0: 4000, z0: 14000, x1: 6000, z1: 16000 }
+    bakeLightRows(shape, block, sun, out, 5, 6, { shape: farShape, g: far }, 0, 21, near)
+    // the wall 1.3 km north, 3 km high: the node in its shadow
+    expect(out[(5 * 21 + 10) * 2]).toBe(0)
+  })
+})

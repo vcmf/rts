@@ -11,7 +11,7 @@
 //      numbers are small and deflate well
 //   then the planes, size × size bytes each: the sun (0 shadow to 255 lit), the sky (its open share), the forest
 // Rows run south to north, nodes west to east; nodes past the level's grid repeat its edge.
-import type { Grid } from './bake.ts'
+import { wholeOf, type Grid, type Place } from './bake.ts'
 import { rowDeltas, rowSums } from './rows.ts'
 
 export const TILE_MAGIC = 'CMPT'
@@ -160,7 +160,7 @@ export interface LevelBake {
   forest: Uint8Array
   // a block of the level (baked by blocks): where its node (0, 0) lies in the level, and the level's size in nodes;
   // without it, the grid is the whole level
-  place?: { i0: number; j0: number; nx: number; nz: number }
+  place?: Place
 }
 
 /** How a level's grid is cut: `size` nodes a tile, tilesX × tilesZ tiles (the last ones padded with the edge). */
@@ -210,7 +210,7 @@ export function levelBlocks(nx: number, nz: number, size: number, blockTiles: nu
 export function cutTile(bake: LevelBake, place: TilePlace, size: number, scale: number, base: number): Tile {
   const { level, column, row } = place
   // the level's size, and where the bake's arrays start in it
-  const at = bake.place ?? { i0: 0, j0: 0, nx: bake.grid.nx, nz: bake.grid.nz }
+  const at = bake.place ?? wholeOf(bake.grid)
   const { nx, nz } = at
   const gx = bake.grid.nx
   const n = size * size

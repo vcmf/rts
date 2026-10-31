@@ -61,6 +61,19 @@ margin its steps reach, so the memory stays that of a few tiles whatever the map
 - Tested: `test/campaign-blocks.test.ts` (the blocks hold every tile once; a block's shape the whole level's on its
   own nodes; a ridge past a block shadows it through the far shape).
 
+**Review rounds** (EU1):
+- **Round 1** (`/code-review high`): severe: a sun's ray past the map's edge was held at the block's own edge, which
+  for a block inside the map is not the map's (a false shadow the whole level never had): a point past the map's
+  edge is now held at it first, then read from the block or the far shape; a failed band no longer left the other
+  workers running (the pool stopped however the bake ends). Weighed and measured: the reviewer's other severe point,
+  that a block's shape is exact only to 10.5 km round its own nodes and a ray should read the far shape past that:
+  done so, the sun was up to 255 levels off the whole level's at a few hundred nodes of the 100 m level (0.002%: the
+  1 km shape misses or makes narrow peaks), against 1 level when the block is read out to its whole margin; so the
+  block is read out to its span, the far shape past it (the seam the point feared measured at 1 level). With: the
+  coarse cell the first of 1 km, 500 m, 250 m the frame divides; one named type for a shared shape; `Place` used in the
+  tiles' module; a block's heights and lakes' distance returned only for the fields' level. Left: a block's forests
+  and light sized to its margin, not its own nodes (2.2 times at 100 m); a block's shape copied once to share it.
+
 ### EU2: Europe's sources and its bake
 
 - The frame: a Lambert azimuthal equal-area projection centred on Europe (the EU's own, EPSG:3035, is centred at

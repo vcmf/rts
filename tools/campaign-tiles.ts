@@ -42,6 +42,7 @@ import {
   WOOD_BOX_M,
   type ForestField,
   type Grid,
+  type Rect,
   type ShapeParams,
   type SunParams,
 } from '../src/render/campaign/bake.ts'
@@ -74,10 +75,11 @@ const LEVELS = [
 // the bake by blocks (docs/plans/active/europe.md, EU1): BLOCK_TILES × BLOCK_TILES tiles a block, baked with a margin
 // of MARGIN_M round it, which covers every step's reach on the block's own nodes (the shape's widest blur, 10.5 km;
 // the lakes' distance, 12 km, and its blur, 1.5 km; the sky's horizon, 9 km, on a shape exact that far out); the sun's
-// rays (60 km) read the coarse shape of the whole map past it, at COARSE_CELL sampled at COARSE_ZOOM
+// rays (60 km) read the coarse shape of the whole map past it, a cell of COARSE_CELLS sampled at COARSE_ZOOM
 const BLOCK_TILES = 4
 const MARGIN_M = 24000
-const COARSE_CELL = 1000
+// the coarse cell: the first of these the frame's extents divide
+const COARSE_CELLS = [1000, 500, 250]
 const COARSE_ZOOM = 7
 // the tile size in nodes, the shape's storage step in metres
 const SIZE = 256
@@ -126,6 +128,12 @@ const deflate = promisify(zlib.deflate)
 const MANIFEST = 'manifest.json'
 const META = 'meta.js'
 
+/** A shape shared with the light's workers, on its grid. */
+interface SharedShape {
+  shape: SharedArrayBuffer
+  g: Grid
+}
+
 /** What a light worker is given. */
 interface Job {
   shape: SharedArrayBuffer
@@ -136,8 +144,9 @@ interface Job {
   j1: number
   i0: number
   i1: number
-  // the coarse shape of the whole map, read past the block
-  far: { shape: SharedArrayBuffer; grid: Grid }
+  // the coarse shape of the whole map, read past `near` (where the block's shape is exact)
+  far: SharedShape
+  near: Rect
 }
 
 /** The generated theatre, as far as this tool reads it. */
@@ -199,7 +208,8 @@ class LightPool {
   async bake(
     shape: Float32Array,
     grid: Grid,
-    far: { shape: SharedArrayBuffer; grid: Grid },
+    far: SharedShape,
+    near: Rect,
     rows: [number, number],
     cols: [number, number],
   ): Promise<Uint8Array> {
@@ -212,7 +222,7 @@ class LightPool {
         const j0 = rows[0] + w * band
         const j1 = Math.min(rows[1], j0 + band)
         if (j0 >= j1) return Promise.resolve()
-        const job: Job = { shape: shared, light, grid, sun: SUN, j0, j1, i0: cols[0], i1: cols[1], far }
+        const job: Job = { shape: shared, light, grid, sun: SUN, j0, j1, i0: cols[0], i1: cols[1], far, near }
         return new Promise<void>((resolve, reject) => {
           if (this.broken) return reject(this.broken)
           const failed = (e: unknown) => reject(e instanceof Error ? e : new Error(`a light worker stopped (${e})`))
@@ -255,14 +265,17 @@ function lakeRings(t: Theatre): Pt[][] {
 }
 
 /**
- * The coarse shape of the whole map (COARSE_CELL, sampled at COARSE_ZOOM, the lakes sunk), which a block's light reads
- * past its margin (the sun's rays reach 60 km): small for any map (a continent's is a few thousand nodes a side).
+ * The coarse shape of the whole map (the first of COARSE_CELLS that divides it, sampled at COARSE_ZOOM, the lakes
+ * sunk), which a block's light reads past where its own shape is exact (the sun's rays reach 60 km): small for any
+ * map (a continent's is a few thousand nodes a side).
  */
-async function coarseShape(src: Sources): Promise<{ shape: SharedArrayBuffer; grid: Grid }> {
+async function coarseShape(src: Sources): Promise<SharedShape> {
   const { t, proj, low } = src
-  const grid: Grid = { ...frameGrid(t.frame, COARSE_CELL), cell: COARSE_CELL, x0: -t.frame.halfX, z0: -t.frame.halfZ }
+  const cell = COARSE_CELLS.find(c => (2 * t.frame.halfX) % c === 0 && (2 * t.frame.halfZ) % c === 0)
+  if (!cell) throw new Error(`no coarse cell (${COARSE_CELLS.join(', ')} m) divides the frame`)
+  const grid: Grid = { ...frameGrid(t.frame, cell), cell, x0: -t.frame.halfX, z0: -t.frame.halfZ }
   const heights = despiked(
-    await sampleGrid(proj, COARSE_ZOOM, grid.x0, grid.z0, COARSE_CELL, grid.nx, grid.nz),
+    await sampleGrid(proj, COARSE_ZOOM, grid.x0, grid.z0, cell, grid.nx, grid.nz),
     grid.nx,
     grid.nz,
   )
@@ -270,7 +283,7 @@ async function coarseShape(src: Sources): Promise<{ shape: SharedArrayBuffer; gr
   sinkLakes(shape, lakeDistance(src.rings, grid, LAKE_BLUR_M), SINK_WIDTH_M, SINK)
   const shared = new SharedArrayBuffer(shape.byteLength)
   new Float32Array(shared).set(shape)
-  return { shape: shared, grid }
+  return { shape: shared, g: grid }
 }
 
 /**
@@ -284,8 +297,9 @@ async function bakeBlock(
   level: { cell: number; zoom: number; nx: number; nz: number },
   block: Block,
   pool: LightPool,
-  far: { shape: SharedArrayBuffer; grid: Grid },
-): Promise<{ bake: LevelBake; heights: Float32Array; lakeD: Float32Array }> {
+  far: SharedShape,
+  withFields: boolean,
+): Promise<{ bake: LevelBake; heights?: Float32Array; lakeD?: Float32Array }> {
   const { t, proj, low } = src
   const { cell } = level
   const b = block.baked
@@ -304,8 +318,19 @@ async function bakeBlock(
   sinkLakes(shape, lakeD, SINK_WIDTH_M, SINK)
   const forest = resampleField(src.forest, cell, grid.nx, grid.nz, b.i0, b.j0)
   const o = block.own
-  const light = await pool.bake(shape, grid, far, [o.j0 - b.j0, o.j1 - b.j0], [o.i0 - b.i0, o.i1 - b.i0])
-  return { bake: { grid, shape, light, forest, place }, heights, lakeD }
+  // the block read out to its whole span, the far shape past it: measured, its margin's shape past the 10.5 km where it
+  // is exact is still far nearer the truth than the coarse shape (the sun within 1 level of the whole level's bake;
+  // read from the coarse shape past 10.5 km instead, up to 255 levels off at a few hundred nodes: docs/plans/active/
+  // europe.md)
+  const near: Rect = {
+    x0: grid.x0,
+    z0: grid.z0,
+    x1: grid.x0 + (grid.nx - 1) * cell,
+    z1: grid.z0 + (grid.nz - 1) * cell,
+  }
+  const light = await pool.bake(shape, grid, far, near, [o.j0 - b.j0, o.j1 - b.j0], [o.i0 - b.i0, o.i1 - b.i0])
+  const bake: LevelBake = { grid, shape, light, forest, place }
+  return withFields ? { bake, heights, lakeD } : { bake }
 }
 
 /**
@@ -318,7 +343,7 @@ async function bakeLevel(
   cell: number,
   zoom: number,
   pool: LightPool,
-  far: { shape: SharedArrayBuffer; grid: Grid },
+  far: SharedShape,
   dir: string,
   prototypeDir: string | undefined,
 ): Promise<{ nx: number; nz: number; written: Written; fields?: Plane[] }> {
@@ -329,8 +354,10 @@ async function bakeLevel(
   const lakeD = withFields ? new Float32Array(nx * nz) : null
   const written: Written = { tiles: 0, bytes: 0, prototype: 0 }
   for (const block of levelBlocks(nx, nz, SIZE, BLOCK_TILES, margin)) {
-    const baked = await bakeBlock(src, { cell, zoom, nx, nz }, block, pool, far)
-    if (heights && lakeD) copyOwn(block, baked, nx, heights, lakeD)
+    const baked = await bakeBlock(src, { cell, zoom, nx, nz }, block, pool, far, withFields)
+    if (heights && lakeD && baked.heights && baked.lakeD) {
+      copyOwn(block, { heights: baked.heights, lakeD: baked.lakeD }, nx, heights, lakeD)
+    }
     const tiles: Tile[] = []
     for (let row = block.tiles.r0; row < block.tiles.r1; row++) {
       for (let column = block.tiles.c0; column < block.tiles.c1; column++) {
@@ -351,7 +378,7 @@ async function bakeLevel(
 /** A block's own nodes' heights and lakes' distance copied into the whole level's arrays. */
 function copyOwn(
   block: Block,
-  baked: { bake: LevelBake; heights: Float32Array; lakeD: Float32Array },
+  baked: { heights: Float32Array; lakeD: Float32Array },
   nx: number,
   heights: Float32Array,
   lakeD: Float32Array,
@@ -546,34 +573,38 @@ async function main() {
   const levels: Level[] = []
   let prototypeMeta = {}
   const pool = new LightPool()
-  const coarseStart = performance.now()
-  const far = await coarseShape(src)
-  console.log(
-    `coarse shape: ${far.grid.nx} × ${far.grid.nz} nodes at ${COARSE_CELL} m, ${Math.round(performance.now() - coarseStart)} ms`,
-  )
-  for (const [level, { cell, zoom }] of LEVELS.entries()) {
-    const start = performance.now()
-    // the close level for the prototype too
-    const forPrototype = level === LEVELS.length - 1 ? path.join(prototypeOut, prototypeBuild) : undefined
-    const baked = await bakeLevel(src, level, cell, zoom, pool, far, path.join(out, build, `l${level}`), forPrototype)
-    const { nx, nz, written } = baked
-    const layout = levelLayout(nx, nz, SIZE)
-    levels.push({ cell, nx, nz, ...layout, scale: SCALE, base: BASE, zoom, path: `${build}/l${level}/t-{i}-{j}.bin` })
-    const ms = Math.round(performance.now() - start)
-    const tiles = layout.tilesX * layout.tilesZ
-    console.log(`level ${level}: ${nx} × ${nz} nodes at ${cell} m, ${tiles} tiles, ${mb(written.bytes)}, ${ms} ms`)
-    if (baked.fields) {
-      const fieldsStart = performance.now()
-      const packed = await deflate(packFields(baked.fields), { level: 9 })
-      await writeFlushed(path.join(out, build, FIELDS_FILE), packed)
-      console.log(`fields: ${mb(packed.length)}, packed in ${Math.round(performance.now() - fieldsStart)} ms`)
+  // the workers stopped however the bake ends: a failure stops them all, none left baking or holding the run open
+  try {
+    const coarseStart = performance.now()
+    const far = await coarseShape(src)
+    console.log(
+      `coarse shape: ${far.g.nx} × ${far.g.nz} nodes at ${far.g.cell} m, ${Math.round(performance.now() - coarseStart)} ms`,
+    )
+    for (const [level, { cell, zoom }] of LEVELS.entries()) {
+      const start = performance.now()
+      // the close level for the prototype too
+      const forPrototype = level === LEVELS.length - 1 ? path.join(prototypeOut, prototypeBuild) : undefined
+      const baked = await bakeLevel(src, level, cell, zoom, pool, far, path.join(out, build, `l${level}`), forPrototype)
+      const { nx, nz, written } = baked
+      const layout = levelLayout(nx, nz, SIZE)
+      levels.push({ cell, nx, nz, ...layout, scale: SCALE, base: BASE, zoom, path: `${build}/l${level}/t-{i}-{j}.bin` })
+      const ms = Math.round(performance.now() - start)
+      const tiles = layout.tilesX * layout.tilesZ
+      console.log(`level ${level}: ${nx} × ${nz} nodes at ${cell} m, ${tiles} tiles, ${mb(written.bytes)}, ${ms} ms`)
+      if (baked.fields) {
+        const fieldsStart = performance.now()
+        const packed = await deflate(packFields(baked.fields), { level: 9 })
+        await writeFlushed(path.join(out, build, FIELDS_FILE), packed)
+        console.log(`fields: ${mb(packed.length)}, packed in ${Math.round(performance.now() - fieldsStart)} ms`)
+      }
+      if (forPrototype) {
+        console.log(`prototype tiles: ${mb(written.prototype)}`)
+        prototypeMeta = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams(), build: prototypeBuild }
+      }
     }
-    if (forPrototype) {
-      console.log(`prototype tiles: ${mb(written.prototype)}`)
-      prototypeMeta = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams(), build: prototypeBuild }
-    }
+  } finally {
+    await pool.close()
   }
-  await pool.close()
   const labels = labelsOf(t, data, proj)
   await writeFlushed(path.join(out, build, LABELS_FILE), JSON.stringify(labels))
   console.log(`labels: ${labels.towns.length} towns, ${labels.regions.length} regions, ${labels.rivers.length} rivers`)
@@ -603,9 +634,9 @@ if (isMainThread) {
 } else if (workerData === 'light') {
   // a light worker: bakes the bands it is sent until it is stopped
   parentPort!.on('message', (job: Job) => {
-    const far = { shape: new Float32Array(job.far.shape), g: job.far.grid }
+    const far = { shape: new Float32Array(job.far.shape), g: job.far.g }
     const out = new Uint8Array(job.light)
-    bakeLightRows(new Float32Array(job.shape), job.grid, job.sun, out, job.j0, job.j1, far, job.i0, job.i1)
+    bakeLightRows(new Float32Array(job.shape), job.grid, job.sun, out, job.j0, job.j1, far, job.i0, job.i1, job.near)
     parentPort!.postMessage('done')
   })
 }
