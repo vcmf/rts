@@ -2,7 +2,7 @@
 // makes the settings controls and the dialog live. docs/systems/front-menu.md ("The specimen sheet").
 import { find, h, paintArmy } from './dom.ts'
 import { bar, barShare, barState, card } from './elements.ts'
-import { LEVEL_SERIES, LEVELS, levelMarker, type LevelSeries } from './levels.ts'
+import { levelMarker } from './levels.ts'
 import { historyImage } from './images.ts'
 import { loadRoster } from './load.ts'
 import { entryById, isRegiment, type Roster } from './roster.ts'
@@ -68,33 +68,20 @@ function barSamples(): HTMLElement[] {
 /** The levels' names: the Napoleonic ruleset's (docs/proposals/unit-model.md § Experience), 1 to 6. In the game
  *  they come from the ruleset; the sheet names them here. */
 const LEVEL_NAMES = ['Recruits', 'Line', 'Veterans', 'Young Guard', 'Middle Guard', 'Old Guard']
-const SERIES_NOTES: Record<LevelSeries, string> = {
-  sleeve:
-    'Recommended. A ring, then one and two service chevrons (French sleeves counted service in chevrons); the Guard a star: drawn, filled, filled in a laurel.',
-  shield:
-    'One outline that fills with bars; the Guard a star: inside the outline, cut from the solid shield, then in a laurel.',
-  honours: 'All marks filled: a bar, one and two chevrons; the Guard a star, a star over a bar, a star in a laurel.',
-}
-
-/** One row a series: its name and note, then each level at 40 and 16 px with its name. */
-function levelRows(): HTMLElement[] {
-  return LEVEL_SERIES.map(series => {
-    const cells = Array.from({ length: LEVELS }, (_, i) => {
-      const name = LEVEL_NAMES[i]
-      const big = levelMarker(series, i + 1, name)
-      big.classList.add('big')
-      return h('figure', {}, big, levelMarker(series, i + 1, name), h('figcaption', { class: 'mono' }, name))
-    })
-    const title = h('div', {}, h('div', { class: 'display' }, series), h('p', {}, SERIES_NOTES[series]))
-    return h('div', { class: 'level-row' }, title, ...cells)
+/** The six markers, each at 40 and 16 px with its name. */
+function levelCells(): HTMLElement[] {
+  return LEVEL_NAMES.map((name, i) => {
+    const big = levelMarker(i + 1, name)
+    big.classList.add('big')
+    return h('figure', {}, big, levelMarker(i + 1, name), h('figcaption', { class: 'mono' }, name))
   })
 }
 
-/** Each `data-level="<1–6>"` becomes its Sleeve marker. */
+/** Each `data-level="<1–6>"` becomes its marker. */
 function fillLevelMarks(): void {
   for (const node of document.querySelectorAll<HTMLElement>('[data-level]')) {
     const level = Number(node.dataset.level)
-    node.replaceWith(levelMarker('sleeve', level, LEVEL_NAMES[level - 1]))
+    node.replaceWith(levelMarker(level, LEVEL_NAMES[level - 1]))
   }
 }
 
@@ -156,7 +143,7 @@ async function main(): Promise<void> {
   if (regiment) find<HTMLImageElement>('[data-slot=unit-image]').src = historyImage(regiment.image)
   fillBars()
   find('[data-slot=bars]').replaceChildren(...barSamples())
-  find('[data-slot=levels]').replaceChildren(...levelRows())
+  find('[data-slot=levels]').replaceChildren(...levelCells())
   fillLevelMarks()
   liveSwitches()
   liveRanges()

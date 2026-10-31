@@ -51,16 +51,16 @@ Out: the background art (the home stays empty paper), Campaign, Battles and Sett
 
 ## Decided
 
+- **Experience markers: Honours** (the owner, 2026-10-31) for the unit model's six levels: every mark filled; a bar,
+  one and two chevrons for the line, a star, a star over a bar, a star in a laurel for the Guard. Sleeve and Shield
+  were the other candidates.
 - **The selection accent: gamboge** (the owner, 2026-10-31), a wash under ink lines (decision 0100). Terracotta read
   as a brand orange; verdigris and violet were the other candidates.
 
-## Open questions
+- **Unit bars**: continuous, one colour each (the owner asked for it, 2026-10-31): bistre toughness, verdigris
+  morale, violet fatigue; low hatched under a dotted frame, critical an empty outline, never a new hue.
 
-- **Experience markers** for the unit model's six levels (`docs/proposals/unit-model.md` § Experience: Recruits,
-  Line, Veterans, Young, Middle and Old Guard): three series on the sheet, each with the line's levels as counted
-  marks and the Guard's as a star family (Sleeve: a ring, one and two chevrons, a star drawn, filled, in a laurel;
-  Shield; Honours). Recommended: Sleeve.
-- **Unit bars**: continuous, bistre toughness, verdigris morale, violet fatigue; low hatched, critical outlined.
+## Open questions
 
 - The game's title ("Empires" is a placeholder).
 - Prussia's and Poland's army colours (`#23324a`, `#9c2440`) are provisional: the art bible names only France,

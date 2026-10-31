@@ -69,7 +69,7 @@ keydown ──keyAction(route, key)──▶ go(route) | step | activate
   elements: buttons, menu items, tags and stamps, tabs, chips, crumbs, settings controls (switch, scale-bar range,
   segmented choice, check, select, ruled input), continuous unit bars (low hatched, critical outlined) and progress,
   experience markers for the unit model's six levels (`src/ui/levels.ts`: the line's levels counted marks, the
-  Guard's a star family; three candidate series), tooltip, dialog, dispatch, cards, and the
+  Guard's a star family: the Honours series), tooltip, dialog, dispatch, cards, and the
   battle's cartouche, unit panel and status bar. Each interactive element also takes `.is-hover`, `.is-focus` and
   `.is-active`, so the sheet can show its states side by side.
 - **The specimen sheet** (`app/ui-kit.html`, `src/ui/kit.ts`, layout `src/ui/kit.css`): every element in every state,

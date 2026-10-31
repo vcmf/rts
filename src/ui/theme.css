@@ -271,7 +271,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* Level: a unit's experience marker, an ink glyph (src/ui/levels.ts) that grows in weight with the level. */
 .level { display: inline-block; width: 16px; height: 16px; color: var(--ink); vertical-align: -3px; }
-.level .cut { stroke: var(--paper-hi); }
 
 /* Progress: a scale-bar track filled with ink from the left. */
 .progress { height: 8px; border: 1px solid var(--ink); background: repeating-linear-gradient(90deg, var(--paper-lo) 0 5%, var(--paper-hi) 5% 10%); }
