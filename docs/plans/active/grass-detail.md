@@ -106,11 +106,59 @@ Two notes on these results:
 
 ## Outcome
 
-**Review rounds 1–3 (2026-10-31)** found severe issues in the split-ring design. By the owner's rule Balanced was
-redesigned (the next section; Option A1 built). The review rounds restart. The final pass, after the last round:
-- the two-round bench (Kobelnitz close, default, wide and a 90 m view, and the demo);
-- the stills and the goldens;
-- the full checks.
+**Reviews.** Rounds 1–3 (2026-10-31) found severe issues in the split-ring design, so by the owner's rule Balanced
+was redesigned (the next section; Option A1 built). A1's own three rounds followed; the third found nothing severe.
+
+**The final pass (2026-10-31).** Dev Mac (M1 Pro, ANGLE Metal), `vite build` + `vite preview`,
+`tools/bench-look.mjs --gpu metal`, 1920×1080, the l2 arm.
+
+Two alternated rounds under the bench lock, each run gated at a 1-min load of 5 or less:
+- Round 1: Kobelnitz, its 90 m view (`?benchr=90`), then the demo, Full first. It started at a load of 4.12.
+- Round 2: the reverse order, Balanced first. It started at 3.79.
+
+Run start loads ranged from 3.79 to 4.98. Each cell is the mean of four runs, which agreed within 0.06 ms. Each
+cell gives the GPU frame p50, then the frame-interval p50, in ms:
+
+| camera | Kobelnitz Full | Balanced | Δ GPU | demo Full | Balanced | Δ GPU |
+|---|---|---|---|---|---|---|
+| close −45 | 8.84 / 5.83 | **8.19** / 5.55 | −0.66 | 7.07 / 5.45 | 6.74 / 4.86 | −0.33 |
+| close 0 | 8.89 / 5.92 | **8.29** / 5.62 | −0.59 | 6.98 / 5.14 | 6.70 / 4.84 | −0.28 |
+| close +45 | 9.02 / 6.13 | **8.34** / 5.64 | −0.69 | 6.60 / 4.70 | 6.48 / 4.71 | −0.12 |
+| 90 m −45 | 8.67 / 6.10 | 8.68 / 5.69 | +0.01 | | | |
+| 90 m 0 | 8.71 / 6.32 | 8.71 / 6.16 | 0.00 | | | |
+| 90 m +45 | 8.79 / 6.11 | 8.78 / 6.47 | −0.01 | | | |
+| default −45 | 8.49 / 6.50 | 8.50 / 6.50 | +0.01 | 9.07 / 7.05 | 9.09 / 7.08 | +0.02 |
+| default 0 | 8.70 / 6.21 | 8.70 / 6.39 | 0.00 | 8.98 / 6.93 | 8.99 / 6.98 | +0.01 |
+| default +45 | 8.63 / 6.23 | 8.64 / 6.34 | +0.01 | 9.36 / 7.08 | 9.38 / 7.11 | +0.02 |
+| wide −45 | 8.93 / 5.42 | 8.92 / 5.41 | −0.01 | 12.43 / 7.18 | 12.42 / 7.21 | 0.00 |
+| wide 0 | 9.05 / 5.42 | 9.04 / 5.42 | −0.02 | 13.64 / 8.26 | 13.65 / 7.98 | +0.02 |
+| wide +45 | 8.78 / 5.39 | 8.78 / 5.39 | −0.01 | 12.30 / 7.22 | 12.33 / 7.29 | +0.03 |
+
+**Results:**
+- **Kobelnitz close.** 0.6–0.7 ms less. Two of the three yaws come under 8.3 ms (8.19, 8.29); the third is
+  8.34, 0.04 over the budget.
+- **The demo's close.** 0.1–0.35 ms less.
+- **At 90 m** the share is about half of its whole (the zoom's ramp). Even with Full: the saving there is within the
+  noise.
+- **Default and wide.** Even with Full, within ±0.03 ms: Balanced is Full's program from 110 m.
+
+**Goldens.** Full (the default) against origin/main's build, `tools/golden.mjs`, the demo and Kobelnitz: every
+region of all 8 views matches (0.000 % differing, mean 0.000).
+
+**Stills** (main checkout, output/farmland-perf/compare.html, not committed), Full against Balanced at 20, 45, 90
+and 125 m on Kobelnitz and the demo's meadow:
+- **125 m:** identical (Kobelnitz 0 pixels differ; the demo 2, by a level).
+- **20–45 m, past about 10 m:** a sparser and slightly darker carpet, with more ground and single strokes between
+  the tufts. On the demo's meadow the thinner band around the focus (about 12–20 m) can be read.
+- **The crops:** unchanged.
+
+**The pan.** `pan45-full-balanced.gif`: 24 steps of 0.25 m at 45 m, Full against Balanced. The change from frame to
+frame is even (Balanced 11.4–11.8 mean levels, Full 12.9–13.1), with no spike: no clump pops.
+
+**Left as follow-ups:**
+- **Kobelnitz's third yaw** is 0.04 ms over. If it must come under, the next lever is the vertex work of the dropped
+  clumps (Redesign, Option A as built): leaving them out of the packed slot buffer.
+- **The visible band** on the meadow is the owner's call on the stills.
 
 ## Redesign (2026-10-31: Option A1 chosen by the owner and built, as amended below)
 

@@ -675,7 +675,8 @@ shader); `?meadow=off` puts back the old scatter.
     render, once the new program is ready (`switchDefineWhenReady`, `src/look/define-switch.ts`; the old defines kept
     meanwhile), so the ring never blinks. The share eases from none after a switch on and to none before a switch off
     (`ThinEase`, `THIN_EASE_S`; snapped on the tools' frozen page), so no clump pops. Past 10 m the close carpet is sparser, with
-    more ground between its tufts. Its cost: the plan (to be measured).
+    more ground between its tufts. Its cost (Metal, two rounds: the plan): 0.6–0.7 ms less at Kobelnitz's close camera, 0.1–0.35 at the
+    demo's, even at 90 m, the default and the wide zooms; Full's goldens match main's.
   - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
   - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
     `__look.flowBuildMs`: the flow textures' time on load.

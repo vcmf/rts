@@ -37,9 +37,11 @@ unchanged). Full's material and program are main's. The setting applies live.
 
 ## Consequences
 
-- **Balanced** is meant to spare GPU time at the close camera, toward Kobelnitz's 8.3 ms budget, and to be even with
-  Full at the default and wide zooms. **Pending measurement** (an estimate, not measured on the current design): the
-  plan's final pass benches it.
+- **Balanced**, measured (the plan's outcome: dev Mac, Metal, two alternated rounds, GPU frame p50):
+  - Kobelnitz's close camera: 0.6–0.7 ms less, 8.19–8.34 ms against Full's 8.84–9.02. Two of its three yaws come
+    under the 8.3 ms budget; the third is 0.04 ms over.
+  - The demo's close camera: 0.1–0.35 ms less.
+  - The default and wide zooms and a 90 m view: even with Full, within ±0.03 ms.
 - **What Balanced loses.** From about 10 to 20 m the carpet is sparser: half the grass tufts gone and a fifth more
   smaller, with more of the
   ground showing between them. Inside 8 m, the crops and the outer rings are unchanged.
@@ -49,7 +51,7 @@ unchanged). Full's material and program are main's. The setting applies live.
     GL call: the program has no location for them);
   - a few arithmetic operations of the share's ease run each frame.
 
-  **Pending**: the goldens decide the pixels in the plan's final pass.
+  The goldens against main's build match in every region of every view, on the demo and on Kobelnitz.
 - **Applying a change.** It toggles the define live, without a reload:
   - the new program is compiled ahead while Balanced is chosen (and again when the material's other defines change);
   - the look tools wait for it to be in force before a still (`__look.meadowSettled`);
