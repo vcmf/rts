@@ -148,3 +148,56 @@ After the redesign, round 2 (9 findings, none severe; fixed or answered, then st
 - answered: the bakes' casters by the scene's list with the leaving parts left out, and owners that record four
   observables (explicit caster lists and disposables: a change to every builder; decision 0096's consequences); the
   apron's buffers and the flow's comb made again on a move: G3c's cost.
+
+## G3b-3: built
+
+- **The worker** (`src/look/tile-worker.ts`): a map world's page sends it the window's map, its catalogue and its
+  heightfield's bytes once (the built page's assets); it compiles the map (validate, the files, expand, apply: the CLI's
+  `layersOf` steps) and bakes the coarse light, then builds each tile asked for with the compiler's own window build
+  (`src/look/world/window-build.ts`, moved out of `tools/build-look-data.ts` so the browser runs it; the compiler's
+  bytes unchanged).
+- **The rule** (`tileWanted`, `src/look/tile.ts`): when the focus comes within 200 m of the tile's edge, the centre on
+  the 200 m grid nearest it, kept so the whole tile lies inside the map (the compiler builds none past it: within about
+  130 m of Austerlitz's east and north edges the far ring shows under the focus), is asked for; it takes the tile's
+  place (`retile`) when it comes; one request at a time. Not on a frozen page (the look tools keep their tile) nor under
+  `?follow=0`.
+- **Measured** (the dev Mac, Kobelnitz, the focus sent 1 km east): the map compiled in the worker in 3.3 s on load;
+  the tile built in 1.6–1.7 s, off the page's thread; its swap 0.93 s on Metal (12 s under SwiftShader). Shots in
+  `scratch/g3b3/` (the far ring, then the tile come).
+
+G3b-3, round 1 (`/code-review high`, 10 findings, 1 severe):
+- fixed, severe: a tile that failed (its build, or its move) was asked for again every frame, a worker never at rest:
+  a failed tile is asked for again only once the focus wants another (`TileFollow`, tested);
+- fixed: a tile come after the focus moved on is not swapped in (the next frame asks for the one wanted); the worker's
+  own failures (its module, a message it cannot read) reported; no following on the bench (a move would land in a
+  measured hold); the tools' `retile` hook refused on a page that follows (it would take the tile back); the assets'
+  fetches checked; one map compile for the CLI and the worker (`src/map/compile.ts`, `compileMap`; the map page's
+  worker reports its steps' issues to its editor and keeps its own);
+- answered (G3c, a move's cost): the worker builds a tile's whole far ring, its cover and the coarse light the page
+  throws away, bakes the light again, and starts on load; a tile-only build, the page's light sent, and a start when
+  the focus first nears the edge, there.
+
+G3b-3, round 2 (9 findings, 2 severe):
+- fixed, severe: near the map's edge the tile flipped back and forth (the rule took the farther axis's distance, which
+  the edge held past it, so the other axis moved the tile on every crossing of a grid midpoint): the rule now axis by
+  axis, a held axis keeping its centre (tested: fails at the rule before); a tile come while a pan went on was dropped
+  if the focus wanted another by then (a sustained pan never got its detail): a tile is swapped in if it is the one
+  wanted, or if it holds the focus (tested; the first form also refused a wanted tile near the edge that cannot reach
+  the focus, and asked for it again forever: found on the page, tested);
+- fixed: the centres kept a far cell inside the far ring too (retile's check; `tileBounds`); the map fetched and
+  compiled the first time a tile is wanted (a page looked at where it opened fetches nothing); the rule's no-flip
+  condition checked at start (`followRuleOk`); the tests put the tile back after each; the look checks' comment over
+  their hooks again; `src/map/compile.ts` in the map system doc;
+- answered: the worker's repeated per-window work (the base, the ground's bound, the light): G3c.
+- checked on the page (Metal): the worker not started on load; a pan of 2.4 km in 6 s got its detail twice; held
+  against the north edge, one move, then none over 40 crossings of x = 100.
+
+G3b-3, round 3 (10 findings, none severe; fixed or answered, then stopped):
+- fixed: a tile come when none is wanted is dropped (it would be swapped in, then back); a colour bake that fails
+  after the swap is reported, not counted a failed move; a late error from a request given up keeps the one in
+  flight; a load of the map's files that fails is tried again 10 s on, not given up; the files fetched side by side; a
+  tile's bytes transferred without a copy; the tests import the window build from its module (the tool's re-export
+  gone); a repeated comment;
+- answered: the worker's per-window work again on every tile (G3c); one loader of a map's files for the map page and
+  the look page (their contracts differ: the map page lets `checkFiles` report a missing file); `layersOf` reading the
+  map's files before validating it (the CLI's, a failing map only).

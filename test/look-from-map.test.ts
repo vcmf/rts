@@ -1,7 +1,7 @@
 // The look compiler (docs/plans/active/look-austerlitz-a1.md, PR a): a window of a map's layers into the look world's
 // inputs, on small hand-made layers: the heights rebased, each kind's cover class, the arable's strips, the roads'
 // lines and marks, the trees in the woods and the orchards' rows; the page's window query; the data's world and trees.
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { Layers } from '../src/map/apply.ts'
 import type { Resolved } from '../src/map/resolve.ts'
 import type { Pt } from '../src/map/schema.ts'
@@ -36,6 +36,7 @@ import {
   type LookData,
 } from '../src/look/world/data.ts'
 import { WINDOWS, windowOf, type LookWindow } from '../src/look/world/windows.ts'
+import { TILE_O, TileFollow, followRuleOk, tileBounds, tileWanted } from '../src/look/tile.ts'
 import { noRiver } from '../src/look/river.ts'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -682,5 +683,73 @@ describe('a moved tile (G3b-1)', () => {
     })
     // a world with a river is not moved (its samples' places are the demo's)
     expect(() => moveLook({ ...d, river: { ...d.river, n: 1 } }, [200, 0])).toThrow(/river/)
+  })
+})
+
+describe('the tile following the focus (tileWanted, G3b-3)', () => {
+  // Kobelnitz's frame: the map from −1274 to 1726 m east, −1676 to 1324 m north; the tile 800 m on the 200 m grid
+  const edge = { x0: -1274, z0: -1676, x1: 1726, z1: 1324 }
+  const bounds = tileBounds(edge, 200, 400)
+  const want = (x: number, z: number) => tileWanted(x, z, bounds, 200, 400, 200)
+  afterEach(() => TILE_O.set(0, 0))
+  it('takes the centres a whole tile can have inside the map', () => {
+    // (the most a centre can be: 1726 − 400 = 1326, on the grid 1200; the least −1274 + 400 = −874, on it −800)
+    expect(bounds).toEqual({ x0: -800, z0: -1200, x1: 1200, z1: 800 })
+  })
+  it('keeps the tile while the focus lies 200 m or more inside it, and wants the nearest centre past that', () => {
+    expect(want(150, -199)).toBeNull()
+    expect(want(201, 0)).toEqual([200, 0])
+    expect(want(650, -320)).toEqual([600, -400])
+    // after a move the focus lies within half a step of the centre: no move back
+    TILE_O.set(600, -400)
+    expect(want(650, -320)).toBeNull()
+  })
+  it("moves along the map's edge only past the rule on the other axis: no flip back and forth there", () => {
+    // the focus held against the north edge (its centre's axis kept at 800), jittering about x = 100: the bug asked
+    // for [200, 800] then [0, 800] again on every crossing, as its far axis stayed past the rule
+    TILE_O.set(0, 800)
+    expect(want(101, 1250)).toBeNull()
+    expect(want(99, 1250)).toBeNull()
+    expect(want(201, 1250)).toEqual([200, 800])
+    TILE_O.set(200, 800)
+    expect(want(199, 1250)).toBeNull()
+    // the corner: both axes kept
+    TILE_O.set(1200, 800)
+    expect(want(1700, 1300)).toBeNull()
+  })
+  it('keeps a whole tile inside the map near its edge', () => {
+    expect(want(1700, 1300)).toEqual([1200, 800])
+    expect(want(-1270, -1670)).toEqual([-800, -1200])
+  })
+  it('holds that a move cannot flip back: half a step inside the rule', () => {
+    expect(followRuleOk(200, 400, 200)).toBe(true)
+    expect(followRuleOk(400, 400, 200)).toBe(false)
+  })
+})
+
+describe("the follower's choices (TileFollow, G3b-3)", () => {
+  it('asks for a tile that failed only once the focus wants another, and swaps in a tile that holds the focus', () => {
+    const f = new TileFollow()
+    expect(f.ask([200, 0])).toBe(true)
+    expect(f.ask(null)).toBe(false)
+    // (the bug: a tile that failed was asked for again every frame)
+    f.failedAt([200, 0])
+    expect(f.ask([200, 0])).toBe(false)
+    expect(f.ask([400, 0])).toBe(true)
+    // a failure that names no tile keeps the last
+    f.failedAt(null)
+    expect(f.ask([200, 0])).toBe(false)
+    f.moved()
+    expect(f.ask([200, 0])).toBe(true)
+    // a tile that holds the focus is swapped in, even if the focus wants another by now (a fast pan); one that lost it
+    // is not
+    expect(f.accept([200, 0], [400, 0], 450, 0, 400)).toBe(true)
+    expect(f.accept([200, 0], [0, 0], 590, -300, 400)).toBe(true)
+    // none wanted (the tile now holds the focus): dropped, not swapped in to be swapped back
+    expect(f.accept([400, 0], null, 80, 0, 400)).toBe(false)
+    expect(f.accept([200, 0], [800, 0], 610, 0, 400)).toBe(false)
+    // near the map's edge the tile wanted may not reach the focus: it is still the one to take (the bug: dropped, then
+    // asked for again, forever)
+    expect(f.accept([200, 800], [200, 800], 100, 1250, 400)).toBe(true)
   })
 })

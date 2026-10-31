@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { SPEC } from '../src/look/spec.ts'
 import { ROAD_SEG, ROAD_SLOTS } from '../src/look/world/data.ts'
-import { roadGrid } from '../tools/build-look-data.ts'
+import { roadGrid } from '../src/look/world/window-build.ts'
 
 const R = roadGrid()
 const sn = R.segs.length / ROAD_SEG
