@@ -744,7 +744,9 @@ describe("the follower's choices (TileFollow, G3b-3)", () => {
     // a tile that holds the focus is swapped in, even if the focus wants another by now (a fast pan); one that lost it
     // is not
     expect(f.accept([200, 0], [400, 0], 450, 0, 400)).toBe(true)
-    expect(f.accept([200, 0], null, 590, -300, 400)).toBe(true)
+    expect(f.accept([200, 0], [0, 0], 590, -300, 400)).toBe(true)
+    // none wanted (the tile now holds the focus): dropped, not swapped in to be swapped back
+    expect(f.accept([400, 0], null, 80, 0, 400)).toBe(false)
     expect(f.accept([200, 0], [800, 0], 610, 0, 400)).toBe(false)
     // near the map's edge the tile wanted may not reach the focus: it is still the one to take (the bug: dropped, then
     // asked for again, forever)

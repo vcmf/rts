@@ -34,7 +34,6 @@ import { layersOf } from '../maps/engine.ts'
 import { WINDOWS, mapFile, windowFile } from '../src/look/world/windows.ts'
 // the window builder (the page's tile worker runs it too: src/look/tile-worker.ts)
 import { buildWindowData, coarseLight, roadGrid } from '../src/look/world/window-build.ts'
-export { buildWindowData, coarseLight, roadGrid }
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const LOOK_FILE = path.join(ROOT, 'data/painted-world.lookdata')

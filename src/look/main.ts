@@ -1655,7 +1655,8 @@ async function move(next: LookData): Promise<number> {
   tileNow = next
   frameNow = frame
   // (on the GPU, after the move: a failure here leaves the new tile with the last colour bake, reported)
-  await macro.bake()
+  // (the tile has moved: a colour bake that fails is reported, not a failed move)
+  await macro.bake().catch((err: unknown) => console.error(`the move's colour bake failed: ${(err as Error).message}`))
   return performance.now() - t0
 }
 
@@ -1705,9 +1706,10 @@ const follower = (() => {
   worker.onmessage = async (e: MessageEvent<TileReply>) => {
     const r = e.data
     if (r.type === 'error') {
-      // (a tile's build, or the map's: then the follower stays not ready)
+      // (a tile's build, or the map's: then the follower stays not ready; a late error from a request given up keeps
+      // the one in flight)
       fail(r.seq === seq ? lastAsked : null, r.message)
-      state.busy = false
+      if (r.seq === seq || r.seq === null) state.busy = false
       return
     }
     if (r.type === 'map') {
@@ -1740,10 +1742,17 @@ const follower = (() => {
   }
   let lastAsked: [number, number] | null = null
   // the map fetched and compiled the first time a tile is wanted (a page looked at where it opened costs nothing)
+  // (a load that failed, a fetch that broke: tried again RETRY ms on)
+  const RETRY = 10_000
   let started = false
+  let retryAt = 0
   const start = () => {
     started = true
-    void load().catch((err: unknown) => fail(null, (err as Error).message))
+    void load().catch((err: unknown) => {
+      fail(null, `the map's files: ${(err as Error).message} (tried again in ${RETRY / 1000} s)`)
+      started = false
+      retryAt = performance.now() + RETRY
+    })
   }
   const load = async () => {
     const get = async (name: string) => {
@@ -1753,14 +1762,17 @@ const follower = (() => {
       if (!res.ok) throw new Error(`maps/${name}: ${res.status} ${res.statusText}`)
       return res
     }
-    const mapText = await (await get(`${win.map}.map.json`)).text()
-    const files: Record<string, ArrayBuffer> = {}
-    for (const n of demFileNames(JSON.parse(mapText))) files[n] = await (await get(n)).arrayBuffer()
-    const req: TileRequest = { type: 'map', win, mapText, kindsText: await (await get('kinds.json')).text(), files }
-    worker.postMessage(req, Object.values(files))
+    const [mapText, kindsText] = await Promise.all(
+      [`${win.map}.map.json`, 'kinds.json'].map(async n => (await get(n)).text()),
+    )
+    const names = demFileNames(JSON.parse(mapText))
+    const bytes = await Promise.all(names.map(async n => (await get(n)).arrayBuffer()))
+    const files = Object.fromEntries(names.map((n, k) => [n, bytes[k]]))
+    const req: TileRequest = { type: 'map', win, mapText, kindsText, files }
+    worker.postMessage(req, bytes)
   }
   scene.onBeforeRenderObservable.add(() => {
-    if (!started && want()) start()
+    if (!started && performance.now() >= retryAt && want()) start()
     if (!state.ready || state.busy) return
     const at = want()
     if (!at || !choose.ask(at)) return

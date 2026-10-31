@@ -32,7 +32,6 @@ export function layersOf(file: string, seed?: number): { map: MapFile; layers: L
   // another battlefield from the same intent (docs/plans/done/m3-generators.md);
   // a file that is no map fails validation below
   if (seed !== undefined && raw !== null && typeof raw === 'object' && !Array.isArray(raw)) raw.seed = seed
-  // (a file that is no map fails validation in compileMap)
   return compileMap(file, raw, cat, readMapFiles(path.resolve(ROOT, file), raw as unknown as MapFile))
 }
 

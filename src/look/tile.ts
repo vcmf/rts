@@ -70,7 +70,7 @@ export class TileFollow {
   }
   /** whether a tile come from the worker is swapped in: the one the focus wants now (`wanted`; near the map's edge it
    *  may not reach the focus), or one that holds the focus (x, z) within `half` m of its centre, even if the focus
-   *  wants another by now (a fast pan: the next frame asks for that); else it is dropped */
+   *  wants another by now (a fast pan: the next frame asks for that); else, and when none is wanted, it is dropped */
   accept(
     came: readonly [number, number],
     wanted: readonly [number, number] | null,
@@ -78,7 +78,9 @@ export class TileFollow {
     z: number,
     half: number,
   ): boolean {
-    const isWanted = !!wanted && wanted[0] === came[0] && wanted[1] === came[1]
+    // (none wanted: the tile now holds the focus, a tile come would only be swapped back)
+    if (!wanted) return false
+    const isWanted = wanted[0] === came[0] && wanted[1] === came[1]
     return isWanted || (Math.abs(x - came[0]) <= half && Math.abs(z - came[1]) <= half)
   }
   /** a tile that failed (null: a failure that names none, the last kept) */

@@ -37,7 +37,11 @@ self.onmessage = (e: MessageEvent<TileRequest>) => {
     if (!world) throw new Error('a tile asked for before the map')
     const t0 = performance.now()
     const bytes = buildWindowData(world.win, world.map, world.layers, world.light, q.at)
-    const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+    // (the encoding's own buffer when it is all of it: transferred, not copied)
+    const whole = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+    const buf = (
+      whole ? bytes.buffer : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+    ) as ArrayBuffer
     post({ type: 'tile', seq: q.seq, at: q.at, bytes: buf, ms: performance.now() - t0 }, [buf])
   } catch (err) {
     post({ type: 'error', seq: q.type === 'tile' ? q.seq : null, message: (err as Error).message })

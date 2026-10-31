@@ -191,3 +191,13 @@ G3b-3, round 2 (9 findings, 2 severe):
 - answered: the worker's repeated per-window work (the base, the ground's bound, the light): G3c.
 - checked on the page (Metal): the worker not started on load; a pan of 2.4 km in 6 s got its detail twice; held
   against the north edge, one move, then none over 40 crossings of x = 100.
+
+G3b-3, round 3 (10 findings, none severe; fixed or answered, then stopped):
+- fixed: a tile come when none is wanted is dropped (it would be swapped in, then back); a colour bake that fails
+  after the swap is reported, not counted a failed move; a late error from a request given up keeps the one in
+  flight; a load of the map's files that fails is tried again 10 s on, not given up; the files fetched side by side; a
+  tile's bytes transferred without a copy; the tests import the window build from its module (the tool's re-export
+  gone); a repeated comment;
+- answered: the worker's per-window work again on every tile (G3c); one loader of a map's files for the map page and
+  the look page (their contracts differ: the map page lets `checkFiles` report a missing file); `layersOf` reading the
+  map's files before validating it (the CLI's, a failing map only).

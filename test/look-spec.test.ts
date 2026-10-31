@@ -38,7 +38,8 @@ import { checkLookData, decodeLook, encodeLook } from '../src/look/world/data.ts
 import { longIt } from './fx.ts'
 import { layersOf } from '../maps/engine.ts'
 import { bakeLight, SUN } from '../src/render/lit/bake.ts'
-import { LOOK_FILE, buildLookData, buildWindowData, coarseLight } from '../tools/build-look-data.ts'
+import { LOOK_FILE, buildLookData } from '../tools/build-look-data.ts'
+import { buildWindowData, coarseLight } from '../src/look/world/window-build.ts'
 import { WINDOWS } from '../src/look/world/windows.ts'
 import { heightOf } from '../src/map/apply.ts'
 
