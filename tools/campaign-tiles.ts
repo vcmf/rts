@@ -47,6 +47,8 @@ import {
 } from '../src/render/campaign/bake.ts'
 import {
   cutTile,
+  levelBlocks,
+  type Block,
   levelLayout,
   MANIFEST_FORMAT,
   packTile,
@@ -69,6 +71,14 @@ const LEVELS = [
   { cell: 250, zoom: 9 },
   { cell: 100, zoom: 10 },
 ]
+// the bake by blocks (docs/plans/active/europe.md, EU1): BLOCK_TILES × BLOCK_TILES tiles a block, baked with a margin
+// of MARGIN_M round it, which covers every step's reach on the block's own nodes (the shape's widest blur, 10.5 km;
+// the lakes' distance, 12 km, and its blur, 1.5 km; the sky's horizon, 9 km, on a shape exact that far out); the sun's
+// rays (60 km) read the coarse shape of the whole map past it, at COARSE_CELL sampled at COARSE_ZOOM
+const BLOCK_TILES = 4
+const MARGIN_M = 24000
+const COARSE_CELL = 1000
+const COARSE_ZOOM = 7
 // the tile size in nodes, the shape's storage step in metres
 const SIZE = 256
 const SCALE = 0.5
@@ -124,6 +134,10 @@ interface Job {
   sun: SunParams
   j0: number
   j1: number
+  i0: number
+  i1: number
+  // the coarse shape of the whole map, read past the block
+  far: { shape: SharedArrayBuffer; grid: Grid }
 }
 
 /** The generated theatre, as far as this tool reads it. */
@@ -160,35 +174,66 @@ function lowest(h: Float32Array): number {
   return low
 }
 
-/** Bakes the light on every core, each worker a band of rows; returns the sun and sky bytes a node. */
-async function bakeLight(shape: Float32Array, grid: Grid): Promise<Uint8Array> {
-  const shared = new SharedArrayBuffer(shape.byteLength)
-  new Float32Array(shared).set(shape)
-  const light = new SharedArrayBuffer(grid.nx * grid.nz * 2)
-  const count = Math.max(1, os.cpus().length)
-  const band = Math.ceil(grid.nz / count)
-  const workers = Array.from({ length: count }, (_, w) => {
-    const job: Job = { shape: shared, light, grid, sun: SUN, j0: w * band, j1: Math.min(grid.nz, (w + 1) * band) }
-    return new Worker(new URL(import.meta.url), { workerData: job })
-  })
-  try {
-    await Promise.all(
-      workers.map(
-        worker =>
-          new Promise<void>((resolve, reject) => {
-            worker.on('message', () => resolve())
-            worker.on('error', reject)
-            // a worker gone without its message (killed, out of memory) would leave the build waiting: after the
-            // message, the promise is settled and this does nothing
-            worker.on('exit', code => reject(new Error(`a light worker stopped (exit ${code}) before its band`)))
-          }),
-      ),
-    )
-  } finally {
-    // a failed band stops the others: none is left baking
-    await Promise.all(workers.map(worker => worker.terminate()))
+/**
+ * The light's workers, one a core, kept for the whole run (a block's light is baked by all of them, each a band of its
+ * rows): a block's shape and the coarse shape of the whole map are shared with them, not copied.
+ */
+class LightPool {
+  private readonly workers: Worker[]
+  private broken: Error | null = null
+
+  constructor() {
+    const count = Math.max(1, os.cpus().length)
+    this.workers = Array.from({ length: count }, () => new Worker(new URL(import.meta.url), { workerData: 'light' }))
+    for (const worker of this.workers) {
+      // a worker gone (killed, out of memory) fails the run, not leaves it waiting
+      worker.on('exit', code => (this.broken ??= new Error(`a light worker stopped (exit ${code})`)))
+      worker.on('error', e => (this.broken ??= e))
+    }
   }
-  return new Uint8Array(light)
+
+  /**
+   * The light of a block's rows j0..j1 and columns i0..i1 (its nodes in the block's grid), its shape on its grid and
+   * the far shape past it: the sun and sky bytes a node of the block (the rest left 0).
+   */
+  async bake(
+    shape: Float32Array,
+    grid: Grid,
+    far: { shape: SharedArrayBuffer; grid: Grid },
+    rows: [number, number],
+    cols: [number, number],
+  ): Promise<Uint8Array> {
+    const shared = new SharedArrayBuffer(shape.byteLength)
+    new Float32Array(shared).set(shape)
+    const light = new SharedArrayBuffer(grid.nx * grid.nz * 2)
+    const band = Math.ceil((rows[1] - rows[0]) / this.workers.length)
+    await Promise.all(
+      this.workers.map((worker, w) => {
+        const j0 = rows[0] + w * band
+        const j1 = Math.min(rows[1], j0 + band)
+        if (j0 >= j1) return Promise.resolve()
+        const job: Job = { shape: shared, light, grid, sun: SUN, j0, j1, i0: cols[0], i1: cols[1], far }
+        return new Promise<void>((resolve, reject) => {
+          if (this.broken) return reject(this.broken)
+          const failed = (e: unknown) => reject(e instanceof Error ? e : new Error(`a light worker stopped (${e})`))
+          worker.once('message', () => {
+            worker.off('error', failed)
+            worker.off('exit', failed)
+            resolve()
+          })
+          worker.once('error', failed)
+          worker.once('exit', failed)
+          worker.postMessage(job)
+        })
+      }),
+    )
+    return new Uint8Array(light)
+  }
+
+  /** Stops the workers. */
+  async close() {
+    await Promise.all(this.workers.map(worker => worker.terminate()))
+  }
 }
 
 /** What every level is baked from: the theatre, its projection, its lowest ground, its lakes, the forests. */
@@ -209,30 +254,116 @@ function lakeRings(t: Theatre): Pt[][] {
   })
 }
 
-/** A level baked, and its fields when it is the level they lie on. */
-interface Baked {
-  bake: LevelBake
-  fields?: Plane[]
+/**
+ * The coarse shape of the whole map (COARSE_CELL, sampled at COARSE_ZOOM, the lakes sunk), which a block's light reads
+ * past its margin (the sun's rays reach 60 km): small for any map (a continent's is a few thousand nodes a side).
+ */
+async function coarseShape(src: Sources): Promise<{ shape: SharedArrayBuffer; grid: Grid }> {
+  const { t, proj, low } = src
+  const grid: Grid = { ...frameGrid(t.frame, COARSE_CELL), cell: COARSE_CELL, x0: -t.frame.halfX, z0: -t.frame.halfZ }
+  const heights = despiked(
+    await sampleGrid(proj, COARSE_ZOOM, grid.x0, grid.z0, COARSE_CELL, grid.nx, grid.nz),
+    grid.nx,
+    grid.nz,
+  )
+  const shape = buildShape(heights, grid, { ...SHAPE, low })
+  sinkLakes(shape, lakeDistance(src.rings, grid, LAKE_BLUR_M), SINK_WIDTH_M, SINK)
+  const shared = new SharedArrayBuffer(shape.byteLength)
+  new Float32Array(shared).set(shape)
+  return { shape: shared, grid }
 }
 
 /**
- * One level baked: its heights (sampled at `zoom`), shape, lakes, light and forest, on a grid spanning the frame (the
- * cell must divide it); with `withFields`, its fields too.
+ * A block of a level baked: its heights (sampled at `zoom`), shape, lakes and forest on its nodes and its margin's,
+ * exact on its own nodes and out to the sky's reach (the margin covers every step's: the shape's blurs, the lakes'
+ * distance and its blur, the sky's horizon), and its light on its own nodes, the sun's rays reading the coarse shape
+ * past the margin. Returns the bake (a block of the level) and its heights and lakes' distance for the fields.
  */
-async function bakeLevel(src: Sources, cell: number, zoom: number, withFields: boolean): Promise<Baked> {
+async function bakeBlock(
+  src: Sources,
+  level: { cell: number; zoom: number; nx: number; nz: number },
+  block: Block,
+  pool: LightPool,
+  far: { shape: SharedArrayBuffer; grid: Grid },
+): Promise<{ bake: LevelBake; heights: Float32Array; lakeD: Float32Array }> {
   const { t, proj, low } = src
-  const { frame } = t
-  const grid: Grid = { ...frameGrid(frame, cell), cell, x0: -frame.halfX, z0: -frame.halfZ }
-  const sampled = await sampleGrid(proj, zoom, grid.x0, grid.z0, cell, grid.nx, grid.nz)
+  const { cell } = level
+  const b = block.baked
+  const grid: Grid = {
+    nx: b.i1 - b.i0,
+    nz: b.j1 - b.j0,
+    cell,
+    x0: -t.frame.halfX + b.i0 * cell,
+    z0: -t.frame.halfZ + b.j0 * cell,
+  }
+  const place = { i0: b.i0, j0: b.j0, nx: level.nx, nz: level.nz }
+  const sampled = await sampleGrid(proj, level.zoom, grid.x0, grid.z0, cell, grid.nx, grid.nz)
   const heights = despiked(sampled, grid.nx, grid.nz)
-  const shape = buildShape(heights, grid, { ...SHAPE, low })
+  const shape = buildShape(heights, grid, { ...SHAPE, low }, place)
   const lakeD = lakeDistance(src.rings, grid, LAKE_BLUR_M)
   sinkLakes(shape, lakeD, SINK_WIDTH_M, SINK)
-  const forest = resampleField(src.forest, cell, grid.nx, grid.nz)
-  // made before the light, so the heights and the lakes' distance are not kept through the tiles' writing
-  const fields = withFields ? fieldsOf(src, grid, heights, lakeD) : undefined
-  const light = await bakeLight(shape, grid)
-  return { bake: { grid, shape, light, forest }, fields }
+  const forest = resampleField(src.forest, cell, grid.nx, grid.nz, b.i0, b.j0)
+  const o = block.own
+  const light = await pool.bake(shape, grid, far, [o.j0 - b.j0, o.j1 - b.j0], [o.i0 - b.i0, o.i1 - b.i0])
+  return { bake: { grid, shape, light, forest, place }, heights, lakeD }
+}
+
+/**
+ * One level baked block by block (each its tiles' worth with a margin), its tiles written as each block is done, and
+ * its fields when it is the level they lie on (from its blocks' own heights and lakes' distance, put together).
+ */
+async function bakeLevel(
+  src: Sources,
+  levelIndex: number,
+  cell: number,
+  zoom: number,
+  pool: LightPool,
+  far: { shape: SharedArrayBuffer; grid: Grid },
+  dir: string,
+  prototypeDir: string | undefined,
+): Promise<{ nx: number; nz: number; written: Written; fields?: Plane[] }> {
+  const { nx, nz } = frameGrid(src.t.frame, cell)
+  const margin = Math.ceil(MARGIN_M / cell)
+  const withFields = levelIndex === FIELDS_LEVEL
+  const heights = withFields ? new Float32Array(nx * nz) : null
+  const lakeD = withFields ? new Float32Array(nx * nz) : null
+  const written: Written = { tiles: 0, bytes: 0, prototype: 0 }
+  for (const block of levelBlocks(nx, nz, SIZE, BLOCK_TILES, margin)) {
+    const baked = await bakeBlock(src, { cell, zoom, nx, nz }, block, pool, far)
+    if (heights && lakeD) copyOwn(block, baked, nx, heights, lakeD)
+    const tiles: Tile[] = []
+    for (let row = block.tiles.r0; row < block.tiles.r1; row++) {
+      for (let column = block.tiles.c0; column < block.tiles.c1; column++) {
+        tiles.push(cutTile(baked.bake, { level: levelIndex, column, row }, SIZE, SCALE, BASE))
+      }
+    }
+    await writeTiles(dir, tiles, written, prototypeDir)
+  }
+  const { tilesX, tilesZ } = levelLayout(nx, nz, SIZE)
+  if (written.tiles !== tilesX * tilesZ) {
+    throw new Error(`level ${levelIndex}: ${written.tiles} tiles of ${tilesX * tilesZ}`)
+  }
+  const grid: Grid = { nx, nz, cell, x0: -src.t.frame.halfX, z0: -src.t.frame.halfZ }
+  const fields = heights && lakeD ? fieldsOf(src, grid, heights, lakeD) : undefined
+  return { nx, nz, written, fields }
+}
+
+/** A block's own nodes' heights and lakes' distance copied into the whole level's arrays. */
+function copyOwn(
+  block: Block,
+  baked: { bake: LevelBake; heights: Float32Array; lakeD: Float32Array },
+  nx: number,
+  heights: Float32Array,
+  lakeD: Float32Array,
+) {
+  const b = block.baked
+  const o = block.own
+  const bw = b.i1 - b.i0
+  for (let j = o.j0; j < o.j1; j++) {
+    const from = (j - b.j0) * bw + (o.i0 - b.i0)
+    heights.set(baked.heights.subarray(from, from + (o.i1 - o.i0)), j * nx + o.i0)
+    lakeD.set(baked.lakeD.subarray(from, from + (o.i1 - o.i0)), j * nx + o.i0)
+  }
 }
 
 /**
@@ -300,14 +431,6 @@ function labelsOf(t: Theatre, data: Data, proj: ReturnType<typeof projection>): 
   return { towns, regions, rivers }
 }
 
-/** The tiles of a level, cut from its bake row by row, their shape above BASE. */
-function* tilesOf(bake: LevelBake, level: number): Generator<Tile> {
-  const { tilesX, tilesZ } = levelLayout(bake.grid.nx, bake.grid.nz, SIZE)
-  for (let row = 0; row < tilesZ; row++) {
-    for (let column = 0; column < tilesX; column++) yield cutTile(bake, { level, column, row }, SIZE, SCALE, BASE)
-  }
-}
-
 /**
  * A tile as the prototype loads it: a script calling window.__campaignTile with the shape (from zero, a lake below
  * the lowest ground held there, as the prototype has always drawn it) and the light's three bytes a node interleaved.
@@ -329,18 +452,23 @@ function prototypeTile(tile: Tile): string {
 // at most as libuv)
 const WRITERS = Math.min(1024, Math.max(1, Math.floor(Number(process.env.UV_THREADPOOL_SIZE)) || 4))
 
+/** The tiles written so far, and their bytes on disk in each output. */
+interface Written {
+  tiles: number
+  bytes: number
+  prototype: number
+}
+
 /**
- * Writes a level's tiles under `dir`, deflated on libuv's thread pool and flushed to the disk, and, given
- * `prototypeDir`, the prototype's tiles there too, from the same cut. Returns the tiles written and the bytes on disk
- * of each output; throws unless every tile of the level was written.
+ * Writes tiles under `dir`, deflated on libuv's thread pool and flushed to the disk, and, given `prototypeDir`, the
+ * prototype's tiles there too, from the same cut; counts them into `written`.
  */
-async function writeLevel(dir: string, bake: LevelBake, level: number, prototypeDir?: string) {
+async function writeTiles(dir: string, tiles: Tile[], written: Written, prototypeDir?: string) {
   fs.mkdirSync(dir, { recursive: true })
   if (prototypeDir) fs.mkdirSync(prototypeDir, { recursive: true })
-  const tiles = tilesOf(bake, level)
-  const written = { tiles: 0, bytes: 0, prototype: 0 }
+  const queue = tiles.values()
   const worker = async () => {
-    for (const tile of tiles) {
+    for (const tile of queue) {
       const name = `t-${tile.column}-${tile.row}`
       const packed = await deflate(packTile(tile), { level: 9 })
       await writeFlushed(path.join(dir, `${name}.bin`), packed)
@@ -354,11 +482,6 @@ async function writeLevel(dir: string, bake: LevelBake, level: number, prototype
     }
   }
   await Promise.all(Array.from({ length: WRITERS }, worker))
-  const layout = levelLayout(bake.grid.nx, bake.grid.nz, SIZE)
-  if (written.tiles !== layout.tilesX * layout.tilesZ) {
-    throw new Error(`level ${level}: ${written.tiles} tiles written of ${layout.tilesX * layout.tilesZ}`)
-  }
-  return written
 }
 
 /** The parameters the prototype's tiles were baked with, as the prototype compares them. */
@@ -422,14 +545,18 @@ async function main() {
   const prototypeBuild = startBuild(prototypeOut)
   const levels: Level[] = []
   let prototypeMeta = {}
+  const pool = new LightPool()
+  const coarseStart = performance.now()
+  const far = await coarseShape(src)
+  console.log(
+    `coarse shape: ${far.grid.nx} × ${far.grid.nz} nodes at ${COARSE_CELL} m, ${Math.round(performance.now() - coarseStart)} ms`,
+  )
   for (const [level, { cell, zoom }] of LEVELS.entries()) {
     const start = performance.now()
-    const baked = await bakeLevel(src, cell, zoom, level === FIELDS_LEVEL)
-    const { bake } = baked
     // the close level for the prototype too
     const forPrototype = level === LEVELS.length - 1 ? path.join(prototypeOut, prototypeBuild) : undefined
-    const written = await writeLevel(path.join(out, build, `l${level}`), bake, level, forPrototype)
-    const { nx, nz } = bake.grid
+    const baked = await bakeLevel(src, level, cell, zoom, pool, far, path.join(out, build, `l${level}`), forPrototype)
+    const { nx, nz, written } = baked
     const layout = levelLayout(nx, nz, SIZE)
     levels.push({ cell, nx, nz, ...layout, scale: SCALE, base: BASE, zoom, path: `${build}/l${level}/t-{i}-{j}.bin` })
     const ms = Math.round(performance.now() - start)
@@ -446,6 +573,7 @@ async function main() {
       prototypeMeta = { cell, nx, nz, ...layout, scale: SCALE, params: prototypeParams(), build: prototypeBuild }
     }
   }
+  await pool.close()
   const labels = labelsOf(t, data, proj)
   await writeFlushed(path.join(out, build, LABELS_FILE), JSON.stringify(labels))
   console.log(`labels: ${labels.towns.length} towns, ${labels.regions.length} regions, ${labels.rivers.length} rivers`)
@@ -472,8 +600,12 @@ async function main() {
 
 if (isMainThread) {
   await main()
-} else {
-  const job = workerData as Job
-  bakeLightRows(new Float32Array(job.shape), job.grid, job.sun, new Uint8Array(job.light), job.j0, job.j1)
-  parentPort!.postMessage('done')
+} else if (workerData === 'light') {
+  // a light worker: bakes the bands it is sent until it is stopped
+  parentPort!.on('message', (job: Job) => {
+    const far = { shape: new Float32Array(job.far.shape), g: job.far.grid }
+    const out = new Uint8Array(job.light)
+    bakeLightRows(new Float32Array(job.shape), job.grid, job.sun, out, job.j0, job.j1, far, job.i0, job.i1)
+    parentPort!.postMessage('done')
+  })
 }

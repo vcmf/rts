@@ -44,6 +44,23 @@ margin its steps reach, so the memory stays that of a few tiles whatever the map
   K2b's four views (a mean difference under 2 levels); the memory a level takes measured (a few hundred MB at most,
   whatever its size); the bake's time.
 
+**Results** (EU1), on the owner's WSL machine (an i7-9700K, 8 cores):
+- The levels baked in blocks of 4 × 4 tiles with a margin of 24 km (`levelBlocks` in `src/render/campaign/tiles.ts`;
+  `tools/campaign-tiles.ts`): every step exact on a block's own nodes but the sun's rays past the margin, which read
+  a coarse shape of the whole map (1 km, 801 × 501 nodes for the theatre, 0.4 s); the light's workers kept for the
+  whole run. The shapes' blurs as a whole level's on the block's nodes (`buildShape` takes the block's place in the
+  level for the frame's edge), the forests resampled from the block's corner, the light baked on the block's columns.
+- Against the whole-level bake of the same theatre, tile by tile: the shape, the sky and the forests the same to the
+  bit at both levels, the sun the same at 250 m and within 1 level at 100 m (the rays past the margin); the fields'
+  and the labels' files the same, byte for byte. (A first run differed in the sky by up to 16 levels at a few nodes:
+  a ray past the map's edge read the coarse shape, where the whole level holds its edge; fixed.)
+- The bake 116 s (it was 70 s: a block of the 100 m level is baked on 2.2 times its own nodes, its margin's), its
+  peak memory 1.4 GB (the whole-level bake: 2.4 GB). What still grows with the map: the forests' field, held whole
+  (100 m: 1.3 GB for Europe, to be read by blocks in EU2), and the fields' level's heights and lakes' distance, held
+  whole for its fields (the 1 km level for Europe: small).
+- Tested: `test/campaign-blocks.test.ts` (the blocks hold every tile once; a block's shape the whole level's on its
+  own nodes; a ridge past a block shadows it through the far shape).
+
 ### EU2: Europe's sources and its bake
 
 - The frame: a Lambert azimuthal equal-area projection centred on Europe (the EU's own, EPSG:3035, is centred at

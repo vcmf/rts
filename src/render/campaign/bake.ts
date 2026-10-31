@@ -112,10 +112,24 @@ export function blur(h: ArrayLike<number>, nx: number, nz: number, r: number): F
 }
 
 /**
+ * Where a grid lies in its whole level: its node (0, 0) is the level's node (i0, j0), of a level of nx × nz nodes.
+ * A grid that is the whole level lies at (0, 0) of itself.
+ */
+export interface Place {
+  i0: number
+  j0: number
+  nx: number
+  nz: number
+}
+
+/** A whole level's place in itself. */
+export const wholeOf = (g: Grid): Place => ({ i0: 0, j0: 0, nx: g.nx, nz: g.nz })
+
+/**
  * The one shape, in metres above `low`, raised `vert` times: the large forms whole, the detail scaled by `fine`,
  * mountain regions lifted, flattened toward the frame's edge (the grid spans the frame).
  */
-export function buildShape(h0: ArrayLike<number>, g: Grid, p: ShapeParams): Float32Array {
+export function buildShape(h0: ArrayLike<number>, g: Grid, p: ShapeParams, whole: Place = wholeOf(g)): Float32Array {
   const { nx, nz, cell } = g
   const big = blur(h0, nx, nz, Math.round(p.bigM / cell))
   const region = blur(h0, nx, nz, Math.round(p.regionM / cell))
@@ -125,7 +139,10 @@ export function buildShape(h0: ArrayLike<number>, g: Grid, p: ShapeParams): Floa
       const k = j * nx + i
       const h = big[k] + (h0[k] - big[k]) * p.fine - p.low
       const lift = 1 + p.mount * sstep(p.mountFrom, p.mountTo, region[k])
-      const edgeKm = (Math.min(i, nx - 1 - i, j, nz - 1 - j) * cell) / 1000
+      // the frame's edge is the whole level's: a block's own edge inside it is not
+      const wi = whole.i0 + i
+      const wj = whole.j0 + j
+      const edgeKm = (Math.min(wi, whole.nx - 1 - wi, wj, whole.nz - 1 - wj) * cell) / 1000
       out[k] = Math.max(0, h) * lift * p.vert * sstep(0, p.edgeKm, edgeKm)
     }
   }
@@ -217,14 +234,41 @@ function sample(h: Float32Array, g: Grid, x: number, z: number): number {
   return top * (1 - v) + bottom * v
 }
 
+/** A shape on its grid. */
+export interface ShapeGrid {
+  shape: Float32Array
+  g: Grid
+}
+
+/** Whether a point (metres) lies on a grid's nodes' span. */
+function onGrid(g: Grid, x: number, z: number): boolean {
+  return x >= g.x0 && z >= g.z0 && x <= g.x0 + (g.nx - 1) * g.cell && z <= g.z0 + (g.nz - 1) * g.cell
+}
+
 /**
- * The light that does not change, for the rows j0 ≤ j < j1, written into `out` (RG bytes a node, the whole grid's
- * size): R the sun's shadow: from each node a ray walks toward the sun in growing steps (to about 60 km); the sun is
+ * The light that does not change, for the rows j0 ≤ j < j1 (and the columns i0 ≤ i < i1), written into `out` (RG
+ * bytes a node, the whole grid's size): the heights read from `shape` on its grid, and past its span from `far`, a
+ * coarser shape of the whole map (a block baked with a margin reads its own nodes near it and the far one beyond).
+ * R the sun's shadow: from each node a ray walks toward the sun in growing steps (to about 60 km); the sun is
  * a disc `size` degrees across, so a ridge just grazing the ray dims it in part, and the penumbra widens with the
  * distance to the ridge. G the open sky: in eight directions, the highest horizon within about 9 km; the sky a node
  * sees is the mean of one minus the sine of those horizon angles (ambient occlusion).
  */
-export function bakeLightRows(shape: Float32Array, g: Grid, sun: SunParams, out: Uint8Array, j0: number, j1: number) {
+export function bakeLightRows(
+  shape: Float32Array,
+  g: Grid,
+  sun: SunParams,
+  out: Uint8Array,
+  j0: number,
+  j1: number,
+  far: ShapeGrid | null = null,
+  i0 = 0,
+  i1 = g.nx,
+) {
+  // the far shape only between the block's span and the map's edge: past the map's edge, the block's own edge held, as
+  // a whole level's is
+  const at = (x: number, z: number) =>
+    !far || onGrid(g, x, z) || !onGrid(far.g, x, z) ? sample(shape, g, x, z) : sample(far.shape, far.g, x, z)
   const rad = Math.PI / 180
   const tanEl = Math.tan(sun.el * rad)
   const tanR = Math.tan((sun.size / 2) * rad)
@@ -235,21 +279,21 @@ export function bakeLightRows(shape: Float32Array, g: Grid, sun: SunParams, out:
   for (let a = 0; a < 8; a++) dirs.push([Math.cos((a * Math.PI) / 4), Math.sin((a * Math.PI) / 4)])
   const skySteps = [300, 700, 1300, 2200, 3600, 5800, 9000]
   for (let j = j0; j < j1; j++) {
-    for (let i = 0; i < g.nx; i++) {
+    for (let i = i0; i < i1; i++) {
       const k = j * g.nx + i
       const x = g.x0 + i * g.cell
       const z = g.z0 + j * g.cell
       const h = shape[k]
       let lit = 1
       for (const d of sunSteps) {
-        const clear = (h + d * tanEl - sample(shape, g, x + sunXZ[0] * d, z + sunXZ[1] * d)) / d
+        const clear = (h + d * tanEl - at(x + sunXZ[0] * d, z + sunXZ[1] * d)) / d
         lit = Math.min(lit, clamp(0.5 + (0.5 * clear) / tanR, 0, 1))
         if (lit <= 0) break
       }
       let sky = 0
       for (const [dx, dz] of dirs) {
         let horizon = 0
-        for (const d of skySteps) horizon = Math.max(horizon, (sample(shape, g, x + dx * d, z + dz * d) - h) / d)
+        for (const d of skySteps) horizon = Math.max(horizon, (at(x + dx * d, z + dz * d) - h) / d)
         sky += 1 - horizon / Math.hypot(1, horizon)
       }
       out[k * 2] = Math.round(lit * lit * (3 - 2 * lit) * 255)
@@ -278,19 +322,27 @@ export interface ForestField {
 }
 
 /**
- * The field on another grid over the same frame (nx × nz nodes `cell` metres apart from the same south-west corner):
+ * The field on another grid over the same frame (nx × nz nodes `cell` metres apart from the same south-west corner, or
+ * a block of it from its node (fromI, fromJ)):
  * bilinear between the field's nodes, held at its edge. Where a node falls on one of the field's, it is that node's
  * value, so the two layers agree.
  */
-export function resampleField(field: ForestField, cell: number, nx: number, nz: number): Uint8Array {
+export function resampleField(
+  field: ForestField,
+  cell: number,
+  nx: number,
+  nz: number,
+  fromI = 0,
+  fromJ = 0,
+): Uint8Array {
   const out = new Uint8Array(nx * nz)
   const at = (i: number, j: number) => field.cover[Math.min(field.nz - 1, j) * field.nx + Math.min(field.nx - 1, i)]
   for (let j = 0; j < nz; j++) {
-    const fz = (j * cell) / field.cell
+    const fz = ((fromJ + j) * cell) / field.cell
     const j0 = Math.floor(fz)
     const v = fz - j0
     for (let i = 0; i < nx; i++) {
-      const fx = (i * cell) / field.cell
+      const fx = ((fromI + i) * cell) / field.cell
       const i0 = Math.floor(fx)
       const u = fx - i0
       const south = at(i0, j0) * (1 - u) + at(i0 + 1, j0) * u
