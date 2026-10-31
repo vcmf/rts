@@ -30,7 +30,8 @@ export function setHeightfield(hf: Heightfield, far: Grid, tileHalf: number): vo
 
 // Babylon's ground (CreateGround) splits each cell along the diagonal from (x1, z0) to (x0, z1): with fu, fv the
 // position in the cell from its (x0, z0) corner, the triangle is (00, 10, 01) when fu + fv ≤ 1, else (10, 11, 01).
-function sample(f: Grid, x: number, z: number): number {
+/** A grid's ground at a point (the tile's or the far ring's: the same split as the mesh's) */
+export function sample(f: Grid, x: number, z: number): number {
   // clamped to the field; the last row and column of nodes belong to the cell before them
   const u = Math.min(f.n - 1, Math.max(0, (x - f.x0) / f.cell))
   const v = Math.min(f.n - 1, Math.max(0, (z - f.z0) / f.cell))
