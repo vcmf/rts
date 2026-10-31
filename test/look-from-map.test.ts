@@ -486,10 +486,12 @@ describe('the page and the data', () => {
       farCover,
       light,
       tileAt: [0, 0],
+      buildings: Float32Array.from([2, 3, 4, 0.5, 1.1]),
     })
     const back = decodeLook(c.buffer.slice(c.byteOffset, c.byteOffset + c.byteLength) as ArrayBuffer)
     expect(back.world).toEqual(world)
     expect(Array.from(back.trees)).toEqual([1, 2, 3, 4])
+    expect(Array.from(back.buildings)).toEqual([2, 3, 4, 0.5, Math.fround(1.1)])
     expect(back.river.n).toBe(0)
     expect({ ...back.farCover!, tex: Array.from(back.farCover!.tex) }).toEqual({
       ...farCover,
@@ -659,6 +661,7 @@ describe('a moved tile (G3b-1)', () => {
       farCover: { n: 1, cell: 4, x0: -11, z0: -12, tex: new Uint8Array(4) },
       light: { nx: 1, nz: 1, cell: 2, x0: -13, z0: -14, rg: new Uint8Array(2) },
       tileAt: [0, 0],
+      buildings: Float32Array.from([1, 10, 20, 0.5, 1.2]),
     }
     const m = moveLook(d, [400, -200])
     expect(m.tileAt).toEqual([400, -200])
@@ -668,6 +671,8 @@ describe('a moved tile (G3b-1)', () => {
     // a segment's ends move, its distance along, half width, index, flags and mitres do not
     expect(Array.from(m.roads.segs)).toEqual([401, -198, 403, -196, 5, 6, 7, 8, 9, 10, 11, 12])
     expect(Array.from(m.trees)).toEqual([401, -198, 3, 4, 405, -194, 7, 8])
+    // a building's place moves, its model, yaw and scale do not
+    expect(Array.from(m.buildings)).toEqual([1, 410, -180, 0.5, Math.fround(1.2)])
     expect(m.world).toMatchObject({ play: { x0: 399, z0: -202, x1: 403, z1: -196 } })
     // the heights are shared, not copied; and back again is the data
     expect(m.hf.h).toBe(d.hf.h)

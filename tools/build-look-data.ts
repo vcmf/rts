@@ -119,6 +119,7 @@ export function buildLookData(): Uint8Array {
     farCover: null,
     light: null,
     tileAt: [0, 0],
+    buildings: new Float32Array(0),
   }
   return encodeLook(data)
 }
@@ -154,7 +155,8 @@ const WINDOW_SOURCES = [
   'src/look/river.ts',
   'src/look/heightfield.ts',
   'src/look/spec.ts',
-  'src/render/lit/bake.ts',
+  'src/look/noise.ts',
+  'src/render/lit',
   'src/map',
   'maps/engine.ts',
   'maps/kinds.json',

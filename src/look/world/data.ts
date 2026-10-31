@@ -8,12 +8,14 @@ import type { Grid, Heightfield } from '../heightfield.ts'
 import { ROAD_SLOTS, macroFarNOf, rectOf, type Derived, type Rect } from '../spec.ts'
 import { SAMPLE_KEYS, type RiverParams, type RiverSamples } from '../river.ts'
 import { packCover, unpackCover, type CoverGrid } from './cover.ts'
+import { BUILDING_FLOATS } from './map-buildings.ts'
 
 // 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/done/roads.md); 9: the world it holds
 // (the demo, or a map's window) and a map world's trees (docs/plans/active/look-austerlitz-a1.md); 10: a map world's
 // far ring the whole map, its cover and its coarse light (docs/plans/done/g3a-the-whole-map-far.md); 11: the tile's
-// centre (G3b, docs/plans/done/g3b-the-detail-follows.md)
-export const LOOK_VERSION = 11
+// centre (G3b, docs/plans/done/g3b-the-detail-follows.md); 12: a map world's buildings (G3d,
+// docs/plans/done/g3d-villages.md)
+export const LOOK_VERSION = 12
 
 // the trees' species a map world's data names by index (src/look/world/from-map.ts; the page draws each as its
 // generated model, src/look/nature.ts)
@@ -96,6 +98,9 @@ export interface LookData {
   light: LightGrid | null
   // the tile's centre in the world's frame, m (G3b): on SPEC.tileStep's grid; [0, 0] but for a moved tile
   tileAt: TileAt
+  // a map world's buildings on the tile as the page's models (G3d: src/look/world/map-buildings.ts, BUILDING_FLOATS
+  // each: the model's index, x, z, yaw, scale); none on the demo (its buildings are the page's own list)
+  buildings: Float32Array
 }
 
 /** A tile's centre, m (x, z) */
@@ -129,8 +134,14 @@ export function moveLook(d: LookData, [dx, dz]: TileAt): LookData {
     trees[k] += dx
     trees[k + 1] += dz
   }
+  // (a building's x and z: its second and third floats)
+  const buildings = Float32Array.from(d.buildings)
+  for (let k = 0; k < buildings.length; k += BUILDING_FLOATS) {
+    buildings[k + 1] += dx
+    buildings[k + 2] += dz
+  }
   const m = moveGrids(d, [dx, dz])
-  return { ...m, roads: { ...m.roads, segs }, trees }
+  return { ...m, roads: { ...m.roads, segs }, trees, buildings }
 }
 
 /** The look data's grids, rectangles and tile centre moved by (dx, dz) m, their arrays shared (moveLook moves the
@@ -191,6 +202,7 @@ export function encodeLook(d: LookData): Uint8Array {
     ['roadSegs', d.roads.segs],
     ['roadIds', d.roads.ids],
     ['trees', d.trees],
+    ['buildings', d.buildings],
     ...(d.farCover ? [['farCoverRuns', packCover(d.farCover)] as [string, Uint8Array]] : []),
     ...(d.light ? [['light', d.light.rg] as [string, Uint8Array]] : []),
   ]
@@ -316,6 +328,9 @@ export function decodeLook(buf: ArrayBuffer): LookData {
   if (!meta.cover || !u8.coverRuns) throw new Error('look data: no cover grid')
   const cover: CoverGrid = { ...meta.cover, tex: unpackCover(meta.cover.n, u8.coverRuns) }
   if (!meta.world || !arr.trees || arr.trees.length % TREE_FLOATS) throw new Error('look data: no world, or no trees')
+  if (!arr.buildings || arr.buildings.length % BUILDING_FLOATS) {
+    throw new Error('look data: no buildings, or a short one')
+  }
   if (!meta.farCover !== !u8.farCoverRuns) {
     throw new Error("look data: the far ring's cover without its grid, or its grid without it")
   }
@@ -337,6 +352,7 @@ export function decodeLook(buf: ArrayBuffer): LookData {
     farCover,
     light,
     tileAt: meta.tileAt,
+    buildings: arr.buildings,
   }
 }
 

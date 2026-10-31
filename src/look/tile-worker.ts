@@ -7,7 +7,8 @@ import type { Layers } from '../map/apply.ts'
 import { compileMap } from '../map/compile.ts'
 import type { LightGrid, TileAt } from './world/data.ts'
 import type { LookWindow } from './world/windows.ts'
-import { coarseLight, windowData } from './world/window-build.ts'
+import { coarseLight, standingOf, windowData } from './world/window-build.ts'
+import type { Standing } from '../render/lit/houses.ts'
 import { encodeLook } from './world/data.ts'
 import { coarsenCover } from './world/cover.ts'
 import { flowBytes } from './flow-field.ts'
@@ -53,8 +54,15 @@ export type TileReply =
     }
   | { type: 'error'; seq: number | null; message: string }
 
-let world: { win: LookWindow; map: MapFile; layers: Layers; light: LightGrid; flow: boolean; meadow: boolean } | null =
-  null
+let world: {
+  win: LookWindow
+  map: MapFile
+  layers: Layers
+  light: LightGrid
+  flow: boolean
+  meadow: boolean
+  built: Standing[] // (the map's standing buildings, once: each tile's are among them)
+} | null = null
 const post = (r: TileReply, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(r, transfer)
 
 self.onmessage = (e: MessageEvent<TileRequest>) => {
@@ -65,13 +73,21 @@ self.onmessage = (e: MessageEvent<TileRequest>) => {
       const cat = JSON.parse(q.kindsText) as Catalogue
       const files = new Map(Object.entries(q.files).map(([k, b]) => [k, new Uint8Array(b)]))
       const { map, layers } = compileMap(q.win.map, JSON.parse(q.mapText), cat, files)
-      world = { win: q.win, map, layers, light: coarseLight(layers), flow: q.flow, meadow: q.meadow }
+      world = {
+        win: q.win,
+        map,
+        layers,
+        light: coarseLight(layers),
+        flow: q.flow,
+        meadow: q.meadow,
+        built: standingOf(map, layers),
+      }
       post({ type: 'map', ms: performance.now() - t0 })
       return
     }
     if (!world) throw new Error('a tile asked for before the map')
     const t0 = performance.now()
-    const data = windowData(world.win, world.map, world.layers, world.light, q.at)
+    const data = windowData(world.win, world.map, world.layers, world.light, q.at, world.built)
     const bytes = encodeLook(data)
     const frame = coarsenCover(data.cover, D.spec.macro.cover)
     const flow = world.flow ? flowBytes(q.at[0], q.at[1], D.spec.tile) : null

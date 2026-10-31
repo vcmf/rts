@@ -172,15 +172,22 @@ function bakeOutlines(
   })
 }
 
+// release: where it hands what is not the scene's (its effect wrappers and renderer: src/look/owned.ts)
 // bounce: the ground's bounce on the walls (?bldbounce=0 without: no target, no quad); timed: each bake's time, read
 // back (it waits for the GPU: the bench and the checks only)
+/** The buildings' static light baked into an atlas, a tile a building (above), and their ground's bounce: bound to
+ *  the bakes' light map and bounce, baked again with them */
 export function buildBuildingLight(
   scene: Scene,
   mats: Materials,
   bakes: Bakes,
   meshes: Mesh[],
   instances: LitInstance[],
-  { bounce: withBounce = true, timed = false } = {},
+  {
+    bounce: withBounce = true,
+    timed = false,
+    release,
+  }: { bounce?: boolean; timed?: boolean; release?: (undo: () => void) => void } = {},
 ): BuildingLight {
   if (mats.webgl1) {
     throw new Error("the buildings' light bake needs WebGL2 (main.ts takes the runtime's taps on WebGL1)")
@@ -258,6 +265,9 @@ void main(){vec2 b=floor(vUV/(uTexel*${OCC.toFixed(1)}))*${OCC.toFixed(1)};float
     uniformNames: ['uTexel'],
     samplerNames: ['uSrc'],
   })
+  // (what is not the scene's, handed to the part's owner as each is made: src/look/owned.ts)
+  release?.(() => occE.dispose())
+
   const neutral = `vec4(${NEUTRAL.r.toFixed(1)},${NEUTRAL.g.toFixed(1)},${NEUTRAL.b.toFixed(1)},${NEUTRAL.a.toFixed(1)})`
   const dilate = new EffectWrapper({
     engine,
@@ -274,7 +284,10 @@ void main(){vec4 c=texture2D(uSrc,vUV);if(c.a>0.0){gl_FragColor=c;return;}
     uniformNames: ['uTexel'],
     samplerNames: ['uSrc', 'uOcc'],
   })
+  release?.(() => dilate.dispose())
+
   const renderer = new EffectRenderer(engine)
+  release?.(() => renderer.dispose())
   occE.onApplyObservable.add(() => {
     occE.effect.setTexture('uSrc', raw)
     occE.effect.setFloat2('uTexel', 1 / width, 1 / height)

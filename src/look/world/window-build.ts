@@ -32,6 +32,8 @@ import {
   windowHeights,
 } from './from-map.ts'
 import type { LookWindow } from './windows.ts'
+import { mapBuildings } from './map-buildings.ts'
+import { standing, type Standing } from '../../render/lit/houses.ts'
 
 type Pt = readonly [number, number]
 
@@ -153,12 +155,20 @@ export function buildWindowData(
 ): Uint8Array {
   return encodeLook(windowData(win, map, L, mapLight, tileAt))
 }
+/** A map's standing buildings (the staff map's rule: standing), in map metres: once a map (the tile worker keeps them;
+ *  each tile's build takes them as `built`) */
+export function standingOf(map: MapFile, L: Layers): Standing[] {
+  return standing(map.features, L.table, L.built, { x0: L.x0, z0: L.z0, cell: L.cell, nx: L.nx, nz: L.nz })
+}
+/** A window's look data (not encoded): its tile at `tileAt` (map metres), the far ring, the light; `built`, the map's
+ *  standing buildings if found already (standingOf: the worker finds them once a map) */
 export function windowData(
   win: LookWindow,
   map: MapFile,
   L: Layers,
   mapLight = coarseLight(L),
   tileAt: TileAt = [0, 0],
+  built?: readonly Standing[],
 ): LookData {
   const s = D.spec
   checkTileAt(tileAt, s.tileStep)
@@ -185,6 +195,8 @@ export function windowData(
     cover: mapCover(areas, L.table, at, lines),
     world: { kind: 'map', map: win.map, window: win.name, x: win.x, z: win.z, base, play, edge },
     trees: packTrees(mapTrees(L, areas, at)),
+    // (the map's standing buildings on the tile, as the page's models: G3d)
+    buildings: mapBuildings(built ?? standingOf(map, L), at, s.tile / 2, lines),
     farCover,
     light: { ...mapLight, x0: L.x0 - at.x, z0: L.z0 - at.z },
     tileAt: [0, 0],

@@ -79,4 +79,36 @@ describe('a part of the scene built again (owned, Materials.mark)', () => {
     expect([scene.meshes.length, scene.onBeforeRenderObservable.observers.length]).toEqual([m0, o0])
     expect(bound(mats)).not.toContain('x')
   })
+
+  it('undoes what a build hands it (an effect wrapper: on disposal, and at once when the build throws)', async () => {
+    const { scene, mats } = world()
+    const undone: string[] = []
+    const p = owned(scene, mats, release => {
+      release(() => undone.push('a'))
+      release(() => undone.push('b'))
+      return 1
+    })
+    expect(undone).toEqual([])
+    p.dispose()
+    // (the last handed first)
+    expect(undone).toEqual(['b', 'a'])
+    expect(() =>
+      owned(scene, mats, release => {
+        release(() => undone.push('c'))
+        throw new Error('the build failed')
+      }),
+    ).toThrow(/the build failed/)
+    expect(undone).toEqual(['b', 'a', 'c'])
+  })
+
+  it("takes away a build's hooks on a lost context's restoring", async () => {
+    const { scene, mats } = world()
+    const o = scene.getEngine().onContextRestoredObservable
+    const n0 = o.observers.length
+    const p = owned(scene, mats, () => o.add(() => undefined))
+    expect(o.observers.length).toBe(n0 + 1)
+    p.dispose()
+    await new Promise(r => setTimeout(r, 0))
+    expect(o.observers.length).toBe(n0)
+  })
 })

@@ -31,6 +31,8 @@ const observables = (s: Scene): Observable<any>[] => [
   s.onAfterRenderObservable,
   s.onBeforeCameraRenderObservable,
   s.onAfterCameraRenderObservable,
+  // (a lost context's rebake: the buildings' light hooks it, G3d)
+  s.getEngine().onContextRestoredObservable,
 ]
 
 /** What the scene holds now, and a function giving what was added since (the snapshot dropped once read, so an owner
@@ -62,15 +64,21 @@ function takeAway(scene: Scene, added: unknown[][], hooks: unknown[][], forget: 
   }
 }
 
-/** Builds a part of the scene, recording what it adds: dispose() takes it all away again; a build that throws is taken
- *  away at once and its error rethrown */
-export function owned<T>(scene: Scene, mats: Materials, build: () => T): Owned<T> {
+/** Builds a part of the scene, recording what it adds: dispose() takes it all away again; what lies outside the
+ *  scene's lists (an effect wrapper, an effect renderer) the build hands to `release` as it makes it, and that is
+ *  undone first. A build that throws is taken away at once (what it released too) and its error rethrown */
+export function owned<T>(scene: Scene, mats: Materials, build: (release: (undo: () => void) => void) => T): Owned<T> {
   const diff = since(scene)
   const done = mats.mark()
+  const undos: (() => void)[] = []
+  const undo = () => {
+    for (const u of undos.splice(0).reverse()) u()
+  }
   let value: T
   try {
-    value = build()
+    value = build(u => undos.push(u))
   } catch (err) {
+    undo()
     const { added, hooks } = diff()
     takeAway(scene, added, hooks, done().forget)
     throw err
@@ -78,5 +86,13 @@ export function owned<T>(scene: Scene, mats: Materials, build: () => T): Owned<T
   const { added, hooks } = diff()
   const { forget, bind } = done()
   const mine = new Set(added.flat())
-  return { value, dispose: () => takeAway(scene, added, hooks, forget), rebind: bind, has: x => mine.has(x) }
+  return {
+    value,
+    dispose: () => {
+      undo()
+      takeAway(scene, added, hooks, forget)
+    },
+    rebind: bind,
+    has: x => mine.has(x),
+  }
 }

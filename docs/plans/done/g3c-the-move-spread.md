@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-31
 ---
 
@@ -116,3 +116,10 @@ page's); one count of the map's texels (`meadowN`) for the page and the worker; 
 (its callers make it: the rules no longer passed and ignored); the meadow's half floats from Babylon's half-float module; doc
 comments and a stale cross-reference; answered: the worker making the meadow map for a tile the page may drop (G3c-3:
 a move's cost).
+
+## The owner's choice (2026-10-31)
+
+G3c-3 (the move spread over frames: the parts built against the new tile's place from their arguments, not the
+global `TILE_O`, each in its own frame beside the last tile) **deferred to G5**, the frame phase: a move's 0.31–0.37 s
+frame (one every ~200 m of panning) stays until then. G3 goes on with G3d's villages (its water waits for Track E's
+A2), G3e, then G4.
