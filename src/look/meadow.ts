@@ -19,7 +19,7 @@ import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
 import { MEADOW_LOOK, type MeadowLook } from './meadow-look.ts'
-import { bandAt, GRASS_DETAIL_PRESETS, type GrassDetailPreset, ringsFor, slotBand, thinClump } from './grass-detail.ts'
+import { clumpRadius, type GrassDetail, ringBands, ringBandsOf, ringsFor, slotBand, thinClump } from './grass-detail.ts'
 import {
   CLUMP_REACH,
   CROP_WIDE,
@@ -134,6 +134,9 @@ export interface MeadowMap {
 export interface Meadow {
   meshes: Mesh[]
   setOn(on: boolean): void
+  /** the player's grass detail (src/look/grass-detail.ts), applied from the next frame: the rings of both levels are
+   * built, a level only sets what each draws */
+  setDetail(level: GrassDetail): void
   bakeMs: number
   // the ground's dark under-layer (shore.glsl, MEADOW_UNDER) on these materials: the meadow map, and each frame its
   // reach and strength (off while the meadow is off or hidden: underOn)
@@ -327,7 +330,7 @@ export function buildMeadow(
   wide = true,
   reach = CLUMP_REACH,
   look: MeadowLook = MEADOW_LOOK,
-  detail: GrassDetailPreset = GRASS_DETAIL_PRESETS.full,
+  detail: GrassDetail = 'full',
 ): Meadow {
   const t0 = performance.now()
   const { map, growingCells, growthAt, cropAt, groundAt: groundAtMap } = mm
@@ -359,10 +362,11 @@ export function buildMeadow(
     return { pos, nrm, vv, idx, top }
   }
   const clumps = { Grass_Large: indexed(src.Grass_Large), Grass_Small: indexed(src.Grass_Small) }
-  // the rings by the player's grass detail (src/look/grass-detail.ts): main's, or the near ring cut in two and the
-  // small clump thinned (built only when a ring draws it)
-  const rings = ringsFor(detail)
-  const thinSmall = rings.some(r => r.thin) ? thinClump(clumps.Grass_Small) : clumps.Grass_Small
+  // the rings of both grass detail levels (src/look/grass-detail.ts): main's, the near one cut in two, the cut ring's
+  // small clump thinned (drawn at Balanced only)
+  const thinSmall = thinClump(clumps.Grass_Small)
+  const rings = ringsFor(clumpRadius(thinSmall))
+  let level = detail
 
   const meshes: Mesh[] = []
   const ringMats: ShaderMaterial[] = []
@@ -378,7 +382,7 @@ export function buildMeadow(
       MEADOW_FS,
       {
         attributes: ['position', 'normal', 'aV', 'aSlot'],
-        uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'],
+        uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand', 'uBandMix', 'uCropBand'],
         samplers: ['uMeadow', 'uGB'],
         defines: [
           ...grassDefinesForClumps(look.up),
@@ -394,7 +398,7 @@ export function buildMeadow(
         ],
       },
     )
-    const c = r.thin ? thinSmall : clumps[r.clump]
+    const c = r.kind === 'cut' ? thinSmall : clumps[r.clump]
     m.backFaceCulling = false
     m.setTexture('uMeadow', map)
     m.setFloat('uCell', r.cell)
@@ -415,7 +419,7 @@ export function buildMeadow(
     // the slots by chunk (CHUNKS × CHUNKS of the ring's square), so the frame draws only the chunks in view and in the
     // band (cullRing, below): a slot culled by the vertex shader still costs its every vertex (the clump's 58 to 108)
     const outer = ri === rings.length - 1
-    // (its widest band at any zoom: the grass detail's split moves by zoom, slotBand)
+    // (its widest band at any level and zoom: slotBand)
     const sb = slotBand(r)
     const ch: Chunk[] = []
     for (let cj = 0; cj < CHUNKS; cj++) {
@@ -473,20 +477,46 @@ export function buildMeadow(
   const outer = rings[rings.length - 1].band
   let underOn = true
   let meadowOn = true
+  // each ring's bands this frame (the grass detail's, ringBands, scaled for the zoom out), as meadow.vert reads them,
+  // and the band its chunks are culled to (cullBands: the grass's and the crops' together)
   const bands = rings.map(r => new Vector4(...r.band))
-  rings.forEach((_, ri) => ringMats[ri].setVector4('uBand', bands[ri]))
+  const mixes = rings.map(() => new Vector4(0, 0, 0, 1))
+  const crops = rings.map(() => new Vector4())
+  const cullBands = rings.map(() => new Vector4())
+  const rb = rings.map(ringBandsOf)
+  rings.forEach((_, ri) => {
+    ringMats[ri].setVector4('uBand', bands[ri])
+    ringMats[ri].setVector4('uBandMix', mixes[ri])
+    ringMats[ri].setVector4('uCropBand', crops[ri])
+  })
   scene.onBeforeRenderObservable.add(() => {
     const t = wide ? Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))) : 0
     const k = 1 - t * t * (3 - 2 * t)
     under.z = underOn && meadowOn ? k : 0
     rings.forEach((r, ri) => {
       const outer = ri === rings.length - 1
-      const b = bands[ri]
-      // (the grass detail's split moves by zoom: bandAt; main's rings keep their own)
-      const rb = bandAt(r, detail, camera.radius)
-      if (!rb) b.set(0, 0, 0, 0)
-      else b.set(rb[0] * k, rb[1] * k, outer ? rb[2] : rb[2] * k, outer ? rb[3] : rb[3] * k)
-      meshes[ri].isVisible = b.w > 0 // (visibility: the page's own switches set enabled)
+      const q = rb[ri]
+      ringBands(r, level, camera.radius, q)
+      // (zoomed out every edge shrinks to the focus by k but the outer ring's edge out, as before)
+      const ko = outer ? 1 : k
+      const b = bands[ri].set(q.band[0] * k, q.band[1] * k, q.band[2] * ko, q.band[3] * ko)
+      const m = mixes[ri].set(q.mix[0] * ko, q.mix[1] * ko, q.mix[2], q.mix[3])
+      const c = crops[ri].set(q.crop[0] * k, q.crop[1] * k, q.crop[2] * ko, q.crop[3] * ko)
+      const grass = b.w > 0 && m.w > 0
+      // the chunks' cull: the grass's band (its edge out the farther of the two it moves between) and the crops'
+      const gz = Math.max(b.z, m.z > 0 ? m.x : b.z)
+      const gw = Math.max(b.w, m.z > 0 ? m.y : b.w)
+      if (!grass) cullBands[ri].copyFrom(c)
+      else if (c.w <= 0) cullBands[ri].set(b.x, b.y, gz, gw)
+      else {
+        cullBands[ri].set(
+          Math.min(b.x, c.x),
+          b.y > 0 && c.y > 0 ? Math.min(b.y, c.y) : 0,
+          Math.max(gz, c.z),
+          Math.max(gw, c.w),
+        )
+      }
+      meshes[ri].isVisible = grass || c.w > 0 // (visibility: the page's own switches set enabled)
     })
     const f = camera.target
     const y = heightAt(f.x, f.z)
@@ -507,7 +537,7 @@ export function buildMeadow(
     const vp = scene.getTransformMatrix().m
     rings.forEach((r, ri) => {
       if (!meshes[ri].isVisible) return
-      cullRing(r, chunks[ri], origins[ri], centre, focusY, bands[ri], vp, holes, reach, keep)
+      cullRing(r, chunks[ri], origins[ri], centre, focusY, cullBands[ri], vp, holes, reach, keep)
       // (none in view: not drawn, a forced count of 0 would draw one clump without
       // instances, in another shader variant)
       meshes[ri].isVisible = keep.length > 0
@@ -532,6 +562,9 @@ export function buildMeadow(
   // (under() sets the reach on the given materials; the map itself, uMeadow, is bound on every painted material above)
   return {
     meshes,
+    setDetail: l => {
+      level = l
+    },
     setOn: on => {
       meadowOn = on
       for (const m of meshes) m.setEnabled(on)

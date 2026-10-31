@@ -26,22 +26,22 @@ We will give the player a **Grass detail** setting with two levels (`src/look/gr
 look page's settings panel):
 
 - **Full**: decision 0085's meadow, the default everywhere, map windows included.
-- **Balanced**: up close, the near ring's clumps from 8–12 m of the focus out to its edge (25 m) are the small clump
-  with every other blade, at the large clump's footprint. That cut moves out to the ring's edge between 70 and 110 m
-  of zoom, so from 110 m out, the default zoom included, Balanced draws Full's meadow. Inside 8 m and on the outer
-  rings the grass is Full's.
+- **Balanced**: up close, the near ring's grass from 8–12 m of the focus out to its edge (25 m) is the small clump
+  with every other blade, at the large clump's footprint. Between 70 and 110 m of zoom it hands back to Full's ring
+  continuously, so from 110 m out, the default zoom included, Balanced draws Full's meadow. Inside 8 m and on the
+  outer rings the grass is Full's.
 
-The crops are drawn as at Full.
+The crops are drawn as at Full at both levels (decision 0085's wheat fill unchanged). The setting applies live.
 
 ## Consequences
 
-- **Balanced** spares about 1.1–1.2 ms at the close camera on Kobelnitz (7.8 ms against 8.9–9.0), which puts it
-  under 8.3 ms, and 0.3–0.55 ms on the demo. It is even with Full at the default and wide zooms (the numbers: the
-  plan).
+- **Balanced** spares GPU time at the close camera, aimed at Kobelnitz's 8.3 ms budget, and is meant to be even with
+  Full at the default and wide zooms (the numbers: the plan).
 - **What Balanced loses.** Past about 10 m the carpet is thinner: fewer strokes, with more of the ground showing
   between them. Inside 8 m it is unchanged.
 - **Full** draws exactly what main drew (the goldens match).
-- **Applying a change.** The meadow's rings are built once, so a change of the setting reloads the page.
+- **Applying a change.** Both levels' rings are built (the cut ring is hidden at Full), so a change applies on the next
+  frame, without a reload.
 
 ## Alternatives considered
 

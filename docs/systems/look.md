@@ -652,15 +652,18 @@ shader); `?meadow=off` puts back the old scatter.
     across its band out (no seam). 0 is the splayed look before it, 1 upright alone (both kept for comparisons). Every
     look stays within the combed clumps' reach (`clumpReach`, under `CLUMP_REACH_FLOW`, which the growth keeps).
   - **Grass detail** (decision 0092, issue #257; `src/look/grass-detail.ts`, `?grassdetail=full|balanced`, any other
-    value refused; the settings panel's Grass detail, which reloads the page with it, as the rings are built once;
-    `docs/plans/active/grass-detail.md`): **Full**, the default everywhere (map windows too), is the meadow above,
-    unchanged. **Balanced** cuts the near (0.5 m) ring in two at 8–12 m from the focus (`ringsFor`): the large clump
-    inside, and outside, on the same cells, the small clump with every other blade (`thinClump`) at the large clump's
-    footprint; the outer rings and the crops as at Full. The cut moves out to the ring's edge between 70 and 110 m of
-    the camera's radius (`bandAt`; each ring's slots cover its widest band, `slotBand`), so from 110 m out, the default
-    zoom included, Balanced draws Full. About 1.1–1.2 ms less at Kobelnitz's close camera (7.8 ms), 0.3–0.55 on the
-    demo, even at the default and wide zooms (Metal, two rounds: the plan); past 10 m the carpet is thinner and darker,
-    with more ground between its strokes.
+    value refused, and Balanced without the meadow; the settings panel's Grass detail, applied live and kept in the
+    address, its row hidden without the meadow; `docs/plans/active/grass-detail.md`). The meadow builds both levels'
+    rings (`ringsFor`): the near (0.5 m) ring with the large clump and, on the same cells, a cut ring with the small
+    clump thinned to every other blade (`thinClump`), its spread scaled by the thinned clump's own radius
+    (`clumpRadius`) so its footprint is the large clump's; a level only sets what each ring draws (`ringBands`, read by
+    `meadow.vert` as `uBand`, `uBandMix`, `uCropBand`). **Full**, the default everywhere (map windows too), draws the
+    meadow above, unchanged, the cut ring not at all. **Balanced** draws the near ring's grass to 8–12 m from the
+    focus and the cut ring's beyond it; the crops stay the near ring's out to its edge at both levels (the wheat's
+    fill unchanged). Across 70–110 m of the camera's radius the near ring's edge moves out to main's while the cut ring
+    fades by as much (the rings always add to one: no pop, no overdraw), so from 110 m out, the default zoom included,
+    Balanced draws Full. Each ring's slots cover its widest band (`slotBand`). Past 10 m the close carpet is thinner and
+    darker, with more ground between its strokes; its cost: the plan.
   - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
   - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
     `__look.flowBuildMs`: the flow textures' time on load.

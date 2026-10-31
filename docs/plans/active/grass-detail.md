@@ -23,13 +23,14 @@ The owner (2026-10-30) chose a player option with two levels: **Full** (today's 
 - **`src/look/grass-detail.ts`** (pure):
   - the levels;
   - the `?grassdetail=full|balanced` parsing (anything else throws);
-  - the presets;
-  - the rings a preset draws, and a ring's band by zoom (`bandAt`);
+  - Balanced's cut and its zoom (`BALANCED_CUT`, `BALANCED_ZOOM`);
+  - the rings of both levels, and what each draws at a level and zoom (`ringBands`);
   - the thinned clump (every other blade).
 - **`src/look/meadow.ts`**: builds its rings and clumps from the preset. Full gives main's rings and clumps, with the
   same bands.
-- **The look page's settings panel**: a Grass detail select (Full | Balanced). A change reloads the page with
-  `?grassdetail`, because the meadow's rings are built once.
+- **The look page's settings panel**: a Grass detail select (Full | Balanced), applied live and kept in the
+  address. Both levels' rings are built; a level only sets what each draws. The row is hidden without the meadow, and
+  `?grassdetail=balanced` without it is refused.
 - **Docs**: `docs/systems/look.md` (the setting) and decision 0092 (a player option over decision 0085's meadow).
 - **Tests**: the parsing, the presets' rings and bands, the thinned clump.
 
@@ -42,11 +43,13 @@ Not in scope:
 
 **What Balanced draws.** It cuts the near (0.5 m) ring in two at 8–12 m from the focus:
 - inside the cut, the large clump;
-- outside the cut, on the same cells, the small clump with every other blade, scaled to the large clump's footprint.
+- outside the cut, on the same cells, the small clump with every other blade, scaled to the large clump's footprint
+  (by the thinned clump's own radius);
+- the crops on the near ring out to its edge at both levels.
 
-The cut moves out to the ring's edge as the camera's radius goes from 70 to 110 m, the zoom over which the combed
-clumps already widen up close (`CLOSE_ZOOM`). From 110 m out, which includes the default zoom of 125 m, the near ring
-is Full's and the thinned ring is not drawn. The outer rings and the crops stay as at Full.
+As the camera's radius goes from 70 to 110 m (the zoom over which the combed clumps already widen up close,
+`CLOSE_ZOOM`), the near ring's edge moves out to main's while the cut ring fades by as much, so the rings always add
+to one. From 110 m out, which includes the default zoom of 125 m, Balanced draws Full. The outer rings and the crops stay as at Full.
 
 **The tuning.** Each step below is a single run on Kobelnitz on the dev Mac (M1 Pro, ANGLE Metal), with the GPU
 frame p50 in ms:
@@ -56,7 +59,7 @@ frame p50 in ms:
 | every ring thinned, widened ×1.4, the inner rings cut from 60 m (the experiment's `thin`) | −0.6 to −0.7 | +0.3 to +0.5 | 0 |
 | every ring thinned, not widened, main's 150 m cut | −0.7 to −0.85 | +0.05 to +0.12 | 0 |
 | only the near ring's 8–25 m thinned, at every zoom | −0.8 to −1.0 | 0 to +0.1 (the demo: +0.4 to +0.7) | 0 |
-| the same, its cut moving out from 70 to 110 m of radius (built) | −1.1 to −1.2 | 0 | 0 |
+| the same, its cut moving out from 70 to 110 m of radius (built; measured before review round 1's crop fix, to be remeasured) | −1.1 to −1.2 | 0 | 0 |
 
 Two notes on these results:
 - **Why widening cost at the default zoom.** The wider clumps cover more pixels.
@@ -77,36 +80,15 @@ Two notes on these results:
 
 ## Outcome
 
-**Measurement.** Dev Mac (M1 Pro, ANGLE Metal), `vite build` + `vite preview`, `tools/bench-look.mjs --gpu metal`,
-1920×1080, the l2 arm, GPU frame p50 in ms.
+**Review round 1 (2026-10-31)** found that Balanced grew the crops with the thinned clump, and that the cut ring
+popped at 110 m. Both are fixed:
+- The crops stay the near ring's at both levels.
+- The near ring and the cut ring hand over continuously, always adding to one.
 
-**Rounds.** Two alternated rounds under the bench lock:
-- Round 1: Kobelnitz then the demo, Full first. It started at a 1-min load of 4.92.
-- Round 2: the demo then Kobelnitz, Balanced first. It started at 4.88.
-
-Every run also waited for a load of 5 or less (4.56–4.95 at their starts). Each cell is the mean of four runs (two
-per round). The runs agreed within 0.1 ms.
-
-| camera | Kobelnitz Full | Balanced | Δ | demo Full | Balanced | Δ |
-|---|---|---|---|---|---|---|
-| close −45 | 8.85 | **7.76** | −1.09 | 7.07 | 6.51 | −0.56 |
-| close 0 | 8.90 | **7.79** | −1.11 | 6.98 | 6.50 | −0.48 |
-| close +45 | 9.03 | **7.80** | −1.23 | 6.60 | 6.33 | −0.27 |
-| default −45 | 8.50 | 8.49 | −0.01 | 9.11 | 9.10 | −0.01 |
-| default 0 | 8.71 | 8.72 | +0.01 | 9.03 | 9.00 | −0.03 |
-| default +45 | 8.62 | 8.65 | +0.03 | 9.43 | 9.40 | −0.04 |
-| wide −45 | 8.92 | 8.98 | +0.06 | 12.52 | 12.42 | −0.11 |
-| wide 0 | 9.04 | 9.04 | −0.01 | 13.76 | 13.67 | −0.08 |
-| wide +45 | 8.77 | 8.77 | 0.00 | 12.46 | 12.40 | −0.06 |
-
-**Results:**
-- **Close.** Balanced puts Kobelnitz's close cameras under 8.3 ms, at 7.8.
-- **Default and wide.** Balanced is even with Full.
-- **Stills.** At 125 m, Balanced's stills equal Full's pixel for pixel on Kobelnitz, and differ by one pixel by one
-  level on the demo.
-- **What it costs the eye.** Past about 10 m the close carpet is thinner and a little darker, with more ground
-  between its strokes. Inside 8 m nothing changes.
+The numbers measured before those fixes (Kobelnitz close about 1.1 ms less) no longer stand: part of that saving
+was the crops. One final pass after the last review round will rebench (Kobelnitz close, default, wide and a 90 m
+view, plus the demo, in two alternated rounds), reshoot the stills and redo the goldens.
 
 **A bug found on the way.** A ring's slots were cut to its band when it was built. Once the near ring's band moved out
-with the zoom, ground from 13 to 18 m showed bare. Each ring's slots now cover the widest band it takes at any zoom
-(`slotBand`, with a regression test).
+with the zoom, ground from 13 to 18 m showed bare. Each ring's slots now cover the widest band it takes at any level
+and zoom (`slotBand`, with a regression test).
