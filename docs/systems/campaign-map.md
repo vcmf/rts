@@ -121,5 +121,7 @@ comments avoid both.
 - One light model for both map views (decision 0058): the battle map's lit view bakes its own relief
   (`src/render/lit/bake.ts`), at another scale; the campaign page has its own renderer (K2b), the question settled in
   K3.
+- Up close, a lake's shore shows a saw-tooth in the light (the 100 m tiles' sunk beds against the water's steps from
+  the far level), since K2b.
 - A smaller format (a predictor for the light planes, another codec), if the size matters once the whole of Europe
   is baked (K6).

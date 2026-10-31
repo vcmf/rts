@@ -1,7 +1,7 @@
 // The campaign map's patch near the camera (src/render/campaign/patch.ts, docs/plans/active/k2c-stream.md K2c2): where
 // it lies, and the far mesh's own height, which its edge takes so the two meet without a crack.
 import { describe, it, expect } from 'vitest'
-import { farMeshHeight, patchStart } from '../src/render/campaign/patch.ts'
+import { farMeshHeight, patchRamp, patchStart } from '../src/render/campaign/patch.ts'
 
 describe('the patch place', () => {
   it('centres on the target, its start on the far mesh grid', () => {
@@ -74,5 +74,28 @@ describe('the far mesh height', () => {
     expect(h(1.0, 0.75)).toBeCloseTo(at(4, 3), 9)
     // node (3, 3): halfway along the quad's north edge, from (2, 3) to (4, 3)
     expect(h(0.75, 0.75)).toBeCloseTo((at(2, 3) + at(4, 3)) / 2, 9)
+  })
+})
+
+describe('the patch share of the detail', () => {
+  const rect: [number, number, number, number] = [-25, -25, 25, 25]
+  const ramp = (x: number, z: number, centre: [number, number] = [0, 0], r = rect) =>
+    patchRamp(x, z, centre, r, 19, 22.5, 0.5)
+
+  it('is whole near the target and none past its outer square', () => {
+    expect(ramp(0, 0)).toBe(1)
+    expect(ramp(18, -18)).toBe(1)
+    expect(ramp(22.5, 0)).toBe(0)
+    expect(ramp(5, 23)).toBe(0)
+    expect(ramp(20.75, 0)).toBeCloseTo(0.5, 9)
+  })
+
+  it('is none within the band of the patch edge, wherever the patch lies', () => {
+    // a patch pushed off its target (near the frame edge): the target 3 km from its east edge
+    const pushed: [number, number, number, number] = [-28, -25, 22, 25]
+    expect(ramp(22, 0, [19, 0], pushed)).toBe(0)
+    expect(ramp(21.6, 0, [19, 0], pushed)).toBe(0)
+    // 1.5 km from the edge: halfway up the band's 2 km ease
+    expect(ramp(20.5, 0, [19, 0], pushed)).toBeCloseTo(0.5, 9)
   })
 })

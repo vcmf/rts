@@ -22,7 +22,7 @@ import '@babylonjs/core/PostProcesses/RenderPipeline/postProcessRenderPipelineMa
 // the scene's createPickingRay (groundAt)
 import '@babylonjs/core/Culling/ray.js'
 import { FSR1RenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/fsr1RenderingPipeline.js'
-import { blitTile, halved, interleave, type LevelData } from './level.ts'
+import { bilinear, blitTile, halved, interleave, type LevelData } from './level.ts'
 import {
   areaOrigin,
   areaTiles,
@@ -43,6 +43,7 @@ import {
   cameraPosition,
   clampView,
   groundHit,
+  rayGround,
   sstep,
   TILT_FAR,
   TILT_NEAR,
@@ -50,7 +51,7 @@ import {
   type CampaignView,
 } from './camera.ts'
 import { cloudCanvas, paperCanvas } from './paper.ts'
-import { patchStart } from './patch.ts'
+import { patchRamp, patchStart } from './patch.ts'
 import PRINT_VS from './shaders/print.vert?raw'
 import PRINT_FS from './shaders/print.frag?raw'
 import PATCH_VS from './shaders/patch.vert?raw'
@@ -120,8 +121,6 @@ const PATCH_OUTER_KM = 22.5
 // a tile fades in over FADE_MS as it is first drawn, and toward a neighbour not yet drawn over DETAIL_FADE nodes
 const FADE_MS = 400
 const DETAIL_FADE = 10
-// the rounds groundAt takes to meet the raised surface
-const GROUND_ROUNDS = 4
 
 /** How the page asked to upscale: by the screen ('auto'), never ('off'), or by a factor. */
 export type Upscale = 'auto' | 'off' | number
@@ -238,6 +237,14 @@ export class CampaignMapView {
   private readonly patchMaterial: ShaderMaterial
   private readonly print: Print
   private patch: Mesh | null = null
+  // the far mesh's quad, km (a vertex every MESH_STEP nodes of the far level)
+  private farStep = 0
+  // a height above all the ground, km (where groundAt starts its walk)
+  private highest = 10
+  // the detail's share by the zoom (uDetailK), as the last frame set it
+  private detailShare = 0
+  // where the patch lies, km (x0, z0, x1, z1), or null when it is off
+  private patchRect: [number, number, number, number] | null = null
   private readonly sideMaterial: ShaderMaterial
   private readonly full: boolean
   private fsr: FSR1RenderingPipeline | null = null
@@ -424,7 +431,12 @@ export class CampaignMapView {
     m.setVector2('uLightTexel', new Vector2(1 / nx, 1 / nz))
     m.setFloat('uCellKm', level.cell / 1000)
     // the band at the patch's edge where it lies on the far mesh's surface: one quad of the far mesh
-    m.setFloat('uPatchBand', (MESH_STEP * level.cell) / 1000)
+    this.farStep = (MESH_STEP * level.cell) / 1000
+    // the highest ground, km, with room for the 100 m relief above the far level's
+    let top = 0
+    for (const v of far.shape) top = Math.max(top, v)
+    this.highest = (top + 500) / 1000
+    m.setFloat('uPatchBand', this.farStep)
     m.setVector3('uSun', new Vector3(...this.sun))
     this.buildMeshes(far)
     this.placeCamera()
@@ -531,6 +543,10 @@ export class CampaignMapView {
 
   /** The close zoom's level and how to load its tiles: from then on, the detail area follows the camera. */
   setDetail(level: Level, load: TileLoader) {
+    if (!this.far) throw new Error('setDetail: the map first (setMap)')
+    // a close level set again: the last one's textures let go
+    const old = this.detail
+    if (old) for (const t of [old.texS, old.texL, old.texT, old.texF]) t.dispose()
     const n = AREA * level.size
     const texS = this.floatTexture(new Float32Array(n * n), n, n)
     texS.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
@@ -585,19 +601,17 @@ export class CampaignMapView {
 
   /**
    * The patch's mesh: a vertex every `cellKm` over PATCH_KM a side, from its south-west corner (the vertex shader
-   * places and raises it), off until the detail is used.
+   * places and raises it), off until the detail is used; none (the far mesh alone up close, with a warning) where the
+   * levels do not fit it: its edge on the far mesh's grid lines and its vertices on the close level's nodes need its
+   * size a whole number of far quads and a far quad a whole number of close cells.
    */
-  private patchMesh(cellKm: number): Mesh {
-    // the patch's edge on the far mesh's grid lines and its vertices on the close level's nodes: its size a whole
-    // number of far quads, a far quad a whole number of close cells
-    const step = (MESH_STEP * this.far!.level.cell) / 1000
+  private patchMesh(cellKm: number): Mesh | null {
+    const step = this.farStep
     const whole = (a: number, b: number) => Math.abs(a / b - Math.round(a / b)) < 1e-9
-    if (!whole(PATCH_KM, step) || !whole(step, cellKm)) {
-      throw new Error(
-        `the patch (${PATCH_KM} km) does not fit the far mesh (${step} km) and the close cells (${cellKm} km)`,
-      )
+    if (!step || !whole(PATCH_KM, step) || !whole(step, cellKm)) {
+      console.warn(`campaign map: no patch: ${PATCH_KM} km does not fit far quads of ${step} km, cells of ${cellKm} km`)
+      return null
     }
-    if (PATCH_OUTER_KM + step * 1.5 > PATCH_KM / 2) throw new Error('the patch eases out past its band')
     const n = Math.round(PATCH_KM / cellKm) + 1
     const positions = new Float32Array(n * n * 3)
     for (let j = 0; j < n; j++) {
@@ -634,13 +648,13 @@ export class CampaignMapView {
    */
   private placePatch(on: boolean) {
     if (!this.patch || !this.far) return
-    const step = (MESH_STEP * this.far.level.cell) / 1000
-    const x0 = patchStart(this.viewNow.x, this.half.x, step, PATCH_KM)
-    const z0 = patchStart(this.viewNow.z, this.half.z, step, PATCH_KM)
+    const x0 = patchStart(this.viewNow.x, this.half.x, this.farStep, PATCH_KM)
+    const z0 = patchStart(this.viewNow.z, this.half.z, this.farStep, PATCH_KM)
     // none on a map too small to hold it
     const place = on && x0 !== null && z0 !== null
     this.patch.setEnabled(place)
-    this.print.setVector4('uPatchRect', place ? new Vector4(x0, z0, x0 + PATCH_KM, z0 + PATCH_KM) : OFF_MAP())
+    this.patchRect = place ? [x0, z0, x0 + PATCH_KM, z0 + PATCH_KM] : null
+    this.print.setVector4('uPatchRect', this.patchRect ? Vector4.FromArray(this.patchRect) : OFF_MAP())
     this.print.setVector2('uPatchCentre', new Vector2(this.viewNow.x, this.viewNow.z))
   }
 
@@ -816,12 +830,19 @@ export class CampaignMapView {
   }
 
   /**
-   * How high the map stands at a point (km): up close, where the patch is drawn and the point's tile of the close
-   * level is cached, from its 100 m shape; else from the far level's shape; bilinear.
+   * How high the map stands at a point (km), as it is drawn: the far mesh's shape, and where the patch is drawn the
+   * close level's from its cached tile, by the patch's share there (`patchRamp`) and the zoom's; bilinear. (The tiles'
+   * fade-in is left out: it lasts 0.4 s.)
    */
   private riseAt(xKm: number, zKm: number): number {
-    const near = this.patch?.isEnabled() ? this.closeRiseAt(xKm, zKm) : null
-    return near ?? this.farRiseAt(xKm, zKm)
+    const far = this.farRiseAt(xKm, zKm)
+    const rect = this.patchRect
+    if (!rect || this.detailShare <= 0) return far
+    const centre: [number, number] = [this.viewNow.x, this.viewNow.z]
+    const ramp = patchRamp(xKm, zKm, centre, rect, PATCH_INNER_KM, PATCH_OUTER_KM, this.farStep)
+    const k = this.detailShare * ramp
+    const near = k > 0 ? this.closeRiseAt(xKm, zKm) : null
+    return near === null ? far : far + (near - far) * k
   }
 
   /** The close level's height at a point (km) from its cached tile, bilinear inside the tile, or null. */
@@ -829,21 +850,13 @@ export class CampaignMapView {
     const d = this.detail
     if (!d) return null
     const { level } = d
+    const n = level.size
     const fx = (xKm + this.half.x) / (level.cell / 1000)
     const fz = (zKm + this.half.z) / (level.cell / 1000)
-    const tile = d.cache.get(tileKey([Math.floor(fx / level.size), Math.floor(fz / level.size)]))
+    const tile = d.cache.get(tileKey([Math.floor(fx / n), Math.floor(fz / n)]))
     if (!tile) return null
-    const n = level.size
-    const li = Math.min(n - 1.001, Math.max(0, fx - tile.column * n))
-    const lj = Math.min(n - 1.001, Math.max(0, fz - tile.row * n))
-    const i = Math.floor(li)
-    const j = Math.floor(lj)
-    const u = li - i
-    const v = lj - j
-    const at = (a: number, b: number) => level.base + tile.shape[b * n + a] * level.scale
-    const top = at(i, j) * (1 - u) + at(i + 1, j) * u
-    const bottom = at(i, j + 1) * (1 - u) + at(i + 1, j + 1) * u
-    return (top * (1 - v) + bottom * v) / 1000
+    const at = (i: number, j: number) => level.base + tile.shape[j * n + i] * level.scale
+    return bilinear(at, fx - tile.column * n, fz - tile.row * n, n, n) / 1000
   }
 
   /** The far level's height at a point (km), bilinear. */
@@ -851,16 +864,8 @@ export class CampaignMapView {
     if (!this.far) return 0
     const { nx, nz, shape } = this.far.data
     const cellKm = this.far.level.cell / 1000
-    const fx = Math.min(nx - 1.001, Math.max(0, (xKm + this.half.x) / cellKm))
-    const fz = Math.min(nz - 1.001, Math.max(0, (zKm + this.half.z) / cellKm))
-    const i = Math.floor(fx)
-    const j = Math.floor(fz)
-    const u = fx - i
-    const v = fz - j
-    const k = j * nx + i
-    const top = shape[k] * (1 - u) + shape[k + 1] * u
-    const bottom = shape[k + nx] * (1 - u) + shape[k + nx + 1] * u
-    return (top * (1 - v) + bottom * v) / 1000
+    const at = (i: number, j: number) => shape[j * nx + i]
+    return bilinear(at, (xKm + this.half.x) / cellKm, (zKm + this.half.z) / cellKm, nx, nz) / 1000
   }
 
   /** Places the camera from the view, and the haze by its tilt. */
@@ -875,20 +880,17 @@ export class CampaignMapView {
   }
 
   /**
-   * The point of the map (km) under a screen position (CSS pixels), or null above the horizon: where the ray meets
-   * the raised surface, found by meeting the level of the ground under the last guess (a few rounds converge: the
-   * camera looks down at 30° or more and the shape's slopes, at the far level, are gentle against it).
+   * The point of the map (km) under a screen position (CSS pixels), or null above the horizon: where the ray first
+   * meets the surface as drawn (`rayGround`: walked down from above the highest ground, then halved; on the 100 m
+   * relief's steep slopes a fixed point would not converge). A ray that misses the raised map meets the plane under it.
    */
   groundAt(sx: number, sy: number): [number, number] | null {
     this.scene.updateTransformMatrix(true)
     const ray = this.scene.createPickingRay(sx, sy, Matrix.Identity(), this.camera)
+    const o: [number, number, number] = [ray.origin.x, ray.origin.y, ray.origin.z]
     const d: [number, number, number] = [ray.direction.x, ray.direction.y, ray.direction.z]
-    let hit = groundHit([ray.origin.x, ray.origin.y, ray.origin.z], d)
-    for (let k = 0; k < GROUND_ROUNDS && hit; k++) {
-      const rise = this.riseAt(hit[0], hit[1])
-      hit = groundHit([ray.origin.x, ray.origin.y - rise, ray.origin.z], d)
-    }
-    return hit
+    const bottom = this.far ? this.far.level.base / 1000 : 0
+    return rayGround(o, d, (x, z) => this.riseAt(x, z), this.highest, bottom) ?? groundHit(o, d)
   }
 
   /** A map point (km) on the screen, at the height of the ground there, in CSS pixels, or null behind the camera. */
@@ -961,6 +963,7 @@ export class CampaignMapView {
       this.print.setFloat('uContourK', sstep(1.2, 3, ppk))
       const detailK = this.detail ? sstep(4, 9, ppk) : 0
       this.print.setFloat('uDetailK', detailK)
+      this.detailShare = detailK
       this.placePatch(detailK > 0)
       this.wantDetail(ppk)
       this.onViewChanged?.(ppk)

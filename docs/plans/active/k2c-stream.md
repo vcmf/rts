@@ -119,7 +119,20 @@ detail reads and the far mesh's height through two GLSL files put in by the view
   the old one disposed on a new close level; one setter for both materials, one off-map rectangle. Measured after:
   the same image (a mean of 0.2 to 0.8 level against round 0's), panning a mean of 2.8 to 3.0 ms and the 95th
   centile 4.0 to 4.5 ms at 1080p and 4K, the worst single frames 5.0 to 8.4 ms.
+- **Round 2**: severe: near the frame's edges the patch, pushed in off its target, could take the detail at its own
+  edge (a crack beside the far mesh): the detail now eases in over 2 km from the patch's band wherever the patch lies
+  (`patchRamp`, tested, and the same in `shaders/patch.vert`). With: the map's height on the CPU (the pointer, the
+  scale, the camera's clearance) follows the drawn surface's shares, not the 100 m shape whole; the pointer's point
+  found by walking the ray down and halving (`rayGround`, tested), the fixed point not converging on the 100 m
+  relief's steep slopes; a level the patch does not fit leaves it off (a warning) instead of stopping the page; the
+  patch skips its detail reads where its share is none; one bilinear read for both levels' heights; the far mesh's
+  quad kept once; a close level set again lets the last one's textures go. Left: the far mesh's height is written
+  twice, in TypeScript (tested) and in GLSL (`shaders/farmesh.glsl`), kept the same by hand. Measured after: the image
+  the same (a mean under 0.01 level), the patch's edge whole at the frame's east edge; panning a mean of 2.9 and
+  3.2 ms at 1080p and 4K, the 95th centile 4.1 and 4.3 ms, the worst single frames 6.4 and 7.7 ms.
 
 ## Open questions
 
 - A denser mesh far out too (a mesh in rings around the camera) if Europe's far views need it.
+- Up close, a lake's shore in the light shows a saw-tooth (the 100 m tiles' sunk beds against the water's steps from
+  the far level), from K2b on, with or without the patch (seen at the frame's east edge, 40 km).

@@ -48,3 +48,26 @@ export function farMeshHeight(
   const h11 = node(i + 1, j + 1)
   return u + v <= 1 ? h00 + u * (h10 - h00) + v * (h01 - h00) : h11 + (1 - u) * (h01 - h11) + (1 - v) * (h10 - h11)
 }
+
+/**
+ * How much of the 100 m detail the patch takes at a point (0 to 1), as ./shaders/patch.vert: full within `inner` km
+ * of the target (a square round it), easing out to none at `outer`, and none within `band` km of the patch's own edge
+ * (where it lies on the far mesh), easing in over 2 km inside that, wherever the patch lies.
+ */
+export function patchRamp(
+  x: number,
+  z: number,
+  centre: [number, number],
+  rect: [x0: number, z0: number, x1: number, z1: number],
+  inner: number,
+  outer: number,
+  band: number,
+): number {
+  const smooth = (a: number, b: number, v: number) => {
+    const t = Math.min(1, Math.max(0, (v - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+  }
+  const off = Math.max(Math.abs(x - centre[0]), Math.abs(z - centre[1]))
+  const edge = Math.min(x - rect[0], rect[2] - x, z - rect[1], rect[3] - z)
+  return (1 - smooth(inner, outer, off)) * smooth(band, band + 2, edge)
+}
