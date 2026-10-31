@@ -17,7 +17,7 @@ import { rowDeltas, rowSums } from './rows.ts'
 export const TILE_MAGIC = 'CMPT'
 export const TILE_VERSION = 1
 // the manifest's own format, apart from the tiles' (a field added to one need not refuse the other)
-export const MANIFEST_FORMAT = 3
+export const MANIFEST_FORMAT = 4
 const HEADER = 16
 const PLANES = 3
 

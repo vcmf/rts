@@ -83,7 +83,9 @@ const SHAPE: Omit<ShapeParams, 'low'> = {
 const SUN: SunParams = { el: 20, az: 55, size: 2.5 }
 const SINK = 70
 const LAKE_BLUR_M = 750
-// the width the lakes sink over at their shore, at every level (the far level's cell, as the prototype sinks its own)
+// the width the lakes sink over at their shore, the same at every level (over one cell, the 100 m level drew a
+// staircase along the shore; 250 m left faint teeth, 500 m none: docs/plans/done/k2c-stream.md); the prototype sinks
+// its own far level over the same
 const SINK_WIDTH_M = 500
 // the level the fields are baked on (the far one, which spans the whole theatre in one texture), their file
 const FIELDS_LEVEL = 0
@@ -332,6 +334,7 @@ function prototypeParams() {
     soft: SUN.size,
     bytes: 3,
     woodBoxM: WOOD_BOX_M,
+    sinkWidthM: SINK_WIDTH_M,
   }
 }
 

@@ -75,7 +75,7 @@ describe('the manifest', () => {
   })
 
   it('is refused in another format, with a level off the frame, or fields on no level', () => {
-    expect(() => readManifest({ ...manifest(), format: 2 })).toThrow(/format is 2, this page reads 3/)
+    expect(() => readManifest({ ...manifest(), format: 3 })).toThrow(/format is 3, this page reads 4/)
     expect(() => readManifest({ ...manifest(), levels: [{ ...level, nx: 6 }] })).toThrow(/level 0 does not span/)
     expect(() => readManifest({ ...manifest(), fields: { level: 1, path: 'x' } })).toThrow(/fields lie on level 1/)
     expect(() => readManifest(null)).toThrow(/not an object/)

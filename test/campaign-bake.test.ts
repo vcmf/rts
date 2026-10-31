@@ -85,18 +85,19 @@ describe('the bake', () => {
 })
 
 describe('the lakes sunk', () => {
-  it('drop the same over the same metres from the shore at every level, eased over the width given', () => {
+  it('drop the same over the same metres from the shore at every level, given the same distances', () => {
     // the distance to the shore in km at a node (positive in the water): a 100 m level and a 250 m one
     const fine = Float32Array.from({ length: 11 }, (_, k) => (k - 5) * 0.1)
     const coarse = Float32Array.from({ length: 5 }, (_, k) => (k - 2) * 0.25)
-    const sunkFine = sinkLakes(new Float32Array(11), fine, 250, 70)
-    const sunkCoarse = sinkLakes(new Float32Array(5), coarse, 250, 70)
-    // dry 125 m and more inland, full 125 m and more out, half at the shore
-    expect(sunkFine[3]).toBe(0)
+    // over 500 m, as the tiles are baked (tools/campaign-tiles.ts)
+    const sunkFine = sinkLakes(new Float32Array(11), fine, 500, 70)
+    const sunkCoarse = sinkLakes(new Float32Array(5), coarse, 500, 70)
+    // dry 250 m and more inland, full 250 m and more out, half at the shore
+    expect(sunkFine[2]).toBe(0)
     expect(sunkFine[5]).toBeCloseTo(-35, 4)
-    expect(sunkFine[7]).toBeCloseTo(-70, 4)
-    // at 100 m the drop takes more than one node: a node 100 m out is sunk part of the way
-    expect(sunkFine[6]).toBeCloseTo(-63, 4)
+    expect(sunkFine[8]).toBeCloseTo(-70, 4)
+    // at 100 m the drop takes five nodes: a node 100 m out is sunk part of the way
+    expect(sunkFine[6]).toBeCloseTo(-49, 4)
     // the 250 m level's nodes at 0 and 250 m out fall where the 100 m level's would
     expect(sunkCoarse[2]).toBeCloseTo(sunkFine[5], 4)
     expect(sunkCoarse[3]).toBeCloseTo(-70, 4)
