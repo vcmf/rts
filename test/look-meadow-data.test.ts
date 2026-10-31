@@ -16,7 +16,7 @@ describe("the meadow map's data (meadowMapData)", () => {
       all,
       () => 0,
       all,
-      (x, z) => 3 + 0.1 * x,
+      x => 3 + 0.1 * x,
     )
     expect(md.growingCells).toBe(tile * tile)
     expect(md.croppingCells).toBe(0)
